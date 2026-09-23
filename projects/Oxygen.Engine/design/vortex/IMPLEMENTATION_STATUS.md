@@ -84,7 +84,7 @@ and [CPU decision](lld/post-process-service.md#approved-ex051-13ab-joint-cpu-cor
 | 5.1 — Exposure performance         | validated   | Closed 2026-09-21: format/policy, independent SceneColor ownership, CPU corrections, correctness and final GPU acceptance complete. User accepts measured CPU cost; further CPU optimization is deferred to a later milestone. | [Current work](#31-current-work), [final CPU decision](lld/post-process-service.md#approved-ex051-13ab-joint-cpu-correction)                                                                                                                                                                                                                                    |
 | 5.2 — Focused exposure quality     | validated   | Approved residual owner fixes and Release include repair committed; 65 Debug and 65 Release cases pass, scoped changed code is tidy-clean, and one matched I02 preservation run passes.                                        | [Bounded scope and result](#322-slice-52-code-quality-and-test-structure)                                                                                                                                                                                                                                                                                       |
 | 6 — Authoring and persistence      | validated   | Strict source/cook/load/script/editor migration, C++20 editor boundary, PAK repacking, rendered UI acceptance and configuration isolation closed.                                                                              | [Detailed items](#33-slice-6-work-items), [acceptance evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice6/slice6-progress.json)                                                                                                                                                                                                          |
-| 7 — Physical and scalable lighting | in_progress | EX07A contract/interface/native ABI gate validated; EX07B independent reference and instrument work is current. Full correctness/performance gates remain open.                                                                | [A checkpoint](plan/EX07A-contract-review.md), [EX07 items](#34-slice-7-work-items), [workloads and gates](plan/EX07-lighting-correctness-and-scalability.md)                                                                                                                                                                                                   |
+| 7 — Physical and scalable lighting | in_progress | EX07A and EX07B validated; paused before C. Full renderer correctness/performance gates remain open.                                                                                                                           | [A checkpoint](plan/EX07A-contract-review.md), [EX07 items](#34-slice-7-work-items), [workloads and gates](plan/EX07-lighting-correctness-and-scalability.md)                                                                                                                                                                                                   |
 | 8 — Measured Neutral Reference     | planned     | Qualified instruments plus the first usable interactive/batch experiment.                                                                                                                                                      | [EX08 and automation follow-ups](#35-slice-8-work-items)                                                                                                                                                                                                                                                                                                        |
 | 8.1 — Console controls             | planned     | Existing console drives validated post-process settings and transitions.                                                                                                                                                       | [EX08.1](#351-slice-81-post-processing-console-controls)                                                                                                                                                                                                                                                                                                        |
 | 8.2 — ImGui UI automation          | planned     | Actual widget workflows and EX06 regressions run in an opt-in native test configuration.                                                                                                                                       | [EX08.2](#352-slice-82-imgui-interaction-automation)                                                                                                                                                                                                                                                                                                            |
@@ -99,173 +99,21 @@ complete. The TexturedCube panel-refresh regression is covered by automated
 tests and the user's successful rebuilt-app test. See the
 [EX06 result and evidence](#33-slice-6-work-items).
 
-**Current: EX07B — independent references and instruments. EX07 remains in_progress.**
+**Current: EX07A and EX07B are complete. Paused before EX07C at the user's request.**
 
-The latest B checkpoint adds a test-only full-list GPU image reference independent
-of renderer light selection, retaining the serial-image checks and adding actual
-missing-light negative controls. Debug and Release each pass 331,776 additional
-RGB comparisons, both image tests and the three affected tone probes. See the
-[reference qualification record](plan/EX07B-reference-validation.md#independent-full-list-gpu-image-reference).
-The subsequent instrument checkpoint adds eight cached CPU phase descriptions
-and verifies bounded CPU/GPU records in native forward/deferred frames. Debug and
-Release pass the new native check, eight CPU collector tests and both image tests;
-Release additionally passes 17 timeline and two native timestamp tests. No
-production benchmark collector or per-light CPU instrumentation is added.
-The resource instrument now exposes on-demand D3D12MA segment snapshots and uses
-a bounded test-owned recorder. Native known-allocation checks preserve 1.125 MiB
-of device allocations plus 4 MiB of upload allocation through deferred release,
-then distinguish zero live allocation bytes from retained 8 MiB heaps in each
-segment after retirement. Debug/Release pass 11 CPU and two native instrument
-tests. A fixed-storage, test-only creation counter now also captures allocation
-churn that live-count deltas miss: 17 buffers and three textures can be created
-and destroyed while live bytes remain unchanged. Debug/Release pass 13 CPU and
-three native instrument tests. Workload attribution, material-format/filter and native
-collection-overhead qualification remain open; these checkpoints do not close
-EX07B or change shading.
+[Section 3.4](#34-slice-7-work-items) is the single authoritative EX07 progress
+tracker. It shows the execution stages, numbered deliverables, completed portions
+and remaining owners. Detailed audits and test records are evidence, not separate
+progress trackers. Overall EX07 remains `in_progress`; production physical
+correctness, scalability and final performance qualification are still open.
 
-The full incremental collection run is now measured: 57,085 frames across eight
-native windows, with identical images across modes and complete CPU/memory exports.
-Pooled median/p95 frame times fit both proposed budgets, but forward p99 increases
-from 3.768 to 4.463 ms, concentrated in one collection-on window. No overhead
-acceptance is claimed. A focused forward repeat does not reproduce the large
-tail spike: differences are +0.0117 ms median, +0.06356 ms p95 and +0.073961 ms
-p99. Its p95 misses proposed A's 0.05 ms allowance but satisfies B's 0.10 ms
-allowance; the user's numeric-budget choice remains pending. Both runs are
-preserved in the [measurement](plan/EX07B-reference-validation.md#full-collection-measurement).
-
-**User-directed stopping point:** finish EX07B's reference/instrument validation
-gate and commit its stable checkpoint, then pause. Do not begin EX07C until the
-user instructs resumption. Intermediate B checkpoints do not satisfy this gate.
-
-EX07A is validated on 2026-09-23 against its
-[completion audit](plan/EX07A-completion-audit.md). D1–D6 freeze physical-only
-attenuation, flux-conserving sphere/disk extent, compensated correlated GGX,
-dynamic capacity, hemispherical soft spots and the configurable 4 GiB total /
-128 MiB compact-index ceilings. Their mathematical, wire, persistence and
-failure contracts remain in the [PBR owner](../renderer-core/physically-based-rendering.md#physical-light-conversion),
-[GPU ABI](lld/lighting-gpu-abi.md) and [property inventory](lld/lighting-properties.md).
-
-The A implementation uses 15 canonical wire payloads, typed source/array
-identities, all-directional selection, shadow-owned reference maps, immutable
-deferred constants and same-frame-safe transient descriptors. Actual CPU grid
-parameters now pass native near/far and interior checks. The final production
-checkpoint passes 24 native-suite, 29 lighting, 17 shadow and 68 SceneRenderer
-cases per configuration; catalog closure adds four cases per configuration.
-RenderDoc qualifies the scoped directional/local/fog/AP/readability paths. The
-user confirmed the spotlight repair and stable lower offscreen views; the
-[validation record](plan/EX07A-offscreen-flicker-validation.md) preserves that
-boundary. The [review](plan/EX07A-contract-review.md) retains prior checkpoints,
-including the committed MSVC heap-leak repair.
-
-The [B reference foundation](plan/EX07B-reference-validation.md) now covers
-independent CPU GGX directional/mean moments, the approved three-lobe BRDF,
-punctual photometry, finite sphere/disk integration and packed-material decoding.
-Typed physical/angular/packed inputs prevent accidental interchange. Analytic
-limits and independent area/angle integrals qualify the tested cases; bounded
-refinement fails explicitly when work is exhausted. The separate
-[pointwise certificate](plan/EX07B-moment-certificates.md) supplies rigorous
-FLINT/Arb enclosures at 55 parameter pairs, with C++ distance bounds below 1.71e-9
-against the 1e-5 budget. High-precision endpoint anchors, generated-data
-reproducibility and generator safety checks remain qualified. These certificates
-do not establish arbitrary interpolation. Cosine-weighted means now have
-independent certificates at six roughness values: exported radii remain below
-5.13e-9, and C++ distance-to-truth bounds below 5.23e-9. The generated matrix
-reproduces byte-for-byte; thirteen Python safety tests and both new C++ tests in
-Debug/Release pass. Additional reference queries still need their own enclosures.
-
-The current native material probe reads actual 10-bit normal, 8-bit scalar and
-sRGB texture formats through production HLSL decoding and F0 helpers, covering
-all byte codes and normal-fold landmarks. The probe passes with maximum
-normal error 2.006e-7 and sRGB error 0.429605 encoded codes (within the format's
-half-code limit). The end-to-end lighting budget is unchanged. Debug passes all
-44 CPU reference tests in the owning run; both configurations
-pass all 25 native tests. Release also qualifies the new material and mean
-checks. The changed C++ files are
-oxytidy-clean. Earlier BRDF/furnace and finite-source checks remain recorded in
-the reference evidence. The expanded smooth/grazing furnace matrix covers 392
-combinations using certified directional/mean moments; Debug and Release pass
-with maximum error including the grazing-tail bound of 5.854e-5 against 2e-3.
-The affected Release suites pass all 16 tests. Off-axis finite-source checks now
-compare 18 disk and 18 sphere cases against separate Cartesian/surface
-integrals, including just-outside-rim highlights. Optional peak partitions
-resolve smooth highlights without changing the equations; Release passes all
-14 finite-source tests and all 43 owning Debug cases pass. Changed C++ files
-are oxytidy-clean. The tilted/grazing extension now covers 36 additional disk
-cases and nine additional sphere cases. Tangent-cap regularization and
-row-specific peak-plane partitions preserve the equations while resolving the
-grazing ridge. Release passes 15 finite-source tests and the owning Debug suite
-passes all 44 cases. Coupled RGB composition now passes 18 sphere/disk/lobe
-comparisons at roughness one, including HDR tint and source exposure; Debug and
-Release pass all 16 affected finite-source tests, and the changed file is
-oxytidy-clean. This does not qualify general material/texture transport or
-production shading. RGB light-tint transport, complete material evaluation,
-lighting/image probes and instrumentation remain open in B.
-
-The punctual GPU photometry instrument now covers 2,160 known inputs through
-production CPU conversion and shared HLSL attenuation. Its separate physical
-admission gate currently rejects 23 narrow-cone boundary channel results;
-the largest missing contribution is 0.06790593 lux. This is an explicit C repair
-obligation, not a qualified renderer result. The [B validation record](plan/EX07B-reference-validation.md#native-punctual-photometry-probe-and-physical-admission)
-documents the matrix, instrument/renderer distinction and enforcing command.
-The native direct-BRDF probe adds 108 material/direction inputs in both paths;
-565 of 648 channel responses currently fail the approved-model budget. The
-shared admission checker requires both matrices and rejects these results.
-Forward arithmetic extraction preserves byte-identical optimized DXIL in three
-checked variants. The [BRDF probe record](plan/EX07B-reference-validation.md#native-direct-brdf-probe)
-preserves the exact scope and C repair obligations.
-Both configurations pass 27 native instrument tests; the physical gate still
-exits 1 with both failure sets. Seven gate-safety tests pass and the changed
-C++ file is oxytidy-clean. Complete material evaluation, matched-image fixtures
-and bounded instrumentation remain open in B.
-
-The bounded CPU capture foundation is now shared under `Test/Support`, with a
-test-support library consumed by both tests and benchmarks. Exposure callers are
-migrated without a compatibility wrapper. This introduces no production hooks
-or linked collection code. Lighting phase integration, GPU/resource collection
-and measured on/off overhead remain open; the [instrument record](plan/EX07B-reference-validation.md#shared-bounded-cpu-capture-foundation)
-defines the qualification boundary.
-
-The native serial-image fixture now passes 31/32/33 mixed-light accumulation,
-physical light-order permutation and zero-light recovery for both pipelines and
-three material domains. Debug/Release cover 331,776 combined and 110,592
-permutation channel comparisons within the frozen image budget. RenderDoc
-confirms all 33 sources and 64 complete-list cells in the live forward frame.
-The [image reference record](plan/EX07B-reference-validation.md#native-serial-image-accumulation-fixture)
-retains the limits: physical BRDF correctness and an independently forced
-unculled path are not established by serial renders through shared selection.
-
-The [reference runtime optimization](plan/EX07B-reference-validation.md#reference-test-runtime-improvement)
-retains all 45 tests and their accuracy requirements. Full Ninja runs improve
-from 532.604 to 128.955 seconds in Debug and from 277.866 to 45.626 seconds in
-Release. Certificate-query value changes stay below 4.108e-15; all 27 native
-instrument tests pass with the same known C physical-admission failures.
-
-The default-material CPU reference now evaluates factors, resolved samples,
-packed ORM/AO selection, HDR emission, tangent-frame normals and alpha/two-sided
-eligibility. Six new checks run in under a millisecond; Debug/Release pass ten
-focused material tests and 28 native instrument tests. The native UV0 probe
-covers 36 transformations with maximum absolute error 2.448e-6. The
-[material reference record](plan/EX07B-reference-validation.md#default-material-evaluation-reference-and-native-uv-probe)
-keeps actual texture sampling, format expansion and raster qualification open.
-
-The [native material producer matrix](plan/EX07B-reference-validation.md#native-sampled-material-and-g-buffer-producer-checks)
-now passes 144 constant float-map cases in Debug/Release: 96 stored G-buffer
-results and 48 correct backface/mask rejections. It checks packed/separate maps,
-AO override, normal scaling/folding, disabled sampling and HDR emission; maximum
-stored-code error is 0.501945526. Remaining format/filtering coverage and the
-physical renderer admission gates are still open.
-
-A's closure does not establish the final physical renderer. B must supply an
-independent double-precision oracle, moment uncertainty and known-input probes,
-matched unculled image reference, deterministic fixtures and bounded instruments.
-C still owns complete BRDF/finite-source/wide-spot behavior, property transport
-and strict scene-v7/editor/script migration, shared atmosphere conversion,
-dynamic memory admission and full failure/recovery/submission lifetime. D–F
-own qualified baselines, measured optimizations and final native/editor delivery.
-The [memory review](plan/EX07-shadow-memory-review.md) contains fresh versioned
-allocation queries and explicitly marks the lost historical format-probe
-artifacts. Reproduce rendering-format qualification before production D32
-adoption. Do not interpret either ceiling as a normal whole-engine working set.
+The [A audit](plan/EX07A-completion-audit.md) preserves the contract/interface and
+native proof. The [B audit](plan/EX07B-completion-audit.md) preserves reference,
+material, workload and instrument qualification. Their detailed records retain
+historical checks, measured limitations and the accepted overhead decision.
+The [shadow memory review](plan/EX07-shadow-memory-review.md) retains the
+conditional D32 qualification requirement and distinguishes admission ceilings
+from normal whole-engine memory consumption.
 
 The
 [revised delivery sequence](plan/exposure-and-lightbench-correction.md#remaining-delivery-at-a-glance)
@@ -839,34 +687,63 @@ No EX06 delivery item remains open.
 
 ### 3.4 Slice 7 work items
 
-EX07 owns review, repair, optimization and validation of the agreed lighting path,
-including existing defects and necessary cross-module dependencies. Both
-correctness and performance must pass; recording a limitation does not close work.
+**EX07 overall: in progress. A and B are complete. Work is paused before C.**
 
-**Planned. Outcome:** physical light correctness and improved, qualified many-light
-rendering. The [EX07 plan](plan/EX07-lighting-correctness-and-scalability.md) owns
-the bounded workloads and gates. Order: A contracts -> B references/instruments
--> C correctness repair -> D qualified baselines/budgets -> E scalable optimization
--> F final validation. No timing result is claimed; only correctness-qualified
-workloads enter the baseline, with numeric thresholds frozen before candidates.
+This section is the single progress tracker for EX07. **A–F are the ordered
+execution stages. EX07-01–14 are stable deliverable IDs that can span several
+stages.** Completing B closes the reference/instrument portions of those IDs;
+production repair, performance work and final qualification have later owners.
 
-| ID        | Required result                                                                                                                                                | Status      |
-| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
-| EX07-01   | Directional physical reference: unassigned, each explicit atmosphere slot and both sources together.                                                           | planned     |
-| EX07-02   | Point flux conversion, inverse-square/range fade and finite near/zero separation.                                                                              | planned     |
-| EX07-03   | Spot flux normalization, hard-cone limit, zero-angle rejection and boundaries.                                                                                 | planned     |
-| EX07-04   | Canonical CPU/HLSL interface and native sentinel gate validated in A; final shared physical/BRDF semantics remain C work.                                      | in_progress |
-| EX07-05   | Frozen packed-material and working-color-space oracle.                                                                                                         | planned     |
-| EX07-06   | Independent physical/image references and probes in B; calibration and affected content qualification in C.                                                    | in_progress |
-| EX07-07   | Deterministic workloads in B; correctness-qualified baselines and numeric budget/gain/regression/noise policy in D.                                            | planned     |
-| EX07-08   | Complete lists and tested input/view failure/recovery in C; conservative spatial culling improvements in E.                                                    | planned     |
-| EX07-09   | Measured shader and deferred draw/submission/overdraw improvements with preserved BRDF/HDR response.                                                           | planned     |
-| EX07-10   | Safe shared records/per-view lists, bounded allocations/uploads and in-flight lifetime under mutation.                                                         | planned     |
-| EX07-11   | Correct shadow identity/consumption, supported capacities and separately measured shadow cost.                                                                 | planned     |
-| EX07-12   | LP01-LP32 retained/removal inventory, atomic ingress and scene-v7 contract frozen; transport/mutation/round-trip/editor/lifecycle implementation remains open. | in_progress |
-| EX07-13   | Shared bounded CPU capture in B; lighting integration and GPU/resource instruments remain open. Qualified baselines/culling diagnostics belong to D/E.         | in_progress |
-| EX07-14   | Final correctness/performance gates, supported limits, operating commands and owner documents in F.                                                            | planned     |
-| EX07-GATE | Physical calibration and many-light correctness/performance pass, with measured improvements and no hidden quality reduction.                                  | planned     |
+#### Execution stages — where we are
+
+| Stage                              | Result                                                                                                                                   | Current status                                         | Deliverable ownership                                                                                  |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| **A — Contracts**                  | Reviewed model, property inventory, canonical CPU/HLSL interface, capacities and failure contracts.                                      | **Complete** — [audit](plan/EX07A-completion-audit.md) | Contract/interface groundwork, especially 04 and 12; grid, lifetime and shadow contracts for 08/10/11. |
+| **B — References and instruments** | Independent physical/material/image references, native probes, frozen workloads and bounded instruments.                                 | **Complete** — [audit](plan/EX07B-completion-audit.md) | Reference/oracle portions of 01–06; workload portion of 07; instrument portion of 13.                  |
+| **C — Correctness repair**         | Correct production lighting and retained properties; content migration; complete lists, shadow identities/capacities and safe lifetimes. | **Not started — next on user resumption**              | Remaining correctness in 01–04, 06, 08, 10–12.                                                         |
+| **D — Baselines and budgets**      | Time only correctness-qualified workloads; freeze CPU/GPU/memory budgets and comparison policy.                                          | **Not started**                                        | 07; baseline/shadow-cost portions of 11/13.                                                            |
+| **E — Scalable optimization**      | Conservative culling and measured shader, submission, upload, resource and shadow improvements.                                          | **Not started**                                        | Optimization portions of 08–11; culling/performance diagnostics in 13.                                 |
+| **F — Final delivery**             | Final-code numerical, native/editor, visual and performance gates; operating documentation and supported limits.                         | **Not started**                                        | 14 and EX07-GATE, rechecking the final implementation of all IDs.                                      |
+
+**Immediate next work is C, not another B investigation.** B's measured physical
+residuals are inputs to C; successful reference tests do not mean the production
+BRDF is already correct. The user accepted B's overhead item and directed a pause
+after the B closeout. No additional long B benchmark run is required.
+
+#### Numbered deliverables — what is complete and what remains
+
+`Complete` means the entire numbered deliverable is closed. `Partial` identifies
+finished foundations with explicitly named later work. `Not started` means no
+qualified delivery is claimed. These are item states, distinct from stage states.
+
+| ID / deliverable                             | Item state       | Completed portion                                                                                                   | Remaining work / owning stage                                                                                                |
+| -------------------------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| **01 — Directional lighting**                | Partial          | A: directional authority/array interface. B: independent lux/EV reference and probes.                               | **C:** production physical calibration for unassigned, primary, secondary and combined sources.                              |
+| **02 — Point lighting**                      | Partial          | B: flux, distance/range and finite-emitter reference calculations and known-input probes.                           | **C:** qualify production point response, including finite-source and near/zero-separation behavior.                         |
+| **03 — Spot lighting**                       | Partial          | B: independent flux/cone/boundary references and native residual reporting.                                         | **C:** repair and qualify production soft/hard/wide cones and boundary behavior.                                             |
+| **04 — Shared interface and BRDF semantics** | Partial          | A: canonical ABI and native sentinel gate. B: independent compensated-GGX oracle and native BRDF probes.            | **C:** implement/qualify the approved shared BRDF and required LUT semantics.                                                |
+| **05 — Material/color oracle**               | **Complete (B)** | Independent packed-material/working-space reference; native format, UV, filtering, mip and producer checks.         | **None for the oracle.** Remaining production property transport belongs to 12.                                              |
+| **06 — References and calibration**          | Partial          | B: independent physical/image references, full-list and serial comparisons, negative controls.                      | **C:** use them to qualify the repaired renderer and affected content.                                                       |
+| **07 — Workloads and baselines**             | Partial          | B: frozen 1,024-light primary and count/distribution/view/shadow/mutation recipe parameters; native preview.        | **D:** correctness-qualified timing baselines and numeric budget/gain/regression/noise policy.                               |
+| **08 — Complete lists and spatial culling**  | Partial          | A: canonical grid/list contract and complete-list publication. B: independent reference/probes.                     | **C:** full failure/recovery correctness. **E:** real conservative spatial rejection and measured scaling.                   |
+| **09 — Shader/draw performance**             | Not started      | B supplies the measuring instruments; no qualified optimization is claimed.                                         | **E:** measured shader, deferred draw/submission and overdraw improvements.                                                  |
+| **10 — Resources, uploads and lifetime**     | Partial          | A: immutable publication and descriptor-lifetime repairs. B: bounded memory/retirement/churn instruments.           | **C:** complete mutation/admission/lifetime behavior. **E:** measured allocation/upload/resource improvements.               |
+| **11 — Shadows**                             | Partial          | A: shadow-owned identities/interfaces and scoped native proofs. B: shadow-demand recipe parameters.                 | **C:** final consumption/capacity/finite/wide-spot correctness. **D/E:** separate cost baseline and qualified optimizations. |
+| **12 — Retained properties and content**     | Partial          | A: LP01–LP32 inventory and strict migration contracts. B: sampled-material qualification and UV/alpha identity fix. | **C:** complete retained-property transport, mutation, scene-v7/editor/script migration and round-trip/lifecycle checks.     |
+| **13 — Measurement and diagnostics**         | Partial          | B: CPU/GPU/memory/churn instruments, native validity checks and user-accepted collection overhead.                  | **D/E:** integration into qualified baselines and scalable-culling diagnostic reports.                                       |
+| **14 — Final validation/docs**               | Not started      | A/B audits preserve prerequisite evidence.                                                                          | **F:** final-code correctness/performance/visual/native/editor checks and complete operating docs.                           |
+| **EX07-GATE — Whole slice**                  | **Open**         | A and B gates passed.                                                                                               | **F:** all production correctness/performance gates pass together, with measured improvements and supported limits.          |
+
+#### Evidence and scope
+
+- [A completion audit](plan/EX07A-completion-audit.md): contracts/interfaces and native proof.
+- [B completion audit](plan/EX07B-completion-audit.md): closed exit checklist and final affected test results.
+- [B detailed validation record](plan/EX07B-reference-validation.md): historical numerical, image, instrument and benchmark evidence; not an additional task list.
+- [EX07 implementation plan](plan/EX07-lighting-correctness-and-scalability.md): required workloads, contracts and gates for the remaining stages.
+
+No production performance baseline is claimed from the B instrument-overhead
+runs. The 1,024-light preview is fixture correctness evidence; official workload
+qualification and timing remain C/D responsibilities.
 
 ### 3.5 Slice 8 work items
 
