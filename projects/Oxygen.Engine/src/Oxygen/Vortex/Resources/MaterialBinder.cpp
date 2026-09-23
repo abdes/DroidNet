@@ -275,6 +275,18 @@ auto MakeMaterialKey(
   oxygen::HashCombine(
     seed, QuantizeMaterialScalar(asset.GetAmbientOcclusion()));
 
+  // Every retained sampling input must distinguish the GPU constants. UVs
+  // are coordinates, so dimensionless scalar quantization is inappropriate.
+  for (const auto component : asset.GetUvScale()) {
+    oxygen::HashCombine(seed, component);
+  }
+  for (const auto component : asset.GetUvOffset()) {
+    oxygen::HashCombine(seed, component);
+  }
+  oxygen::HashCombine(seed, asset.GetUvRotationRadians());
+  oxygen::HashCombine(seed, asset.GetUvSet());
+  oxygen::HashCombine(seed, asset.GetAlphaCutoff());
+
   MaterialTextureBindingKeys::From(asset).HashInto(seed);
   oxygen::HashCombine(seed, asset.GetMaterialDomain());
   oxygen::HashCombine(seed, asset.GetFlags());
