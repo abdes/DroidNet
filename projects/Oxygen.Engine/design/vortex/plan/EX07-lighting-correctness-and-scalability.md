@@ -44,6 +44,15 @@ validating** the complete lighting path covered by this plan. That responsibilit
 includes pre-existing defects and defects discovered during execution, regardless
 of which module or earlier milestone introduced them.
 
+The user's 2026-09-24 authorization supersedes the earlier production model and
+fixed numerical budgets: migrate to analytic finite-source evaluation, ordinary
+center-cone attenuation, view-dependent energy compensation with a compact
+hardware-filtered LUT, and cone/projected-shadow rendering for ordinary spots.
+The detailed current contract is the model-2 section of the PBR owner document.
+Keep independent references as measurement tools, publish observed quality/time/
+memory tradeoffs, and leave final acceptance to the user. Historical A/B and C
+records remain evidence for their recorded implementation, not model-2 closure.
+
 The user's 2026-09-23 performance directive requires production regression repair
 and profiling during C. Numerical accuracy alone does not qualify shipping code.
 Use bounded runtime work, reuse material/view terms, preserve safe frames in flight,

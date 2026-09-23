@@ -689,6 +689,16 @@ No EX06 delivery item remains open.
 
 **EX07 overall: in progress. A and B are complete. C is active.**
 
+**2026-09-24 active migration: production model 2.** The user authorized adopting
+UE-style analytic finite emitters and view-dependent energy compensation,
+removing runtime quadrature/compensated cone evaluation and reducing BRDF data
+to one compact hardware-filtered texture. Ordinary spots return to cone proxies
+and projected shadows. Prior hard numerical budgets are superseded as production
+acceptance gates; report measured quality, performance and memory for the user's
+decision. Implementation and fresh native/image/1440p evidence are in progress.
+The checkpoints below describe their original code and do not validate model 2.
+
+
 This section is the single progress tracker for EX07. **A–F are the ordered
 execution stages. EX07-01–14 are stable deliverable IDs that can span several
 stages.** Completing B closes the reference/instrument portions of those IDs;
