@@ -1235,8 +1235,9 @@ personal settings.
 
 ### Slice 7 - Complete the reference lighting unit chain
 
-**Outcome:** physically correct directional/point/spot illumination and qualified,
-improved rendering of large supported light sets.
+**Outcome:** physically normalized directional/point/spot illumination using
+[production model 2](../../renderer-core/physically-based-rendering.md#production-local-lighting-and-brdf-model-2),
+with qualified quality/performance tradeoffs and scalable supported light sets.
 **Dependency:** closed EX06. **Tracked by:** EX07-01–14/GATE.
 
 EX07 owns correctness and performance of the complete agreed lighting path,
@@ -1247,7 +1248,7 @@ An existing implementation limitation is repair work, not a completion exemption
 The [EX07 correctness/scalability plan](EX07-lighting-correctness-and-scalability.md)
 owns workload definitions, cost attribution, capacity/overflow behavior and
 performance acceptance. Execute six steps: **A contracts -> B references and
-instruments -> C correctness repair -> D qualified baseline/budgets -> E scalable
+instruments -> C correctness repair -> D qualified operating points -> E scalable
 culling and optimization -> F final validation**. Its directional cases retain the explicit dual-source
 contract in section 6. These checkpoints all belong to EX07 before EX08 begins.
 
@@ -1264,16 +1265,18 @@ contract in section 6. These checkpoints all belong to EX07 before EX08 begins.
   their appearance. Record intentional physical recalibration; never compensate
   with a hidden exposure offset or preserve old behavior through a compatibility path.
 
-**Calibration gate (EX07C):** directional, point and spot rendered probes in both families meet
-the PBR packed-material/BRDF budget (2% relative + 2e-5 absolute). Independent spot
-integration recovers authored flux; point ratios include known range fade.
+**Calibration gate (EX07C):** both families pass photometric normalization,
+material decoding, ABI and shared-model consistency checks. Report independent
+BRDF/finite-source approximation differences with the current model-2 quality
+measurements. Independent spot-profile integration recovers authored flux; point
+ratios include known range fade.
 Zero/near separation, at/beyond range, inner/outer and equal-angle cones have
 explicit finite/zero/invalid expectations. Inspect the lit calibration fixtures
 and run affected light/shader tests. EX08 consumes these qualified references.
 
 **Full EX07 gate:** also pass the many-light culling/reference-image, overflow,
 shader/shadow association, multi-view, resource-lifetime and editor-input cases.
-Freeze and meet the native performance budgets; deliver measured improvements
+Measure native quality/time/memory operating points; deliver accepted improvements
 and explicit supported limits. Primary workload: 1,024 mixed local lights at
 1080p; 4,096 lights, dense overlap and 4K qualify scaling. Shadowed subsets are
 measured separately. Benchmarks remain opt-in executables under `Benchmarks`,
@@ -1411,7 +1414,8 @@ prescribed distances and angular sweeps from EX07, with helpful distance/normal/
 cone overlays. Keep materials, camera and exposure fixed during comparisons.
 
 **Exit gate:** both experiments pass independent point intensity/range-fade and
-spot angular/flux expectations within the frozen budgets, with clearly visible
+spot center-cone/flux expectations, with model-2 approximation differences reported
+separately and clearly visible
 illuminated receivers. Reset restores all inputs; UI edits mark the recipe
 Modified. Both cases pass the same batch controller and native layout checks.
 Reuse EX07's singularity/invalid-input tests; rerun them only for affected code.
@@ -1551,7 +1555,10 @@ Freeze tolerances before results, using the
 [PBR budgets](../../renderer-core/physically-based-rendering.md#acceptance-budgets)
 and [LightBench coverage rules](../../renderer-core/lightbench.md#independent-measurement).
 GPU values, derived CPU values and displayed pixels have distinct comparisons.
-Never widen a budget to accept a failing result.
+Keep exposure, encoding and same-model consistency tolerances fixed. Assess
+production shading approximations using the PBR model-2 quality/time/memory
+comparisons; the old integrated-source and reciprocal-model errors are not
+implementation-failure thresholds for this model.
 
 ### Required coverage
 

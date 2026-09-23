@@ -1,8 +1,8 @@
 # Deferred Lighting LLD
 
-**Phase:** 3 — Deferred Core
+**Stage:** 12 — Deferred Direct Lighting
 **Deliverable:** D.6
-**Status:** `ready`
+**Status:** Implemented; broader EX07 qualification is tracked in the implementation plan.
 
 ## Mandatory Vortex Rule
 
@@ -21,35 +21,28 @@
 
 ## Exposure-package integration
 
-EX07's current target is owned by [LightingService](lighting-service.md), the
-[wire contract](lighting-gpu-abi.md#shadow-association-and-deferred-draws) and the
-[PBR equations](../../renderer-core/physically-based-rendering.md#common-surface-brdf).
-Use canonical indexed physical records and 80-byte geometry/index draw constants,
-correlated-GGX compensation and finite sphere/disk source integration. The
-remaining Phase-3/4 descriptions below are historical baseline context, not a
-parallel current interface. Missing required inputs fail the view; valid disabled
-lighting still preserves emissive. Historical passes do not qualify EX07.
+[LightingService](lighting-service.md) owns stage-12 deferred lighting, using the
+[canonical indexed ABI](lighting-gpu-abi.md#shadow-association-and-deferred-draws)
+and [production BRDF model 2](../../renderer-core/physically-based-rendering.md#production-local-lighting-and-brdf-model-2).
+Physical light records are shared with forward shading; 80-byte per-draw constants
+carry geometry and indices. Source attenuation, analytic source response and
+energy compensation are shared helpers.
 
-Use the [LightingService physical contract](lighting-service.md#exposure-package-light-calibration)
-for directional/point/spot units and regularization. The historical shader
-sketches below are not authorization for the old `1/(d*d+1)` attenuation or
-passing lumens through as candela. Add P-scaled radiance to the existing
-pre-exposed emissive SceneColor, preserving coverage. HDR target/PSO formats and
-cumulative range checks follow the [SceneTextures inventory](scene-textures.md#exposure-hdr-domain-and-format-inventory).
-Do not infer safety from each individual light contribution when the accumulated
-target can overflow. Exposure history remains owned by PostProcessService.
+Accumulate P-scaled radiance into the existing pre-exposed emissive SceneColor.
+Missing required inputs fail the view; valid disabled or empty direct lighting
+preserves emissive. HDR formats and cumulative range checks follow the
+[SceneTextures inventory](scene-textures.md#exposure-hdr-domain-and-format-inventory).
+Exposure history remains owned by PostProcessService.
 
 ## 1. Scope and Context
 
 ### 1.1 What This Covers
 
-The deferred direct-lighting pass at stage 12 — fullscreen pass-per-light
-for directional lights and one-pass bounded-volume lighting for point/spot
-lights. All light types read GBuffer products, evaluate Cook-Torrance BRDF,
-and accumulate into SceneColor.
-
-In Phase 3 the deferred lighting logic lives inline in `SceneRenderer` as
-a file-separated method. In Phase 4A it migrates into `LightingService`.
+`LightingService::RenderDeferredLighting` invokes `DeferredLightPass` for each
+view. One fullscreen draw evaluates all directional sources, reusing GBuffer
+reconstruction and material/view preparation. Each local light uses one bounded
+volume draw. Static sky diffuse, when enabled, uses a separate fullscreen draw.
+All draws add to SceneColor.
 
 ### 1.2 Stage Position
 
@@ -72,103 +65,54 @@ a file-separated method. In Phase 4A it migrates into `LightingService`.
 This module must preserve the following invariants from
 [ARCHITECTURE.md §6.3.1](../ARCHITECTURE.md):
 
-- in Phase 3, stage 12 is temporary inline `SceneRenderer` orchestration
-- the deferred-light shader family still belongs to the Lighting domain and is
-  authored under that file home even before CPU-side ownership migrates
+- stage 12 is dispatched by `SceneRenderer` through `LightingService`
+- the deferred-light shader family belongs to the Lighting domain
 - scene-texture access flows through published `ViewFrameBindings` →
   `SceneTextureBindings`; no local binding synthesis is allowed
 
 ## 2. Interface Contracts
 
-### 2.1 Phase 3 Location (Inline)
+`LightingService::RenderDeferredLighting` receives the current render context,
+command recorder, SceneTextures, immutable frame selection, indexed shadow data
+and shadow surfaces, and static-sky availability. Its boolean result propagates
+recording failure. The service owns publication and dispatch; `DeferredLightPass`
+owns draw preparation, PSOs, framebuffers and persistent sphere/cone geometry.
 
-In Phase 3, deferred lighting is a file-separated method of `SceneRenderer`:
-
-```text
-src/Oxygen/Vortex/
-└── SceneRenderer/
-    ├── SceneRenderer.h
-    └── SceneRenderer.cpp   ← Phase 3 inline orchestration owner
-```
-
-### 2.2 Phase 3 Method Signature
-
-```cpp
-namespace oxygen::vortex {
-
-// Private method of SceneRenderer, defined in separate .cpp
-void SceneRenderer::RenderDeferredLighting(
-  RenderContext& ctx,
-  const SceneTextures& scene_textures);
-
-}  // namespace oxygen::vortex
-```
-
-### 2.3 Phase 4A Target (LightingService)
-
-When migrated in Phase 4A, the CPU-side method moves into:
-
-```cpp
-class LightingService {
- public:
-  void RenderDeferredLighting(RenderContext& ctx,
-                               const SceneTextures& scene_textures);
-};
-```
-
-The Phase 3 inline implementation should be written to facilitate this
-migration with minimal restructuring. The CPU-side orchestration is temporary;
-the shader-family home already follows the final Lighting-domain owner to avoid
-future shader-path churn. Phase 4A also introduces a separately published
-forward-light family under the Lighting domain, but that supporting product
-does not replace the canonical per-light deferred direct-lighting contract.
-
-### 2.4 Ownership and Lifetime
-
-| Owner                                            | Owned By                                                                                                    | Lifetime                                           |
-| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| Deferred lighting logic                          | `SceneRenderer` (Phase 3 inline)                                                                            | Per SceneRenderer                                  |
-| Local-light proxy geometry                       | Phase 03: shader-generated procedural sphere/cone volumes; Phase 4A: `LightingService` proxy-geometry cache | Phase 03 draw-time generation; Phase 4A persistent |
-| Per-light constants buffer + per-light CBV views | `SceneRenderer` (Phase 03 inline)                                                                           | Per SceneRenderer allocation, per-frame contents   |
-| Per-light PSOs                                   | `SceneRenderer` (Phase 03 inline), later `LightingService`                                                  | Persistent                                         |
-
-The key Phase 03 deviation from UE5.7 is explicit and already approved in the
-architecture package: Vortex keeps UE's bounded-volume local-light algorithm,
-but the retained Phase 03 branch generates point/spot proxy geometry
-procedurally from `SV_VertexID` and selects per-light constants through the
-bindless heap instead of using persistent renderer-owned proxy meshes plus
-traditional pass-uniform plumbing. That deviation remains temporary and is
-scheduled to migrate to `LightingService` in Phase 4A.
+Per-draw constants and CBV descriptors use the renderer's frame-safe allocation
+and retention infrastructure. Light records, per-view bindings and shadow
+references retain their published frame/view identity until GPU use completes.
+The exact interface and lifetimes are defined by the
+[service contract](lighting-service.md#2-canonical-data-and-interfaces) and
+[GPU ABI](lighting-gpu-abi.md).
 
 ## 3. Light Types and Rendering Strategy
 
-### 3.1 Per-Light Rendering Approach
+### 3.1 Rendering approach
 
-| Light Type  | Geometry                         | Draw Policy             | Notes                                                                                               |
-| ----------- | -------------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------- |
-| Directional | Fullscreen triangle              | Fullscreen              | One fullscreen draw per directional light                                                           |
-| Point       | Procedural sphere bounded volume | One-pass bounded volume | Generated from `SV_VertexID`; outside-volume, inside-volume, or non-perspective bounded-volume mode |
-| Spot        | Procedural cone bounded volume   | One-pass bounded volume | Generated from `SV_VertexID`; outside-volume, inside-volume, or non-perspective bounded-volume mode |
+| Source | Geometry | Draw policy |
+| --- | --- | --- |
+| Directional array | Procedural fullscreen triangle | One draw per view; one shared surface/BRDF preparation and a loop over sources |
+| Point | Persistent sphere proxy | One bounded-volume draw per light |
+| Ordinary spot | Persistent cone proxy | One bounded-volume draw per light, regardless of source radius |
+| 90-degree soft spot | Persistent sphere proxy | One bounded-volume draw; center-cone shader still rejects the back hemisphere |
 
-### 3.2 Local-Light Volume Modes (Point + Spot)
+### 3.2 Local-light volume modes
 
-Phase 03 uses a **one-pass bounded-volume** path for every local light. The
-renderer chooses the raster/depth policy per light:
+- Camera outside: render front faces with `GREATER_EQUAL` for reversed Z or
+  `LESS_EQUAL` for ordinary Z.
+- Camera inside or near-plane overlap: render back faces with `ALWAYS` depth.
+- Non-perspective views: use back faces and `ALWAYS`; this is a conservative
+  raster policy, not a claim that the camera lies inside the volume.
 
-- **Camera outside light volume:** render the volume’s front faces with depth
-  compare `LESS_EQUAL` / `GREATER_EQUAL` depending on the active Z convention.
-- **Camera inside light volume:** render back faces with depth compare
-  `ALWAYS`.
-- **Non-perspective view mode:** use the same one-pass bounded-volume state as
-  the inside-volume mode until a dedicated orthographic local-light policy
-  exists.
-
-There is no separate stencil-mark pass in the final Phase 03 contract. Local
-lights are bounded by volume rasterization and per-pixel scene-depth sampling.
+There is no stencil-mark pass. Depth writes and stencil are disabled. Proxy Z
+clipping is disabled so an exit surface beyond the far plane cannot remove
+visible receivers; XY/W clipping, culling and depth policy remain. The pixel
+shader reconstructs the receiver and checks actual center-based range/cone
+support before expensive shading.
 
 ### 3.3 Per-Light Data Access
 
-Phase 3 uses a bindless-selected per-light constant-buffer-view model.
+Draws use bindless-selected constant-buffer views.
 The per-draw geometry/index contract is `DeferredLightConstants`; shaders do
 not receive it through a fixed `register(b1)` pass binding. Instead:
 
@@ -220,238 +164,80 @@ After stage 12:
 
 ### 4.4 Execution Flow
 
-```text
-SceneRenderer::RenderDeferredLighting(ctx, scene_textures)
-  │
-  ├─ Read current view from RenderContext
-  ├─ Load published SceneTextureBindings for the current view
-  ├─ Ensure the per-light constants upload buffer and CBV views exist
-  ├─ Set blend state: Additive (SrcBlend=ONE, DestBlend=ONE)
-  │
-  ├─ for each directional light:
-  │     ├─ Write DeferredLightConstants (type=DIRECTIONAL)
-  │     ├─ Set root constants {g_DrawIndex, g_PassConstantsIndex}
-  │     ├─ Bind fullscreen directional PSO
-  │     └─ Draw fullscreen triangle (3 vertices, no VB/IB)
-  │
-  ├─ for each point light:
-  │     ├─ Write DeferredLightConstants (type=POINT)
-  │     ├─ Set root constants {g_DrawIndex, g_PassConstantsIndex}
-  │     └─ One bounded-volume lighting draw
-  │           (outside-volume, inside-volume, or non-perspective bounded-volume policy;
-  │            proxy sphere generated procedurally from `SV_VertexID`)
-  │
-  └─ for each spot light:
-        ├─ Write DeferredLightConstants (type=SPOT)
-        ├─ Set root constants {g_DrawIndex, g_PassConstantsIndex}
-        └─ One bounded-volume lighting draw
-              (outside-volume, inside-volume, or non-perspective bounded-volume policy;
-               proxy cone generated procedurally from `SV_VertexID`)
-```
+1. Load current-view scene and lighting bindings and prepare draw packets.
+2. Ensure service-owned local proxy buffers and matching framebuffers exist.
+3. Emit one directional-array fullscreen draw when direct directionals are active.
+4. Emit one sphere/cone draw per local packet with the appropriate volume mode.
+5. Emit the separate static-sky diffuse draw when available and enabled.
+6. Accumulate with additive blending, retaining existing emissive and coverage.
 
 ## 5. Shader Contracts
 
-### 5.1 Directional Light Shader
+### 5.1 Directional array
 
-```hlsl
-cbuffer RootConstants : register(b2, space0)
-{
-    uint g_DrawIndex;
-    uint g_PassConstantsIndex;
-}
+`DeferredLightDirectional.hlsl` reconstructs a covered surface once and prepares
+`GgxDirectContext` once. It loops over `LightingFrameBindings.directional_count`,
+retaining each source's indexed shadow visibility, atmosphere transport and
+illuminance. It accumulates unexposed contributions and applies pre-exposure once.
+The static-sky draw uses its separate diffuse branch.
 
-[shader("vertex")]
-VortexFullscreenTriangleOutput DeferredLightDirectionalVS(uint vertex_id : SV_VertexID)
-{
-    return GenerateVortexFullscreenTriangle(vertex_id);
-}
+### 5.2 Point and spot lights
 
-[shader("pixel")]
-float4 DeferredLightDirectionalPS(VortexFullscreenTriangleOutput input) : SV_Target0
-{
-    ConstantBuffer<DeferredLightConstants> light_constants
-        = ResourceDescriptorHeap[g_PassConstantsIndex];
-    const SceneTextureBindingData bindings = LoadBindingsFromCurrentView();
-    const float3 lighting = EvaluateDeferredLight(
-        input.uv,
-        VortexSafeNormalize(light_constants.light_direction_and_falloff.xyz),
-        LoadDeferredLightColor(light_constants.light_color_and_intensity),
-        1.0f,
-        camera_position,
-        bindings);
-    return float4(lighting, 0.0f);
-}
-```
+`DeferredLightPoint.hlsl` and `DeferredLightSpot.hlsl` share this sequence:
 
-### 5.2 Point Light Shader
+1. Reject invalid bindings and background depth; reconstruct world position.
+2. Resolve the canonical local record using the draw's selection index.
+3. `PrepareLocalEmitterInput` computes center direction, inverse distance and
+   range/cone attenuation once; reject zero contribution before material work.
+4. Decode the material and reject surfaces outside the analytic source horizon.
+5. Resolve indexed shadow visibility once; reject fully shadowed receivers.
+6. Prepare shared GGX terms, evaluate analytic source lobes, multiply visibility
+   and apply pre-exposure once.
 
-```hlsl
-[shader("vertex")]
-DeferredLightVolumeVSOutput DeferredLightPointVS(uint vertex_id : SV_VertexID)
-{
-    ConstantBuffer<DeferredLightConstants> light_constants
-        = ResourceDescriptorHeap[g_PassConstantsIndex];
-    return GenerateDeferredLightVolume(
-        GenerateDeferredLightSphereVertex(vertex_id),
-        light_constants.light_world_matrix);
-}
+The source family is specialized per shader. There is no runtime quadrature or
+shadow lookup inside a source-sampling loop. Ordinary spots use projected shadow
+records; points and 90-degree soft spots use cube records. Source radius changes
+analytic diffuse/specular response without expanding range or cone support.
 
-[shader("pixel")]
-float4 DeferredLightPointPS(DeferredLightVolumeVSOutput input) : SV_Target0
-{
-    ConstantBuffer<DeferredLightConstants> light_constants
-        = ResourceDescriptorHeap[g_PassConstantsIndex];
-    const SceneTextureBindingData bindings = LoadBindingsFromCurrentView();
-    const float2 screen_uv = ResolveDeferredLightScreenUv(input.screen_position);
-    const float scene_depth = SampleSceneDepth(screen_uv, bindings);
-    const float3 world_position
-        = ReconstructDeferredWorldPosition(screen_uv, scene_depth);
-    const float3 light_vector
-        = light_constants.light_position_and_radius.xyz - world_position;
-    const float attenuation = ComputeLocalLightDistanceAttenuation(
-        light_vector, light_constants.light_position_and_radius.w);
-    const float3 lighting = EvaluateDeferredLightAtWorldPosition(
-        screen_uv,
-        scene_depth,
-        world_position,
-        VortexSafeNormalize(light_vector),
-        LoadDeferredLightColor(light_constants.light_color_and_intensity),
-        attenuation,
-        camera_position,
-        bindings);
-    return float4(lighting, 0.0f);
-}
-```
+### 5.3 Shared helpers and data
 
-### 5.3 Spot Light Shader
+`DeferredLightingCommon.hlsli` owns deferred geometry/binding access;
+`DeferredShadingCommon.hlsli` owns deferred surface reconstruction and material
+decoding. `FiniteEmitter.hlsli` and `LocalLightAttenuation.hlsli` supply the same
+source evaluation used by forward lighting. `Shared/BRDFCommon.hlsli` owns the
+shared direct/indirect BRDF and compact energy lookup.
 
-```hlsl
-[shader("vertex")]
-DeferredLightVolumeVSOutput DeferredLightSpotVS(uint vertex_id : SV_VertexID)
-{
-    ConstantBuffer<DeferredLightConstants> light_constants
-        = ResourceDescriptorHeap[g_PassConstantsIndex];
-    return GenerateDeferredLightVolume(
-        GenerateDeferredLightConeVertex(vertex_id),
-        light_constants.light_world_matrix);
-}
+View transforms and perspective/orthographic view directions use the standard
+Vortex view contract. Draw constants contain no duplicate intensity or cone
+parameters; their exact layout is in the
+[80-byte geometry/index ABI](lighting-gpu-abi.md#shadow-association-and-deferred-draws).
 
-[shader("pixel")]
-float4 DeferredLightSpotPS(DeferredLightVolumeVSOutput input) : SV_Target0
-{
-    ConstantBuffer<DeferredLightConstants> light_constants
-        = ResourceDescriptorHeap[g_PassConstantsIndex];
-    const SceneTextureBindingData bindings = LoadBindingsFromCurrentView();
-    const float2 screen_uv = ResolveDeferredLightScreenUv(input.screen_position);
-    const float scene_depth = SampleSceneDepth(screen_uv, bindings);
-    const float3 world_position
-        = ReconstructDeferredWorldPosition(screen_uv, scene_depth);
-    const float3 light_vector
-        = light_constants.light_position_and_radius.xyz - world_position;
-    const float base_attenuation = ComputeLocalLightDistanceAttenuation(
-        light_vector, light_constants.light_position_and_radius.w);
-    const float spot_attenuation = ComputeSpotLightAngularAttenuation(
-        light_vector,
-        light_constants.light_direction_and_falloff.xyz,
-        light_constants.spot_angles.x,
-        light_constants.spot_angles.y);
-    const float3 lighting = EvaluateDeferredLightAtWorldPosition(
-        screen_uv,
-        scene_depth,
-        world_position,
-        VortexSafeNormalize(light_vector),
-        LoadDeferredLightColor(light_constants.light_color_and_intensity),
-        base_attenuation * spot_attenuation,
-        camera_position,
-        bindings);
-    return float4(lighting, 0.0f);
-}
-```
+### 5.4 Shader entrypoints
 
-### 5.4 DeferredLightingCommon.hlsli (Family-Local)
-
-```hlsl
-struct DeferredLightConstants
-{
-    float4 light_position_and_radius;
-    float4 light_color_and_intensity;
-    float4 light_direction_and_falloff;
-    float4 spot_angles;
-    float4x4 light_world_matrix;
-    uint light_type;
-    uint _padding0;
-    uint _padding1;
-    uint _padding2;
-};
-
-// Shared helpers:
-// - GenerateDeferredLightSphereVertex(vertex_id)
-// - GenerateDeferredLightConeVertex(vertex_id)
-// - GenerateDeferredLightVolume(local_position, light_world_matrix)
-// - LoadBindingsFromCurrentView()
-// - ResolveDeferredLightScreenUv(screen_position)
-// - ReconstructDeferredWorldPosition(screen_uv, scene_depth)
-// - ComputeLocalLightDistanceAttenuation(...)
-// - ComputeSpotLightAngularAttenuation(...)
-```
-
-The include consumes `Renderer/ViewConstants.hlsli`, so view-space globals such
-as `view_matrix`, `projection_matrix`, and `camera_position` come from the
-standard Vortex view contract rather than from a lighting-specific `cbuffer`.
-This is the approved Phase 03 bindless contract and must stay coherent with the
-already-approved `SceneTextureBindings` / `ViewFrameBindings` routing model.
-
-### 5.5 DeferredShadingCommon.hlsli (Family-Local)
-
-`DeferredShadingCommon.hlsli` also belongs to the Lighting deferred family.
-It is not renderer-wide `Shared/` code because its current responsibilities are
-specific to deferred-light input validation, deferred surface reconstruction,
-and deferred Cook-Torrance evaluation. It therefore lives at:
-
-```text
-Services/Lighting/DeferredShadingCommon.hlsli
-```
-
-If a future non-lighting family proves stable reuse of this file's helpers,
-that promotion decision must be made explicitly against the architecture
-ownership rules rather than by convenience.
-
-### 5.6 Catalog Registration
-
-| Entrypoint                   | Profile | Notes                                     |
-| ---------------------------- | ------- | ----------------------------------------- |
-| `DeferredLightDirectionalVS` | vs_6_0  | Fullscreen triangle                       |
-| `DeferredLightDirectionalPS` | ps_6_0  | GBuffer read + BRDF                       |
-| `DeferredLightPointVS`       | vs_6_0  | Procedural sphere volume                  |
-| `DeferredLightPointPS`       | ps_6_0  | GBuffer read + BRDF + attenuation         |
-| `DeferredLightSpotVS`        | vs_6_0  | Procedural cone volume                    |
-| `DeferredLightSpotPS`        | ps_6_0  | GBuffer read + BRDF + attenuation + angle |
+| Entrypoint | Responsibility |
+| --- | --- |
+| `DeferredLightDirectionalVS` | Procedural fullscreen triangle |
+| `DeferredLightDirectionalPS` | Directional-array shading or static-sky diffuse |
+| `DeferredLightPointVS` | Load and transform stored sphere proxy vertices |
+| `DeferredLightPointPS` | Shared analytic point-source shading |
+| `DeferredLightSpotVS` | Load and transform stored cone/sphere proxy vertices |
+| `DeferredLightSpotPS` | Shared analytic spot-source shading and center-cone attenuation |
 
 ## 6. Light Volume Geometry
 
-### 6.1 Unit Sphere (Point Lights)
+### 6.1 Sphere proxy
 
-Phase 03 currently generates the point-light proxy sphere procedurally from
-`SV_VertexID` in shader code. The sphere is still treated as a unit bounded
-volume scaled and translated by `LightWorldMatrix`, but there is no persistent
-VB/IB allocation in the retained runtime branch.
+`DeferredLightPass` lazily generates the sphere vertices on the CPU and retains
+a structured buffer/SRV for reuse. Point and hemispherical spot draws select this
+buffer and transform it to the light's center/range influence volume. Vertex
+shaders load stored positions using `SV_VertexID`.
 
-This is **temporary Phase 03 scaffolding only**. The permanent architecture is
-Phase 4A `LightingService` ownership of persistent sphere proxy geometry.
-Phase 4A must remove the procedural point-light proxy-generation path from the
-canonical Stage 12 runtime path.
+### 6.2 Cone proxy
 
-### 6.2 Unit Cone (Spot Lights)
-
-Phase 03 currently generates the spot-light proxy cone procedurally from
-`SV_VertexID` in shader code. The cone is still treated as a bounded volume
-scaled and oriented by `LightWorldMatrix`, but there is no persistent VB/IB
-allocation in the retained runtime branch.
-
-This is **temporary Phase 03 scaffolding only**. The permanent architecture is
-Phase 4A `LightingService` ownership of persistent cone proxy geometry. Phase
-4A must remove the procedural spot-light proxy-generation path from the
-canonical Stage 12 runtime path.
+Ordinary spots use the same service-owned persistent-buffer pattern for the cone
+(currently 144 vertices). Its transform derives from center range, direction and
+outer cone angle. Increasing source radius does not change the proxy. No proxy
+vertices are regenerated per pixel or per frame.
 
 ### 6.3 Fullscreen Triangle (Directional)
 
@@ -467,7 +253,7 @@ RasterizerState:  CullNone (fullscreen triangle)
 DepthStencil:     Depth test DISABLED (fullscreen, always shade)
                   Stencil DISABLED
 BlendState:       SrcBlend=ONE, DestBlend=ONE (additive)
-RTV:              SceneColor (R16G16B16A16_FLOAT)
+RTV:              SceneColor (its published HDR format)
 DSV:              None (no depth test)
 ```
 
@@ -479,7 +265,7 @@ DepthStencil:     Depth test LESS_EQUAL / GREATER_EQUAL
                   Stencil DISABLED
                   Depth write DISABLED
 BlendState:       SrcBlend=ONE, DestBlend=ONE (additive)
-RTV:              SceneColor (R16G16B16A16_FLOAT)
+RTV:              SceneColor (its published HDR format)
 DSV:              SceneDepth (depth read)
 ```
 
@@ -491,7 +277,7 @@ DepthStencil:     Depth test ALWAYS
                   Stencil DISABLED
                   Depth write DISABLED
 BlendState:       SrcBlend=ONE, DestBlend=ONE (additive)
-RTV:              SceneColor (R16G16B16A16_FLOAT)
+RTV:              SceneColor (its published HDR format)
 DSV:              SceneDepth (depth read)
 ```
 
@@ -503,25 +289,24 @@ DepthStencil:     Depth test ALWAYS
                   Stencil DISABLED
                   Depth write DISABLED
 BlendState:       SrcBlend=ONE, DestBlend=ONE (additive)
-RTV:              SceneColor (R16G16B16A16_FLOAT)
+RTV:              SceneColor (its published HDR format)
 DSV:              SceneDepth (depth read)
 ```
 
-The non-perspective bounded-volume mode is an explicit temporary Phase 03 policy, not a
-claim that the camera is geometrically “inside” the light volume.
+Local-light PSOs disable proxy Z clipping as described in section 3.2.
+Non-perspective mode does not imply a geometrically inside camera.
 
 ## 8. Stage Integration
 
 ### 8.1 Dispatch Contract
 
-SceneRenderer calls `RenderDeferredLighting(ctx, scene_textures)` at stage 12
-for the current view after setting that view in `RenderContext`. This is a
-private method of SceneRenderer defined in a separate .cpp file.
+SceneRenderer dispatches stage 12 through `LightingService` after establishing
+the current view and published products in `RenderContext`.
 
 ### 8.2 Null-Safe Behavior
 
-If no lights exist in the scene, the method returns immediately. SceneColor
-retains only the emissive contribution from BasePass.
+If no active direct or static-sky draws remain, the pass emits no lighting draws.
+SceneColor retains the existing emissive contribution from BasePass.
 
 ### 8.3 Capability Gate
 
@@ -530,49 +315,40 @@ stage 12 is skipped.
 
 ## 9. Resource Management
 
-### 9.1 GPU Resources
+### 9.1 GPU resources
 
-| Resource                                                                | Lifetime             | Notes                                                                                  |
-| ----------------------------------------------------------------------- | -------------------- | -------------------------------------------------------------------------------------- |
-| Procedural light-volume geometry (sphere, cone)                         | Shader-generated     | Temporary Phase 03-only implementation shortcut; scheduled for removal in Phase 4A     |
-| Per-light CBV views over `DeferredLightConstants` upload buffer         | Per light / per draw | Upload buffer + shader-visible CBV descriptors selected through `g_PassConstantsIndex` |
-| PSOs (directional + point/spot outside/inside/non-perspective variants) | Persistent           | Cached by renderer                                                                     |
+| Resource | Lifetime and ownership |
+| --- | --- |
+| Sphere/cone structured buffers and SRVs | Persistent, service-owned through DeferredLightPass; lazy initialization |
+| Draw constants and CBVs | Per frame/draw; retained through GPU completion |
+| Directional/local PSOs | Cached, keyed by formats, depth convention, volume mode and shader variants |
+| Framebuffers | Rebuilt when referenced scene attachments change |
+| Energy LUT | One immutable 32x32 RG32F texture shared across views through LightingService publication |
 
-### 9.2 Performance Considerations
+### 9.2 Performance considerations
 
-- **Pass-per-light:** One draw call per light. Directional lights use a
-  fullscreen triangle; point/spot lights use bounded volume draws with
-  mode-specific cull/depth policy. Cost still scales linearly with light count.
-- **Future optimization (Phase 4A):** Tiled/clustered deferred using compute
-  shaders. Not in Phase 3 scope.
-- **Temporary Phase 03 deviation only:** UE 5.7 commonly uses persistent
-  bounded-volume proxy ownership for point/spot lights. The retained Vortex
-  Phase 03 branch keeps the same bounded-volume contract but generates the
-  sphere/cone procedurally in shader code as short-lived delivery scaffolding.
-  This is not accepted as the permanent solution. The scheduled replacement is
-  Phase 4A `LightingService` ownership of persistent sphere/cone proxy
-  geometry.
+Directional batching avoids repeated surface reconstruction and material/view
+preparation across sources covering the same pixels. Local volume rasterization,
+center-attenuation rejection and horizon rejection precede expensive BRDF work.
+Source evaluation has fixed work; shadow filtering occurs once per receiver.
+Local draw/submission and shaded-overlap cost still scale with relevant lights.
+
+The [PBR rationale](../../renderer-core/physically-based-rendering.md#design-tradeoffs-and-rejected-alternatives)
+explains the approximation and LUT choices. The
+[EX07 plan](../plan/EX07-lighting-correctness-and-scalability.md) owns measured
+culling/submission improvements and many-light qualification. A tiled/clustered
+deferred replacement requires profiling evidence and a revised service/ABI design.
 
 ## 10. Testability Approach
 
 1. **Single directional light:** Render a white sphere on gray plane with
    one white directional light. Verify SceneColor shows correct
-   diffuse+specular shading. Compare against reference (Lambertian +
-   GGX specular).
-2. **Point light bounded volume:** Place a point light with small radius.
-   Verify that pixels outside the light radius show zero lighting contribution
+   diffuse+specular shading. Compare the shared model with independent diffuse/specular references.
+2. **Point light bounded volume:** Place a point light with small range.
+   Verify that pixels outside the light range show zero lighting contribution
    (only emissive).
 3. **Multi-light accumulation:** Add 3 colored lights (red, green, blue).
    Verify additive accumulation produces expected color mixing.
 4. **RenderDoc validation:** Inspect SceneColor after stage 12.
    Verify correct light accumulation, no banding, and correct outside-volume /
    inside-volume local-light products.
-
-## 11. Open Questions
-
-None. The Phase 3 contract is fully specified after fixing:
-
-- stage-12 ownership as temporary inline SceneRenderer orchestration with a
-  future LightingService migration path
-- explicit published-binding access through ViewFrameBindings
-- fullscreen directional vs bounded local-light rendering patterns

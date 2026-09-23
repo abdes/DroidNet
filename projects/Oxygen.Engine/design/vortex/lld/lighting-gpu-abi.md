@@ -3,14 +3,11 @@
 Current execution and qualification status lives only in
 [tracker section 3.4](../IMPLEMENTATION_STATUS.md#34-slice-7-work-items). This companion to
 [LightingService](lighting-service.md#2-canonical-data-and-interfaces) specifies
-CPU/HLSL wire layouts. The [A checkpoint](../plan/EX07A-contract-review.md) owns
-approved decisions, evidence and remaining gates.
+CPU/HLSL wire layouts for production lighting model 2.
 
 The records below have size/alignment/every-offset assertions and native D3D12
-upload/decode/readback coverage. In Debug and Release the 24-case suite passes
-22 native decode/lookup cases, one allocation query and one CPU index-contract
-check, including integer high-bit values, sentinels, reserved fields,
-nonzero element indices, adjacent records and nonsymmetric matrix transforms.
+upload/decode/readback coverage, including integer high-bit values, sentinels,
+reserved fields, adjacent records and nonsymmetric matrix transforms.
 Deferred draw constants are additionally decoded through actual aligned CBVs.
 Production deferred CBVs now occupy immutable 256-byte slices in frame-owned
 upload batches. Repeated recordings cannot overwrite earlier constants; failed
@@ -27,10 +24,8 @@ inactive until the contact product is connected.
 The current CPU publisher emits complete light lists without a compact-index
 buffer. The CPU source selection is now an ordered directional collection, and each
 shadowed source publishes an independently indexed family and surface. Spatial
-culling and complete support/failure/lifetime behavior remain open. BRDF moment
-publication uses the existing fields below and a shared immutable texture pair. These
-ABI and binding proofs close the scoped A migration gate recorded in the
-completion audit; they do not qualify physical lighting or overall EX07.
+culling and complete support/failure/lifetime behavior remain open. BRDF energy
+publication uses one immutable 32x32 RG32Float texture shared by all views.
 
 ## Encoding rules
 
@@ -72,34 +67,23 @@ and culling. Target stride **80**, alignment **16**:
 |      0 | float3 `position_ws`                   | World metres, matching view reconstruction origin                     |
 |     12 | float `range_m`                        | Authored finite range >=0; zero has no influence                      |
 |     16 | float3 `intensity_rgb_cd`              | Compensated, tinted point/spot candela RGB, resolved once             |
-|     28 | float `source_radius_m`                | Physical sphere/disk radius >=0                                       |
+|     28 | float `source_radius_m`                | Source radius >=0 for analytic diffuse/specular response                                       |
 |     32 | float3 `emitted_direction_ws`          | Unit emitted axis; point stores (0,-1,0), unused                      |
 |     44 | float `inverse_range_m`                | Checked positive reciprocal, or zero for zero range                   |
-|     48 | float `inner_cone_sin_half_squared`    | sin(inner/2)^2; point 0                                               |
-|     52 | float `outer_cone_sin_half_squared`    | sin(outer/2)^2; point 0                                               |
+|     48 | float `outer_cone_cosine`             | cos(outer); point 0                                               |
+|     52 | float `inverse_cone_cosine_width`     | 1/(cos(inner)-cos(outer)); hard cone and point 0                                               |
 |     56 | uint `kind`                            | Point=0, Spot=1; reject unknown values                                |
 |     60 | uint `flags`                           | Bit 0 authored shadow request, bit 1 contact request; other bits zero |
 |     64 | uint `selection_index`                 | Index in immutable local selection                                    |
-|     68 | float `inner_cone_relative_correction` | Relative residual of the double-precision squared half-angle; point 0 |
-|     72 | float `outer_cone_relative_correction` | Relative residual of the double-precision squared half-angle; point 0 |
-|     76 | uint `reserved`                        | Zero; no attenuation selector/exponent                                |
+|     68 | uint3 `reserved`                      | Zero; no attenuation selector or precision-expansion payload |
 
-C's boundary-precision repair retains the 80-byte stride and existing member
-offsets, assigning two previously reserved words to cone precision. Each exact
-squared half-angle is represented by `high * (1 + relative_correction)`, where
-`high` is the original float at offset 48/52 and the correction is computed in
-double precision before upload. Zero inner angle has zero correction; the exact
-hemisphere endpoint is `(0.5,0)`. CPU/HLSL producers, both consuming families,
-native probes and diagnostic readers migrate together; reserved-word zeros from
-the old layout are not a compatibility contract.
-
-This refinement is required by the existing physical budget: the B native probe
-reported 23 narrow-cone boundary channel failures after a small valid ramp was
-rounded to zero. Evaluate the angular coordinate using normalized represented
-directions and compensated float arithmetic; preserve the correction through
-the outer-edge subtraction. Relative corrections and scaled angular coordinates
-avoid depending on subnormal residual storage. This changes neither the physical
-profile nor supported source power, and does not require optional GPU FP64.
+The CPU resolves photometric normalization in double precision and publishes
+ordinary FP32 cone constants. Soft cones evaluate one squared cosine ramp from
+the source center; inverse width zero selects the hard-cone step. Publication
+rejects an outer cosine rounded to one or a soft interval whose rounded cosines
+are indistinguishable. A soft hemisphere has outer cosine zero. Source radius
+does not expand the center-based range or cone, and does not select cube shadows
+for an ordinary spot.
 
 Source lux/lumens, compensation, source node handle/generation and shadow tuning
 remain in the CPU selection. The resolved evaluation records are derived once
@@ -174,9 +158,13 @@ must not reuse the small scene ID carried by node handles.
 |     64 | uint2 `frame_sequence`            | Current renderer frame sequence                                                                    |
 |     72 | uint2 `view_generation`           | View lifetime/resource generation, not just ViewId                                                 |
 |     80 | uint `publication_state`          | Disabled=0, Empty=1, Recorded=2, Failed=3; this describes the recorded package, not GPU completion |
-|     84 | uint `brdf_moments_srv`           | Texture-domain RG32Float loss/B; X=sqrt(mu), Y=effective roughness                                 |
-|     88 | uint `brdf_mean_moments_srv`      | Texture-domain RG32Float mean-loss/mean-B; one X texel, Y=effective roughness                      |
-|     92 | uint `brdf_model_revision`        | 1 for the specified compensated correlated-GGX model                                               |
+|     84 | uint `brdf_energy_srv`           | Shared 32x32 RG32Float directional albedo E / Schlick moment B |
+|     88 | uint `brdf_model_revision`       | 2 for analytic finite sources and view-dependent compensation |
+|     92 | uint `reserved`                  | Zero |
+
+The energy texture uses X=sqrt(NdotV), Y=(effective roughness-0.045)/0.955 and
+hardware bilinear filtering at texel-center coordinates. There is no mean-energy
+texture descriptor. Direct and indirect consumers use the same model revision.
 
 Remove the embedded directional, `has_directional_light`, directional-index
 indirection, compatibility slots and duplicate grid fields. No alternate forward
@@ -307,14 +295,12 @@ that distinction. NoRequest includes only no authored request or explicitly
 disabled shadow evaluation, never exhaustion. Contact sampling still uses the
 shared contact product and per-light flags/receiver eligibility.
 
-Projection kind is independent of light kind: point and finite/wide spot lights
-may use LocalCube. A punctual spot may use LocalProjected2D only when its complete
-support is representable by that projection. All finite disks and 90-degree
-spots use the existing six-face conventional representation initially. Preserve
-source identity, requested per-face quality and all required faces; no cone clamp.
+Projection kind is independent of light kind: points and 90-degree soft spots
+use LocalCube. Ordinary spots use LocalProjected2D, including nonzero source
+radius, because model-2 influence uses the center cone/range. Preserve source
+identity, requested per-face quality and all six hemisphere faces; no cone clamp.
 
-Replace the current 3,328-byte singleton/inline-array `ShadowFrameBindings`
-with this **112-byte**, 16-aligned family header:
+`ShadowFrameBindings` is a **112-byte**, 16-aligned indexed family header:
 
 | Offset | Type / member                       | Meaning                                                 |
 | -----: | ----------------------------------- | ------------------------------------------------------- |

@@ -62,12 +62,12 @@ Apply frame-pinned P once at HDR writes and preserve the
 Approved EX07A D2 removes the local attenuation-model selector and custom decay
 exponent across all APIs, persistence, tools and consumers. There is one physical
 punctual-light model; do not retain artistic alternatives or an ignored selector.
-D3 retains physical point-sphere/spot-disk extent, conserved flux and a shared
-source model for diffuse/specular, qualified against independent integration.
-Approved D4 selects height-correlated Smith GGX with multiple-scattering
-compensation, retaining Schlick Fresnel, normalized diffuse and existing material
-inputs. The [PBR specification](../../renderer-core/physically-based-rendering.md#physical-light-conversion)
-owns the exact emitter/BRDF equations, domains and numerical budgets.
+Local source radius controls analytic diffuse horizon and specular highlight
+response. Range and spot attenuation use the source center. Both shading families
+share correlated GGX, Schlick Fresnel, view-dependent energy compensation and
+normalized diffuse with specular energy preservation. The
+[PBR specification](../../renderer-core/physically-based-rendering.md#production-local-lighting-and-brdf-model-2)
+owns the source/BRDF equations and measurement conventions.
 Directional CSM's independent distribution exponent remains supported.
 
 Shared family preparation captures source identity/properties before environment
@@ -261,7 +261,8 @@ additional admission check. Original per-view/count proposals remain withdrawn.
 The [bounded shadow-memory work](../plan/EX07-shadow-memory-review.md) reduces
 unused storage and duplication without changing these ceilings. Parent allocator
 admission accounts for other engine commitments, pending growth and explicit
-headroom; the lighting ceiling is not a reservation. Record unique resource
+headroom (configurable `lighting_driver_headroom_bytes`, default **256 MiB**
+below the driver-reported budget); the lighting ceiling is not a reservation. Record unique resource
 requirements, committed heap/slack and process-local DXGI usage separately.
 Account across all views,
 in-flight allocations and caches; do not retain fixed four-point/eight-spot
@@ -428,7 +429,7 @@ means valid empty products and zero direct-light draws.
 ## 7. Implementation and validation gates
 
 The six EX07 steps are contracts, references/instrumentation, correctness repair,
-qualified baseline/budgets, scalable optimization and final validation. Before
+qualified operating points, scalable optimization and final validation. Before
 consumer changes, freeze the property inventory, canonical ABI and execution/
 capacity contracts with their tests. CPU/HLSL/SDK changes land together; obsolete
 single-light/positional routes are removed rather than maintained in parallel.
@@ -443,8 +444,8 @@ integration and debug-layer checks.
 
 Only correctness-qualified workloads become timing baselines. Report measured
 CPU/GPU/memory use, image quality, approximation differences and noise treatment.
-The user decides whether the resulting operating point is acceptable; historical
-model-1 numerical budgets do not force its reference algorithms into production. Measure native Release separately
-from captures/debug instrumentation. The plan owns counts/durations and final
+The user decides whether the resulting operating point is acceptable. Use Tracy
+for Release cost attribution and distinguish it from uninstrumented throughput.
+RenderDoc and debug-layer validation run separately. The plan owns counts/durations and final
 matrix; timing sources live in `Benchmarks` with a separate executable. Both
 final correctness and performance evidence are required for closure.

@@ -3,8 +3,9 @@
 Status: **validated — B is closed; pause before EX07C.**
 
 The [EX07 plan](EX07-lighting-correctness-and-scalability.md) owns the full
-reference/instrument gate. The [PBR specification](../../renderer-core/physically-based-rendering.md#shared-equations-and-numerical-domain)
-owns the model and tolerances. The [completion audit](EX07B-completion-audit.md)
+reference/instrument gate. The [PBR specification](../../renderer-core/physically-based-rendering.md#production-local-lighting-and-brdf-model-2)
+owns current production model 2. This record describes the independent numerical
+reference and its original validation. The [completion audit](EX07B-completion-audit.md)
 owns final scope, evidence and remaining C–F obligations. Earlier sections retain
 checkpoint history. The closeout includes a material-cache identity correction;
 production BRDF/photometry repair remains C work.
@@ -57,8 +58,9 @@ The directional-albedo/Schlick decomposition and reflection weight are also
 documented in [Filament's pre-integration discussion](https://google.github.io/filament/main/filament.html#lighting/imagebasedlights/importanceSamplingForTheIBL).
 [Heitz's visible-normal paper](https://www.jcgt.org/published/0007/04/01/paper.pdf)
 provides a useful independent sampling formulation for later cross-checks.
-Oxygen's approved reciprocal compensation lobe and diffuse coupling remain the
-target; this reference introduces no new material model.
+The reciprocal compensation lobe and diffuse coupling remain available in the
+independent reference for comparisons. Production uses view-dependent model-2
+compensation with the same underlying correlated-GGX moments.
 
 ## Checks and current evidence
 

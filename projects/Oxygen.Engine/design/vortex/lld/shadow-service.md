@@ -2,15 +2,15 @@
 
 **Phase:** 4C - Migration-Critical Services
 **Deliverable:** D.11
-**Status:** Historical VTX-M05D baseline; EX07 target frozen, implementation pending.
+**Status:** Indexed directional/local shadows implemented; remaining qualification is tracked in EX07.
 
 ## V0.1 Production Extension
 
 EX07 freezes the current [indexed family ABI](lighting-gpu-abi.md#shadow-association-and-deferred-draws)
 and [capacity/failure contract](lighting-service.md#4-capacity-failure-and-recovery).
 Use dynamic directional, projected-local and cube-local records, typed surface/
-layer indices and source identity maps. Finite/hemispherical spots use the
-existing cube technique. The 4-point/8-spot arrays are not product limits.
+layer indices and source identity maps. Ordinary spots use one projected map
+regardless of source radius; 90-degree soft spots use the existing cube technique. The 4-point/8-spot arrays are not product limits.
 Requested maps for enabled, contributing lights cannot silently become absent.
 Both forward/translucent and deferred consumers belong to EX07 qualification.
 
