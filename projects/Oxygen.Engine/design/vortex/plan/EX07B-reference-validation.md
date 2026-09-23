@@ -1104,6 +1104,32 @@ repeat of the unresolved forward tail. The repeat is diagnostic evidence; no
 hardware inspection, clock/power changes or unrelated exposure campaign is
 part of it.
 
+The focused forward repeat at source checkpoint `ec756733d` completes **44,112
+frames** with the same image/format checks, valid CPU/memory coverage and zero
+observed warmed factory creations. Its two enabled windows contribute 109,790
+CPU records and 21,958 memory snapshots. Pooled control/candidate results are:
+
+| Statistic | Collection off (ms) | Collection on (ms) | Difference (ms) |
+| --------- | ------------------: | -----------------: | --------------: |
+| Median    |            2.668500 |           2.680200 |       +0.011700 |
+| p95       |            3.149340 |           3.212900 |       +0.063560 |
+| p99       |            3.485582 |           3.559543 |       +0.073961 |
+
+The earlier large p99 increase does not recur. The repeat's enabled-window p99s
+are 3.573103 and 3.552065 ms; control p99s are 3.420255 and 3.545067 ms.
+Recording/submission p95 increases by 0.021010 ms. This does not establish the
+cause of the first run's spike or justify discarding that run. The repeat's
+median/p95 passes proposed B but misses proposed A at p95: its allowed A increment
+is 0.05 ms and the observed increment is 0.06356 ms. No budget is relaxed after
+measurement, and no acceptance is claimed while the user's choice is pending.
+
+Evidence: `ex07b/collection-forward-repeat.{json,log}` and
+`ex07b/collection-199236184138000/`, including raw data, per-window and pooled
+analysis, and binary hashes. The path-specific benchmark builds in both Ninja
+configurations; its combined smoke test passes and changed code is oxytidy-clean
+(`collection-path-tidy/`). Further work can proceed on material qualification
+without repeating this measurement or investigating external system activity.
+
 ## Qualification boundary and next work
 
 The [mean certificates](EX07B-mean-moment-certificates.md) now supply

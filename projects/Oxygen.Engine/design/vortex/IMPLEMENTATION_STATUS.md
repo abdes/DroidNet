@@ -127,8 +127,11 @@ The full incremental collection run is now measured: 57,085 frames across eight
 native windows, with identical images across modes and complete CPU/memory exports.
 Pooled median/p95 frame times fit both proposed budgets, but forward p99 increases
 from 3.768 to 4.463 ms, concentrated in one collection-on window. No overhead
-acceptance is claimed while that tail result and the user's numeric-budget choice
-remain open. See the [measurement](plan/EX07B-reference-validation.md#full-collection-measurement).
+acceptance is claimed. A focused forward repeat does not reproduce the large
+tail spike: differences are +0.0117 ms median, +0.06356 ms p95 and +0.073961 ms
+p99. Its p95 misses proposed A's 0.05 ms allowance but satisfies B's 0.10 ms
+allowance; the user's numeric-budget choice remains pending. Both runs are
+preserved in the [measurement](plan/EX07B-reference-validation.md#full-collection-measurement).
 
 **User-directed stopping point:** finish EX07B's reference/instrument validation
 gate and commit its stable checkpoint, then pause. Do not begin EX07C until the
