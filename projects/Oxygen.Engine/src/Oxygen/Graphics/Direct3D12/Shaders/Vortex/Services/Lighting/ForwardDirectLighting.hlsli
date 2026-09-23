@@ -76,18 +76,8 @@ static inline DirectionalLightDiagnosticTerms EvaluateDirectionalLightDiagnostic
     const float NdotH = saturate(dot(N, H));
     const float VdotH = saturate(dot(V, H));
 
-    const float3 F = FresnelSchlick(VdotH, F0);
-    const float D = DistributionGGX(NdotH, roughness);
-    const float G = GeometrySmith(NdotV, NdotL, roughness);
-
-    const float3 numerator = D * G * F;
-    const float denom = max(4.0 * NdotV * NdotL, 1.0e-6);
-    const float3 specular = numerator / denom;
-
-    const float3 kS = F;
-    const float3 kD = (1.0 - kS) * (1.0 - metalness);
-    const float3 diffuse = kD * base_rgb;
-    terms.brdf_core = (diffuse + specular) * NdotL;
+    terms.brdf_core = EvaluateForwardDirectBrdf(NdotV, NdotL, NdotH, VdotH,
+        F0, base_rgb, metalness, roughness) * NdotL;
 
     const float3 raw_radiance = dl.illuminance_rgb_lux * (1.0 / kPi);
     terms.full_direct = terms.brdf_core
@@ -305,17 +295,9 @@ float3 AccumulateLocalLightsClustered(
             const float NdotH = saturate(dot(N, H));
             const float VdotH = saturate(dot(V, H));
 
-            const float3 F = FresnelSchlick(VdotH, F0);
-            const float D = DistributionGGX(NdotH, roughness);
-            const float G = GeometrySmith(NdotV, NdotL, roughness);
-            const float3 numerator = D * G * F;
-            const float denom = max(4.0 * NdotV * NdotL, 1.0e-6);
-            const float3 specular = numerator / denom;
-
-            const float3 kS = F;
-            const float3 kD = (1.0 - kS) * (1.0 - metalness);
-            const float3 diffuse = kD * base_rgb;
-            const float3 contribution = (diffuse + specular) * light.intensity_rgb_cd * atten * NdotL;
+            const float3 brdf = EvaluateForwardDirectBrdf(NdotV, NdotL, NdotH, VdotH,
+                F0, base_rgb, metalness, roughness);
+            const float3 contribution = brdf * light.intensity_rgb_cd * atten * NdotL;
             RecordForwardHdrSource(contribution);
             direct += contribution;
         }

@@ -175,6 +175,16 @@ admission gate currently rejects 23 narrow-cone boundary channel results;
 the largest missing contribution is 0.06790593 lux. This is an explicit C repair
 obligation, not a qualified renderer result. The [B validation record](plan/EX07B-reference-validation.md#native-punctual-photometry-probe-and-physical-admission)
 documents the matrix, instrument/renderer distinction and enforcing command.
+The native direct-BRDF probe adds 108 material/direction inputs in both paths;
+565 of 648 channel responses currently fail the approved-model budget. The
+shared admission checker requires both matrices and rejects these results.
+Forward arithmetic extraction preserves byte-identical optimized DXIL in three
+checked variants. The [BRDF probe record](plan/EX07B-reference-validation.md#native-direct-brdf-probe)
+preserves the exact scope and C repair obligations.
+Both configurations pass 27 native instrument tests; the physical gate still
+exits 1 with both failure sets. Seven gate-safety tests pass and the changed
+C++ file is oxytidy-clean. Complete material evaluation, matched-image fixtures
+and bounded instrumentation remain open in B.
 
 A's closure does not establish the final physical renderer. B must supply an
 independent double-precision oracle, moment uncertainty and known-input probes,

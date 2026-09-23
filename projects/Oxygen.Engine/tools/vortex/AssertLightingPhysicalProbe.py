@@ -1,6 +1,6 @@
 """Reject EX07 lighting admission when native physical probe evidence is incomplete.
 
-The native test qualifies the instrument and records boundary residuals. This
+The native tests qualify instruments and record physical residuals. This
 separate gate requires the renderer to satisfy the physical budget as well.
 """
 
@@ -12,31 +12,43 @@ import math
 from pathlib import Path
 
 
-PROBE_NAME = "PunctualPhotometryProbeQualifiesFactorsAndReportsBoundaryResiduals"
-PROBE_COUNT = 2160
+REQUIRED_PROBES = {
+    "PunctualPhotometryProbeQualifiesFactorsAndReportsBoundaryResiduals": 2160,
+    "DirectBrdfProbeReportsIndependentOracleResiduals": 108,
+}
 
 
 def validate(document: dict) -> None:
     for field in ("failures", "errors", "disabled"):
         if document.get(field) != 0:
             raise ValueError(f"native results have missing/nonzero {field}")
-    cases = [
-        case
-        for suite in document.get("testsuites", [])
-        if suite.get("name") == "LightingGpuAbiTest"
-        for case in suite.get("testsuite", [])
-        if case.get("name") == PROBE_NAME
-    ]
-    if len(cases) != 1:
-        raise ValueError("exactly one completed physical probe is required")
-    case = cases[0]
+    failures = []
+    for name, count in REQUIRED_PROBES.items():
+        cases = [
+            case
+            for suite in document.get("testsuites", [])
+            if suite.get("name") == "LightingGpuAbiTest"
+            for case in suite.get("testsuite", [])
+            if case.get("name") == name
+        ]
+        try:
+            if len(cases) != 1:
+                raise ValueError("exactly one completed physical probe is required")
+            validate_case(cases[0], count)
+        except (ValueError, TypeError) as error:
+            failures.append(f"{name}: {error}")
+    if failures:
+        raise ValueError("\n".join(failures))
+
+
+def validate_case(case: dict, count: int) -> None:
     if case.get("status") != "RUN" or case.get("result") != "COMPLETED":
         raise ValueError("physical probe did not run to completion")
     if case.get("failures"):
         raise ValueError("physical probe contains test failures")
     if int(case.get("physical_probe_schema", -1)) != 1:
         raise ValueError("unsupported/missing physical probe schema")
-    if int(case.get("probe_count", -1)) != PROBE_COUNT:
+    if int(case.get("probe_count", -1)) != count:
         raise ValueError("incomplete physical probe matrix")
     residuals = int(case.get("physical_budget_failures", -1))
     details = json.loads(case.get("physical_failure_details", "null"))
@@ -60,7 +72,7 @@ def main() -> int:
         validate(json.loads(args.results.read_text(encoding="utf-8")))
     except (OSError, ValueError, TypeError, KeyError) as error:
         parser.exit(1, f"{error}\n")
-    print(f"Physical probe admission passed: {PROBE_COUNT} inputs")
+    print(f"Physical probe admission passed: {sum(REQUIRED_PROBES.values())} inputs")
     return 0
 
 

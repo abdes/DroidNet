@@ -16,11 +16,18 @@ gtest_program(
     "ShadowAllocationRequirements_test.cpp"
     "MaterialDecodeGpu_test.cpp"
     "PhotometryGpu_test.cpp"
+    "BrdfGpu_test.cpp"
     "../../Lighting/Internal/LightPhotometry.cpp"
     "Reference/Photometry.cpp"
     "Reference/Photometry.h"
     "Reference/MaterialDecode.cpp"
     "Reference/MaterialDecode.h"
+    "Reference/GgxBrdf.cpp"
+    "Reference/GgxBrdf.h"
+    "Reference/GgxMoments.cpp"
+    "Reference/GgxMoments.h"
+    "Reference/ReferenceQuadrature.cpp"
+    "Reference/ReferenceQuadrature.h"
   DEPS
     oxygen::vortex
     oxygen::graphics-direct3d12
@@ -122,4 +129,5 @@ target_compile_definitions(
   PRIVATE
     OXYGEN_LIGHTING_ABI_PROBE="${lighting_probe_output}"
     OXYGEN_LIGHTING_ABI_WORKSPACE="${PROJECT_SOURCE_DIR}"
+    OXYGEN_GGX_MEAN_CERTIFICATE_FILE="${CMAKE_CURRENT_SOURCE_DIR}/Reference/GgxMeanMomentCertificates.json"
 )

@@ -17,6 +17,18 @@
 #include "Vortex/Contracts/Scene/GBufferHelpers.hlsli"
 #include "Vortex/Shared/BRDFCommon.hlsli"
 #include "Vortex/Services/Lighting/LocalLightAttenuation.hlsli"
+#include "Vortex/Services/Lighting/DeferredShadingCommon.hlsli"
+// Both current paths declare these helper names. Rename only the forward
+// declarations in this qualification shader; shipping includes are unchanged.
+#define DistributionGGX ForwardDistributionGGX
+#define GeometrySchlickGGX ForwardGeometrySchlickGGX
+#define GeometrySmith ForwardGeometrySmith
+#define FresnelSchlick ForwardFresnelSchlick
+#include "Vortex/Stages/Translucency/ForwardPbr.hlsli"
+#undef DistributionGGX
+#undef GeometrySchlickGGX
+#undef GeometrySmith
+#undef FresnelSchlick
 
 struct ProbeArguments {
     uint4 decode;
@@ -53,6 +65,17 @@ struct PhotometryProbeInput {
     float outer_sin_half_squared;
     float3 intensity_rgb_cd;
     uint is_spot;
+};
+
+struct BrdfProbeInput {
+    float roughness;
+    float light_cosine;
+    float view_cosine;
+    float azimuth;
+    float3 base_color;
+    float metallic;
+    float3 incident_rgb;
+    float specular;
 };
 
 cbuffer ProbeRoot : register(b2, space0) {
@@ -265,5 +288,30 @@ void CS(uint3 thread : SV_DispatchThreadID) {
         float3 normal_illuminance = value.intensity_rgb_cd * distance_factor * angular_factor;
         output.Store2(address, asuint(float2(distance_factor, angular_factor)));
         output.Store3(address + 8, asuint(normal_illuminance));
+    } else if (g_RecordKind == 19) {
+        StructuredBuffer<BrdfProbeInput> inputs = ResourceDescriptorHeap[args.x];
+        BrdfProbeInput value = inputs[element];
+        float light_sine = sqrt((1.0 - value.light_cosine) * (1.0 + value.light_cosine));
+        float view_sine = sqrt((1.0 - value.view_cosine) * (1.0 + value.view_cosine));
+        float3 L = float3(light_sine * cos(value.azimuth), light_sine * sin(value.azimuth), value.light_cosine);
+        float3 V = float3(view_sine, 0.0, value.view_cosine);
+        float3 H = normalize(L + V);
+        float3 f0 = ComputeMetallicF0(value.base_color, value.metallic, value.specular);
+        DeferredLightingSurfaceData surface = (DeferredLightingSurfaceData)0;
+        surface.world_normal = float3(0.0, 0.0, 1.0);
+        surface.view_direction = V;
+        surface.base_color = value.base_color;
+        surface.metallic = value.metallic;
+        surface.specular = value.specular;
+        surface.specular_f0 = f0;
+        surface.roughness = max(value.roughness, kVortexDeferredMinRoughness);
+        surface.ambient_occlusion = 1.0;
+        float3 deferred = EvaluateCookTorranceLighting(surface, L, value.incident_rgb);
+        float3 forward = EvaluateForwardDirectBrdf(value.view_cosine, value.light_cosine,
+            saturate(H.z), saturate(dot(V, H)), f0, value.base_color, value.metallic,
+            value.roughness) * value.incident_rgb * value.light_cosine;
+        output.Store4(address, asuint(float4(deferred, DistributionGGX(saturate(H.z), surface.roughness))));
+        output.Store4(address + 16, asuint(float4(forward, ForwardDistributionGGX(saturate(H.z), value.roughness))));
+        output.Store4(address + 32, asuint(float4(f0, 0.0)));
     }
 }
