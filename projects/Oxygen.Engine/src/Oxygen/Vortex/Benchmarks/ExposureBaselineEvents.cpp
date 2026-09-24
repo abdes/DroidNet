@@ -110,9 +110,9 @@ auto ExposureBaselineScenario::ApplyEvent(const unsigned event_frame) -> void
     break;
   case 300U:
   case 360U: {
-    auto light = sun.GetLightAs<scene::DirectionalLight>();
-    CHECK_F(light.has_value());
-    light->get().SetIntensityLux(event_frame == 300U ? 440000.0F : 110000.0F);
+    CHECK_F(sun.EditLight<scene::DirectionalLight>([event_frame](auto& light) {
+      light.SetIntensityLux(event_frame == 300U ? 440000.0F : 110000.0F);
+    }));
     operation = event_frame == 300U ? "sun-step" : "restore-sun";
     // UpdatePath normally synchronizes before OnFrameStart; this operation
     // changes authored lighting afterward, so publish its dirty state now.
