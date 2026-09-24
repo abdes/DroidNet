@@ -1,7 +1,9 @@
 # EX07 — Physical lighting and many-light qualification
 
-Status: **in_progress**; current stage and deliverable status are maintained only
-in [tracker section 3.4](../IMPLEMENTATION_STATUS.md#34-slice-7-work-items).
+Status: **validated and closed (2026-09-25)**. All EX07A–F stages and
+EX07-01–14 deliverables are complete, including final user editor acceptance.
+See the [F acceptance report](EX07F-acceptance-report.md) and
+[tracker section 3.4](../IMPLEMENTATION_STATUS.md#34-slice-7-work-items).
 EX07 owns end-to-end lighting correctness and performance. The
 [current PBR model](../../renderer-core/physically-based-rendering.md#production-local-lighting-and-brdf-model-2),
 [GPU ABI](../lld/lighting-gpu-abi.md) and [property inventory](../lld/lighting-properties.md)

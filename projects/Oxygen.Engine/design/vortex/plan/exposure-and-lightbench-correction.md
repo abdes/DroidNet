@@ -153,11 +153,11 @@ The original fixed-gain floor, histogram/adaptation, sharing, pre-exposure,
 serialization and settings-isolation defects are closed by EX02-06. Their
 requirements remain in sections 3-5 and the completed slice records.
 
-Source review after EX06 identifies these remaining delivery gaps:
+EX07 also closed the physical-lighting defects in both forward and deferred
+consumers; calibration, many-light qualification and final editor acceptance are
+recorded in the [F report](EX07F-acceptance-report.md). The remaining delivery
+gaps belong to EX08 onward:
 
-- `DeferredLightPacketBuilder` still forwards local-light intensity directly;
-  `DeferredLightingCommon.hlsli` still uses `1/(d*d + 1)`. EX07 must complete
-  the physical contract across both consumers, not calibrate a demo around it.
 - `LightScene::ApplyScenePreset` changes object visibility. It is not a complete
   experiment controller, and there is no calibrated directional Neutral Reference.
   EX06's camera/isolation changes are retained as prerequisites.
