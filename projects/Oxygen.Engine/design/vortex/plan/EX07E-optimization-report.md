@@ -237,7 +237,7 @@ response was "Visually validated; accept and commit". Durable records are in
 
 ## E04/E07 discovered defect: caster normal under nonuniform transforms
 
-**E07.1, open; source-confirmed, native reproduction pending.**
+**E07.1, repaired and native-test validated.**
 `DirectionalShadowDepth.hlsl` currently computes the caster normal with the
 world matrix. `BasePassGBuffer.hlsl` uses the published inverse-transpose normal
 matrix, indexed through the instance transform index. Shadow pass constants omit
@@ -253,3 +253,40 @@ filter policy. This is a correctness repair, not permission to retune bias or
 claim complete UE5.7 filter parity. Investigate/reproduce and fix after E03's
 bounded qualification; do not let the finding disappear into the performance
 work. It is separate from the already fixed receiver-depth footprint defect.
+
+### E07.1 reproduction and repair
+
+The native regression renders identical world-space triangles, once with
+nonuniform runtime scale and once with that scale baked into positions/normals.
+It reads the actual cube-shadow depth through its R32 shader view using the
+existing test GPU probe (the generic D32 copy-readback path is unsupported).
+Before repair the depths are **0.26634109 versus 0.41634110**, a **0.15** mismatch.
+With the published inverse-transpose normal matrix and resolved instance index,
+the values match within **1e-6**. All **19 native image tests pass in each Ninja Release mode** after repair
+(Tracy OFF and ON); the final native targeted case also passes after formatting
+and constant-name correction.
+
+The private shadow-pass constants remain 128 bytes; offset 124 now carries the
+normal-matrix descriptor. Zero slope coefficient skips the normal fetch/math.
+No bias value, depth encoding, filter kernel, map resolution or authored range is
+retuned. Point/spot setup constants are renamed to remove a false UE attribution;
+the [shadow-service contract](../lld/shadow-service.md#23-published-shadow-contract)
+now spells out the retained local bias equation and its metric effect. The native
+reproduction, both suite results and final targeted result are versioned in the
+[caster-normal evidence register](baselines/ex07e-20260924/caster-normal/register.json).
+Both complete RenderScene targets are rebuilt so their C++ pass payloads match
+the updated shared shader archive. This is correctness evidence, not a newly
+established performance baseline.
+
+### Next bounded E04 investigation
+
+A quality-preserving PCF candidate can use four raw `GatherRed` footprints to
+fetch the same nine clamped texels, retaining every comparison and the 1/9 box
+weight. This is not hardware comparison filtering or a changed kernel. Verify
+texel/component ordering, edge clamping, nonuniform descriptors and supported
+map resolutions with native tests before timing one candidate/control pair.
+Microsoft documents the raw gather component order and unfiltered semantics in
+[gather4](https://learn.microsoft.com/en-us/windows/win32/direct3dhlsl/gather4--sm5---asm-).
+No PCF change is implemented or accepted yet. Keep larger projected-depth/bias
+recalibration separate because it changes authored behavior and needs a concrete
+quality decision; do not copy UE's constants into the linear-depth profile.

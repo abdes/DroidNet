@@ -4,7 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
 #include <memory>
+#include <span>
 #include <string>
 #include <utility>
 #include <vector>
@@ -12,7 +14,10 @@
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialDomain.h>
+#include <Oxygen/Data/PakFormat_geometry.h>
+#include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
@@ -53,6 +58,98 @@ namespace {
       return node;
     }
   };
+
+  NOLINT_TEST_F(ShadowAdmissionGpuTest,
+    NonuniformCasterTransformMatchesBakedGeometryWithSlopeBias)
+  {
+    auto light = AddPoint(0U);
+    ASSERT_TRUE(light.EditLight<scene::PointLight>(
+      [](auto& candidate) { candidate.Common().shadow.bias = 0.1F; }));
+    SetSurface(data::MaterialDomain::kOpaque);
+    std::shared_ptr<const graphics::Texture> surface;
+    std::uint32_t layer = 0U;
+    std::uint32_t surface_srv = kInvalidShaderVisibleIndex.get();
+    probe->inspect = [&](const auto& ctx, const auto&, unsigned) {
+      auto* owner = RendererPublicationProbe::GetSceneRenderer(*renderer_);
+      auto* shadows = RendererPublicationProbe::GetShadowService(*owner);
+      const auto* data = shadows->InspectShadowData(ctx.current_view.view_id);
+      ASSERT_NE(data, nullptr);
+      ASSERT_EQ(data->cube_local_records.size(), 1U);
+      const auto surfaces
+        = shadows->InspectPointShadowSurfaces(ctx.current_view.view_id);
+      ASSERT_EQ(surfaces.size(), 1U);
+      surface = surfaces.front();
+      layer = data->cube_local_records.front().first_array_layer.get() + 5U;
+      surface_srv = data->cube_local_records.front().surface_srv.get();
+    };
+    std::array<float, 2> depths {};
+    for (const bool baked : { false, true }) {
+      SCOPED_TRACE(baked);
+      // Both variants have the same world-space triangle. The baked normal is
+      // perpendicular to its edges; the unbaked path must use inverse
+      // transpose.
+      const std::array positions {
+        glm::vec3 { -0.5F, -0.5F, -0.5F },
+        glm::vec3 { 0.5F, -0.5F, -1.5F },
+        glm::vec3 { 0.0F, 0.5F, -1.0F },
+      };
+      const auto normal = baked ? glm::normalize(glm::vec3 { 0.5F, 0, 1 })
+                                : glm::normalize(glm::vec3 { 1, 0, 1 });
+      auto vertices = std::vector<data::Vertex> {};
+      for (auto position : positions) {
+        if (baked) {
+          position.x *= 2.0F;
+        }
+        vertices.push_back({ .position = position,
+          .normal = normal,
+          .texcoord = { 0.5F, 0.5F },
+          .tangent = { 0, 1, 0 },
+          .bitangent = { 1, 0, 0 },
+          .color = { 1, 1, 1, 1 } });
+      }
+      std::shared_ptr<data::Mesh> mesh
+        = data::MeshBuilder()
+            .WithVertices(vertices)
+            .WithIndices(std::vector<std::uint32_t> { 0, 1, 2 })
+            .BeginSubMesh("Slope", data::MaterialAsset::CreateDefault())
+            .WithMeshView({ .first_index = 0,
+              .index_count = 3,
+              .first_vertex = 0,
+              .vertex_count = 3 })
+            .EndSubMesh()
+            .Build();
+      auto desc = data::pak::geometry::GeometryAssetDesc {};
+      desc.lod_count = 1U;
+      desc.bounding_box_min[0] = baked ? -1.0F : -0.5F;
+      desc.bounding_box_max[0] = baked ? 1.0F : 0.5F;
+      desc.bounding_box_min[1] = -0.5F;
+      desc.bounding_box_max[1] = 0.5F;
+      desc.bounding_box_min[2] = -1.5F;
+      desc.bounding_box_max[2] = -0.5F;
+      mesh_node.GetRenderable().SetGeometry(
+        std::make_shared<data::GeometryAsset>(
+          data::AssetKey::FromVirtualPath(baked
+              ? "/Test/ShadowNormal/Baked.ogeo"
+              : "/Test/ShadowNormal/Transformed.ogeo"),
+          desc, std::vector<std::shared_ptr<data::Mesh>> { mesh }));
+      ASSERT_TRUE(mesh_node.GetTransform().SetLocalScale(
+        { baked ? 1.0F : 2.0F, 1.0F, 1.0F }));
+      ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F, 3U));
+      ASSERT_NE(surface, nullptr);
+      const auto& texture = surface->GetDescriptor();
+      const auto sample = std::array { surface_srv, texture.width / 2U,
+        texture.height / 2U, layer };
+      constexpr auto depth_array_probe = 32768U;
+      const auto readback = RunToneProbe(
+        std::as_bytes(std::span { sample }), 1U, depth_array_probe, false);
+      ASSERT_EQ(readback.size(), 1U);
+      depths.at(static_cast<unsigned>(baked)) = readback.front().front();
+      EXPECT_GT(depths.at(static_cast<unsigned>(baked)), 0.0F);
+      EXPECT_LT(depths.at(static_cast<unsigned>(baked)), 1.0F);
+    }
+    EXPECT_NEAR(depths[0], depths[1], 1.0e-6F);
+    surface.reset();
+  }
 
   NOLINT_TEST_F(
     ShadowAdmissionGpuTest, FifthCubeAndNinthProjectedShadowRenderTogether)

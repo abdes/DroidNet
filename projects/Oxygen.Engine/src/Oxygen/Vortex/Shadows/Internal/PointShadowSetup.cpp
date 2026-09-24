@@ -30,8 +30,9 @@ namespace {
 
   constexpr float kMinPointNearPlane = 0.1F;
   constexpr float kMinPointRange = 0.1F;
-  constexpr float kUePointLightShadowDepthBias = 3.0F;
-  constexpr float kUeMaxUserShadowBias = 10.0F;
+  // Oxygen's retained linear-depth profile, not UE's projected-depth bias.
+  constexpr float kPointShadowDepthBiasScale = 3.0F;
+  constexpr float kMaxUserShadowBias = 10.0F;
 
   constexpr auto kPointFaceDirections = std::array {
     glm::vec3 { 1.0F, 0.0F, 0.0F },
@@ -62,8 +63,8 @@ namespace {
     const auto safe_depth_span = (std::max)(depth_span, kMinPointRange);
     const auto safe_resolution = (std::max)(resolution, 1U);
     const auto user_bias
-      = std::clamp(light.shadow_bias, 0.0F, kUeMaxUserShadowBias);
-    const auto bias = kUePointLightShadowDepthBias * 512.0F
+      = std::clamp(light.shadow_bias, 0.0F, kMaxUserShadowBias);
+    const auto bias = kPointShadowDepthBiasScale * 512.0F
       / (safe_depth_span * static_cast<float>(safe_resolution)) * 2.0F
       * user_bias;
     return std::clamp(bias, 0.0F, 0.1F);
