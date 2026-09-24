@@ -60,8 +60,9 @@ public sealed partial class DirectionalLightComponent : LightComponent
 
     private float intensityLux = DefaultIntensityLux;
     private float angularSizeRadians = DefaultAngularSizeRadians;
-    private bool environmentContribution = true;
-    private bool isSunLight = true;
+    private AtmosphereLightSlot atmosphereSlot;
+    private bool usePerPixelAtmosphereTransmittance;
+    private Vector3 atmosphereDiskLuminanceScaleRgb = Vector3.One;
     private int cascadeCount = DefaultCascadeCount;
     private DirectionalCsmSplitMode splitMode = DirectionalCsmSplitMode.Generated;
     private float maxShadowDistance = DefaultMaxShadowDistance;
@@ -98,22 +99,25 @@ public sealed partial class DirectionalLightComponent : LightComponent
         set => _ = this.SetProperty(ref this.angularSizeRadians, value);
     }
 
-    /// <summary>
-    /// Gets or sets a value indicating whether this light contributes to the scene environment.
-    /// </summary>
-    public bool EnvironmentContribution
+    /// <summary>Gets or sets the explicit atmosphere source slot.</summary>
+    public AtmosphereLightSlot AtmosphereSlot
     {
-        get => this.environmentContribution;
-        set => _ = this.SetProperty(ref this.environmentContribution, value);
+        get => this.atmosphereSlot;
+        set => _ = this.SetProperty(ref this.atmosphereSlot, value);
     }
 
-    /// <summary>
-    /// Gets or sets a value indicating whether this directional light is the active sun.
-    /// </summary>
-    public bool IsSunLight
+    /// <summary>Gets or sets whether surface atmosphere transmittance is evaluated per pixel.</summary>
+    public bool UsePerPixelAtmosphereTransmittance
     {
-        get => this.isSunLight;
-        set => _ = this.SetProperty(ref this.isSunLight, value);
+        get => this.usePerPixelAtmosphereTransmittance;
+        set => _ = this.SetProperty(ref this.usePerPixelAtmosphereTransmittance, value);
+    }
+
+    /// <summary>Gets or sets the analytic disk's linear RGB luminance multiplier.</summary>
+    public Vector3 AtmosphereDiskLuminanceScaleRgb
+    {
+        get => this.atmosphereDiskLuminanceScaleRgb;
+        set => _ = this.SetProperty(ref this.atmosphereDiskLuminanceScaleRgb, value);
     }
 
     /// <summary>
@@ -192,8 +196,9 @@ public sealed partial class DirectionalLightComponent : LightComponent
         {
             this.IntensityLux = light.IntensityLux;
             this.AngularSizeRadians = light.AngularSizeRadians;
-            this.EnvironmentContribution = light.EnvironmentContribution;
-            this.IsSunLight = light.IsSunLight;
+            this.AtmosphereSlot = light.AtmosphereSlot;
+            this.UsePerPixelAtmosphereTransmittance = light.UsePerPixelAtmosphereTransmittance;
+            this.AtmosphereDiskLuminanceScaleRgb = light.AtmosphereDiskLuminanceScaleRgb;
             this.CascadeCount = light.CascadeCount;
             this.SplitMode = light.SplitMode;
             this.MaxShadowDistance = light.MaxShadowDistance;
@@ -212,14 +217,15 @@ public sealed partial class DirectionalLightComponent : LightComponent
             Name = this.Name,
             AffectsWorld = this.AffectsWorld,
             Color = this.Color,
-            Mobility = this.Mobility,
+
             CastsShadows = this.CastsShadows,
             Shadow = this.DehydrateShadow(),
             ExposureCompensation = this.ExposureCompensation,
             IntensityLux = this.IntensityLux,
             AngularSizeRadians = this.AngularSizeRadians,
-            EnvironmentContribution = this.EnvironmentContribution,
-            IsSunLight = this.IsSunLight,
+            AtmosphereSlot = this.AtmosphereSlot,
+            UsePerPixelAtmosphereTransmittance = this.UsePerPixelAtmosphereTransmittance,
+            AtmosphereDiskLuminanceScaleRgb = this.AtmosphereDiskLuminanceScaleRgb,
             CascadeCount = this.CascadeCount,
             SplitMode = this.SplitMode,
             MaxShadowDistance = this.MaxShadowDistance,

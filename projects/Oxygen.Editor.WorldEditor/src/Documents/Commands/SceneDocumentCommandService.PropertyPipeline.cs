@@ -6,6 +6,7 @@ using System.Numerics;
 using DroidNet.TimeMachine;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Services;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -59,7 +60,7 @@ public sealed partial class SceneDocumentCommandService
     /// </summary>
     public const string SceneEnvironmentKind = "scene-environment";
 
-    private const int DirectionalLightPropertyEntryCapacity = 25;
+    private const int DirectionalLightPropertyEntryCapacity = 27;
 
     /// <summary>
     /// Gets the canonical descriptor catalog for transform.
@@ -412,16 +413,23 @@ public sealed partial class SceneDocumentCommandService
         ];
     }
 
+    private static void AddDirectionalLightDiskScale(List<EnginePropertyValueEntry> entries, Vector3 scale)
+    {
+        entries.Add(new(EngineComponentId.DirectionalLight, (ushort)DirectionalLightField.DiskScaleR, scale.X));
+        entries.Add(new(EngineComponentId.DirectionalLight, (ushort)DirectionalLightField.DiskScaleG, scale.Y));
+        entries.Add(new(EngineComponentId.DirectionalLight, (ushort)DirectionalLightField.DiskScaleB, scale.Z));
+    }
+
     private static List<EnginePropertyValueEntry> BuildDirectionalLightPropertyEntries(DirectionalLightEdit edit, DirectionalLightComponent light)
     {
         ArgumentNullException.ThrowIfNull(light);
-        return BuildDirectionalLightPropertyEntries(edit, light.Color, light.IsSunLight);
+        return BuildDirectionalLightPropertyEntries(edit, light.Color, light.AtmosphereSlot);
     }
 
     private static List<EnginePropertyValueEntry> BuildDirectionalLightPropertyEntries(DirectionalLightEdit edit)
-        => BuildDirectionalLightPropertyEntries(edit, edit.Color.HasValue ? edit.Color.Value : Vector3.Zero, edit.IsSunLight.HasValue && edit.IsSunLight.Value);
+        => BuildDirectionalLightPropertyEntries(edit, edit.Color.HasValue ? edit.Color.Value : Vector3.Zero, edit.AtmosphereSlot.HasValue ? edit.AtmosphereSlot.Value : AtmosphereLightSlot.None);
 
-    private static List<EnginePropertyValueEntry> BuildDirectionalLightPropertyEntries(DirectionalLightEdit edit, Vector3 color, bool isSunLight)
+    private static List<EnginePropertyValueEntry> BuildDirectionalLightPropertyEntries(DirectionalLightEdit edit, Vector3 color, AtmosphereLightSlot atmosphereSlot)
     {
         ArgumentNullException.ThrowIfNull(edit);
 
@@ -432,7 +440,10 @@ public sealed partial class SceneDocumentCommandService
         }
 
         AddOptional(entries, edit.AffectsWorld, DirectionalLightField.AffectsWorld);
-        AddOptional(entries, edit.Mobility, DirectionalLightField.Mobility);
+        if (edit.AtmosphereDiskLuminanceScaleRgb.HasValue)
+        {
+            AddDirectionalLightDiskScale(entries, Get(edit.AtmosphereDiskLuminanceScaleRgb));
+        }
         AddOptional(entries, edit.CastsShadows, DirectionalLightField.CastsShadows);
         AddOptional(entries, edit.ShadowBias, DirectionalLightField.ShadowBias);
         AddOptional(entries, edit.ShadowNormalBias, DirectionalLightField.ShadowNormalBias);
@@ -441,10 +452,10 @@ public sealed partial class SceneDocumentCommandService
         AddOptional(entries, edit.ExposureCompensation, DirectionalLightField.ExposureCompensation);
         AddOptional(entries, edit.IntensityLux, DirectionalLightField.IntensityLux);
         AddOptional(entries, edit.AngularSizeRadians, DirectionalLightField.AngularSizeRadians);
-        AddOptional(entries, edit.EnvironmentContribution, DirectionalLightField.EnvironmentContribution);
-        if (edit.IsSunLight.HasValue)
+        AddOptional(entries, edit.UsePerPixelAtmosphereTransmittance, DirectionalLightField.UsePerPixelAtmosphereTransmittance);
+        if (edit.AtmosphereSlot.HasValue)
         {
-            entries.Add(BoolEntry(DirectionalLightField.IsSunLight, isSunLight));
+            entries.Add(EnumEntry(DirectionalLightField.AtmosphereLightSlot, atmosphereSlot));
         }
 
         AddOptional(entries, edit.CascadeCount, DirectionalLightField.CascadeCount);
@@ -467,7 +478,7 @@ public sealed partial class SceneDocumentCommandService
         var entries = new List<EnginePropertyValueEntry>(capacity: DirectionalLightPropertyEntryCapacity);
         AddDirectionalLightColor(entries, light.Color);
         entries.Add(BoolEntry(DirectionalLightField.AffectsWorld, light.AffectsWorld));
-        entries.Add(EnumEntry(DirectionalLightField.Mobility, light.Mobility));
+        AddDirectionalLightDiskScale(entries, light.AtmosphereDiskLuminanceScaleRgb);
         entries.Add(BoolEntry(DirectionalLightField.CastsShadows, light.CastsShadows));
         entries.Add(FloatEntry(DirectionalLightField.ShadowBias, light.ShadowBias));
         entries.Add(FloatEntry(DirectionalLightField.ShadowNormalBias, light.ShadowNormalBias));
@@ -476,8 +487,8 @@ public sealed partial class SceneDocumentCommandService
         entries.Add(FloatEntry(DirectionalLightField.ExposureCompensation, light.ExposureCompensation));
         entries.Add(FloatEntry(DirectionalLightField.IntensityLux, light.IntensityLux));
         entries.Add(FloatEntry(DirectionalLightField.AngularSizeRadians, light.AngularSizeRadians));
-        entries.Add(BoolEntry(DirectionalLightField.EnvironmentContribution, light.EnvironmentContribution));
-        entries.Add(BoolEntry(DirectionalLightField.IsSunLight, light.IsSunLight));
+        entries.Add(BoolEntry(DirectionalLightField.UsePerPixelAtmosphereTransmittance, light.UsePerPixelAtmosphereTransmittance));
+        entries.Add(EnumEntry(DirectionalLightField.AtmosphereLightSlot, light.AtmosphereSlot));
         entries.Add(FloatEntry(DirectionalLightField.CascadeCount, light.CascadeCount));
         entries.Add(EnumEntry(DirectionalLightField.SplitMode, light.SplitMode));
         entries.Add(FloatEntry(DirectionalLightField.MaxShadowDistance, light.MaxShadowDistance));

@@ -12,13 +12,13 @@ namespace Oxygen.Editor.WorldEditor.Documents.Commands;
 /// </summary>
 /// <param name="Color">Optional linear RGB color multiplier.</param>
 /// <param name="IntensityLux">Optional illuminance in lux.</param>
-/// <param name="IsSunLight">Optional primary-sun candidate flag.</param>
-/// <param name="EnvironmentContribution">Optional atmosphere/environment contribution flag.</param>
+/// <param name="AtmosphereSlot">Optional primary-sun candidate flag.</param>
+/// <param name="UsePerPixelAtmosphereTransmittance">Optional atmosphere/environment contribution flag.</param>
 /// <param name="CastsShadows">Optional shadow-casting flag.</param>
 /// <param name="AffectsWorld">Optional world-lighting flag.</param>
 /// <param name="AngularSizeRadians">Optional angular size in radians.</param>
 /// <param name="ExposureCompensation">Optional light exposure compensation in EV.</param>
-/// <param name="Mobility">Optional authoring mobility.</param>
+/// <param name="AtmosphereDiskLuminanceScaleRgb">Optional RGB disk luminance scale.</param>
 /// <param name="ShadowBias">Optional shadow depth bias.</param>
 /// <param name="ShadowNormalBias">Optional shadow normal bias.</param>
 /// <param name="ContactShadows">Optional contact shadow flag.</param>
@@ -36,13 +36,13 @@ namespace Oxygen.Editor.WorldEditor.Documents.Commands;
 public sealed record DirectionalLightEdit(
     OptionalEditValue<Vector3> Color,
     OptionalEditValue<float> IntensityLux,
-    OptionalEditValue<bool> IsSunLight,
-    OptionalEditValue<bool> EnvironmentContribution,
+    OptionalEditValue<AtmosphereLightSlot> AtmosphereSlot,
+    OptionalEditValue<bool> UsePerPixelAtmosphereTransmittance,
     OptionalEditValue<bool> CastsShadows,
     OptionalEditValue<bool> AffectsWorld,
     OptionalEditValue<float> AngularSizeRadians,
     OptionalEditValue<float> ExposureCompensation,
-    OptionalEditValue<LightMobility> Mobility = default,
+    OptionalEditValue<Vector3> AtmosphereDiskLuminanceScaleRgb = default,
     OptionalEditValue<float> ShadowBias = default,
     OptionalEditValue<float> ShadowNormalBias = default,
     OptionalEditValue<bool> ContactShadows = default,

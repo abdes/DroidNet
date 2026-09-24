@@ -4,25 +4,15 @@
 
 namespace Oxygen.Editor.World.Serialization;
 
-/// <summary>
-/// Runtime participation mode for authored lights.
-/// </summary>
-public enum LightMobility
+/// <summary>Explicit atmosphere source assignment, independent of visibility.</summary>
+public enum AtmosphereLightSlot
 {
-    /// <summary>
-    /// The light is evaluated dynamically at runtime.
-    /// </summary>
-    Realtime = 0,
-
-    /// <summary>
-    /// The light can mix baked and runtime contribution.
-    /// </summary>
-    Mixed = 1,
-
-    /// <summary>
-    /// The light is authored for baked lighting workflows.
-    /// </summary>
-    Baked = 2,
+    /// <summary>Direct lighting only.</summary>
+    None = 0,
+    /// <summary>First atmosphere contributor.</summary>
+    Primary = 1,
+    /// <summary>Second atmosphere contributor.</summary>
+    Secondary = 2,
 }
 
 /// <summary>

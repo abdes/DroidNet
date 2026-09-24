@@ -28,6 +28,9 @@
 #include <Oxygen/Scene/Types/NodeHandle.h>
 
 #include <Commands/AttachCameraCommand.h>
+#include <Oxygen/Scene/Light/DirectionalLight.h>
+#include <Oxygen/Scene/Light/PointLight.h>
+#include <Oxygen/Scene/Light/SpotLight.h>
 #include <Commands/AttachLightCommand.h>
 #include <Commands/CreateSceneNodeCommand.h>
 #include <Commands/DetachGeometryCommand.h>
@@ -204,73 +207,41 @@ namespace Oxygen::Interop::World {
       };
     }
 
-    static void EnqueueAttachLight(EngineContext^ context,
-      System::Guid nodeId, LightKind kind, float intensity, float range,
-      float innerConeAngle, float outerConeAngle,
-      float sourceRadius, float decayExponent, float angularSize,
-      System::Numerics::Vector3 color, bool affectsWorld, int mobility,
-      bool castsShadows, float shadowBias, float shadowNormalBias,
-      bool contactShadows, int shadowResolutionHint, float exposureCompensation,
-      bool environmentContribution, bool isSunLight, int cascadeCount,
-      int splitMode, float maxShadowDistance,
-      System::Numerics::Vector4 cascadeDistances, float distributionExponent,
-      float transitionFraction, float distanceFadeoutFraction)
+    static auto MakeLightCommon(System::Numerics::Vector3 color,
+      bool affectsWorld, int mobility, bool castsShadows, float shadowBias,
+      float shadowNormalBias, bool contactShadows, int shadowResolutionHint,
+      float exposureCompensation) -> oxygen::scene::CommonLightProperties
     {
-      auto native_ctx = context->NativePtr();
-      if (!native_ctx || !native_ctx->engine) {
-        return;
+      if (mobility != 0 || shadowResolutionHint < 0 || shadowResolutionHint > 3) {
+        throw gcnew System::ArgumentOutOfRangeException("light", "Unsupported light mobility or resolution hint");
       }
-
-      auto editor_module = native_ctx->engine->GetModule<EditorModule>();
-      if (!editor_module) {
-        return;
-      }
-
-      auto b = nodeId.ToByteArray();
-      std::array<uint8_t, 16> key {};
-      for (int i = 0; i < 16; ++i) {
-        key[i] = b[i];
-      }
-
-      auto opt = NodeRegistry::Lookup(key);
-      if (!opt.has_value()) {
-        return;
-      }
-
-      LightCommonParams common {};
-      common.color = oxygen::Vec3 { color.X, color.Y, color.Z };
+      oxygen::scene::CommonLightProperties common;
+      common.color_rgb = { color.X, color.Y, color.Z };
       common.affects_world = affectsWorld;
-      common.mobility = static_cast<oxygen::scene::LightMobility>(mobility);
       common.casts_shadows = castsShadows;
-      common.shadow.bias = shadowBias;
-      common.shadow.normal_bias = shadowNormalBias;
-      common.shadow.contact_shadows = contactShadows;
-      common.shadow.resolution_hint
-        = static_cast<oxygen::scene::ShadowResolutionHint>(
-          shadowResolutionHint);
+      common.shadow = { .bias = shadowBias, .normal_bias = shadowNormalBias,
+        .contact_shadows = contactShadows,
+        .resolution_hint = static_cast<oxygen::scene::ShadowResolutionHint>(shadowResolutionHint) };
       common.exposure_compensation_ev = exposureCompensation;
+      return common;
+    }
 
-      DirectionalLightParams directional {};
-      directional.cascade_count
-        = cascadeCount > 0 ? static_cast<std::uint32_t>(cascadeCount) : 1U;
-      directional.split_mode
-        = static_cast<oxygen::scene::DirectionalCsmSplitMode>(splitMode);
-      directional.max_shadow_distance = maxShadowDistance;
-      directional.cascade_distances = {
-        cascadeDistances.X,
-        cascadeDistances.Y,
-        cascadeDistances.Z,
-        cascadeDistances.W,
-      };
-      directional.distribution_exponent = distributionExponent;
-      directional.transition_fraction = transitionFraction;
-      directional.distance_fadeout_fraction = distanceFadeoutFraction;
-
-      auto cmd = std::make_unique<AttachLightCommand>(opt.value(), kind,
-        common, intensity, range, innerConeAngle, outerConeAngle,
-        sourceRadius, decayExponent, angularSize, environmentContribution,
-        isSunLight, directional);
-      editor_module->get().Enqueue(std::move(cmd));
+    static void EnqueueAttachLight(EngineContext^ context, System::Guid nodeId,
+      std::unique_ptr<oxygen::Component> light)
+    {
+      if (const auto error = oxygen::scene::ValidateLight(*light)) {
+        throw gcnew System::ArgumentException(gcnew System::String((error->field + ": " + error->message).c_str()));
+      }
+      auto native_ctx = context->NativePtr();
+      if (!native_ctx || !native_ctx->engine) return;
+      auto editor_module = native_ctx->engine->GetModule<EditorModule>();
+      if (!editor_module) return;
+      auto bytes = nodeId.ToByteArray();
+      std::array<uint8_t, 16> key {};
+      for (int i = 0; i < 16; ++i) key[i] = bytes[i];
+      const auto handle = NodeRegistry::Lookup(key);
+      if (!handle) return;
+      editor_module->get().Enqueue(std::make_unique<AttachLightCommand>(*handle, std::move(light)));
     }
 
     static void EnqueueDetachLight(EngineContext^ context, System::Guid nodeId)
@@ -996,41 +967,62 @@ namespace Oxygen::Interop::World {
     float intensityLux, float angularSizeRadians, System::Numerics::Vector3 color,
     bool affectsWorld, int mobility, bool castsShadows, float shadowBias,
     float shadowNormalBias, bool contactShadows, int shadowResolutionHint,
-    float exposureCompensation, bool environmentContribution, bool isSunLight,
+    float exposureCompensation, int atmosphereLightSlot, bool usePerPixelAtmosphereTransmittance,
+    System::Numerics::Vector3 atmosphereDiskLuminanceScaleRgb,
     int cascadeCount, int splitMode, float maxShadowDistance,
     System::Numerics::Vector4 cascadeDistances, float distributionExponent,
-    float transitionFraction, float distanceFadeoutFraction) {
-    EnqueueAttachLight(context_, nodeId, LightKind::kDirectional, intensityLux,
-      0.0F, 0.0F, 0.0F, 0.0F, 2.0F, angularSizeRadians, color, affectsWorld,
-      mobility, castsShadows, shadowBias, shadowNormalBias, contactShadows,
-      shadowResolutionHint, exposureCompensation, environmentContribution,
-      isSunLight, cascadeCount, splitMode, maxShadowDistance, cascadeDistances,
-      distributionExponent, transitionFraction, distanceFadeoutFraction);
+    float transitionFraction, float distanceFadeoutFraction)
+  {
+    if (atmosphereLightSlot < 0 || atmosphereLightSlot > 2 || cascadeCount < 1
+      || cascadeCount > 4 || splitMode < 0 || splitMode > 1) {
+      throw gcnew System::ArgumentOutOfRangeException("light", "Invalid directional light enum/count");
+    }
+    auto light = std::make_unique<oxygen::scene::DirectionalLight>();
+    light->Common() = MakeLightCommon(color, affectsWorld, mobility, castsShadows,
+      shadowBias, shadowNormalBias, contactShadows, shadowResolutionHint, exposureCompensation);
+    light->SetIntensityLux(intensityLux);
+    light->SetAngularSizeRadians(angularSizeRadians);
+    light->SetAtmosphereLightSlot(static_cast<oxygen::scene::AtmosphereLightSlot>(atmosphereLightSlot));
+    light->SetUsePerPixelAtmosphereTransmittance(usePerPixelAtmosphereTransmittance);
+    light->SetAtmosphereDiskLuminanceScale({ atmosphereDiskLuminanceScaleRgb.X,
+      atmosphereDiskLuminanceScaleRgb.Y, atmosphereDiskLuminanceScaleRgb.Z });
+    light->CascadedShadows() = { .cascade_count = static_cast<std::uint32_t>(cascadeCount),
+      .split_mode = static_cast<oxygen::scene::DirectionalCsmSplitMode>(splitMode),
+      .max_shadow_distance = maxShadowDistance,
+      .cascade_distances = { cascadeDistances.X, cascadeDistances.Y, cascadeDistances.Z, cascadeDistances.W },
+      .distribution_exponent = distributionExponent, .transition_fraction = transitionFraction,
+      .distance_fadeout_fraction = distanceFadeoutFraction };
+    EnqueueAttachLight(context_, nodeId, std::move(light));
   }
 
-  void OxygenWorld::AttachPointLight(System::Guid nodeId,
-    float luminousFluxLumens, float range, float sourceRadius, float decayExponent,
-    System::Numerics::Vector3 color, bool affectsWorld, bool castsShadows,
-    float exposureCompensation) {
-    EnqueueAttachLight(context_, nodeId, LightKind::kPoint,
-      luminousFluxLumens, range, 0.0F, 0.0F, sourceRadius, decayExponent, 0.0F,
-      color, affectsWorld, 0, castsShadows, 0.0F, 0.02F, false, 1,
-      exposureCompensation, false, false, 4, 0, 160.0F,
-      System::Numerics::Vector4(8.0F, 24.0F, 64.0F, 160.0F), 3.0F, 0.1F,
-      0.1F);
+  void OxygenWorld::AttachPointLight(System::Guid nodeId, float luminousFluxLumens,
+    float range, float sourceRadius, System::Numerics::Vector3 color,
+    bool affectsWorld, bool castsShadows, float shadowBias, float shadowNormalBias,
+    bool contactShadows, int shadowResolutionHint, float exposureCompensation)
+  {
+    auto light = std::make_unique<oxygen::scene::PointLight>();
+    light->Common() = MakeLightCommon(color, affectsWorld, 0, castsShadows,
+      shadowBias, shadowNormalBias, contactShadows, shadowResolutionHint, exposureCompensation);
+    light->SetLuminousFluxLm(luminousFluxLumens);
+    light->SetRange(range);
+    light->SetSourceRadius(sourceRadius);
+    EnqueueAttachLight(context_, nodeId, std::move(light));
   }
 
-  void OxygenWorld::AttachSpotLight(System::Guid nodeId,
-    float luminousFluxLumens, float range, float sourceRadius,
-    float decayExponent, float innerConeAngleRadians, float outerConeAngleRadians,
+  void OxygenWorld::AttachSpotLight(System::Guid nodeId, float luminousFluxLumens,
+    float range, float sourceRadius, float innerConeAngleRadians, float outerConeAngleRadians,
     System::Numerics::Vector3 color, bool affectsWorld, bool castsShadows,
-    float exposureCompensation) {
-    EnqueueAttachLight(context_, nodeId, LightKind::kSpot, luminousFluxLumens,
-      range, innerConeAngleRadians, outerConeAngleRadians, sourceRadius,
-      decayExponent, 0.0F, color, affectsWorld, 0, castsShadows,
-      0.0F, 0.02F, false, 1, exposureCompensation, false, false, 4, 0,
-      160.0F, System::Numerics::Vector4(8.0F, 24.0F, 64.0F, 160.0F), 3.0F,
-      0.1F, 0.1F);
+    float shadowBias, float shadowNormalBias, bool contactShadows,
+    int shadowResolutionHint, float exposureCompensation)
+  {
+    auto light = std::make_unique<oxygen::scene::SpotLight>();
+    light->Common() = MakeLightCommon(color, affectsWorld, 0, castsShadows,
+      shadowBias, shadowNormalBias, contactShadows, shadowResolutionHint, exposureCompensation);
+    light->SetLuminousFluxLm(luminousFluxLumens);
+    light->SetRange(range);
+    light->SetSourceRadius(sourceRadius);
+    light->SetConeAnglesRadians(innerConeAngleRadians, outerConeAngleRadians);
+    EnqueueAttachLight(context_, nodeId, std::move(light));
   }
 
   void OxygenWorld::DetachLight(System::Guid nodeId) {

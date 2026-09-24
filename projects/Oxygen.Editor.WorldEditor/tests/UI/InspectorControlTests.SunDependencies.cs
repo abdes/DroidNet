@@ -16,7 +16,7 @@ namespace Oxygen.Editor.World.Tests;
 /// <summary>Checks visible sun-reference feedback after scene topology changes.</summary>
 public sealed partial class InspectorControlTests
 {
-    /// <summary>The selected sun becomes stale on removal, recovers on restoration, and clears only on explicit user action.</summary>
+    /// <summary>The picker follows stored light ownership across removal, restoration and explicit clearing.</summary>
     /// <param name="removeComponent">Whether to remove the light component or its entire node.</param>
     /// <returns>The test task.</returns>
     [TestMethod]
@@ -34,32 +34,27 @@ public sealed partial class InspectorControlTests
         var picker = await FindSunPickerAsync(view, scroller, model).ConfigureAwait(true);
         picker.SelectedItem = model.SunOptions.Single(option => option.NodeId == fixture.Node.Id);
         await model.PendingEdits.ConfigureAwait(true);
-        _ = fixture.Scene.Environment.SunNodeId.Should().Be(fixture.Node.Id);
+        _ = fixture.Node.Components.OfType<DirectionalLightComponent>().Single().AtmosphereSlot.Should().Be(Oxygen.Editor.World.Serialization.AtmosphereLightSlot.Primary);
         _ = fixture.Context.History.UndoStack.Should().ContainSingle();
-        var warning = ((Grid)picker.Parent).Children.OfType<InfoBar>().Single();
         var light = fixture.Node.Components.OfType<DirectionalLightComponent>().Single();
 
         RemoveSunTarget(fixture, light, removeComponent);
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
         await model.PendingEdits.ConfigureAwait(true);
-        _ = warning.IsOpen.Should().BeTrue();
-        _ = warning.Message.Should().NotBeEmpty();
         _ = ((SunLightOption)picker.SelectedItem).NodeId.Should().BeNull();
-        _ = fixture.Scene.Environment.SunNodeId.Should().Be(fixture.Node.Id);
+        _ = light.AtmosphereSlot.Should().Be(Oxygen.Editor.World.Serialization.AtmosphereLightSlot.Primary);
         _ = fixture.Context.History.UndoStack.Should().ContainSingle();
 
         RestoreSunTarget(fixture, light, removeComponent);
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
         await model.PendingEdits.ConfigureAwait(true);
-        _ = warning.IsOpen.Should().BeFalse();
         _ = ((SunLightOption)picker.SelectedItem).NodeId.Should().Be(fixture.Node.Id);
         _ = fixture.Context.History.UndoStack.Should().ContainSingle();
         var clear = ((Grid)picker.Parent).Children.OfType<Button>().Single();
         ((IInvokeProvider)new ButtonAutomationPeer(clear).GetPattern(PatternInterface.Invoke)).Invoke();
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
         await model.PendingEdits.ConfigureAwait(true);
-        _ = fixture.Scene.Environment.SunNodeId.Should().BeNull();
-        _ = warning.IsOpen.Should().BeFalse();
+        _ = light.AtmosphereSlot.Should().Be(Oxygen.Editor.World.Serialization.AtmosphereLightSlot.None);
         _ = fixture.Context.History.UndoStack.Should().HaveCount(2);
     });
 

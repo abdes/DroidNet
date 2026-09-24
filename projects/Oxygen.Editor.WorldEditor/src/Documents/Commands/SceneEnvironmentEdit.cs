@@ -11,7 +11,6 @@ namespace Oxygen.Editor.WorldEditor.Documents.Commands;
 /// Partial edit for scene environment authoring data.
 /// </summary>
 /// <param name="AtmosphereEnabled">Optional atmosphere enabled flag.</param>
-/// <param name="SunNodeId">Optional sun node identity.</param>
 /// <param name="ExposureMode">Optional exposure mode.</param>
 /// <param name="ManualExposureEv">Optional manual exposure in EV.</param>
 /// <param name="ExposureCompensation">Optional exposure compensation in EV.</param>
@@ -21,7 +20,6 @@ namespace Oxygen.Editor.WorldEditor.Documents.Commands;
 /// <param name="PostProcess">Optional post-process settings.</param>
 public sealed record SceneEnvironmentEdit(
     OptionalEditValue<bool> AtmosphereEnabled,
-    OptionalEditValue<Guid?> SunNodeId,
     OptionalEditValue<ExposureMode> ExposureMode,
     OptionalEditValue<float> ManualExposureEv,
     OptionalEditValue<float> ExposureCompensation,

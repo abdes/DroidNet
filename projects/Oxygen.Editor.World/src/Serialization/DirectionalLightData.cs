@@ -4,11 +4,14 @@
 
 using System.Numerics;
 
+using System.Text.Json.Serialization;
+
 namespace Oxygen.Editor.World.Serialization;
 
 /// <summary>
 /// DTO for authored directional light data.
 /// </summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record DirectionalLightData : LightComponentData
 {
     /// <summary>
@@ -21,15 +24,14 @@ public sealed record DirectionalLightData : LightComponentData
     /// </summary>
     public float AngularSizeRadians { get; init; } = 0.00935f;
 
-    /// <summary>
-    /// Gets a value indicating whether this light contributes to the scene environment.
-    /// </summary>
-    public bool EnvironmentContribution { get; init; } = true;
+    /// <summary>Gets the explicitly assigned atmosphere source slot.</summary>
+    public AtmosphereLightSlot AtmosphereSlot { get; init; } = AtmosphereLightSlot.None;
 
-    /// <summary>
-    /// Gets a value indicating whether this directional light is the active sun.
-    /// </summary>
-    public bool IsSunLight { get; init; } = true;
+    /// <summary>Gets whether surfaces evaluate atmosphere transmittance per pixel.</summary>
+    public bool UsePerPixelAtmosphereTransmittance { get; init; }
+
+    /// <summary>Gets the RGB luminance multiplier for the analytic disk.</summary>
+    public Vector3 AtmosphereDiskLuminanceScaleRgb { get; init; } = Vector3.One;
 
     /// <summary>
     /// Gets the number of directional shadow cascades.

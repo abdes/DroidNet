@@ -8,5 +8,4 @@ public sealed record PointLightSource(
     LightCommonSource Common,
     float LuminousFluxLumens,
     float Range,
-    float SourceRadius,
-    float DecayExponent);
+    float SourceRadius);

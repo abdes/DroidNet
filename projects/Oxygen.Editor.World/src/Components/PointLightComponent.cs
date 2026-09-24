@@ -15,7 +15,6 @@ public sealed partial class PointLightComponent : LightComponent
     private float luminousFluxLumens = 800f;
     private float range = 10f;
     private float sourceRadius;
-    private float decayExponent = 2f;
 
     static PointLightComponent()
     {
@@ -54,14 +53,6 @@ public sealed partial class PointLightComponent : LightComponent
         set => _ = this.SetProperty(ref this.sourceRadius, value);
     }
 
-    /// <summary>
-    /// Gets or sets the attenuation decay exponent.
-    /// </summary>
-    public float DecayExponent
-    {
-        get => this.decayExponent;
-        set => _ = this.SetProperty(ref this.decayExponent, value);
-    }
 
     /// <inheritdoc/>
     public override void Hydrate(ComponentData data)
@@ -77,7 +68,7 @@ public sealed partial class PointLightComponent : LightComponent
             this.LuminousFluxLumens = light.LuminousFluxLumens;
             this.Range = light.Range;
             this.SourceRadius = light.SourceRadius;
-            this.DecayExponent = light.DecayExponent;
+
         }
     }
 
@@ -89,13 +80,13 @@ public sealed partial class PointLightComponent : LightComponent
             Name = this.Name,
             AffectsWorld = this.AffectsWorld,
             Color = this.Color,
-            Mobility = this.Mobility,
+
             CastsShadows = this.CastsShadows,
             Shadow = this.DehydrateShadow(),
             ExposureCompensation = this.ExposureCompensation,
             LuminousFluxLumens = this.LuminousFluxLumens,
             Range = this.Range,
             SourceRadius = this.SourceRadius,
-            DecayExponent = this.DecayExponent,
+
         };
 }

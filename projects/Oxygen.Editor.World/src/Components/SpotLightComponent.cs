@@ -15,7 +15,6 @@ public sealed partial class SpotLightComponent : LightComponent
     private float luminousFluxLumens = 800f;
     private float range = 10f;
     private float sourceRadius;
-    private float decayExponent = 2f;
     private float innerConeAngleRadians = 0.4f;
     private float outerConeAngleRadians = 0.6f;
 
@@ -56,14 +55,6 @@ public sealed partial class SpotLightComponent : LightComponent
         set => _ = this.SetProperty(ref this.sourceRadius, value);
     }
 
-    /// <summary>
-    /// Gets or sets the attenuation decay exponent.
-    /// </summary>
-    public float DecayExponent
-    {
-        get => this.decayExponent;
-        set => _ = this.SetProperty(ref this.decayExponent, value);
-    }
 
     /// <summary>
     /// Gets or sets the inner cone angle, in radians.
@@ -97,7 +88,7 @@ public sealed partial class SpotLightComponent : LightComponent
             this.LuminousFluxLumens = light.LuminousFluxLumens;
             this.Range = light.Range;
             this.SourceRadius = light.SourceRadius;
-            this.DecayExponent = light.DecayExponent;
+
             this.InnerConeAngleRadians = light.InnerConeAngleRadians;
             this.OuterConeAngleRadians = light.OuterConeAngleRadians;
         }
@@ -111,14 +102,14 @@ public sealed partial class SpotLightComponent : LightComponent
             Name = this.Name,
             AffectsWorld = this.AffectsWorld,
             Color = this.Color,
-            Mobility = this.Mobility,
+
             CastsShadows = this.CastsShadows,
             Shadow = this.DehydrateShadow(),
             ExposureCompensation = this.ExposureCompensation,
             LuminousFluxLumens = this.LuminousFluxLumens,
             Range = this.Range,
             SourceRadius = this.SourceRadius,
-            DecayExponent = this.DecayExponent,
+
             InnerConeAngleRadians = this.InnerConeAngleRadians,
             OuterConeAngleRadians = this.OuterConeAngleRadians,
         };

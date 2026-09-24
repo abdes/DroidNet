@@ -77,6 +77,10 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
     /// <param name="data">DTO containing scene data.</param>
     public void Hydrate(Serialization.SceneData data)
     {
+        if (LightValidation.ValidateScene(data) is { } error)
+        {
+            throw new ArgumentException(error, nameof(data));
+        }
         using (this.SuppressNotifications())
         {
             this.RootNodes.Clear();
@@ -95,7 +99,12 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
     /// </summary>
     /// <returns>A data transfer object containing the current state of this scene.</returns>
     public Serialization.SceneData Dehydrate()
-        => new()
+    {
+        if (LightValidation.ValidateScene(this) is { } error)
+        {
+            throw new InvalidOperationException(error);
+        }
+        return new()
         {
             Name = this.Name,
             Id = this.Id,
@@ -103,6 +112,7 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
             Environment = NormalizeEnvironment(this.Environment),
             ExplorerLayout = this.ExplorerLayout,
         };
+    }
 
     /// <summary>
     /// Replaces editor-only Scene Explorer layout data.

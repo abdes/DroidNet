@@ -19,8 +19,9 @@ namespace Oxygen.Editor.Runtime.Engine;
 /// <param name="ContactShadows">The ContactShadows command value.</param>
 /// <param name="ShadowResolutionHint">The ShadowResolutionHint command value.</param>
 /// <param name="ExposureCompensation">The ExposureCompensation command value.</param>
-/// <param name="EnvironmentContribution">The EnvironmentContribution command value.</param>
-/// <param name="IsSunLight">The IsSunLight command value.</param>
+/// <param name="AtmosphereLightSlot">Explicit None/Primary/Secondary assignment.</param>
+/// <param name="UsePerPixelAtmosphereTransmittance">Surface transmittance mode.</param>
+/// <param name="AtmosphereDiskLuminanceScaleRgb">RGB disk luminance multiplier.</param>
 /// <param name="CascadeCount">The CascadeCount command value.</param>
 /// <param name="SplitMode">The SplitMode command value.</param>
 /// <param name="MaxShadowDistance">The MaxShadowDistance command value.</param>
@@ -41,8 +42,9 @@ public sealed record RuntimeAttachDirectionalLight(
     bool ContactShadows,
     int ShadowResolutionHint,
     float ExposureCompensation,
-    bool EnvironmentContribution,
-    bool IsSunLight,
+    int AtmosphereLightSlot,
+    bool UsePerPixelAtmosphereTransmittance,
+    Vector3 AtmosphereDiskLuminanceScaleRgb,
     int CascadeCount,
     int SplitMode,
     float MaxShadowDistance,

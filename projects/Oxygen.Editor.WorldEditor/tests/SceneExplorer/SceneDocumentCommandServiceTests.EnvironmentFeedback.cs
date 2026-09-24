@@ -40,22 +40,17 @@ public sealed partial class SceneDocumentCommandServiceTests
         var scene = CreateScene();
         var sun = CreateDirectionalLightNode(scene, "Sun");
         scene.RootNodes.Add(sun);
-        scene.SetEnvironment(new SceneEnvironmentData { SunNodeId = sun.Id });
         using var editor = new EnvironmentViewModel();
         editor.SetScene(scene);
         _ = editor.SelectedSun!.NodeId.Should().Be(sun.Id);
 
         _ = scene.RootNodes.Remove(sun);
-        _ = editor.HasStaleSun.Should().BeTrue();
         _ = editor.SelectedSun!.NodeId.Should().BeNull();
         scene.RootNodes.Add(sun);
-        _ = editor.HasStaleSun.Should().BeFalse();
         _ = editor.SelectedSun!.NodeId.Should().Be(sun.Id);
         var light = sun.Components.OfType<DirectionalLightComponent>().Single();
         _ = sun.RemoveComponent(light);
-        _ = editor.HasStaleSun.Should().BeTrue();
         _ = sun.AddComponent(light);
-        _ = editor.HasStaleSun.Should().BeFalse();
     }
 
     [TestMethod]
@@ -83,11 +78,9 @@ public sealed partial class SceneDocumentCommandServiceTests
         var first = CreateScene();
         var firstSun = CreateDirectionalLightNode(first, "First Sun");
         first.RootNodes.Add(firstSun);
-        first.SetEnvironment(new SceneEnvironmentData { SunNodeId = firstSun.Id });
         var second = CreateScene();
         var secondSun = CreateDirectionalLightNode(second, "Second Sun");
         second.RootNodes.Add(secondSun);
-        second.SetEnvironment(new SceneEnvironmentData { SunNodeId = secondSun.Id });
         using var editor = new EnvironmentViewModel();
         editor.SetScene(first);
         editor.SetScene(second);
@@ -98,7 +91,6 @@ public sealed partial class SceneDocumentCommandServiceTests
 
         _ = editor.SelectedSun.Should().BeSameAs(selected);
         _ = editor.SelectedSun!.NodeId.Should().Be(secondSun.Id);
-        _ = editor.HasStaleSun.Should().BeFalse();
         secondSun.Name = "Renamed Sun";
         _ = editor.SelectedSun.DisplayName.Should().Be("Renamed Sun");
     }
@@ -129,10 +121,10 @@ public sealed partial class SceneDocumentCommandServiceTests
         }
 
         await editor.PendingEdits.ConfigureAwait(false);
-        _ = light.IsSunLight.Should().BeTrue();
+        _ = light.AtmosphereSlot.Should().Be(AtmosphereLightSlot.Primary);
         await context.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = light.IsSunLight.Should().BeTrue();
+        _ = light.AtmosphereSlot.Should().Be(AtmosphereLightSlot.Primary);
         await context.History.RedoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = light.IsSunLight.Should().BeTrue();
+        _ = light.AtmosphereSlot.Should().Be(AtmosphereLightSlot.Primary);
     }
 }

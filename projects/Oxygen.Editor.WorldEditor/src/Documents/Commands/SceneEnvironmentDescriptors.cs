@@ -18,7 +18,6 @@ internal sealed class SceneEnvironmentDescriptors
 {
     private readonly List<PropertyDescriptor> all;
     private readonly PropertyDescriptor<bool> atmosphereEnabledDescriptor;
-    private readonly PropertyDescriptor<Guid?> sunNodeIdDescriptor;
     private readonly PropertyDescriptor<Vector3> backgroundColorDescriptor;
     private readonly PropertyDescriptor<ExposureMode> exposureModeDescriptor;
     private readonly PropertyDescriptor<bool> exposureEnabledDescriptor;
@@ -61,7 +60,6 @@ internal sealed class SceneEnvironmentDescriptors
         this.all = [.. descriptors];
         this.ById = this.all.ToDictionary(static descriptor => descriptor.Id);
         this.atmosphereEnabledDescriptor = this.Get<bool>("/atmosphere_enabled");
-        this.sunNodeIdDescriptor = this.Get<Guid?>("/sun_node_id");
         this.backgroundColorDescriptor = this.Get<Vector3>("/background_color");
         this.exposureModeDescriptor = this.Get<ExposureMode>("/post_process/exposure_mode");
         this.exposureEnabledDescriptor = this.Get<bool>("/post_process/exposure_enabled");
@@ -105,9 +103,6 @@ internal sealed class SceneEnvironmentDescriptors
 
     /// <summary>Gets the typed property id for atmosphere enablement.</summary>
     internal PropertyId<bool> AtmosphereEnabled => this.atmosphereEnabledDescriptor.TypedId;
-
-    /// <summary>Gets the typed property id for the environment sun node.</summary>
-    internal PropertyId<Guid?> SunNodeId => this.sunNodeIdDescriptor.TypedId;
 
     /// <summary>Gets the typed property id for the background color.</summary>
     internal PropertyId<Vector3> BackgroundColor => this.backgroundColorDescriptor.TypedId;
@@ -234,7 +229,6 @@ internal sealed class SceneEnvironmentDescriptors
     private static void AddRootDescriptors(List<PropertyDescriptor> descriptors)
     {
         descriptors.Add(BoolDescriptor("/atmosphere_enabled", "Enabled", static value => value.AtmosphereEnabled, static (value, next) => value with { AtmosphereEnabled = next }, "environment.atmosphere_enabled"));
-        descriptors.Add(NullableGuidDescriptor("/sun_node_id", "Sun Light", static value => value.SunNodeId, static (value, next) => value with { SunNodeId = next }, "environment.sun_node_id"));
         descriptors.Add(VectorDescriptor(
             "/background_color",
             "Background",

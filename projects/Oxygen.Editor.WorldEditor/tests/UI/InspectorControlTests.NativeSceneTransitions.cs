@@ -90,7 +90,7 @@ public sealed partial class InspectorControlTests
         var sun = new SceneNode(scene) { Name = "Sun", IsActive = true };
         _ = sun.AddComponent(new DirectionalLightComponent { Name = "Sun", CastsShadows = true, CascadeCount = cascades });
         scene.RootNodes.Add(sun);
-        scene.Hydrate(scene.Dehydrate() with { Environment = scene.Environment with { SunNodeId = sun.Id } });
+        sun.Components.OfType<DirectionalLightComponent>().Single().AtmosphereSlot = Oxygen.Editor.World.Serialization.AtmosphereLightSlot.Primary;
     }
 
     private sealed partial class NativeSceneFixture

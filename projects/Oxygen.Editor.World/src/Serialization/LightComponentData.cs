@@ -25,10 +25,6 @@ public abstract record LightComponentData : ComponentData
     /// </summary>
     public Vector3 Color { get; init; } = Vector3.One;
 
-    /// <summary>
-    /// Gets the runtime participation mode for this light.
-    /// </summary>
-    public LightMobility Mobility { get; init; } = LightMobility.Realtime;
 
     /// <summary>
     /// Gets a value indicating whether the light casts shadows.

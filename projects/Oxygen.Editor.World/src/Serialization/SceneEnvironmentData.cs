@@ -23,10 +23,6 @@ public sealed record SceneEnvironmentData
     /// </summary>
     public SkyAtmosphereEnvironmentData SkyAtmosphere { get; init; } = new();
 
-    /// <summary>
-    /// Gets the scene node identity bound as the sun light, or null when no sun is bound.
-    /// </summary>
-    public Guid? SunNodeId { get; init; }
 
     /// <summary>
     /// Gets authored post-process parameters mirrored from Oxygen's native PostProcessVolume.

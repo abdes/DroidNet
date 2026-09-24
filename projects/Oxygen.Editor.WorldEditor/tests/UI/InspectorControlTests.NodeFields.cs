@@ -29,7 +29,9 @@ public sealed partial class InspectorControlTests
         new("Light", "ColorG", 3, 1, 0.3f, 0.3f),
         new("Light", "ColorB", 3, 2, 0.4f, 0.4f),
         new("Light", "AffectsWorld", 3, 3, ControlValue: false, 0),
-        new("Light", "Mobility", 3, 4, LightMobility.Mixed, 1),
+        new("Light", "DiskScaleR", 3, 27, 2f, 2f),
+        new("Light", "DiskScaleG", 3, 28, 3f, 3f),
+        new("Light", "DiskScaleB", 3, 29, 4f, 4f),
         new("Light", "CastsShadows", 3, 5, ControlValue: false, 0),
         new("Light", "ShadowBias", 3, 6, 0.01f, 0.01f),
         new("Light", "ShadowNormalBias", 3, 7, 0.04f, 0.04f),
@@ -38,8 +40,8 @@ public sealed partial class InspectorControlTests
         new("Light", "ExposureCompensation", 3, 10, 1.5f, 1.5f),
         new("Light", "IntensityLux", 3, 11, 80000f, 80000f),
         new("Light", "AngularSizeRadians", 3, 12, 0.02f, 0.02f),
-        new("Light", "EnvironmentContribution", 3, 13, ControlValue: false, 0),
-        new("Light", "IsSunLight", 3, 14, ControlValue: false, 0),
+        new("Light", "UsePerPixelAtmosphereTransmittance", 3, 26, ControlValue: true, 1),
+        new("Light", "AtmosphereSlot", 3, 25, AtmosphereLightSlot.Primary, 1),
         new("Light", "CascadeCount", 3, 15, 3f, 3),
         new("Light", "SplitMode", 3, 16, DirectionalCsmSplitMode.ManualDistances, 1),
         new("Light", "MaxShadowDistance", 3, 17, 200f, 200),
@@ -71,14 +73,17 @@ public sealed partial class InspectorControlTests
                 3,
                 [
                 light.Color.X, light.Color.Y, light.Color.Z,
-                light.AffectsWorld ? 1f : 0f, (int)light.Mobility, light.CastsShadows ? 1f : 0f,
+                light.AffectsWorld ? 1f : 0f, 0, light.CastsShadows ? 1f : 0f,
                 light.ShadowBias, light.ShadowNormalBias, light.ContactShadows ? 1f : 0f, (int)light.ShadowResolutionHint,
                 light.ExposureCompensation, light.IntensityLux, light.AngularSizeRadians,
-                light.EnvironmentContribution ? 1f : 0f, light.IsSunLight ? 1f : 0f,
+                0, 0,
                 light.CascadeCount, (int)light.SplitMode, light.MaxShadowDistance,
                 light.CascadeDistances.X, light.CascadeDistances.Y, light.CascadeDistances.Z, light.CascadeDistances.W,
                 light.DistributionExponent, light.TransitionFraction, light.DistanceFadeoutFraction,
+                (int)light.AtmosphereSlot, light.UsePerPixelAtmosphereTransmittance ? 1f : 0f,
+                light.AtmosphereDiskLuminanceScaleRgb.X, light.AtmosphereDiskLuminanceScaleRgb.Y, light.AtmosphereDiskLuminanceScaleRgb.Z,
             ]);
+            foreach (ushort removed in new ushort[] { 4, 13, 14 }) result.Remove((3, removed));
         }
 
         return result;

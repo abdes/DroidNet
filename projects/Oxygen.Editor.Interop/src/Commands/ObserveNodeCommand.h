@@ -128,7 +128,7 @@ private:
     add(DirectionalLightField::kColorG, common.color_rgb.g);
     add(DirectionalLightField::kColorB, common.color_rgb.b);
     add(DirectionalLightField::kAffectsWorld, common.affects_world);
-    add(DirectionalLightField::kMobility, common.mobility);
+
     add(DirectionalLightField::kCastsShadows, common.casts_shadows);
     add(DirectionalLightField::kShadowBias, common.shadow.bias);
     add(DirectionalLightField::kShadowNormalBias, common.shadow.normal_bias);
@@ -137,8 +137,14 @@ private:
     add(DirectionalLightField::kExposureCompensation, common.exposure_compensation_ev);
     add(DirectionalLightField::kIntensityLux, light.GetIntensityLux());
     add(DirectionalLightField::kAngularSizeRadians, light.GetAngularSizeRadians());
-    add(DirectionalLightField::kEnvironmentContribution, light.GetEnvironmentContribution());
-    add(DirectionalLightField::kIsSunLight, light.IsSunLight());
+
+
+    add(DirectionalLightField::kAtmosphereLightSlot, light.GetAtmosphereLightSlot());
+    add(DirectionalLightField::kUsePerPixelAtmosphereTransmittance, light.GetUsePerPixelAtmosphereTransmittance());
+    const auto disk = light.GetAtmosphereDiskLuminanceScale();
+    add(DirectionalLightField::kDiskScaleR, disk.x);
+    add(DirectionalLightField::kDiskScaleG, disk.y);
+    add(DirectionalLightField::kDiskScaleB, disk.z);
     add(DirectionalLightField::kCascadeCount, csm.cascade_count);
     add(DirectionalLightField::kSplitMode, csm.split_mode);
     add(DirectionalLightField::kMaxShadowDistance, csm.max_shadow_distance);

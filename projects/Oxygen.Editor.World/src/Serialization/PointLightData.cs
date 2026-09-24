@@ -2,11 +2,14 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Text.Json.Serialization;
+
 namespace Oxygen.Editor.World.Serialization;
 
 /// <summary>
 /// DTO for authored point light data.
 /// </summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record PointLightData : LightComponentData
 {
     /// <summary>
@@ -24,8 +27,4 @@ public sealed record PointLightData : LightComponentData
     /// </summary>
     public float SourceRadius { get; init; }
 
-    /// <summary>
-    /// Gets the attenuation decay exponent.
-    /// </summary>
-    public float DecayExponent { get; init; } = 2f;
 }

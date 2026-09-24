@@ -2,11 +2,14 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Text.Json.Serialization;
+
 namespace Oxygen.Editor.World.Serialization;
 
 /// <summary>
 /// DTO for authored spot light data.
 /// </summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record SpotLightData : LightComponentData
 {
     /// <summary>
@@ -24,10 +27,6 @@ public sealed record SpotLightData : LightComponentData
     /// </summary>
     public float SourceRadius { get; init; }
 
-    /// <summary>
-    /// Gets the attenuation decay exponent.
-    /// </summary>
-    public float DecayExponent { get; init; } = 2f;
 
     /// <summary>
     /// Gets the inner cone angle, in radians.

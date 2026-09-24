@@ -133,8 +133,9 @@ struct DirectionalLightPropertySnapshot {
 
   bool primary_sun_resolved_before = false;
   bool primary_sun_resolved_after = false;
-  bool environment_contribution = false;
-  bool is_sun_light = false;
+  bool per_pixel_transmittance = false;
+  int atmosphere_slot = 0;
+  bool invalid_edit_preserved = false;
   float intensity_lux = 0.0F;
 };
 
@@ -423,12 +424,14 @@ auto RunAttachDirectionalSunConfiguresAtmosphereLightRole(
     auto node = scene->CreateNode("Sun");
     auto context = BuildContext(*scene);
 
-    LightCommonParams common {};
-    common.affects_world = true;
-    common.casts_shadows = true;
-    AttachLightCommand command(node.GetHandle(), LightKind::kDirectional,
-      common, 100000.0F, 0.0F, 0.0F, 0.0F, 0.0F, 2.0F, 0.0095F, true,
-      true);
+    auto candidate = std::make_unique<oxygen::scene::DirectionalLight>();
+    candidate->Common().casts_shadows = true;
+    candidate->SetIntensityLux(100000.0F);
+    candidate->SetAngularSizeRadians(0.0095F);
+    candidate->SetAtmosphereLightSlot(oxygen::scene::AtmosphereLightSlot::kPrimary);
+    candidate->SetUsePerPixelAtmosphereTransmittance(true);
+    candidate->SetAtmosphereDiskLuminanceScale({ 1.0F, 0.95F, 0.9F });
+    AttachLightCommand command(node.GetHandle(), std::move(candidate));
 
     command.Execute(context);
 
@@ -453,11 +456,10 @@ auto RunAttachDirectionalNonSunClearsAtmosphereLightRole(
     auto node = scene->CreateNode("Fill");
     auto context = BuildContext(*scene);
 
-    LightCommonParams common {};
-    common.affects_world = true;
-    AttachLightCommand command(node.GetHandle(), LightKind::kDirectional,
-      common, 5000.0F, 0.0F, 0.0F, 0.0F, 0.0F, 2.0F, 0.0095F, false,
-      false);
+    auto candidate = std::make_unique<oxygen::scene::DirectionalLight>();
+    candidate->SetIntensityLux(5000.0F);
+    candidate->SetAngularSizeRadians(0.0095F);
+    AttachLightCommand command(node.GetHandle(), std::move(candidate));
 
     command.Execute(context);
 
@@ -482,11 +484,11 @@ auto RunSetPropertiesDirectionalLightEditInvalidatesResolvedSun(
     auto node = scene->CreateNode("Sun");
     auto context = BuildContext(*scene);
 
-    LightCommonParams common {};
-    common.affects_world = true;
-    AttachLightCommand attach_command(node.GetHandle(), LightKind::kDirectional,
-      common, 5000.0F, 0.0F, 0.0F, 0.0F, 0.0F, 2.0F, 0.0095F, false,
-      false);
+    auto candidate = std::make_unique<oxygen::scene::DirectionalLight>();
+    candidate->SetIntensityLux(5000.0F);
+    candidate->SetAngularSizeRadians(0.0095F);
+    AttachLightCommand attach_command(node.GetHandle(), std::move(candidate));
+
     attach_command.Execute(context);
 
     scene->Update(false);
@@ -498,10 +500,10 @@ auto RunSetPropertiesDirectionalLightEditInvalidatesResolvedSun(
     std::vector<PropertyEntry> entries {
       { ComponentId::kDirectionalLight,
         static_cast<std::uint16_t>(
-          DirectionalLightField::kEnvironmentContribution),
+          DirectionalLightField::kUsePerPixelAtmosphereTransmittance),
         1.0F },
       { ComponentId::kDirectionalLight,
-        static_cast<std::uint16_t>(DirectionalLightField::kIsSunLight),
+        static_cast<std::uint16_t>(DirectionalLightField::kAtmosphereLightSlot),
         1.0F },
       { ComponentId::kDirectionalLight,
         static_cast<std::uint16_t>(DirectionalLightField::kIntensityLux),
@@ -509,6 +511,17 @@ auto RunSetPropertiesDirectionalLightEditInvalidatesResolvedSun(
     };
     SetPropertiesCommand edit_command(node.GetHandle(), std::move(entries));
     edit_command.Execute(context);
+    std::vector<PropertyEntry> invalid_entries {
+      { ComponentId::kDirectionalLight, static_cast<std::uint16_t>(DirectionalLightField::kIntensityLux), 123.0F },
+      { ComponentId::kDirectionalLight, static_cast<std::uint16_t>(DirectionalLightField::kCascadeCount), 0.0F },
+    };
+    try {
+      SetPropertiesCommand invalid(node.GetHandle(), std::move(invalid_entries));
+      invalid.Execute(context);
+    } catch (const std::invalid_argument&) {
+      result.invalid_edit_preserved = node.GetLightAs<oxygen::scene::DirectionalLight>()->get().GetIntensityLux() == 90000.0F;
+    }
+
 
     const auto resolved
       = scene->GetDirectionalLightResolver().ResolvePrimarySun();
@@ -516,9 +529,9 @@ auto RunSetPropertiesDirectionalLightEditInvalidatesResolvedSun(
 
     auto light = node.GetLightAs<oxygen::scene::DirectionalLight>();
     if (light) {
-      result.environment_contribution
-        = light->get().GetEnvironmentContribution();
-      result.is_sun_light = light->get().IsSunLight();
+      result.per_pixel_transmittance
+        = light->get().GetUsePerPixelAtmosphereTransmittance();
+      result.atmosphere_slot = static_cast<int>(light->get().GetAtmosphereLightSlot());
       result.intensity_lux = light->get().GetIntensityLux();
     }
   });
@@ -875,8 +888,9 @@ public:
     AssertSucceeded(snapshot.status);
     Assert::IsFalse(snapshot.primary_sun_resolved_before);
     Assert::IsTrue(snapshot.primary_sun_resolved_after);
-    Assert::IsTrue(snapshot.environment_contribution);
-    Assert::IsTrue(snapshot.is_sun_light);
+    Assert::IsTrue(snapshot.per_pixel_transmittance);
+    Assert::AreEqual(1, snapshot.atmosphere_slot);
+    Assert::IsTrue(snapshot.invalid_edit_preserved);
     Assert::AreEqual(90000.0F, snapshot.intensity_lux, 0.0001F);
   }
 };
