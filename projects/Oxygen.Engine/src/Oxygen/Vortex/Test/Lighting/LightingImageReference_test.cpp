@@ -329,6 +329,13 @@ namespace {
             ASSERT_TRUE(std::isfinite(measured));
             if (shadowed) {
               EXPECT_LT(measured, 0.1F * baseline);
+              mesh_node.GetFlags()->get().SetLocalValue(
+                scene::SceneNodeFlags::kReceivesShadows, false);
+              ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0.0F, 2U));
+              const auto unshadowed = ReadFloatTexture(*probe->color).at(0).at(0);
+              EXPECT_NEAR(unshadowed, baseline, 0.005F * baseline + 2.0e-5F);
+              mesh_node.GetFlags()->get().SetLocalValue(
+                scene::SceneNodeFlags::kReceivesShadows, true);
             } else {
               ASSERT_GT(measured, 1.0e-6F);
               baseline = measured;

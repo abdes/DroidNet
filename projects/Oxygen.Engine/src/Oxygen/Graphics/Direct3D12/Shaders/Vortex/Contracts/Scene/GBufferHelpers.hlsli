@@ -15,6 +15,8 @@
 struct GBufferData
 {
     float3 world_normal;
+    float3 geometric_normal;
+    bool receives_shadows;
     float3 base_color;
     float metallic;
     float specular;
@@ -74,6 +76,9 @@ static inline GBufferData ReadGBuffer(float2 uv, SceneTextureBindingData binding
     data.custom_data = SampleGBuffer(GBUFFER_CUSTOM_DATA, uv, bindings);
 
     data.world_normal = DecodeGBufferNormal(gbuffer_normal);
+    data.receives_shadows = gbuffer_normal.w > 0.5f;
+    data.geometric_normal = OctahedronDecode(
+        float2(gbuffer_normal.z, data.custom_data.w) * 2.0f - 1.0f);
     DecodeGBufferMaterial(gbuffer_material, data.metallic, data.specular,
         data.roughness, data.shading_model);
     DecodeGBufferBaseColor(

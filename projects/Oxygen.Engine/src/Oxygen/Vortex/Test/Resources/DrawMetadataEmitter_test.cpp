@@ -1442,6 +1442,59 @@ NOLINT_TEST_F(DrawMetadataEmitterTest,
     partitions.back().pass_mask.IsSet(PassMaskBit::kReverseWinding));
 }
 
+NOLINT_TEST_F(DrawMetadataEmitterTest,
+  InstancingPreservesReceiverEligibilityWithoutChangingCasting)
+{
+  const auto geometry
+    = MakeSimpleGeometryRef("DrawMetadataEmitter.MixedReceivers");
+  BeginFrame(
+    SequenceNumber {
+      1U,
+    },
+    Slot {
+      0U,
+    });
+  const auto handle = GeoUploader().GetOrAllocate(geometry);
+  GeoUploader().EnsureFrameResources();
+  BeginFrame(
+    SequenceNumber {
+      2U,
+    },
+    Slot {
+      1U,
+    });
+  ASSERT_NE(GeoUploader().GetShaderVisibleIndices(handle).vertex_srv_index,
+    oxygen::kInvalidShaderVisibleIndex);
+
+  for (std::uint32_t index = 0U; index < 4U; ++index) {
+    auto item = oxygen::vortex::sceneprep::RenderItemData {};
+    item.geometry = geometry;
+    item.submesh_index = 0U;
+    item.transform_handle = oxygen::vortex::sceneprep::TransformHandle {
+      oxygen::vortex::sceneprep::TransformHandle::Index {
+        index + 1U,
+      },
+      oxygen::vortex::sceneprep::TransformHandle::Generation {
+        1U,
+      },
+    };
+    item.cast_shadows = true;
+    item.receive_shadows = (index % 2U) != 0U;
+    Emitter().EmitDrawMetadata(item);
+  }
+  Emitter().SortAndPartition();
+  const auto bytes = Emitter().GetDrawMetadataBytes();
+  ASSERT_EQ(bytes.size(), 2U * sizeof(oxygen::vortex::DrawMetadata));
+  const auto draws = DecodeDrawMetadata(bytes);
+  EXPECT_EQ(draws.at(0).instance_count, 2U);
+  EXPECT_EQ(draws.at(1).instance_count, 2U);
+  EXPECT_NE(draws.at(0).primitive_flags, draws.at(1).primitive_flags);
+  EXPECT_EQ((draws.at(0).primitive_flags ^ draws.at(1).primitive_flags),
+    static_cast<std::uint32_t>(oxygen::vortex::DrawPrimitiveFlagBits::kDisableShadowReception));
+  EXPECT_TRUE(draws.at(0).flags.IsSet(PassMaskBit::kShadowCaster));
+  EXPECT_TRUE(draws.at(1).flags.IsSet(PassMaskBit::kShadowCaster));
+}
+
 NOLINT_TEST(DrawMetadataEmitterStandaloneTest,
   ShadowRasterCulling_ConservativelyKeepsTouchingCasterBounds)
 {

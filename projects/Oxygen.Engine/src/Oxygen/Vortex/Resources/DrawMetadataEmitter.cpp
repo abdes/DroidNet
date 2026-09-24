@@ -334,7 +334,8 @@ auto DrawMetadataEmitter::EmitDrawMetadata(
     dm.instance_metadata_offset = 0;
     dm.transform_generation = item.transform_handle.GenerationValue().get();
     dm.submesh_index = item.submesh_index;
-    dm.primitive_flags = 0U;
+    dm.primitive_flags = item.receive_shadows ? 0U
+      : static_cast<uint32_t>(DrawPrimitiveFlagBits::kDisableShadowReception);
     if (item.static_shadow_caster) {
       dm.primitive_flags |= static_cast<uint32_t>(
         oxygen::vortex::DrawPrimitiveFlagBits::kStaticShadowCaster);
@@ -662,6 +663,7 @@ auto DrawMetadataEmitter::BatchingKeyHash::operator()(
   oxygen::HashCombine(hash, key.vertex_count);
   oxygen::HashCombine(hash, key.is_indexed);
   oxygen::HashCombine(hash, key.flags.get());
+  oxygen::HashCombine(hash, key.primitive_flags);
   oxygen::HashCombine(hash, key.node_handle);
   return hash;
 }
@@ -695,6 +697,7 @@ auto DrawMetadataEmitter::ApplyInstancingBatches() -> void
       .vertex_count = dm.vertex_count,
       .is_indexed = dm.is_indexed,
       .flags = dm.flags,
+      .primitive_flags = dm.primitive_flags,
       .node_handle = keys_[i].node_handle,
     };
     if (const auto it = key_to_group_index.find(key);

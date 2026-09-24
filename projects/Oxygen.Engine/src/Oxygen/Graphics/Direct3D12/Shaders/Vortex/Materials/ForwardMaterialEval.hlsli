@@ -25,6 +25,7 @@ struct MaterialSurface
     float  ao;
     float3 emissive;
     uint   flags;
+    bool   receives_shadows;
 
     float3 N;
     float3 V;
@@ -116,6 +117,7 @@ MaterialSurface EvaluateMaterialSurface(
     s.ao        = 1.0;
     s.emissive  = float3(0.0, 0.0, 0.0);
     s.flags     = 0u;
+    s.receives_shadows = true;
 
     s.N = SafeNormalize(world_normal);
     // Fallback for degenerate normals from vertex data
@@ -136,6 +138,8 @@ MaterialSurface EvaluateMaterialSurface(
             return s;
         }
         DrawMetadata meta = draw_meta_buffer[draw_index];
+        s.receives_shadows = (meta.primitive_flags
+            & DRAW_PRIMITIVE_DISABLE_SHADOW_RECEPTION) == 0u;
 
         StructuredBuffer<MaterialShadingConstants> materials = ResourceDescriptorHeap[draw_bindings.material_shading_constants_slot];
         uint material_count = 0u;

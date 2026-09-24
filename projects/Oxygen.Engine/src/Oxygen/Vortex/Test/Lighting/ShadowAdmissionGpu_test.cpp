@@ -104,6 +104,39 @@ namespace {
     RecordProperty("lighting_allocation_bytes", memory.allocated.get());
   }
 
+  NOLINT_TEST_F(ShadowAdmissionGpuTest, ContactDepthIsConditionalAndSelfDoesNotOcclude)
+  {
+    auto light_node = AddPoint(0U);
+    bool expected_contact = false;
+    probe->inspect = [&](const auto& ctx, const auto&, unsigned) {
+      auto* owner = RendererPublicationProbe::GetSceneRenderer(*renderer_);
+      auto* shadows = RendererPublicationProbe::GetShadowService(*owner);
+      const auto* data = shadows->InspectShadowData(ctx.current_view.view_id);
+      ASSERT_NE(data, nullptr);
+      EXPECT_EQ(data->bindings.contact_enabled, expected_contact ? 1U : 0U);
+      EXPECT_EQ(data->bindings.contact_depth_srv.IsValid(), expected_contact);
+    };
+    for (const bool forward : { false, true }) {
+      SetSurface(data::MaterialDomain::kOpaque);
+      float baseline = 0.0F;
+      for (const bool contact : { false, true, false }) {
+        auto light = std::make_unique<scene::PointLight>(
+          light_node.GetLightAs<scene::PointLight>()->get());
+        light->Common().shadow.contact_shadows = contact;
+        ASSERT_TRUE(light_node.ReplaceLight(std::move(light)));
+        expected_contact = contact;
+        ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0.0F, 2U));
+        const auto measured = ReadFloatTexture(*probe->color).at(0).at(0);
+        ASSERT_GT(measured, 1.0e-6F);
+        if (contact) {
+          EXPECT_NEAR(measured, baseline, baseline * 0.005F + 2.0e-5F);
+        } else {
+          baseline = measured;
+        }
+      }
+    }
+  }
+
   class BoundedShadowAdmissionGpuTest : public ShadowAdmissionGpuTest {
   protected:
     auto ConfigureRenderer(RendererConfig& config) const -> void override

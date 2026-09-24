@@ -30,6 +30,7 @@
 #include <Oxygen/Vortex/Shadows/Internal/ShadowEligibility.h>
 #include <Oxygen/Vortex/Shadows/Internal/ShadowReferenceBuilder.h>
 #include <Oxygen/Vortex/Shadows/Passes/CascadeShadowPass.h>
+#include <Oxygen/Vortex/Shadows/Passes/ContactShadowCasterDepthPass.h>
 #include <Oxygen/Vortex/Shadows/ShadowService.h>
 #include <Oxygen/Vortex/Shadows/Types/CubeLocalShadowRecord.h>
 #include <Oxygen/Vortex/Shadows/Types/DirectionalShadowRecord.h>
@@ -48,6 +49,7 @@ namespace oxygen::vortex {
 ShadowService::ShadowService(Renderer& renderer)
   : renderer_(renderer)
   , cascade_shadow_pass_(std::make_unique<shadows::CascadeShadowPass>(renderer))
+  , contact_depth_pass_(std::make_unique<shadows::ContactShadowCasterDepthPass>(renderer))
 {
 }
 
@@ -104,6 +106,7 @@ auto ShadowService::OnFrameStart(
     .frame_slot = slot,
   };
   cascade_shadow_pass_->OnFrameStart(sequence, slot);
+  contact_depth_pass_->OnFrameStart(sequence);
   if (EnsurePublishResources()) {
     bindings_publisher_->OnFrameStart(sequence, slot);
     directional_record_buffer_->OnFrameStart(sequence, slot);
@@ -324,6 +327,23 @@ auto ShadowService::RenderShadowDepths(const FrameShadowInputs& inputs) -> void
           continue;
         }
       }
+      auto contact_surface = std::shared_ptr<graphics::Texture> {};
+      const bool needs_contact = inputs.frame_light_set != nullptr
+        && shadows::internal::NeedsContactShadows(
+          *inputs.frame_light_set, view_input.resolved_view.get());
+      if (needs_contact) {
+        contact_surface = contact_depth_pass_->Record(view_input, view_data.bindings);
+        if (!contact_surface) {
+          failed_views_.insert_or_assign(view_input.view_id,
+            LightingPreparationFailure {
+              .error = LightingPreparationError::kMissingShadow,
+              .view_id = view_input.view_id,
+            });
+          continue;
+        }
+      } else {
+        contact_depth_pass_->RemoveView(view_input.view_id);
+      }
       const auto before
         = renderer_.GetLightingAllocationBudget()->Snapshot().rejected_requests;
       const auto slot = PublishShadowBindings(view_input.view_id, view_data);
@@ -369,6 +389,7 @@ auto ShadowService::RenderShadowDepths(const FrameShadowInputs& inputs) -> void
           .directional_surfaces = std::move(directional_surfaces),
           .spot_surfaces = std::move(spot_shadow_surfaces),
           .point_surfaces = std::move(point_shadow_surfaces),
+          .contact_surface = std::move(contact_surface),
         });
     } catch (const graphics::AllocationBudgetExceeded&) {
       const auto snapshot = renderer_.GetLightingAllocationBudget()->Snapshot();

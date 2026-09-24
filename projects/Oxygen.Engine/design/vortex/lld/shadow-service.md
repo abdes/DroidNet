@@ -39,6 +39,24 @@ PCF contracts remain; atmosphere disk diameter adds no PCSS/finite-source effect
 Historical single-light interface examples and VTX evidence below do not close
 the new two-source, receiver or contact requirements.
 
+## Conditional contact-caster depth
+
+`ContactShadowCasterDepthPass`, owned by ShadowService at Stage 8, renders one
+camera-space D32 depth product per requesting view. It shares the depth-prepass
+pipeline builder, opaque/masked mesh processing and raster-state rules. Its draw
+selection uses shadow-caster eligibility, independently of main-view geometry
+visibility. No eligible contact request means no allocation, recording or usable
+binding. Resizing and view removal retire textures/descriptors through the
+existing retained-texture pool; allocations count against the lighting budget.
+
+The shared contact shader implements the fixed 0.25 m/16-sample profile in the
+[editor rendering contract](../plan/editor-v01-rendering-contract.md#5-contactshadowcasterdepth-and-contact-attenuation).
+It uses geometric-normal bias, metric depth thickness, exact start-depth rejection
+and edge/end fading. Forward and deferred consumers multiply its result with
+conventional visibility once, after the receiver gate. Required allocation or
+submission failure rejects the affected shadow publication. The screen-space
+supplement retains conventional maps for off-screen and hidden-depth coverage.
+
 ## Mandatory Vortex Rule
 
 - For Vortex planning and implementation, `Oxygen.Renderer` is legacy dead

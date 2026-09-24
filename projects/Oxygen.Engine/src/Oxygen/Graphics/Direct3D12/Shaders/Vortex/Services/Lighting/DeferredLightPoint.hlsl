@@ -8,6 +8,7 @@
 #include "Vortex/Services/Lighting/DeferredLightingCommon.hlsli"
 #include "Vortex/Services/Lighting/FiniteEmitter.hlsli"
 #include "Vortex/Services/Shadows/DirectionalShadowCommon.hlsli"
+#include "Vortex/Services/Shadows/ContactShadow.hlsli"
 
 cbuffer RootConstants : register(b2, space0)
 {
@@ -62,8 +63,11 @@ float4 DeferredLightPointPS(DeferredLightVolumeVSOutput input) : SV_Target0
     if (!LocalEmitterFacesSurface(light, source, surface.world_normal)) return 0.0f.xxxx;
     const LightShadowReference shadow_reference = LoadLightShadowReference(
         lighting_bindings.local_shadow_map_srv, light.selection_index);
-    const float shadow_visibility = ComputeLocalShadowVisibility(shadow_reference,
-        world_position, surface.world_normal, source.direction_to_center);
+    const float shadow_visibility = surface.receives_shadows
+        ? ComputeLocalShadowVisibility(shadow_reference,
+            world_position, surface.world_normal, source.direction_to_center)
+            * ComputeContactShadowVisibility(light.flags, true, world_position,
+                surface.geometric_normal, source.direction_to_center) : 1.0f;
     if (shadow_visibility <= 0.0) return 0.0f.xxxx;
     const GgxDirectContext brdf = PrepareGgxDirect(surface.world_normal,
         surface.view_direction, surface.specular_f0,

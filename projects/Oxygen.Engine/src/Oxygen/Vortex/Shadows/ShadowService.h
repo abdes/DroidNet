@@ -31,6 +31,7 @@ namespace upload {
 
 namespace shadows {
   class CascadeShadowPass;
+  class ContactShadowCasterDepthPass;
 } // namespace shadows
 
 class ShadowService {
@@ -92,6 +93,7 @@ private:
     std::vector<std::shared_ptr<graphics::Texture>> directional_surfaces;
     std::vector<std::shared_ptr<graphics::Texture>> spot_surfaces;
     std::vector<std::shared_ptr<graphics::Texture>> point_surfaces;
+    std::shared_ptr<graphics::Texture> contact_surface;
   };
 
   auto EnsurePublishResources() -> bool;
@@ -114,6 +116,7 @@ private:
   std::unordered_map<ViewId, PublishedView> published_views_;
   std::unordered_map<ViewId, LightingPreparationFailure> failed_views_;
   std::unique_ptr<shadows::CascadeShadowPass> cascade_shadow_pass_;
+  std::unique_ptr<shadows::ContactShadowCasterDepthPass> contact_depth_pass_;
 };
 
 } // namespace oxygen::vortex

@@ -988,6 +988,22 @@ Stage 23 (Cleanup)
 
 ## 5. Resource Management
 
+### Receiver data in the existing GBuffer
+
+`DrawMetadata::primitive_flags` carries `kDisableShadowReception` per draw.
+Instancing groups include primitive flags, so shared geometry/materials cannot
+merge receivers with different shadow eligibility. Forward shading reads this
+state with the material draw data; deferred shading reads it from GBufferNormal A
+(1 receives, 0 bypasses). Only direct map/contact visibility is bypassed; direct
+BRDF response, AO, indirect lighting and caster participation are unchanged.
+
+GBufferNormal RG retains the 10-bit octahedral shading normal. Its previously
+unused B lane and GBufferCustomData A store the geometric normal's octahedral X/Y
+coordinates at 10/8-bit precision for the 1 mm contact-ray origin offset. Masked
+coverage/alpha/cutoff diagnostics retain CustomData RGB. This avoids another MRT
+or a wider attachment; normal-map perturbations do not alter the contact bias.
+The geometric normal uses the same sidedness/orientation helper as forward.
+
 ### 5.1 GPU Resources
 
 | Product                 | Format                                                                   | Size                  | Lifecycle                                                                                                       |

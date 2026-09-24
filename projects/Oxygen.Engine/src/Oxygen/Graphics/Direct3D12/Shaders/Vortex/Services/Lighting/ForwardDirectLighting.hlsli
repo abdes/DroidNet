@@ -7,6 +7,7 @@
 #include "Vortex/Contracts/Lighting/LightingHelpers.hlsli"
 #include "Vortex/Services/Shadows/DirectionalShadowCommon.hlsli"
 #include "Vortex/Services/Shadows/ShadowSurfaceNormal.hlsli"
+#include "Vortex/Services/Shadows/ContactShadow.hlsli"
 #include "Vortex/Shared/Lighting.hlsli"
 #include "Vortex/Services/Lighting/FiniteEmitter.hlsli"
 #include "Vortex/Shared/Geometry.hlsli"
@@ -45,7 +46,8 @@ static inline DirectionalLightDiagnosticTerms EvaluateDirectionalLightDiagnostic
     float3 F0,
     float3 base_rgb,
     float  metalness,
-    float  roughness)
+    float  roughness,
+    bool receives_shadows)
 {
     DirectionalLightDiagnosticTerms terms = (DirectionalLightDiagnosticTerms)0;
 
@@ -67,8 +69,10 @@ static inline DirectionalLightDiagnosticTerms EvaluateDirectionalLightDiagnostic
         dl.atmosphere_mode_flags);
     terms.transmittance_luma = ComputePerceptualLuma(transmittance);
 
-    terms.shadow_visibility = saturate(ComputeDirectionalShadowVisibility(
-        dl.selection_index, world_pos, shadow_normal_ws, L));
+    terms.shadow_visibility = receives_shadows
+        ? saturate(ComputeDirectionalShadowVisibility(
+            dl.selection_index, world_pos, shadow_normal_ws, L))
+            * ComputeContactShadowVisibility(dl.flags, true, world_pos, shadow_normal_ws, L) : 1.0f;
 
     terms.brdf_core = EvaluateGgxDirectResponse(N, V, L, F0, base_rgb * (1.0 - metalness),
         roughness, LoadResolvedLightingFrameBindings());
@@ -96,11 +100,12 @@ static inline float3 EvaluateDirectionalLightContribution(
     float3 F0,
     float3 base_rgb,
     float  metalness,
-    float  roughness)
+    float  roughness,
+    bool receives_shadows)
 {
     const float3 radiance = EvaluateDirectionalLightDiagnosticTerms(
         dl, world_pos, screen_position_xy, shadow_normal_ws, N, V, NdotV, F0, base_rgb,
-        metalness, roughness).full_direct;
+        metalness, roughness, receives_shadows).full_direct;
     RecordForwardHdrSource(radiance);
     return radiance;
 }
@@ -148,7 +153,8 @@ float3 AccumulateDirectionalLightGatesDebug(
     float3 F0,
     float3 base_rgb,
     float  metalness,
-    float  roughness)
+    float  roughness,
+    bool receives_shadows)
 {
     const LightingFrameBindings lighting = LoadResolvedLightingFrameBindings();
     float3 result = 0.0.xxx;
@@ -157,7 +163,7 @@ float3 AccumulateDirectionalLightGatesDebug(
         DirectionalLightForwardData light;
         if (!TryLoadDirectionalLight(lighting, index, light)) continue;
         const DirectionalLightDiagnosticTerms terms = EvaluateDirectionalLightDiagnosticTerms(
-            light, world_pos, screen_position_xy, shadow_normal_ws, N, V, NdotV, F0, base_rgb, metalness, roughness);
+            light, world_pos, screen_position_xy, shadow_normal_ws, N, V, NdotV, F0, base_rgb, metalness, roughness, receives_shadows);
         result += float3(terms.shadow_visibility, terms.transmittance_luma, 0.0);
         count += 1.0;
     }
@@ -175,7 +181,8 @@ float3 AccumulateDirectionalLightsBrdfCore(
     float3 F0,
     float3 base_rgb,
     float  metalness,
-    float  roughness)
+    float  roughness,
+    bool receives_shadows)
 {
     const LightingFrameBindings lighting = LoadResolvedLightingFrameBindings();
     float3 result = 0.0.xxx;
@@ -183,7 +190,7 @@ float3 AccumulateDirectionalLightsBrdfCore(
         DirectionalLightForwardData light;
         if (!TryLoadDirectionalLight(lighting, index, light)) continue;
         result += EvaluateDirectionalLightDiagnosticTerms(light, world_pos, screen_position_xy,
-            shadow_normal_ws, N, V, NdotV, F0, base_rgb, metalness, roughness).brdf_core;
+            shadow_normal_ws, N, V, NdotV, F0, base_rgb, metalness, roughness, receives_shadows).brdf_core;
     }
     return result;
 }
@@ -199,7 +206,8 @@ float3 AccumulateDirectionalLights(
     float3 F0,
     float3 base_rgb,
     float  metalness,
-    float  roughness)
+    float  roughness,
+    bool receives_shadows)
 {
     const LightingFrameBindings lighting = LoadResolvedLightingFrameBindings();
     float3 result = 0.0.xxx;
@@ -207,7 +215,7 @@ float3 AccumulateDirectionalLights(
         DirectionalLightForwardData light;
         if (TryLoadDirectionalLight(lighting, index, light))
             result += EvaluateDirectionalLightContribution(light, world_pos, screen_position_xy,
-                shadow_normal_ws, N, V, NdotV, F0, base_rgb, metalness, roughness);
+                shadow_normal_ws, N, V, NdotV, F0, base_rgb, metalness, roughness, receives_shadows);
     }
     return result;
 }
@@ -216,13 +224,15 @@ float3 AccumulateLocalLightsClustered(
     float3 world_pos,
     float2 screen_position_xy,
     float linear_depth,
+    float3 shadow_normal_ws,
     float3 N,
     float3 V,
     float  NdotV,
     float3 F0,
     float3 base_rgb,
     float  metalness,
-    float  roughness)
+    float  roughness,
+    bool receives_shadows)
 {
     float3 direct = float3(0.0, 0.0, 0.0);
 
@@ -270,8 +280,11 @@ float3 AccumulateLocalLightsClustered(
                 || !LocalEmitterFacesSurface(light, source, N)) continue;
             const LightShadowReference shadow = LoadLightShadowReference(
                 lighting.local_shadow_map_srv, light.selection_index);
-            const float visibility = ComputeLocalShadowVisibility(shadow,
-                world_pos, N, source.direction_to_center);
+            const float visibility = receives_shadows
+                ? ComputeLocalShadowVisibility(shadow,
+                    world_pos, N, source.direction_to_center)
+                    * ComputeContactShadowVisibility(light.flags, true, world_pos,
+                        shadow_normal_ws, source.direction_to_center) : 1.0f;
             if (visibility <= 0.0) continue;
             const GgxDirectLobes lobes = EvaluatePreparedLocalEmitterLobes(
                 light, source, N, V, brdf);

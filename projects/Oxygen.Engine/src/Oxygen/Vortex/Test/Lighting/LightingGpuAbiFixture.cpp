@@ -341,23 +341,24 @@ auto LightingGpuAbiTest::PublishIndices(std::span<const std::uint32_t> indices)
 }
 
 auto LightingGpuAbiTest::PublishPackedTexture(const Format format,
-  const std::span<const std::uint32_t> texels) -> ShaderVisibleIndex
+  const std::span<const std::uint32_t> texels, const std::uint32_t height)
+  -> ShaderVisibleIndex
 {
-  CHECK_F(!texels.empty());
+  CHECK_F(!texels.empty() && height != 0U && texels.size() % height == 0U);
   CHECK_LE_F(texels.size(), std::numeric_limits<std::uint32_t>::max());
   CHECK_F(format == Format::kRGBA8UNorm || format == Format::kRGBA8UNormSRGB
-    || format == Format::kR10G10B10A2UNorm);
+    || format == Format::kR10G10B10A2UNorm || format == Format::kR32Float);
   auto texture = CreateRegisteredTexture({
-    .width = static_cast<std::uint32_t>(texels.size()),
-    .height = 1U,
+    .width = static_cast<std::uint32_t>(texels.size() / height),
+    .height = height,
     .format = format,
     .texture_type = TextureType::kTexture2D,
     .debug_name = "Lighting material decode texture",
     .is_shader_resource = true,
   });
   const auto slice = graphics::TextureSlice {
-    .width = static_cast<std::uint32_t>(texels.size()),
-    .height = 1U,
+    .width = static_cast<std::uint32_t>(texels.size() / height),
+    .height = height,
     .depth = 1U,
   };
   const auto footprint
@@ -369,7 +370,11 @@ auto LightingGpuAbiTest::PublishPackedTexture(const Format format,
     .memory = BufferMemory::kUpload,
     .debug_name = "Lighting material decode upload",
   });
-  upload->Update(texels.data(), texels.size_bytes(), 0U);
+  const auto row_size = texels.size_bytes() / height;
+  for (std::uint32_t row = 0U; row < height; ++row) {
+    upload->Update(texels.data() + row * (texels.size() / height), row_size,
+      static_cast<std::uint64_t>(row) * footprint.row_pitch.get());
+  }
   SubmitCommands("Lighting material texture upload",
     [&](graphics::CommandRecorder& recorder) -> void {
       EnsureTracked(recorder, upload, ResourceStates::kGenericRead);

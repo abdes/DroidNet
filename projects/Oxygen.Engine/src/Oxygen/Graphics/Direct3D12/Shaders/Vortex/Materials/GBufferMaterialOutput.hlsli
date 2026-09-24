@@ -15,6 +15,7 @@
 #include "Vortex/Contracts/Definitions/SceneDefinitions.hlsli"
 #include "Vortex/Contracts/Scene/GBufferHelpers.hlsli"
 #include "Vortex/Shared/BRDFCommon.hlsli"
+#include "Vortex/Services/Shadows/ShadowSurfaceNormal.hlsli"
 
 static inline uint ResolveVortexShadingModel(uint draw_index)
 {
@@ -28,7 +29,8 @@ static inline uint ResolveVortexShadingModel(uint draw_index)
 }
 
 static inline GBufferOutput PackGBufferOutput(
-    MaterialSurface surface, uint shading_model, float2 uv0, uint draw_index)
+    MaterialSurface surface, uint shading_model, float2 uv0, uint draw_index,
+    float3 geometric_normal)
 {
     GBufferOutput output;
     output.gbuffer_normal = EncodeGBufferNormal(surface.N);
@@ -46,6 +48,12 @@ static inline GBufferOutput PackGBufferOutput(
             1.0f, alpha_test.alpha, alpha_test.cutoff, 0.0f);
     }
 #endif
+    // Per-instance receiver state is independent of shared material/shading data.
+    output.gbuffer_normal.w = surface.receives_shadows ? 1.0f : 0.0f;
+    // Preserve the geometric normal for metric contact bias without another MRT.
+    const float2 geometric_oct = OctahedronEncode(geometric_normal) * 0.5f + 0.5f;
+    output.gbuffer_normal.z = geometric_oct.x;
+    output.gbuffer_custom_data.w = geometric_oct.y;
     // Surviving opaque/masked fragments have full foreground coverage.
 #if defined(OXYGEN_DEPTH_COMPLETE)
     const ViewFrameBindings bindings = LoadViewFrameBindings(bindless_view_frame_bindings_slot);
@@ -67,7 +75,9 @@ static inline GBufferOutput EvaluateGBufferMaterialOutput(float3 world_pos,
         world_normal, world_tangent, world_bitangent, uv0, draw_index,
         is_front_face);
     const uint shading_model = ResolveVortexShadingModel(draw_index);
-    return PackGBufferOutput(surface, shading_model, uv0, draw_index);
+    const float3 geometric_normal = ComputeShadowSurfaceNormal(
+        world_pos, world_normal, is_front_face);
+    return PackGBufferOutput(surface, shading_model, uv0, draw_index, geometric_normal);
 }
 
 #endif // OXYGEN_D3D12_SHADERS_VORTEX_MATERIALS_GBUFFERMATERIALOUTPUT_HLSLI
