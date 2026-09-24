@@ -24,6 +24,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/NamedType.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Result.h>
 // ReSharper disable once CppUnusedIncludeDirective - For always_false_v
 #include <Oxygen/Base/VariantHelpers.h>
 #include <Oxygen/Core/Types/Format.h>
@@ -185,9 +186,9 @@ public:
   */
   OXGN_GFX_API virtual auto End() noexcept -> std::shared_ptr<CommandList>;
   OXGN_GFX_API auto RetainRegistration(ResourceRegistry& registry,
-    const RegistrationOwner& owner) -> std::expected<void, RegistrationError>;
+    const RegistrationOwner& owner) -> Result<void, RegistrationError>;
   auto RetainRegistration(ResourceRegistry& registry,
-    const RegistrationLease& lease) -> std::expected<void, RegistrationError>
+    const RegistrationLease& lease) -> Result<void, RegistrationError>
   {
     return RetainRegistration(registry, lease.AllocationOwner());
   }

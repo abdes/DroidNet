@@ -124,7 +124,7 @@ void CommandRecorder::Begin()
 }
 
 auto CommandRecorder::RetainRegistration(ResourceRegistry& registry,
-  const RegistrationOwner& owner) -> std::expected<void, RegistrationError>
+  const RegistrationOwner& owner) -> Result<void, RegistrationError>
 {
   return command_list_->Uses().Retain(registry, owner);
 }

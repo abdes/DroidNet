@@ -50,13 +50,13 @@ auto RecordingUseBatch::Contains(RegistrationIdentity id) const noexcept -> bool
     registrations_, [&](const auto& pin) { return pin.Identity() == id; });
 }
 auto RecordingUseBatch::Retain(ResourceRegistry& registry,
-  const RegistrationOwner& owner) -> std::expected<void, RegistrationError>
+  const RegistrationOwner& owner) -> Result<void, RegistrationError>
 {
   if (resolved_) {
-    return std::unexpected(RegistrationError::kClosed);
+    return Err(RegistrationError::kClosed);
   }
   if (owner.Identity().backend != backend_) {
-    return std::unexpected(RegistrationError::kWrongBackend);
+    return Err(RegistrationError::kWrongBackend);
   }
   if (Contains(owner.Identity())) {
     return {};
@@ -68,12 +68,12 @@ auto RecordingUseBatch::Retain(ResourceRegistry& registry,
     }
     auto use = registry.RetainUse(owner);
     if (!use) {
-      return std::unexpected(use.error());
+      return Err(use.error());
     }
     registrations_.push_back(std::move(*use));
     return {};
   } catch (...) {
-    return std::unexpected(RegistrationError::kAllocationFailed);
+    return Err(RegistrationError::kAllocationFailed);
   }
 }
 auto RecordingUseBatch::RetainOpaque(std::shared_ptr<const void> owner,

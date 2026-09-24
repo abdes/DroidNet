@@ -1,0 +1,67 @@
+{
+  "status": "Passed; C++20 editor SDK build repaired. Manual editor workflow remains user-owned.",
+  "source_base": "c962187ab9ecddd92280852452512de0ed19040d",
+  "source_sha256": {
+    "src\\Oxygen\\Graphics\\Common\\RecordingUseBatch.h": "2da9430c349051ff9d6d003db2709226208d1138b9e5147d9961647c6b01092b",
+    "src\\Oxygen\\Graphics\\Common\\RecordingUseBatch.cpp": "f6261384155c23720012597296ea295a71f34a19d81aa8c73bb976be4d8bcdde",
+    "src\\Oxygen\\Graphics\\Common\\CommandRecorder.h": "341e22a6fce5a855e24f36aafb4fd2d75ebccb9f235e05edbdff4c23babd187c",
+    "src\\Oxygen\\Graphics\\Common\\CommandRecorder.cpp": "2b31beebae9b34fc77c6782ef3037de83159dd6e2e8f22d7476509423e6f868b"
+  },
+  "native_build": "Existing out/build-ninja; Debug and Release; targets oxygen-vortex, oxygen-engine-editorinterface, Oxygen.Loader.BackendLifetimeIntegration.Tests",
+  "native_tests": {
+    "Debug": 4,
+    "Release": 4
+  },
+  "native_filter": "*ManagedSubmissionRetiresOutsideFrameLoop*:*LateManagedSubmitIsIndependentOfFrameRetirement*",
+  "sdk_install": "cmake --install out/build-ninja --config <Debug|Release> --prefix <engine>/out/install/<Debug|Release>; both exposed headers verified byte-identical to source",
+  "editor_build": "MSBuild Oxygen.Editor.Interop.vcxproj /t:Build /p:Configuration=Debug /p:Platform=x64 /p:BuildProjectReferences=false /m:4; existing C++20 setting; exit 0",
+  "editor_dll_sha256": "e5ae4702794c8bce889feeade8c7ffdaa5da02455329bd88300ba5bba925af95",
+  "no_capture_or_benchmark_run": true,
+  "artifacts": [
+    {
+      "path": "build-Debug.log.gz",
+      "sha256": "32b7a4c0be0a15ddaf6c92bc6442ad3837cdde3e1911da41512ea70e8b9699a2",
+      "original_sha256": "7afcd4221ba5dc13cc08766ccc7bf7d9f2c024c4023ff08c5c00bf6130c989e6"
+    },
+    {
+      "path": "build-Release.log.gz",
+      "sha256": "8c7046e142b48a58067b489936354b923f58f48aa365e7fc47738bc8ffb61b12",
+      "original_sha256": "c35a6617aa5a0c28a9312da8dfd81a10376e6fbe244e8f9cb005172497b065cb"
+    },
+    {
+      "path": "install-Debug.log.gz",
+      "sha256": "0de76b1bfba85f8ca9d77a0a1388ec502434ee189175b3e8c21a1f4685bf5dd4",
+      "original_sha256": "da247ddabda0d3dfa26971b3f03e26eb0efcef12d991248bb79a2b67b769febd"
+    },
+    {
+      "path": "install-Release.log.gz",
+      "sha256": "d1efb02211aaaa6c84c4a66bfef9afb8f99bdd434bb6573e8d766d3cfb7a9462",
+      "original_sha256": "f7a449bd6b637d322eb136819338b8798325205921c5a181e64a7bb177dbe459"
+    },
+    {
+      "path": "interop-Debug.log.gz",
+      "sha256": "64c0c3534a7c4e92f760fa0d0574359c4be06e79e5b61317f784d6be21afef69",
+      "original_sha256": "64b084467774c2271d7393d6a57a3ff8215b147bbc28bf4e54cbd0a85517f093"
+    },
+    {
+      "path": "retention-Debug.json.gz",
+      "sha256": "70d12e028f051dbef0e81446b7c75eb417a9090fd5eb0f5fb4bbdccc2e45457b",
+      "original_sha256": "4d7e97cf1d98498f6ada0c6e3c5c5d300fef763a955acd17d661601494869a3d"
+    },
+    {
+      "path": "retention-Debug.log.gz",
+      "sha256": "cf9e36bd3b862a2ef7670ddc2ee975d536a6355566df73f34220e58edaabccfc",
+      "original_sha256": "3b5113c0a9b589c4810a394ae50ee7ac329fd2b0bf900f490fcc3c65d76766e1"
+    },
+    {
+      "path": "retention-Release.json.gz",
+      "sha256": "32f3c2e0114f3cf12d499106a46215a72659c9b91f56f706f2999f847f394b96",
+      "original_sha256": "509635afda43194645711f963e6fd249ddc85502fbeceb35f3c121195ae87fca"
+    },
+    {
+      "path": "retention-Release.log.gz",
+      "sha256": "22062903c0ed6e367d51c97bebe7385ebdf99736259d4243eb018ad605716658",
+      "original_sha256": "836a16927cf78b88bb5a406ffafdd4c714ad35e228691f5dcc5a08e515421ebd"
+    }
+  ]
+}

@@ -6,11 +6,11 @@
 
 #pragma once
 
-#include <expected>
 #include <memory>
 #include <span>
 #include <vector>
 
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Graphics/Common/Registration.h>
 #include <Oxygen/Graphics/Common/Submission.h>
 
@@ -45,7 +45,7 @@ public:
   OXGN_GFX_API auto Bind(BackendIncarnationId backend, QueueIdentity queue)
     -> void;
   OXGN_GFX_API auto Retain(ResourceRegistry& registry,
-    const RegistrationOwner& owner) -> std::expected<void, RegistrationError>;
+    const RegistrationOwner& owner) -> Result<void, RegistrationError>;
   OXGN_GFX_API auto RetainOpaque(std::shared_ptr<const void> owner,
     uint64_t kind, void* context = nullptr, OpaqueUseHooks hooks = {}) -> void;
   OXGN_GFX_API auto RecordDependency(CompletionReceipt receipt) -> void;
