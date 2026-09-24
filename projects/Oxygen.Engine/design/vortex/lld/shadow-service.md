@@ -18,9 +18,17 @@ The [EX07 shadow-memory audit](../plan/EX07-shadow-memory-review.md) selects D32
 for conventional CSM/local targets while preserving FP32 depth, reversed-Z,
 bias and PCF. Migrate views, PSOs and depth-only clears together; scene/custom
 stencil and independently owned VSM products are not changed. Compatible local
-maps may share within a frame; CSM/contact products remain view-specific. Reuse
-resolution buckets through existing lifetime/fence infrastructure. Native format
-validation is recorded; production cutover and timing are still pending.
+maps may share compatible complete contents and retain them across frames;
+CSM/contact products remain view-specific. Re-evaluate caster membership,
+including newly entering casters, and invalidate for relevant light, geometry,
+material or projection changes. Cache publication requires successful submission
+and the producer's queue/fence dependency; discarded work cannot become reusable.
+Use Nexus `FrameDrivenIndexReuse<ShadowSlotIndex>` for retained local-slot
+ownership and deferred recycling; content validity remains separate. The D32
+production cutover, focused tests and static-scene Tracy comparison are complete.
+The user visually approved the conventional-shadow changes on 2026-09-24.
+Per-light caster dependencies and projected-quality behavior are specified in
+[the local-shadow contract](shadow-local-lights.md#ex07-production-contract).
 
 [Editor V0.1 rendering](../plan/editor-v01-rendering-contract.md#4-conventional-shadows-and-receiver-control)
 extends this baseline with explicitly indexed per-light directional CSMs, GPU

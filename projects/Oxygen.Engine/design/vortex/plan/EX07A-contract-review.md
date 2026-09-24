@@ -45,7 +45,8 @@ are navigation anchors; no runtime result is inferred from their existence.
 
 ### D1 — admission capacities
 
-**Approved 2026-09-22: A — budgeted dynamic capacity. Implementation pending.**
+**Approved 2026-09-22: A — budgeted dynamic capacity. Conventional allocation
+and compact-list implementation complete; broader workload qualification continues.**
 Use indexed light/shadow records and grow resources within explicit
 renderer-wide budgets and backend limits. Account for unique live allocations
 across all views, frame generations, retained/discarded submissions and caches.
@@ -54,15 +55,19 @@ the arbitrary four-point/eight-spot shadow cutoffs; atmosphere's two slots do
 not cap ordinary directional lights or shadow families. The 4,096-light
 qualification endpoint is not a hard scene-count limit.
 
-Requested shadow resolution follows the explicitly selected quality profile;
-it cannot be reduced to fit a budget. Fixed per-kind product count profiles were
+Requested shadow resolution follows the explicitly selected quality profile.
+The conventional local profile uses projected-size buckets, hysteresis and
+fading under the authored/tier ceiling, as specified in
+[the local-shadow design](../lld/shadow-local-lights.md#conventional-local-quality-and-allocation).
+Resolution cannot be reduced to recover from an allocation failure. Fixed per-kind product count profiles were
 not selected. Backend representation/resource limits still apply and must be
 published, checked and distinguished from memory availability.
 
 Preserve every admitted light and requested shadow. Known invalid
 candidates are rejected atomically; preparation failures invalidate the affected
 view without rewriting authored data. No brightest-N selection, silent truncation,
-automatic unshadowing or resolution/update-rate reduction is allowed. Existing
+automatic unshadowing or resolution/update-rate reduction in response to
+allocation pressure is allowed. Existing
 valid panes and application UI remain usable under the LLD failure contract.
 Unused cached resources may be retired to satisfy a budget only when fence-safe;
 in-flight allocations cannot be reclaimed or counted as free.

@@ -9,22 +9,60 @@ define production behavior. The [exposure delivery plan](exposure-and-lightbench
 owns package order; this document owns workloads and qualification. A/B audits
 retain the contract and independent-reference evidence.
 
-## Delivery order and shared ownership
+## Conventional-shadow implementation sequence
 
-The user will implement the
-[New Sponza light/shadow report](../../../out/analysis/light-shadow-audit-20260924/REPORT.md)
-before follow-on EX07C work. Its five steps own shadow eligibility/caster culling,
-per-light buckets and D32, local depth caching, spatial light lists, and measured
-resolution/fade policy, including their supporting correctness repairs and tests.
-Use that sequence for the present shadow bottleneck. These changes supply parts
-of C/D/E; do not implement them again to satisfy an older stage assignment.
+The following implementation sequence, automated acceptance checks and user
+visual acceptance are **complete**. Visual approval was received on 2026-09-24.
+Evidence is recorded
+in [tracker section 3.4](../IMPLEMENTATION_STATUS.md#34-slice-7-work-items).
+Remaining EX07C integration uses these delivered implementations:
 
-The [tracker's remaining-C list](../IMPLEMENTATION_STATUS.md#user-owned-prerequisite-and-remaining-c-work)
-defines what follows. Reconcile the delivered code/results once, credit any
-additional overlap resolved there, and reuse the accepted shadow/grid design and
-evidence. The report's static-scene gain and user-led interactive checks do not
-wait for the broader EX07 workload matrix. No new validation framework is needed.
-VSM remains outside this conventional-shadow work.
+1. **Eligibility and spatial caster culling.** Use the same energy, range,
+   participation and view-relevance decisions in allocation, setup, recording
+   and publication. Cull world-space caster bounds per point face, spot
+   projection and extruded directional cascade, retaining contributing
+   off-screen casters. Publish empty eligible maps as fully lit and distinguish
+   irrelevant lights from failed required allocations.
+2. **Per-light allocation and D32.** Group local maps by resolution, retain
+   stable scene/light owners through Nexus `FrameDrivenIndexReuse<ShadowSlotIndex>`,
+   publish fixed surface/layer associations, reconcile empty local selections, grow
+   only affected buckets and retire resources after their consumer fences.
+   Migrate conventional textures, views, PSOs and clears to depth-only D32.
+   Scene/custom stencil is unchanged.
+3. **Cross-frame local depth caching.** Reuse unchanged point/spot map contents
+   with complete light-space coverage. Re-evaluate current caster membership so
+   entering and leaving casters invalidate the affected map. Track light,
+   projection, resolution and each relevant caster's geometry, transform and
+   depth-affecting material/texture inputs. Geometry content revisions invalidate
+   unchanged handles/SRVs after hot reload, including while a light is out of view. Recorded
+   contents become reusable only after successful submission; retain and honor
+   the producing queue/fence dependency. Failed/discarded work is never valid
+   cache content. Directional cascades remain view-dependent.
+4. **Spatial light lists.** Build conservative per-view compact cell membership
+   from the shared typed light selection. Reserve the complete-list sentinel for
+   actual capacity fallback, publish truthful status and preserve references
+   and buffers through their final consumers. Start compact storage from bounded
+   occupancy and grow from completed GPU counts, sharing the aggregate budget
+   across all active views and frame slots. Never silently truncate lights.
+5. **Projected-benefit quality.** Select resolution buckets within the chosen
+   quality profile and authored ceiling, with hysteresis and defined fading.
+   Resolution changes invalidate cached depths. Keep intentional quality
+   choices distinct from allocation failure. Orthographic quality uses projected
+   size regardless of camera distance; the user confirms visual tuning.
+
+Repair related correctness defects, duplicated decisions and superseded code
+within the implementing step. These changes supply parts of C/D/E; later stages
+reuse the implementation rather than creating another allocator, cache or culler.
+Current status and remaining integration work live in
+[tracker section 3.4](../IMPLEMENTATION_STATUS.md#34-slice-7-work-items).
+
+Build affected targets and use existing focused unit/GPU tests for each step.
+Use the shadow-enabled Instancing scene for incremental static-scene runtime and
+Tracy checks with `--fps 0 --vsync false`. The user owns interactive camera/caster
+visual checks. Run New Sponza only after all five steps and their unit tests are
+complete, then make one comparison against the matching uncapped/VSync-off
+baseline. Do not add a validation framework or automate an exhaustive visual
+matrix. VSM is excluded from this work.
 
 ## Outcome and boundaries
 
@@ -92,14 +130,14 @@ agreed product scope or quality target is a separate decision.
 The initial review established the areas below. Current behavior and remaining
 work are summarized here; measured regression-repair results are in the tracker.
 
-| Owner                                                                            | Implementation and remaining work                                                                                       | Consequence for EX07                                                                                         |
+| Owner                                                                            | Implementation and remaining work                                                                                | Consequence for EX07                                                                                         |
 | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | `Lighting/Internal/ForwardLightPublisher.cpp`                                    | Every cluster references the complete local-light list. CPU vectors/grid entries are rebuilt during publication. | Establish real conservative spatial lists; measure preparation, upload and shader work.                      |
 | `Lighting/Internal/LightGridBuilder.cpp`                                         | Builds records and grid metadata; this service path does not dispatch GPU spatial culling.                       | A baked culling shader alone is not evidence of an operational culler.                                       |
 | Shader `Services/Lighting/LightCulling.hlsl`                                     | Scans all lights for each cell and clamps output count to per-cell capacity.                                     | Review ABI/coordinates before reuse; eliminate silent light loss on overflow.                                |
 | `Types/LightCullingConfig.h`                                                     | 64-pixel XY cells, 32 depth slices and nominal 32 entries per cell.                                              | Exercise 31/32/33 overlap and viewport/depth boundaries; these constants are not a proven scalable envelope. |
 | `Lighting/Passes/DeferredLightPass.cpp`                                          | Produces per-local-light volume/fullscreen draws and per-draw constants.                                         | Measure CPU submission, visibility rejection, camera-inside fallback and overlapping volume cost.            |
-| `Shadows/Internal/{Point,Spot}ShadowSetup.cpp` and `Types/ShadowFrameBindings.h` | Indexed dynamic families replace the former four-point/eight-spot arrays.                                               | Test capacity, mapping and overflow explicitly; never equate total light count with shadow count.            |
+| `Shadows/Internal/{Point,Spot}ShadowSetup.cpp` and `Types/ShadowFrameBindings.h` | Indexed dynamic families replace the former four-point/eight-spot arrays.                                        | Test capacity, mapping and overflow explicitly; never equate total light count with shadow count.            |
 | `Diagnostics/ShaderDebugModeRegistry.cpp`                                        | Light-grid debug views are marked unsupported.                                                                   | Publish truthful culling statistics and a useful opt-in visualization for qualification.                     |
 
 Paths above are under `src/Oxygen/Vortex`; shader paths are under
@@ -113,8 +151,8 @@ owners, view publications, upload allocators and profiling remain authoritative.
 | EX07A — Review and freeze contracts       | Canonical LLD/ABI, field-to-consumer inventory, directional authority, GPU scheduling, capacities and failure/recovery behavior.                    | One documented contract; no conflicting historical interface; complete review decisions and test obligations before consumer changes. |
 | EX07B — References and instruments        | Independent physical oracle, known-input GPU probes, unculled image reference, deterministic fixtures and bounded CPU/GPU/resource instrumentation. | Reference/instrument validity is established independently of the renderer being tested.                                              |
 | EX07C — Repair correctness                | Physical response, every retained property, directional/local/shadow identities, complete lists, ingress/round-trip behavior and safe lifetime.     | Each workload admitted to timing passes its applicable numerical/image/mutation/capacity checks.                                      |
-| EX07D — Qualified operating points   | Correctness-qualified workload baselines, CPU/GPU costs, memory use, quality and measurement noise.                 | Controlled baseline and measured tradeoffs support selection of an acceptable operating point.                                 |
-| EX07E — Scalable culling and optimization | Real spatial rejection and measured shader/submission/upload/shadow/resource improvements.                                                          | Candidates preserve implementation checks and report quality, timing and memory against matched baselines.                                 |
+| EX07D — Qualified operating points        | Correctness-qualified workload baselines, CPU/GPU costs, memory use, quality and measurement noise.                                                 | Controlled baseline and measured tradeoffs support selection of an acceptable operating point.                                        |
+| EX07E — Scalable culling and optimization | Real spatial rejection and measured shader/submission/upload/shadow/resource improvements.                                                          | Candidates preserve implementation checks and report quality, timing and memory against matched baselines.                            |
 | EX07F — Final validation and delivery     | Final-code Debug/Release correctness, native performance, editor/native operation, inspected images and complete operating docs.                    | All EX07 gates pass together, with supported limits and no unexplained failures or quality reduction.                                 |
 
 Current stage and item status live only in [tracker section 3.4](../IMPLEMENTATION_STATUS.md#34-slice-7-work-items).
@@ -256,7 +294,7 @@ draws/dispatches/PSO switches, uploaded bytes, live/in-flight/cached memory and
 steady allocation churn. Deep shader counters are opt-in and outside timed runs.
 Counters/heatmaps must describe the executed product, not nominal configuration.
 
-The report's five-step order governs the prerequisite delivery. The areas below
+The conventional-shadow sequence above governs the prerequisite delivery. The areas below
 are covered by that work or assessed afterward from the remaining measured costs;
 they are not a second ordered implementation list:
 
@@ -294,7 +332,9 @@ remain part of EX07 until both gates pass.
 
 The [2026-09-22 stencil/ownership audit](EX07-shadow-memory-review.md) selects
 three focused changes under EX07-10/11. Source tracing and a native GPU format
-comparison support the design; production correctness/performance remain open.
+comparison supported the initial design. D32 cutover, retained ownership,
+cross-frame cache reuse and focused/static performance acceptance are complete;
+broader workload qualification and cross-view sharing remain later work.
 
 | Work                            | Scope and implementation owner                                                      | Required result                                                                                                                                                                 |
 | ------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -302,10 +342,11 @@ comparison support the design; production correctness/performance remain open.
 | Compatible local-map sharing    | `ShadowService`, `CascadeShadowPass` and indexed bindings                           | One render/allocation for identical local-light shadow content within the frame; distinct per-view CSM/contact products. Different caster content or generations cannot share.  |
 | Bounded allocation reuse/growth | Existing shadow allocator and frame leases/fences                                   | Correct per-light resolution buckets, no redundant complete-set duplication, only affected buckets grow, fence-safe retirement and bounded spare capacity without steady churn. |
 
-The user-owned report incorporates this memory work in steps 2/3 and adds
-cross-frame point/spot depth-content reuse with complete light-space caster
-coverage. Reuse compatible maps across views through the delivered stable
-allocation/content ownership; cascades remain view-dependent. Do not schedule a
+The conventional-shadow sequence completes D32, bounded allocation ownership and
+cross-frame point/spot depth-content reuse with complete light-space coverage.
+Current local contents are retained per view; compatible cross-view sharing is a
+later EX07E optimization using the delivered allocation/content ownership.
+Cascades remain view-dependent. Do not schedule a
 second allocator, D32 conversion or cache implementation under EX07E. Step 5
 separately selects a user-confirmed resolution/fade policy; memory exhaustion
 remains distinct from that intentional quality choice. No VSM or global aliasing

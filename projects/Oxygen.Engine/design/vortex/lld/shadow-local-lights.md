@@ -16,11 +16,82 @@ projected records for ordinary spots, including nonzero source radius. Only
 Preserve FP32 depth, reversed depth and 3x3 PCF, per-light quality and typed identity.
 The [audited EX07 memory work](../plan/EX07-shadow-memory-review.md) selects
 depth-only D32 conventional targets after coordinated view/clear/PSO migration and
-production qualification; D32S8 describes the current baseline. Scene/custom
-stencil and VSM resources are unaffected. Share only same-frame local maps with
-equal light/caster content and use the indexed ABI's resolution buckets.
+production qualification; conventional targets now use D32 with R32 SRVs. Scene/custom
+stencil and VSM resources are unaffected. Retain unchanged conventional local
+depth contents across frames in per-light resolution buckets. Re-evaluate current
+caster membership so newly entering and leaving casters
+invalidate the map. Recorded contents remain pending until successful submission;
+retain the producer queue/fence dependency for every consumer. Failed/discarded
+recordings never establish reusable contents. A camera move alone does not
+invalidate a complete light-space local map. Light, projection, resolution,
+geometry bindings/transforms and depth-affecting material changes invalidate
+affected maps. Build per-source dependencies before instancing; hash only a
+caster's own transform, geometry identity/content revision and raster state,
+plus its alpha-test material
+and base-color texture revision when masked. Re-select these dependencies from
+all current shadow casters against each light volume. Unrelated transforms and
+texture uploads must not invalidate that light. `GeometryUploader` advances its
+content revision on accepted creation, explicit updates and hot reload, even
+when topology, handle generation and descriptors stay unchanged. The revision
+is published with complete resident bindings and copied into each unbatched
+caster source. Revision zero means continuity is unknown and prevents reuse for
+lights influenced by that caster. This also invalidates a retained map after the
+light returns to camera coverage following an unseen geometry update.
+The conventional depth shader
+currently consumes undeformed geometry; adding deformation to that shader must
+extend these dependencies with its per-caster inputs.
+Directional cascades remain view-dependent. Implementation and focused tests
+are complete. The user visually approved the conventional-shadow changes and
+quality policy on 2026-09-24.
 Remove the 4/8 cutoffs and float-encoded layers. Allocation pressure is explicit
 failure/recovery, never automatic unshadowing or a resolution reduction.
+
+### Conventional local quality and allocation
+
+Treat the authored resolution hint and renderer tier as the maximum resolution.
+For a camera outside the light volume, derive a conservative projected radius
+from the resolved viewport/projection and the light's near-side view depth.
+Use 1.27324 texels per pixel for cube projections and twice that for ordinary
+spots. For perspective views, a camera inside the volume requests the authored/tier
+ceiling. Orthographic views always use projected size, including when the camera
+enters the volume; translation along the viewing axis does not change quality. Choose
+power-of-two resolutions; retain the previous bucket until demand falls below
+75% of it or reaches the next doubled bucket. An authored ceiling reduction
+takes effect immediately. A resolution change redraws the affected point/spot
+map at the new dimensions; the next unchanged frame reuses that result. Growing
+back to a previously used resolution must not resurrect stale cached contents.
+
+Fade map visibility smoothly from zero at 32 desired texels to full strength at
+64 desired texels. A zero-strength request publishes `QualityOmitted` without a
+map. Other local records publish `shadow_strength`; both shading families apply
+it once as `lerp(1, map_visibility, shadow_strength)`. This is the normal selected
+quality policy, not a response to memory exhaustion. User visual approval of
+the implemented policy was received on 2026-09-24.
+
+Retain `(view, scene lifetime, light NodeHandle)` ownership independently of
+frame selection indices. `FrameDrivenIndexReuse<ShadowSlotIndex>` supplies the
+slot generation and deferred recycling; the allocator owns its reclaimer and
+drains pending callbacks before shutdown, following `GeometryUploader`.
+Each versioned slot maps to one resolution bucket, chunk and layer range.
+Adding, removing, reordering or camera-culling another light does not move it.
+Reconcile local ownership for every active view before rendering, including empty
+selections and views containing only directional lights. Removing the last local
+light releases its owners; Nexus recycling then allows unused chunks to retire
+through the graphics reclaimer and leave the allocation budget.
+Only removal, scene replacement or that light's quality/projection change ends
+its current ownership. Do not reuse its layer range before Nexus recycles it.
+
+Slot generation does not imply valid depth contents. Each light has a separate
+content entry even when several maps share a surface. Content entries retain the
+producer fence only after successful submission and reuse waits for that fence.
+
+Store each resolution bucket in appendable array chunks targeting 64 MiB, with
+at most 64 lights per chunk and at least one complete projection. This limits
+allocation replacement peaks when the visible light count grows. It does not
+limit scene light count. Keep existing chunks when adding another, and retry
+without unused spare layers if that spare capacity alone exceeds the budget.
+Retire unused chunks through the existing deferred fence mechanism. Failure to
+allocate the required layers remains an explicit preparation failure.
 
 ## Mandatory Vortex Rule
 
