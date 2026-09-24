@@ -775,7 +775,11 @@ C integration is implemented, with the two remaining caller fixes awaiting build
 `Oxygen.Vortex.Exposure.Benchmarks` now edits attached light intensity through
 `EditLight`; `Oxygen.Scene.EnvironmentComponents.Tests` uses RGB disk scale.
 These targets were omitted from the prior build coverage. The fixes are source-reviewed;
-no build or test was run for this follow-up.
+no build or test was run for this follow-up. The RenderScene re-import regression also
+has a source fix pending validation: glTF/FBX LDR material textures retain their
+BC7 presets and mip chains, HDR source format is preserved, and scoped allocation
+admission no longer adds a hard driver-budget limit to unowned resources.
+The existing uncompressed Sponza content must be recooked with the corrected importer.
 
 | Area | Current behavior |
 | --- | --- |

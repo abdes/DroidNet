@@ -264,6 +264,10 @@ admission accounts for other engine commitments, pending growth and explicit
 headroom (configurable `lighting_driver_headroom_bytes`, default **256 MiB**
 below the driver-reported budget); the lighting ceiling is not a reservation. Record unique resource
 requirements, committed heap/slack and process-local DXGI usage separately.
+The backend adds D3D12MA's `WITHIN_BUDGET` hard-failure flag only to allocations
+with an explicit budget owner. Untagged material textures and other resources
+retain their requested allocator flags; the lighting admission policy must not
+silently change their driver-residency behavior.
 Account across all views,
 in-flight allocations and caches; do not retain fixed four-point/eight-spot
 cutoffs. The
