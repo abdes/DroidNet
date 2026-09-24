@@ -36,6 +36,9 @@ struct PreparedViewShadowInput {
 struct FrameShadowInputs {
   const FrameLightSelection* frame_light_set { nullptr };
   std::span<const PreparedViewShadowInput> active_views;
+  //! Full CPU preparation family; active_views alone select the views to
+  //! render.
+  std::span<const PreparedViewShadowInput> preparation_views;
 
   [[nodiscard]] auto HasFrameLightSelection() const noexcept -> bool
   {

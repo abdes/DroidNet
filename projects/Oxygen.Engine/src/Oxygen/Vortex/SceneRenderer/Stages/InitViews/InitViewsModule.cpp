@@ -676,7 +676,12 @@ void InitViewsModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
     scene_prep_->PrepareView(
       *scene, *view_entry.resolved_view, ctx.frame_sequence, scene_prep_state_);
     scene_prep_->FinalizeView(scene_prep_state_);
+    if (next_preparation_revision_
+      == (std::numeric_limits<std::uint64_t>::max)()) {
+      throw std::overflow_error("Scene preparation revisions exhausted");
+    }
     PublishPreparedSceneFrame(scene_prep_state_, storage);
+    storage.prepared_frame.preparation_revision = next_preparation_revision_++;
     storage.shadow_texture_revisions.clear();
     for (const auto& material : storage.shadow_materials) {
       storage.shadow_texture_revisions.push_back(texture_binder_ != nullptr

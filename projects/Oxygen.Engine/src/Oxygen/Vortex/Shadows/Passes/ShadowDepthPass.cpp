@@ -53,20 +53,16 @@
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/DepthPrepass/DepthPrepassMeshProcessor.h>
 #include <Oxygen/Vortex/Shadows/Internal/ShadowCasterCulling.h>
+#include <Oxygen/Vortex/Shadows/Internal/SharedShadowMap.h>
 #include <Oxygen/Vortex/Shadows/Passes/ShadowDepthPass.h>
 #include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
 #include <Oxygen/Vortex/Shadows/Types/ShadowFrameData.h>
 
 namespace oxygen::vortex::shadows {
 
-struct ShadowDepthPass::CacheEntry {
+struct ShadowDepthPass::SurfaceViews {
   std::weak_ptr<graphics::Texture> surface;
   std::vector<graphics::NativeView> dsvs;
-  observer_ptr<graphics::CommandQueue> queue;
-  std::uint64_t fingerprint { 0U };
-  std::uint64_t fence { 0U };
-  std::uint64_t generation { 0U };
-  bool valid { false };
 };
 
 namespace {
@@ -101,64 +97,6 @@ namespace {
   static_assert(offsetof(ShadowPassConstants, normal_matrices_slot) == 124U);
   constexpr std::uint32_t kShadowPassConstantsStride
     = sizeof(ShadowPassConstants);
-
-  auto BuildCacheFingerprint(const PreparedViewShadowInput& view,
-    const std::span<const ShadowDepthPass::DepthSlice> slices)
-    -> std::optional<std::uint64_t>
-  {
-    if (view.scene_generation == 0U || !view.shadow_dependencies_available) {
-      return {};
-    }
-    auto hash = static_cast<std::size_t>(view.scene_generation);
-    const auto& light = slices.front();
-    const auto volume
-      = Frustum::FromViewProj(light.light_view_projection, true);
-    auto relevant = std::vector<std::uint64_t> {};
-    for (const auto& dependency : view.shadow_caster_dependencies) {
-      const auto bounds = dependency.bounds;
-      if (std::isfinite(bounds.x) && std::isfinite(bounds.y)
-        && std::isfinite(bounds.z) && std::isfinite(bounds.w)
-        && bounds.w > 0.0F) {
-        const auto radius = bounds.w * 1.01F + 1.0e-4F;
-        const auto delta
-          = glm::vec3(bounds) - glm::vec3(light.light_position_and_inv_range);
-        const auto extent
-          = radius + 1.0F / light.light_position_and_inv_range.w;
-        if (glm::dot(delta, delta) > extent * extent
-          || (slices.size() == 1U
-            && !volume.IntersectsSphere(glm::vec3(bounds), radius))) {
-          continue;
-        }
-      }
-      if (!dependency.reusable) {
-        return {};
-      }
-      relevant.push_back(dependency.fingerprint);
-    }
-    // Recompute membership from all current casters, including those outside
-    // the previous light volume. Selection/instancing order is not content.
-    std::ranges::sort(relevant);
-    HashCombine(hash,
-      ComputeFNV1a64(relevant.data(), relevant.size() * sizeof(std::uint64_t)));
-    for (const auto& slice : slices) {
-      HashCombine(hash, slice.light_source);
-      HashCombine(hash, slice.slot_generation);
-      HashCombine(hash, slice.target_slice);
-      HashCombine(hash,
-        ComputeFNV1a64(
-          &slice.light_view_projection, sizeof(slice.light_view_projection)));
-      HashCombine(hash,
-        ComputeFNV1a64(
-          &slice.shadow_bias_parameters, sizeof(slice.shadow_bias_parameters)));
-      HashCombine(hash,
-        ComputeFNV1a64(&slice.light_direction_to_source,
-          sizeof(slice.light_direction_to_source)));
-      HashCombine(hash,
-        ComputeFNV1a64(&slice.light_position_and_inv_range,
-          sizeof(slice.light_position_and_inv_range)));
-    }
-    return hash;
-  }
 
   auto AddBooleanDefine(const bool enabled, std::string_view name,
     std::vector<graphics::ShaderDefine>& defines) -> void
@@ -307,8 +245,8 @@ auto ShadowDepthPass::OnFrameStart(
   current_slot_ = slot;
   last_render_state_ = {};
   pass_constants_buffer_.OnFrameStart(sequence, slot);
-  std::erase_if(
-    cache_, [](const auto& item) { return item.second->surface.expired(); });
+  std::erase_if(surface_views_,
+    [](const auto& item) { return item.second->surface.expired(); });
 }
 
 auto ShadowDepthPass::Record(const PreparedViewShadowInput& view_input,
@@ -337,8 +275,8 @@ auto ShadowDepthPass::Record(const PreparedViewShadowInput& view_input,
 
 auto ShadowDepthPass::RecordSlices(const PreparedViewShadowInput& view_input,
   const std::shared_ptr<graphics::Texture>& shadow_surface,
-  const std::span<const DepthSlice> depth_slices, const bool cache_local_depths)
-  -> RenderState
+  const std::span<const DepthSlice> depth_slices,
+  const std::shared_ptr<internal::ShadowMapVersion>& local_map) -> RenderState
 {
   last_render_state_ = {};
   if (shadow_surface == nullptr || depth_slices.empty()) {
@@ -349,41 +287,32 @@ auto ShadowDepthPass::RecordSlices(const PreparedViewShadowInput& view_input,
     return last_render_state_;
   }
 
-  auto& entry
-    = cache_[{ shadow_surface.get(), depth_slices.front().target_slice }];
-  if (!entry || entry->surface.lock() != shadow_surface) {
-    entry = std::make_shared<CacheEntry>();
-    entry->surface = shadow_surface;
+  std::shared_ptr<SurfaceViews> views;
+  if (local_map) {
+    if (local_map->slot->backing->texture != shadow_surface) {
+      throw std::logic_error(
+        "Shadow writer target does not match its managed allocation");
+    }
+  } else {
+    auto& cached = surface_views_[{
+      shadow_surface.get(), depth_slices.front().target_slice }];
+    if (!cached || cached->surface.lock() != shadow_surface) {
+      cached = std::make_shared<SurfaceViews>();
+      cached->surface = shadow_surface;
+    }
+    views = cached;
   }
-  const auto fingerprint = cache_local_depths
-    ? BuildCacheFingerprint(view_input, depth_slices)
-    : std::nullopt;
   const auto queue_key = gfx->QueueKeyFor(graphics::QueueRole::kGraphics);
-  auto recorder
-    = gfx->AcquireCommandRecorder(queue_key, "ShadowService ShadowDepth");
+  auto recorder = gfx->AcquireCommandRecorder(queue_key,
+    "ShadowService ShadowDepth", graphics::SubmissionPolicy::kExplicit);
   if (!recorder) {
     return last_render_state_;
   }
   renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(*recorder);
-  if (fingerprint && entry->valid && entry->fingerprint == *fingerprint
-    && entry->queue == recorder->GetTargetQueue()) {
-    {
-      graphics::GpuEventScope scope(*recorder, "Vortex.Stage8.ShadowCacheReuse",
-        profiling::ProfileGranularity::kTelemetry,
-        profiling::ProfileCategory::kPass);
-      recorder->RecordQueueWait(entry->fence);
-      AdoptOrBeginPersistentState(*recorder, *shadow_surface);
-      recorder->RequireResourceStateFinal(
-        *shadow_surface, graphics::ResourceStates::kShaderResource);
-    }
-    last_render_state_.shadow_caster_draw_count
-      = view_input.shadow_caster_draw_count;
-    last_render_state_.recording_succeeded = recorder.Submit();
-    last_render_state_.reused_depths = last_render_state_.recording_succeeded;
-    return last_render_state_;
+  if (local_map) {
+    internal::AttachShadowUse(local_map, internal::ShadowUseMode::kWrite,
+      *recorder, gfx->GetResourceRegistry());
   }
-  entry->valid = false;
-  const auto generation = ++entry->generation;
 
   auto slice_draws = std::vector<std::vector<DrawCommand>>(depth_slices.size());
   auto has_draws = false;
@@ -444,7 +373,9 @@ auto ShadowDepthPass::RecordSlices(const PreparedViewShadowInput& view_input,
     graphics::GpuEventScope stage_scope(*recorder, "Vortex.Stage8.ShadowDepths",
       profiling::ProfileGranularity::kTelemetry,
       profiling::ProfileCategory::kPass);
-    AdoptOrBeginPersistentState(*recorder, *shadow_surface);
+    if (!local_map) {
+      AdoptOrBeginPersistentState(*recorder, *shadow_surface);
+    }
     recorder->RequireResourceState(
       *shadow_surface, graphics::ResourceStates::kDepthWrite);
 
@@ -458,8 +389,10 @@ auto ShadowDepthPass::RecordSlices(const PreparedViewShadowInput& view_input,
     for (std::uint32_t slice_index = 0U; slice_index < depth_slices.size();
       ++slice_index) {
       const auto target_slice = depth_slices[slice_index].target_slice;
-      const auto dsv = EnsureDepthStencilViewForCascade(
-        *gfx, entry->dsvs, *shadow_surface, target_slice);
+      const auto dsv = local_map
+        ? local_map->slot->backing->dsvs.at(target_slice)
+        : EnsureDepthStencilViewForCascade(
+            *gfx, views->dsvs, *shadow_surface, target_slice);
       const auto& shadow_desc = shadow_surface->GetDescriptor();
       recorder->FlushBarriers();
       recorder->SetRenderTargets({}, dsv);
@@ -512,24 +445,10 @@ auto ShadowDepthPass::RecordSlices(const PreparedViewShadowInput& view_input,
     recorder->RequireResourceStateFinal(
       *shadow_surface, graphics::ResourceStates::kShaderResource);
   }
-  if (fingerprint) {
-    const auto queue = recorder->GetTargetQueue();
-    const auto fence = queue->Signal();
-    recorder->RecordQueueSignal(fence);
-    recorder->OnSubmission([entry, generation, value = *fingerprint, queue,
-                             fence](graphics::SubmissionOutcome outcome) {
-      if (entry->generation != generation) {
-        return;
-      }
-      entry->valid = outcome == graphics::SubmissionOutcome::kSubmitted;
-      if (entry->valid) {
-        entry->fingerprint = value;
-        entry->queue = queue;
-        entry->fence = fence;
-      }
-    });
-  }
-  last_render_state_.recording_succeeded = recorder.Submit();
+  last_render_state_.recording_succeeded = local_map
+    ? recorder.SubmitWithReceipt().outcome
+      == graphics::SubmissionOutcome::kSubmitted
+    : recorder.Submit();
   return last_render_state_;
 }
 

@@ -21,6 +21,8 @@
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/AllocationBudget.h>
+#include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Profiling/CpuProfileScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
@@ -29,6 +31,7 @@
 #include <Oxygen/Vortex/Shadows/Internal/ShadowCasterDependencies.h>
 #include <Oxygen/Vortex/Shadows/Internal/ShadowEligibility.h>
 #include <Oxygen/Vortex/Shadows/Internal/ShadowReferenceBuilder.h>
+#include <Oxygen/Vortex/Shadows/Internal/SharedShadowMap.h>
 #include <Oxygen/Vortex/Shadows/Passes/CascadeShadowPass.h>
 #include <Oxygen/Vortex/Shadows/Passes/ContactShadowCasterDepthPass.h>
 #include <Oxygen/Vortex/Shadows/ShadowService.h>
@@ -49,11 +52,20 @@ namespace oxygen::vortex {
 ShadowService::ShadowService(Renderer& renderer)
   : renderer_(renderer)
   , cascade_shadow_pass_(std::make_unique<shadows::CascadeShadowPass>(renderer))
-  , contact_depth_pass_(std::make_unique<shadows::ContactShadowCasterDepthPass>(renderer))
+  , contact_depth_pass_(
+      std::make_unique<shadows::ContactShadowCasterDepthPass>(renderer))
 {
 }
 
-ShadowService::~ShadowService() = default;
+ShadowService::~ShadowService() { CloseFramePublications(); }
+auto ShadowService::CloseFramePublications() noexcept -> void
+{
+  for (auto& [view, publication] : published_views_) {
+    if (publication.read_set) {
+      publication.read_set->Close();
+    }
+  }
+}
 
 auto ShadowService::EnsurePublishResources() -> bool
 {
@@ -97,8 +109,13 @@ auto ShadowService::EnsurePublishResources() -> bool
 auto ShadowService::OnFrameStart(
   const frame::SequenceNumber sequence, const frame::Slot slot) -> void
 {
+  std::erase_if(prepared_casters_, [&](const auto& entry) {
+    return entry.second.last_seen != current_sequence_;
+  });
+  caster_records_.Prune();
   current_sequence_ = sequence;
   current_slot_ = slot;
+  CloseFramePublications();
   published_views_.clear();
   failed_views_.clear();
   last_render_state_ = {
@@ -167,6 +184,82 @@ auto ShadowService::PublishShadowBindings(
   return bindings_publisher_->Publish(view_id, bindings);
 }
 
+auto ShadowService::PrepareLocalRequests(const FrameShadowInputs& inputs)
+  -> void
+{
+  static const profiling::CpuProfileScopeDesc kProfile { .label
+    = "Vortex.Shadows.PrepareLocalRequests",
+    .category = profiling::ProfileCategory::kPass };
+  const profiling::CpuProfileScope profile(kProfile);
+  family_views_.assign(inputs.active_views.begin(), inputs.active_views.end());
+  for (auto& view_input : family_views_) {
+    const auto revision = view_input.prepared_scene
+      ? view_input.prepared_scene->preparation_revision
+      : 0;
+    const auto epoch
+      = inputs.frame_light_set ? inputs.frame_light_set->selection_epoch : 0;
+    const auto scene_generation
+      = inputs.frame_light_set ? inputs.frame_light_set->scene_generation : 0;
+    if (auto old = published_views_.find(view_input.view_id);
+      old != published_views_.end()
+      && (revision == 0 || old->second.preparation_revision != revision
+        || old->second.selection_epoch != epoch
+        || old->second.scene_generation != scene_generation)) {
+      if (old->second.read_set) {
+        old->second.read_set->Close();
+      }
+      published_views_.erase(old);
+    }
+    failed_views_.erase(view_input.view_id);
+    try {
+      view_input.scene_generation = inputs.frame_light_set != nullptr
+        ? inputs.frame_light_set->scene_generation
+        : 0U;
+      if (view_input.prepared_scene != nullptr) {
+        const auto& scene = *view_input.prepared_scene;
+        auto& prepared = prepared_casters_[view_input.view_id];
+        if (prepared.last_seen != current_sequence_
+          || scene.preparation_revision == 0
+          || prepared.revision != scene.preparation_revision) {
+          caster_records_.Build(scene, prepared.dependencies);
+          prepared.draw_count = 0;
+          for (const auto& draw : scene.GetDrawMetadata()) {
+            prepared.draw_count
+              += draw.flags.IsSet(PassMaskBit::kShadowCaster) ? 1U : 0U;
+          }
+          prepared.available
+            = prepared.draw_count == 0U || !scene.shadow_caster_sources.empty();
+          prepared.revision = scene.preparation_revision;
+        }
+        prepared.last_seen = current_sequence_;
+        view_input.shadow_caster_dependencies = prepared.dependencies;
+        view_input.shadow_caster_draw_count = prepared.draw_count;
+        view_input.shadow_dependencies_available = prepared.available;
+      }
+      cascade_shadow_pass_->PrepareLocalRequests(
+        { &view_input, 1 }, inputs.frame_light_set);
+    } catch (const std::exception& error) {
+      LOG_F(ERROR, "Local shadow preparation failed: {}", error.what());
+      failed_views_.insert_or_assign(view_input.view_id,
+        LightingPreparationFailure {
+          .error = LightingPreparationError::kAllocationFailed,
+          .view_id = view_input.view_id });
+    }
+  }
+  std::erase_if(family_views_,
+    [&](const auto& view) { return failed_views_.contains(view.view_id); });
+  cascade_shadow_pass_->ReconcileLocalFamily(family_views_);
+}
+
+auto ShadowService::InspectLocalSharing() const -> ShadowSharingDiagnostics
+{
+  auto result = cascade_shadow_pass_->InspectLocalSharing();
+  result.canonical_records = caster_records_.LiveRecordCount();
+  result.canonical_record_bytes
+    = result.canonical_records * sizeof(ShadowCasterRecord);
+  return result;
+}
+
 auto ShadowService::RenderShadowDepths(const FrameShadowInputs& inputs) -> void
 {
   // Cache the owning label; steady-state scope entry needs no label allocation.
@@ -175,6 +268,8 @@ auto ShadowService::RenderShadowDepths(const FrameShadowInputs& inputs) -> void
     .category = profiling::ProfileCategory::kPass,
   };
   const auto profile = profiling::CpuProfileScope(kProfile);
+  last_render_state_.attached_map_uses = 0;
+  last_render_state_.attached_backing_uses = 0;
   last_render_state_.published_view_count = 0U;
   last_render_state_.directional_view_count = 0U;
   last_render_state_.spot_view_count = 0U;
@@ -193,25 +288,22 @@ auto ShadowService::RenderShadowDepths(const FrameShadowInputs& inputs) -> void
         inputs.frame_light_set->directional_lights)
     : std::span<const FrameDirectionalLightSelection> {};
   cascade_shadow_pass_->RetainDirectionalSources(directional_lights);
-  for (auto view_input : inputs.active_views) {
-    view_input.scene_generation = inputs.frame_light_set != nullptr
-      ? inputs.frame_light_set->scene_generation
-      : 0U;
-    auto dependencies = std::vector<ShadowCasterDependency> {};
-    if (view_input.prepared_scene != nullptr) {
-      dependencies = shadows::internal::BuildShadowCasterDependencies(
-        *view_input.prepared_scene);
-      view_input.shadow_caster_dependencies = dependencies;
-      for (const auto& draw : view_input.prepared_scene->GetDrawMetadata()) {
-        view_input.shadow_caster_draw_count
-          += draw.flags.IsSet(PassMaskBit::kShadowCaster) ? 1U : 0U;
-      }
-      view_input.shadow_dependencies_available
-        = view_input.shadow_caster_draw_count == 0U
-        || !view_input.prepared_scene->shadow_caster_sources.empty();
+  PrepareLocalRequests({ .frame_light_set = inputs.frame_light_set,
+    .active_views = inputs.preparation_views.empty()
+      ? inputs.active_views
+      : inputs.preparation_views });
+  for (const auto& active : inputs.active_views) {
+    const auto prepared = std::ranges::find(
+      family_views_, active.view_id, &PreparedViewShadowInput::view_id);
+    if (prepared == family_views_.end()) {
+      continue;
     }
-    published_views_.erase(view_input.view_id);
-    failed_views_.erase(view_input.view_id);
+    auto view_input = *prepared;
+    view_input.view_constants = active.view_constants;
+    view_input.lighting_bindings = active.lighting_bindings;
+    if (failed_views_.contains(view_input.view_id)) {
+      continue;
+    }
     try {
       // Reconcile even an empty selection, before any rendering can fail.
       cascade_shadow_pass_->RetainLocalSources(view_input,
@@ -220,6 +312,8 @@ auto ShadowService::RenderShadowDepths(const FrameShadowInputs& inputs) -> void
               inputs.frame_light_set->local_lights)
           : std::span<const FrameLocalLightSelection> {});
       auto view_data = ShadowFrameData {};
+      std::vector<std::shared_ptr<shadows::internal::ShadowMapOwner>>
+        local_maps;
       auto directional_surfaces
         = std::vector<std::shared_ptr<graphics::Texture>> {};
       auto spot_shadow_surfaces
@@ -267,6 +361,8 @@ auto ShadowService::RenderShadowDepths(const FrameShadowInputs& inputs) -> void
         view_data.projected_local_records = std::move(spot_state.records);
         view_data.local_quality_omissions
           = std::move(spot_state.quality_omissions);
+        local_maps.insert(local_maps.end(), spot_state.local_maps.begin(),
+          spot_state.local_maps.end());
         spot_shadow_surfaces = std::move(spot_state.shadow_surfaces);
         rendered_spot_shadow_count = spot_state.rendered_shadow_count;
         rendered_draw_count += spot_state.rendered_draw_count;
@@ -280,6 +376,8 @@ auto ShadowService::RenderShadowDepths(const FrameShadowInputs& inputs) -> void
           view_data.local_quality_omissions.end(),
           point_state.quality_omissions.begin(),
           point_state.quality_omissions.end());
+        local_maps.insert(local_maps.end(), point_state.local_maps.begin(),
+          point_state.local_maps.end());
         point_shadow_surfaces = std::move(point_state.shadow_surfaces);
         rendered_point_shadow_count += point_state.rendered_shadow_count;
         rendered_draw_count += point_state.rendered_draw_count;
@@ -332,7 +430,8 @@ auto ShadowService::RenderShadowDepths(const FrameShadowInputs& inputs) -> void
         && shadows::internal::NeedsContactShadows(
           *inputs.frame_light_set, view_input.resolved_view.get());
       if (needs_contact) {
-        contact_surface = contact_depth_pass_->Record(view_input, view_data.bindings);
+        contact_surface
+          = contact_depth_pass_->Record(view_input, view_data.bindings);
         if (!contact_surface) {
           failed_views_.insert_or_assign(view_input.view_id,
             LightingPreparationFailure {
@@ -382,6 +481,15 @@ auto ShadowService::RenderShadowDepths(const FrameShadowInputs& inputs) -> void
       if (view_data.bindings.cube_local_record_count > 0U) {
         last_render_state_.point_view_count += 1U;
       }
+      const auto revision = view_input.prepared_scene
+        ? view_input.prepared_scene->preparation_revision
+        : 0;
+      auto read_set = std::make_shared<ShadowFrameReadSet>(
+        current_sequence_, revision, slot, local_maps);
+      if (const auto old = published_views_.find(view_input.view_id);
+        old != published_views_.end() && old->second.read_set) {
+        old->second.read_set->Close();
+      }
       published_views_.insert_or_assign(view_input.view_id,
         PublishedView {
           .slot = slot,
@@ -390,6 +498,13 @@ auto ShadowService::RenderShadowDepths(const FrameShadowInputs& inputs) -> void
           .spot_surfaces = std::move(spot_shadow_surfaces),
           .point_surfaces = std::move(point_shadow_surfaces),
           .contact_surface = std::move(contact_surface),
+          .local_maps = std::move(local_maps),
+          .read_set = std::move(read_set),
+          .scene_generation = view_input.scene_generation,
+          .preparation_revision = revision,
+          .selection_epoch = inputs.frame_light_set
+            ? inputs.frame_light_set->selection_epoch
+            : 0,
         });
     } catch (const graphics::AllocationBudgetExceeded&) {
       const auto snapshot = renderer_.GetLightingAllocationBudget()->Snapshot();
@@ -400,7 +515,9 @@ auto ShadowService::RenderShadowDepths(const FrameShadowInputs& inputs) -> void
           .requested_bytes = snapshot.last_requested,
           .available_bytes = snapshot.last_available,
         });
-    } catch (const std::exception&) {
+    } catch (const std::exception& error) {
+      LOG_F(ERROR, "Shadow preparation/rendering failed for view {}: {}",
+        view_input.view_id.get(), error.what());
       failed_views_.insert_or_assign(view_input.view_id,
         LightingPreparationFailure {
           .error = LightingPreparationError::kAllocationFailed,
@@ -468,6 +585,51 @@ auto ShadowService::InspectContactShadowSurface(const ViewId view_id) const
 {
   const auto it = published_views_.find(view_id);
   return it != published_views_.end() ? it->second.contact_surface : nullptr;
+}
+
+auto ShadowService::InspectReadSet(ViewId view) const
+  -> std::shared_ptr<const ShadowFrameReadSet>
+{
+  const auto found = published_views_.find(view);
+  return found == published_views_.end() ? nullptr : found->second.read_set;
+}
+auto ShadowService::AttachLocalReads(ViewId view, frame::SequenceNumber frame,
+  std::uint64_t preparation_revision, graphics::CommandRecorder& recorder)
+  -> void
+{
+  const auto read_set = InspectReadSet(view);
+  if (!read_set) {
+    throw std::logic_error("Local shadow publication is unavailable");
+  }
+  const auto attached = read_set->Attach(frame, preparation_revision, recorder,
+    renderer_.GetGraphics()->GetResourceRegistry());
+  if (!attached) {
+    throw std::logic_error("Local shadow read set is not ready for attachment");
+  }
+  last_render_state_.attached_map_uses
+    += static_cast<uint32_t>(attached->map_uses);
+  last_render_state_.attached_backing_uses
+    += static_cast<uint32_t>(attached->backing_uses);
+}
+auto ShadowService::RetainLocalContent(
+  ViewId view, scene::NodeHandle light) const -> ShadowContentLease
+{
+  const auto found = published_views_.find(view);
+  if (found == published_views_.end()) {
+    return {};
+  }
+  for (const auto& map : found->second.local_maps) {
+    if (map->version->content.light != light) {
+      continue;
+    }
+    auto lease = renderer_.GetGraphics()->GetResourceRegistry().AcquireManaged(
+      map->version->slot->backing->registration.Identity());
+    if (!lease) {
+      return {};
+    }
+    return ShadowContentLease(map, std::move(*lease));
+  }
+  return {};
 }
 
 } // namespace oxygen::vortex

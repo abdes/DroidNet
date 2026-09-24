@@ -117,6 +117,7 @@ m_gtest_program(
   SOURCES
     "Fixtures/MeshRasterStateTest.h"
     "ShadowService_test.cpp"
+    "CanonicalShadowRequests_test.cpp"
 )
 target_compile_definitions(
   Oxygen.Vortex.ShadowService.Tests

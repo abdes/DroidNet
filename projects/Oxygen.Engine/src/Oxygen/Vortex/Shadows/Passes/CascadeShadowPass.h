@@ -12,8 +12,10 @@
 
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Vortex/Shadows/Internal/LocalShadowRequest.h>
 #include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
 #include <Oxygen/Vortex/Shadows/Types/ShadowFrameData.h>
+#include <Oxygen/Vortex/Shadows/Types/ShadowSharingDiagnostics.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
 #include <Oxygen/Vortex/Types/ShadowFrameBindings.h>
 #include <Oxygen/Vortex/api_export.h>
@@ -31,6 +33,7 @@ namespace shadows {
     class ConventionalShadowTargetAllocator;
     class PointShadowSetup;
     class SpotShadowSetup;
+    struct ShadowMapOwner;
   } // namespace internal
 
   class CascadeShadowPass {
@@ -46,6 +49,7 @@ namespace shadows {
     struct ViewSpotShadowPassState {
       std::vector<ProjectedLocalShadowRecord> records;
       std::vector<LightSelectionIndex> quality_omissions;
+      std::vector<std::shared_ptr<internal::ShadowMapOwner>> local_maps;
       std::vector<std::shared_ptr<graphics::Texture>> shadow_surfaces;
       std::uint32_t shadow_caster_draw_count { 0U };
       std::uint32_t rendered_shadow_count { 0U };
@@ -55,6 +59,7 @@ namespace shadows {
     struct ViewPointShadowPassState {
       std::vector<CubeLocalShadowRecord> records;
       std::vector<LightSelectionIndex> quality_omissions;
+      std::vector<std::shared_ptr<internal::ShadowMapOwner>> local_maps;
       std::vector<std::shared_ptr<graphics::Texture>> shadow_surfaces;
       std::uint32_t shadow_caster_draw_count { 0U };
       std::uint32_t rendered_shadow_count { 0U };
@@ -63,6 +68,8 @@ namespace shadows {
 
     OXGN_VRTX_API explicit CascadeShadowPass(Renderer& renderer);
     OXGN_VRTX_API ~CascadeShadowPass();
+    [[nodiscard]] OXGN_VRTX_API auto InspectLocalSharing() const
+      -> ShadowSharingDiagnostics;
 
     CascadeShadowPass(const CascadeShadowPass&) = delete;
     auto operator=(const CascadeShadowPass&) -> CascadeShadowPass& = delete;
@@ -71,6 +78,11 @@ namespace shadows {
 
     OXGN_VRTX_API auto OnFrameStart(
       frame::SequenceNumber sequence, frame::Slot slot) -> void;
+    OXGN_VRTX_API auto ReconcileLocalFamily(
+      std::span<const PreparedViewShadowInput> views) -> void;
+    OXGN_VRTX_API auto PrepareLocalRequests(
+      std::span<const PreparedViewShadowInput> views,
+      const FrameLightSelection* selection) -> void;
     OXGN_VRTX_API auto RetainLocalSources(const PreparedViewShadowInput& view,
       std::span<const FrameLocalLightSelection> lights) -> void;
     OXGN_VRTX_API auto RetainDirectionalSources(
@@ -96,6 +108,15 @@ namespace shadows {
     };
     auto PrepareQualityHistory(const PreparedViewShadowInput& view,
       std::span<const FrameLocalLightSelection> lights) -> ViewQuality&;
+    struct PreparedLocalView {
+      frame::SequenceNumber frame { 0 };
+      std::uint64_t preparation_revision { 0 };
+      std::uint64_t selection_epoch { 0 };
+      std::uint64_t scene_generation { 0 };
+      std::vector<internal::LocalShadowRequest> requests;
+    };
+    std::unordered_map<ViewId, PreparedLocalView> prepared_locals_;
+    std::vector<const internal::LocalShadowRequest*> family_requests_;
     frame::SequenceNumber current_sequence_ { 0U };
     std::unordered_map<ViewId, ViewQuality> quality_history_;
     Renderer& renderer_;

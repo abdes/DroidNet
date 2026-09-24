@@ -1706,7 +1706,7 @@ void SceneRenderer::RenderViewFamily(RenderContext& ctx)
       renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(recorder);
       recorder.OnSubmission(
         [this](const graphics::SubmissionOutcome outcome) -> void {
-          if (outcome == graphics::SubmissionOutcome::kDiscarded) {
+          if (outcome != graphics::SubmissionOutcome::kSubmitted) {
             ResetPerViewSceneProducts();
           }
         });
@@ -1895,7 +1895,7 @@ auto SceneRenderer::OnRender(RenderContext& ctx) -> bool
     renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(recorder);
     recorder.OnSubmission(
       [this](const graphics::SubmissionOutcome outcome) -> void {
-        if (outcome == graphics::SubmissionOutcome::kDiscarded) {
+        if (outcome != graphics::SubmissionOutcome::kSubmitted) {
           ResetPerViewSceneProducts();
         }
       });
@@ -2243,9 +2243,21 @@ auto SceneRenderer::RenderCurrentView(
         ? lighting_->InspectForwardLightBindings(input.view_id)
         : nullptr;
     }
+    frame_shadow_preparation_views_.clear();
+    for (const auto& view : ctx.frame_views) {
+      if (!view.is_scene_view || !view.resolved_view) {
+        continue;
+      }
+      frame_shadow_preparation_views_.push_back({ .view_id = view.view_id,
+        .prepared_scene = observer_ptr<const PreparedSceneFrame> { init_views_
+            ->GetPreparedSceneFrame(view.view_id) },
+        .resolved_view = view.resolved_view,
+        .composition_view = view.composition_view });
+    }
     shadows_->RenderShadowDepths(FrameShadowInputs {
       .frame_light_set = &frame_light_selection_,
       .active_views = std::span(frame_shadow_views_),
+      .preparation_views = std::span(frame_shadow_preparation_views_),
     });
   }
   if (shadows_ != nullptr && wants_shadow_products) {
@@ -2258,6 +2270,11 @@ auto SceneRenderer::RenderCurrentView(
       }
       return false;
     }
+    shadows_->AttachLocalReads(ctx.current_view.view_id, ctx.frame_sequence,
+      ctx.current_view.prepared_frame
+        ? ctx.current_view.prepared_frame->preparation_revision
+        : 0,
+      recorder);
     if (lighting_ != nullptr && wants_scene_lighting) {
       const auto* shadow_data
         = shadows_->InspectShadowData(ctx.current_view.view_id);
@@ -2873,7 +2890,12 @@ void SceneRenderer::OnCompositing(RenderContext& /*ctx*/)
   // planning, queueing, target resolution, and presentation ownership.
 }
 
-void SceneRenderer::OnFrameEnd(const engine::FrameContext& /*frame*/) { }
+void SceneRenderer::OnFrameEnd(const engine::FrameContext& /*frame*/)
+{
+  if (shadows_) {
+    shadows_->CloseFramePublications();
+  }
+}
 
 void SceneRenderer::PreserveRemovedExposureSource(
   std::shared_ptr<const ExposureSourceLoss> loss)
