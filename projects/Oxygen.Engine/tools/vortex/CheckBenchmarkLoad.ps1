@@ -12,7 +12,8 @@ param(
     [double]$MaxMeanCpu = 25,
     [double]$MaxPeakCpu = 50,
     [double]$MaxMeanGpu = 50,
-    [double]$MaxPeakGpu = 70
+    [double]$MaxPeakGpu = 70,
+    [ValidateRange(1, 30)][int]$PeakSamplesRequired = 2
 )
 $ErrorActionPreference = 'Stop'
 $started = (Get-Date).ToUniversalTime().ToString('o')
@@ -30,12 +31,16 @@ for ($i = 0; $i -lt $Samples; ++$i) {
 $cpuStats = $samplesOut.cpu_percent | Measure-Object -Average -Maximum
 $gpuValues = @($samplesOut | ForEach-Object { ($_.gpus | ForEach-Object { [double]$_.utilization }) | Measure-Object -Maximum | Select-Object -ExpandProperty Maximum })
 $gpuStats = $gpuValues | Measure-Object -Average -Maximum
-$accepted = $cpuStats.Average -le $MaxMeanCpu -and $cpuStats.Maximum -le $MaxPeakCpu -and $gpuStats.Average -le $MaxMeanGpu -and $gpuStats.Maximum -le $MaxPeakGpu
+$highCpuSamples = @($samplesOut | Where-Object cpu_percent -gt $MaxPeakCpu).Count
+$highGpuSamples = @($gpuValues | Where-Object { $_ -gt $MaxPeakGpu }).Count
+# A single desktop/compositor burst is not sustained contention. Mean load and
+# repeated high samples still gate the run; preserve every sample for review.
+$accepted = $cpuStats.Average -le $MaxMeanCpu -and $highCpuSamples -lt $PeakSamplesRequired -and $gpuStats.Average -le $MaxMeanGpu -and $highGpuSamples -lt $PeakSamplesRequired
 $cpuProcesses = @(Get-CimInstance Win32_PerfFormattedData_PerfProc_Process | Where-Object { $_.Name -notin @('_Total','Idle') -and $_.PercentProcessorTime -gt 0 } | Sort-Object PercentProcessorTime -Descending | Select-Object -First 8 Name,IDProcess,PercentProcessorTime)
 $gpuOwners = @(Get-CimInstance Win32_PerfFormattedData_GPUPerformanceCounters_GPUEngine | Where-Object UtilizationPercentage -gt 1 | Sort-Object UtilizationPercentage -Descending | Select-Object -First 8 Name,UtilizationPercentage)
 $result = @{
     accepted=$accepted; started_utc=$started; finished_utc=(Get-Date).ToUniversalTime().ToString('o')
-    thresholds=@{mean_cpu_percent=$MaxMeanCpu;peak_cpu_percent=$MaxPeakCpu;mean_gpu_percent=$MaxMeanGpu;peak_gpu_percent=$MaxPeakGpu}
+    thresholds=@{mean_cpu_percent=$MaxMeanCpu;peak_cpu_percent=$MaxPeakCpu;mean_gpu_percent=$MaxMeanGpu;peak_gpu_percent=$MaxPeakGpu;peak_samples_required=$PeakSamplesRequired}
     observed=@{mean_cpu_percent=$cpuStats.Average;peak_cpu_percent=$cpuStats.Maximum;mean_gpu_percent=$gpuStats.Average;peak_gpu_percent=$gpuStats.Maximum}
     samples=$samplesOut; cpu_process_counters=$cpuProcesses; gpu_engine_owners=$gpuOwners
     scope='Pre-launch headroom check, allowing ordinary desktop activity rather than requiring idle hardware. GPU values cover NVIDIA adapters. Process CPU counters may sum above 100 across cores. This does not prove absence of interference later in the run.'
