@@ -7,7 +7,7 @@ Status: `in_progress` — current slice state and evidence are maintained in the
 are updated there; this plan owns the requirements and gates.
 
 Date: 2026-09-16
-Updated: 2026-09-24 — EX06, EX07A/B and EX07D are closed; EX07E is prepared and awaits the user's explicit start signal. Remaining C validation and E/F gates keep overall EX07 open.
+Updated: 2026-09-24 — EX06, EX07A/B and EX07D are closed; EX07E is active, authorized by the user on 2026-09-24. Remaining C validation and E/F gates keep overall EX07 open.
 
 Paths are relative to `projects/Oxygen.Engine` unless identified as
 repository-root paths.
@@ -1254,8 +1254,10 @@ contract in section 6. These checkpoints all belong to EX07 before EX08 begins.
 
 **EX07D is closed (2026-09-24)** with implementation in `137b681b2` and durable
 baseline evidence in `894a25e57`. The
-[EX07E handoff](EX07-lighting-correctness-and-scalability.md#ex07e-handoff--awaiting-user-signal)
-is prepared; no E execution begins until the user's explicit signal.
+[EX07E handoff](EX07-lighting-correctness-and-scalability.md#ex07e-handoff--active)
+is active following the user's explicit start signal on 2026-09-24; its
+[E01–E08 ledger](../IMPLEMENTATION_STATUS.md#ex07e--work-items-and-resume-checkpoint)
+records the remaining work and resume point.
 
 D credits the accepted MultiView and conventional-shadow baselines and B's
 reference/instrument qualification. Its new delivery is the runnable many-light

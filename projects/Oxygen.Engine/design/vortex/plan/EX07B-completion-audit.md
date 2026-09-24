@@ -2,7 +2,8 @@
 
 Status: **EX07B validated.** The pause before C was the instruction at B closure.
 Current progression is recorded in the [tracker](../IMPLEMENTATION_STATUS.md#34-slice-7-work-items):
-EX07D is now closed and EX07E awaits the user's explicit start signal.
+EX07D is now closed and EX07E is active; its work ledger and resume checkpoint
+are in the linked tracker.
 
 This closes the reference/instrument gate only. EX07 as a whole remains
 `in_progress`. Production physical repairs and their admission tests belong to C;
@@ -69,4 +70,5 @@ production lighting repair will require the C/F numerical and visual gates.
 - D: record correctness-qualified baselines and freeze numeric performance budgets.
 - E/F: implement and qualify scalability/resource optimizations and final delivery.
 
-No B exit item remains open. Pause now; do not start C without user resumption.
+No B exit item remains open. The pause before C applied at B closure and has
+since been superseded by user resumption; follow the current tracker for execution.

@@ -12,9 +12,9 @@ in `894a25e57`. The delivered scene/presets, 54 benchmark records, four applicat
 runs and credited historical controls satisfy D's baseline-delivery gate.
 The recorded preflight gaps, noisy B05-D and application memory scope constrain
 later comparisons; they do not require another blanket baseline campaign.
-EX07E is prepared and awaits the user's explicit start signal. Performance-budget
+EX07E is active, authorized by the user on 2026-09-24. Performance-budget
 acceptance and final integrated validation remain E/F work; overall EX07 is open.
-See the [E handoff](EX07-lighting-correctness-and-scalability.md#ex07e-handoff--awaiting-user-signal).
+See the [E handoff](EX07-lighting-correctness-and-scalability.md#ex07e-handoff--active).
 
 ## Results summary
 
