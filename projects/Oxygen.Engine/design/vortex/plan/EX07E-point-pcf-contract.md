@@ -1,9 +1,11 @@
 # EX07E04 — Cube hardware PCF implementation contract
 
-Status: implementation in progress; no new baseline accepted. The user approved
-UE-aligned point-light hardware PCF and the Low/Medium/High/Ultra comparison-count
-mapping **1/5/29/29** on 2026-09-24. E06 infrastructure remains deferred until the
-other EX07E implementation work is complete and its independent review is resolved.
+Status: implemented, qualified and visually accepted on 2026-09-25. The user
+approved UE-aligned point-light hardware PCF and Low/Medium/High/Ultra counts of
+**1/5/29/29**. E06 sharing subsequently completed as the last E implementation
+item. The [accepted comparison report](EX07E-shadow-sharing-results.md) records
+final quality, cost and evidence; the requirements below describe the delivered
+contract.
 
 ## Source contract
 

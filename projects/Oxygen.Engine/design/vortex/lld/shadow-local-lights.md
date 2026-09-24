@@ -23,8 +23,9 @@ automatic cube texel offsets are removed. The
 [implementation contract](../plan/EX07E-point-pcf-contract.md) owns the current
 UE5.7 source comparison, units and qualification gates. The
 [New Sponza analysis](../plan/EX07-NewSponza-regression-analysis.md) remains the
-historical diagnosis preceding this migration. New baseline visual acceptance
-is still open.
+historical diagnosis preceding this migration. Final baseline visual acceptance
+was received on 2026-09-25; [accepted results](../plan/EX07E-shadow-sharing-results.md)
+retain the filter quality/cost difference.
 
 The baseline evidence below remains historical. EX07 supersedes its bounded
 arrays and Stage-18 deferral with the [indexed shadow-family ABI](lighting-gpu-abi.md#shadow-association-and-deferred-draws),
@@ -89,22 +90,28 @@ it once as `lerp(1, map_visibility, shadow_strength)`. This is the normal select
 quality policy, not a response to memory exhaustion. User visual approval of
 the implemented policy was received on 2026-09-24.
 
-Retain `(view, scene lifetime, light NodeHandle)` ownership independently of
-frame selection indices. `FrameDrivenIndexReuse<ShadowSlotIndex>` supplies the
-slot generation and deferred recycling; the allocator owns its reclaimer and
-drains pending callbacks before shutdown, following `GeometryUploader`.
-Each versioned slot maps to one resolution bucket, chunk and layer range.
-Adding, removing, reordering or camera-culling another light does not move it.
-Reconcile local ownership for every active view before rendering, including empty
-selections and views containing only directional lights. Removing the last local
-light releases its owners; Nexus recycling then allows unused chunks to retire
-through the graphics reclaimer and leave the allocation budget.
-Only removal, scene replacement or that light's quality/projection change ends
-its current ownership. Do not reuse its layer range before Nexus recycles it.
+Retain view-local light associations independently of selection indices, while
+compatible views share exact immutable per-light depth versions. Canonical
+caster membership and content identity determine compatibility; resolution,
+projection or depth-affecting changes acquire the appropriate new version.
+Each physical slot identifies one resolution bucket, chunk and layer range.
+Adding, removing or reordering unrelated lights cannot reinterpret its content.
+Reconcile owners for every active view, including empty or directional-only
+selections. Scene replacement or removal releases that view's aliases while
+other owners and submitted users continue to retain their allocations.
 
-Slot generation does not imply valid depth contents. Each light has a separate
-content entry even when several maps share a surface. Content entries retain the
-producer fence only after successful submission and reuse waits for that fence.
+`IndexReuse<ShadowSlotIndex>` and retirement tickets separate generation
+invalidation from safe reuse. A version owns its slot and shared backing;
+recording/GPU uses pin both. Removing the final allocation owner starts retirement,
+but finalization waits for all uses. Closing a view cannot unregister descriptors
+still owned by another view, retained content or submitted work. Stable weak
+return targets avoid callbacks into a destroyed allocator.
+
+Content becomes reusable only after successful producer submission. Consumers
+attach through managed uses and order against actual completion receipts;
+unsubmitted/retained readers can force copy-on-write. See the
+[shared ownership contract](shadow-service.md#compatible-local-map-ownership)
+for publication expiry, retained reads and backing-wide hazards.
 
 Store each resolution bucket in appendable array chunks targeting 64 MiB, with
 at most 64 lights per chunk and at least one complete projection. This limits

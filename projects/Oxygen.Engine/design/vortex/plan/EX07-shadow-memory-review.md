@@ -1,5 +1,11 @@
 # EX07 — Shadow memory review and selected optimizations
 
+**Historical audit.** The selected D32/reuse work and subsequent cross-view
+sharing are now implemented and qualified. Current ownership is documented in
+[ShadowService](../lld/shadow-service.md#compatible-local-map-ownership), with
+[accepted measurements](EX07E-shadow-sharing-results.md). Later-work statements
+below describe this audit's original checkpoint, not outstanding EX07 tasks.
+
 Date: 2026-09-22. Source review: repository HEAD `09aa65362`, with the existing
 EX07 documentation changes. **Updated 2026-09-24: D32, bounded allocation reuse,
 local depth caching and focused/static performance acceptance are complete.
