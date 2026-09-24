@@ -178,10 +178,15 @@ growth, retained generations and heap overhead are additional.
 ## Production qualification and scope control
 
 EX07C repairs required view ownership, shadow identity, eligibility and per-light
-quality first. EX07D freezes correctly rendered baselines and numeric memory,
-CPU/GPU/whole-frame regression and noise thresholds. EX07E introduces these
-changes individually, with before/after attribution, then EX07F confirms the
-integrated result. Existing source correctness failures cannot serve as baselines.
+quality first. EX07D is closed (2026-09-24); its
+[baseline register](EX07D-baseline-report.md) records timing, memory scope,
+quality and confidence limits in commit `894a25e57`. The
+[EX07E handoff](EX07-lighting-correctness-and-scalability.md#ex07e-handoff--awaiting-user-signal)
+awaits the user's explicit start signal. E introduces remaining changes
+individually, freezing matched regression/noise criteria before candidate timing
+and reporting before/after attribution; EX07F confirms the integrated result.
+Existing source correctness failures cannot serve as baselines. Delivered D32,
+allocation ownership and local-map cache work remains credited by the tracker.
 
 - For depth-only cutover, compare rendered depth and final visibility/images for
   CSM cascade boundaries/blends/motion, opaque/masked casters, projected spots,

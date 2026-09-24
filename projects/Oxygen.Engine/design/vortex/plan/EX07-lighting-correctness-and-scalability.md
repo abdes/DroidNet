@@ -174,7 +174,8 @@ never time a defective image as the acceptance reference.
 
 ### EX07D delivery: many-light scene and baseline
 
-**Execution checkpoint (2026-09-24):** D's expanded baseline register is delivered:
+**EX07D closed (2026-09-24):** implementation is committed in `137b681b2` and
+the expanded baseline register/evidence in `894a25e57`:
 54 timed, image-qualified benchmark rows and four current Instancing/New Sponza
 application runs, with separate Tracy/non-Tracy Ninja Release identities,
 percentiles, memory scope, images, traces, recipes and historical controls.
@@ -196,7 +197,7 @@ captures for additional statistics where possible. Reopen an accepted case only
 when a specific change invalidates its evidence or diagnosed noise prevents the
 required comparison; record that reason before repeating it.
 
-D's new work is the many-light test scene and its baseline:
+D's completed delivery comprises the many-light test scene and its baseline:
 
 **Rendering-family scope:** preserve Vortex's deferred-first desktop contract.
 D measures both deferred and forward rendering on the same many-light recipes.
@@ -235,18 +236,45 @@ F reuses unaffected evidence and validates the integrated result. Stage changes
 alone do not require another baseline campaign. The workload envelope and full
 EX07 exit requirements remain unchanged.
 
+### EX07E handoff — awaiting user signal
+
+**Prepared; do not start until the user explicitly signals.** Earlier measured
+submission/resource repairs remain credited; this handoff does not authorize
+new code changes, builds, profiling or benchmark runs. D is closed; overall EX07
+and the separately tracked C caller-target validation and F acceptance stay open.
+
+On that signal, begin with the committed
+[baseline register](EX07D-baseline-report.md#how-e-and-f-use-this-register) and
+[source/UE5.7 analysis](EX07-NewSponza-regression-analysis.md). Use the current
+A-SPONZA and A-INSTANCING traces to isolate the dominant local-light shader work
+before selecting an implementation. Explain the expected cost reduction and
+correctness/quality implications against UE5.7's corresponding path. Preserve
+conservative influence-volume culling, off-screen contributing lights/casters,
+authored ranges and shadow requests. Broader bias/filtering parity remains an
+explicit investigation, not an established equivalence.
+
+Select matched baseline IDs and freeze candidate acceptance/noise criteria before
+timing. Requalify only affected or insufficiently controlled rows; B05-D and the
+30 rows without recorded CPU preflight cannot support small timing claims as-is.
+Use only existing `out/build-ninja` and `out/build-tracy-ninja`, both Release,
+keeping Tracy attribution separate from native throughput. Check sustained heavy
+CPU/GPU contention while allowing ordinary desktop use. Do not repeat the full
+baseline campaign merely to enter E. Candidate reports must preserve image and
+physical-reference checks, show whole-frame/stage and relevant memory results,
+and record retained limits. F owns final integrated and interactive acceptance.
+
 ### Recorded E priorities after the New Sponza regression analysis
 
 The [source and Tracy analysis](EX07-NewSponza-regression-analysis.md) records
 performance work still required:
 
-| Priority                                 | Evidence / problem                                                                                                                    | Recommendation and acceptance                                                                                                                                                                                               |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| GPU local-light evaluation               | Current Sponza: 38.609 ms across 23 point draws within 45.568 ms deferred lighting; CPU recording is 0.109 ms.                        | Isolate filter, material-fetch and BRDF/register costs. Measure specialization and uniform-data reuse first, preserving contributions and matching content, quality and instrumentation.                                    |
-| Translucent lighting                     | Current Sponza: 14.260 ms.                                                                                                            | Profile the shared forward evaluator and overlap before selecting changes; retain physical/material and shadow references in both families.                                                                                 |
-| Shadow bias/filtering                    | Receiver-footprint repair passes point/spot, short/long-range tests; the whole point pipeline is not quantitatively UE5.7-equivalent. | Audit units, depth producer/consumer and nonzero authored bias together. Comparison filtering needs a quality contract and contact/grazing/cube-seam coverage; do not copy constants or hide fewer samples as optimization. |
-| Shared-grid scaling                      | Earlier 4,096-light stage-timing runs cost about 11 ms in either family.                                                              | Compare against count, overlap, irrelevant-light, motion and view baselines; preserve complete-list fallback and every valid contributor.                                                                                   |
-| Application lifetime/final qualification | Premature DemoShell composite-target release caused the close failure; the fixed debug-layer run closes cleanly.                      | F includes application close, resize/view removal, movement and scene replacement alongside offscreen checks.                                                                                                               |
+| Priority                                 | Evidence / problem                                                                                                                        | Recommendation and acceptance                                                                                                                                                                                               |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GPU local-light evaluation               | Registered Sponza Tracy: 45.288 ms across 23 point draws within 46.309 ms deferred lighting; Instancing: 26.433 ms across 39 point draws. | Isolate filter, material-fetch and BRDF/register costs. Measure specialization and uniform-data reuse first, preserving contributions and matching content, quality and instrumentation.                                    |
+| Translucent lighting                     | Registered Sponza Tracy: 7.726 ms.                                                                                                        | Profile the shared forward evaluator and overlap before selecting changes; retain physical/material and shadow references in both families.                                                                                 |
+| Shadow bias/filtering                    | Receiver-footprint repair passes point/spot, short/long-range tests; the whole point pipeline is not quantitatively UE5.7-equivalent.     | Audit units, depth producer/consumer and nonzero authored bias together. Comparison filtering needs a quality contract and contact/grazing/cube-seam coverage; do not copy constants or hide fewer samples as optimization. |
+| Shared-grid scaling                      | Registered B09 grid means: 10.959 ms deferred / 10.800 ms forward, non-Tracy Release.                                                     | Compare against count, overlap, irrelevant-light, motion and view baselines; preserve complete-list fallback and every valid contributor.                                                                                   |
+| Application lifetime/final qualification | Premature DemoShell composite-target release caused the close failure; the fixed debug-layer run closes cleanly.                          | F includes application close, resize/view removal, movement and scene replacement alongside offscreen checks.                                                                                                               |
 
 Current Sponza has 4,096 m point ranges; the accepted older capture had 10 m.
 Their timing difference is not an isolated code regression, and shortening ranges

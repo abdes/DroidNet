@@ -112,7 +112,11 @@ Each delivery step includes its numerical, interaction and relevant native visua
 checks. Automation grows with the experiments; EX10 is integration/closure.
 The [detailed gates](plan/exposure-and-lightbench-correction.md#8-ordered-implementation-slices)
 own scope and measurable criteria. The [tracker](IMPLEMENTATION_STATUS.md#34-slice-7-work-items)
-owns current status. **EX07A and EX07B are validated. EX07C implementation is present; two additional light-API caller fixes await target build validation. D/E workload qualification and F final acceptance remain open; overall EX07 remains in progress.**
+owns current status. **EX07A and EX07B are validated. EX07D is closed (2026-09-24),
+with the [durable baseline register](plan/EX07D-baseline-report.md) committed in
+`894a25e57`. EX07E is prepared and awaits the user's explicit start signal;
+F final acceptance remains open.** EX07C's separately tracked caller-target
+validation remains open; D closure does not close that obligation or overall EX07.
 
 Retain the accepted FP32/P=1 production policy; varying P/FP16 qualification stays
 explicit diagnostic coverage. Reuse valid EX05 MultiView and EX06 authoring evidence;
