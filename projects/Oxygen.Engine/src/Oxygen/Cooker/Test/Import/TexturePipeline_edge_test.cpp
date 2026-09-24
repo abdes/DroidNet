@@ -4,8 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <memory>
 #include <span>
 #include <string>
@@ -17,11 +19,13 @@
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/TexturePipeline.h>
 #include <Oxygen/Cooker/Import/TextureImportDesc.h>
+#include <Oxygen/Cooker/Import/TextureImportPresets.h>
 #include <Oxygen/Cooker/Import/TextureImportTypes.h>
 #include <Oxygen/Cooker/Import/TexturePackingPolicy.h>
 #include <Oxygen/Cooker/Import/TextureSourceAssembly.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/OxCo/asio.h>
@@ -138,7 +142,7 @@ auto MakeWorkItem(TextureImportDesc desc, std::string texture_id,
     .source_key = nullptr,
     .desc = std::move(desc),
     .packing_policy_id = std::move(packing_policy_id),
-    .output_format_is_override = true,
+    .output_format_policy = TexturePipeline::OutputFormatPolicy::kExplicit,
     .failure_policy = TexturePipeline::FailurePolicy::kStrict,
     .source = std::move(source),
     .stop_token = {},
@@ -179,6 +183,72 @@ class TexturePipelineEdgeTest : public testing::Test {
 protected:
   ImportEventLoop loop_;
 };
+
+NOLINT_TEST_F(TexturePipelineEdgeTest, MaterialPresetsKeepCompressionAndMipChains)
+{
+  for (const auto preset : { TexturePreset::kAlbedo, TexturePreset::kNormal }) {
+    const auto desc = MakeDescFromPreset(preset);
+    auto item = MakeWorkItem(desc, "material.bmp", MakeSourceBytes(MakeBmp2x2()),
+      std::string(TightPackedPolicy::Instance().Id()));
+    item.output_format_policy
+      = TexturePipeline::OutputFormatPolicy::kMaterialPreset;
+
+    const auto result = RunPipelineOnce(loop_, std::move(item));
+    ASSERT_TRUE(result.success);
+    ASSERT_TRUE(result.cooked);
+    EXPECT_EQ(result.cooked->desc.format, desc.output_format);
+    EXPECT_EQ(result.cooked->desc.mip_levels, 2U);
+  }
+}
+
+NOLINT_TEST_F(TexturePipelineEdgeTest, SourceAndExplicitPoliciesRetainTheirStorageIntent)
+{
+  for (const auto policy : { TexturePipeline::OutputFormatPolicy::kPreserveSource,
+         TexturePipeline::OutputFormatPolicy::kExplicit }) {
+    auto desc = MakeDescFromPreset(TexturePreset::kAlbedo);
+    if (policy == TexturePipeline::OutputFormatPolicy::kExplicit) {
+      desc.output_format = Format::kRGBA8UNorm;
+      desc.bc7_quality = Bc7Quality::kNone;
+    }
+    auto item = MakeWorkItem(desc, "storage.bmp", MakeSourceBytes(MakeBmp2x2()),
+      std::string(TightPackedPolicy::Instance().Id()));
+    item.output_format_policy = policy;
+    const auto result = RunPipelineOnce(loop_, std::move(item));
+    ASSERT_TRUE(result.success);
+    ASSERT_TRUE(result.cooked);
+    EXPECT_EQ(result.cooked->desc.format, Format::kRGBA8UNorm);
+    EXPECT_EQ(result.cooked->desc.mip_levels, 2U);
+  }
+}
+
+NOLINT_TEST_F(TexturePipelineEdgeTest, MaterialPresetPreservesHdrRadiance)
+{
+  auto image = ScratchImage::Create({ .width = 1U, .height = 1U,
+    .format = Format::kRGBA32Float });
+  const auto pixel = std::array { 64.0F, 8.0F, 2.0F, 1.0F };
+  std::memcpy(image.GetMutablePixels(0, 0).data(), pixel.data(), sizeof(pixel));
+  auto desc = MakeDescFromPreset(TexturePreset::kEmissive);
+  desc.source_color_space = oxygen::ColorSpace::kLinear;
+  auto item = MakeWorkItem(desc, "emissive.exr", std::move(image),
+    std::string(TightPackedPolicy::Instance().Id()));
+  item.output_format_policy
+    = TexturePipeline::OutputFormatPolicy::kMaterialPreset;
+  const auto result = RunPipelineOnce(loop_, std::move(item));
+  ASSERT_TRUE(result.success);
+  ASSERT_TRUE(result.cooked);
+  EXPECT_EQ(result.cooked->desc.format, Format::kRGBA32Float);
+  ASSERT_FALSE(result.cooked->layouts.empty());
+  oxygen::data::pak::render::TexturePayloadHeader header {};
+  ASSERT_GE(result.cooked->payload.size(), sizeof(header));
+  std::memcpy(&header, result.cooked->payload.data(), sizeof(header));
+  const auto& layout = result.cooked->layouts.front();
+  std::array<float, 4> actual {};
+  const auto offset = header.data_offset_bytes + layout.offset_bytes;
+  ASSERT_GE(result.cooked->payload.size(), offset + sizeof(actual));
+  std::memcpy(actual.data(), result.cooked->payload.data() + offset,
+    sizeof(actual));
+  EXPECT_EQ(actual, pixel);
+}
 
 //! Empty byte payloads should fail with a cook diagnostic.
 NOLINT_TEST_F(TexturePipelineEdgeTest, CollectEmptySourceBytesFails)

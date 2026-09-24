@@ -18,6 +18,7 @@
 #include <Oxygen/Cooker/Import/Internal/TextureSourceAssembly_internal.h>
 #include <Oxygen/Cooker/Import/TextureImportError.h>
 #include <Oxygen/Cooker/Import/TexturePackingPolicy.h>
+#include <Oxygen/Core/Detail/FormatUtils.h>
 
 namespace oxygen::content::import {
 
@@ -371,15 +372,20 @@ namespace {
     std::optional<std::chrono::microseconds> decode_duration;
   };
 
-  //! Cook a decoded image with optional output format override.
+  //! Resolve storage policy after decoding, then apply the existing cooker.
   [[nodiscard]] auto CookDecodedImage(ScratchImage&& image,
     TextureImportDesc desc, const ITexturePackingPolicy& policy,
-    const bool output_format_is_override,
+    const TexturePipeline::OutputFormatPolicy output_format_policy,
     std::optional<std::chrono::microseconds> decode_duration,
     const bool with_content_hashing) -> CookOutcome
   {
-    if (!output_format_is_override) {
-      const auto& meta = image.Meta();
+    const auto& meta = image.Meta();
+    const bool preserve_source = output_format_policy
+        == TexturePipeline::OutputFormatPolicy::kPreserveSource
+      || (output_format_policy
+          == TexturePipeline::OutputFormatPolicy::kMaterialPreset
+        && graphics::detail::IsHdr(meta.format));
+    if (preserve_source) {
       desc.output_format = meta.format;
       desc.bc7_quality = Bc7Quality::kNone;
     }
@@ -398,7 +404,7 @@ namespace {
    @param source Encoded payload bytes.
    @param desc Import description for the texture.
    @param policy Packing policy used by the cooker.
-   @param output_format_is_override Whether output format is forced.
+   @param output_format_policy Source, material preset, or explicit storage policy.
    @param equirect_to_cubemap Whether to convert from equirectangular.
    @param cubemap_face_size Output face size for cubemap conversion.
    @param cubemap_layout Layout for cubemap face extraction.
@@ -414,7 +420,8 @@ namespace {
   */
   [[nodiscard]] auto CookFromBytes(TexturePipeline::SourceBytes source,
     TextureImportDesc desc, const ITexturePackingPolicy& policy,
-    const bool output_format_is_override, const bool equirect_to_cubemap,
+    const TexturePipeline::OutputFormatPolicy output_format_policy,
+    const bool equirect_to_cubemap,
     const uint32_t cubemap_face_size, const CubeMapImageLayout cubemap_layout,
     const bool with_content_hashing) -> CookOutcome
   {
@@ -455,7 +462,7 @@ namespace {
       }
 
       return CookDecodedImage(std::move(*cube), desc, policy,
-        output_format_is_override, decode_duration, with_content_hashing);
+        output_format_policy, decode_duration, with_content_hashing);
     }
 
     if (cubemap_layout != CubeMapImageLayout::kUnknown) {
@@ -477,7 +484,7 @@ namespace {
       }
 
       return CookDecodedImage(std::move(*cube), desc, policy,
-        output_format_is_override, decode_duration, with_content_hashing);
+        output_format_policy, decode_duration, with_content_hashing);
     }
 
     const auto decode_start = std::chrono::steady_clock::now();
@@ -492,7 +499,7 @@ namespace {
     }
 
     return CookDecodedImage(std::move(*decoded), desc, policy,
-      output_format_is_override, decode_duration, with_content_hashing);
+      output_format_policy, decode_duration, with_content_hashing);
   }
 
   //! Decode, validate, assemble, and cook a set of source slices.
@@ -503,7 +510,7 @@ namespace {
    @param source_set Source set containing decoded subresources.
    @param desc Import description for the texture.
    @param policy Packing policy used by the cooker.
-   @param output_format_is_override Whether output format is forced.
+   @param output_format_policy Source, material preset, or explicit storage policy.
    @return Cooked texture payload with accumulated decode duration.
 
   ### Performance Characteristics
@@ -516,7 +523,8 @@ namespace {
   */
   [[nodiscard]] auto CookFromSourceSet(TextureSourceSet source_set,
     TextureImportDesc desc, const ITexturePackingPolicy& policy,
-    const bool output_format_is_override, const bool with_content_hashing)
+    const TexturePipeline::OutputFormatPolicy output_format_policy,
+    const bool with_content_hashing)
     -> CookOutcome
   {
     if (source_set.IsEmpty()) {
@@ -609,7 +617,7 @@ namespace {
       }
 
       return CookDecodedImage(std::move(*cube), desc, policy,
-        output_format_is_override, decode_accum, with_content_hashing);
+        output_format_policy, decode_accum, with_content_hashing);
     }
 
     if (desc.texture_type == TextureType::kTextureCubeArray) {
@@ -624,7 +632,7 @@ namespace {
       }
 
       return CookDecodedImage(std::move(*volume), desc, policy,
-        output_format_is_override, decode_accum, with_content_hashing);
+        output_format_policy, decode_accum, with_content_hashing);
     }
     if (desc.texture_type != TextureType::kTexture2D
       && desc.texture_type != TextureType::kTexture2DArray) {
@@ -747,12 +755,13 @@ namespace {
 
     desc.texture_type = array_type;
     return CookDecodedImage(std::move(assembled), desc, policy,
-      output_format_is_override, decode_accum, with_content_hashing);
+      output_format_policy, decode_accum, with_content_hashing);
   }
 
   [[nodiscard]] auto CookFromSourceContent(
     TexturePipeline::SourceContent source, TextureImportDesc desc,
-    const ITexturePackingPolicy& policy, const bool output_format_is_override,
+    const ITexturePackingPolicy& policy,
+    const TexturePipeline::OutputFormatPolicy output_format_policy,
     const bool equirect_to_cubemap, const uint32_t cubemap_face_size,
     const CubeMapImageLayout cubemap_layout, const bool with_content_hashing)
     -> CookOutcome
@@ -764,14 +773,14 @@ namespace {
 
         if constexpr (std::is_same_v<ValueT, TexturePipeline::SourceBytes>) {
           return CookFromBytes(std::move(value), desc, policy,
-            output_format_is_override, equirect_to_cubemap, cubemap_face_size,
+            output_format_policy, equirect_to_cubemap, cubemap_face_size,
             cubemap_layout, with_content_hashing);
         } else if constexpr (std::is_same_v<ValueT, TextureSourceSet>) {
           return CookFromSourceSet(std::move(value), desc, policy,
-            output_format_is_override, with_content_hashing);
+            output_format_policy, with_content_hashing);
         } else {
           return CookDecodedImage(std::move(value), desc, policy,
-            output_format_is_override, {}, with_content_hashing);
+            output_format_policy, {}, with_content_hashing);
         }
       },
       std::move(source));
@@ -846,7 +855,7 @@ namespace {
       std::move(item.source));
     co_return co_await thread_pool.Run(
       [source_ptr, desc = std::move(desc), policy = &policy,
-        output_format_is_override = item.output_format_is_override,
+        output_format_policy = item.output_format_policy,
         equirect_to_cubemap = item.equirect_to_cubemap,
         cubemap_face_size = item.cubemap_face_size,
         cubemap_layout = item.cubemap_layout, with_content_hashing,
@@ -860,7 +869,7 @@ namespace {
           };
         }
         return CookFromSourceContent(std::move(*source_ptr), desc, *policy,
-          output_format_is_override, equirect_to_cubemap, cubemap_face_size,
+          output_format_policy, equirect_to_cubemap, cubemap_face_size,
           cubemap_layout, with_content_hashing);
       });
   }
@@ -1076,10 +1085,10 @@ auto TexturePipeline::Worker() -> co::Co<>
     auto item = std::move(*maybe_item);
     LOG_F(INFO,
       "TexturePipeline::Worker start: source_id='{}' texture_id='{}' "
-      "source_key={} source_path='{}' stop_requested={} override_format={}",
+      "source_key={} source_path='{}' stop_requested={} format_policy={}",
       item.source_id, item.texture_id, item.source_key,
       item.source_path.string(), item.stop_token.stop_requested(),
-      item.output_format_is_override);
+      static_cast<unsigned>(item.output_format_policy));
     if (item.stop_token.stop_requested()) {
       co_await ReportCancelled(std::move(item));
       continue;

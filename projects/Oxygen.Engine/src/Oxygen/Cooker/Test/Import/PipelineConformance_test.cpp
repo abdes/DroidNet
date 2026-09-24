@@ -122,7 +122,7 @@ auto MakeTextureWorkItem() -> TexturePipeline::WorkItem
     .source_key = nullptr,
     .desc = desc,
     .packing_policy_id = "d3d12",
-    .output_format_is_override = true,
+    .output_format_policy = TexturePipeline::OutputFormatPolicy::kExplicit,
     .failure_policy = TexturePipeline::FailurePolicy::kStrict,
     .equirect_to_cubemap = false,
     .cubemap_face_size = 0,

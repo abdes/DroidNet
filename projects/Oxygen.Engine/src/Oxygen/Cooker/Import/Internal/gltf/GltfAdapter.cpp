@@ -2178,7 +2178,9 @@ auto GltfAdapter::BuildWorkItems(TextureWorkTag, TextureWorkItemSink& sink,
 
       item.packing_policy_id
         = tuning.enabled ? tuning.packing_policy_id : "d3d12";
-      item.output_format_is_override = tuning.enabled;
+      item.output_format_policy = tuning.enabled
+        ? TexturePipeline::OutputFormatPolicy::kExplicit
+        : TexturePipeline::OutputFormatPolicy::kMaterialPreset;
       item.failure_policy
         = input.request.options.texture_tuning.placeholder_on_failure
         ? TexturePipeline::FailurePolicy::kPlaceholder
@@ -2227,7 +2229,9 @@ auto GltfAdapter::BuildWorkItems(TextureWorkTag, TextureWorkItemSink& sink,
     item.desc = std::move(desc);
     item.packing_policy_id
       = tuning.enabled ? tuning.packing_policy_id : "d3d12";
-    item.output_format_is_override = tuning.enabled;
+    item.output_format_policy = tuning.enabled
+      ? TexturePipeline::OutputFormatPolicy::kExplicit
+      : TexturePipeline::OutputFormatPolicy::kMaterialPreset;
     item.failure_policy
       = input.request.options.texture_tuning.placeholder_on_failure
       ? TexturePipeline::FailurePolicy::kPlaceholder

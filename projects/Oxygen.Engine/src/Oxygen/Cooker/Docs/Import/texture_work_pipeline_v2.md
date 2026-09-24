@@ -94,8 +94,7 @@ struct WorkItem {
   const void* source_key{};  // Opaque correlation (e.g. ufbx_texture*)
   TextureImportDesc desc;    // Existing type
   std::string packing_policy_id;  // "d3d12" | "tight"
-  bool output_format_is_override = false; // True when config explicitly set
-                                         // output format
+  OutputFormatPolicy output_format_policy = OutputFormatPolicy::kPreserveSource;
   FailurePolicy failure_policy = FailurePolicy::kPlaceholder;
   bool equirect_to_cubemap = false;
   uint32_t cubemap_face_size = 0; // Required when equirect_to_cubemap = true
@@ -131,11 +130,16 @@ Notes:
 - `cubemap_layout` enables layout extraction from a single image (auto/strip/
   cross). `kUnknown` disables layout extraction. If both equirect and layout
   flags are set, equirect conversion takes precedence.
-- `output_format_is_override` should mirror whether the job explicitly
-  overrides the output format.
-- When `output_format_is_override == false`, the pipeline must preserve the
-  decoded format (set `desc.output_format` to the decoded format and set
-  `desc.bc7_quality = kNone`).
+- `output_format_policy` separates three distinct choices:
+  - `kPreserveSource`: keep decoded storage format; disable BC7 conversion.
+  - `kMaterialPreset`: glTF/FBX role presets choose LDR storage (BC7 sRGB for
+    color and linear BC7 for data), retaining the preset mip chain. Floating HDR
+    sources keep their decoded float format rather than being forced into BC7.
+  - `kExplicit`: honor the requested format through the existing cooker
+    validation and explicit HDR handling controls.
+- Disabling texture tuning in a model import means use material presets; it does
+  not mean store every decoded image as uncompressed RGBA8. Standalone texture
+  imports retain source preservation when no output override was requested.
 
 ### WorkResult
 
@@ -233,13 +237,11 @@ For each work item:
    - copy from `WorkItem.desc`
    - set `source_id` and `stop_token`
 5. Cook using the appropriate `CookTexture(...)` overload:
-   - `SourceBytes`: decode with extension hints and, if
-     `output_format_is_override == false`, preserve the decoded format before
-     calling `CookTexture(ScratchImage&&, ...)`.
+   - `SourceBytes`: decode with extension hints, resolve the output-format policy,
+     then call `CookTexture(ScratchImage&&, ...)`.
    - `TextureSourceSet`: decode all sources, verify matching dimensions/format,
-     preserve the decoded format when `output_format_is_override == false`,
-     assemble cubemaps, 2D arrays with pre-authored mips, or 3D depth slices.
-   - `ScratchImage`: skip decode and cook directly.
+     assemble the target, then resolve the same output-format policy.
+   - `ScratchImage`: skip decoding and resolve the same policy before cooking.
 6. On error:
    - If `failure_policy == kPlaceholder` and the error is **not** cancellation,
      return `success = false` with `used_placeholder = true`. The job/orchestrator
@@ -472,7 +474,7 @@ payload is created by `TextureEmitter` and reused across all failures.
 - Format importer (FBX/GLB/etc):
   - discovers textures, presets, and intent
   - resolves sources (embedded vs file-backed; cubemap face resolution)
-  - builds `WorkItem`s (including `output_format_is_override`)
+  - builds `WorkItem`s (including `output_format_policy`)
   - maps results back to materials and emits diagnostics
 - `TexturePipeline`:
   - compute-only cook (`CookTexture(...)` overloads)
