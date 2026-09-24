@@ -106,7 +106,8 @@ multiple views qualify scaling. Shadowed subsets have explicit capacity and
 separate cost. Order: contracts -> references/instruments -> correctness repairs
 -> qualified baselines/budgets -> scalable optimization -> final validation.
 Only correct workloads enter the baseline; numeric improvement/regression/noise
-thresholds are frozen before candidate runs. No performance capability is claimed yet.
+thresholds are frozen before candidate runs. Measured improvements and their
+limits are recorded in the [E comparison report](plan/EX07E-shadow-sharing-results.md).
 
 Each delivery step includes its numerical, interaction and relevant native visual
 checks. Automation grows with the experiments; EX10 is integration/closure.
@@ -114,7 +115,8 @@ The [detailed gates](plan/exposure-and-lightbench-correction.md#8-ordered-implem
 own scope and measurable criteria. The [tracker](IMPLEMENTATION_STATUS.md#34-slice-7-work-items)
 owns current status. **EX07A and EX07B are validated. EX07D is closed (2026-09-24),
 with the [durable baseline register](plan/EX07D-baseline-report.md) committed in
-`894a25e57`. EX07E is active, authorized by the user on 2026-09-24;
+`894a25e57`. EX07E is closed (2026-09-25), including implementation, S9 qualification,
+user visual/numeric acceptance and evidence commit `b8f1376e1`;
 F final acceptance remains open.** EX07C's separately tracked caller-target
 validation remains open; D closure does not close that obligation or overall EX07.
 

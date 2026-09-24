@@ -236,14 +236,17 @@ F reuses unaffected evidence and validates the integrated result. Stage changes
 alone do not require another baseline campaign. The workload envelope and full
 EX07 exit requirements remain unchanged.
 
-### EX07E handoff — active
+### EX07E handoff — closed
 
-**Execution paused at the pre-E06 checkpoint by user request, 2026-09-24.**
-The heading anchor is retained for existing links. Resume only on the user's
-signal; the [authoritative checkpoint](../IMPLEMENTATION_STATUS.md#ex07e--work-items-and-resume-checkpoint)
-records completed pre-E06 checks and the dependent final acceptance gates.
+**E06 implementation resumed by user instruction, 2026-09-24.** The independent
+review is accepted with the descriptor-cleanup and uncertain-submission recovery
+amendments. The [authoritative checkpoint](../IMPLEMENTATION_STATUS.md#ex07e--work-items-and-resume-checkpoint)
+records completed S1–S9 implementation/qualification and user visual acceptance
+on 2026-09-25. The requested numeric review is complete and evidence is committed
+in `b8f1376e1`. The [sharing comparison report](EX07E-shadow-sharing-results.md)
+owns final benchmark, scene, memory and operating-limit results.
 
-**Active: the user authorized EX07E on 2026-09-24.** The authoritative
+**Closed: implementation, qualification and user acceptance complete (2026-09-25).** The authoritative
 [E01–E08 work ledger and resume checkpoint](../IMPLEMENTATION_STATUS.md#ex07e--work-items-and-resume-checkpoint)
 record all eight investigation/delivery obligations, completion evidence and
 next action. Update that ledger as findings and fixes are delivered. Earlier
