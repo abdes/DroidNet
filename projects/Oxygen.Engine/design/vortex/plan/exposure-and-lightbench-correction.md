@@ -1260,8 +1260,11 @@ many-light scalability remains an explicit qualification and optimization
 obligation. E/F reuse the scene and unaffected evidence; accepted
 cases are repeated only for a specific invalidating change or diagnosed noise.
 The [D delivery scope](EX07-lighting-correctness-and-scalability.md#ex07d-delivery-many-light-scene-and-baseline)
-and [credited evidence](../IMPLEMENTATION_STATUS.md#ex07d--credited-evidence-and-remaining-delivery)
-define the remaining work without reopening accepted measurements.
+and [baseline register](EX07D-baseline-report.md) record the benchmark and
+Instancing/New Sponza operating points, precise collection modes, confidence
+limits and accepted historical evidence required for E/F. The register includes
+54 timed benchmark rows and four application runs; preflight coverage gaps and
+noisy measurements remain explicit, not silently accepted as controlled timing.
 
 - Implement section 6's shared point/spot conversion, distance/range falloff,
   cone normalization, hard-cone limit and invalid-cone rejection. Directional

@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "renderer_commit": "137b681b2",
+  "collection_protocol_commits": ["250917c9e", "d90e15823"],
+  "benchmark_rows": 54,
+  "application_runs": 4,
+  "benchmark_record": "benchmark-baselines.json",
+  "application_records": [
+    "instancing-tracy.json",
+    "instancing-native.json",
+    "sponza-tracy.json",
+    "sponza-native.json"
+  ],
+  "historical_record": "historical-controls.json",
+  "raw_capture_root": "out/analysis/ex07d/closure-137b681b2",
+  "headroom_checked_benchmark_rows": 24,
+  "preflight": "Five samples; ordinary desktop activity allowed. CPU mean 25%, NVIDIA GPU mean 50%; reject two samples above CPU 50% or GPU 70%. Early successful checks used a stricter single-spike rule and also satisfy this policy. Per-run observations retained.",
+  "collection_limit": "The complete initial 54-row matrix preceded the CPU headroom requirement. 24 timed rows were repeated with preflight, then the blanket repeat stopped at user request to release the machine. The other 30 image-qualified timing records are retained with missing CPU-preflight coverage explicitly marked. All four subsequent scene runs use headroom checks."
+}

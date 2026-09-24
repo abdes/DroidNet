@@ -1,7 +1,10 @@
 # New Sponza regression analysis and UE5.7 comparison
 
-2026-09-24. **Shutdown repair verified; shadow correction validated as a
-candidate; performance remains open. All changes are uncommitted.**
+2026-09-24. **Shutdown repair verified; shadow correction validated;
+performance remains open.** Correctness fixes and this analysis were committed
+in `137b681b2`. The [EX07D baseline register](EX07D-baseline-report.md) now records
+the current benchmark and application comparison points. Timings below retain
+their original diagnostic scope; they are not substituted for that register.
 
 This follows the user's application regression report and request for analysis
 before further performance changes. The many-light benchmark did not cover

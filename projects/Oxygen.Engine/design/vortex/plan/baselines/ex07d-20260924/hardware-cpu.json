@@ -1,0 +1,10 @@
+{
+  "system": {
+    "TotalPhysicalMemory": 134904303616
+  },
+  "cpu": {
+    "Name": "AMD Ryzen 9 9950X 16-Core Processor            ",
+    "NumberOfCores": 16,
+    "NumberOfLogicalProcessors": 32
+  }
+}

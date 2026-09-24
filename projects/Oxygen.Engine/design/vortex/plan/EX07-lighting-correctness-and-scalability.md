@@ -174,14 +174,14 @@ never time a defective image as the acceptance reference.
 
 ### EX07D delivery: many-light scene and baseline
 
-**Execution checkpoint (2026-09-24):** the native scene and initial baseline are
-established. The user has reopened D's evidence closeout: its final document must
-record the benchmark baselines and both Instancing and New Sponza application
-baselines required by E/F, with provenance, measurements and comparison rules.
-The preserved reference has 16 completed count/family rows and the 1,024-light
-primary in both families; broader image qualification alone is not a timed
-baseline. See the
-[baseline and optimization report](EX07D-baseline-report.md). Do not restart
+**Execution checkpoint (2026-09-24):** D's expanded baseline register is delivered:
+54 timed, image-qualified benchmark rows and four current Instancing/New Sponza
+application runs, with separate Tracy/non-Tracy Ninja Release identities,
+percentiles, memory scope, images, traces, recipes and historical controls.
+CPU/GPU preflight is recorded for 24 benchmark rows and all application runs;
+the other 30 timings predate that requirement and are explicitly supporting
+references. Noisy B05-D requires a targeted comparison before a timing claim.
+See the [baseline register](EX07D-baseline-report.md). Do not restart
 accepted baseline campaigns or treat slow deferred results as an architecture
 policy change. Deferred draw culling must conservatively retain off-screen
 lights whose influence reaches the view, as UE5.7's light-volume frustum test

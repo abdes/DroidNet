@@ -1,0 +1,770 @@
+{
+  "complete": true,
+  "method": "Complete CPU scene-completion log intervals 20-50 s after first startup log, Tracy OFF, informational logging ON, timestamps quantized to 1 ms; not GPU timing",
+  "frame_ms": {
+    "count": 1094,
+    "mean": 27.415904936014627,
+    "p50": 27.0,
+    "p95": 29.0,
+    "p99": 30.0,
+    "max": 31.0
+  },
+  "fps": 36.47517754142633,
+  "load_preflight": {
+    "gpu_engine_owners": [
+      {
+        "Name": "pid_67040_luid_0x00000000_0x000183AF_phys_0_eng_1_engtype_Copy",
+        "UtilizationPercentage": 22
+      },
+      {
+        "Name": "pid_67040_luid_0x00000000_0x00016AEE_phys_0_eng_0_engtype_3D",
+        "UtilizationPercentage": 19
+      },
+      {
+        "Name": "pid_67040_luid_0x00000000_0x000183AF_phys_0_eng_0_engtype_3D",
+        "UtilizationPercentage": 12
+      }
+    ],
+    "finished_utc": "2026-09-24T09:04:50.0563321Z",
+    "started_utc": "2026-09-24T09:04:40.5700078Z",
+    "samples": [
+      {
+        "utc": "2026-09-24T09:04:43.8137092Z",
+        "gpus": [
+          {
+            "index": "0",
+            "name": "NVIDIA GeForce RTX 3080",
+            "utilization": "30",
+            "memory_utilization": "3",
+            "clock_mhz": "1095",
+            "temperature_c": "54",
+            "memory_used_mib": "3783"
+          }
+        ],
+        "cpu_percent": 3.0
+      },
+      {
+        "utc": "2026-09-24T09:04:45.1365586Z",
+        "gpus": [
+          {
+            "index": "0",
+            "name": "NVIDIA GeForce RTX 3080",
+            "utilization": "27",
+            "memory_utilization": "2",
+            "clock_mhz": "1980",
+            "temperature_c": "55",
+            "memory_used_mib": "3783"
+          }
+        ],
+        "cpu_percent": 7.0
+      },
+      {
+        "utc": "2026-09-24T09:04:46.4585551Z",
+        "gpus": [
+          {
+            "index": "0",
+            "name": "NVIDIA GeForce RTX 3080",
+            "utilization": "30",
+            "memory_utilization": "3",
+            "clock_mhz": "1455",
+            "temperature_c": "54",
+            "memory_used_mib": "3783"
+          }
+        ],
+        "cpu_percent": 5.0
+      },
+      {
+        "utc": "2026-09-24T09:04:47.7867276Z",
+        "gpus": [
+          {
+            "index": "0",
+            "name": "NVIDIA GeForce RTX 3080",
+            "utilization": "31",
+            "memory_utilization": "3",
+            "clock_mhz": "1215",
+            "temperature_c": "53",
+            "memory_used_mib": "3783"
+          }
+        ],
+        "cpu_percent": 9.0
+      },
+      {
+        "utc": "2026-09-24T09:04:49.1264812Z",
+        "gpus": [
+          {
+            "index": "0",
+            "name": "NVIDIA GeForce RTX 3080",
+            "utilization": "99",
+            "memory_utilization": "20",
+            "clock_mhz": "1980",
+            "temperature_c": "52",
+            "memory_used_mib": "3783"
+          }
+        ],
+        "cpu_percent": 5.0
+      }
+    ],
+    "accepted": true,
+    "scope": "Pre-launch headroom check, allowing ordinary desktop activity rather than requiring idle hardware. GPU values cover NVIDIA adapters. Process CPU counters may sum above 100 across cores. This does not prove absence of interference later in the run.",
+    "cpu_process_counters": [
+      {
+        "Name": "WmiPrvSE",
+        "IDProcess": 7944,
+        "PercentProcessorTime": 85
+      },
+      {
+        "Name": "pwsh#8",
+        "IDProcess": 75340,
+        "PercentProcessorTime": 76
+      },
+      {
+        "Name": "ChatGPT#5",
+        "IDProcess": 84764,
+        "PercentProcessorTime": 52
+      },
+      {
+        "Name": "Taskmgr",
+        "IDProcess": 75488,
+        "PercentProcessorTime": 47
+      },
+      {
+        "Name": "ChatGPT#2",
+        "IDProcess": 67040,
+        "PercentProcessorTime": 33
+      },
+      {
+        "Name": "System",
+        "IDProcess": 4,
+        "PercentProcessorTime": 23
+      },
+      {
+        "Name": "WmiPrvSE#2",
+        "IDProcess": 41496,
+        "PercentProcessorTime": 23
+      },
+      {
+        "Name": "cortex-apiserver",
+        "IDProcess": 8256,
+        "PercentProcessorTime": 23
+      }
+    ],
+    "observed": {
+      "peak_gpu_percent": 99.0,
+      "peak_cpu_percent": 9.0,
+      "mean_gpu_percent": 43.4,
+      "mean_cpu_percent": 5.8
+    },
+    "thresholds": {
+      "peak_gpu_percent": 70.0,
+      "peak_cpu_percent": 50.0,
+      "peak_samples_required": 2,
+      "mean_gpu_percent": 50.0,
+      "mean_cpu_percent": 25.0
+    }
+  },
+  "window_seconds": [20.005, 49.998],
+  "gpu_scopes_ms": {},
+  "gpu_calls_per_frame": {},
+  "cpu_scopes_per_call_ms": {},
+  "noise": {
+    "block_means_ms": [
+      27.416438356164385, 27.413698630136988, 27.417582417582416
+    ],
+    "block_range_percent": 0.014166183660515095,
+    "scope": "Within-capture three 10-second blocks; no between-run confidence claim"
+  },
+  "process": {
+    "working_set_bytes": 383029248,
+    "scope": "Process CPU memory at capture end; not renderer GPU allocation",
+    "cpu_time_seconds": 19.375,
+    "private_bytes": 2753691648
+  },
+  "identity": {
+    "tracy": false,
+    "git_head": "d90e1582303c818f548bbb2e4654862aa17c2d7b",
+    "build": "oxygen-ninja-release",
+    "runtime_environment": {
+      "PATH": "C:\\Users\\abdes\\.conan2\\p\\b\\sdlb9ad705c7d7b3\\p\\bin;C:\\Program Files\\PowerShell\\7;C:\\Users\\abdes\\.codex\\tmp\\arg0\\codex-arg07PdUIH;C:\\Users\\abdes\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\native\\libheif\\libheif\\bin;C:\\Users\\abdes\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\native\\jxrlib\\jxrlib\\bin;C:\\Users\\abdes\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\native\\poppler\\Library\\bin;C:\\Users\\abdes\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\bin\\override;C:\\Program Files (x86)\\oh-my-posh\\bin\\;C:\\WINDOWS\\system32;C:\\WINDOWS;C:\\WINDOWS\\System32\\Wbem;C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\;C:\\WINDOWS\\System32\\OpenSSH\\;C:\\Program Files\\NVIDIA Corporation\\NVIDIA App\\NvDLISR;C:\\Program Files (x86)\\NVIDIA Corporation\\PhysX\\Common;C:\\Program Files\\doxygen\\bin;C:\\Program Files\\dotnet\\;C:\\Program Files (x86)\\Windows Kits\\10\\Windows Performance Toolkit\\;C:\\Program Files\\Kubernetes\\Minikube;C:\\Program Files\\MATLAB\\R2026a\\bin;C:\\Program Files\\CMake\\bin;C:\\Program Files\\Git\\cmd;C:\\Program Files\\Go\\bin;C:\\Program Files\\Pandoc\\;C:\\Program Files\\nodejs\\;C:\\Program Files\\PowerShell\\7\\;C:\\Program Files\\Neovim\\bin;C:\\Program Files\\Docker\\Docker\\resources\\bin;C:\\Program Files\\GitHub CLI\\;C:\\Users\\abdes\\.cortex-tools\\bin;C:\\Users\\abdes\\.cortex-tools\\go\\1.27.1\\go\\bin;C:\\Users\\abdes\\AppData\\Local\\Programs\\oh-my-posh\\bin\\;C:\\Users\\abdes\\AppData\\Local\\agy\\bin;C:\\Users\\abdes\\AppData\\Local\\pnpm\\bin;C:\\Program Files (x86)\\Windows Kits\\10\\Debuggers\\x64;C:\\Users\\abdes\\.cargo\\bin;C:\\Program Files\\FontForgeBuilds\\bin;C:\\Users\\abdes\\AppData\\Local\\UniGetUI\\Chocolatey\\bin;C:\\Program Files\\Graphviz\\bin;D:\\dev\\ccache;D:\\dev\\ninja;C:\\Program Files\\Conan\\conan;C:\\Users\\abdes\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\native\\powershell;C:\\Users\\abdes\\AppData\\Local\\Microsoft\\WindowsApps;C:\\Users\\abdes\\AppData\\Local\\Microsoft\\WinGet\\Packages\\junegunn.fzf_Microsoft.Winget.Source_8wekyb3d8bbwe;C:\\Program Files\\LLVM\\bin;C:\\Users\\abdes\\AppData\\Local\\Programs\\Microsoft VS Code\\bin;C:\\Users\\abdes\\.dotnet\\tools;G:\\Antigravity\\bin;D:\\dev\\Zed\\bin;C:\\Program Files\\JetBrains\\CLion 2025.3\\bin;C:\\Users\\abdes\\.lmstudio\\bin;C:\\Users\\abdes\\AppData\\Local\\Microsoft\\WinGet\\Links;C:\\Users\\abdes\\.dotnet\\tools;C:\\Users\\abdes\\.dotnet\\tools;C:\\Users\\abdes\\AppData\\Local\\Python\\bin;H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\install\\RelWithDebInfo\\bin;C:\\Users\\abdes\\.dotnet\\tools;C:\\Program Files (x86)\\Dr. Memory\\bin\\;C:\\Users\\abdes\\AppData\\Local\\Programs\\Antigravity IDE\\bin;C:\\Users\\abdes\\go\\bin;C:\\Users\\abdes\\AppData\\Roaming\\npm;C:\\Users\\abdes\\AppData\\Local\\PowerToys\\DSCModules\\;C:\\Users\\abdes\\AppData\\Local\\Microsoft\\WinGet\\Packages\\sourcegit-scm.SourceGit_Microsoft.Winget.Source_8wekyb3d8bbwe\\SourceGit;C:\\Users\\abdes\\.dotnet\\tools;C:\\Users\\abdes\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\bin\\fallback;C:\\Users\\abdes\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\node\\bin;C:\\Users\\abdes\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\native\\git\\cmd;C:\\Users\\abdes\\AppData\\Local\\OpenAI\\Codex\\bin\\d5b459afd5dcd195;C:\\Users\\abdes\\AppData\\Local\\OpenAI\\Codex\\bin\\80f78947ad880e6e"
+    },
+    "inputs": [
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Examples.RenderScene.exe",
+        "sha256": "8c96022842fd9454abc111dfee97f67313c7d980fbc4dbb11736121e3450943c"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine/bin/Oxygen/Release/production/shaders.bin",
+        "sha256": "3764add3b75fcd4835589a3735a855b7b665dbbdd0208889df0592906fbf0480"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine/Examples/Content/.cooked/container.index.bin",
+        "sha256": "9d5bf46b7dab8a31b2bda6ce624656da0b70ea8650ce21e9e187ffc455bd5c7c"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine/Examples/Content/.cooked/Scenes/InstancingTestScene.oscene",
+        "sha256": "140e1e40074f5f6de76e43d8caefc42af88279401d535107c3e35f3b5ffa0b03"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine/Examples/RenderScene/demo_settings.json",
+        "sha256": "30199a59af3cc1b3e0f687550285b50abfc8d27e542bcfb9a1f74c1bf94fc6fa"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine/imgui.ini",
+        "sha256": "b6fbb153af2f551ab1ece85b9e1de0e9aceeb352ad5845a7d8271fd9afb2503c"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Base.dll",
+        "sha256": "ea11ac231a17e2a6b1dfde5651ee6f9fe220c0b45796ba85bfa8b5e8aeb3ea37"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Clap.dll",
+        "sha256": "f79c7f997eb25e57d26cf473a14af14a3b2d975c5da63a45059eeb6a1d0e6573"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Composition.dll",
+        "sha256": "ae25b44de02f195b5e07a3a97b8111c0ed35bb38289117c8ae7a27cb46ae0c5c"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Console.dll",
+        "sha256": "7d1c98cabca878f23aed53f5dbb2d32a660937868528cfca87d00e7d85c1d24b"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Content.dll",
+        "sha256": "9e468c6a9f44354740cfb64e367abde5409ff99a7317eb9337c0330074fcb6cc"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Cooker.dll",
+        "sha256": "14544718c7cc0c7d32877fed5eff3d4d8bbfcc6cde2946a7f174b631e2e415f3"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Core.dll",
+        "sha256": "f9cb50ca38f242133a02b442a5aa6e7d082379343a0431131d54d4a834eee403"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Data.dll",
+        "sha256": "27ef29d47bb8d13aadbf6fb606d22f31e4c4b7cacbd5df337a64a1572468f9a8"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Engine.dll",
+        "sha256": "8744f2c64c61b11b5eecf33f74f89597d19e60018e4327201e6c7b6cf193ceae"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Engine.EditorInterface.dll",
+        "sha256": "f87b3982db7ffdb5164aeefbba8ae4b92d31dfca01a07f5149b49595afe4e0a1"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Graphics.Common.dll",
+        "sha256": "fa2e360e5f8c738ebca05adecc97541e88fd7698459e462c7635d755cf80fde2"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Graphics.Direct3D12.dll",
+        "sha256": "3874ff0657f69fb3449b00948700ab6bc1b06d08c1a7b84efd7ddfc3f8e03e85"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Graphics.Headless.dll",
+        "sha256": "5312133659abfbaf559a556b6e7c7f7082204e11375e257df1e368fd8a75778a"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.ImGui.dll",
+        "sha256": "c6412110d379146d143eca92f229426669026092169e43aa7a0f9464a9e6586b"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Input.dll",
+        "sha256": "bbf9e61915e005158ad22c03ee80cad3fda9a36077d4490cd5c41be0eb302b3f"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Nexus.dll",
+        "sha256": "d9fee988c5f35aff3122a9a382461e053fdc66818ccd556400979479a56fa6b8"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Physics.dll",
+        "sha256": "29ddee02d52e25c67b81622d86b212a51a2dba2bab749143655f3fcac390c409"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.PhysicsModule.dll",
+        "sha256": "2b97e3e9bc6494d1e6e82dd53e96d7f1adba3a3f21618db079f1198a6a89d5eb"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Platform.dll",
+        "sha256": "82f3e985b681b6615b692187347437d7d91d317c79ce2cf50114af5e459adcd3"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Profiling.Cpu.dll",
+        "sha256": "1e5a4323e9da279591a819a5deb7156b0003ceb3d284cfb34109b6fd4e976f28"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Scene.dll",
+        "sha256": "2cacef44653a7170de92af00cfcdb3e561afa2e04e90de7e940dd24050e2fac8"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.SceneSync.dll",
+        "sha256": "12b9aaf2f30eefd5089ee175572eaaa63da7edf3c2d74d533583dd3802ffae25"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Scripting.dll",
+        "sha256": "f97bc55927b16c939ca3c2128c0e92b90d6a16996005d758572538ca4461ad85"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Serio.dll",
+        "sha256": "4d0155f4009d9c6ebecfcbed46e5e6e11966f3af094db303ea3d6a439363abed"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.TextWrap.dll",
+        "sha256": "a3ad64b5f229cb41cc6b9f7fc58137dab7dbd5ff89868efcdf147b76c289dbd3"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Tracy.dll",
+        "sha256": "56427563d9425fdacdc02162ab43ad0546f0a11b13e0f7f069ec37e515ce8a95"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Vortex.dll",
+        "sha256": "eb11b1a7da02c1abf3836a71595202f8a3acc80e83aadec373f7ca676b21d712"
+      }
+    ]
+  },
+  "run": {
+    "pid": 80380,
+    "executable": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Examples.RenderScene.exe",
+    "measured_window_seconds": [20, 50],
+    "started": "2026-09-24T13:04:50.1580781+04:00",
+    "arguments": [
+      "-v=0",
+      "--frames",
+      "0",
+      "--fps",
+      "0",
+      "--vsync",
+      "false",
+      "--resolution",
+      "2560x1400",
+      "--scene",
+      "InstancingTestScene",
+      "--directional-shadows",
+      "conventional",
+      "--debug-layer",
+      "false"
+    ]
+  },
+  "artifact_sha256": {
+    "run.json": "d67f08fe71c71c4507607a90665ad265184f76f7130e936ac2eceb4d4443bdf4",
+    "identity.json": "35a5eff95eaefb8da32c53bcd1e3e7baa7e2a733a6e36690e3e54b0433e7a01e",
+    "demo_settings.json": "30199a59af3cc1b3e0f687550285b50abfc8d27e542bcfb9a1f74c1bf94fc6fa",
+    "demo_settings.final.json": "6725345ae03b934babdf9c202963017c1900850384333f6db56c96d1ea5da9f0",
+    "scene.png": "ca8ce001f6ae9f3f56eff1efdd30de6c5aefa7c9cdb50d5d8b6681ef5850d810",
+    "process.json": "c75875c8ec9e6f6dfb48b9aa48e81272b84ed675a64ce8e64d9b9a387cbbfe8b",
+    "hardware-end.csv": "ca5e6059c01b77dbbfad6a5a831ef957117db9636fa096dc53ddb503ee7dfc70",
+    "exit-code.txt": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354",
+    "load-preflight.json": "94a755c9044fdb78eb8370a20297af7981efc0d3a70c57aaa7cdbdbf3e1689cf",
+    "stderr.log": "2756acd8d550dcb18433ed0b98893d0af7187a1261067eb769da51e3ca1cd716"
+  },
+  "id": "A-INSTANCING-NATIVE",
+  "directory": "out/analysis/ex07d/closure-137b681b2/scenes/InstancingTestScene-native",
+  "scene_inventory": {
+    "tables": [
+      ["MESH", 1000, 40],
+      ["PCAM", 1, 32],
+      ["DLIT", 1, 97],
+      ["PLIT", 49, 50]
+    ],
+    "lights": [
+      {
+        "kind": "DLIT",
+        "node": 2,
+        "casts_shadows": 0,
+        "bias": 0.029999999329447746,
+        "normal_bias_m": 0.019999999552965164
+      },
+      {
+        "kind": "PLIT",
+        "node": 3,
+        "casts_shadows": 1,
+        "bias": 0.029999999329447746,
+        "normal_bias_m": 0.019999999552965164,
+        "range_m": 6.0
+      },
+      {
+        "kind": "PLIT",
+        "node": 4,
+        "casts_shadows": 1,
+        "bias": 0.029999999329447746,
+        "normal_bias_m": 0.019999999552965164,
+        "range_m": 6.0
+      },
+      {
+        "kind": "PLIT",
+        "node": 5,
+        "casts_shadows": 1,
+        "bias": 0.029999999329447746,
+        "normal_bias_m": 0.019999999552965164,
+        "range_m": 6.0
+      },
+      {
+        "kind": "PLIT",
+        "node": 6,
+        "casts_shadows": 1,
+        "bias": 0.029999999329447746,
+        "normal_bias_m": 0.019999999552965164,
+        "range_m": 6.0
+      },
+      {
+        "kind": "PLIT",
+        "node": 7,
+        "casts_shadows": 1,
+        "bias": 0.029999999329447746,
+        "normal_bias_m": 0.019999999552965164,
+        "range_m": 6.0
+      },
+      {
+        "kind": "PLIT",
+        "node": 8,
+        "casts_shadows": 1,
+        "bias": 0.029999999329447746,
+        "normal_bias_m": 0.019999999552965164,
+        "range_m": 6.0
+      },
+      {
+        "kind": "PLIT",
+        "node": 9,
+        "casts_shadows": 1,
+        "bias": 0.029999999329447746,
+        "normal_bias_m": 0.019999999552965164,
+        "range_m": 6.0
+      },
+      {
+        "kind": "PLIT",
+        "node": 10,
+        "casts_shadows": 1,
+        "bias": 0.029999999329447746,
+        "normal_bias_m": 0.019999999552965164,
+        "range_m": 6.0
+      },
+      {
+        "kind": "PLIT",
+        "node": 11,
+        "casts_shadows": 1,
+        "bias": 0.029999999329447746,
+        "normal_bias_m": 0.019999999552965164,
+        "range_m": 7.0
+      },
+      {
+        "kind": "PLIT",
+        "node": 12,
+        "casts_shadows": 1,
+        "bias": 0.029999999329447746,
+        "normal_bias_m": 0.019999999552965164,
+        "range_m": 7.0
+      },
+      {
+        "kind": "PLIT",
+        "node": 13,
+        "casts_shadows": 1,
+        "bias": 0.029999999329447746,
+        "normal_bias_m": 0.019999999552965164,
+        "range_m": 7.0
+      },
+      {
+        "kind": "PLIT",
+        "node": 14,
+        "casts_shadows": 1,
+        "bias": 0.029999999329447746,
+        "normal_bias_m": 0.019999999552965164,
+        "range_m": 7.0
+      },
+      {
+        "kind": "PLIT",
+        "node": 15,
+        "casts_shadows": 1,
+        "bias": 0.029999999329447746,
+        "normal_bias_m": 0.019999999552965164,
+        "range_m": 7.0
+      },
+      {
+        "kind": "PLIT",
+        "node": 16,
+        "casts_shadows": 1,
+        "bias": 0.029999999329447746,
+        "normal_bias_m": 0.019999999552965164,
+        "range_m": 7.0
+      },
+      {
+        "kind": "PLIT",
+        "node": 17,
+        "casts_shadows": 1,
+        "bias": 0.029999999329447746,
+        "normal_bias_m": 0.019999999552965164,
+        "range_m": 7.0
+      },
+      {
+        "kind": "PLIT",
+        "node": 18,
+        "casts_shadows": 1,
+        "bias": 0.029999999329447746,
+        "normal_bias_m": 0.019999999552965164,
+        "range_m": 7.0
+      },
+      {
+        "kind": "PLIT",
+        "node": 19,
+        "casts_shadows": 1,
+        "bias": 0.029999999329447746,
+        "normal_bias_m": 0.019999999552965164,
+        "range_m": 8.0
+      },
+      {
+        "kind": "PLIT",
+        "node": 20,
+        "casts_shadows": 1,
+        "bias": 0.029999999329447746,
+        "normal_bias_m": 0.019999999552965164,
+        "range_m": 8.0
+      },
+      {
+        "kind": "PLIT",
+        "node": 21,
+        "casts_shadows": 1,
+        "bias": 0.029999999329447746,
+        "normal_bias_m": 0.019999999552965164,
+        "range_m": 8.0
+      },
+      {
+        "kind": "PLIT",
+        "node": 22,
+        "casts_shadows": 1,
+        "bias": 0.029999999329447746,
+        "normal_bias_m": 0.019999999552965164,
+        "range_m": 8.0
+      },
+      {
+        "kind": "PLIT",
+        "node": 23,
+        "casts_shadows": 1,
+        "bias": 0.029999999329447746,
+        "normal_bias_m": 0.019999999552965164,
+        "range_m": 8.0
+      },
+      {
+        "kind": "PLIT",
+        "node": 24,
+        "casts_shadows": 1,
+        "bias": 0.029999999329447746,
+        "normal_bias_m": 0.019999999552965164,
+        "range_m": 8.0
+      },
+      {
+        "kind": "PLIT",
+        "node": 25,
+        "casts_shadows": 1,
+        "bias": 0.029999999329447746,
+        "normal_bias_m": 0.019999999552965164,
+        "range_m": 8.0
+      },
+      {
+        "kind": "PLIT",
+        "node": 26,
+        "casts_shadows": 1,
+        "bias": 0.029999999329447746,
+        "normal_bias_m": 0.019999999552965164,
+        "range_m": 8.0
+      },
+      {
+        "kind": "PLIT",
+        "node": 27,
+        "casts_shadows": 1,
+        "bias": 0.029999999329447746,
+        "normal_bias_m": 0.019999999552965164,
+        "range_m": 8.0
+      },
+      {
+        "kind": "PLIT",
+        "node": 28,
+        "casts_shadows": 1,
+        "bias": 0.029999999329447746,
+        "normal_bias_m": 0.019999999552965164,
+        "range_m": 8.0
+      },
+      {
+        "kind": "PLIT",
+        "node": 29,
+        "casts_shadows": 1,
+        "bias": 0.029999999329447746,
+        "normal_bias_m": 0.019999999552965164,
+        "range_m": 8.0
+      },
+      {
+        "kind": "PLIT",
+        "node": 30,
+        "casts_shadows": 1,
+        "bias": 0.029999999329447746,
+        "normal_bias_m": 0.019999999552965164,
+        "range_m": 8.0
+      },
+      {
+        "kind": "PLIT",
+        "node": 31,
+        "casts_shadows": 1,
+        "bias": 0.029999999329447746,
+        "normal_bias_m": 0.019999999552965164,
+        "range_m": 8.0
+      },
+      {
+        "kind": "PLIT",
+        "node": 32,
+        "casts_shadows": 1,
+        "bias": 0.029999999329447746,
+        "normal_bias_m": 0.019999999552965164,
+        "range_m": 8.0
+      },
+      {
+        "kind": "PLIT",
+        "node": 33,
+        "casts_shadows": 1,
+        "bias": 0.029999999329447746,
+        "normal_bias_m": 0.019999999552965164,
+        "range_m": 8.0
+      },
+      {
+        "kind": "PLIT",
+        "node": 34,
+        "casts_shadows": 1,
+        "bias": 0.029999999329447746,
+        "normal_bias_m": 0.019999999552965164,
+        "range_m": 8.0
+      },
+      {
+        "kind": "PLIT",
+        "node": 35,
+        "casts_shadows": 1,
+        "bias": 0.029999999329447746,
+        "normal_bias_m": 0.019999999552965164,
+        "range_m": 8.0
+      },
+      {
+        "kind": "PLIT",
+        "node": 36,
+        "casts_shadows": 1,
+        "bias": 0.029999999329447746,
+        "normal_bias_m": 0.019999999552965164,
+        "range_m": 10.0
+      },
+      {
+        "kind": "PLIT",
+        "node": 37,
+        "casts_shadows": 1,
+        "bias": 0.029999999329447746,
+        "normal_bias_m": 0.019999999552965164,
+        "range_m": 10.0
+      },
+      {
+        "kind": "PLIT",
+        "node": 38,
+        "casts_shadows": 1,
+        "bias": 0.029999999329447746,
+        "normal_bias_m": 0.019999999552965164,
+        "range_m": 10.0
+      },
+      {
+        "kind": "PLIT",
+        "node": 39,
+        "casts_shadows": 1,
+        "bias": 0.029999999329447746,
+        "normal_bias_m": 0.019999999552965164,
+        "range_m": 10.0
+      },
+      {
+        "kind": "PLIT",
+        "node": 40,
+        "casts_shadows": 1,
+        "bias": 0.029999999329447746,
+        "normal_bias_m": 0.019999999552965164,
+        "range_m": 10.0
+      },
+      {
+        "kind": "PLIT",
+        "node": 41,
+        "casts_shadows": 1,
+        "bias": 0.029999999329447746,
+        "normal_bias_m": 0.019999999552965164,
+        "range_m": 10.0
+      },
+      {
+        "kind": "PLIT",
+        "node": 42,
+        "casts_shadows": 1,
+        "bias": 0.029999999329447746,
+        "normal_bias_m": 0.019999999552965164,
+        "range_m": 10.0
+      },
+      {
+        "kind": "PLIT",
+        "node": 43,
+        "casts_shadows": 1,
+        "bias": 0.029999999329447746,
+        "normal_bias_m": 0.019999999552965164,
+        "range_m": 10.0
+      },
+      {
+        "kind": "PLIT",
+        "node": 44,
+        "casts_shadows": 1,
+        "bias": 0.029999999329447746,
+        "normal_bias_m": 0.019999999552965164,
+        "range_m": 10.0
+      },
+      {
+        "kind": "PLIT",
+        "node": 45,
+        "casts_shadows": 1,
+        "bias": 0.029999999329447746,
+        "normal_bias_m": 0.019999999552965164,
+        "range_m": 10.0
+      },
+      {
+        "kind": "PLIT",
+        "node": 46,
+        "casts_shadows": 1,
+        "bias": 0.029999999329447746,
+        "normal_bias_m": 0.019999999552965164,
+        "range_m": 10.0
+      },
+      {
+        "kind": "PLIT",
+        "node": 47,
+        "casts_shadows": 1,
+        "bias": 0.029999999329447746,
+        "normal_bias_m": 0.019999999552965164,
+        "range_m": 10.0
+      },
+      {
+        "kind": "PLIT",
+        "node": 48,
+        "casts_shadows": 1,
+        "bias": 0.029999999329447746,
+        "normal_bias_m": 0.019999999552965164,
+        "range_m": 10.0
+      },
+      {
+        "kind": "PLIT",
+        "node": 49,
+        "casts_shadows": 1,
+        "bias": 0.029999999329447746,
+        "normal_bias_m": 0.019999999552965164,
+        "range_m": 10.0
+      },
+      {
+        "kind": "PLIT",
+        "node": 50,
+        "casts_shadows": 1,
+        "bias": 0.029999999329447746,
+        "normal_bias_m": 0.019999999552965164,
+        "range_m": 10.0
+      },
+      {
+        "kind": "PLIT",
+        "node": 51,
+        "casts_shadows": 1,
+        "bias": 0.029999999329447746,
+        "normal_bias_m": 0.019999999552965164,
+        "range_m": 10.0
+      }
+    ]
+  }
+}
