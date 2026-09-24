@@ -77,7 +77,9 @@ source data with recorded current settings. Historical per-source settings were
 not retained, so it is not a replay of unknown historical options.
 
 Use [reimport_scenes.ps1](reimport_scenes.ps1), which invokes the existing native
-ImportTool and Inspector. Create an ignored local source list from the
+ImportTool and Inspector. It selects an available built pair from CMake presets,
+preferring Release, ordinary builds, then Ninja. Use `-BuildTree`, `-Config`, or
+`-Preset` to constrain selection, or `-ToolPath` for an explicit executable. Create an ignored local source list from the
 [schema-backed example](reimport-sources.example.json), then edit its paths:
 
 ```powershell
@@ -87,13 +89,20 @@ Copy-Item ./Examples/RenderScene/reimport-sources.example.json ./Examples/Render
 From the engine root, run:
 
 ```powershell
+./Examples/RenderScene/reimport_scenes.ps1 -h
 ./Examples/RenderScene/reimport_scenes.ps1 -SourceList ./Examples/RenderScene/reimport-sources.local.json
 ```
 
-The defaults are **BC7 + Full**. For a different build, pass `-ToolPath`; Inspector
-defaults to the same executable directory. `-CookedRoot` selects the live target.
-Relative sources resolve against the source-list file; other relative arguments
-resolve against the working directory. Use PowerShell 7.4 or newer.
+`-Help` and `-h` display usage without a source list or initialized tools.
+The script delegates executable-set resolution, runtime environment, logging,
+and invocation to the same library as `oxyrun`. Manifest generation, validation
+and content recovery remain the workflow's responsibility.
+
+The defaults are **BC7 + Full**. Use `-BuildTree`, `-Config` or `-Preset` to
+constrain automatic tool selection, or `-ToolPath` for an explicit executable;
+Inspector defaults to the same directory. `-CookedRoot` selects the live target.
+Relative sources resolve against the source-list file, tree paths against the
+engine root, and other relative paths against the working directory. Use PowerShell 7.4 or newer.
 
 | Parameter                            | Choices and effect                                                                                                                                                                                                         |
 | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -120,11 +129,11 @@ are diagnosed by the native importer; any failure prevents publication.
 
 The script never deletes old or failed generations. It rejects unsafe paths and
 simultaneous runs against the same target. Close all consumers first. A failed
-cook or validation moves failed output into the build-tree run and restores the
-previous root. The output and build-tree backup must be on the same volume.
+cook or validation moves failed output into the recovery directory and restores the
+previous root. The output and recovery backup must be on the same volume.
 
 Each run retains its exact manifest, native report/logs, source/tool hashes,
-output hashes, and `result.json` under `out/build-ninja/renderscene-reimport/`.
+output hashes, and `result.json` under `out/renderscene-reimport/`.
 Failures exit nonzero and preserve evidence and failed output. Inspect reported warnings
 and then perform native visual validation; successful cooking does not prove
 rendered appearance. Run `Get-Help ./Examples/RenderScene/reimport_scenes.ps1 -Full`

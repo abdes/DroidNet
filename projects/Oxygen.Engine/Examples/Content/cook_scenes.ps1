@@ -5,7 +5,8 @@ Cooks one or all scenes in the Examples/Content/scenes folder using the Oxygen.C
 .DESCRIPTION
 This script finds and runs the Oxygen.Cooker.ImportTool against scene 'import-manifest.json' files.
 It can target a specific scene by folder name, or all scenes found in the 'scenes' subdirectory.
-By default, it parses the CMake presets to find the built tool without running `cmake` directly, avoiding reconfigurations.
+By default, it selects an existing importer from available CMake presets.
+Selection prefers Release, ordinary builds, then Ninja. No reconfiguration is run.
 The native ImportTool validates manifests and descriptors against its current schemas.
 The -All scope is the authored scene manifests and their dependencies; unreferenced
 raw FBX models and standalone images are not imported, and PAKs are not rebuilt.
@@ -17,7 +18,13 @@ The name of the scene folder to cook (e.g. "bottle-on-box"). Required if -All is
 Switch to cook all scene folders that contain an import-manifest.json.
 
 .PARAMETER Preset
-The name of the CMake preset to resolve the tool from (default: "windows-debug").
+Optional exact CMake build preset. Overrides automatic selection.
+
+.PARAMETER BuildTree
+Optional build tree name or path.
+
+.PARAMETER Config
+Optional required configuration.
 
 .PARAMETER NoTUI
 Switch to disable the Text User Interface of the ImportTool (useful for CI or plain logs).
@@ -25,15 +32,18 @@ Switch to disable the Text User Interface of the ImportTool (useful for CI or pl
 .PARAMETER ToolPath
 Optional explicit path to the Oxygen.Cooker.ImportTool.exe. If omitted, it will try resolving via the specified CMake Preset.
 
+.PARAMETER Help
+Show usage, options and examples without selecting tools or cooking. Alias: -h.
+
 .EXAMPLE
 .\cook_scenes.ps1 -Scene bottle-on-box
 
 .EXAMPLE
-.\cook_scenes.ps1 -All -NoTUI -Preset windows-release
+.\cook_scenes.ps1 -All -NoTUI -Preset oxygen-ninja-release
 #>
 
 [CmdletBinding(DefaultParameterSetName = 'Single')]
-param (
+param(
     [Parameter(Mandatory = $true, ParameterSetName = 'Single', Position = 0)]
     [string]$Scene,
 
@@ -41,12 +51,24 @@ param (
     [switch]$All,
 
     [Parameter(Mandatory = $false)]
-    [string]$Preset = "windows-debug",
+    [string]$Preset,
 
     [switch]$NoTUI,
 
-    [string]$ToolPath
+    [string]$ToolPath,
+
+    [string]$BuildTree,
+
+    [string]$Config,
+
+    [Parameter(Mandatory = $true, ParameterSetName = 'Help')]
+    [Alias('h')][switch]$Help
 )
+
+if ($Help) {
+    Get-Help $PSCommandPath -Detailed
+    return
+}
 
 $ErrorActionPreference = "Stop"
 
@@ -60,162 +82,10 @@ if (-not (Test-Path $ScenesDir)) {
     exit 1
 }
 
-function Get-ExpandedCMakePresets {
-    param([string]$Path, [System.Collections.Hashtable]$Seen = @{})
-
-    $Path = [System.IO.Path]::GetFullPath($Path)
-    if ($Seen.ContainsKey($Path) -or -not (Test-Path $Path)) { return @() }
-
-    $Seen[$Path] = $true
-
-    # Using Try/Catch for parse errors just in case
-    try {
-        $Content = Get-Content -Raw -Path $Path -ErrorAction Stop | ConvertFrom-Json
-    } catch {
-        return @()
-    }
-
-    $Result = New-Object System.Collections.ArrayList
-    $null = $Result.Add($Content)
-
-    if ($Content.include) {
-        foreach ($Inc in $Content.include) {
-            if ([System.IO.Path]::IsPathRooted($Inc)) {
-                $IncPath = $Inc
-            } else {
-                $IncPath = [System.IO.Path]::GetFullPath((Join-Path (Split-Path $Path) $Inc))
-            }
-            $Sub = Get-ExpandedCMakePresets -Path $IncPath -Seen $Seen
-            foreach ($s in $Sub) { $null = $Result.Add($s) }
-        }
-    }
-    return $Result
-}
-
-function Get-InheritedPresetProperty {
-    param(
-        [hashtable]$Presets,
-        [string]$Name,
-        [string]$Property,
-        [string[]]$Ancestors = @()
-    )
-
-    if ($Name -in $Ancestors) {
-        throw "CMake preset inheritance cycle: $($Ancestors -join ' -> ') -> $Name"
-    }
-    $Entry = $Presets[$Name]
-    if ($null -eq $Entry) { return $null }
-
-    $Value = $Entry.$Property
-    if ($null -ne $Value) { return $Value }
-
-    # CMake gives earlier parents precedence when a preset inherits several.
-    foreach ($Parent in @($Entry.inherits)) {
-        if ([string]::IsNullOrWhiteSpace($Parent)) { continue }
-        $Value = Get-InheritedPresetProperty -Presets $Presets -Name $Parent `
-            -Property $Property -Ancestors ($Ancestors + $Name)
-        if ($null -ne $Value) { return $Value }
-    }
-    return $null
-}
-
-# Resolve Tool Path
-if ([string]::IsNullOrWhiteSpace($ToolPath) -and -not [string]::IsNullOrWhiteSpace($Preset)) {
-    $RepoRoot = (Get-Item $PSScriptRoot).Parent.Parent.FullName
-    $ToolName = "Oxygen.Cooker.ImportTool.exe"
-
-    $RootBase = Join-Path $RepoRoot "CMakePresets.json"
-    $RootUser = Join-Path $RepoRoot "CMakeUserPresets.json"
-
-    $AllPresets = New-Object System.Collections.ArrayList
-    if (Test-Path $RootUser) {
-        $Sub = Get-ExpandedCMakePresets -Path $RootUser
-        foreach ($s in $Sub) { $null = $AllPresets.Add($s) }
-    }
-    if (Test-Path $RootBase) {
-        $Sub = Get-ExpandedCMakePresets -Path $RootBase
-        foreach ($s in $Sub) { $null = $AllPresets.Add($s) }
-    }
-
-    $BuildPresets = @{}
-    $ConfigurePresets = @{}
-
-    foreach ($File in $AllPresets) {
-        if ($File.buildPresets) {
-            foreach ($BP in $File.buildPresets) {
-                if (-not $BuildPresets.ContainsKey($BP.name)) { $BuildPresets[$BP.name] = $BP }
-            }
-        }
-        if ($File.configurePresets) {
-            foreach ($CP in $File.configurePresets) {
-                if (-not $ConfigurePresets.ContainsKey($CP.name)) { $ConfigurePresets[$CP.name] = $CP }
-            }
-        }
-    }
-
-    $Configuration = "Debug" # default fallback
-
-    $BP = $BuildPresets[$Preset]
-    if ($BP) {
-        $ConfigName = Get-InheritedPresetProperty -Presets $BuildPresets `
-            -Name $Preset -Property "configurePreset"
-        $InheritedConfiguration = Get-InheritedPresetProperty -Presets $BuildPresets `
-            -Name $Preset -Property "configuration"
-        if ($InheritedConfiguration) { $Configuration = $InheritedConfiguration }
-    } else {
-        $ConfigName = $Preset
-    }
-
-    $BinaryDir = Get-InheritedPresetProperty -Presets $ConfigurePresets `
-        -Name $ConfigName -Property "binaryDir"
-
-    if (-not [string]::IsNullOrWhiteSpace($BinaryDir)) {
-        # Expand common macros
-        $ResolvedBinDir = $BinaryDir.Replace('${sourceDir}', $RepoRoot).
-            Replace('${sourceParentDir}', (Split-Path -Parent $RepoRoot)).
-            Replace('${sourceDirName}', (Split-Path -Leaf $RepoRoot)).
-            Replace('${presetName}', $ConfigName)
-        if ($ResolvedBinDir.Contains('$')) {
-            throw "Unsupported macro in CMake binaryDir '$BinaryDir'. Provide -ToolPath explicitly."
-        }
-        if (-not [System.IO.Path]::IsPathRooted($ResolvedBinDir)) {
-            $ResolvedBinDir = Join-Path $RepoRoot $ResolvedBinDir
-        }
-        $ResolvedBinDir = [System.IO.Path]::GetFullPath($ResolvedBinDir)
-
-        # Test standard locations inside this binary dir
-        $Candidates = @(
-            (Join-Path $ResolvedBinDir "bin\$Configuration\$ToolName"),
-            (Join-Path $ResolvedBinDir "bin\$ToolName"),
-            (Join-Path $ResolvedBinDir "$ToolName")
-        )
-
-        # Multi-config ninja specific:
-        $Candidates += (Join-Path $ResolvedBinDir "src\Oxygen\Cooker\Tools\ImportTool\oxygen-cooker-importtool.dir\$Configuration\$ToolName")
-
-        foreach ($cand in $Candidates) {
-            if (Test-Path $cand -PathType Leaf) {
-                $ToolPath = $cand
-                break
-            }
-        }
-    }
-
-    if ([string]::IsNullOrWhiteSpace($ToolPath)) {
-        Write-Error "Could not resolve tool path for Preset '$Preset'. Ensure it's built or provide -ToolPath manually."
-        exit 1
-    }
-} elseif ([string]::IsNullOrWhiteSpace($ToolPath)) {
-    Write-Error "Please provide either -Preset or -ToolPath parameter."
-    exit 1
-}
-
-$ToolPath = [System.IO.Path]::GetFullPath($ToolPath)
-if (-not (Test-Path -LiteralPath $ToolPath -PathType Leaf)) {
-    throw "ImportTool not found: $ToolPath"
-}
-
-Write-Host "Using ImportTool: $ToolPath" -ForegroundColor DarkGray
+$RepoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
+. (Join-Path $RepoRoot 'tools/cli/BuildSelection.ps1')
+$tools = Resolve-OxygenExecutables -SourceRoot $RepoRoot -Targets 'oxygen-cooker-importtool' -BuildTree $BuildTree -Config $Config -Preset $Preset -Overrides @{ 'oxygen-cooker-importtool' = $ToolPath }
+Write-OxygenExecutableSelection $tools
 
 # Collect scenes to process
 $ScenesToCook = @()
@@ -262,19 +132,11 @@ foreach ($SceneDir in $ScenesToCook) {
     Write-Host "Cooking Scene: $($SceneDir.Name)" -ForegroundColor Cyan
     Write-Host "=======================================================" -ForegroundColor Cyan
 
-    # Base arguments for the tool
-    $ArgsList = @(
-        "batch",
-        "--manifest",
-        $ManifestPath
-    )
-
-    if ($NoTUI) {
-        $ArgsList += "--no-tui"
-    }
-
-    # Preserve each argument, including paths with spaces, without shell parsing.
-    & $ToolPath @ArgsList
+    # Global ImportTool options precede the batch subcommand.
+    $ArgsList = @()
+    if ($NoTUI) { $ArgsList += '--no-tui' }
+    $ArgsList += @('batch', '--manifest', $ManifestPath)
+    Invoke-OxygenTool -Context $tools -Target 'oxygen-cooker-importtool' -Arguments $ArgsList
     $ExitCode = $LASTEXITCODE
 
     if ($ExitCode -ne 0) {

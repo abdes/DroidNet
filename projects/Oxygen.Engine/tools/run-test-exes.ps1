@@ -1,23 +1,24 @@
 param(
-  [string]$BuildTree = "out/build-vs",
-  [string]$Pattern = "*.Tests.exe"
+  [string]$BuildTree,
+
+  [string]$Pattern = "*.Tests.exe",
+
+  [Alias('h')][switch]$Help,
+
+  [string]$Config,
+
+  [string]$Preset
 )
 
-$repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
-$buildRoot = if ([System.IO.Path]::IsPathRooted($BuildTree)) {
-  $BuildTree
-} else {
-  Join-Path $repoRoot $BuildTree
-}
+if ($Help) { Get-Help $PSCommandPath -Detailed; return }
 
-if (-not (Test-Path $buildRoot)) {
-  Write-Error "Build tree not found: $buildRoot"
-  exit 1
-}
-
-$tests = Get-ChildItem -Path $buildRoot -Recurse -File -Filter $Pattern `
-  -ErrorAction SilentlyContinue `
-  | Sort-Object FullName
+$ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'cli/BuildSelection.ps1')
+$selection = Resolve-OxygenBuildSelection -BuildTree $BuildTree -Config $Config -Preset $Preset -RequiredExecutables $Pattern
+Write-OxygenBuildSelection $selection
+$buildRoot = $selection.BuildRoot
+$binaryRoot = Join-Path $buildRoot "bin/$($selection.Config)"
+$tests = @(Get-ChildItem -LiteralPath $binaryRoot -File -Filter $Pattern | Sort-Object FullName)
 
 if ($tests.Count -eq 0) {
   Write-Host "No test executables found under $buildRoot"
@@ -28,7 +29,7 @@ $overallExitCode = 0
 
 foreach ($testExe in $tests) {
   $relative = [System.IO.Path]::GetRelativePath($buildRoot, $testExe.FullName)
-  $output = & $testExe.FullName --gtest_color=no --gtest_brief=1 2>&1
+  $output = Invoke-OxygenSelectedExecutable $selection $testExe.FullName @('--gtest_color=no', '--gtest_brief=1') 2>&1
   $exitCode = $LASTEXITCODE
 
   if ($exitCode -eq 0) {

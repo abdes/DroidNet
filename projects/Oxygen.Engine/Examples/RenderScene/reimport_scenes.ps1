@@ -5,17 +5,25 @@ Reimports original RenderScene models into the standard cooked root with recover
 .DESCRIPTION
 Uses the native ImportTool and Inspector from one build. Validates the source-list
 schema and files, generates a persistent native manifest, runs native --dry-run,
-preserves the previous root under the build tree, cooks directly into CookedRoot,
+preserves the previous root in the recovery directory, cooks directly into CookedRoot,
 and checks reports/descriptors/texture policy. On failure the previous root is
-restored; failed output and evidence remain under the build tree for diagnosis.
+restored; failed output and evidence remain in the recovery directory for diagnosis.
 
 Close RenderScene and any other consumer of CookedRoot first. Relative source
-paths resolve against SourceList. Other relative parameters resolve against the
-working directory. The emitted virtual mount root is always /.cooked.
+paths resolve against SourceList, and BuildTree paths against the engine root.
+Other relative paths resolve against the working directory. The emitted virtual
+mount root is always /.cooked.
 .PARAMETER SourceList
 JSON matching reimport-sources.schema.json. Copy the example and set original paths.
 .PARAMETER ToolPath
-Native Oxygen.Cooker.ImportTool.exe. Defaults to this checkout's Ninja Debug build.
+Native Oxygen.Cooker.ImportTool.exe. Otherwise select a built ImportTool/Inspector
+pair from presets, preferring Release, ordinary builds, then Ninja.
+.PARAMETER BuildTree
+Optional tree name under out, engine-relative path, or absolute path.
+.PARAMETER Config
+Optional required configuration.
+.PARAMETER Preset
+Optional exact CMake build preset.
 .PARAMETER InspectorPath
 Native Oxygen.Cooker.Inspector.exe. Defaults to the ImportTool directory.
 .PARAMETER CookedRoot
@@ -33,6 +41,8 @@ Native import thread pool size; default 8.
 .PARAMETER TextureWorkers
 Native texture pipeline workers; default 2. Queue capacity is twice this value,
 with a minimum of 4. Other pipelines have one worker and jobs remain sequential.
+.PARAMETER Help
+Show usage, options and examples without a source list or initialized tools. Alias: -h.
 .EXAMPLE
 ./reimport_scenes.ps1 -SourceList ./reimport-sources.local.json
 .EXAMPLE
@@ -42,23 +52,46 @@ with a minimum of 4. Other pipelines have one worker and jobs remain sequential.
 .NOTES
 Requires PowerShell 7.4+. Exits nonzero on preflight, native-tool, validation, or
 publication failure. Backups, logs and result.json are under
-out/build-ninja/renderscene-reimport/<unique-run>. -WhatIf performs read-only preflight and describes
-the operation; it does not run native tools or create files. This script does
+out/renderscene-reimport/<unique-run>. -WhatIf performs read-only preflight and describes
+the operation; it does not run ImportTool/Inspector or create files. This script does
 not validate rendered appearance or modify demo settings.
 #>
-[CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'Medium')]
+[CmdletBinding(DefaultParameterSetName = 'Import', SupportsShouldProcess = $true, ConfirmImpact = 'Medium')]
 param(
-    [Parameter(Mandatory)][string]$SourceList,
+    [Parameter(Mandatory, ParameterSetName = 'Import', Position = 0)][string]$SourceList,
+
     [string]$ToolPath,
+
     [string]$InspectorPath,
+
     [string]$CookedRoot = (Join-Path $PSScriptRoot '.cooked'),
+
     [ValidateSet('BC7', 'None')][string]$Compression = 'BC7',
+
     [ValidateSet('None', 'Full', 'Max')][string]$MipPolicy = 'Full',
+
     [ValidateRange(1, 255)][int]$MaxMipLevels,
+
     [ValidateSet('Fast', 'Default', 'High')][string]$BC7Quality = 'Default',
+
     [ValidateRange(1, 256)][int]$ThreadPoolSize = 8,
-    [ValidateRange(1, 256)][int]$TextureWorkers = 2
+
+    [ValidateRange(1, 256)][int]$TextureWorkers = 2,
+
+    [string]$BuildTree,
+
+    [string]$Config,
+
+    [string]$Preset,
+
+    [Parameter(Mandatory, ParameterSetName = 'Help')]
+    [Alias('h')][switch]$Help
 )
+
+if ($Help) {
+    Get-Help $PSCommandPath -Detailed
+    return
+}
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -98,16 +131,6 @@ function Write-JsonFile($Value, [string]$Path) {
     $Value | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $Path -Encoding utf8NoBOM
 }
 
-function Invoke-NativeLogged([string]$Executable, [string[]]$Arguments, [string]$LogPath) {
-    $stage = [IO.Path]::GetFileNameWithoutExtension($LogPath)
-    Write-Host "Running ${stage}: $([IO.Path]::GetFileName($Executable)); log: $LogPath"
-    & $Executable @Arguments *> $LogPath
-    if ($LASTEXITCODE -ne 0) {
-        throw "$([IO.Path]::GetFileName($Executable)) exited $LASTEXITCODE. See $LogPath"
-    }
-    Write-Host "Completed $stage"
-}
-
 function Get-CheckedChild([string]$Root, [string]$RelativePath) {
     if ([IO.Path]::IsPathRooted($RelativePath)) { throw "Expected relative descriptor path: $RelativePath" }
     $path = Get-AbsolutePath $RelativePath $Root
@@ -133,10 +156,14 @@ try {
         throw '-TextureWorkers must not exceed -ThreadPoolSize.'
     }
     $engineRoot = Get-AbsolutePath '../..' $PSScriptRoot
-    if (-not $ToolPath) { $ToolPath = Join-Path $engineRoot 'out/build-ninja/bin/Debug/Oxygen.Cooker.ImportTool.exe' }
-    $ToolPath = Get-AbsolutePath $ToolPath
-    if (-not $InspectorPath) { $InspectorPath = Join-Path ([IO.Path]::GetDirectoryName($ToolPath)) 'Oxygen.Cooker.Inspector.exe' }
-    $InspectorPath = Get-AbsolutePath $InspectorPath
+    . (Join-Path $engineRoot 'tools/cli/BuildSelection.ps1')
+    $tools = Resolve-OxygenExecutables -SourceRoot $engineRoot -Targets @('oxygen-cooker-importtool', 'oxygen-cooker-inspector') -BuildTree $BuildTree -Config $Config -Preset $Preset -Overrides @{
+        'oxygen-cooker-importtool' = $ToolPath
+        'oxygen-cooker-inspector' = $InspectorPath
+    }
+    Write-OxygenExecutableSelection $tools
+    $ToolPath = $tools.Paths['oxygen-cooker-importtool']
+    $InspectorPath = $tools.Paths['oxygen-cooker-inspector']
     $SourceList = Get-AbsolutePath $SourceList
     foreach ($file in @($SourceList, $ToolPath, $InspectorPath)) {
         if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "Required file not found: $file" }
@@ -185,12 +212,12 @@ try {
         }
     }
     $runId = [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss') + '-' + [Guid]::NewGuid().ToString('N').Substring(0, 8)
-    $recoveryRoot = Join-Path $engineRoot 'out/build-ninja/renderscene-reimport'
+    $recoveryRoot = Join-Path $engineRoot 'out/renderscene-reimport'
     $pendingRunDirectory = Join-Path $recoveryRoot $runId
     $backup = Join-Path $pendingRunDirectory 'previous-cooked'
     Assert-NoReparseAncestor $pendingRunDirectory
     if (-not [IO.Path]::GetPathRoot($CookedRoot).Equals([IO.Path]::GetPathRoot($backup), [StringComparison]::OrdinalIgnoreCase)) {
-        throw 'CookedRoot and the build-tree recovery directory must be on the same volume.'
+        throw 'CookedRoot and the recovery directory must be on the same volume.'
     }
     if (-not $PSCmdlet.ShouldProcess($CookedRoot, "Reimport $($sources.Count) original(s), validate, preserve old generation at $backup, and publish")) {
         return
@@ -241,7 +268,7 @@ try {
     $manifestPath = Join-Path $runDirectory 'manifest.json'
     $reportPath = Join-Path $runDirectory 'import-report.json'
     Write-JsonFile $manifest $manifestPath
-    Invoke-NativeLogged $ToolPath @('--no-tui', 'batch', '--manifest', $manifestPath, '--dry-run', 'true') (Join-Path $runDirectory 'preflight.log')
+    Invoke-OxygenTool -Context $tools -Target 'oxygen-cooker-importtool' -Arguments @('--no-tui', 'batch', '--manifest', $manifestPath, '--dry-run', 'true') -LogPath (Join-Path $runDirectory 'preflight.log') -CheckExitCode
     Assert-Sibling $CookedRoot $parent
     Assert-Sibling $backup $runDirectory
     if (Test-Path -LiteralPath $backup) { throw "Backup destination already exists: $backup" }
@@ -252,7 +279,7 @@ try {
     }
     $generationStarted = $true
     $result.status = 'cooking'
-    Invoke-NativeLogged $ToolPath @('--no-tui', 'batch', '--manifest', $manifestPath, '--report', $reportPath) (Join-Path $runDirectory 'import.log')
+    Invoke-OxygenTool -Context $tools -Target 'oxygen-cooker-importtool' -Arguments @('--no-tui', 'batch', '--manifest', $manifestPath, '--report', $reportPath) -LogPath (Join-Path $runDirectory 'import.log') -CheckExitCode
     $report = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json -AsHashtable
     if ($report.summary.jobs_total -ne $sources.Count -or $report.summary.jobs_succeeded -ne $sources.Count -or
         $report.summary.jobs_failed -ne 0 -or $report.summary.jobs_skipped -ne 0 -or $report.jobs.Count -ne $sources.Count) {
@@ -266,9 +293,9 @@ try {
         }
     }
     $result.status = 'validating'
-    Invoke-NativeLogged $InspectorPath @('validate', $CookedRoot) (Join-Path $runDirectory 'validate.log')
+    Invoke-OxygenTool -Context $tools -Target 'oxygen-cooker-inspector' -Arguments @('validate', $CookedRoot) -LogPath (Join-Path $runDirectory 'validate.log') -CheckExitCode
     $indexLog = Join-Path $runDirectory 'index.log'
-    Invoke-NativeLogged $InspectorPath @('index', $CookedRoot, '--assets', 'true', '--digests', 'true') $indexLog
+    Invoke-OxygenTool -Context $tools -Target 'oxygen-cooker-inspector' -Arguments @('index', $CookedRoot, '--assets', 'true', '--digests', 'true') -LogPath $indexLog -CheckExitCode
     $indexedScenes = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     $assetCount = 0
     $declaredAssets = -1
@@ -294,7 +321,7 @@ try {
     $textureCount = 0
     if (Test-Path -LiteralPath (Join-Path $CookedRoot 'Resources/textures.table')) {
         $textureLog = Join-Path $runDirectory 'textures.log'
-        Invoke-NativeLogged $InspectorPath @('textures', $CookedRoot) $textureLog
+        Invoke-OxygenTool -Context $tools -Target 'oxygen-cooker-inspector' -Arguments @('textures', $CookedRoot) -LogPath $textureLog -CheckExitCode
         $declaredTextures = -1
         $textureRows = 0
         foreach ($line in Get-Content -LiteralPath $textureLog) {

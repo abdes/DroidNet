@@ -30,8 +30,14 @@ param(
   [int]$BuildJobs = 4,
 
   [Parameter()]
-  [string]$RenderDocLibrary = 'C:\Program Files\RenderDoc\renderdoc.dll'
+  [string]$RenderDocLibrary = 'C:\Program Files\RenderDoc\renderdoc.dll',
+
+  [Alias('h')][switch]$Help,
+
+  [string]$BuildTree
 )
+
+if ($Help) { Get-Help $PSCommandPath -Detailed; return }
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -80,7 +86,10 @@ function Get-BlockingRuntimeLogMatches {
 }
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-$buildRoot = Join-Path $repoRoot 'out\build-ninja'
+. (Join-Path $repoRoot 'tools/cli/BuildSelection.ps1')
+$selection = Resolve-OxygenBuildSelection -SourceRoot $repoRoot -BuildTree $BuildTree -Config Debug
+Write-OxygenBuildSelection $selection
+$buildRoot = $selection.BuildRoot
 $binaryDirectory = Join-Path $buildRoot 'bin\Debug'
 $asyncExe = Join-Path $binaryDirectory 'Oxygen.Examples.Async.exe'
 $verifyScript = Join-Path $PSScriptRoot 'Verify-AsyncRuntimeProof.ps1'
