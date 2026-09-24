@@ -1,163 +1,144 @@
-# LightBench exposure benchmark
+# LightBench calibration demo
 
-Status: experiment delivery remains planned. EX06 delivered settings isolation
-and startup prerequisites; the calibrated controller/instruments are still open.
+Status: revised scope approved 2026-09-25; implementation not resumed.
 The [delivery plan](../vortex/plan/exposure-and-lightbench-correction.md) owns
-slice order and acceptance. [PBR](physically-based-rendering.md) owns equations
-and frozen precision budgets. This document owns experiments and presentation.
+sequence and gates; [PBR](physically-based-rendering.md) owns equations and frozen
+budgets. This document owns the demo behavior. EX01–EX07 remain closed.
 
 ## Delivery outcomes
 
-The engine's exposure foundation is validated. Remaining LightBench work makes
-it a usable reference with independent expected/measured values, reproducible
-reset and the same experiment in interactive and batch execution.
+LightBench provides known inputs, independently qualified reference rendering,
+reproducible presentation and clear controls. It does not numerically certify
+arbitrary edited frames in the running application.
 
-| Delivery step | Experiments or workflow delivered                                                                                              |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| EX07          | Qualified physical references and many-light correctness/performance; existing native fixtures and separate opt-in benchmarks. |
-| EX08          | Neutral Reference, qualified instrument, complete recipe/reset/save/load, initial batch report and operating README.           |
-| EX08.1        | Console inspection/edits/transitions through existing validated owners.                                                        |
-| EX08.2        | Actual ImGui interaction regression tests with isolated state and failure artifacts.                                           |
-| EX09A         | Point Falloff and Spot Distribution.                                                                                           |
-| EX09B         | Fixed Exposure.                                                                                                                |
-| EX09C         | Adaptation and Lifecycle.                                                                                                      |
-| EX09D         | HDR Domain.                                                                                                                    |
-| EX09E         | Existing MultiView scenario/measurement/runner integration.                                                                    |
-| EX10          | Final integrated package evidence and documentation.                                                                           |
+| Step   | Useful result                                                                                           |
+| ------ | ------------------------------------------------------------------------------------------------------- |
+| EX08   | Calibrated Neutral Reference; complete reset; explicit local save/load; focused native test and README. |
+| EX08.1 | Existing console drives validated settings/transitions and local preset/reset operations.               |
+| EX08.2 | Deferred ImGui Test Engine integration; user owns UI acceptance.                                        |
+| EX09A  | Point/spot calibration presets with relevant controls and useful geometry cues.                         |
+| EX09B  | Fixed exposure controls on the reference scene; exact numerical cases stay in native tests.             |
+| EX09C  | Simple bright/dark transition and reset; lifecycle/timing matrices stay in native tests.                |
+| EX09D  | Existing HDR correctness coverage plus focused checks for gaps; no new demo experiment.                 |
+| EX09E  | Existing MultiView controls/proofs and remaining operational acceptance.                                |
+| EX10   | Durable evidence summary, affected tests, user acceptance and actual instructions.                      |
 
-Every experiment arrives with its controls, batch case, numerical gate and native
-visual check. Reuse the same controller/report and valid previous proof. The
-[delivery plan](../vortex/plan/exposure-and-lightbench-correction.md#8-ordered-implementation-slices)
-owns exact gates; this document remains the experiment/presentation contract.
+The user removed the universal experiment controller/schema, reusable runtime
+measurement service, live sampling/readbacks, instrumented tonemap variants,
+runtime numerical verdicts, seven complete experiment UIs and new batch/report
+framework from this package. These are not implemented or counted as complete.
+Do not reintroduce them as prerequisites for a useful calibration demo.
 
-EX07's [many-light workload suite](../vortex/plan/EX07-lighting-correctness-and-scalability.md)
-qualifies production scalability before this controller is available. It retains
-its own correctness fixtures and benchmark executable; it does not add an eighth
-LightBench experiment or delay its baseline until EX08 instruments exist.
+## Reference presets
 
-## One experiment controller
+Neutral Reference uses linear card albedos **0.18, 0.9, 0.02**, metalness 0,
+roughness 1, no texture/normal-map ambiguity and a white **1000-lux directional
+light**. Place camera and light on the visible side; use a controlled environment
+and explicit output transform. Include production dielectric specular and decoded
+packed values in the independent oracle. High roughness is not Lambertian-only
+shading. Derive fixed exposure from expected gray-card luminance and the chosen
+output transform, never from measured GPU brightness. Record resolved EV and
+reference expectations in the durable qualification summary.
 
-Interactive selection, reset, saved-experiment loading and batch execution use
-one controller and the same schema-validated version-1 definitions. An experiment
-owns geometry, materials, lights, environment, camera, feature settings,
-exposure/output transform, measurement regions and scripted transitions.
-Stage a complete recipe, wait for required asset readiness, then publish at one
-frame boundary with a new experiment revision and appropriate public transition.
-Do not expose a half-applied recipe or start measurement before readiness.
+Frame all three cards with consistent margins. Labels and background remain
+readable and separate from physical illumination. Advanced controls start
+collapsed. Show relevant light/exposure units and clearly distinguish authored,
+accepted and independently calculated reference values.
 
-Persist window/panel preferences separately. DemoShell's experiment-owned
-activation policy skips saved camera/post-process/environment reapplication;
-other demos retain their existing policy. Batch runs never mutate personal
-settings. Saved modified experiments load explicitly. Reset restores every
-reference input, scripted time, measurement validity and temporal state.
-Convert the shipped indoor preset to the same versioned experiment format.
+Point preset: white point on the receiver normal; fixed material/exposure;
+distances well above the 1 mm numerical guard and with known range fade. Spot
+preset: white spot aimed at receiver centre with visible inner/outer-cone response.
+Show position, receiver normal, distance and cone only when useful. Credit EX07
+flux/inverse-square/range/cone/finite-emitter references when applicable. Do not
+build sweep editors or alternate rendering models for these presets.
 
-Each definition contains: schema version, stable experiment ID, recipe revision,
-scene/material/light/camera configuration, view/layout settings, canonical
-exposure settings, output transform, fixed game timestep, readiness requirements,
-measurement regions, transition sequence and independently derived expectations.
-No runtime resource slots, GPU state or view handles are serialized.
+Fixed exposure uses the reference scene and existing controls. A simple
+reproducible bright/dark change demonstrates adaptation in both directions.
+Detailed lifecycle and HDR stress cases remain native fixtures.
 
-## Seven experiments
+## Local settings and complete reset
 
-| ID                | Initial configuration                                                                                                                                         | Sequence and evidence                                                                                                                                                                                                                                                 |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| neutral-reference | Three nonmetallic gray/white/black cards; neutral white directional key on visible side; fixed camera, controlled environment, explicit tone/output transform | Default launch/reset; full production BRDF oracle for decoded packed normals, albedo, roughness and fixed specular=0.5; readable full-card framing                                                                                                                    |
-| fixed-exposure    | Known constant HDR foreground 4096; key 12.5, compensation 0, None, gamma 1                                                                                   | EV14/15/16 -> 0.25/0.125/0.0625 before dither; sweep supported gain bounds, keys and compensation; disabled -> unit gain                                                                                                                                              |
-| adaptation        | Known uniform and structured luminance distributions, Auto and controlled game dt                                                                             | Both step directions; 30/60/120 Hz and irregular schedules at equal time; pause/zero speed/long frame; mask/profile/curve variants and linear/exponential crossing                                                                                                    |
-| lifecycle         | Public game-facing view handles/events and controlled scene signal                                                                                            | Startup, seed event frame including out-of-meter-range EV, cuts, Manual/Auto, zero target/restoration, pause, sharing/source loss, stateless and recovery; delayed/stale status                                                                                       |
-| point-falloff     | White point on receiver normal, camera on visible side; fixed material/exposure; distances far above 1 mm and inside range                                    | Prescribed distances and known range fade; independent flux-to-candela and production BRDF; zero separation, near-field and range-edge fixtures                                                                                                                       |
-| spot-distribution | White spot aimed at receiver centre; receiver shows inner/outer cones clearly                                                                                 | Angular sweep, hard-cone limit, finite cone boundaries; independent numerical solid-angle integration verifies total flux                                                                                                                                             |
-| hdr-domain        | Bright/dark required signals plus opaque, forward, translucent, sky and fog content                                                                           | Vary numerical P without changing scene/output; startup and recovery; sustained excessive-range FP32; reduced-range eligibility/return under the explicit qualified diagnostic control; insignificant-signal case; inspect upstream writes and fog history conversion |
+Use a small LightBench settings structure and existing scene/settings owners.
+The app and focused reference test share canonical scene construction/parameters;
+expected results remain independently calculated. No generic experiment engine
+or matching interactive/batch execution abstraction is required.
 
-Neutral Reference uses known linear card albedos (0.18, 0.9, 0.02), metalness 0,
-roughness 1, no texture or normal-map ambiguity, and a neutral 1000-lux
-directional source. Include the production dielectric specular term and packed
-values in its independent oracle. Derive fixed exposure from expected gray
-luminance and the chosen output transform, never from a measured GPU brightness.
-Record the resulting resolved EV in the recipe/report when the slice-7 material
-oracle is qualified. This does not authorize substituting Lambertian-only math.
+Apply a complete validated state at the normal frame boundary; wait for required
+assets through existing readiness handling. Avoid partially applied settings.
+Reset Reference restores geometry, materials, lights, environment, camera,
+rendering/output/exposure settings and relevant temporal state through public
+transitions. Reset a selected preset to all its defined inputs.
 
-Frame cards with consistent margins; labels/background are display-space.
-Point/spot overlays show receiver normal, light position, measured distance and
-cone only when useful. Adaptation scenes must make both illumination transitions
-visibly clear. Preserve background and UI readability as exposure changes.
+Reuse DemoShell's experiment-owned activation policy; do not reapply personal
+camera/environment/post-process preferences over the reference. Window size,
+panel layout and UI preferences remain separate and unchanged. Other demos keep
+their existing persistence behavior.
 
-## Controls and verdicts
+Explicit Save/Load round-trips modified local settings. Validate the entire load
+before mutating accepted state; reject malformed or unsupported versions with an
+actionable message. Update the shipped indoor settings to the supported local
+format, with no universal recipe schema or legacy reader. Preserve user-owned
+files. Never serialize runtime resource slots, GPU history or view handles.
 
-Show experiment selector, Reset, explicit Load/Save experiment, relevant controls,
-expected/measured values and effective exposure. Advanced settings (D, black
-influence, histogram window, precision status) are collapsed. Show requested and
-effective settings separately when residency/validation delays application.
-Do not label adapted gain as measured luminance. Debug overrides are visible.
+Show **Reference** versus **Modified** configuration. This is not a numerical
+Pass/Fail verdict. Existing asynchronous settings/resource status must remain
+truthful; a pending mask is not accepted, and settings status is not measured GPU
+luminance or same-frame consumed gain.
 
-Before a current measurement is available, show progress/pending without a verdict.
-States: Pass (all valid comparisons passed), Fail (valid comparison outside
-budget), Modified (recipe differs from reference), Invalid (measurement or
-required resource unavailable). Optional unsupported capabilities may have a
-diagnostic; required experiments cannot complete as Unsupported. Do not reuse
-late values after experiment reset/change as a current verdict.
+## Console and UI acceptance ownership
 
-## Console and UI automation ownership
+EX08.1 reuses the existing console policies and validated settings/transition
+owners. Ordinary commands are available in normal Release builds. Explicit
+view/owner targeting, atomic rejection and queued/applied/rejected revision/token
+feedback remain required. Local preset/reset commands call LightBench directly.
+No GPU-state writes, parallel persistence path or measurement commands.
 
-EX08.1 commands reuse the existing Oxygen console and validated settings,
-transition and experiment owners. Console edits and UI edits must converge on
-the same accepted state. Explicit view targets and asynchronous outcome/revision
-reporting are required; commands never write GPU state directly.
-
-EX08.2 adds an opt-in ImGui Test Engine configuration and tests the actual widgets.
-Use stable item paths, bounded readiness waits and isolated assets/preferences.
-Exercise keyboard commit/cancel/focus, dragging, curves, mask failure/recovery,
-reset/save/load and panel navigation; console setup cannot substitute for those
-interactions. New experiments extend this suite as they land. Keep human visual
-inspection for readability/composition and independent GPU probes for numerical
-correctness. Dependency/configuration/license prerequisites belong to that slice.
+The agent owns automated unit/native correctness tests. The user owns UI checks.
+When ready, launch the demo and provide numbered actions and expected outcomes.
+Record OK/NOK and reasons; fix failures and retest only affected checks. ImGui
+Test Engine integration is explicitly deferred and does not block this package.
 
 ## Independent measurement
 
-DiagnosticsService owns bounded region-statistics and same-frame consumed-gain
-probes; LightBench owns region definitions, independent expectations and verdicts.
-Request no GPU dispatch/readback allocation when measurements are disabled.
-No permanent full-resolution post-exposure target is allowed. Probe the actual
-production multiplication for consumed gain/linear pixel evidence, or extract a
-real product. Explicitly label any CPU-derived quantity.
+Numerical measurements belong in existing native fixtures/readbacks. Reuse the
+EX07 independent lighting oracle and applicable prior evidence. Render the shared
+canonical scene through production rendering, including optimized Release tests
+in the existing Ninja tree. No interactive measurement facility or new shader
+instrumentation is required.
 
-Results carry logical frame, ViewStateHandle lifetime, experiment revision,
-source product/domain, stored-P generation, region, settings/event generations,
-validity and sample counts. Recover scene-referred values using the product P.
-Readbacks remain leased through completion. Reject stale, nonfinite, occluded,
-edge-contaminated and insufficient-coverage samples; zero samples is Invalid,
-not a black measurement. Use inset card regions with at least 95% expected
-foreground coverage and reject any unexpected geometry/depth coverage.
+Fixture comparisons identify actual source products and recover scene values
+with stored P. Use inset reference regions with at least 95% expected foreground
+coverage; reject unexpected geometry/depth, edge contamination, nonfinite or
+missing samples. Missing samples cannot pass as true black. Preserve production
+BRDF, packing, sampling and output-encoding budgets. Known-input fixture checks
+must establish the readback/comparison path is meaningful; no new general GPU
+instrument qualification project.
 
-Before lighting verdicts, qualify instruments against known float textures,
-coverage, zero/invalid regions, varying P, exact consumed gain and delayed
-readbacks. Use exact bin-grid references separately from full-resolution sampling
-references. For small-feature and edge sweeps report retained weighted mass and
-meter EV error; a reference feature must occupy at least four bounded-grid cells
-for a stable exposure verdict. Smaller features explicitly test sampling limits,
-not exact full-image metering equivalence.
+Fixed-exposure fixtures retain input 4096, key 12.5, compensation 0, None/gamma 1:
+EV14/15/16 produce 0.25/0.125/0.0625 before dither/encoding. Camera, disabled,
+key/compensation and supported limits remain covered by existing/affected tests.
+Metering/adaptation/lifecycle/HDR matrices remain in the delivery plan. For
+sampling tests distinguish exact bounded-grid expectations from full-image
+integration: features covering fewer than four grid cells test sampling limits.
+Convergence is assessed by elapsed time and EV error, not fixed warmup frames.
 
-## Native visual and batch acceptance
+## Native visual acceptance and evidence
 
-Inspect startup, all seven initialized experiments, transitions, steady state and
-full reset at 1920x1080, 2560x1440 and a resized window. Measure convergence by
-elapsed time and stop error, not a fixed warmup-frame count. Verify mask, curve,
-mode, EV and compensation interaction against numerical data. No stale overlays,
-unintended black frame, white flash or saved-settings reapplication is acceptable.
+The user checks clean launch/reset, complete framing, relevant edits and explicit
+save/load at 1080p, 1440p and a resized layout. Accept new presets/transitions as
+they arrive, reusing unchanged layout checks. Unexpected flashes, black frames,
+stale status and personal-settings reapplication are bugs. No repeated captures
+or numerical proof is demanded from the user.
 
-Batch uses identical recipes/controller and actual controlled game dt. Reports
-include resolved values, experiment/version/revision, build/shader identity,
-backend/device, dt/frame/view IDs, sample validity, predeclared tolerances,
-expected/measured values, captures and verdicts. Extend existing capture tools
-and MultiView analysis/schema, not a separate benchmark infrastructure.
+MultiView retains ordinary lit PiP and existing standard/auxiliary/offscreen/
+feature layouts. Preserve standalone/family equivalence, independent/shared
+exposure, previous-owner-frame delay, reorder/resize/lifetime/mode/source-loss
+behavior and intended composition. Credit applicable EX05 evidence; retain BLACK
+expected diagnostic cells and check remaining interactions with the user.
 
-MultiView runs ordinary lit PiP and standard/auxiliary/offscreen/feature layouts.
-Compare per-view pre-composition output to an equivalent standalone view before
-checking final composite. Exercise independent/shared gain, submission reorder,
-resize, hide/recreate, source loss and different per-view FP16 suitability.
-Inspect every lit pane and retain intentional BLACK expected diagnostic cells.
-
-Operational commands and actual supported CLI belong in the application READMEs
-as implementation lands. Store reports and inspected native captures under
-`out/build-ninja/analysis/vortex/exposure-lightbench/`.
+Publish actual launch/test commands in application READMEs as implementation
+lands. Record source/build/shader/scene identities, expected/measured test values,
+frozen tolerances, applicable prior evidence and user acceptance in durable
+Markdown. Existing test outputs are sufficient; no new report schema or runner.
+Transient analysis paths alone are insufficient. Do not redo EX07 captures or
+benchmarks for this work.

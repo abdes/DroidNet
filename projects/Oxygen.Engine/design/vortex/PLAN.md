@@ -76,27 +76,31 @@ Important baseline facts:
 
 The [exposure package](plan/exposure-and-lightbench-correction.md) delivers a
 predictable global-exposure engine, a calibrated interactive LightBench and
-visually correct MultiView, with repeatable independent measurements.
+visually correct MultiView, with focused independent native verification.
 
 **Validated foundation:** EX01-06, including EX051 performance and EX052 quality.
 EX06 closed current-format persistence across engine/tooling/editor/examples,
 the public C++20 boundary, DemoShell UX and configuration isolation. Further
 optimization beyond the accepted EX051 CPU cost remains a later milestone.
 
-**Remaining delivery:**
+**Remaining delivery (scope reduction approved 2026-09-25):**
 
-| Order  | Observable result                                                                                                                |
-| ------ | -------------------------------------------------------------------------------------------------------------------------------- |
-| EX07   | Physical direct-light calibration plus qualified/improved many-light culling, shaders, shadows, submission and resource scaling. |
-| EX08   | Calibrated Neutral Reference with trustworthy measurements, complete reset/save/load and the first interactive/batch report.     |
-| EX08.1 | Post-processing console commands use the same validated controls and report asynchronous outcomes.                               |
-| EX08.2 | Native ImGui tests exercise the actual edit/focus/mask/reset/panel workflows, including the EX06 regressions.                    |
-| EX09A  | Point Falloff and Spot Distribution experiments.                                                                                 |
-| EX09B  | Fixed Exposure experiment with exact EV reference outputs.                                                                       |
-| EX09C  | Adaptation and Lifecycle experiments with controlled time and event expectations.                                                |
-| EX09D  | Mixed HDR Domain experiment preserving required signals and appearance.                                                          |
-| EX09E  | Existing MultiView proofs integrated into usable controls, qualified measurements and the validation runner.                     |
-| EX10   | Complete final-build acceptance report, working commands and reconciled operating docs.                                          |
+| Order  | Observable result                                                                                                    |
+| ------ | -------------------------------------------------------------------------------------------------------------------- |
+| EX08   | Calibrated Neutral Reference, complete local reset/save/load, focused native reference check and user UI acceptance. |
+| EX08.1 | Existing console drives validated settings/transitions; ordinary commands remain available in Release.               |
+| EX09A  | Useful point/spot presets and controls, crediting applicable EX07 numerical proof.                                   |
+| EX09B  | Fixed exposure controls on the reference scene and existing/focused native checks.                                   |
+| EX09C  | Simple bright/dark transition/reset; timing/lifecycle matrices remain native tests.                                  |
+| EX09D  | Applicable existing HDR evidence and focused gap repair; no new experiment UI.                                       |
+| EX09E  | Existing MultiView controls/proofs and remaining operational acceptance.                                             |
+| EX10   | Affected final checks, user acceptance, durable evidence summary and working instructions.                           |
+
+EX08.2 ImGui Test Engine integration is deferred, not a dependency. The user owns
+UI checks; the agent launches the demo and supplies numbered actions/expected
+results when ready. The universal experiment controller, runtime measurements,
+instrumented tonemap variants, seven experiment UIs and new runner/report schema
+are removed from scope, not completed. See [the approved decision](plan/EX08-execution.md).
 
 EX07 includes the [many-light qualification plan](plan/EX07-lighting-correctness-and-scalability.md):
 review and repair existing defects, improve the production path, then qualify
@@ -109,8 +113,7 @@ Only correct workloads enter the baseline; numeric improvement/regression/noise
 thresholds are frozen before candidate runs. Measured improvements and their
 limits are recorded in the [E comparison report](plan/EX07E-shadow-sharing-results.md).
 
-Each delivery step includes its numerical, interaction and relevant native visual
-checks. Automation grows with the experiments; EX10 is integration/closure.
+Each delivery step credits applicable existing numerical evidence, adds focused checks for gaps/changes, and obtains relevant user UI acceptance. EX10 is concise closure, not a validation-platform project.
 The [detailed gates](plan/exposure-and-lightbench-correction.md#8-ordered-implementation-slices)
 own scope and measurable criteria. The [tracker](IMPLEMENTATION_STATUS.md#34-slice-7-work-items)
 owns current status. **EX07A and EX07B are validated. EX07D is closed (2026-09-24),
@@ -119,7 +122,7 @@ with the [durable baseline register](plan/EX07D-baseline-report.md) committed in
 user visual/numeric acceptance and evidence commit `b8f1376e1`;
 F and overall EX07 are closed (2026-09-25), including final user editor approval.** See the [F acceptance report](plan/EX07F-acceptance-report.md)
 and [C validation record](plan/EX07C-completion-report.md). No benchmark rerun or
-engine implementation remains; EX08 has not started.
+EX07 engine implementation remains. EX08 reduced scope is approved; code implementation has not resumed.
 
 Retain the accepted FP32/P=1 production policy; varying P/FP16 qualification stays
 explicit diagnostic coverage. Reuse valid EX05 MultiView and EX06 authoring evidence;
