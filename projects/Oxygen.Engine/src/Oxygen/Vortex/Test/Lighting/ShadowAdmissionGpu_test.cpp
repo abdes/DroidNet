@@ -115,6 +115,12 @@ namespace {
       ASSERT_NE(data, nullptr);
       EXPECT_EQ(data->bindings.contact_enabled, expected_contact ? 1U : 0U);
       EXPECT_EQ(data->bindings.contact_depth_srv.IsValid(), expected_contact);
+      if (expected_contact) {
+        const auto index = data->bindings.contact_depth_srv.get();
+        EXPECT_GE(index, bindless::generated::kTexturesShaderIndexBase);
+        EXPECT_LT(index, bindless::generated::kTexturesShaderIndexBase
+          + bindless::generated::kTexturesCapacity);
+      }
     };
     for (const bool forward : { false, true }) {
       SetSurface(data::MaterialDomain::kOpaque);
