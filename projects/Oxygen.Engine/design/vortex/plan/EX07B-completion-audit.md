@@ -2,12 +2,11 @@
 
 Status: **EX07B validated.** The pause before C was the instruction at B closure.
 Current progression is recorded in the [tracker](../IMPLEMENTATION_STATUS.md#34-slice-7-work-items):
-A–E are closed and [F engine acceptance](EX07F-acceptance-report.md) is complete;
-only the user-owned editor interaction sign-off remains.
+A–F and overall EX07 are closed, including [final user editor acceptance](EX07F-acceptance-report.md).
 
-This closes the reference/instrument gate only. EX07 as a whole remains
-`in_progress`. Production physical repairs and their admission tests belong to C;
-qualified performance baselines and optimizations belong to D–F.
+This audit closes the reference/instrument gate only. Subsequent C–F evidence
+closes production repairs, baselines, optimization and final acceptance; the
+tracker records overall EX07 as `validated`.
 
 | B requirement                  | Implementation and evidence                                                                                                                                                                                                                                                                                                                    |
 | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

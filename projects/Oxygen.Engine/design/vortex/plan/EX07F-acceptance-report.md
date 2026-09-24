@@ -1,12 +1,11 @@
 # EX07F — Final acceptance
 
-**Engine-side acceptance and documentation complete, 2026-09-25, including the
-subsequent C++20 editor SDK build repair.** The user
-confirmed RenderScene camera movement, resizing, scene switching and shutdown.
-The user explicitly retained the remaining interactive editor check. EX07F and
-the overall EX07 gate therefore await only that user-owned sign-off. The
-subsequently reported test build failure is repaired and qualified in `4fd55cd8d`;
-no engine implementation, benchmark capture or automated validation task remains.
+**EX07F and overall EX07 closed on 2026-09-25.** Engine qualification,
+documentation, build repairs and final user editor acceptance are complete.
+The user confirmed RenderScene interactions and editor project/scene creation,
+lights and procedural meshes, followed by live light intensity/color changes,
+viewport response, undo/redo and save/reopen persistence: "All work".
+No implementation or acceptance item remains. EX08 has not started.
 
 ## Evidence reuse and final-code applicability
 
@@ -36,7 +35,7 @@ Overlapping test checkpoints are not summed as distinct tests.
 | Lifecycle, failure and recovery        | E native debug-layer coverage of retained/unsubmitted readers, frame-slot rollover, budget failure/recovery, incompatible/reordered views, all surface consumers and actual release. C's I02 run covers all 16 lifecycle/exposure operations. RenderScene interactions are user-confirmed. |
 | Performance and memory                 | Reuse all final E measurements below, their distributions, load checks and limitations. No new baseline or renewed timing campaign.                                                                                                                                                        |
 | Visual acceptance                      | Final E Sponza/Instancing approval and numeric review remain valid. User additionally confirmed RenderScene interaction checks for F.                                                                                                                                                      |
-| Interactive editor                     | **User-owned, pending.** Change directional intensity/color, observe viewport update, undo/redo, save/reopen. Automated command transport and round-trip proof remain credited; they do not claim this manual check was performed.                                                         |
+| Interactive editor                     | **Passed, user-confirmed 2026-09-25.** Project/scene creation, lights/procedural meshes, live intensity/color changes with viewport response, undo/redo and save/reopen persistence.                                                                                                       |
 | Operating documentation                | Current lighting/shadow/PCF contracts, benchmark commands and stage/deliverable tracker reconciled. Three reviewer documents remain uncommitted as instructed.                                                                                                                             |
 
 ## Build defect discovered during closeout
@@ -160,9 +159,14 @@ results. Historical capture records retain their original identities and limits.
 This final reconciliation is documentation-only; no build, test, capture or
 benchmark was repeated while the user builds and checks the editor.
 
-## Remaining handoff
+## Final acceptance and handoff
 
-Only the user's editor interaction sign-off remains. Record its outcome here and
-in the [tracker](../IMPLEMENTATION_STATUS.md#34-slice-7-work-items); if it passes,
-close EX07F/EX07-GATE without rerunning unchanged benchmarks. If it exposes a
-defect, repair and qualify that affected path. EX08 has not started.
+The user completed the requested editor workflow and replied **"All work"**.
+[Final acceptance record](validation/ex07f-20260925/acceptance.json) records that
+confirmation alongside the credited engine evidence. EX07F, EX07-01–14 and
+EX07-GATE are closed in the tracker and package plan. No build, test, benchmark
+or capture was repeated for this documentation-only closure. Historical result
+files retain their original capture-time status and identities.
+
+EX08 remains planned and unstarted. The three reviewer documents remain excluded
+from commits as instructed.

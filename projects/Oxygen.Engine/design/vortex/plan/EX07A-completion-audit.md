@@ -1,10 +1,10 @@
 # EX07A completion audit
 
-Status: **EX07A validated on 2026-09-23. Overall EX07 remains in_progress.**
+Status: **EX07A validated on 2026-09-23; overall EX07 closed on 2026-09-25.**
 
 Current progression is recorded in the [tracker](../IMPLEMENTATION_STATUS.md#34-slice-7-work-items):
-EX07D is closed with the [baseline register](EX07D-baseline-report.md); EX07E is
-active following the user's start signal on 2026-09-24. The audit below preserves
+All A–F stages are closed; the [F report](EX07F-acceptance-report.md) records
+final engine and user editor acceptance. The audit below preserves
 A's evidence and stage ownership at its closure.
 
 The [six-step EX07 plan](EX07-lighting-correctness-and-scalability.md#six-ordered-implementation-steps)
@@ -63,10 +63,10 @@ applicable captures and user checkpoints pass their scoped exit gate. The
 276 Debug/Release test executions. The subsequent catalog tests add eight
 executions; source/document reconciliation changes no production behavior.
 
-Proceed to EX07B: independently qualified physical/BRDF/finite-source references,
+At A closure, the handoff to B required independently qualified physical/BRDF/finite-source references,
 known-input GPU probes, deterministic image/reference fixtures and bounded
-instrumentation. Keep EX07-01–14 and EX07-GATE open according to their owning
-scopes. In particular, A does **not** qualify the final BRDF, finite-emitter/wide-
+instrumentation. EX07-01–14 and EX07-GATE stayed open at that checkpoint according
+to their owning scopes. In particular, A does **not** qualify the final BRDF, finite-emitter/wide-
 spot support, strict scene-v7/editor/script migration, dynamic memory admission,
-all failure/lifetime paths, spatial culling or measured performance. These remain
-required work in B–F, not new exclusions. The overall goal stays active.
+all failure/lifetime paths, spatial culling or measured performance. These were
+required B–F work, subsequently qualified by the linked F closure.

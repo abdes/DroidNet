@@ -6,7 +6,7 @@ The [D register](EX07D-baseline-report.md) preserves the initial comparison
 points, and the [accepted E report](EX07E-shadow-sharing-results.md) records the
 subsequent optimization and approved PCF quality/cost decisions. Timings below
 retain their original diagnostic scope. [F engine acceptance](EX07F-acceptance-report.md)
-is complete; only the user-owned editor interaction sign-off remains. The
+and overall EX07 are closed, including user-confirmed editor interaction. The
 recommendations below explain the investigation that led to E, rather than a
 second list of outstanding EX07 tasks.
 

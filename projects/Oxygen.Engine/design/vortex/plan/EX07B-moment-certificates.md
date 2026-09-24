@@ -1,6 +1,8 @@
 # EX07B pointwise moment certificates
 
-Status: **validated for the recorded 55 parameter pairs; overall EX07B remains in_progress.**
+Status: **validated for the recorded 55 parameter pairs.** Subsequent
+[B completion](EX07B-completion-audit.md) and [F acceptance](EX07F-acceptance-report.md)
+close their respective gates; this record preserves the pointwise checkpoint.
 
 The [independent moment implementation](EX07B-reference-validation.md#independent-moment-implementation)
 defines E/B; the reference uncertainty budget here is <=1e-5. This checkpoint adds

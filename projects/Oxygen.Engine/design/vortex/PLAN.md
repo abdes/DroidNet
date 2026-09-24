@@ -117,8 +117,7 @@ owns current status. **EX07A and EX07B are validated. EX07D is closed (2026-09-2
 with the [durable baseline register](plan/EX07D-baseline-report.md) committed in
 `894a25e57`. EX07E is closed (2026-09-25), including implementation, S9 qualification,
 user visual/numeric acceptance and evidence commit `b8f1376e1`;
-F engine-side acceptance and documentation are complete; only the user-owned
-editor interaction sign-off remains.** See the [F acceptance report](plan/EX07F-acceptance-report.md)
+F and overall EX07 are closed (2026-09-25), including final user editor approval.** See the [F acceptance report](plan/EX07F-acceptance-report.md)
 and [C validation record](plan/EX07C-completion-report.md). No benchmark rerun or
 engine implementation remains; EX08 has not started.
 

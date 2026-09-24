@@ -88,7 +88,7 @@ The archived results were inspected, not rerun or silently expanded:
   user visual acceptance of the conventional-shadow repair.
 
 [F engine-side acceptance](EX07F-acceptance-report.md) subsequently credits these
-results. The interactive editor check remains user-owned. C has no remaining
+results, with final user editor acceptance now confirmed. C has no remaining
 implementation or validation item.
 
 ## Durable evidence

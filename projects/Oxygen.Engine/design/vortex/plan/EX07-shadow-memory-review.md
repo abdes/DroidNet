@@ -190,7 +190,7 @@ quality and confidence limits in commit `894a25e57`. The
 [EX07E handoff](EX07-lighting-correctness-and-scalability.md#ex07e-handoff--closed)
 subsequently closed with matched comparisons and explicit confidence limits.
 [F engine acceptance](EX07F-acceptance-report.md) credits that qualification;
-only the user-owned editor interaction sign-off remains.
+final user editor approval closes F and overall EX07.
 Existing source correctness failures cannot serve as baselines. Delivered D32,
 allocation ownership and local-map cache work remains credited by the tracker.
 

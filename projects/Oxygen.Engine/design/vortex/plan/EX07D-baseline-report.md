@@ -2,7 +2,7 @@
 
 Recorded 2026-09-24. This preserves the initial D comparison baseline.
 Current accepted measurements are in the [E comparison report](EX07E-shadow-sharing-results.md);
-[F acceptance](EX07F-acceptance-report.md) awaits only user-owned editor sign-off.
+[F acceptance](EX07F-acceptance-report.md) and overall EX07 are closed.
 Renderer implementation: **137b681b2**. Collection tooling: **250917c9e**, with
 the desktop-load refinement in **d90e15823**. All runs use existing Ninja Release
 trees; no other build tree was used or created for this closeout.
@@ -14,8 +14,8 @@ runs and credited historical controls satisfy D's baseline-delivery gate.
 The recorded preflight gaps, noisy B05-D and application memory scope constrain
 later comparisons; they do not require another blanket baseline campaign.
 EX07E subsequently closed with accepted performance, memory and visual evidence.
-F credits those results and the qualified build repairs; only the user-owned
-editor interaction sign-off keeps overall EX07 open. The original D numbers and
+F credits those results, qualified build repairs and final user editor approval;
+overall EX07 is closed. The original D numbers and
 collection limits below remain unchanged.
 
 ## Results summary
@@ -319,7 +319,7 @@ inventories. Do not claim scene allocation savings from device-wide usage; obtai
 matched allocation snapshots when that is the proposed E change. The benchmark
 rows supply actual renderer allocation-domain baselines. E subsequently recorded
 bounded lifecycle/release memory evidence; F credits that evidence and the user's
-RenderScene interaction approval. Only editor sign-off remains. No indefinite
+RenderScene and editor interaction approval. No indefinite
 application soak is claimed.
 
 ![Instancing frozen view](baselines/ex07d-20260924/instancing.png)

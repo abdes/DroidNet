@@ -251,10 +251,9 @@ owns final benchmark, scene, memory and operating-limit results.
 record all eight investigation/delivery obligations, completion evidence and
 next action. Update that ledger as findings and fixes are delivered. Earlier
 measured repairs remain credited. A–E are closed, including the
-[C caller/importer follow-up](EX07C-completion-report.md). Overall EX07 remains
-open only for the user-owned editor interaction sign-off.
-[F engine-side acceptance](EX07F-acceptance-report.md) is complete, reusing E
-measurements and C validation; RenderScene interactions are user-confirmed.
+[C caller/importer follow-up](EX07C-completion-report.md). Overall EX07 is
+closed with [F acceptance](EX07F-acceptance-report.md), reusing E measurements
+and C validation. RenderScene and editor interactions are user-confirmed.
 
 Begin with the committed
 [baseline register](EX07D-baseline-report.md#how-e-and-f-use-this-register) and
