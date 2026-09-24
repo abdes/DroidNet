@@ -267,9 +267,11 @@ namespace {
     std::uint32_t status_uav;
     std::uint32_t borrowed_state_srv;
     std::array<std::uint32_t, 2> view_lifetime;
+    std::uint32_t lighting_frame_slot;
+    std::array<std::uint32_t, 3> reserved {};
   };
 
-  static_assert(sizeof(AutoExposureAverageConstants) == 112U);
+  static_assert(sizeof(AutoExposureAverageConstants) == 128U);
   static_assert(
     offsetof(AutoExposureAverageConstants, previous_state_srv) == 64U);
   static_assert(
@@ -2561,6 +2563,7 @@ auto ExposurePass::UpdateAverageConstants(RenderContext& ctx,
     .borrowed_state_srv = borrowed_srv.get(),
     .view_lifetime = { static_cast<std::uint32_t>(view_lifetime),
       static_cast<std::uint32_t>(view_lifetime >> 32U), },
+    .lighting_frame_slot = ctx.current_view.lighting_frame_slot.get(),
   };
 
   const auto slot

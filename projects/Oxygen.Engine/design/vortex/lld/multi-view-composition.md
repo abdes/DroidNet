@@ -1481,3 +1481,28 @@ M06A can be closed only when all of the following are true:
 
 Until those evidence items exist, M06A remains implementation-pending even if
 this LLD is accepted.
+
+## Failed views and capture eligibility
+
+SceneRenderer isolates required-input, allocation, recording and submission
+failures per view. Its owned `ViewRenderStatus` identifies the view and frame;
+`Renderer::InspectViewRenderStatus` exposes the latest result and nonblocking
+lighting-build completion. A failed pane receives a display-space striped error
+tile through the existing compositor. Other panes continue. DemoShell supplies a
+brief label using the same status; the renderer does not own application text.
+
+GPU lighting-build failures are checked in tonemap and in composition when a
+source has no post-process guard. This does not wait for CPU readback or add a
+fullscreen pass to normal tone-mapped copy composition. Existing compact-grid
+readback supplies detailed completion status. Exposure gains survive a rejected
+frame, failed radiance is excluded from fog history, and discarded command
+recordings retain the existing submission-dependent history rules.
+
+Offscreen execution returning true means recording and submission succeeded.
+After waiting for the output readback, capture callers must require
+`ValidatedOffscreenSceneSession::IsOutputCaptureEligible()` or the frame-matched
+`ViewRenderStatus::IsCaptureEligible(sequence)`. A pending, failed, replaced or
+expired result cannot authorize a successful capture. Outcomes remain available
+for at most the in-flight frame window, or until the view renders again or is
+removed; long-lived capture owners must retain their acceptance result after
+completion. No GPU wait is inserted into interactive rendering.

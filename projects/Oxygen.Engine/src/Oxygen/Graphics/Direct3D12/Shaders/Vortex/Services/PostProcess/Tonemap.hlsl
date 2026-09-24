@@ -5,6 +5,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
+#include "Vortex/Contracts/Lighting/LightingFrameBindings.hlsli"
+#include "Vortex/Shared/FailedViewPresentation.hlsli"
 #include "Vortex/Contracts/View/ExposureStateData.hlsli"
 #include "Vortex/Services/PostProcess/ToneMapping.hlsli"
 #include "Vortex/Shared/FullscreenTriangle.hlsli"
@@ -29,7 +31,8 @@ struct TonemapPassConstants
     uint background_enabled;
     uint fallback_texture_index;
     uint conversion_report_index;
-    uint2 reserved;
+    uint lighting_frame_slot;
+    uint reserved;
 };
 
 [shader("vertex")]
@@ -48,6 +51,10 @@ float4 VortexTonemapPS(VortexFullscreenTriangleOutput input) : SV_Target0
     StructuredBuffer<TonemapPassConstants> pass_buffer
         = ResourceDescriptorHeap[g_PassConstantsIndex];
     const TonemapPassConstants pass = pass_buffer[0];
+    if (pass.lighting_frame_slot != K_INVALID_BINDLESS_INDEX
+        && !IsLightingPublicationReady(LoadLightingFrameBindings(pass.lighting_frame_slot))) {
+        return FailedViewColor(input.position.xy);
+    }
     if (pass.source_texture_index == K_INVALID_BINDLESS_INDEX) {
         return float4(0.0f, 0.0f, 0.0f, 1.0f);
     }

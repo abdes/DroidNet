@@ -58,7 +58,8 @@ namespace {
     std::uint32_t background_enabled;
     std::uint32_t fallback_texture_index;
     std::uint32_t conversion_report_index;
-    std::array<std::uint32_t, 2> reserved {};
+    std::uint32_t lighting_frame_slot;
+    std::uint32_t reserved { 0U };
   };
 
   static_assert(sizeof(TonemapPassConstants) == 64U);
@@ -357,6 +358,7 @@ auto TonemapPass::UpdatePassConstants(RenderContext& ctx, const Inputs& inputs)
     .background_enabled = inputs.background_color.has_value() ? 1U : 0U,
     .fallback_texture_index = inputs.scene_fallback_srv.get(),
     .conversion_report_index = inputs.conversion_report_srv.get(),
+    .lighting_frame_slot = ctx.current_view.lighting_frame_slot.get(),
   };
 
   const auto slot = constants_publisher_->Publish(ctx.current_view.view_id,

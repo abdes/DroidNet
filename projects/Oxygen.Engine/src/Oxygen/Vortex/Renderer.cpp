@@ -2029,6 +2029,28 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
         profiling::Vars(
           profiling::Var("label", FormatCompositingTaskScopeLabel(task))));
 
+      const auto source_view = task.type == CompositingTaskType::kCopy
+        ? task.copy.source_view_id : task.type == CompositingTaskType::kBlend
+          ? task.blend.source_view_id : kInvalidViewId;
+      const auto status = source_view != kInvalidViewId
+        ? scene_renderer.InspectViewRenderStatus(source_view) : std::nullopt;
+      compositing_pass_config_->failed_view = status
+        && status->frame_sequence == comp_context.frame_sequence
+        && status->state == ViewRenderState::kFailed;
+      compositing_pass_config_->lighting_frame_slot = status
+        && status->frame_sequence == comp_context.frame_sequence
+        && status->state == ViewRenderState::kSubmitted && !status->output_checks_lighting
+        ? scene_renderer.ResolveViewLightingFrameSlot(source_view) : kInvalidShaderVisibleIndex;
+      if (compositing_pass_config_->failed_view) {
+        compositing_pass_config_->source_texture.reset();
+        compositing_pass_config_->viewport = task.type == CompositingTaskType::kCopy
+          ? task.copy.viewport : task.blend.viewport;
+        compositing_pass_config_->alpha = 1.0F;
+        co_await compositing_pass_->PrepareResources(comp_context, recorder);
+        co_await compositing_pass_->Execute(comp_context, recorder);
+        continue;
+      }
+
       switch (task.type) {
       case CompositingTaskType::kCopy: {
         auto source = resolve_composition_source(task.copy.source_view_id);
@@ -2038,8 +2060,8 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
 
         TrackCompositionSourceTexture(
           gfx->GetResourceRegistry(), recorder, *source);
-        if (source->GetDescriptor().format
-          != backbuffer.GetDescriptor().format) {
+        if (compositing_pass_config_->lighting_frame_slot.IsValid()
+          || source->GetDescriptor().format != backbuffer.GetDescriptor().format) {
           compositing_pass_config_->source_texture = source;
           compositing_pass_config_->viewport = task.copy.viewport;
           compositing_pass_config_->alpha = 1.0F;
@@ -3123,6 +3145,12 @@ auto Renderer::GetUploadCoordinator() -> upload::UploadCoordinator&
   return *uploader_;
 }
 
+auto Renderer::InspectViewRenderStatus(ViewId view_id) const
+  -> std::optional<ViewRenderStatus>
+{
+  return scene_renderer_ ? scene_renderer_->InspectViewRenderStatus(view_id) : std::nullopt;
+}
+
 auto Renderer::GetAssetLoader() const noexcept
   -> observer_ptr<content::IAssetLoader>
 {
@@ -4034,6 +4062,7 @@ Renderer::ValidatedOffscreenSceneSession::ValidatedOffscreenSceneSession(
 
 auto Renderer::ValidatedOffscreenSceneSession::ExecuteNow() -> bool
 {
+  executed_sequence_.reset();
   CHECK_NOTNULL_F(
     renderer_.get(), "ValidatedOffscreenSceneSession requires a live renderer");
   CHECK_NOTNULL_F(scene_source_.scene.get(),
@@ -4124,12 +4153,14 @@ auto Renderer::ValidatedOffscreenSceneSession::ExecuteNow() -> bool
     return false;
   }
   FinalizeOffscreenOutputProduct(*renderer_, *output_target_.framebuffer);
+  executed_sequence_ = frame_session.frame_sequence;
   return true;
 }
 
 auto Renderer::ValidatedOffscreenSceneSession::ExecuteInsideFrame(
   engine::FrameContext& frame_context) -> bool
 {
+  executed_sequence_.reset();
   CHECK_NOTNULL_F(
     renderer_.get(), "ValidatedOffscreenSceneSession requires a live renderer");
   CHECK_NOTNULL_F(scene_source_.scene.get(),
@@ -4213,6 +4244,7 @@ auto Renderer::ValidatedOffscreenSceneSession::ExecuteInsideFrame(
     return false;
   }
   FinalizeOffscreenOutputProduct(*renderer_, *output_target_.framebuffer);
+  executed_sequence_ = frame_context.GetFrameSequenceNumber();
 
   scene_renderer.OnFrameStart(frame_context);
   renderer_->scene_renderer_started_frame_
@@ -4223,6 +4255,16 @@ auto Renderer::ValidatedOffscreenSceneSession::ExecuteInsideFrame(
 auto Renderer::ValidatedOffscreenSceneSession::Execute() -> co::Co<bool>
 {
   co_return ExecuteNow();
+}
+
+auto Renderer::ValidatedOffscreenSceneSession::IsOutputCaptureEligible() const
+  -> bool
+{
+  if (!executed_sequence_ || !renderer_) {
+    return false;
+  }
+  const auto status = renderer_->InspectViewRenderStatus(GetViewId());
+  return status && status->IsCaptureEligible(*executed_sequence_);
 }
 
 Renderer::OffscreenSceneFacade::OffscreenSceneFacade(

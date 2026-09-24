@@ -25,6 +25,7 @@
 #include <Oxygen/Vortex/Environment/Types/EnvironmentAmbientBridgeBindings.h>
 #include <Oxygen/Vortex/Lighting/Types/FrameLightingInputs.h>
 #include <Oxygen/Vortex/Lighting/Types/LightingPreparationFailure.h>
+#include <Oxygen/Vortex/Types/ViewRenderStatus.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextureLeasePool.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
@@ -155,6 +156,9 @@ public:
   OXGN_VRTX_API void PrimePreparedView(RenderContext& ctx);
   OXGN_VRTX_API void RenderViewFamily(RenderContext& ctx);
   OXGN_VRTX_API auto OnRender(RenderContext& ctx) -> bool;
+  [[nodiscard]] OXGN_VRTX_API auto InspectViewRenderStatus(ViewId view_id) const
+    -> std::optional<ViewRenderStatus>;
+  [[nodiscard]] auto ResolveViewLightingFrameSlot(ViewId view_id) const -> ShaderVisibleIndex;
   OXGN_VRTX_API void OnCompositing(RenderContext& ctx);
   OXGN_VRTX_API void OnFrameEnd(const engine::FrameContext& frame);
   OXGN_VRTX_API void RemoveViewState(ViewId view_id,
@@ -203,7 +207,8 @@ public:
 private:
   auto ReportLightingFailure(
     LightingPreparationFailure failure, ViewId fallback_view) -> void;
-  std::optional<LightingPreparationFailure> reported_lighting_failure_;
+  std::unordered_map<ViewId, LightingPreparationFailure> reported_lighting_failures_;
+  std::unordered_map<ViewId, ViewRenderStatus> view_render_status_;
   friend struct testing::RendererPublicationProbe;
 
   struct ExposureProductLayout {

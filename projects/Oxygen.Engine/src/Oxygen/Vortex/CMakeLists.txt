@@ -222,6 +222,7 @@ set(
   "Types/ExposureTargetData.h"
   "Types/ExposureStateData.h"
   "Types/ViewConstants.h"
+  "Types/ViewRenderStatus.h"
   "Types/ViewFrameBindings.h"
   "Types/ViewHistoryFrameBindings.h"
   "Types/VsmFrameBindings.h"

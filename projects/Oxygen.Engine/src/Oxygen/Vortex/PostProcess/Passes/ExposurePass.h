@@ -265,7 +265,7 @@ namespace postprocess {
       = CompositionView::kInvalidViewStateHandle) -> void;
 
   private:
-    static constexpr std::size_t kAverageConstantWordCount = 28U;
+    static constexpr std::size_t kAverageConstantWordCount = 32U;
     static constexpr std::size_t kFrameConstantWordCount = 12U;
 
     auto RecordSceneRange(RenderContext& ctx,

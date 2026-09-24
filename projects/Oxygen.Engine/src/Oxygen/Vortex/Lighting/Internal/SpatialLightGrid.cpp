@@ -69,6 +69,7 @@ struct SpatialLightGrid::Impl {
     std::uint64_t measured_demand { 0U };
     frame::SequenceNumber feedback_sequence { 0U };
     bool have_demand { false };
+    std::optional<CompletedLightGridBuild> completed;
   };
   Renderer& renderer;
   frame::SequenceNumber sequence { 0U };
@@ -135,6 +136,9 @@ struct SpatialLightGrid::Impl {
         if (mapped && mapped->Bytes().size() >= sizeof(LightGridBuildStatus)) {
           auto status = LightGridBuildStatus {};
           std::memcpy(&status, mapped->Bytes().data(), sizeof(status));
+          if (!view.completed || resources.feedback_sequence > view.completed->sequence) {
+            view.completed = CompletedLightGridBuild { resources.feedback_sequence, status };
+          }
           if (status.state == kLightGridBuildValid
             && (!view.have_demand
               || resources.feedback_sequence > view.feedback_sequence)) {
@@ -312,6 +316,14 @@ auto SpatialLightGrid::Prepare(
     }
   }
   return true;
+}
+
+auto SpatialLightGrid::InspectCompleted(ViewId view) -> std::optional<CompletedLightGridBuild>
+{
+  const auto found = impl_->views.find(view);
+  if (found == impl_->views.end()) return std::nullopt;
+  impl_->ReadDemand(found->second);
+  return found->second.completed;
 }
 
 auto SpatialLightGrid::Inspect(ViewId view) const -> LightGridResources

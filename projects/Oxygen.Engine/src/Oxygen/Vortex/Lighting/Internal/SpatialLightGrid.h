@@ -7,6 +7,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Vortex/Lighting/Internal/LightGridBuilder.h>
@@ -28,6 +29,7 @@ namespace lighting::internal {
     [[nodiscard]] auto Record(
       const BuiltLightGridView& view, ShaderVisibleIndex header) -> bool;
     [[nodiscard]] auto Inspect(ViewId view) const -> LightGridResources;
+    [[nodiscard]] auto InspectCompleted(ViewId view) -> std::optional<CompletedLightGridBuild>;
 
   private:
     struct Impl;

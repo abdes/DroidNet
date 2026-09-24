@@ -463,4 +463,11 @@ auto ShadowService::ResolveShadowFrameSlot(const ViewId view_id) const
     : ShaderVisibleIndex { kInvalidShaderVisibleIndex };
 }
 
+auto ShadowService::InspectContactShadowSurface(const ViewId view_id) const
+  -> std::shared_ptr<const graphics::Texture>
+{
+  const auto it = published_views_.find(view_id);
+  return it != published_views_.end() ? it->second.contact_surface : nullptr;
+}
+
 } // namespace oxygen::vortex

@@ -17,6 +17,7 @@
 #include <ranges>
 #include <set>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -86,6 +87,7 @@
 #include <Oxygen/Vortex/SceneRenderer/Stages/Translucency/TranslucencyMeshProcessor.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Translucency/TranslucencyModule.h>
 #include <Oxygen/Vortex/ShaderDebugMode.h>
+#include <Oxygen/Vortex/ViewExtension.h>
 #include <Oxygen/Vortex/Test/Fixtures/MeshRasterStateTest.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
 #include <Oxygen/Vortex/Types/DrawMetadata.h>
@@ -755,6 +757,63 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   EXPECT_EQ(scene_renderer_->GetPublishedViewId(), second_view_id_);
   EXPECT_NE(scene_renderer_->GetPublishedViewFrameBindingsSlot(),
     oxygen::kInvalidShaderVisibleIndex);
+}
+
+NOLINT_TEST_F(SceneRendererDeferredCoreTest,
+  FailedViewDoesNotPublishOrBlockSiblingAndRecovers)
+{
+  struct Fault final : oxygen::vortex::IViewExtension {
+    ViewId failed_view;
+    bool fail = true;
+    unsigned completed = 0U;
+    void OnPreRenderViewGpu(const oxygen::vortex::ViewRenderGpuContext& hook) override
+    {
+      if (fail && hook.render_context.current_view.view_id == failed_view) {
+        throw std::runtime_error("Injected per-view recording failure");
+      }
+    }
+    void OnPostRenderViewGpu(const oxygen::vortex::ViewRenderGpuContext&) override
+    { ++completed; }
+  };
+  auto fault = std::make_shared<Fault>();
+  fault->failed_view = first_view_id_;
+  renderer_->RegisterViewExtension(fault);
+  scene_renderer_->OnFrameStart(frame_context_);
+  UpdateSceneTransforms();
+  auto context = RenderContext {};
+  context.scene = oxygen::observer_ptr<Scene> { scene_.get() };
+  context.frame_slot = oxygen::frame::Slot { 1U };
+  context.frame_sequence = oxygen::frame::SequenceNumber { 1U };
+  context.view_constants = view_constants_buffer_;
+  for (auto [id, view] : { std::pair { first_view_id_, &first_resolved_view_ },
+         std::pair { second_view_id_, &second_resolved_view_ } }) {
+    auto& entry = context.frame_views.emplace_back();
+    entry.view_id = id;
+    entry.is_scene_view = true;
+    entry.resolved_view = oxygen::observer_ptr<const ResolvedView> { view };
+  }
+
+  scene_renderer_->RenderViewFamily(context);
+  const auto failed = scene_renderer_->InspectViewRenderStatus(first_view_id_);
+  ASSERT_TRUE(failed);
+  EXPECT_EQ(failed->state, oxygen::vortex::ViewRenderState::kFailed);
+  EXPECT_EQ(failed->failure, oxygen::vortex::ViewRenderFailure::kRecording);
+  EXPECT_FALSE(failed->IsCaptureEligible(context.frame_sequence));
+  EXPECT_FALSE(context.frame_views[0].rendered);
+  EXPECT_TRUE(context.frame_views[1].rendered);
+  EXPECT_EQ(fault->completed, 1U);
+  EXPECT_EQ(context.current_view.view_id, oxygen::kInvalidViewId);
+
+  fault->fail = false;
+  context.frame_sequence = oxygen::frame::SequenceNumber { 2U };
+  scene_renderer_->RenderViewFamily(context);
+  const auto recovered = scene_renderer_->InspectViewRenderStatus(first_view_id_);
+  ASSERT_TRUE(recovered);
+  EXPECT_TRUE(recovered->IsCaptureEligible(context.frame_sequence));
+  EXPECT_FALSE(recovered->IsCaptureEligible(oxygen::frame::SequenceNumber { 1U }));
+  EXPECT_TRUE(context.frame_views[0].rendered);
+  EXPECT_TRUE(context.frame_views[1].rendered);
+  EXPECT_EQ(fault->completed, 3U);
 }
 
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,

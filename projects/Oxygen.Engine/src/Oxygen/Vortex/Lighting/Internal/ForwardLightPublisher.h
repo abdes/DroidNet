@@ -7,6 +7,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <unordered_map>
 
 #include <Oxygen/Base/Macros.h>
@@ -50,6 +51,8 @@ namespace lighting::internal {
       -> const LightingFrameBindings*;
     [[nodiscard]] auto ResolveBindingSlot(ViewId view_id) const
       -> ShaderVisibleIndex;
+    [[nodiscard]] auto InspectCompletedGrid(ViewId view_id) const
+      -> std::optional<CompletedLightGridBuild>;
     [[nodiscard]] auto InspectGridResources(ViewId view_id) const
       -> LightGridResources;
 
