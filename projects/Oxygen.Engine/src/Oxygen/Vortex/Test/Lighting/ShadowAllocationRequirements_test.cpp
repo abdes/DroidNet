@@ -33,6 +33,7 @@
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/Shadows/Internal/ConventionalShadowTargetAllocator.h>
+#include <Oxygen/Vortex/Shadows/Internal/LocalShadowRequest.h>
 #include <Oxygen/Vortex/Test/Lighting/LightingGpuAbiFixture.h>
 
 namespace oxygen::vortex::testing {
@@ -68,7 +69,8 @@ NOLINT_TEST_F(LightingGpuAbiTest, NativeShadowAllocationRequirements)
     { "shadow_resources_allocated", true },
     {
       "scope",
-      "native D32 allocator chunks and budget accounting; not whole-frame peak",
+      "native D32 allocator chunks and budget accounting; allocation only, "
+      "no shadow rendering or whole-frame peak",
     },
     { "requirements", nlohmann::json::array() },
   };
@@ -92,40 +94,62 @@ NOLINT_TEST_F(LightingGpuAbiTest, NativeShadowAllocationRequirements)
       Kind kind;
       std::uint32_t resolution;
       std::uint32_t requested_count;
-      std::uint32_t chunk;
       std::uint32_t expected_layers;
     };
     constexpr auto requests = std::array {
-      Request { "directional", Kind::kDirectional, 1024U, 2U, 0U, 2U },
-      Request { "low_point", Kind::kPoint, 512U, 2U, 0U, 60U },
-      Request { "medium_point", Kind::kPoint, 1024U, 2U, 0U, 12U },
-      Request { "appended_point", Kind::kPoint, 1024U, 1U, 1U, 12U },
-      Request { "low_spot", Kind::kSpot, 512U, 2U, 0U, 64U },
-      Request { "medium_spot", Kind::kSpot, 1024U, 1U, 0U, 16U },
+      Request { "directional", Kind::kDirectional, 1024U, 2U, 2U },
+      Request { "low_point", Kind::kPoint, 512U, 2U, 60U },
+      Request { "medium_point", Kind::kPoint, 1024U, 2U, 12U },
+      Request { "appended_point", Kind::kPoint, 1024U, 1U, 12U },
+      Request { "low_spot", Kind::kSpot, 512U, 2U, 64U },
+      Request { "medium_spot", Kind::kSpot, 1024U, 1U, 16U },
     };
     auto total_native_bytes = std::uint64_t { 0U };
     auto surfaces = std::vector<std::shared_ptr<graphics::Texture>> {};
+    auto next_light = std::uint32_t { 1U };
+    const auto input = PreparedViewShadowInput { .view_id = view,
+      .scene_generation = 1U,
+      .shadow_dependencies_available = true };
     for (const auto& request : requests) {
       SCOPED_TRACE(request.name);
+      auto local_requests
+        = std::vector<shadows::internal::LocalShadowRequest> {};
+      if (request.kind != Kind::kDirectional) {
+        for (auto i = 0U; i < request.requested_count; ++i) {
+          const auto light = FrameLocalLightSelection {
+            .source_node = scene::NodeHandle { next_light++, 1U },
+            .kind = request.kind == Kind::kPoint ? LocalLightKind::kPoint
+                                                 : LocalLightKind::kSpot,
+            .range = 5.0F,
+            .luminous_flux_lm = 100.0F,
+            .flags = kLocalLightFlagCastsShadows,
+          };
+          shadows::internal::PrepareLocalShadowRequest(input, light,
+            LightSelectionIndex { i }, request.resolution, 1.0F,
+            local_requests.emplace_back());
+        }
+      }
       const auto acquire = [&]() -> std::shared_ptr<graphics::Texture> {
-        switch (request.kind) {
-        case Kind::kDirectional:
+        if (request.kind == Kind::kDirectional) {
           return allocator
             .AcquireDirectionalSurface(view, LightSelectionIndex { 0U },
               request.requested_count, scene::ShadowResolutionHint::kLow)
             .surface;
-        case Kind::kPoint:
-          return allocator
-            .AcquirePointSurface(
-              view, request.requested_count, request.resolution, request.chunk)
-            .surface;
-        case Kind::kSpot:
-          return allocator
-            .AcquireSpotSurface(
-              view, request.requested_count, request.resolution, request.chunk)
-            .surface;
         }
-        return {};
+        auto surface = std::shared_ptr<graphics::Texture> {};
+        for (const auto& local : local_requests) {
+          auto acquired = allocator.AcquireLocalMap(view, local);
+          const auto& texture = acquired.owner->version->slot->backing->texture;
+          if (surface) {
+            EXPECT_EQ(texture, surface);
+          } else {
+            surface = texture;
+          }
+          // Exercise physical allocation/replacement only. No submitted depth
+          // content is claimed by this allocation-requirements test.
+          acquired.Commit();
+        }
+        return surface;
       };
       auto surface = acquire();
       ASSERT_NE(surface, nullptr);
@@ -173,6 +197,7 @@ NOLINT_TEST_F(LightingGpuAbiTest, NativeShadowAllocationRequirements)
     }
     report["charged_shadow_bytes"] = total_native_bytes;
   }
+  Backend().PollCompletedUses();
   Backend().GetDeferredReclaimer().ProcessAllDeferredReleases();
   EXPECT_EQ(budget->Snapshot().allocated.get(), baseline);
   Backend().EndFrame(frame::SequenceNumber { 1U }, frame::Slot { 0U });
