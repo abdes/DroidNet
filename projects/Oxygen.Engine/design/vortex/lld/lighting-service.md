@@ -282,6 +282,18 @@ family order independent of command-recording order, and fail only affected view
 unless a shared product fails. Unused cached allocations are reclaimable only
 after their fences permit it.
 
+The spatial producer uses GPU count/scan/scatter and conservative light-sphere
+intersection with view-space cell bounds. Point and spot spheres retain boundary
+contributors; perspective uses logarithmic depth slices and orthographic uses
+signed linear slices. CPU storage starts at up to four indices per cell, bounded
+by the light count. Completed GPU status readbacks drive subsequent growth with
+25% headroom; allocation is capped by a fair share across active views and frame
+slots, actual demand, available aggregate budget and the wire limit. Oversized
+storage is retired through the existing reclaimer. Never reserve the full
+`cluster_count * local_count` product as the cold allocation. A cell whose full
+list does not fit uses the complete-list sentinel; it never publishes a partial
+list. Readbacks use the existing manager and do not stall the CPU for sizing.
+
 All counts/byte products/offsets are checked in uint64 before GPU narrowing.
 The uint32 index sentinel reserves 0xffffffff: valid element indices are at most
 0xfffffffe and a counted array has at most 0xffffffff elements, further limited

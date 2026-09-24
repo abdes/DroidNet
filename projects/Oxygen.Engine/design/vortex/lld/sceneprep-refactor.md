@@ -152,13 +152,24 @@ Authoritative content lives here:
 - draw-metadata bytes / bindless slots
 - pass partitions
 - draw bounding spheres
+- unbatched shadow-caster source dependencies, including bounds and resident
+  geometry content revision
 - explicit current / previous transform publication slots
 - explicit current / previous deformation publication slots
 - any other per-view prepared-scene arrays needed by downstream stages
 
+Geometry residency and geometry content have different identities.
+`GeometryUploader::MeshShaderVisibleIndices::content_revision` changes on an
+accepted mesh update/hot reload even when its handle generation, vertex/index
+counts and descriptors stay fixed. It is zero while complete resident bindings
+are unavailable. `DrawMetadataEmitter` captures this revision before instancing;
+`InitViewsModule` publishes the per-source snapshot without evaluating light
+volumes. ShadowService selects relevant dependencies and treats a missing content
+revision conservatively. Stable handles alone do not certify unchanged geometry.
+
 Explicit exclusion:
 
-- shadow caster bounds
+- per-light/cascade caster-volume bounds and selected caster lists
 - visible receiver bounds
 - conventional shadow draw records
 

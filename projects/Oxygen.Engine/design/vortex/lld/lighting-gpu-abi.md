@@ -62,20 +62,20 @@ convention; sentinel tests must use a nonsymmetric matrix.
 Evolve `ForwardLocalLightRecord` in place, using it for both shading families
 and culling. Target stride **80**, alignment **16**:
 
-| Offset | Type / member                          | Meaning                                                               |
-| -----: | -------------------------------------- | --------------------------------------------------------------------- |
-|      0 | float3 `position_ws`                   | World metres, matching view reconstruction origin                     |
-|     12 | float `range_m`                        | Authored finite range >=0; zero has no influence                      |
-|     16 | float3 `intensity_rgb_cd`              | Compensated, tinted point/spot candela RGB, resolved once             |
-|     28 | float `source_radius_m`                | Source radius >=0 for analytic diffuse/specular response                                       |
-|     32 | float3 `emitted_direction_ws`          | Unit emitted axis; point stores (0,-1,0), unused                      |
-|     44 | float `inverse_range_m`                | Checked positive reciprocal, or zero for zero range                   |
-|     48 | float `outer_cone_cosine`             | cos(outer); point 0                                               |
-|     52 | float `inverse_cone_cosine_width`     | 1/(cos(inner)-cos(outer)); hard cone and point 0                                               |
-|     56 | uint `kind`                            | Point=0, Spot=1; reject unknown values                                |
-|     60 | uint `flags`                           | Bit 0 authored shadow request, bit 1 contact request; other bits zero |
-|     64 | uint `selection_index`                 | Index in immutable local selection                                    |
-|     68 | uint3 `reserved`                      | Zero; no attenuation selector or precision-expansion payload |
+| Offset | Type / member                     | Meaning                                                               |
+| -----: | --------------------------------- | --------------------------------------------------------------------- |
+|      0 | float3 `position_ws`              | World metres, matching view reconstruction origin                     |
+|     12 | float `range_m`                   | Authored finite range >=0; zero has no influence                      |
+|     16 | float3 `intensity_rgb_cd`         | Compensated, tinted point/spot candela RGB, resolved once             |
+|     28 | float `source_radius_m`           | Source radius >=0 for analytic diffuse/specular response              |
+|     32 | float3 `emitted_direction_ws`     | Unit emitted axis; point stores (0,-1,0), unused                      |
+|     44 | float `inverse_range_m`           | Checked positive reciprocal, or zero for zero range                   |
+|     48 | float `outer_cone_cosine`         | cos(outer); point 0                                                   |
+|     52 | float `inverse_cone_cosine_width` | 1/(cos(inner)-cos(outer)); hard cone and point 0                      |
+|     56 | uint `kind`                       | Point=0, Spot=1; reject unknown values                                |
+|     60 | uint `flags`                      | Bit 0 authored shadow request, bit 1 contact request; other bits zero |
+|     64 | uint `selection_index`            | Index in immutable local selection                                    |
+|     68 | uint3 `reserved`                  | Zero; no attenuation selector or precision-expansion payload          |
 
 The CPU resolves photometric normalization in double precision and publishes
 ordinary FP32 cone constants. Soft cones evaluate one squared cosine ramp from
@@ -158,9 +158,9 @@ must not reuse the small scene ID carried by node handles.
 |     64 | uint2 `frame_sequence`            | Current renderer frame sequence                                                                    |
 |     72 | uint2 `view_generation`           | View lifetime/resource generation, not just ViewId                                                 |
 |     80 | uint `publication_state`          | Disabled=0, Empty=1, Recorded=2, Failed=3; this describes the recorded package, not GPU completion |
-|     84 | uint `brdf_energy_srv`           | Shared 32x32 RG32Float directional albedo E / Schlick moment B |
-|     88 | uint `brdf_model_revision`       | 2 for analytic finite sources and view-dependent compensation |
-|     92 | uint `reserved`                  | Zero |
+|     84 | uint `brdf_energy_srv`            | Shared 32x32 RG32Float directional albedo E / Schlick moment B                                     |
+|     88 | uint `brdf_model_revision`        | 2 for analytic finite sources and view-dependent compensation                                      |
+|     92 | uint `reserved`                   | Zero                                                                                               |
 
 The energy texture uses X=sqrt(NdotV), Y=(effective roughness-0.045)/0.955 and
 hardware bilinear filtering at texel-center coordinates. There is no mean-energy
@@ -222,23 +222,30 @@ metadata source. No CPU payload retains a competing viewport/depth description.
 
 ## Complete lists and GPU validity
 
-The service-owned grid recorder uses **48-byte**, 16-aligned pass constants
-(256-byte CBV allocation alignment), replacing the old positional-culler CBV:
+The service-owned grid recorder uses **208-byte**, 16-aligned structured pass
+constants. Each dispatch has immutable control values and resolved-view matrices:
 
-|   Offset | Type / member                                  | Meaning                                                    |
-| -------: | ---------------------------------------------- | ---------------------------------------------------------- |
-|        0 | uint `lighting_bindings_srv`                   | Current view's canonical input package                     |
-| 4, 8, 12 | uint `ranges_uav`, `indices_uav`, `status_uav` | Outputs; indices may be invalid only when capacity is zero |
-|   16, 20 | uint `counts_uav`, `offsets_uav`               | Per-cell uint counts and uint2 checked prefix offsets      |
-|       24 | uint `subpass`                                 | Reset=0, Count=1, Scan=2, Scatter=3, Finalize=4            |
-|       28 | uint `work_count`                              | Bounded logical work in this dispatch                      |
-|       32 | uint2 `work_offset`                            | Low/high logical starting element                          |
-|       40 | uint `scan_stride`                             | Positive scan step where applicable, otherwise zero        |
-|       44 | uint `scan_phase`                              | Upsweep=0, Downsweep=1; zero outside Scan                  |
+|   Offset | Type / member                                  | Meaning                                                                      |
+| -------: | ---------------------------------------------- | ---------------------------------------------------------------------------- |
+|        0 | uint `lighting_bindings_srv`                   | Current view's canonical input package                                       |
+| 4, 8, 12 | uint `ranges_uav`, `indices_uav`, `status_uav` | Outputs; indices may be invalid only when capacity is zero                   |
+|   16, 20 | uint `counts_uav`, `offsets_uav`               | Per-cell uint counts and uint2 checked prefix offsets                        |
+|       24 | uint `subpass`                                 | Reset=0, Count=1, Scan=2, Scatter=3, Finalize=4                              |
+|       28 | uint `work_count`                              | Bounded logical work in this dispatch                                        |
+|       32 | uint2 `work_offset`                            | Low/high logical starting element                                            |
+|       40 | uint `scan_stride`                             | Positive scan step where applicable, otherwise zero                          |
+|       44 | uint `scan_phase`                              | Reserved zero; source/destination descriptors identify scan ping-pong        |
+|       48 | uint `scan_destination_uav`                    | Output of the current bounded prefix-scan step                               |
+|       52 | uint3 `reserved`                               | Zero                                                                         |
+|       64 | float4x4 `view_matrix`                         | Current resolved world-to-view transform                                     |
+|      128 | float4x4 `inverse_projection`                  | Inverse of the same resolved projection used for rasterization               |
+|      192 | float4 `depth_projection`                      | Projection row-2/row-3 Z/W coefficients for signed view-depth reconstruction |
 
-The owning recorder binds that view's finalized view constants explicitly.
-There is no second inverse-projection/viewport copy in the culling CBV. Validate
-each subpass's resource domains and dispatch bounds. Reset/count/scan/scatter/
+Matrices are copied from each immutable `ResolvedView` when shared lighting is
+prepared, so recording another view cannot change their meaning. They introduce
+no independently configurable camera state. Rectangle and depth-slice mapping
+remain solely in `LightGridMetadata`. Each grid uses separate resources per
+view/frame slot. Validate each subpass's resource domains and dispatch bounds. Reset/count/scan/scatter/
 readiness transitions have explicit UAV ordering; a scan cannot rely on an
 unbounded inter-workgroup spin. Count/offset scratch is charged to the same
 resource budget. Spatial algorithm improvements may refine implementation, but
@@ -287,7 +294,9 @@ status; emitting black inside a lighting helper is insufficient.
 `uint projection_kind` at 0 (None=0, Cascaded2D=1, LocalCube=2, LocalProjected2D=3),
 `uint record_index` at 4 (absent=`0xffffffff`), `uint selection_index` at 8,
 `uint coverage_state` at 12 (NoRequest=0, NoInfluence=1, Complete=2,
-OutsideAuthoredCoverage=3). ShadowService alone produces both map arrays from
+OutsideAuthoredCoverage=3, QualityOmitted=4). QualityOmitted has no depth record
+and represents the explicit projected-size fade policy; allocation failure never
+produces that state. ShadowService alone produces both map arrays from
 source identity and the same selection. A required-but-missing map is failure,
 not a None entry. Exact zero energy/range and an entirely out-of-view authored
 CSM coverage interval do not require maps; the explicit coverage state records
@@ -360,27 +369,29 @@ term still runs outside CSM distance coverage when the light contributes.
 
 `ProjectedLocalShadowRecord`: **128 bytes**, 16-aligned:
 
-|            Offset | Type / member                                                            |
-| ----------------: | ------------------------------------------------------------------------ |
-|                 0 | float4x4 `light_view_projection`                                         |
-|                64 | float3 `shadow_origin_ws`                                                |
-|            76, 80 | float `near_plane_m`, `far_plane_m`                                      |
-|        84, 88, 92 | float `normal_bias_m`, `depth_bias`, `world_texel_size`                  |
-| 96, 100, 104, 108 | uint `surface_srv`, `array_layer`, `selection_index`, `reserved0` (zero) |
-|               112 | float2 `inverse_resolution`                                              |
-|               120 | uint2 `reserved1` (zero)                                                 |
+|       Offset | Type / member                                           |
+| -----------: | ------------------------------------------------------- |
+|            0 | float4x4 `light_view_projection`                        |
+|           64 | float3 `shadow_origin_ws`                               |
+|       76, 80 | float `near_plane_m`, `far_plane_m`                     |
+|   84, 88, 92 | float `normal_bias_m`, `depth_bias`, `world_texel_size` |
+| 96, 100, 104 | uint `surface_srv`, `array_layer`, `selection_index`    |
+|          108 | float `shadow_strength` (0–1; default 1)                |
+|          112 | float2 `inverse_resolution`                             |
+|          120 | uint2 `reserved1` (zero)                                |
 
 `CubeLocalShadowRecord`: **448 bytes**, 16-aligned:
 
-|             Offset | Type / member                                                                  |
-| -----------------: | ------------------------------------------------------------------------------ |
-|                  0 | float4x4 `face_light_view_projection[6]` (64-byte matrix stride)               |
-|                384 | float3 `shadow_origin_ws`                                                      |
-|           396, 400 | float `near_plane_m`, `far_plane_m`                                            |
-|      404, 408, 412 | float `normal_bias_m`, `depth_bias`, `world_texel_size`                        |
-| 416, 420, 424, 428 | uint `surface_srv`, `first_array_layer`, `selection_index`, `reserved0` (zero) |
-|                432 | float2 `inverse_resolution`                                                    |
-|                440 | uint2 `reserved1` (zero)                                                       |
+|        Offset | Type / member                                                    |
+| ------------: | ---------------------------------------------------------------- |
+|             0 | float4x4 `face_light_view_projection[6]` (64-byte matrix stride) |
+|           384 | float3 `shadow_origin_ws`                                        |
+|      396, 400 | float `near_plane_m`, `far_plane_m`                              |
+| 404, 408, 412 | float `normal_bias_m`, `depth_bias`, `world_texel_size`          |
+| 416, 420, 424 | uint `surface_srv`, `first_array_layer`, `selection_index`       |
+|           428 | float `shadow_strength` (0–1; default 1)                         |
+|           432 | float2 `inverse_resolution`                                      |
+|           440 | uint2 `reserved1` (zero)                                         |
 
 Both local records describe derived shadow projection, not another authored
 light. `far_plane_m` covers the physical finite-emitter influence, not just the
