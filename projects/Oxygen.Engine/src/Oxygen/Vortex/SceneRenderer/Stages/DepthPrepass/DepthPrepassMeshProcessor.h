@@ -44,7 +44,8 @@ public:
     -> DepthPrepassMeshProcessor& = delete;
 
   OXGN_VRTX_API void BuildDrawCommands(const PreparedSceneFrame& prepared_scene,
-    const ResolvedView* resolved_view, bool include_masked);
+    const ResolvedView* resolved_view, bool include_masked,
+    bool shadow_casters_only = false);
 
   [[nodiscard]] OXGN_VRTX_API auto GetDrawCommands() const
     -> std::span<const DrawCommand>;

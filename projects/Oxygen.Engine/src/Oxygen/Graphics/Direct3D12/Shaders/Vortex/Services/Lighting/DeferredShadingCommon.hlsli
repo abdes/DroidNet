@@ -22,6 +22,7 @@ struct DeferredLightingSurfaceData
 {
     float3 world_position;
     float3 world_normal;
+    float3 geometric_normal;
     float3 base_color;
     float3 view_direction;
     float3 specular_f0;
@@ -29,6 +30,7 @@ struct DeferredLightingSurfaceData
     float specular;
     float roughness;
     float ambient_occlusion;
+    bool receives_shadows;
 };
 
 static inline bool HasDeferredLightingInputs(SceneTextureBindingData bindings)
@@ -60,6 +62,8 @@ static inline DeferredLightingSurfaceData LoadDeferredLightingSurface(
 
     const GBufferData gbuffer = ReadGBuffer(uv, bindings);
     surface.world_normal = VortexSafeNormalize(gbuffer.world_normal);
+    surface.receives_shadows = gbuffer.receives_shadows;
+    surface.geometric_normal = gbuffer.geometric_normal;
     surface.base_color = max(gbuffer.base_color, 0.0f.xxx);
     surface.view_direction
         = ResolveSurfaceViewDirection(surface.world_position, camera_position_ws,

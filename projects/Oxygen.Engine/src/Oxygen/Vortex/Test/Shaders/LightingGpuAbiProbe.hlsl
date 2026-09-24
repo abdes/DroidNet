@@ -17,10 +17,22 @@
 #include "Vortex/Contracts/Scene/GBufferHelpers.hlsli"
 #include "Vortex/Shared/BRDFCommon.hlsli"
 #include "Vortex/Services/Lighting/FiniteEmitter.hlsli"
+#include "Vortex/Services/Shadows/ContactShadow.hlsli"
 #include "Vortex/Contracts/Draw/MaterialShadingConstants.hlsli"
 #include "Vortex/Services/Lighting/LocalLightAttenuation.hlsli"
 #include "Vortex/Services/Lighting/DeferredShadingCommon.hlsli"
 #include "Vortex/Stages/Translucency/ForwardPbr.hlsli"
+
+struct ContactShadowProbeInput {
+    float4x4 view;
+    float4x4 projection;
+    float3 position;
+    uint reversed_depth;
+    float3 normal;
+    uint depth_srv;
+    float3 light_direction;
+    uint extent;
+};
 
 struct ProbeArguments {
     uint4 decode;
@@ -121,7 +133,16 @@ void CS(uint3 thread : SV_DispatchThreadID) {
     RWByteAddressBuffer output = ResourceDescriptorHeap[args.y];
     uint element = args.w + thread.x;
     uint address = thread.x * args.z * 4;
-    if (g_RecordKind == 0) {
+    if (g_RecordKind == 26) {
+        StructuredBuffer<ContactShadowProbeInput> inputs = ResourceDescriptorHeap[args.x];
+        const ContactShadowProbeInput input = inputs[element];
+        VortexShadowFrameBindings bindings = MakeInvalidVortexShadowFrameBindings();
+        bindings.contact_depth_srv = input.depth_srv;
+        bindings.contact_content_extent_px = float(input.extent).xx;
+        output.Store(address, asuint(TraceContactShadow(bindings, input.view,
+            input.projection, input.reversed_depth != 0u, input.position,
+            input.normal, input.light_direction)));
+    } else if (g_RecordKind == 0) {
         StructuredBuffer<ClusterLightRange> inputs = ResourceDescriptorHeap[args.x];
         ClusterLightRange value = inputs[element];
         output.Store2(address, uint2(value.offset, value.count));

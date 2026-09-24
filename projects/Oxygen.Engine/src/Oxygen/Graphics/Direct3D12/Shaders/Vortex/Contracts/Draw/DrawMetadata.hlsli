@@ -7,6 +7,8 @@
 #ifndef OXYGEN_D3D12_SHADERS_RENDERER_DRAWMETADATA_HLSLI
 #define OXYGEN_D3D12_SHADERS_RENDERER_DRAWMETADATA_HLSLI
 
+static const uint DRAW_PRIMITIVE_DISABLE_SHADOW_RECEPTION = 1u << 2u;
+
 // ABI: must match sizeof(oxygen::engine::DrawMetadata) == 64
 struct DrawMetadata
 {

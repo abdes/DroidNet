@@ -178,6 +178,7 @@ private:
     std::uint32_t vertex_count { 0 };
     std::uint32_t is_indexed { 0 };
     oxygen::vortex::PassMask flags;
+    std::uint32_t primitive_flags { 0U };
     scene::NodeHandle node_handle;
 
     [[nodiscard]] constexpr auto operator==(const BatchingKey&) const noexcept

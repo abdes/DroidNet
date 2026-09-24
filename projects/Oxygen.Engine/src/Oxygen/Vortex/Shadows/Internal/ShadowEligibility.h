@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <algorithm>
+
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
 
@@ -34,6 +36,18 @@ namespace oxygen::vortex::shadows::internal {
 {
   return (light.shadow_flags & kDirectionalLightShadowFlagCastsShadows) != 0U
     && HasShadowEnergy(light.illuminance_lux, light.color);
+}
+
+[[nodiscard]] inline auto NeedsContactShadows(
+  const FrameLightSelection& selection, const ResolvedView* view) -> bool
+{
+  return std::ranges::any_of(selection.directional_lights, [](const auto& light) {
+    return HasDirectionalShadowInfluence(light)
+      && (light.shadow_flags & kLightFlagContactShadows) != 0U;
+  }) || std::ranges::any_of(selection.local_lights, [view](const auto& light) {
+    return HasLocalShadowInfluence(light, view)
+      && (light.flags & kLightFlagContactShadows) != 0U;
+  });
 }
 
 } // namespace oxygen::vortex::shadows::internal

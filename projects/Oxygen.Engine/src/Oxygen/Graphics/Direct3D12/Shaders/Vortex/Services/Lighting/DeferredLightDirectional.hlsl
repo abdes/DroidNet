@@ -7,6 +7,7 @@
 #include "Vortex/Contracts/View/FrameExposureHelpers.hlsli"
 #include "Vortex/Services/Lighting/DeferredLightingCommon.hlsli"
 #include "Vortex/Services/Shadows/DirectionalShadowCommon.hlsli"
+#include "Vortex/Services/Shadows/ContactShadow.hlsli"
 #include "Vortex/Services/Lighting/AtmosphereDirectionalLightShared.hlsli"
 #include "Vortex/Shared/FullscreenTriangle.hlsli"
 
@@ -66,10 +67,13 @@ float4 DeferredLightDirectionalPS(VortexFullscreenTriangleOutput input) : SV_Tar
         const LightShadowReference shadow_reference = LoadLightShadowReference(
             lighting_bindings.directional_shadow_map_srv, light.selection_index);
         float visibility = 1.0;
-        if (shadow_reference.projection_kind == SHADOW_PROJECTION_CASCADED_2D) {
+        if (surface.receives_shadows
+            && shadow_reference.projection_kind == SHADOW_PROJECTION_CASCADED_2D) {
             visibility = ComputeDirectionalShadowVisibility(light.selection_index,
                 world_position, surface.world_normal, light_dir);
         }
+        visibility *= ComputeContactShadowVisibility(light.flags, surface.receives_shadows,
+            world_position, surface.geometric_normal, light_dir);
         const float3 radiance = ResolveDirectionalLightAtmosphereRadiance(
             world_position, light_dir, light.ground_transmittance_rgb,
             light.atmosphere_mode_flags, light.illuminance_rgb_lux);

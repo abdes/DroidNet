@@ -100,7 +100,7 @@ DepthPrepassMeshProcessor::~DepthPrepassMeshProcessor() = default;
 
 void DepthPrepassMeshProcessor::BuildDrawCommands(
   const PreparedSceneFrame& prepared_scene, const ResolvedView* resolved_view,
-  const bool include_masked)
+  const bool include_masked, const bool shadow_casters_only)
 {
   (void)renderer_;
   draw_commands_.clear();
@@ -109,7 +109,9 @@ void DepthPrepassMeshProcessor::BuildDrawCommands(
     return;
   }
 
-  const auto accept_mask = include_masked
+  const auto accept_mask = shadow_casters_only
+    ? PassMask { PassMaskBit::kShadowCaster }
+    : include_masked
     ? PassMask { PassMaskBit::kOpaque, PassMaskBit::kMasked }
     : PassMask { PassMaskBit::kOpaque };
   const auto accepted_draws = AcceptedDrawView(prepared_scene, accept_mask);

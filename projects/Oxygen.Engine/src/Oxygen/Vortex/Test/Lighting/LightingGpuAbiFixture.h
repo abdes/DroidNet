@@ -49,7 +49,8 @@ protected:
   //! Publish a single row of exact packed 32-bit texels for native format
   //! decoding.
   auto PublishPackedTexture(
-    Format format, std::span<const std::uint32_t> texels) -> ShaderVisibleIndex;
+    Format format, std::span<const std::uint32_t> texels, std::uint32_t height = 1U)
+    -> ShaderVisibleIndex;
   auto PublishBrdfEnergyTexture() -> ShaderVisibleIndex;
 
 private:

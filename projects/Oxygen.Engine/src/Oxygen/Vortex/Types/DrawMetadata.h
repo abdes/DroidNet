@@ -17,6 +17,7 @@ enum class DrawPrimitiveFlagBits : uint32_t {
   kNone = 0U,
   kStaticShadowCaster = 1U << 0U,
   kMainViewVisible = 1U << 1U,
+  kDisableShadowReception = 1U << 2U,
 };
 
 [[nodiscard]] constexpr auto HasAnyDrawPrimitiveFlag(

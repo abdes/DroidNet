@@ -7,6 +7,11 @@
 #include <array>
 #include <bit>
 #include <cstddef>
+#include <cmath>
+#include <algorithm>
+
+#include <glm/ext/matrix_clip_space.hpp>
+#include <glm/geometric.hpp>
 #include <cstdint>
 #include <span>
 #include <type_traits>
@@ -25,6 +30,82 @@
 
 namespace oxygen::vortex::testing {
 namespace {
+
+  NOLINT_TEST_F(LightingGpuAbiTest, ContactShadowMetricRayThicknessSelfRejectionAndFades)
+  {
+    struct Probe {
+      glm::mat4 view { 1.0F };
+      glm::mat4 projection;
+      glm::vec3 position { 0.0F, 0.0F, -1.0F };
+      std::uint32_t reversed_depth;
+      glm::vec3 normal { 0.0F, 0.0F, 1.0F };
+      ShaderVisibleIndex depth_srv;
+      glm::vec3 light_direction { glm::normalize(glm::vec3 { 1.0F, 0.0F, 1.0F }) };
+      std::uint32_t extent { 64U };
+    };
+    static_assert(sizeof(Probe) == 176U);
+    for (const bool perspective : { false, true }) {
+      for (const bool reverse : { false, true }) {
+        for (unsigned scenario = 0U; scenario < 6U; ++scenario) {
+          SCOPED_TRACE(perspective);
+          SCOPED_TRACE(reverse);
+          SCOPED_TRACE(scenario);
+          Probe input {};
+          input.reversed_depth = reverse ? 1U : 0U;
+          const auto clip_near = reverse ? 4.0F : 0.1F;
+          const auto clip_far = reverse ? 0.1F : 4.0F;
+          input.projection = perspective
+            ? glm::perspectiveRH_ZO(1.57079632679F, 1.0F, clip_near, clip_far)
+            : glm::orthoRH_ZO(-0.5F, 0.5F, -0.5F, 0.5F, clip_near, clip_far);
+          if (scenario == 4U || scenario == 5U) {
+            input.position.x = perspective ? 0.84F : 0.42F;
+          }
+          if (scenario == 5U) {
+            input.position.x = perspective ? 0.999F : 0.499F;
+          }
+          const auto origin = input.position + 0.001F * input.normal;
+          const auto distance = scenario == 1U ? 0.234375F : 0.0625F;
+          const auto sample = origin + distance * input.light_direction;
+          const auto project = [&](glm::vec3 position) {
+            const auto clip = input.projection * glm::vec4(position, 1.0F);
+            return glm::vec3(clip) / clip.w;
+          };
+          const auto hit_ndc = project(sample);
+          const auto uv = glm::vec2(hit_ndc) * glm::vec2(0.5F, -0.5F) + 0.5F;
+          auto pixels = std::vector<std::uint32_t>(64U * 64U,
+            std::bit_cast<std::uint32_t>(reverse ? 0.0F : 1.0F));
+          float expected = 1.0F;
+          if (uv.x >= 0.0F && uv.x < 1.0F && uv.y >= 0.0F && uv.y < 1.0F) {
+            const auto gap = scenario == 2U ? 0.003F : 0.001F;
+            const auto stored = project(sample + glm::vec3(0, 0, gap)).z;
+            const auto x = static_cast<unsigned>(uv.x * 64U);
+            const auto y = static_cast<unsigned>(uv.y * 64U);
+            pixels.at(y * 64U + x) = std::bit_cast<std::uint32_t>(stored);
+            if (scenario == 3U) {
+              const auto start = project(origin);
+              const auto start_uv = glm::vec2(start) * glm::vec2(0.5F, -0.5F) + 0.5F;
+              pixels.at(static_cast<unsigned>(start_uv.y * 64U) * 64U
+                + static_cast<unsigned>(start_uv.x * 64U)) = std::bit_cast<std::uint32_t>(stored);
+            } else if (scenario != 2U) {
+              const auto t = std::clamp((distance - 0.20F) / 0.05F, 0.0F, 1.0F);
+              const auto end = 1.0F - t * t * (3.0F - 2.0F * t);
+              const auto edge = std::clamp(64.0F
+                * (std::min)({ uv.x, uv.y, 1.0F - uv.x, 1.0F - uv.y }) / 8.0F,
+                0.0F, 1.0F);
+              expected = 1.0F - end * edge;
+            }
+          }
+          input.depth_srv = PublishPackedTexture(Format::kR32Float, pixels, 64U);
+          const auto decoded = Decode({
+            .records = std::as_bytes(std::span(&input, 1U)),
+            .stride = sizeof(Probe), .record_kind = 26U, .decoded_words = 1U,
+            .count = 1U });
+          ASSERT_EQ(decoded.size(), 1U);
+          EXPECT_NEAR(std::bit_cast<float>(decoded[0]), expected, 2.0e-5F);
+        }
+      }
+    }
+  }
 
   static_assert(!std::is_convertible_v<LightSelectionIndex, std::uint32_t>);
   static_assert(!std::is_convertible_v<ShadowRecordIndex, std::uint32_t>);
