@@ -1,6 +1,7 @@
 # EX07A contract review
 
-Status: **EX07A validated on 2026-09-23; full EX07 implementation/qualification remains in_progress.**
+Status: **EX07A validated on 2026-09-23; overall EX07 subsequently closed on 2026-09-25.**
+Historical checkpoints below preserve their original scope; [F acceptance](EX07F-acceptance-report.md) owns final closure.
 The [completion audit](EX07A-completion-audit.md) owns the current A disposition;
 implementation sections below record historical checkpoints and their scoped evidence.
 The initial source review used clean `editor` at `09aa65362` on 2026-09-22.
@@ -908,5 +909,4 @@ checkpoint the spatial culler had not been connected and EX07B–F remained ahea
 For current progress, use the [tracker](../IMPLEMENTATION_STATUS.md#34-slice-7-work-items):
 A–E are closed; the [D baseline register](EX07D-baseline-report.md) and
 [accepted E comparisons](EX07E-shadow-sharing-results.md) remain credited.
-[F engine acceptance](EX07F-acceptance-report.md) is complete, with only the
-user-owned editor interaction sign-off pending for EX07-GATE.
+[F engine acceptance](EX07F-acceptance-report.md) and EX07-GATE are closed, including final user editor approval.

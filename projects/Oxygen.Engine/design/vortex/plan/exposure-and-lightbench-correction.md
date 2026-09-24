@@ -7,7 +7,7 @@ Status: `in_progress` — current slice state and evidence are maintained in the
 are updated there; this plan owns the requirements and gates.
 
 Date: 2026-09-16
-Updated: 2026-09-25 — EX06 and EX07A–E are closed. EX07F engine acceptance, build repairs and documentation are complete; only the user-owned editor interaction sign-off remains. See the [F report](EX07F-acceptance-report.md).
+Updated: 2026-09-25 — EX06 and EX07A–F are closed, including final user editor acceptance. EX08 has not started. See the [F report](EX07F-acceptance-report.md).
 
 Paths are relative to `projects/Oxygen.Engine` unless identified as
 repository-root paths.
@@ -29,7 +29,7 @@ author, inspect and reproduce. The finished package has three observable results
 The exposure engine, HDR/lifecycle contracts, performance disposition and authoring
 are already validated in Slices 1-6, including 5.1 and 5.2. EX07 has qualified
 physical calibration, many-light correctness/performance and targeted lighting
-improvements; its final editor interaction sign-off is user-owned. EX08 onward
+improvements, with final editor interaction approved by the user. EX08 onward
 delivers the maintained applications/instruments and final package integration.
 The completed exposure optimization cycle remains closed.
 
@@ -37,7 +37,7 @@ The completed exposure optimization cycle remains closed.
 
 Execute **EX07 -> EX08 -> EX08.1 -> EX08.2 -> EX09A -> EX09B -> EX09C -> EX09D -> EX09E -> EX10**.
 EX09A-E divide the original large Slice 9; existing requirement IDs remain stable.
-EX07 awaits only editor sign-off; EX08 onward remains planned. Each subsequent
+EX07 is closed; EX08 onward remains planned. Each subsequent
 step ships its focused tests, usable controls, batch case and documentation
 together; EX10 integrates already working delivery.
 
@@ -1259,8 +1259,8 @@ baseline evidence in `894a25e57`. The
 [EX07E handoff](EX07-lighting-correctness-and-scalability.md#ex07e-handoff--closed)
 is closed with accepted measurements and visual approval. The
 [F acceptance report](EX07F-acceptance-report.md) credits that unchanged evidence
-and closes engine-side acceptance/documentation; only the user-owned editor
-interaction sign-off remains.
+and closes overall EX07, including engine qualification, documentation and
+final user editor acceptance.
 
 D credits the accepted MultiView and conventional-shadow baselines and B's
 reference/instrument qualification. Its new delivery is the runnable many-light
@@ -1720,7 +1720,7 @@ serve the specified behavior without adopting UE's legacy compatibility paths.
 ## 11. Completion criteria
 
 Checked foundations are validated by EX02-07 in the tracker. EX07's engine gates
-are complete; its final interactive editor sign-off remains user-owned. Remaining
+and final interactive editor acceptance are complete. Remaining
 unchecked items belong to the later steps and do not reopen those foundations.
 Package closure remains dependent on final integrated evidence.
 
@@ -1732,7 +1732,7 @@ Package closure remains dependent on final integrated evidence.
 - [x] Authored fields round-trip through all active persistence surfaces (EX06).
 - [x] Directional, point and spot reference units and material expectations pass.
 - [x] EX07 many-light correctness, supported capacities and measured performance/improvement gates pass.
-- [ ] EX07 final editor interaction sign-off (user-owned); engine acceptance and build repairs are complete.
+- [x] EX07 final editor interaction sign-off; user confirmed creation, live light edits, undo/redo and save/reopen persistence.
 - [ ] LightBench is a properly repaired, visually useful exposure benchmark;
       all seven experiments pass numerical, interactive and visual acceptance.
 - [ ] MultiView succeeds visually in ordinary and proof layouts; multiple views

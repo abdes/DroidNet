@@ -244,7 +244,7 @@ and **16.434 / 15.347 ms** for Instancing; those captures also remain available.
   timing. Preflight does not prove absence of interference during a capture.
 - No further filter-quality or allocator-policy experiment is part of this
   closure. [F engine-side acceptance](EX07F-acceptance-report.md) subsequently
-  credits these results; only the user-owned editor sign-off remains. The C
+  credits these results and final user editor approval; overall EX07 is closed. The C
   caller/importer follow-up is [closed](EX07C-completion-report.md).
 
 ## Acceptance and durable evidence

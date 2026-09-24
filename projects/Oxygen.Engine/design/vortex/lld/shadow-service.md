@@ -2,7 +2,7 @@
 
 **Phase:** 4C - Migration-Critical Services
 **Deliverable:** D.11
-**Status:** Indexed directional/local shadows, hardware cube PCF and compatible local-map sharing implemented and qualified. [EX07F](../plan/EX07F-acceptance-report.md) awaits only user-owned editor interaction sign-off.
+**Status:** Indexed directional/local shadows, hardware cube PCF and compatible local-map sharing implemented and qualified. [EX07F](../plan/EX07F-acceptance-report.md) is closed, including user-confirmed editor interaction.
 
 ## V0.1 Production Extension
 
