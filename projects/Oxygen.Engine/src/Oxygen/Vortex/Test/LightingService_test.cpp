@@ -311,20 +311,19 @@ NOLINT_TEST_F(LightingServiceBehaviorTest,
   ASSERT_NE(second_bindings, nullptr);
   EXPECT_NE(first_bindings->brdf_energy_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(first_bindings->brdf_model_revision, 2U);
-  EXPECT_EQ(
-    first_bindings->brdf_energy_srv, second_bindings->brdf_energy_srv);
+  EXPECT_EQ(first_bindings->brdf_energy_srv, second_bindings->brdf_energy_srv);
   EXPECT_EQ(
     first_bindings->brdf_model_revision, second_bindings->brdf_model_revision);
   EXPECT_NE(first_bindings->local_records_srv, kInvalidShaderVisibleIndex);
   EXPECT_NE(first_bindings->grid_metadata_srv, kInvalidShaderVisibleIndex);
   EXPECT_NE(first_bindings->cluster_ranges_srv, kInvalidShaderVisibleIndex);
-  EXPECT_EQ(first_bindings->local_indices_srv, kInvalidShaderVisibleIndex);
+  EXPECT_NE(first_bindings->local_indices_srv, kInvalidShaderVisibleIndex);
   EXPECT_NE(
     first_bindings->directional_records_srv, kInvalidShaderVisibleIndex);
   EXPECT_NE(second_bindings->local_records_srv, kInvalidShaderVisibleIndex);
   EXPECT_NE(second_bindings->grid_metadata_srv, kInvalidShaderVisibleIndex);
   EXPECT_NE(second_bindings->cluster_ranges_srv, kInvalidShaderVisibleIndex);
-  EXPECT_EQ(second_bindings->local_indices_srv, kInvalidShaderVisibleIndex);
+  EXPECT_NE(second_bindings->local_indices_srv, kInvalidShaderVisibleIndex);
   EXPECT_NE(
     second_bindings->directional_records_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(first_bindings->directional_records_srv,
@@ -337,7 +336,7 @@ NOLINT_TEST_F(LightingServiceBehaviorTest,
     oxygen::vortex::kLightingPublicationRecorded);
   EXPECT_NE(first_bindings->build_status_srv, kInvalidShaderVisibleIndex);
   EXPECT_EQ(first_bindings->local_shadow_map_srv, kInvalidShaderVisibleIndex);
-  EXPECT_EQ(first_bindings->index_capacity, 0U);
+  EXPECT_GT(first_bindings->index_capacity, 0U);
   EXPECT_EQ(first_bindings->selection_revision.at(0), 91U);
   EXPECT_NE(first_bindings->view_generation, second_bindings->view_generation);
   EXPECT_NE(first_bindings->view_generation, (std::array<std::uint32_t, 2> {}));
@@ -593,6 +592,51 @@ NOLINT_TEST_F(LightingServiceBehaviorTest,
   EXPECT_EQ(
     bindings->publication_state, oxygen::vortex::kLightingPublicationEmpty);
   EXPECT_EQ(bindings->grid_metadata_srv, kInvalidShaderVisibleIndex);
+}
+
+NOLINT_TEST_F(LightingServiceBehaviorTest,
+  CompactStorageSharesBudgetAcrossFrameSlotsAndViews)
+{
+  auto service = LightingService(*renderer_);
+  auto selection = FrameLightSelection {};
+  selection.scene_generation = selection.selection_epoch = 1U;
+  selection.local_lights.resize(1024U);
+  for (auto& light : selection.local_lights) {
+    light.range = 1.0F;
+    light.luminous_flux_lm = 100.0F;
+  }
+  auto resolved = MakeResolvedView(3840.0F, 2160.0F);
+  auto views = std::array {
+    PreparedViewLightingInput { .view_id = oxygen::ViewId { 1U },
+      .resolved_view = oxygen::observer_ptr { &resolved } },
+    PreparedViewLightingInput { .view_id = oxygen::ViewId { 2U },
+      .resolved_view = oxygen::observer_ptr { &resolved } },
+  };
+  const auto budget = renderer_->GetLightingAllocationBudget()
+                        ->Snapshot()
+                        .limits.compact_indices.get();
+  const auto share
+    = budget / views.size() / oxygen::frame::kFramesInFlight.get();
+  for (unsigned frame = 0U; frame < 6U; ++frame) {
+    service.OnFrameStart(oxygen::frame::SequenceNumber { frame + 1U },
+      oxygen::frame::Slot { frame % 3U });
+    ASSERT_TRUE(service.BuildLightGrid(
+      { .frame_light_set = &selection, .active_views = views }));
+    for (const auto& view : views) {
+      const auto* bindings = service.InspectForwardLightBindings(view.view_id);
+      ASSERT_NE(bindings, nullptr);
+      EXPECT_GT(bindings->index_capacity, 0U);
+      EXPECT_LE(
+        std::uint64_t { bindings->index_capacity } * sizeof(std::uint32_t),
+        share);
+      EXPECT_LT(bindings->index_capacity,
+        std::uint64_t { bindings->cluster_count } * bindings->local_count);
+    }
+    EXPECT_LE(renderer_->GetLightingAllocationBudget()
+                ->Snapshot()
+                .compact_indices.get(),
+      budget);
+  }
 }
 
 } // namespace

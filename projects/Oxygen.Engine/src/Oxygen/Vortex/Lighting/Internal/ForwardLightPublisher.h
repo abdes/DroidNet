@@ -14,6 +14,7 @@
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Vortex/Lighting/Internal/LightGridBuilder.h>
 #include <Oxygen/Vortex/Lighting/Types/ForwardLocalLightRecord.h>
+#include <Oxygen/Vortex/Lighting/Types/LightGridResources.h>
 #include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
 
 namespace oxygen::vortex {
@@ -23,6 +24,7 @@ struct ShadowFrameData;
 
 namespace lighting::internal {
   class BrdfEnergyResources;
+  class SpatialLightGrid;
 
   struct PublishedLightingView {
     ShaderVisibleIndex slot { kInvalidShaderVisibleIndex };
@@ -48,12 +50,15 @@ namespace lighting::internal {
       -> const LightingFrameBindings*;
     [[nodiscard]] auto ResolveBindingSlot(ViewId view_id) const
       -> ShaderVisibleIndex;
+    [[nodiscard]] auto InspectGridResources(ViewId view_id) const
+      -> LightGridResources;
 
   private:
     auto EnsurePublishResources() -> bool;
 
     Renderer& renderer_;
     std::unique_ptr<BrdfEnergyResources> brdf_energy_;
+    std::unique_ptr<SpatialLightGrid> spatial_grid_;
     frame::SequenceNumber current_sequence_ { 0U };
     frame::Slot current_slot_ { frame::kInvalidSlot };
     std::unique_ptr<::oxygen::vortex::internal::PerViewStructuredPublisher<
@@ -61,7 +66,6 @@ namespace lighting::internal {
       lighting_bindings_publisher_;
     std::unique_ptr<upload::TransientStructuredBuffer> local_light_buffer_;
     std::unique_ptr<upload::TransientStructuredBuffer> grid_metadata_buffer_;
-    std::unique_ptr<upload::TransientStructuredBuffer> grid_indirection_buffer_;
     std::unique_ptr<upload::TransientStructuredBuffer>
       directional_light_buffer_;
     std::unique_ptr<upload::TransientStructuredBuffer> build_status_buffer_;

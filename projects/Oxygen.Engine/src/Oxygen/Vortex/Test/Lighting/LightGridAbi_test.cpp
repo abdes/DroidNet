@@ -148,7 +148,7 @@ namespace {
     };
     EXPECT_EQ(Decode({
                 .records = std::as_bytes(std::span(records)),
-                .stride = 48U,
+                .stride = sizeof(LightGridPassConstants),
                 .record_kind = 2U,
                 .decoded_words = 12U,
                 .first_element = 1U,

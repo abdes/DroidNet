@@ -398,6 +398,11 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
   },
   // VortexDeferredLightPointVS / VortexDeferredLightPointPS
   ShaderFileSpec {
+    .path="Vortex/Services/Lighting/SpatialLightGrid.hlsl",
+    .entries=std::array {
+      EntryPoint { .type=kCompute, .name="SpatialLightGridCS" } }
+  },
+  ShaderFileSpec {
     .path="Vortex/Services/Lighting/DeferredLightPoint.hlsl",
     .entries=std::array {
       EntryPoint { .type=kPixel, .name="DeferredLightPointPS" },

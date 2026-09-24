@@ -50,7 +50,7 @@ struct LightGridBuildStatus {
     uint2 selection_revision;
 };
 
-// Matches Vortex/Lighting/Types/LightGridPassConstants.h (48 bytes).
+// Matches Vortex/Lighting/Types/LightGridPassConstants.h (208 bytes).
 struct LightGridPassConstants {
     uint lighting_bindings_srv;
     uint ranges_uav;
@@ -63,6 +63,11 @@ struct LightGridPassConstants {
     uint2 work_offset;
     uint scan_stride;
     uint scan_phase;
+    uint scan_destination_uav;
+    uint3 reserved;
+    float4x4 view_matrix;
+    float4x4 inverse_projection;
+    float4 depth_projection;
 };
 
 #endif
