@@ -138,9 +138,10 @@ NOLINT_TEST(BuiltinGeometryCatalogTest, MountAndAuthoringCategoriesArePreserved)
   EXPECT_EQ(standard_count, 9U);
   EXPECT_EQ(advanced_count, 1U);
   EXPECT_EQ(internal_count, 1U);
+  EXPECT_THROW(static_cast<void>(ExportBuiltinGeometryCatalog("../Content")),
+    std::invalid_argument);
   EXPECT_THROW(
-    ExportBuiltinGeometryCatalog("../Content"), std::invalid_argument);
-  EXPECT_THROW(ExportBuiltinGeometryCatalog(""), std::invalid_argument);
+    static_cast<void>(ExportBuiltinGeometryCatalog("")), std::invalid_argument);
 }
 
 } // namespace

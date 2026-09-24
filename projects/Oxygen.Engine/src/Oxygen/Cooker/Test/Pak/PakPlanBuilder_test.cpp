@@ -565,7 +565,6 @@ NOLINT_TEST_F(
   using pak::PakPlanBuilder;
 
   constexpr auto kGuidSeed = uint8_t { 27U };
-  constexpr auto kDescriptorSize = uint64_t { 16U };
   constexpr auto kSourceKeySeed = uint8_t { 0x09U };
   constexpr auto kParamRecordCount = uint32_t { 3U };
   constexpr auto kParamsOffsetRecords = uint64_t { 1U };
@@ -655,7 +654,6 @@ NOLINT_TEST_F(PakPlanBuilderTest, ScriptSlotOutOfBoundsIsRejected)
   using pak::PakPlanBuilder;
 
   constexpr auto kGuidSeed = uint8_t { 37U };
-  constexpr auto kDescriptorSize = uint64_t { 16U };
   constexpr auto kParamRecordCount = uint32_t { 3U };
   constexpr auto kOutOfBoundsOffsetRecords = uint64_t { 2U };
   constexpr auto kOutOfBoundsCount = uint32_t { 2U };
