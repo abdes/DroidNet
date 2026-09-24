@@ -731,7 +731,7 @@ an accepted improvement. Earlier repairs and D baselines remain credited.
 | -------------------------------------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
 | **E01 — Deferred local-light GPU cost**                  | In progress; candidate 1 validated in focused tests | Isolate shadow filtering, GBuffer/bindless fetches, BRDF work, register pressure/spills, divergence and overdraw. Evaluate feature specialization and uniform-data reuse before larger architecture changes. Current traced point totals: Sponza 45.288 ms / 23 draws; Instancing 26.433 ms / 39 draws.                          | Attributed bottleneck and compiled-shader evidence; measured candidate improvement beyond noise on matched synthetic and application controls; preserved image/physical response.                                                               | 02–04, 06, 09, 13 |
 | **E02 — Translucent lighting GPU cost**                  | Open                                                | Explain Sponza's 7.726 ms traced translucency cost: light overlap, forward evaluation, shadow sampling and material work. Repair demonstrated redundant work in the shared consumers.                                                                                                                                            | Matched stage and whole-frame improvement; transparent-material, forward/deferred and shadow reference checks.                                                                                                                                  | 02–04, 06, 09, 13 |
-| **E03 — Grid/list scaling**                              | Open                                                | Explain B09 grid means of 10.959 ms deferred / 10.800 ms forward without Tracy. Inspect candidate tests, assignment/list construction, memory traffic and synchronization; improve measured scaling.                                                                                                                             | Count/boundary, sparse/dense, irrelevant-light, moving, 4K and multi-view comparisons; complete lists/fallback, capacity diagnostics and conservative contributor coverage preserved.                                                           | 08–10, 13         |
+| **E03 — Grid/list scaling**                              | Accepted optimization; final integration in F       | Explain B09 grid means of 10.959 ms deferred / 10.800 ms forward without Tracy. Inspect candidate tests, assignment/list construction, memory traffic and synchronization; improve measured scaling.                                                                                                                             | Count/boundary, sparse/dense, irrelevant-light, moving, 4K and multi-view comparisons; complete lists/fallback, capacity diagnostics and conservative contributor coverage preserved.                                                           | 08–10, 13         |
 | **E04 — Shadow depth, bias and filtering**               | Open                                                | Audit producer/consumer depth encoding, units, nonzero authored bias, receiver offsets and filter quality against the corresponding UE5.7 source path. Investigate comparison sampling if filtering is a demonstrated cost. The receiver-footprint repair is already delivered; complete quantitative parity is not established. | Coherent documented depth/bias/filter contract; contact, grazing/self-shadow, cube-seam, point/spot, short/long-range and quality-tier checks in both families; measured quality/time tradeoffs.                                                | 02–04, 06, 09, 11 |
 | **E05 — CPU, upload, memory and resource scaling**       | Open                                                | Find remaining redundant gather/transform, upload, binding and allocation work under scaled/mutating workloads. Measure live, queued, retired and cached bytes, slack and peaks. Retain existing CBV/state/lifetime repairs and zero steady benchmark allocation churn.                                                          | Attributed active CPU costs separated from GPU waits; matched upload/allocation and whole-frame results; fence-safe reuse/invalidation and bounded growth. Application device-wide samples alone cannot prove renderer allocation savings.      | 09–10, 13         |
 | **E06 — Shadow updates and compatible cross-view reuse** | Open                                                | Share identical local-map content across compatible views using existing ownership/cache mechanisms. Identify unnecessary updates during camera/light/caster changes; reject sharing for incompatible content or generations.                                                                                                    | Matching local-map content rendered/allocated once where compatible; incompatible views remain isolated; mutation and queued-reader checks; memory/time benefit. Directional cascades remain view-dependent.                                    | 10–11, 13         |
@@ -745,7 +745,8 @@ direction rather than iterating indefinitely. Every newly established baseline
 requires the user's manual visual validation before it is committed; candidate
 measurements are provisional until that validation is recorded.
 
-**Resume checkpoint:** the E01 matrix-access improvement is accepted with
+**Resume checkpoint:** the E01 matrix-access improvement is committed in
+`8b65c42f3`, accepted with
 manual Sponza and Instancing visual approval (2026-09-24), one rebuilt GPU ABI
 probe test, 17 native image tests and 10 selected synthetic comparison rows.
 All 12 synthetic images match the original D hashes; steady buffer/texture
@@ -759,14 +760,28 @@ The interrupted Instancing timing attempt is excluded and replaced. Full
 RenderScene builds now align with `oxyrun`; use full target builds before freezing
 future capture identities. Later changed baselines still need manual approval.
 
-**Next:** validate E03's cooperative light-bound preparation candidate described
-in the report. Its standalone shader prototype compiles and is preserved at
-`out/analysis/ex07e/e03-grid/SpatialLightGrid.batched.hlsl`; it is not yet in the
-production archive. A 65-light/partial-group/mutation regression test is being
-added; it has not yet been built or run. Preserve the matrix-access result while
-qualifying that change. Point-kind specialization remains a separate compiled
-experiment, not production. E02–E06 remain open; E07/E08 apply throughout. The
-separately recorded C caller-target validation gap remains open.
+**E03 result:** cooperative light-bound preparation passes all 18 native tests,
+including a 65-light/partial-group/mutation regression. Four timed endpoints and
+26 interaction rows preserve all 44 initial D images exactly. The matched
+matrix-access-only control differs only in shaders.bin and confirms about
+15–17x faster grid construction at 4,096 lights (0.717/0.676 ms deferred/forward).
+The recorded one-light overhead is approximately 1/7 microseconds. The user
+visually validated both application scenes and approved these comparison records
+for commit on 2026-09-24; [durable proof](plan/baselines/ex07e-20260924/cooperative-grid/register.json).
+
+**Next:** reproduce and repair E07.1 below using the existing normal-matrix
+publication. Its new native test is in `ShadowAdmissionGpu_test.cpp`; direct D32
+readback is unsupported, so adapt the existing test GPU readback probe rather
+than expanding the product readback API. No normal-transform repair is implemented
+or validated yet. Point-kind specialization remains a separate compiled
+experiment, not production. E02/E04–E06 remain open; E07/E08 apply throughout.
+The separately recorded C caller-target validation gap remains open.
+
+**Open discovered defect E07.1 (owned by E04/E07):** shadow-depth caster
+normals use the world matrix instead of the existing inverse-transpose normal
+publication under nonuniform scale/shear. Source/mathematical evidence and the
+repair direction are in the optimization report. Native reproduction and repair
+remain required; no validation or quality change is yet claimed.
 
 **Continuation discipline:** update the owning row and this checkpoint after
 each substantive investigation or accepted change, before switching work items.

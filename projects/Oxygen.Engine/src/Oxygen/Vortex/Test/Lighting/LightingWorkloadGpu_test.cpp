@@ -226,6 +226,76 @@ namespace {
     }
   }
 
+  NOLINT_TEST_F(SpatialLightGridGpuTest,
+    LightBatchTailPreservesCompleteOrderedListsAfterMove)
+  {
+    constexpr auto light_count = 65U;
+    for (unsigned i = 0U; i < light_count; ++i) {
+      auto node = scene->CreateNode("Batch light " + std::to_string(i));
+      auto light = std::make_unique<scene::PointLight>();
+      light->SetRange(10000.0F);
+      light->SetLuminousFluxLm(1.0F);
+      light->Common().casts_shadows = false;
+      ASSERT_TRUE(node.AttachLight(std::move(light)));
+      if (i + 1U == light_count) {
+        near_light = node.GetHandle();
+      }
+    }
+    SetSurface(data::MaterialDomain::kOpaque, 1.0F);
+    // The fixture's single XY tile has 32 depth cells, exercising a partial
+    // 64-thread group as well as the second, single-light batch.
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(true, 0.0F, 9U));
+    ASSERT_EQ(grid_bindings.cluster_count, LightCullingConfig::kLightGridSizeZ);
+    for (const bool moved : { false, true }) {
+      SCOPED_TRACE(moved);
+      if (moved) {
+        auto tail = scene->GetNode(near_light);
+        ASSERT_TRUE(tail.has_value());
+        tail->GetTransform().SetLocalPosition({ 100000.0F, 0.0F, 0.0F });
+        ASSERT_NO_FATAL_FAILURE(RenderSurface(true, 0.0F, 3U));
+      }
+      ASSERT_EQ(grid_bindings.local_count, light_count);
+      ASSERT_LT(near_light_index, light_count);
+      ASSERT_NE(grid_resources.status, nullptr);
+      ASSERT_NE(grid_resources.ranges, nullptr);
+      ASSERT_NE(grid_resources.indices, nullptr);
+      const auto expected_count = light_count - static_cast<unsigned>(moved);
+      const auto status = Read<LightGridBuildStatus>(
+        *grid_resources.status, graphics::ResourceStates::kShaderResource);
+      ASSERT_EQ(status.state, kLightGridBuildValid);
+      ASSERT_EQ(status.fallback_cell_count, 0U);
+      ASSERT_EQ(status.written_index_count,
+        grid_bindings.cluster_count * expected_count);
+      const auto ranges
+        = GetReadbackManager()->ReadBufferNow(*grid_resources.ranges,
+          { 0U, grid_bindings.cluster_count * sizeof(ClusterLightRange) });
+      const auto indices
+        = GetReadbackManager()->ReadBufferNow(*grid_resources.indices,
+          { 0U, status.written_index_count * sizeof(std::uint32_t) });
+      ASSERT_TRUE(ranges.has_value());
+      ASSERT_TRUE(indices.has_value());
+      for (unsigned cell = 0U; cell < grid_bindings.cluster_count; ++cell) {
+        auto range = ClusterLightRange {};
+        std::memcpy(
+          &range, ranges->data() + cell * sizeof(range), sizeof(range));
+        ASSERT_EQ(range.count, expected_count);
+        ASSERT_LE(range.offset.get() + range.count, status.written_index_count);
+        unsigned ordinal = 0U;
+        for (unsigned selected = 0U; selected < light_count; ++selected) {
+          if (moved && selected == near_light_index) {
+            continue;
+          }
+          std::uint32_t actual {};
+          std::memcpy(&actual,
+            indices->data() + (range.offset.get() + ordinal) * sizeof(actual),
+            sizeof(actual));
+          EXPECT_EQ(actual, selected) << "cell " << cell;
+          ++ordinal;
+        }
+      }
+    }
+  }
+
   class SpatialLightGridFallbackGpuTest : public SpatialLightGridGpuTest {
   protected:
     void ConfigureRenderer(RendererConfig& config) const override

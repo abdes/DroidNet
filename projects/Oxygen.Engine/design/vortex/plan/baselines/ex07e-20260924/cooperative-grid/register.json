@@ -1,0 +1,41 @@
+{
+  "status": "Accepted cooperative-grid optimization and visually validated comparison records; overall EX07E remains open.",
+  "initial_baseline": "../../ex07d-20260924/register.json",
+  "prior_accepted_change": "../matrix-access/register.json",
+  "user_visual_approval": {
+    "date": "2026-09-24",
+    "answer": "Visually validated; accept and commit",
+    "scope": "Grid optimization inspected in RenderScene Sponza and Instancing; later changed baselines require new validation."
+  },
+  "source_parent": "8b65c42f383bc83ec9a422794272ecdfb5b2656c",
+  "source_sha256": {
+    "src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Lighting/SpatialLightGrid.hlsl": "d99e6ad820778da66bbc04e07131c61150dbf1fc15b9e874b11a380096dcfd3b",
+    "src/Oxygen/Vortex/Test/Lighting/LightingWorkloadGpu_test.cpp": "5408a695c99ebf0de041ffe70db738f49a148de4d6d1ca4cad783dc0cfbda48b"
+  },
+  "qualification": {
+    "native_tests_passed": 18,
+    "timed_endpoint_rows": 4,
+    "matched_control_rows": 4,
+    "interaction_rows": 26,
+    "interaction_images_exact_against_initial": 40,
+    "endpoint_images_exact_against_initial": 4
+  },
+  "tradeoff": "Approximately 1 microsecond deferred / 7 microseconds forward extra grid work at one light; about 15-17x faster grid at 4096 lights. Native whole-frame desktop variance retained.",
+  "unchanged_contracts": [
+    "Sphere bound inflation and intersection",
+    "Ascending complete light lists and overflow fallback",
+    "Resource ABI and persistent allocations",
+    "Off-screen contributing light/caster semantics"
+  ],
+  "raw_roots": [
+    "out/analysis/ex07e/e03-grid",
+    "out/analysis/ex07e/e03-grid-endpoints",
+    "out/analysis/ex07e/e03-grid-control",
+    "out/analysis/ex07e/e03-grid-interactions"
+  ],
+  "source_sha256_scope": "Source bytes used for validation; candidate-source.json preserves the exact patch before formatting.",
+  "committed_source_sha256": {
+    "src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Lighting/SpatialLightGrid.hlsl": "d99e6ad820778da66bbc04e07131c61150dbf1fc15b9e874b11a380096dcfd3b",
+    "src/Oxygen/Vortex/Test/Lighting/LightingWorkloadGpu_test.cpp": "417c2bb05b6b2007fad8f63d5270607ed14b849f93c5f6b268f7f466ac455267"
+  }
+}
