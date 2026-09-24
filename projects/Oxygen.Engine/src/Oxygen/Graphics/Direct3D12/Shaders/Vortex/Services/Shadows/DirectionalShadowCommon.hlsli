@@ -311,7 +311,7 @@ static inline float ComputePointShadowVisibility(
 
     const uint face_index = SelectPointShadowFace(light_to_receiver);
     const float4 shadow_clip = mul(
-        point_shadow.face_light_view_projection[face_index],
+        LoadCubeLocalShadowFaceMatrix(bindings, point_shadow_index, face_index),
         float4(biased_world_position, 1.0f));
     if (abs(shadow_clip.w) <= 1.0e-6f) {
         return 1.0f;

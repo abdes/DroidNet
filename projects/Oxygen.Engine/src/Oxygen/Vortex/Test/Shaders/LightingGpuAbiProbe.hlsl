@@ -281,12 +281,21 @@ void CS(uint3 thread : SV_DispatchThreadID) {
     } else if (g_RecordKind == 15) {
         StructuredBuffer<CubeLocalShadowRecord> inputs = ResourceDescriptorHeap[args.x];
         CubeLocalShadowRecord value = inputs[element];
-        [unroll] for (uint face = 0; face < 6; ++face) {
+        uint count, stride;
+        inputs.GetDimensions(count, stride);
+        VortexShadowFrameBindings bindings = (VortexShadowFrameBindings)0;
+        bindings.cube_local_records_srv = args.x;
+        bindings.cube_local_record_count = count;
+        // Exercise the production face accessor with a runtime face index,
+        // including every matrix lane in distinct, nonzero-index records.
+        [loop] for (uint offset = 0; offset < 6; ++offset) {
+            const uint face = (offset + element) % 6u;
+            const float4x4 face_matrix = LoadCubeLocalShadowFaceMatrix(bindings, element, face);
             [unroll] for (uint column = 0; column < 4; ++column) {
                 float4 basis = 0;
                 basis[column] = 1;
                 output.Store4(address + face * 64 + column * 16,
-                    asuint(mul(value.face_light_view_projection[face], basis)));
+                    asuint(mul(face_matrix, basis)));
             }
         }
         output.Store4(address + 384, asuint(float4(value.shadow_origin_ws, value.near_plane_m)));
