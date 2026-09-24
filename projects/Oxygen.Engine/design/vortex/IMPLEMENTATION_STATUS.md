@@ -99,7 +99,7 @@ complete. The TexturedCube panel-refresh regression is covered by automated
 tests and the user's successful rebuilt-app test. See the
 [EX06 result and evidence](#33-slice-6-work-items).
 
-**Current: EX07A/B and EX07D are closed. EX07E is active, authorized on 2026-09-24.** The [E01–E08 ledger and resume checkpoint](#ex07e--work-items-and-resume-checkpoint) own the next work. Remaining EX07C caller-target validation and F acceptance stay open.
+**Current: EX07A/B and EX07D are closed. EX07E is paused before E06 at the user's request.** The [E01–E08 ledger and resume checkpoint](#ex07e--work-items-and-resume-checkpoint) own the next work. Remaining EX07C caller-target validation and F acceptance stay open.
 
 [Section 3.4](#34-slice-7-work-items) is the single authoritative EX07 progress
 tracker. It shows the execution stages, numbered deliverables, completed portions
@@ -687,7 +687,7 @@ No EX06 delivery item remains open.
 
 ### 3.4 Slice 7 work items
 
-**EX07 overall: in progress. A/B and D are closed. E is active, authorized on 2026-09-24.** C retains its separately recorded caller-target validation gap; F remains open.
+**EX07 overall: in progress. A/B and D are closed. E is paused before E06 at the user's request.** C retains its separately recorded caller-target validation gap; F remains open.
 
 **Production model 2 is implemented and test-validated; the user accepted the
 measured MultiView quality/performance result.** It uses analytic finite sources,
@@ -715,28 +715,41 @@ production repair, performance work and final qualification have later owners.
 | **B — References and instruments**    | Independent physical/material/image references, native probes, frozen workloads and bounded instruments.          | **Complete** — [audit](plan/EX07B-completion-audit.md)                                                                                                                                                                                                                                                                                | Reference/oracle portions of 01–06; workload portion of 07; instrument portion of 13.                  |
 | **C — Correctness repair**            | Validated light ingress/transport, explicit atmosphere roles, receiver/contact shadows and isolated view failure. | **In progress — remaining caller fixes await target build validation**                                                                                                                                                                                                                                                                | Remaining correctness in 01–04, 06, 08, 10–12.                                                         |
 | **D — Many-light scene and baseline** | Reproducible benchmark and application-scene records for E/F.                                                     | **Closed (2026-09-24)** — 54 timed/image-qualified benchmark rows, four current application runs, versioned traces/settings/images and historical controls. CPU preflight coverage is 24/54 benchmark rows plus all application runs; remaining limits and noisy B05-D are explicit in the [register](plan/EX07D-baseline-report.md). | 07; many-light baseline/shadow-cost portions of 11/13.                                                 |
-| **E — Scalable optimization**         | Fix measured deferred submission/resource costs while preserving lighting and shadows.                            | **Active — E01–E08 open** — earlier measured repairs remain credited in the [baseline register](plan/EX07D-baseline-report.md); current priorities and comparison rules are in the [E handoff](plan/EX07-lighting-correctness-and-scalability.md#ex07e-handoff--active).                                                              | Optimization portions of 08–11; culling/performance diagnostics in 13.                                 |
+| **E — Scalable optimization**         | Fix measured deferred submission/resource costs while preserving lighting and shadows.                            | **Paused before E06 — remaining implementation and final acceptance gates open** — earlier measured repairs remain credited in the [baseline register](plan/EX07D-baseline-report.md); current priorities and comparison rules are in the [E handoff](plan/EX07-lighting-correctness-and-scalability.md#ex07e-handoff--active).       | Optimization portions of 08–11; culling/performance diagnostics in 13.                                 |
 | **F — Final delivery**                | Final-code numerical, native/editor, visual and performance gates; operating documentation and supported limits.  | **Not started**                                                                                                                                                                                                                                                                                                                       | 14 and EX07-GATE, rechecking the final implementation of all IDs.                                      |
 
 #### EX07E — Work items and resume checkpoint
 
-**Active, authorized by the user on 2026-09-24.** This is the authoritative E
+**Resume only on the user's explicit signal.** The other optimization code and
+its automated qualification are at the completed pre-E06 checkpoint: both Ninja
+Release builds, 23/23 native image tests and 34/34 service tests per tree, and
+12 interaction rows / 20 matching images. The qualified source recipe and frozen
+binary identities still match the worktree. E06 is the remaining implementation
+item and its independent review is pending. Its dependent memory/lifecycle
+accounting, final integrated Sponza/Instancing comparisons, manual visual baseline
+approval, closeout and commits remain open after E06. This pause does not mark
+those gates complete. The user authorized committing the validated implementation
+and automated test evidence at this checkpoint. New baseline artifacts remain
+excluded pending manual visual validation; the three reviewer documents remain
+excluded by explicit instruction. E06 stays paused.
+
+**Paused at the pre-E06 checkpoint by the user on 2026-09-24.** This is the authoritative E
 work ledger. The eight items below preserve the scope presented to the user;
 they refine the existing EX07 deliverable IDs rather than replace them.
 `Open` means the investigation or implementation and its acceptance remain
 unfinished. A suspected cause is not a confirmed defect, and a prototype is not
 an accepted improvement. Earlier repairs and D baselines remain credited.
 
-| E item                                                   | State                                               | Required investigation / delivery                                                                                                                                                                                                                                                                                                | Closure evidence                                                                                                                                                                                                                                | Existing EX07 IDs |
-| -------------------------------------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
-| **E01 — Deferred local-light GPU cost**                  | In progress; candidate 1 validated in focused tests | Isolate shadow filtering, GBuffer/bindless fetches, BRDF work, register pressure/spills, divergence and overdraw. Evaluate feature specialization and uniform-data reuse before larger architecture changes. Current traced point totals: Sponza 45.288 ms / 23 draws; Instancing 26.433 ms / 39 draws.                          | Attributed bottleneck and compiled-shader evidence; measured candidate improvement beyond noise on matched synthetic and application controls; preserved image/physical response.                                                               | 02–04, 06, 09, 13 |
-| **E02 — Translucent lighting GPU cost**                  | Open                                                | Explain Sponza's 7.726 ms traced translucency cost: light overlap, forward evaluation, shadow sampling and material work. Repair demonstrated redundant work in the shared consumers.                                                                                                                                            | Matched stage and whole-frame improvement; transparent-material, forward/deferred and shadow reference checks.                                                                                                                                  | 02–04, 06, 09, 13 |
-| **E03 — Grid/list scaling**                              | Accepted optimization; final integration in F       | Explain B09 grid means of 10.959 ms deferred / 10.800 ms forward without Tracy. Inspect candidate tests, assignment/list construction, memory traffic and synchronization; improve measured scaling.                                                                                                                             | Count/boundary, sparse/dense, irrelevant-light, moving, 4K and multi-view comparisons; complete lists/fallback, capacity diagnostics and conservative contributor coverage preserved.                                                           | 08–10, 13         |
-| **E04 — Shadow depth, bias and filtering**               | Open                                                | Audit producer/consumer depth encoding, units, nonzero authored bias, receiver offsets and filter quality against the corresponding UE5.7 source path. Investigate comparison sampling if filtering is a demonstrated cost. The receiver-footprint repair is already delivered; complete quantitative parity is not established. | Coherent documented depth/bias/filter contract; contact, grazing/self-shadow, cube-seam, point/spot, short/long-range and quality-tier checks in both families; measured quality/time tradeoffs.                                                | 02–04, 06, 09, 11 |
-| **E05 — CPU, upload, memory and resource scaling**       | Open                                                | Find remaining redundant gather/transform, upload, binding and allocation work under scaled/mutating workloads. Measure live, queued, retired and cached bytes, slack and peaks. Retain existing CBV/state/lifetime repairs and zero steady benchmark allocation churn.                                                          | Attributed active CPU costs separated from GPU waits; matched upload/allocation and whole-frame results; fence-safe reuse/invalidation and bounded growth. Application device-wide samples alone cannot prove renderer allocation savings.      | 09–10, 13         |
-| **E06 — Shadow updates and compatible cross-view reuse** | Open                                                | Share identical local-map content across compatible views using existing ownership/cache mechanisms. Identify unnecessary updates during camera/light/caster changes; reject sharing for incompatible content or generations.                                                                                                    | Matching local-map content rendered/allocated once where compatible; incompatible views remain isolated; mutation and queued-reader checks; memory/time benefit. Directional cascades remain view-dependent.                                    | 10–11, 13         |
-| **E07 — Correctness defects discovered during E**        | Open; continuous obligation                         | Fix discovered missing/duplicate contributions, stale light-shadow mapping, invalid caches, overflow/recovery, view contamination and lifetime failures. Preserve off-screen contributing lights and casters, authored ranges and requested shadows.                                                                             | Every discovered defect gets a linked reproduction, owning E item, repair and regression evidence. No unresolved discovered defect is silently waived or moved out of scope. Final integrated acceptance remains F.                             | 06, 08, 10–12     |
-| **E08 — Candidate qualification and operating limits**   | Open; applies to every candidate                    | Select matched baseline IDs and freeze improvement/regression/noise criteria before timing. Address missing CPU preflight or noisy B05-D only when needed for a comparison. Keep Tracy attribution separate from native throughput and obtain actual allocation snapshots for memory claims.                                     | Durable Markdown results with identities, percentiles, stage/whole-frame costs, memory, image/physical checks, accepted/rejected decisions and supported limits. Unaffected D evidence is reused; F receives explicit residual acceptance work. | 07, 13–14/GATE    |
+| E item                                                   | State                                                          | Required investigation / delivery                                                                                                                                                                                                                                                                                                | Closure evidence                                                                                                                                                                                                                                | Existing EX07 IDs |
+| -------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
+| **E01 — Deferred local-light GPU cost**                  | Implemented candidates; final qualification open               | Isolate shadow filtering, GBuffer/bindless fetches, BRDF work, register pressure/spills, divergence and overdraw. Evaluate feature specialization and uniform-data reuse before larger architecture changes. Current traced point totals: Sponza 45.288 ms / 23 draws; Instancing 26.433 ms / 39 draws.                          | Attributed bottleneck and compiled-shader evidence; measured candidate improvement beyond noise on matched synthetic and application controls; preserved image/physical response.                                                               | 02–04, 06, 09, 13 |
+| **E02 — Translucent lighting GPU cost**                  | Shared matrix fix credited; final qualification open           | Explain Sponza's 7.726 ms traced translucency cost: light overlap, forward evaluation, shadow sampling and material work. Repair demonstrated redundant work in the shared consumers.                                                                                                                                            | Matched stage and whole-frame improvement; transparent-material, forward/deferred and shadow reference checks.                                                                                                                                  | 02–04, 06, 09, 13 |
+| **E03 — Grid/list scaling**                              | Accepted optimization; final integration in F                  | Explain B09 grid means of 10.959 ms deferred / 10.800 ms forward without Tracy. Inspect candidate tests, assignment/list construction, memory traffic and synchronization; improve measured scaling.                                                                                                                             | Count/boundary, sparse/dense, irrelevant-light, moving, 4K and multi-view comparisons; complete lists/fallback, capacity diagnostics and conservative contributor coverage preserved.                                                           | 08–10, 13         |
+| **E04 — Shadow depth, bias and filtering**               | Implemented and tested; visual baseline gate open              | Audit producer/consumer depth encoding, units, nonzero authored bias, receiver offsets and filter quality against the corresponding UE5.7 source path. Investigate comparison sampling if filtering is a demonstrated cost. The receiver-footprint repair is already delivered; complete quantitative parity is not established. | Coherent documented depth/bias/filter contract; contact, grazing/self-shadow, cube-seam, point/spot, short/long-range and quality-tier checks in both families; measured quality/time tradeoffs.                                                | 02–04, 06, 09, 11 |
+| **E05 — CPU, upload, memory and resource scaling**       | CPU changes tested; memory accounting/final qualification open | Find remaining redundant gather/transform, upload, binding and allocation work under scaled/mutating workloads. Measure live, queued, retired and cached bytes, slack and peaks. Retain existing CBV/state/lifetime repairs and zero steady benchmark allocation churn.                                                          | Attributed active CPU costs separated from GPU waits; matched upload/allocation and whole-frame results; fence-safe reuse/invalidation and bounded growth. Application device-wide samples alone cannot prove renderer allocation savings.      | 09–10, 13         |
+| **E06 — Shadow updates and compatible cross-view reuse** | Last implementation item; independent review pending           | Share identical local-map content across compatible views using existing ownership/cache mechanisms. Identify unnecessary updates during camera/light/caster changes; reject sharing for incompatible content or generations.                                                                                                    | Matching local-map content rendered/allocated once where compatible; incompatible views remain isolated; mutation and queued-reader checks; memory/time benefit. Directional cascades remain view-dependent.                                    | 10–11, 13         |
+| **E07 — Correctness defects discovered during E**        | Non-sharing repairs tested; E06 lifetime findings pending      | Fix discovered missing/duplicate contributions, stale light-shadow mapping, invalid caches, overflow/recovery, view contamination and lifetime failures. Preserve off-screen contributing lights and casters, authored ranges and requested shadows.                                                                             | Every discovered defect gets a linked reproduction, owning E item, repair and regression evidence. No unresolved discovered defect is silently waived or moved out of scope. Final integrated acceptance remains F.                             | 06, 08, 10–12     |
+| **E08 — Candidate qualification and operating limits**   | In progress; integrated qualification follows E06              | Select matched baseline IDs and freeze improvement/regression/noise criteria before timing. Address missing CPU preflight or noisy B05-D only when needed for a comparison. Keep Tracy attribution separate from native throughput and obtain actual allocation snapshots for memory claims.                                     | Durable Markdown results with identities, percentiles, stage/whole-frame costs, memory, image/physical checks, accepted/rejected decisions and supported limits. Unaffected D evidence is reused; F receives explicit residual acceptance work. | 07, 13–14/GATE    |
 
 **User acceptance instructions (2026-09-24):** complete E implementation and
 compare against the initial D baseline. Retain improvements unless the user
@@ -769,7 +782,7 @@ The recorded one-light overhead is approximately 1/7 microseconds. The user
 visually validated both application scenes and approved these comparison records
 for commit on 2026-09-24; [durable proof](plan/baselines/ex07e-20260924/cooperative-grid/register.json).
 
-**Current E04/E07.1:** the nonuniform caster-normal defect is reproduced
+**E04/E07.1 repair (commit `31303c316`):** the nonuniform caster-normal defect is reproduced
 natively (0.15 depth mismatch for identical world geometry) and repaired by
 publishing/using the existing inverse-transpose normal stream. All 19 native
 image tests pass in each existing Ninja Release tree (Tracy OFF/ON), and both
@@ -778,18 +791,127 @@ complete RenderScene targets are rebuilt. The
 is versioned with this correctness repair. Private pass constants remain 128 bytes, with the descriptor
 at offset 124; zero slope bias avoids unnecessary normal work. The retained bias
 calibration is documented, and misleading UE constant names are corrected.
-Commit its before/after proof, then investigate the exact-kernel raw-gather
-PCF candidate described in the optimization report. No PCF change is implemented
-or accepted. Any calibration/filter-policy change needs separate quality evidence
-and user direction. E07.1 is repaired; E07 continues to own newly found defects.
+Its proof is committed. The uncommitted raw-gather PCF candidate passes all
+20 native tests (3,888 exact comparison cases), but its Sponza timing is mixed:
+Tracy point work 11.561 -> 11.711 ms, translucency 1.928 -> 1.841 ms, whole frame
+24.125 -> 24.360 ms. Native 23.835 -> 23.122 ms is inconclusive because control
+variability is higher. **E04 direction approved by the user on 2026-09-24:**
+implement UE-aligned point-light cube hardware PCF with coherent depth/bias handling.
+This supersedes both earlier choice questions. Preserve the mixed raw-gather
+experiment as evidence; it is not an accepted implementation or new baseline.
+The user additionally approved Low/Medium/High/Ultra comparison counts of
+**1/5/29/29**, matching UE's 29-comparison High/Epic setting. The raw-gather
+experiment has been removed from the product path; its source and measurements
+remain under `out/analysis/ex07e/e04-pcf`. The
+[cube PCF contract](plan/EX07E-point-pcf-contract.md) now owns the implementation:
+cube-array SRVs, native cube face addressing, unbiased raster depth, receiver
+comparison bias, and a 448-byte record with explicit sample count. The shared
+archive contains the tested hardware-PCF implementation (223 modules after the
+punctual-point variant was added). Both
+existing Ninja Release RenderScene targets are rebuilt. Qualification currently
+proves 31/31 setup tests (non-Tracy), 21/21 native image tests in each tree, and
+3/3 shadow ABI tests in each tree. The report records the 108 bilinear comparison
+cases and 594 rendered cube samples per material state, including masked cache
+invalidation. Scene timing and visual acceptance remain open; do not accept a
+baseline from test success. New baselines require manual visual validation before commit.
+E07.1 is repaired; its native regression now uses a projected spot, where caster
+slope bias remains active.
+
+**E04 candidate regression:** the first Sponza capture is excluded for CPU
+contention at the user's request. A subsequent clean rerun confirms 24.125 ->
+31.606 ms GPU frame time (41.451 -> 31.639 FPS), point work 11.561 -> 17.430 ms,
+and translucency 1.928 -> 3.380 ms. Measured-window CPU mean/peak is 3.435/12%,
+with the same 23 point draws and unchanged scene/settings hashes. This is a GPU
+regression, not CPU overload. A new baseline is **not accepted**. The user then
+explicitly directed retaining justified correctness/quality work and moving to
+other performance opportunities. **Stop the PCF tuning loop.** Keep the approved
+1/5/29/29 quality mapping and coherent hardware-PCF depth/bias contract; do not
+start a shadow-mask architecture experiment or reopen filter quality on this
+instruction. Manual visual approval remains necessary for new baselines.
+The report retains the numerical results. Local candidate evidence at
+`plan/baselines/ex07e-20260924/point-hardware-pcf/register.json` includes CPU-load
+proof and remains uncommitted pending baseline approval. E06 remains last.
+
+**E06 review and execution gate:** the user approved the proposed direction and
+requested independent review before implementation, including changes to resource
+management or Nexus. The [design proposal](plan/EX07E-cross-view-shadow-sharing.md) recommends
+Graphics registration/use leases and actual completion receipts, focused Nexus
+state-machine/lifetime hardening, and Vortex per-light content/storage sharing.
+Current view-exclusive allocation is not claimed to be a live sharing bug.
+The source audit identifies concrete lifetime and submission hazards that must
+be reproduced and addressed under the approved design. No E06 code, build or
+benchmark has been performed for this proposal. E06 is the **last EX07E
+implementation item**: finish the other optimizations and non-sharing correctness
+repairs first, resolve the independent review, then implement E06. Do not begin its
+infrastructure changes under another item. Final integrated E08 qualification
+follows E06; validation continues throughout. Material design changes require the
+user's decision, and new baselines still require manual visual approval.
+
+**E07.2 repaired:** `Core/Version.cpp::Patch()` now returns
+`cVersionPatch`. Both Release targets rebuild. Current major and patch both
+happen to be zero; this fixes the latent API defect without claiming it explains
+any measured rendering cost. The repair was made after the PCF capture pair.
+
+**E05 active implementation:** cache the four owning per-light GPU profile
+descriptors (the old label constructor allocated even with Tracy disabled), reuse
+CPU constant/index-order scratch, borrow already-owned publication indices instead
+of copying a vector, and use stable counting-sort buckets to reduce local-light
+pipeline switches. Directional remains first, sky last, and each draw retains its
+original constant/selection/shadow index. Gathering now reuses already-updated
+world positions and selection-vector capacity, and avoids computing point-light
+orientation that the evaluation publisher discards. Spot quaternion-chain
+direction semantics are preserved under scaled parents. CPU borrowing changes no
+GPU registration, retirement or Nexus ownership. Both Release trees pass 34
+lighting-service tests and all 23 native image tests. The new test covers parent
+rotation/scale, movement and IgnoreParentTransform. The 1,024-source
+native preview renders 704 local draws with **2 pipeline binds** in each tree.
+The original added counter assertion read cleared end-of-frame state; its rerun
+records counters inside the existing publication probe. Non-Tracy 4,096-light
+lighting CPU union is 2.295 ms versus accepted post-grid 4.708 ms; recording is
+0.492 versus 2.620 ms, gathering 0.894 versus 1.163 ms. Whole frame is 9.245
+versus 10.669 ms, but historical noise prevents an isolated FPS claim. Reference
+and frozen-D image comparisons pass; steady buffer/texture creation remains zero.
+The report and local candidate evidence at
+`plan/baselines/ex07e-20260924/cpu-submission/register.json` record the one-light
+result, noise, CPU storage tradeoff and remaining
+dynamic/multi-view/final-scene gates. New baseline acceptance remains pending.
+
+The moving, two-view, orthographic and three shadowed interaction recipes now
+pass in forward and deferred: **12 rows / 20 images**, all exactly matching their
+current complete-list references. E05's inventory/slack/staging figures are in
+the report, but a trustworthy queued/retired/cache-owned byte split is not exposed
+by current instrumentation. That evidence depends on the reviewed E06 ownership
+work and final E08 lifecycle checks; do not invent zero values or implement E06
+infrastructure early to satisfy a counter. Final integrated Sponza/Instancing
+captures and visual baseline acceptance follow E06.
+
+Committed [automated validation records](plan/validation/ex07e-pre-e06/README.md)
+retain the passing test results separately from unapproved baseline artifacts.
+
+**Pre-E06 evidence check (2026-09-24):** all 30 files indexed by the two candidate
+evidence registers match their recorded hashes. The tracked source patch and
+captured untracked shader match the replay recipe, and the current non-Tracy
+benchmark executable/DLL/archive identities match its frozen checkpoint. Saved
+results confirm 23/23 image and 34/34 service tests in each Release tree. This is
+a verified candidate checkpoint, not milestone closure or visual acceptance.
+The user confirmed the independent E06 review is still underway and will share
+its findings. Wait for those findings before E06 implementation; final integrated
+captures remain after E06, not another pre-review campaign.
 
 E05 still needs the remaining CPU/upload/resource-cost assessment; E06 still
 needs compatible cross-view sharing using existing allocation/content ownership.
-For E06, prove complete matching caster content, generation and array-slot layout
-before sharing; preserve incompatible views and fence-safe descriptor retirement.
-Do not hash a whole multi-light bucket using only its first light's caster volume.
-Point-kind specialization remains a compiled experiment, not production. E02/E04–
-E06 remain open; E07/E08 apply throughout. The separately recorded C caller-target
+The [E06 design proposal](plan/EX07E-cross-view-shadow-sharing.md)
+records the required ownership change: share allocation/SRV ownership and canonical
+physical slots per compatible light, including partially overlapping view lists.
+A texture pointer alone cannot prevent the current owner from unregistering its
+descriptors. Do not restrict sharing to identical whole buckets or hash a bucket
+using only its first light's caster volume. Implementation and native proof remain
+open; no product/runtime change or new capture was made during this audit.
+Point/punctual specialization is now test-validated source with an
+exact-zero-radius PSO variant and mixed-source native coverage. It lowers measured
+point-draw GPU time, but the Sponza capture pair does not establish a whole-frame
+gain; retain that limitation in the report and stop further PCF-side iterations.
+E02/E04–E06 remain open; E07/E08 apply throughout. The separately recorded C caller-target
 validation gap remains open. All later changed baselines require manual approval.
 
 **Continuation discipline:** update the owning row and this checkpoint after

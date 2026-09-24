@@ -33,7 +33,9 @@ struct ShadowDepthVSOutput
 {
     float4 position : SV_POSITION;
     float2 uv : TEXCOORD0;
+#if !defined(CUBE_SHADOW)
     float biased_depth : TEXCOORD1;
+#endif
 };
 
 static inline ShadowPassConstants LoadShadowPassConstants(uint slot)
@@ -80,6 +82,7 @@ ShadowDepthVSOutput VortexShadowDepthVS(
         instance_id);
     float4 world_position = mul(world_matrix, float4(vertex.position, 1.0f));
     output.position = mul(pass_constants.light_view_projection, world_position);
+#if !defined(CUBE_SHADOW)
     const float4 unbiased_position = output.position;
     float slope_bias = 0.0f;
     if (pass_constants.shadow_bias_parameters.y > 0.0f) {
@@ -122,16 +125,23 @@ ShadowDepthVSOutput VortexShadowDepthVS(
     // Bias must not move SV_Position before rasterization, especially for
     // perspective local-light shadows near the far end of the cone.
     output.position = unbiased_position;
+#endif
     return output;
 }
 
 [shader("pixel")]
-void VortexShadowDepthMaskedPS(ShadowDepthVSOutput input, out float out_depth : SV_Depth)
+void VortexShadowDepthMaskedPS(ShadowDepthVSOutput input
+#if !defined(CUBE_SHADOW)
+    , out float out_depth : SV_Depth
+#endif
+)
 {
 #if defined(ALPHA_TEST)
     const SamplerState linear_sampler = SamplerDescriptorHeap[0];
     ApplyMaskedAlphaClip(
         EvaluateMaskedAlphaTest(input.uv, g_DrawIndex, linear_sampler));
 #endif
+#if !defined(CUBE_SHADOW)
     out_depth = saturate(input.biased_depth);
+#endif
 }

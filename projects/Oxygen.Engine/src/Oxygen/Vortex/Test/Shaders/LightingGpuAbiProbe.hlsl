@@ -303,7 +303,7 @@ void CS(uint3 thread : SV_DispatchThreadID) {
             value.depth_bias, value.world_texel_size)));
         output.Store4(address + 416, uint4(value.surface_srv, value.first_array_layer,
             value.selection_index, asuint(value.shadow_strength)));
-        output.Store4(address + 432, uint4(asuint(value.inverse_resolution), value.reserved1));
+        output.Store4(address + 432, uint4(asuint(value.inverse_resolution), value.pcf_sample_count, value.reserved1));
     } else if (g_RecordKind == 16) {
         StructuredBuffer<VortexShadowFrameBindings> inputs = ResourceDescriptorHeap[args.x];
         VortexShadowFrameBindings value = inputs[element];

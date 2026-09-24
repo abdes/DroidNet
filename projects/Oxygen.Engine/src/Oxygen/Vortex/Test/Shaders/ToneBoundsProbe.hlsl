@@ -13,6 +13,7 @@
 #include "Vortex/Services/PostProcess/HdrSceneComposition.hlsli"
 #include "Vortex/Services/Environment/TransmittanceMath.hlsli"
 #include "Vortex/Services/Environment/VolumetricFog.hlsl"
+#include "Vortex/Services/Shadows/PointShadowFiltering.hlsli"
 
 struct ProbeConstants { uint inputs; uint output; uint count; uint reserved; };
 
@@ -71,6 +72,19 @@ void CS(uint3 thread : SV_DispatchThreadID)
         return;
     }
     if (thread.x >= pass.count) {
+        return;
+    }
+    if (pass.reserved == 65536u) {
+        const uint4 settings = input[thread.x * 3u];
+        const float4 sample = asfloat(input[thread.x * 3u + 1u]);
+        const float4 bias = asfloat(input[thread.x * 3u + 2u]);
+        TextureCubeArray<float> surface = ResourceDescriptorHeap[NonUniformResourceIndex(settings.x)];
+        const float visibility = SamplePointShadowHardwarePcf(surface, settings.y,
+            sample.xyz, 1.0f / settings.w, sample.w, bias.x, settings.z);
+        SamplerState linear_sampler = SamplerDescriptorHeap[VORTEX_SAMPLER_LINEAR_CLAMP];
+        const float depth = surface.SampleLevel(linear_sampler, float4(sample.xyz, settings.y), 0);
+        output.Store4(thread.x * 32u, asuint(float4(visibility, depth, 0, 0)));
+        output.Store4(thread.x * 32u + 16u, 0u.xxxx);
         return;
     }
     if (pass.reserved == 32768u) {

@@ -6,16 +6,25 @@
 
 ## EX07 production contract
 
-Perspective local-shadow receiver offsets use the texel footprint at the
+Projected-spot receiver offsets use the texel footprint at the
 receiver's positive axial depth, not at the projection far plane. The published
 `world_texel_size` is the far-plane footprint; multiply it by receiver depth
-divided by `far_plane_m`. Cube faces use the dominant absolute light-relative
-coordinate, and spots use unbiased clip w. Authored normal bias remains in
+divided by `far_plane_m`, using unbiased clip W. Authored normal bias remains in
 metres and separate from this projection-derived footprint. This correction
-retains long-range light and off-screen caster contributions. The full point
-depth/filter/bias implementation is not numerically identical to UE5.7; see the
-[New Sponza analysis](../plan/EX07-NewSponza-regression-analysis.md) for the
-source comparison and remaining qualification work.
+retains long-range light and off-screen caster contributions.
+
+EX07E04 replaces the old cube linear-depth/3x3 path with unbiased projected
+reversed-Z depth, cube-array hardware comparison and receiver-side depth bias.
+Point lights and hemispherical spots share this cube contract. Native cube
+sampling uses the receiver-to-light vector; physical face views therefore look
+along the negative cube axes. The approved Low/Medium/High/Ultra comparison
+counts are 1/5/29/29. Authored normal displacement remains separate, and the old
+automatic cube texel offsets are removed. The
+[implementation contract](../plan/EX07E-point-pcf-contract.md) owns the current
+UE5.7 source comparison, units and qualification gates. The
+[New Sponza analysis](../plan/EX07-NewSponza-regression-analysis.md) remains the
+historical diagnosis preceding this migration. New baseline visual acceptance
+is still open.
 
 The baseline evidence below remains historical. EX07 supersedes its bounded
 arrays and Stage-18 deferral with the [indexed shadow-family ABI](lighting-gpu-abi.md#shadow-association-and-deferred-draws),
@@ -24,7 +33,8 @@ and [resource/failure contract](lighting-service.md#4-capacity-failure-and-recov
 Every required point/spot shadow is consumed by both surface families. Use
 projected records for ordinary spots, including nonzero source radius. Only
 90-degree soft cones use the existing conventional cube/multiple-face technique.
-Preserve FP32 depth, reversed depth and 3x3 PCF, per-light quality and typed identity.
+Preserve FP32 reversed depth, per-light quality and typed identity. Ordinary
+projected spots retain 3x3 PCF; cube maps use the EX07E04 contract above.
 The [audited EX07 memory work](../plan/EX07-shadow-memory-review.md) selects
 depth-only D32 conventional targets after coordinated view/clear/PSO migration and
 production qualification; conventional targets now use D32 with R32 SRVs. Scene/custom

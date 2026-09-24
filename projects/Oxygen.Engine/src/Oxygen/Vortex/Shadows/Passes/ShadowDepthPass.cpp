@@ -190,6 +190,9 @@ namespace {
       = vortex::internal::BuildVortexRootBindings();
     auto defines = std::vector<graphics::ShaderDefine> {};
     AddBooleanDefine(raster_state.alpha_test, "ALPHA_TEST", defines);
+    AddBooleanDefine(shadow_surface.GetDescriptor().texture_type
+        == TextureType::kTextureCubeArray,
+      "CUBE_SHADOW", defines);
 
     return graphics::GraphicsPipelineDesc::Builder {}
       .SetVertexShader(graphics::ShaderRequest {

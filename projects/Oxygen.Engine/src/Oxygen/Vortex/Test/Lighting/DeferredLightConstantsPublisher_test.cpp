@@ -3,6 +3,7 @@
 // copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
+#include <algorithm>
 #include <array>
 #include <cstring>
 #include <memory>
@@ -53,6 +54,8 @@ namespace {
     records[0].selection_index = LightSelectionIndex { 7U };
     const auto first = publisher->Publish(records);
     ASSERT_TRUE(first);
+    const auto first_indices
+      = std::vector<ShaderVisibleIndex>(first->begin(), first->end());
     const auto description = graphics::BufferViewDescription { .view_type
       = graphics::ResourceViewType::kConstantBuffer,
       .range = { 256U, 256U } };
@@ -64,7 +67,8 @@ namespace {
     records[0].selection_index = LightSelectionIndex { 19U };
     const auto second = publisher->Publish(records);
     ASSERT_TRUE(second);
-    EXPECT_EQ(*first, *second);
+    EXPECT_TRUE(std::equal(first_indices.begin(), first_indices.end(),
+      second->begin(), second->end()));
     auto observed = DeferredLightConstants {};
     std::memcpy(&observed, next_prefix->Ptr() + 256U, sizeof(observed));
     EXPECT_EQ(observed.selection_index, LightSelectionIndex { 19U });

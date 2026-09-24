@@ -359,7 +359,7 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .entries=std::array {
       EntryPoint { .type=kPixel, .name="VortexShadowDepthMaskedPS" },
       EntryPoint { .type=kVertex, .name="VortexShadowDepthVS" } },
-    .permutations=std::array<std::string_view, 1> { "ALPHA_TEST" }
+    .permutations=std::array<std::string_view, 2> { "ALPHA_TEST", "CUBE_SHADOW" }
   },
   // VortexDeferredLightDirectionalVS / VortexDeferredLightDirectionalPS
   ShaderFileSpec {
@@ -407,6 +407,11 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .entries=std::array {
       EntryPoint { .type=kPixel, .name="DeferredLightPointPS" },
       EntryPoint { .type=kVertex, .name="DeferredLightPointVS" } }
+  },
+  RequiredDefineShaderFileSpec<1, 1> {
+    .path="Vortex/Services/Lighting/DeferredLightPoint.hlsl",
+    .entries=std::array { EntryPoint { .type=kPixel, .name="DeferredLightPointPS" } },
+    .required_defines=std::array<std::string_view, 1> { "PUNCTUAL_POINT" }
   },
   // VortexDeferredLightSpotVS / VortexDeferredLightSpotPS
   ShaderFileSpec {

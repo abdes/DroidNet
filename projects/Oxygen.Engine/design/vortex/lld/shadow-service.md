@@ -298,14 +298,13 @@ skipped when the slope-bias coefficient is zero. Applying the world matrix to a
 caster normal is incorrect under nonuniform scale/shear: transform-equivalent
 geometry must produce the same biased shadow depth.
 
-Local maps retain Oxygen's linear reversed-depth profile: stored depth is
+Projected spot maps retain Oxygen's linear reversed-depth profile: stored depth is
 `1 - axial_distance / range - depth_bias`. The authored receiver normal bias is
 in metres and remains separate. Receiver texel offsets use the actual axial
-receiver distance, not the map's far-plane footprint. For cube faces the world
-texel footprint is `2 * receiver_axial_distance / resolution`; projected spots
-also include the outer-cone tangent.
+receiver distance, not the map's far-plane footprint, including the outer-cone
+tangent.
 
-The current point/spot constant-bias coefficient is
+The projected-spot constant-bias coefficient is
 `clamp(3 * 512 / (depth_span_m * resolution) * 2 * user_bias, 0, 0.1)`, with the
 existing safety clamps in the setup functions. It is applied once in the depth
 pass, together with the bounded slope term. Before coefficient clamping, its
@@ -313,9 +312,22 @@ equivalent axial world displacement is `range * depth_bias`; at 1024 resolution
 and range much larger than the near plane it is approximately `3 * user_bias`
 metres before slope scaling. Default authored depth bias is zero. This is
 Oxygen's retained authored response, not quantitative UE5.7 projected-cube bias
-parity. Changing its calibration or the fixed 3x3 filter requires explicit
-quality evidence and an authored-behavior decision; copying UE constants into
-this different depth representation is not a valid conversion.
+parity. Changing the projected-spot calibration or fixed 3x3 filter requires
+explicit quality evidence and an authored-behavior decision; copying UE constants
+into this different depth representation is not a valid conversion.
+
+**EX07E04 cube migration (implementation in progress):** the user approved
+UE-aligned hardware PCF and Low/Medium/High/Ultra comparison counts of 1/5/29/29.
+Cube-local maps (points and hemispherical spots) now use a cube-array SRV and
+unbiased reversed-Z raster depth. The existing depth pass's `CUBE_SHADOW`
+permutation omits caster bias and pixel depth override; masked coverage remains.
+Receiver-to-light sampling and the producer's six RH face bases share the native
+cube-addressing convention. Authored normal displacement is applied once; clip
+depth bias is applied only during comparison, divided by clip W. The cube record
+remains 448 bytes, with `pcf_sample_count` at offset 440 and reserved padding at 444. The [implementation contract](../plan/EX07E-point-pcf-contract.md) records
+projection/bias units, UE source evidence, and outstanding qualification gates.
+This is a filter/encoding change, not an image-equivalent optimization or an
+accepted new baseline.
 
 ### 2.4 Directional-Light Authority
 

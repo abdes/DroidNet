@@ -1,5 +1,12 @@
 # EX07E — Implementation and comparison record
 
+**Execution paused before E06 at the user's request (2026-09-24). Resume only on
+an explicit user signal.** Other optimization code and automated qualification are
+at the pre-E06 checkpoint. E06's independent review/implementation and dependent
+final integrated measurements, memory accounting, visual approval and commits
+remain open. The records below distinguish accepted earlier work from current
+candidates awaiting baseline acceptance.
+
 **EX07E remains in progress. The matrix-access improvement is accepted.**
 The user manually approved Sponza and Instancing on 2026-09-24 before committing
 these application comparison records. Later changed baselines still require
@@ -290,3 +297,339 @@ Microsoft documents the raw gather component order and unfiltered semantics in
 No PCF change is implemented or accepted yet. Keep larger projected-depth/bias
 recalibration separate because it changes authored behavior and needs a concrete
 quality decision; do not copy UE's constants into the linear-depth profile.
+
+## E05 source-confirmed redundant CPU work
+
+The accepted post-grid 4,096-light deferred capture records 4.708 ms CPU lighting
+union, including 2.620 ms in `RecordDeferred`; forward records 1.772 ms union.
+The mixed recipe alternates point and spot lights. The current draw loop preserves
+that order, so its cached pipeline binding still changes on every alternating
+source. Investigate stable grouping by existing pipeline kind/volume mode while
+preserving selection/shadow identity and the established accumulation tolerance.
+No grouping change has been implemented or timed yet.
+
+`GpuEventScope`'s string-view constructor creates `std::string(label)` before
+`BeginProfileScope` checks whether collection is enabled. The fixed per-light
+labels exceed the usual small-string storage, so this is avoidable CPU allocation
+work even without Tracy. Full per-light Tracy timestamps remain a separate cost.
+Reuse the existing descriptor-taking constructor with static owned descriptors;
+measure the combined submission change against matched native controls. This
+finding corrects any broader implication that all scope-wrapper cost vanishes
+when Tracy is off. No runtime saving is claimed before measurement.
+
+A separate metadata defect, E07.2, was found while checking build identities:
+`Core/Version.cpp::Patch()` returns the major constant. Current major and patch
+are both zero, so current baseline labels are not changed by that latent API
+bug. Repair it after the PCF paired captures to keep their DLL identities fixed.
+
+### E04 gather result: direction requested
+
+Both native and Tracy pairs differ only in `shaders.bin`. All 20 native tests
+pass, including **3,888** original-nine-load versus gather cases, **47** with
+fractional PCF visibility, varying descriptors and face/edge coordinates.
+Sponza's scene-only display region differs by at most one RGB byte, mean
+0.00000524 byte/channel.
+
+| Sponza measurement       | Original nine-load control | Gather candidate |
+| ------------------------ | -------------------------: | ---------------: |
+| Native mean frame ms     |                     23.835 |           23.122 |
+| Native block-mean spread |                    11.910% |           0.666% |
+| Tracy mean frame ms      |                     24.125 |           24.360 |
+| Tracy point-light ms     |                     11.561 |           11.711 |
+| Tracy translucency ms    |                      1.928 |            1.841 |
+| Tracy block-mean spread  |                     1.050% |           0.624% |
+
+This is a mixed result, not an accepted overall performance improvement. The
+native control's noisier final block prevents treating its mean reduction as a
+clear win. On 2026-09-24, the user was asked to choose one bounded forward/
+translucency-only gather follow-up (retaining original deferred filtering), or
+to drop the gather candidate and continue CPU/resource work. PCF experiments
+are paused pending that direction; the all-path candidate is uncommitted and
+has no manual baseline approval. Raw pairs are under `out/analysis/ex07e/e04-pcf-{control,candidate}`.
+
+### UE5.7 PCF choice and corrected decision
+
+The user's subsequent question prompted a direct check of the installed
+UE5.7.4 source (CL 51494982). The earlier two-option question omitted the
+UE-aligned point-light option and is superseded by this decision record.
+
+| Conventional shadow projection | Verified UE5.7 implementation                                                                                                                                                                                                                                                                             |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Point-light cube               | `CubemapHardwarePCF`, `ShadowProjectionCommon.ush:153`: `TextureCube.SampleCmpLevelZero` with a bilinear comparison sampler. Quality levels use 1, 5, 12 or 29 sampling operations; higher levels use disc patterns. Receiver comparison is based on projected z/w with the corresponding bias treatment. |
+| Projected spot/directional     | `ManualPCF`, `ShadowFilteringCommon.ush:352`, called by `ShadowProjectionPixelShader.usf:260`: raw gathers feed shader-side occlusion and fractional-texel weighting. The named 3x3 filter uses four gathers over 4x4 texels; 5x5 uses nine gathers over 6x6 texels.                                      |
+
+The cube comparison sampler is configured in `ShadowRendering.cpp:290`.
+These are conventional-shadow paths; this record does not describe VSM/SMRT.
+UE's split is by shadow projection and filtering contract, not a general rule to
+use gather only in forward rendering. Oxygen's candidate rearranges accesses to
+its existing nine-comparison box kernel; it does not reproduce either UE kernel.
+
+The user must choose the E04 direction before further PCF implementation/capture:
+
+1. **UE-aligned point-light PCF (recommended):** implement cube comparison
+   sampling together with a coherent producer/receiver depth and bias contract.
+   This changes the filtering/quality response and requires focused contact,
+   grazing, seam, range, resolution and family checks plus manual visual approval
+   before committing a newly established baseline. Projected filtering remains
+   explicitly assessed against its separate UE path.
+2. **Preserve the current filter response:** perform one bounded forward/
+   translucency-only gather follow-up, retaining original deferred sampling.
+   This pursues the small measured translucency opportunity without claiming UE
+   PCF parity; mixed results still require a disposition rather than endless tuning.
+3. **Keep the accepted nine-load filter:** discard the gather experiment and
+   proceed with CPU/resource/sharing work. Record filtering as a retained quality
+   choice and obtain an explicit E04 disposition; do not silently call parity done.
+
+At that review checkpoint no selection was inferred from the factual question.
+The subsequent explicit decisions below supersede that pending choice.
+
+### User decisions after the PCF review
+
+On 2026-09-24 the user explicitly approved **UE-aligned point-light hardware PCF
+with coherent depth/bias handling**, superseding the earlier two-/three-option
+questions. The raw-gather candidate remains an unaccepted experiment. Implement
+and qualify the approved point-light path; do not treat this approval as manual
+acceptance of a newly captured baseline.
+
+The user additionally chose **1/5/29/29 hardware comparisons** for
+Low/Medium/High/Ultra. UE's High and Epic conventional-shadow settings both use
+29 comparisons. The [cube PCF implementation contract](EX07E-point-pcf-contract.md)
+records the producer/consumer migration and its qualification gates. The
+unaccepted raw-gather changes have been removed; projected spots and CSM retain
+their accepted filtering. The new cube candidate changes quality and encoding,
+so its future performance report must not imply identical output to the original
+nine-comparison filter.
+
+#### Hardware-PCF candidate qualification (2026-09-24)
+
+At this initial hardware-PCF checkpoint both existing Ninja Release RenderScene
+targets were rebuilt against the 222-module candidate. The subsequent punctual-
+point variant adds one module, producing the current 223-module archive. No new
+baseline is accepted or committed. The user has authorized committing the
+validated implementation and its automated test evidence separately.
+
+| Check                                  | Result                                  | Coverage                                                                                                                                                                                                                                                                                         |
+| -------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Shadow service/setup, non-Tracy        | 31/31 pass                              | Independent native cube-coordinate equations on six asymmetric face samples, reversed-Z near/intermediate/far depths, ranges 0.05/3/4096 m, metric bias normalization, existing selection/quality/reference tests.                                                                               |
+| Native lighting image suite, non-Tracy | 21/21 pass                              | Existing forward/deferred reference, admission, contact, off-screen caster and long-range checks plus the new cube cases below.                                                                                                                                                                  |
+| Native lighting image suite, Tracy     | 21/21 pass                              | Same suite in the separate Tracy-enabled Release tree.                                                                                                                                                                                                                                           |
+| Shadow ABI subset, each tree           | 3/3 pass                                | CPU/HLSL cube record remains 448 bytes; distinct 5/29 sample-count words and selected face-matrix access survive GPU decoding.                                                                                                                                                                   |
+| Bilinear comparison oracle             | 108 cases pass per tree                 | Two uploaded cubes, six faces, asymmetric coordinates and positive/negative comparison bias. A 0.5 visibility result proves filtering of comparisons rather than comparison of interpolated depth.                                                                                               |
+| Rendered cube oracle                   | 594 samples per material state per tree | Three lights, two backings, a nonzero cube index, all faces, edges/corners and poles; 1/5/29 comparisons. Analytic box intersections verify stored projected depth and visibility. Opaque, rejected masked, and accepted masked states also exercise cache invalidation and both lighting paths. |
+
+The caster-normal regression now uses a projected spot, preserving its slope-bias
+coverage after cube caster bias was removed. The contact-occluder test now records
+separate map-shadow and unshadowed references: its former assumption that authored
+bias 1 completely removes map shadows is invalid for the new filter. Contact
+attenuation and caster/receiver gates retain their original numerical tolerances.
+
+Point shader inspection: 25,484 DXIL bytes versus 24,440 for the accepted
+nine-load path; no 96-float local array and no local float stores. Static
+comparison-call counts include quality branches and are not runtime tap counts.
+Quality/performance acceptance remains open pending scene measurements and the
+user's visual validation. Raw logs are under `out/analysis/ex07e/e04-pcf`, with
+the hardware-PCF inspection and scene captures under
+`out/analysis/ex07e/e04-hardware-pcf`; the results above are retained here so their
+meaning does not depend on that transient directory.
+
+The first Sponza hardware-PCF Tracy attempt is **excluded** at the user's request
+because of CPU contention during capture. Its preflight (CPU mean 3.2%, GPU mean
+38.4%) cannot establish in-run headroom. No timing from that attempt is accepted.
+The rerun adds total-CPU sampling throughout the capture and records a separate
+20–50-second CPU-load disposition; quiet startup alone is no longer sufficient.
+
+#### Confirmed Sponza GPU regression — candidate not accepted
+
+After the user cleared the machine, the rerun passed preflight (CPU mean/peak
+5.4/12%, GPU 29/34%). During its measured 20–50-second window, 23 CPU samples
+averaged **3.435%**, peaked at **12%**, and none exceeded 25%. The application
+closed successfully and its binaries/content remained unchanged during capture.
+The retry script initially misclassified coverage because PowerShell converted
+UTC JSON timestamps to DateTime values before reparsing their culture-formatted
+strings as local time. Reprocessing the preserved ISO8601 samples with explicit
+offsets proves full coverage; the script now preserves date strings explicitly.
+This parser correction does not change measured performance or load thresholds.
+
+| Sponza, Tracy Release, 2560×1400 | Prior nine-load profile | Hardware PCF, High = 29 |                 Change |
+| -------------------------------- | ----------------------: | ----------------------: | ---------------------: |
+| Mean GPU frame interval          |               24.125 ms |               31.606 ms |                +31.01% |
+| Derived FPS                      |                  41.451 |                  31.639 |                −23.67% |
+| Point-light GPU work             |               11.561 ms |               17.430 ms |              +5.869 ms |
+| Deferred lighting, inclusive     |               12.510 ms |               18.410 ms |              +5.900 ms |
+| Translucency                     |                1.928 ms |                3.380 ms |              +1.452 ms |
+| Shadow depth work                |                3.673 ms |                3.724 ms |              +0.051 ms |
+| Deferred recording CPU, per call |               0.1173 ms |               0.1207 ms |             +0.0034 ms |
+| Ten-second block variation       |                  1.050% |                  0.955% | Both stable within run |
+
+Both captures contain 23 point-light draws per frame and have identical scene,
+container, demo-settings and UI-settings hashes. End-of-run graphics clocks were
+1920 versus 1890 MHz; this small difference does not account for the observed
+GPU increase. These are the prior nine-load profile and the new encoding/filter
+candidate, not a shader-only matched pair. The new 29-comparison filter changes
+quality, but it is still a **confirmed performance regression**, not an accepted
+optimization. CPU load does not explain it: point evaluation and translucency
+account for almost all of the extra GPU frame time. Scope times are inclusive.
+
+Keep the approved 29-comparison High quality while investigating avoidable shader
+cost. Do not assume all of the increase is inevitable, silently lower quality,
+or accept/commit this as a new baseline. The next bounded investigation should
+separate kernel cost from remaining point/finite-emitter specialization costs;
+seek user direction if the remaining quality/performance tradeoff cannot be
+resolved without changing the approved contract.
+
+Local candidate evidence at
+`baselines/ex07e-20260924/point-hardware-pcf/register.json` retains both timing
+summaries, in-run CPU samples/disposition and the screenshot outside the transient
+analysis directory. It remains uncommitted pending manual baseline approval;
+the numerical findings above remain part of this report.
+
+#### User disposition and bounded specialization result
+
+The user directed stopping PCF tuning and moving to other optimization
+opportunities once its work is justified. The depth/bias migration is necessary
+for correct hardware comparison. The 29 comparisons implement the approved UE
+High filter quality, rather than a minimum requirement for shadow correctness.
+Retain the approved 1/5/29/29 mapping. Do not pursue a shadow-mask pass redesign
+or another PCF parameter campaign on this instruction. New baselines still need
+manual visual acceptance.
+
+The bounded point/punctual specialization preserves all PCF parameters and
+selects its smaller variant only for exactly zero source radius. Cooked files
+contain 23/23 zero-radius Sponza points and 49/49 zero-radius Instancing points.
+The compiled punctual shader is 20,664 bytes versus 25,484. Both Release trees
+pass the 22-image-test suite, including mixed zero, tiny-positive and finite
+radii within one frame. The implementation is test-validated; its performance acceptance remains subject to the limitations below.
+
+| Same-quality Sponza experiment |   Control | Specialized |
+| ------------------------------ | --------: | ----------: |
+| Point-light GPU work           | 17.317 ms |   16.223 ms |
+| Inclusive deferred lighting    | 18.907 ms |   20.992 ms |
+| Translucency                   |  3.357 ms |    3.335 ms |
+| Whole GPU frame interval       | 32.517 ms |   36.519 ms |
+| Derived FPS                    |    30.753 |      27.383 |
+| Ten-second block variation     |    9.191% |      0.213% |
+| Measured-window CPU mean/peak  | 4.391/17% |   6.826/19% |
+
+The pair uses identical runtime binaries with only the shader archive changed.
+Point-draw work is lower by 1.093 ms, but **there is no established whole-frame
+benefit**. The inclusive deferred interval grows outside those point-draw scopes;
+the control is also unstable. Do not label the result an FPS optimization or
+attribute the unexplained interval to CPU overload. The earlier exploratory
+specialized capture had 17.807% block variation and is not a small-delta baseline.
+No additional PCF-side capture is planned; preserve these limits for integrated
+E08 qualification while proceeding with E05.
+
+E02 credits the already accepted shared face-matrix fix: Sponza translucency
+fell from the frozen D 7.726 ms to 1.940 ms in that matched capture. The current
+29-comparison filter adds the explicitly chosen quality cost. Source inspection
+also confirms that forward direct lighting already prepares its BRDF context
+once outside the local-light loop and rejects zero influence/back-facing sources
+before shadow evaluation. Do not schedule those existing optimizations again or
+discard contributing off-screen lights to lower the workload. Final integrated
+transparent-material/scene qualification remains E08 work.
+
+### E05 — CPU allocation and draw submission
+
+Implemented at this checkpoint: static owning GPU scope descriptors, reused constant
+and draw-order scratch, borrowed immutable CBV-index spans, and stable counting
+sort by local-light PSO. This removes per-light label allocations even in
+non-Tracy Release and avoids switching PSO for every interleaved light. It retains
+directional-first/sky-last ordering, original order within a local bucket, and
+the original indices for constants and shadow selection. Only additive local
+accumulation order changes; the existing image error budget still applies.
+
+The borrowed index view is CPU-only and consumed during recording. Same-frame
+publications retain its backing; callers must stop using it at `OnFrameStart` or
+publisher destruction. Existing fenced staging and descriptor retirement remain
+unchanged. This is independent of the deferred E06 ownership work.
+
+Both Ninja Release trees pass 34 lighting-service tests (including cached CBVs,
+growth, same-frame publications and retirement) and all 22 native image tests
+across the suite and a focused counter-check rerun. The 1,024-source native preview
+renders **704 local draws with 2 pipeline binds**, and still lights 2,232 of 2,304
+preview pixels in each tree. The first added counter assertion read state after
+frame cleanup; the correction captures it inside the existing publication probe.
+Endpoint measurements, broader interaction qualification and visual baseline
+acceptance remain open. Bind-count reduction alone is not an FPS claim.
+
+The next gather change reuses the scene's already-updated world positions and
+retains selection-vector capacity. It removes the extra ancestor-matrix traversal
+for every light and the unused quaternion traversal for isotropic point emitters.
+Spot directions retain their authored quaternion-chain semantics: decomposing a
+scaled/sheared world matrix would change that contract. A new native hierarchy
+test covers parent rotation/nonuniform scale, parent movement and
+`IgnoreParentTransform`; all **23 native image tests pass in each Release tree**.
+
+| Non-Tracy Release, 4,096-light deferred workload | Accepted post-grid | Submission changes | Plus gather changes |
+| ------------------------------------------------ | -----------------: | -----------------: | ------------------: |
+| Lighting CPU interval union                      |           4.708 ms |           2.494 ms |            2.295 ms |
+| Deferred recording CPU                           |           2.620 ms |           0.378 ms |            0.492 ms |
+| Light gathering CPU                              |           1.163 ms |           1.154 ms |            0.894 ms |
+| Whole frame mean                                 |          10.669 ms |           9.822 ms |            9.245 ms |
+| Within-run block variation                       |            14.044% |             7.156% |              3.662% |
+| Steady buffer/texture creations                  |                0/0 |                0/0 |                 0/0 |
+
+The current lighting CPU union is approximately **51% lower** than the accepted
+post-grid measurement. The frame-time reduction is reported, but these rows do
+not isolate an FPS benefit: the historical reference is noisy and the current
+candidate also contains the shader work above. These unshadowed endpoints do not
+measure the added PCF quality cost. Both new 1-light/4,096-light submission rows
+and the final 4,096-light gather row passed load preflight and complete-list image
+comparison. Against the frozen EX07D images, all 6,220,800 channels per image
+pass the `0.5% + 2e-5` budget; the final 4,096-light result uses at most
+0.0000661 of that budget. Original order is not claimed to remain bit-identical.
+
+The one-light submission endpoint records 0.0135 ms deferred CPU recording
+versus the historical 0.0121 ms, and 1.896 versus 1.432 ms whole-frame time. Keep
+this result visible; the small CPU difference does not explain the whole-frame
+change. No small-workload FPS win or isolated regression attribution is claimed.
+The retained scratch arrays trade bounded high-water CPU capacity for fewer
+allocations; no GPU-memory saving is claimed from that trade. GPU staging and
+retirement contracts remain unchanged.
+
+Local candidate evidence at
+`baselines/ex07e-20260924/cpu-submission/register.json` contains the summaries,
+preflights, reference comparisons and a source replay recipe. These baseline
+artifacts remain uncommitted pending manual visual approval. The
+[automated validation records](validation/ex07e-pre-e06/README.md) preserve the
+passing tests independently. These are candidate measurements, not manually accepted
+new baselines. Broader dynamic/multi-view qualification and the final integrated
+scene captures still belong to E08.
+
+The additional non-Tracy interaction qualification passed **12 rows / 20 images**:
+moving-1024, two-view-1024, orthographic-1024, five-point/nine-spot shadows, finite
+sources and hemispherical spots, each in forward and deferred. Every image is
+exactly equal to its current complete-list reference. This is automated current-
+candidate qualification, not a claim that the new filter matches D images or that
+the user has visually accepted it.
+
+For the final 4,096-light endpoint, both memory snapshots report 4,333,568 bytes
+charged to lighting (6,692,864-byte peak), 786,432 compact-index bytes, and no
+rejected allocations. Whole-allocator local allocation/commitment is 684,666,880
+bytes with zero local block slack; non-local allocation is 33,816,576 bytes in
+134,610,944 committed bytes, leaving 100,794,368 bytes of block slack. These are
+whole-allocator figures, not lighting-only savings. Lighting/shared staging is
+604,519/19,333 bytes per frame, retaining the existing upload contract.
+
+The current resource inventory exposes native placement and registration state,
+not an authoritative split of GPU-queued, logically retired and cache-owned
+bytes. **That split remains unproven**, rather than being reported as zero or
+inferred from process memory. Its completion is tied to the reviewed E06 use/
+retirement ownership and final E08 lifecycle qualification. No E06 infrastructure
+change has been pulled forward under E05. Final integrated scene captures occur
+after E06, as agreed; they are not a prerequisite that moves E06 earlier.
+
+The separate E07.2 metadata defect is fixed: `Version::Patch()` returns
+`cVersionPatch`. Both trees rebuild; current version numbers do not expose a
+runtime numerical difference because major and patch are both zero.
+
+The user separately identified E06 sharing as critical and required a proper
+proposal, including evaluation of Graphics resource management and Nexus, **for
+approval before code changes**. The
+[E06 design proposal](EX07E-cross-view-shadow-sharing.md) records that direction.
+The user subsequently agreed with the direction, requested independent review,
+and deferred E06 to the **last EX07E implementation item**. Complete all other
+optimizations and non-sharing correctness repairs first; resolve the independent
+review before implementing E06, including its Graphics/Nexus changes. Final
+integrated E08 qualification follows E06. This changes execution order, not scope
+or the manual visual approval requirement for new baselines.

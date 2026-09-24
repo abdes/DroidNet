@@ -213,7 +213,8 @@ auto MakeRenderer(const std::shared_ptr<FakeGraphics>& graphics)
   };
 }
 
-auto MakePerspectiveResolvedView() -> oxygen::ResolvedView
+auto MakePerspectiveResolvedView(const float near_plane = 0.1F)
+  -> oxygen::ResolvedView
 {
   auto params = oxygen::ResolvedView::Params {};
   params.view_config.viewport = oxygen::ViewPort {
@@ -226,7 +227,7 @@ auto MakePerspectiveResolvedView() -> oxygen::ResolvedView
   };
   params.view_config.reverse_z = true;
   params.view_matrix = glm::mat4(1.0F);
-  params.near_plane = 0.1F;
+  params.near_plane = near_plane;
   params.far_plane = 100.0F;
   params.proj_matrix = oxygen::MakeReversedZPerspectiveProjectionRH_ZO(
     glm::pi<float>() / 3.0F, 1.0F, params.near_plane, params.far_plane);
@@ -533,7 +534,7 @@ NOLINT_TEST(ShadowServiceSurfaceTest,
         glm::vec3 { 0, 0, -1 },
       };
       const auto point
-        = glm::vec4 { directions.at(face) * (0.999F * record.far_plane_m),
+        = glm::vec4 { -directions.at(face) * (0.999F * record.far_plane_m),
             1.0F };
       const auto clip = record.face_light_view_projection.at(face) * point;
       EXPECT_GT(clip.w, 0.0F);
@@ -542,6 +543,60 @@ NOLINT_TEST(ShadowServiceSurfaceTest,
       EXPECT_GE(clip.z, 0.0F);
       EXPECT_LE(clip.z, clip.w);
     }
+  }
+}
+
+NOLINT_TEST(ShadowServiceSurfaceTest,
+  CubeProjectionMatchesNativeAddressingAndMetricBiasAcrossRanges)
+{
+  // Keep the shortest test light's sphere inside the view's near plane.
+  auto resolved_view = MakePerspectiveResolvedView(0.001F);
+  oxygen::vortex::PreparedViewShadowInput input {};
+  input.resolved_view
+    = oxygen::observer_ptr<const oxygen::ResolvedView> { &resolved_view };
+  for (const float range : { 0.05F, 3.0F, 4096.0F }) {
+    const auto lights = std::array { FrameLocalLightSelection {
+      .kind = LocalLightKind::kPoint,
+      .position = { 0, 0, 0 },
+      .range = range,
+      .luminous_flux_lm = 100.0F,
+      .flags = kLocalLightFlagCastsShadows,
+      .shadow_bias = 0.5F,
+    } };
+    const auto records = PointShadowSetup {}.BuildPointRecords(input, lights,
+      AllLightIndices(lights),
+      { .surface_srv = oxygen::ShaderVisibleIndex { 13U },
+        .resolution = { 1024U, 1024U },
+        .shadow_count = 1U });
+    ASSERT_EQ(records.size(), 1U);
+    const auto& record = records.front();
+    // Hardware cube convention expressed independently as sample directions
+    // for a fixed asymmetric (s,t) on each face. t points down in the image.
+    constexpr float s = 0.31F;
+    constexpr float t = -0.47F;
+    const auto directions = std::array {
+      glm::vec3 { 1, -t, -s },
+      glm::vec3 { -1, -t, s },
+      glm::vec3 { s, 1, t },
+      glm::vec3 { s, -1, -t },
+      glm::vec3 { s, -t, 1 },
+      glm::vec3 { -s, -t, -1 },
+    };
+    for (unsigned face = 0; face < 6U; ++face) {
+      for (const float axial : { record.near_plane_m, range * 0.25F, range }) {
+        const auto clip = record.face_light_view_projection[face]
+          * glm::vec4(-directions[face] * axial, 1);
+        ASSERT_GT(clip.w, 0.0F);
+        EXPECT_NEAR(clip.x / clip.w, s, 1.0e-6F);
+        EXPECT_NEAR(-clip.y / clip.w, t, 1.0e-6F);
+        const auto expected = record.near_plane_m * (range - axial)
+          / (axial * (range - record.near_plane_m));
+        EXPECT_NEAR(clip.z / clip.w, expected, 1.0e-6F);
+      }
+    }
+    // Resolution 1024 and authored bias 0.5 halve UE's normalized 0.02
+    // coefficient. The result stays invariant under a change of world units.
+    EXPECT_NEAR(record.depth_bias / record.near_plane_m, 0.01F, 1.0e-7F);
   }
 }
 

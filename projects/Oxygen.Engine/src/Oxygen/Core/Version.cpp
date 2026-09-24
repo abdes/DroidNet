@@ -11,7 +11,7 @@ auto oxygen::version::Major() -> std::uint8_t { return info::cVersionMajor; }
 
 auto oxygen::version::Minor() -> std::uint8_t { return info::cVersionMinor; }
 
-auto oxygen::version::Patch() -> std::uint8_t { return info::cVersionMajor; }
+auto oxygen::version::Patch() -> std::uint8_t { return info::cVersionPatch; }
 
 auto oxygen::version::Version() -> std::string { return info::cVersion; }
 

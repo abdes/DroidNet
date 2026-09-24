@@ -349,7 +349,7 @@ auto ConventionalShadowTargetAllocator::AcquireSurface(
     .view_type = graphics::ResourceViewType::kTexture_SRV,
     .visibility = graphics::DescriptorVisibility::kShaderVisible,
     .format = ResolveDepthSrvFormat(desc.format),
-    .dimension = TextureType::kTexture2DArray,
+    .dimension = desc.texture_type,
     .sub_resources = graphics::TextureSubResourceSet::EntireTexture(),
   };
   auto& descriptors = gfx->GetDescriptorAllocator();

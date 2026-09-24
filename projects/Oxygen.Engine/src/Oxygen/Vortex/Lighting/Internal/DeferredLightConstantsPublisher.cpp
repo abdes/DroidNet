@@ -80,7 +80,7 @@ auto DeferredLightConstantsPublisher::OnFrameStart(
 
 auto DeferredLightConstantsPublisher::Publish(
   const std::span<const DeferredLightConstants> records)
-  -> std::expected<std::vector<ShaderVisibleIndex>, upload::UploadError>
+  -> std::expected<std::span<const ShaderVisibleIndex>, upload::UploadError>
 {
   using upload::UploadError;
   constexpr auto kStride = packing::kConstantBufferAlignment;
@@ -90,9 +90,8 @@ auto DeferredLightConstantsPublisher::Publish(
       > (std::numeric_limits<std::size_t>::max() - (kStride - 1U)) / kStride) {
     return std::unexpected(UploadError::kInvalidRequest);
   }
-  auto indices = std::vector<ShaderVisibleIndex> {};
   if (records.empty()) {
-    return indices;
+    return std::span<const ShaderVisibleIndex> {};
   }
   auto gfx = graphics_.lock();
   if (!gfx) {
@@ -141,11 +140,10 @@ auto DeferredLightConstantsPublisher::Publish(
             && cached.views.size() == records.size();
         });
     if (reusable != batches.end()) {
-      indices = reusable->indices;
       std::iter_swap(unused, reusable);
       unused->allocation = std::move(batch.allocation);
       ++storage.used_batches;
-      return indices;
+      return std::span<const ShaderVisibleIndex> { unused->indices };
     }
     // A larger/reordered view can overlap several old batch ranges. Those
     // unused descriptions must retire before registering the replacement.
@@ -187,14 +185,13 @@ auto DeferredLightConstantsPublisher::Publish(
       }
       batch.indices.push_back(descriptor);
     }
-    indices = batch.indices;
     if (storage.used_batches < batches.size()) {
       batches[storage.used_batches] = std::move(batch);
     } else {
       batches.push_back(std::move(batch));
     }
-    ++storage.used_batches;
-    return indices;
+    const auto published = storage.used_batches++;
+    return std::span<const ShaderVisibleIndex> { batches[published].indices };
   } catch (const std::exception& error) {
     ReleaseBatch(batch);
     LOG_F(ERROR, "Deferred constant publication failed: {}", error.what());

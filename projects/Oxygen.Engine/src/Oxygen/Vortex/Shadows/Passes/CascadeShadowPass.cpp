@@ -39,14 +39,19 @@ namespace {
 
   constexpr float kLocalShadowSlopeDepthBiasScale = 3.0F;
 
-  constexpr auto kPointShadowFaceDirections = std::array {
-    glm::vec3 { 1.0F, 0.0F, 0.0F },
-    glm::vec3 { -1.0F, 0.0F, 0.0F },
-    glm::vec3 { 0.0F, 1.0F, 0.0F },
-    glm::vec3 { 0.0F, -1.0F, 0.0F },
-    glm::vec3 { 0.0F, 0.0F, 1.0F },
-    glm::vec3 { 0.0F, 0.0F, -1.0F },
-  };
+  auto PointPcfSampleCount(const ShadowQualityTier tier) -> std::uint32_t
+  {
+    switch (tier) {
+    case ShadowQualityTier::kLow:
+      return 1U;
+    case ShadowQualityTier::kMedium:
+      return 5U;
+    case ShadowQualityTier::kHigh:
+    case ShadowQualityTier::kUltra:
+      return 29U;
+    }
+    return 29U;
+  }
 
   auto BuildLocalBuckets(const PreparedViewShadowInput& view,
     const std::span<const FrameLocalLightSelection> lights, const bool cube,
@@ -255,6 +260,8 @@ auto CascadeShadowPass::RenderPointView(
       view_input, local_lights, selected, allocation);
     for (auto& record : records) {
       record.shadow_strength = strengths[record.selection_index.get()];
+      record.pcf_sample_count
+        = PointPcfSampleCount(renderer_.GetShadowQualityTier());
     }
     state.shadow_surfaces.push_back(allocation.surface);
 
@@ -267,10 +274,9 @@ auto CascadeShadowPass::RenderPointView(
         depth_slices[face_index] = ShadowDepthPass::DepthSlice {
           .light_view_projection
           = point.face_light_view_projection.at(face_index),
-          .shadow_bias_parameters = glm::vec4(point.depth_bias,
-            point.depth_bias * kLocalShadowSlopeDepthBiasScale, 1.0F, 0.0F),
-          .light_direction_to_source
-          = glm::vec4(kPointShadowFaceDirections.at(face_index), 0.0F),
+          // Cube maps store unbiased raster depth. Bias belongs to the
+          // receiver comparison, not the depth producer.
+          .shadow_bias_parameters = glm::vec4(0.0F),
           .light_position_and_inv_range
           = glm::vec4(point.shadow_origin_ws, 1.0F / point.far_plane_m),
           .target_slice = point.first_array_layer.get() + face_index,

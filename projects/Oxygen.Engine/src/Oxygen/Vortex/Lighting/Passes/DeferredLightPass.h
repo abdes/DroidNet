@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <span>
@@ -30,6 +31,7 @@ namespace oxygen::vortex {
 struct RenderContext;
 class SceneTextures;
 class Renderer;
+struct DeferredLightConstants;
 
 namespace lighting {
 
@@ -56,6 +58,8 @@ namespace lighting {
       std::uint32_t outside_volume_local_light_count { 0U };
       std::uint32_t camera_inside_local_light_count { 0U };
       std::uint32_t local_light_draw_count { 0U };
+      std::uint32_t punctual_point_light_draw_count { 0U };
+      std::uint32_t pipeline_bind_count { 0U };
       std::uint32_t non_perspective_local_light_count { 0U };
       bool consumed_directional_shadow_product { false };
       bool directional_shadow_vsm_active { false };
@@ -97,6 +101,10 @@ namespace lighting {
     ShaderVisibleIndex spot_geometry_srv_ { kInvalidShaderVisibleIndex };
     std::uint32_t point_geometry_vertex_count_ { 0U };
     std::uint32_t spot_geometry_vertex_count_ { 0U };
+    // CPU scratch is consumed synchronously during Record; staged GPU data
+    // retains the existing frame-slot ownership contract.
+    std::vector<DeferredLightConstants> constants_scratch_;
+    std::vector<std::size_t> draw_order_scratch_;
   };
 
 } // namespace lighting

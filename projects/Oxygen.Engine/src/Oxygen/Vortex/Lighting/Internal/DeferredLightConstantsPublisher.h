@@ -40,8 +40,11 @@ public:
   OXYGEN_MAKE_NON_MOVABLE(DeferredLightConstantsPublisher)
 
   auto OnFrameStart(frame::SequenceNumber sequence, frame::Slot slot) -> void;
+  //! Indices survive additional Publish calls in this frame, until
+  //! OnFrameStart or destruction. Consume this borrowed view while recording;
+  //! it does not extend descriptor or GPU-resource lifetime.
   [[nodiscard]] auto Publish(std::span<const DeferredLightConstants> records)
-    -> std::expected<std::vector<ShaderVisibleIndex>, upload::UploadError>;
+    -> std::expected<std::span<const ShaderVisibleIndex>, upload::UploadError>;
 
 private:
   struct Batch {
