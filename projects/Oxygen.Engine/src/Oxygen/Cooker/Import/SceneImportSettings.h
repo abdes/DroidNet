@@ -34,6 +34,7 @@ struct SceneImportSettings {
   float unit_scale = 1.0F;
   bool unit_scale_set = false;
   bool bake_transforms = true;
+  float gltf_omitted_light_range_m = 4096.0F;
 
   std::string normals_policy;
   std::string tangents_policy;

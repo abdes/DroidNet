@@ -389,6 +389,11 @@ struct ImportOptions final {
 
   CoordinateConversionPolicy coordinate = {};
 
+  //! Finite support for glTF local lights with no authored range, in meters.
+  //! Explicit source ranges are preserved. This is an import approximation of
+  //! glTF's unbounded influence, independent of intensity, exposure and scene.
+  float gltf_omitted_light_range_m = 4096.0F;
+
   //! Cooperative cancellation token for long-running imports.
   /*! Importers should periodically check this token and abort promptly. */
   std::stop_token stop_token {};

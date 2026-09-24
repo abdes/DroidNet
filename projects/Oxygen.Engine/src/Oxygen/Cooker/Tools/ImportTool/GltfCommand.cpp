@@ -107,6 +107,13 @@ auto GltfCommand::BuildCommand() -> std::shared_ptr<clap::Command>
                       })
                       .Build();
 
+  auto omitted_light_range = Option::WithKey("omitted-light-range")
+    .About("Range in meters for glTF lights without a range (default 4096)")
+    .Long("omitted-light-range")
+    .WithValue<float>()
+    .StoreTo(&options_.gltf_omitted_light_range_m)
+    .Build();
+
   auto no_bake_transforms = Option::WithKey("no-bake-transforms")
                               .About("Disable transform baking into meshes")
                               .Long("no-bake-transforms")
@@ -157,6 +164,7 @@ auto GltfCommand::BuildCommand() -> std::shared_ptr<clap::Command>
     .WithOption(std::move(no_import_scene))
     .WithOption(std::move(unit_policy))
     .WithOption(std::move(unit_scale))
+    .WithOption(std::move(omitted_light_range))
     .WithOption(std::move(no_bake_transforms))
     .WithOption(std::move(normals))
     .WithOption(std::move(tangents))

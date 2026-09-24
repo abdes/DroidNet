@@ -2730,6 +2730,19 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
         light_node_index
           = append_attachment(node, i, "Light", glm::quat(0, 0, 0, 1));
       }
+      float local_range = request.options.gltf_omitted_light_range_m;
+      if (light.type == cgltf_light_type_point || light.type == cgltf_light_type_spot) {
+        if (light.has_range) {
+          local_range = light.range * ComputeUnitScale(request.options.coordinate);
+        }
+        if (!std::isfinite(local_range) || local_range <= 0.0F
+          || !std::isfinite(1.0F / local_range)) {
+          diagnostics.push_back(MakeErrorDiagnostic("scene.light.range_invalid",
+            "Local light range must be finite, positive and representable",
+            input.source_id, name));
+          return result;
+        }
+      }
       switch (light.type) {
       case cgltf_light_type_directional: {
         DirectionalLightRecord rec_light {};
@@ -2744,6 +2757,7 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
       }
       case cgltf_light_type_point: {
         PointLightRecord rec_light {};
+        rec_light.range = local_range;
         rec_light.node_index = i;
         rec_light.common = imported_common;
         rec_light.common.color_rgb[0] = (std::max)(0.0F, light.color[0]);
@@ -2765,6 +2779,7 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
       }
       case cgltf_light_type_spot: {
         SpotLightRecord rec_light {};
+        rec_light.range = local_range;
         rec_light.node_index = light_node_index;
         rec_light.common = imported_common;
         rec_light.common.color_rgb[0] = (std::max)(0.0F, light.color[0]);

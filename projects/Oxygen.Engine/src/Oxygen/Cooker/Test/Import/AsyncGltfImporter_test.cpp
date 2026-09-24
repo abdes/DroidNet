@@ -386,6 +386,43 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest,
   }
 }
 
+NOLINT_TEST_F(AsyncGltfImporterFullTest, LocalRangesPreserveExplicitAndResolveOmittedPolicy)
+{
+  for (const float fallback : { 4096.0F, 123.0F }) {
+    const auto root = MakeTempDir("gltf_ranges_" + std::to_string(fallback));
+    const auto source_path = root / "lights.gltf";
+    std::ofstream source(source_path);
+    source << R"({"asset":{"version":"2.0"},"extensionsUsed":["KHR_lights_punctual"],
+      "extensions":{"KHR_lights_punctual":{"lights":[
+        {"type":"point","range":17.5}, {"type":"point"},
+        {"type":"spot","range":23.75,"spot":{}}, {"type":"spot","spot":{}}]}},
+      "nodes":[{"extensions":{"KHR_lights_punctual":{"light":0}}},
+        {"extensions":{"KHR_lights_punctual":{"light":1}}},
+        {"extensions":{"KHR_lights_punctual":{"light":2}}},
+        {"extensions":{"KHR_lights_punctual":{"light":3}}}],
+      "scenes":[{"nodes":[0,1,2,3]}],"scene":0})";
+    source.close();
+    ImportRequest request {};
+    request.source_path = source_path;
+    request.cooked_root = root / "cooked";
+    request.options.gltf_omitted_light_range_m = fallback;
+    const auto imported = RunImport(std::move(request));
+    ASSERT_TRUE(imported.report.success);
+    const auto scene = LoadCameraScene(imported.report);
+    ASSERT_TRUE(scene);
+    const auto points = scene->GetComponents<world::PointLightRecord>();
+    const auto spots = scene->GetComponents<world::SpotLightRecord>();
+    ASSERT_EQ(points.size(), 2U);
+    ASSERT_EQ(spots.size(), 2U);
+    auto point = points.begin();
+    EXPECT_FLOAT_EQ(point->range, 17.5F);
+    EXPECT_FLOAT_EQ((++point)->range, fallback);
+    auto spot = spots.begin();
+    EXPECT_FLOAT_EQ(spot->range, 23.75F);
+    EXPECT_FLOAT_EQ((++spot)->range, fallback);
+  }
+}
+
 NOLINT_TEST_F(AsyncGltfImporterFullTest,
   SpotPhotometryPreservesPeakCandelaThroughCookAndLoad)
 {
@@ -477,11 +514,14 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest,
 }
 
 NOLINT_TEST_F(
-  AsyncGltfImporterFullTest, InvalidLightPhotometryFailsImportWithoutClamping)
+  AsyncGltfImporterFullTest, InvalidLocalLightValuesFailImportWithoutClamping)
 {
   const auto invalid_lights = std::array {
     R"({"type":"point","intensity":-1})",
     R"({"type":"point","intensity":3e38})",
+    R"({"type":"point","range":0})",
+    R"({"type":"point","range":-1})",
+    R"({"type":"spot","range":0,"spot":{}})",
     R"({"type":"spot","intensity":-1,"spot":{"innerConeAngle":0.2,"outerConeAngle":0.5}})",
     R"({"type":"spot","intensity":100,"spot":{"innerConeAngle":-0.1,"outerConeAngle":0.5}})",
     R"({"type":"spot","intensity":100,"spot":{"innerConeAngle":0.6,"outerConeAngle":0.5}})",
@@ -546,9 +586,11 @@ NOLINT_TEST_F(
     request.cooked_root = root / "cooked";
     const auto imported = RunImport(std::move(request));
     EXPECT_FALSE(imported.report.success);
+    const auto expected_code = nlohmann::json::parse(invalid_lights.at(index)).contains("range")
+      ? "scene.light.range_invalid" : "scene.light.photometry_invalid";
     EXPECT_TRUE(std::ranges::any_of(
-      imported.report.diagnostics, [](const auto& diagnostic) -> auto {
-        return diagnostic.code == "scene.light.photometry_invalid";
+      imported.report.diagnostics, [expected_code](const auto& diagnostic) {
+        return diagnostic.code == expected_code;
       }));
   }
 }

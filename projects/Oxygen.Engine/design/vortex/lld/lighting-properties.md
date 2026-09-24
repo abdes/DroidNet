@@ -85,14 +85,14 @@ are target requirements, not an assertion that today's schema enforces them.
 
 ## Local-light fields
 
-| ID / field                                                  | Source, default and domain                                                                                                                          | Selection / final consumer                                                                                                                                                 | Invalidation / additional tests                                                                                                                                                        |
-| ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| LP14 `luminous_flux_lm`                                     | N/S/J/P/L/E/I/M/T; point/spot 800 lm, finite >=0 and representable resolved candela                                                                 | CPU flux retained; shared physical conversion -> `intensity_rgb_cd`; no per-draw conversion copy                                                                           | V. Point 4*pi and independently integrated squared-cone solid angle; zero/bright/endpoints; exactly-once receiver cosine.                                                              |
-| LP15 `range` | N/S/J/P/L/E/I/M/T; 10 m; finite >=0 with representable inverse; zero has zero influence | Center-based range and quartic fade; point sphere and spot cone bounds use range without source-radius expansion | V/H. Zero clearing/reactivation, near/at/beyond range, rejection of invalid values, projection and shadow coverage. |
-| LP16 `attenuation_model`                                    | Current N/S/J/P/L/T field; **removal approved by D2**                                                                                               | Remove enum, API, script binding, source/packed field and all producer/consumer plumbing; no GPU selector                                                                  | Reject the obsolete key including former value 0; reject old packed layouts; migrate importers/assets/fixtures and verify no compatibility aliases.                                    |
-| LP17 `decay_exponent`                                       | Current N/S/J/P/L/E/I/M field; **removal approved by D2**                                                                                           | Remove local exponent and accessors across native/script/editor/source/packed/tooling; no evaluator or GPU member                                                          | Reject obsolete key including former value 2; migrate serializers/commands/fixtures. Keep unrelated directional CSM distribution_exponent.                                             |
-| LP18 `source_radius` | N/S/J/P/L/E/I/M; 0 m, finite >=0 with representable derived evaluation | Analytic source-size diffuse horizon and specular highlight response; zero selects the punctual response | V. Source-size edits update shading; range/cone support and ordinary-spot shadow projection are unchanged. Compare images and numerical-reference differences. |
-| LP19 `inner_cone_angle_radians`, `outer_cone_angle_radians` | Spot N/S/J/P/L/E/I/M/T; 0.4/0.6 rad half-angles; soft 0<=inner<outer<=pi/2, hard 0<inner=outer<pi/2; GPU cosine parameters must be representable | CPU retains radians and normalizes flux with both angles; GPU receives outer cosine and inverse cosine width. Ordinary spots use projected shadows; hemispheres use cube coverage | V/H. Atomic cone pairs, invalid/unrepresentable interval rejection, hard step, soft hemisphere, cone bounds, glTF candela conversion and shadow routing. |
+| ID / field                                                  | Source, default and domain                                                                                                                       | Selection / final consumer                                                                                                                                                        | Invalidation / additional tests                                                                                                                                |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| LP14 `luminous_flux_lm`                                     | N/S/J/P/L/E/I/M/T; point/spot 800 lm, finite >=0 and representable resolved candela                                                              | CPU flux retained; shared physical conversion -> `intensity_rgb_cd`; no per-draw conversion copy                                                                                  | V. Point 4*pi and independently integrated squared-cone solid angle; zero/bright/endpoints; exactly-once receiver cosine.                                      |
+| LP15 `range`                                                | N/S/J/P/L/E/I/M/T; 10 m; finite >=0 with representable inverse; zero has zero influence                                                          | Center-based range and quartic fade; point sphere and spot cone bounds use range without source-radius expansion                                                                  | V/H. Zero clearing/reactivation, near/at/beyond range, rejection of invalid values, projection and shadow coverage.                                            |
+| LP16 `attenuation_model`                                    | Current N/S/J/P/L/T field; **removal approved by D2**                                                                                            | Remove enum, API, script binding, source/packed field and all producer/consumer plumbing; no GPU selector                                                                         | Reject the obsolete key including former value 0; reject old packed layouts; migrate importers/assets/fixtures and verify no compatibility aliases.            |
+| LP17 `decay_exponent`                                       | Current N/S/J/P/L/E/I/M field; **removal approved by D2**                                                                                        | Remove local exponent and accessors across native/script/editor/source/packed/tooling; no evaluator or GPU member                                                                 | Reject obsolete key including former value 2; migrate serializers/commands/fixtures. Keep unrelated directional CSM distribution_exponent.                     |
+| LP18 `source_radius`                                        | N/S/J/P/L/E/I/M; 0 m, finite >=0 with representable derived evaluation                                                                           | Analytic source-size diffuse horizon and specular highlight response; zero selects the punctual response                                                                          | V. Source-size edits update shading; range/cone support and ordinary-spot shadow projection are unchanged. Compare images and numerical-reference differences. |
+| LP19 `inner_cone_angle_radians`, `outer_cone_angle_radians` | Spot N/S/J/P/L/E/I/M/T; 0.4/0.6 rad half-angles; soft 0<=inner<outer<=pi/2, hard 0<inner=outer<pi/2; GPU cosine parameters must be representable | CPU retains radians and normalizes flux with both angles; GPU receives outer cosine and inverse cosine width. Ordinary spots use projected shadows; hemispheres use cube coverage | V/H. Atomic cone pairs, invalid/unrepresentable interval rejection, hard step, soft hemisphere, cone bounds, glTF candela conversion and shadow routing.       |
 
 ## Directional and atmosphere fields
 
@@ -192,15 +192,29 @@ with the code cutover. LP16/LP17 are removed fields, not reserved bytes.
 
 ### Imported local-light range
 
-The glTF adapter currently leaves both point and spot ranges at the packed
-record's 10 m default instead of reading the source range. Preserve explicit
-positive ranges. For omitted range, resolve the import policy explicitly:
-[KHR_lights_punctual](https://github.com/KhronosGroup/glTF/blob/main/extensions/2.0/Khronos/KHR_lights_punctual/README.md#range-property)
-defines unbounded inverse-square influence, whereas Oxygen's local-light model
-uses finite support. A bounded production approximation needs a documented
-conversion policy; silently inheriting the default record value is not that policy.
-Cover explicit and omitted ranges in the existing glTF importer tests, then
-recook affected content and report it separately from the original renderer baseline.
+The glTF adapter preserves explicit positive source ranges. When the source omits
+range, the importer uses a configurable **4,096 m** finite fallback, approved on
+2026-09-24. `ImportOptions::gltf_omitted_light_range_m`, the manifest field of the
+same name and ImportTool's `gltf --omitted-light-range` select this value. The
+fallback is in Oxygen meters; explicit source ranges follow import unit conversion.
+Neither node scale, source intensity nor camera exposure changes the chosen range.
+Zero, negative, nonfinite and unrepresentable explicit ranges are rejected.
+
+This is an explicit approximation of glTF's unbounded inverse-square influence.
+A large bounded radius retains distant contributions while keeping finite bounds
+and projections in the existing renderer. It can increase cluster overlap and
+shadow coverage, so imported lights remain editable after conversion. Godot uses
+a 4,096-unit bound; Unity glTFast uses a 100,000-unit fallback. An intensity-based
+0.01-lux cutoff was rejected as the default: exposure can make the omitted energy
+visible, and that threshold is not an established import convention. Silently
+using the native 10 m creation default is also rejected. This policy is general
+and contains no scene-name or Sponza-specific condition.
+
+References: [glTF range semantics](https://github.com/KhronosGroup/glTF/blob/main/extensions/2.0/Khronos/KHR_lights_punctual/README.md#range-property),
+[Godot conversion](https://github.com/godotengine/godot/blob/master/modules/gltf/extensions/gltf_light.cpp),
+[Unity glTFast conversion](https://github.com/Unity-Technologies/com.unity.cloud.gltfast/blob/main/Packages/com.unity.cloud.gltfast/Runtime/Scripts/LightPunctualExtension.cs).
+Recooked content is a new content baseline, separate from the original renderer
+performance comparison.
 
 The source-to-cooked check on Sponza's `HDRI_SKY` confirms a source point light
 at 200 cd with no range or shadow override. The cooked node remains a point at
