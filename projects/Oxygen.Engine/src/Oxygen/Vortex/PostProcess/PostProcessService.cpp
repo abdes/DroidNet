@@ -605,7 +605,7 @@ auto PostProcessService::CheckSceneColorRange(RenderContext& ctx,
                             epoch = precision->second.epoch](
                             const graphics::SubmissionOutcome outcome) -> void {
       const auto current = precision_states_.find(handle);
-      if (outcome == graphics::SubmissionOutcome::kDiscarded
+      if (outcome != graphics::SubmissionOutcome::kSubmitted
         && current != precision_states_.end()
         && current->second.epoch == epoch) {
         InvalidatePrecision(handle);
@@ -973,7 +973,7 @@ auto PostProcessService::PrepareScenePrecision(RenderContext& ctx,
     [this, handle = prepared.handle, sequence = ctx.frame_sequence,
       epoch = precision.epoch](
       const graphics::SubmissionOutcome outcome) -> void {
-      if (outcome != graphics::SubmissionOutcome::kDiscarded) {
+      if (outcome == graphics::SubmissionOutcome::kSubmitted) {
         return;
       }
       const auto current = precision_states_.find(handle);

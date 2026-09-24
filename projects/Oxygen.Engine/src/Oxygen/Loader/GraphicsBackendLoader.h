@@ -67,7 +67,7 @@ public:
     std::shared_ptr<loader::detail::PlatformServices> platform_services
     = nullptr) -> GraphicsBackendLoader&;
 
-  //! Destructor. Unloads the backend if it was loaded.
+  //! Requests close and relinquishes this facade's active backend owner.
   ~GraphicsBackendLoader();
 
   OXYGEN_MAKE_NON_COPYABLE(GraphicsBackendLoader)
@@ -79,10 +79,10 @@ public:
     const PathFinderConfig& path_finder_config) const
     -> std::weak_ptr<Graphics>;
 
-  //! Unloads the currently loaded graphics backend, destroying its instance
-  //! and as a result, rendering all weak pointers to it unusable. The
-  //! module's reference count is decremented, and if it is no longer
-  //! referenced, it is automatically unloaded.
+  //! Closes admission and drains the backend on its owner thread. External
+  //! owners and native inspection references may retain the closed incarnation;
+  //! reload reports BackendRetiring until their actual destruction and module
+  //! release.
   void UnloadBackend() const noexcept;
 
   //! Gets the backend instance if one is currently loaded.

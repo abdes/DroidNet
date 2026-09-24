@@ -104,6 +104,22 @@ NOLINT_TEST_F(ResourceRegistryBasicTest, Register_ContainsResource)
   EXPECT_TRUE(registry_->Contains(*resource1_));
 }
 
+NOLINT_TEST_F(ResourceRegistryBasicTest,
+  HashCollisionKeepsDistinctDescriptionsAndIndependentRemoval)
+{
+  TestViewDesc a { .id = 101, .force_hash_collision = true };
+  TestViewDesc b { .id = 202, .force_hash_collision = true };
+  ASSERT_EQ(std::hash<TestViewDesc> {}(a), std::hash<TestViewDesc> {}(b));
+  const auto first = RegisterView(*resource1_, a);
+  const auto second = RegisterView(*resource1_, b);
+  EXPECT_NE(first, second);
+  EXPECT_EQ(registry_->Find(*resource1_, a), first);
+  EXPECT_EQ(registry_->Find(*resource1_, b), second);
+  registry_->UnRegisterView(*resource1_, first);
+  EXPECT_FALSE(registry_->Contains(*resource1_, a));
+  EXPECT_EQ(registry_->Find(*resource1_, b), second);
+}
+
 //! Verify the registry reports the number of registered resources accurately.
 NOLINT_TEST_F(
   ResourceRegistryBasicTest, RegisteredResourceCount_TracksResourceLifecycle)

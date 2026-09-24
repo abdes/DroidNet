@@ -4,15 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Graphics/Common/CommandRecording.h>
-
 #include <exception>
 #include <utility>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Graphics/Common/BackendLifetime.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
+#include <Oxygen/Graphics/Common/CommandRecording.h>
 #include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Profiling/CpuProfileScope.h>
 
@@ -22,8 +22,11 @@ CommandRecording::CommandRecording() noexcept = default;
 
 CommandRecording::CommandRecording(std::unique_ptr<CommandRecorder> recorder,
   const observer_ptr<detail::DeferredReclaimer> reclaimer,
-  const SubmissionPolicy policy)
-  : recorder_(std::move(recorder))
+  const SubmissionPolicy policy, std::shared_ptr<Graphics> backend_owner,
+  std::shared_ptr<BackendLifetime> lifetime)
+  : backend_owner_(std::move(backend_owner))
+  , lifetime_(std::move(lifetime))
+  , recorder_(std::move(recorder))
   , reclaimer_(reclaimer)
   , policy_(policy)
   , state_(State::kRecording)
@@ -33,19 +36,33 @@ CommandRecording::CommandRecording(std::unique_ptr<CommandRecorder> recorder,
   CHECK_NOTNULL_F(reclaimer_);
   command_list_ = recorder_->command_list_;
   CHECK_NOTNULL_F(command_list_);
-  recorder_->Begin();
+  try {
+    command_list_->BindBackend(
+      lifetime_, recorder_->GetTargetQueue()->Identity());
+    recorder_->Begin();
+    if (lifetime_) {
+      lifetime_->RetainRecording();
+    }
+  } catch (...) {
+    command_list_->Invalidate();
+    recorder_->ResolveSubmission(SubmissionOutcome::kDiscarded);
+    throw;
+  }
 }
 
 CommandRecording::~CommandRecording() noexcept { FinishScope(); }
 
 CommandRecording::CommandRecording(CommandRecording&& other) noexcept
-  : recorder_(std::move(other.recorder_))
+  : backend_owner_(std::move(other.backend_owner_))
+  , lifetime_(std::move(other.lifetime_))
+  , recorder_(std::move(other.recorder_))
   , command_list_(std::move(other.command_list_))
   , reclaimer_(other.reclaimer_)
   , policy_(other.policy_)
   , state_(std::exchange(other.state_, State::kEmpty))
   , uncaught_exceptions_(other.uncaught_exceptions_)
   , ended_(other.ended_)
+  , result_(other.result_)
 {
 }
 
@@ -54,6 +71,11 @@ auto CommandRecording::operator=(CommandRecording&& other) noexcept
 {
   if (this != &other) {
     FinishScope();
+    // Destroy old recorder/list before releasing their backend owner.
+    recorder_.reset();
+    command_list_.reset();
+    backend_owner_ = std::move(other.backend_owner_);
+    lifetime_ = std::move(other.lifetime_);
     recorder_ = std::move(other.recorder_);
     command_list_ = std::move(other.command_list_);
     reclaimer_ = other.reclaimer_;
@@ -61,6 +83,7 @@ auto CommandRecording::operator=(CommandRecording&& other) noexcept
     state_ = std::exchange(other.state_, State::kEmpty);
     uncaught_exceptions_ = other.uncaught_exceptions_;
     ended_ = other.ended_;
+    result_ = other.result_;
   }
   return *this;
 }
@@ -102,39 +125,78 @@ void CommandRecording::FinishScope() noexcept
 */
 auto CommandRecording::Submit() noexcept -> bool
 {
+  return Finalize(false).outcome == SubmissionOutcome::kSubmitted;
+}
+
+auto CommandRecording::SubmitWithReceipt() noexcept -> SubmissionResult
+{
+  return Finalize(true);
+}
+
+auto CommandRecording::Finalize(bool receipt) noexcept -> SubmissionResult
+{
   if (state_ != State::kRecording) {
-    return state_ == State::kSubmitted;
+    return result_;
   }
   try {
-    profiling::CpuProfileScope cpu_scope("Graphics.FinalizeCommandRecorder",
-      profiling::ProfileCategory::kGeneral,
-      profiling::Vars(profiling::Var("recording", command_list_->GetName())));
-    ended_ = true;
-    auto completed = recorder_->End();
-    if (!completed) {
-      Discard();
-      return false;
-    }
-    reclaimer_->RegisterDeferredAction([list = completed]() -> void {
-      if (list->IsSubmitted()) {
-        list->OnExecuted();
-      } else {
-        list->OnFailed();
+    // Preserve view-owner attribution without allocating the static label on
+    // every submit. Observer/Tracy consumers read the description at entry.
+    thread_local profiling::CpuProfileScopeDesc finalize_profile { .label
+      = "Graphics.FinalizeCommandRecorder",
+      .variables
+      = profiling::Vars(profiling::Var("recording", std::string_view {})),
+      .category = profiling::ProfileCategory::kGeneral };
+    finalize_profile.variables[0].value.assign(command_list_->GetName());
+    const profiling::CpuProfileScope cpu_scope(finalize_profile);
+
+    std::shared_ptr<CommandList> completed;
+    detail::DeferredReclaimer::PreparedDeferredAction retirement;
+    {
+      const auto admission
+        = lifetime_ ? lifetime_->AcquireOperation() : BackendOperation {};
+      ended_ = true;
+      completed = recorder_->End();
+      if (!completed) {
+        command_list_->Invalidate();
+        throw std::runtime_error("Command recording could not be closed");
       }
-    });
-    recorder_->GetTargetQueue()->Submit(completed);
-    completed->OnSubmitted();
-    state_ = State::kSubmitted;
-    recorder_->ResolveSubmission(SubmissionOutcome::kSubmitted);
-    command_list_.reset();
-    return true;
-  } catch (const std::exception& error) {
-    LOG_F(ERROR, "Command recording submission failed: {}", error.what());
+      receipt = receipt || completed->Uses().NeedsCompletion();
+      if (!receipt) {
+        retirement = reclaimer_->PrepareDeferredAction([list = completed] {
+          if (list->IsSubmitted()) {
+            list->OnExecuted();
+          } else {
+            list->OnFailed();
+          }
+        });
+      }
+    }
+    if (receipt) {
+      result_ = recorder_->GetTargetQueue()->SubmitWithReceipt(completed);
+    } else {
+      recorder_->GetTargetQueue()->Submit(completed);
+      // Test queues may implement Submit directly; production queues finalize
+      // their state inside the common issue transaction.
+      if (!completed->IsSubmitted()) {
+        completed->OnSubmitted();
+      }
+      result_.outcome = SubmissionOutcome::kSubmitted;
+      reclaimer_->CommitDeferredAction(std::move(retirement));
+    }
+  } catch (const SubmissionException& error) {
+    result_ = error.Result();
   } catch (...) {
-    LOG_F(ERROR, "Command recording submission failed with an unknown error");
+    // End/preparation failures have not issued native commands.
   }
-  Discard();
-  return false;
+  if (result_.outcome == SubmissionOutcome::kDiscarded) {
+    Discard();
+  } else {
+    state_ = result_.outcome == SubmissionOutcome::kSubmitted
+      ? State::kSubmitted
+      : State::kExecutionUncertain;
+    ResolveAndRelease(result_.outcome);
+  }
+  return result_;
 }
 
 void CommandRecording::Discard() noexcept
@@ -146,11 +208,33 @@ void CommandRecording::Discard() noexcept
   // Close the native list before its pooled allocator/list can be reset.
   if (!ended_) {
     ended_ = true;
-    static_cast<void>(recorder_->End());
+    try {
+      if (!recorder_->End()) {
+        command_list_->Invalidate();
+      }
+    } catch (...) {
+      command_list_->Invalidate();
+    }
   }
+  command_list_->Uses().Release(UseReleaseReason::kDiscarded);
   command_list_->OnFailed();
-  recorder_->ResolveSubmission(SubmissionOutcome::kDiscarded);
-  command_list_.reset();
+  ResolveAndRelease(SubmissionOutcome::kDiscarded);
+}
+
+void CommandRecording::ResolveAndRelease(
+  const SubmissionOutcome outcome) noexcept
+{
+  // Detach before invoking user observers. Keep the backend alive until all
+  // recorder/list cleanup has returned, outside the lifecycle admission lock.
+  auto backend = std::move(backend_owner_);
+  auto lifetime = std::move(lifetime_);
+  auto recorder = std::move(recorder_);
+  auto list = std::move(command_list_);
+  reclaimer_ = nullptr;
+  if (lifetime) {
+    lifetime->ReleaseRecording();
+  }
+  recorder->ResolveSubmission(outcome);
 }
 
 } // namespace oxygen::graphics

@@ -370,7 +370,8 @@ auto ExposureGpuTest::Uniform(
 }
 
 auto ExposureGpuTest::RunToneProbe(std::span<const std::byte> inputs_data,
-  std::uint32_t record_count, std::uint32_t mode, bool capture_enabled)
+  std::uint32_t record_count, std::uint32_t mode, bool capture_enabled,
+  const std::function<void(graphics::CommandRecorder&)>& attach)
   -> std::vector<std::array<float, 8>>
 {
   if (mode == 16384U) {
@@ -467,6 +468,9 @@ auto ExposureGpuTest::RunToneProbe(std::span<const std::byte> inputs_data,
   probe_view_buffer->Update(&probe_view, sizeof(probe_view), 0U);
   {
     auto recorder = AcquireRecorder("Tone bound arithmetic");
+    if (attach) {
+      attach(*recorder);
+    }
     EnsureTracked(*recorder, inputs, ResourceStates::kGenericRead);
     EnsureTracked(*recorder, output, ResourceStates::kCommon);
     recorder->RequireResourceState(*output, ResourceStates::kUnorderedAccess);

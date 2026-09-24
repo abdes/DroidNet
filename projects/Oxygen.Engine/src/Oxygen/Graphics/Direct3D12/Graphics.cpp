@@ -25,6 +25,7 @@
 #include <Oxygen/Graphics/Common/AllocationBudget.h>
 #include <Oxygen/Graphics/Common/AllocationBudgetTag.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
+#include <Oxygen/Graphics/Common/BackendObject.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
 #include <Oxygen/Graphics/Common/FrameCaptureController.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
@@ -42,6 +43,7 @@
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/ImGui/ImGuiBackend.h>
 #include <Oxygen/Graphics/Direct3D12/MemoryStatistics.h>
+#include <Oxygen/Graphics/Direct3D12/NativeLifetime.h>
 #include <Oxygen/Graphics/Direct3D12/PixFrameCaptureController.h>
 #include <Oxygen/Graphics/Direct3D12/ReadbackManager.h>
 #include <Oxygen/Graphics/Direct3D12/RenderDocFrameCaptureController.h>
@@ -173,8 +175,15 @@ auto CreateBackend(const oxygen::SerializedBackendConfig& config,
   auto& backend = GetBackendInternal();
   if (!backend) {
     try {
-      backend = std::make_shared<oxygen::graphics::d3d12::Graphics>(
-        config, path_finder_config);
+      auto* instance
+        = new oxygen::graphics::d3d12::Graphics(config, path_finder_config);
+      backend = std::static_pointer_cast<oxygen::graphics::d3d12::Graphics>(
+        oxygen::graphics::AdoptBackendObject(
+          static_cast<oxygen::Graphics*>(instance),
+          [](void* object) noexcept {
+            delete static_cast<oxygen::Graphics*>(object);
+          },
+          instance->GetBackendLifetime()));
     } catch (const std::exception& ex) {
       LOG_F(ERROR, "Failed to create D3D12 backend: {}", ex.what());
       backend.reset();
@@ -195,8 +204,7 @@ auto DestroyBackend() -> void
   if (backend) {
     // Ensure async tasks are stopped and resources are released in a safe
     // order before resetting the backend instance.
-    backend->Stop();
-    backend->Flush();
+    backend->Close();
   }
   backend.reset();
 }
@@ -234,6 +242,10 @@ public:
   ~DescriptorAllocatorComponent() override = default;
 
   [[nodiscard]] auto GetAllocator() const -> const auto& { return *allocator_; }
+  [[nodiscard]] auto ShareAllocator() const -> const auto&
+  {
+    return allocator_;
+  }
 
 protected:
   auto UpdateDependencies(
@@ -250,7 +262,7 @@ protected:
       get_component(DeviceManager::ClassTypeId()));
     auto* device = dm.Device();
     DCHECK_NOTNULL_F(device, "DeviceManager not properly initialized");
-    allocator_ = std::make_unique<DescriptorAllocator>(
+    allocator_ = std::make_shared<DescriptorAllocator>(
       std::make_shared<D3D12HeapAllocationStrategy>(device), device);
 
     // Ensure shader-visible heaps (CBV_SRV_UAV and SAMPLER) exist up-front.
@@ -400,7 +412,7 @@ protected:
   }
 
 private:
-  std::unique_ptr<oxygen::graphics::d3d12::DescriptorAllocator> allocator_ {};
+  std::shared_ptr<oxygen::graphics::d3d12::DescriptorAllocator> allocator_ {};
   oxygen::graphics::DescriptorAllocationHandle default_sampler_ {};
   oxygen::graphics::DescriptorAllocationHandle shadow_comparison_sampler_ {};
   oxygen::graphics::DescriptorAllocationHandle point_clamp_sampler_ {};
@@ -470,7 +482,7 @@ auto Graphics::GetAllocator() const -> D3D12MA::Allocator*
   return allocator;
 }
 
-Graphics::~Graphics() = default;
+Graphics::~Graphics() { Close(); }
 
 Graphics::Graphics(const SerializedBackendConfig& config,
   const SerializedPathFinderConfig& path_finder_config)
@@ -562,6 +574,18 @@ Graphics::Graphics(const SerializedBackendConfig& config,
   }
   AddComponent<EngineShaders>(std::move(parsed_path_finder_config));
   AddComponent<DescriptorAllocatorComponent>();
+  auto native = std::make_unique<NativeLifetime>();
+  native->device = GetCurrentDevice();
+  native->memory_allocator = GetAllocator();
+  native->descriptors
+    = GetComponent<DescriptorAllocatorComponent>().ShareAllocator();
+  native_lifetime_
+    = std::static_pointer_cast<NativeLifetime>(AdoptBackendObject(
+      native.release(),
+      [](
+        void* object) noexcept { delete static_cast<NativeLifetime*>(object); },
+      GetBackendLifetime()));
+  SetNativeLifetimeToken(native_lifetime_);
   AddComponent<detail::PipelineStateCache>(this);
   timestamp_query_backend_ = std::make_unique<TimestampQueryBackend>(*this);
   readback_manager_ = std::make_unique<D3D12ReadbackManager>(*this);
@@ -593,7 +617,7 @@ auto Graphics::CreateCommandRecorder(
   observer_ptr<graphics::CommandQueue> target_queue)
   -> std::unique_ptr<graphics::CommandRecorder>
 {
-  auto this_shared = shared_from_this();
+  auto this_shared = RetainBackendOwner();
   auto d3d12_graphics = std::static_pointer_cast<Graphics>(this_shared);
   return std::make_unique<CommandRecorder>(
     d3d12_graphics, std::move(command_list), target_queue);
@@ -719,6 +743,7 @@ auto Graphics::CreateSurface(std::weak_ptr<platform::Window> window_weak,
   const observer_ptr<graphics::CommandQueue> command_queue) const
   -> std::unique_ptr<Surface>
 {
+  const auto admission = GetBackendLifetime()->AcquireOperation();
   DCHECK_F(!window_weak.expired());
   DCHECK_NOTNULL_F(command_queue);
   DCHECK_EQ_F(command_queue->GetTypeId(),
@@ -741,6 +766,7 @@ auto Graphics::CreateSurfaceFromNative(void* /*native_handle*/,
   const observer_ptr<graphics::CommandQueue> command_queue) const
   -> std::shared_ptr<Surface>
 {
+  const auto admission = GetBackendLifetime()->AcquireOperation();
   // native_handle is unused for CompositionSurface as we create the SwapChain
   // internally and expose it via GetSwapChain() for the interop layer to
   // connect.
@@ -880,19 +906,36 @@ auto Graphics::AllocateResource(const AllocationBudgetTag& tag,
 auto Graphics::CreateTexture(const TextureDesc& desc) const
   -> std::shared_ptr<graphics::Texture>
 {
-  return std::make_shared<Texture>(desc, this);
+  const auto admission = GetBackendLifetime()->AcquireOperation();
+  return AdoptBackendObject(
+    static_cast<graphics::Texture*>(new Texture(desc, this)),
+    [](void* object) noexcept {
+      delete static_cast<graphics::Texture*>(object);
+    },
+    GetNativeLifetimeToken());
 }
 
 auto Graphics::CreateTextureFromNativeObject(const TextureDesc& desc,
   const NativeResource& native) const -> std::shared_ptr<graphics::Texture>
 {
-  return std::make_shared<Texture>(desc, native, this);
+  const auto admission = GetBackendLifetime()->AcquireOperation();
+  return AdoptBackendObject(
+    static_cast<graphics::Texture*>(new Texture(desc, native, this)),
+    [](void* object) noexcept {
+      delete static_cast<graphics::Texture*>(object);
+    },
+    GetNativeLifetimeToken());
 }
 
 auto Graphics::CreateBuffer(const BufferDesc& desc) const
   -> std::shared_ptr<graphics::Buffer>
 {
-  return std::make_shared<Buffer>(desc, this);
+  const auto admission = GetBackendLifetime()->AcquireOperation();
+  return AdoptBackendObject(
+    static_cast<graphics::Buffer*>(new Buffer(desc, this)),
+    [](
+      void* object) noexcept { delete static_cast<graphics::Buffer*>(object); },
+    GetNativeLifetimeToken());
 }
 
 auto Graphics::GetOrCreateGraphicsPipeline(GraphicsPipelineDesc desc,

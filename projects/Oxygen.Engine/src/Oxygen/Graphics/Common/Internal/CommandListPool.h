@@ -17,6 +17,7 @@
 #include <Oxygen/Graphics/Common/api_export.h>
 
 namespace oxygen::graphics::internal {
+struct CommandPoolState;
 
 //! Thread-safe pool for managing command lists across different queue roles.
 /*!
@@ -59,15 +60,20 @@ public:
       graphics::QueueRole, std::string_view)>;
 
   //! Constructs a command list pool with the specified factory function.
-  OXGN_GFX_API explicit CommandListPool(CommandListFactory factory);
+  OXGN_GFX_API explicit CommandListPool(
+    CommandListFactory factory, std::shared_ptr<void> native_lifetime = {});
 
   OXYGEN_MAKE_NON_COPYABLE(CommandListPool)
-  OXYGEN_DEFAULT_MOVABLE(CommandListPool)
+  OXYGEN_MAKE_NON_MOVABLE(CommandListPool)
 
   OXGN_GFX_API ~CommandListPool() override;
 
   //! Clears all cached command lists from the pool.
   OXGN_GFX_API auto Clear() noexcept -> void;
+  //! Seal the factory; checked-out lists destroy themselves on late return.
+  OXGN_GFX_API auto Close() noexcept -> void;
+  //! Install backend-native retention before any list is created.
+  OXGN_GFX_API auto SetNativeLifetime(std::shared_ptr<void> lifetime) -> void;
 
   //! Acquires a command list from the pool for the specified queue role.
   OXGN_GFX_NDAPI auto AcquireCommandList(
@@ -75,13 +81,7 @@ public:
     -> std::shared_ptr<graphics::CommandList>;
 
 private:
-  CommandListFactory factory_;
-
-  using CommandListUniquePtr = std::unique_ptr<graphics::CommandList>;
-  using CommandLists = std::vector<CommandListUniquePtr>;
-  //! Pool of available command lists by queue type.
-  std::unordered_map<graphics::QueueRole, CommandLists> command_list_pool_;
-  std::mutex command_list_pool_mutex_;
+  std::shared_ptr<CommandPoolState> state_;
 };
 
 } // namespace oxygen::graphics::internal

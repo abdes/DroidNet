@@ -7,21 +7,22 @@
 #include <memory>
 #include <vector>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
-#include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
+#include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Surface.h>
+#include <Oxygen/Graphics/Common/Test/HeapAllocationFailure.h>
 #include <Oxygen/Graphics/Common/Test/Mocks/MockGraphics.h>
+#include <Oxygen/Testing/GTest.h>
 // Required for direct access to the QueueManager component in tests
-#include <Oxygen/Graphics/Common/Internal/QueueManager.h>
 #include <unordered_set>
+
+#include <Oxygen/Graphics/Common/Internal/QueueManager.h>
 
 // Google Mock will be used to intercept CreateCommandQueue calls made by the
 // base Graphics::CreateCommandQueues implementation. We create a small mock
@@ -71,7 +72,10 @@ public:
   {
     return completed_;
   }
-  [[nodiscard]] auto GetCurrentValue() const -> uint64_t override { return current_; }
+  [[nodiscard]] auto GetCurrentValue() const -> uint64_t override
+  {
+    return current_;
+  }
   auto Submit(std::shared_ptr<CommandList>) -> void override { }
   auto Submit(std::span<std::shared_ptr<CommandList>>) -> void override { }
   auto Flush() const -> void override
@@ -803,11 +807,14 @@ NOLINT_TEST(QueuesStrategy, BootstrapRetirementDrainsPreFrameWorkOnce)
     EXPECT_GE(queue->GetCompletedValue(), startup_fence);
     retired = true;
   });
-  gfx.BeginFrame(oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
+  gfx.BeginFrame(
+    oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
   EXPECT_TRUE(retired);
   EXPECT_EQ(queue->flush_count_, 1);
-  gfx.EndFrame(oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
-  gfx.BeginFrame(oxygen::frame::SequenceNumber { 2U }, oxygen::frame::Slot { 1U });
+  gfx.EndFrame(
+    oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
+  gfx.BeginFrame(
+    oxygen::frame::SequenceNumber { 2U }, oxygen::frame::Slot { 1U });
   EXPECT_EQ(queue->flush_count_, 1);
   EXPECT_TRUE(queue->waited_values.empty());
 }
@@ -848,21 +855,26 @@ NOLINT_TEST(QueuesStrategy, FrameRetirementWaitsForEveryQueue)
 {
   TestGraphics gfx("multiple-queues");
   const QueueSpecification graphics_spec {
-    .key = QueueKey { "graphics" }, .role = Role::kGraphics,
+    .key = QueueKey { "graphics" },
+    .role = Role::kGraphics,
     .allocation_preference = Alloc::kDedicated,
     .sharing_preference = Share::kNamed,
   };
   const QueueSpecification copy_spec {
-    .key = QueueKey { "copy" }, .role = Role::kTransfer,
+    .key = QueueKey { "copy" },
+    .role = Role::kTransfer,
     .allocation_preference = Alloc::kDedicated,
     .sharing_preference = Share::kNamed,
   };
-  auto graphics = std::make_shared<FakeCommandQueue>("graphics", Role::kGraphics);
+  auto graphics
+    = std::make_shared<FakeCommandQueue>("graphics", Role::kGraphics);
   auto copy = std::make_shared<FakeCommandQueue>("copy", Role::kTransfer);
-  EXPECT_CALL(gfx, CreateCommandQueue(graphics_spec.key, _)).WillOnce(Return(graphics));
+  EXPECT_CALL(gfx, CreateCommandQueue(graphics_spec.key, _))
+    .WillOnce(Return(graphics));
   EXPECT_CALL(gfx, CreateCommandQueue(copy_spec.key, _)).WillOnce(Return(copy));
   gfx.CreateCommandQueues(PairStrategy(graphics_spec, copy_spec));
-  gfx.BeginFrame(oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
+  gfx.BeginFrame(
+    oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
   const auto upload_fence = copy->SignalSubmittedWork();
   auto retired = false;
   gfx.GetDeferredReclaimer().RegisterDeferredAction([&] {
@@ -870,16 +882,54 @@ NOLINT_TEST(QueuesStrategy, FrameRetirementWaitsForEveryQueue)
     EXPECT_EQ(copy->GetCompletedValue(), upload_fence + 1U);
     retired = true;
   });
-  gfx.EndFrame(oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
-  gfx.BeginFrame(oxygen::frame::SequenceNumber { 2U }, oxygen::frame::Slot { 1U });
+  gfx.EndFrame(
+    oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
+  gfx.BeginFrame(
+    oxygen::frame::SequenceNumber { 2U }, oxygen::frame::Slot { 1U });
   EXPECT_FALSE(retired);
   EXPECT_TRUE(graphics->waited_values.empty());
   EXPECT_TRUE(copy->waited_values.empty());
-  gfx.EndFrame(oxygen::frame::SequenceNumber { 2U }, oxygen::frame::Slot { 1U });
-  gfx.BeginFrame(oxygen::frame::SequenceNumber { 3U }, oxygen::frame::Slot { 0U });
+  gfx.EndFrame(
+    oxygen::frame::SequenceNumber { 2U }, oxygen::frame::Slot { 1U });
+  gfx.BeginFrame(
+    oxygen::frame::SequenceNumber { 3U }, oxygen::frame::Slot { 0U });
   EXPECT_TRUE(retired);
   EXPECT_EQ(graphics->waited_values.back(), 1U);
   EXPECT_EQ(copy->waited_values.back(), upload_fence + 1U);
 }
 
 } // namespace
+
+#if defined(_MSC_VER) && defined(_DEBUG)
+NOLINT_TEST(QueuesStrategy, NativeStateRetirementDoesNotAllocate)
+{
+  TestGraphics gfx("retirement");
+  const QueueSpecification a { .key = QueueKey { "graphics" },
+    .role = Role::kGraphics,
+    .allocation_preference = Alloc::kDedicated,
+    .sharing_preference = Share::kNamed };
+  const QueueSpecification b { .key = QueueKey { "copy" },
+    .role = Role::kTransfer,
+    .allocation_preference = Alloc::kDedicated,
+    .sharing_preference = Share::kNamed };
+  auto first = std::make_shared<FakeCommandQueue>("graphics", Role::kGraphics);
+  auto second = std::make_shared<FakeCommandQueue>("copy", Role::kTransfer);
+  EXPECT_CALL(gfx, CreateCommandQueue(a.key, _)).WillOnce(Return(first));
+  EXPECT_CALL(gfx, CreateCommandQueue(b.key, _)).WillOnce(Return(second));
+  gfx.CreateCommandQueues(PairStrategy(a, b));
+  const NativeResource resource { uint64_t { 1234 }, oxygen::TypeId { 1 } };
+  const std::array states { CommandQueue::KnownResourceState {
+    resource, ResourceStates::kShaderResource } };
+  first->AdoptKnownResourceStates(states);
+  second->AdoptKnownResourceStates(states);
+  using oxygen::graphics::testing::HeapAllocationFailure;
+  const auto before = HeapAllocationFailure::RejectedCount();
+  {
+    HeapAllocationFailure fail;
+    gfx.ForgetKnownResourceState(resource);
+  }
+  EXPECT_EQ(HeapAllocationFailure::RejectedCount(), before);
+  EXPECT_FALSE(first->TryGetKnownResourceState(resource));
+  EXPECT_FALSE(second->TryGetKnownResourceState(resource));
+}
+#endif

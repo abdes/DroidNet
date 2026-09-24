@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Graphics/Common/BackendObject.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/ImGui/ImGuiGraphicsBackend.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
@@ -32,9 +33,15 @@ class DescriptorAllocatorComponent : public oxygen::Component {
   OXYGEN_COMPONENT(DescriptorAllocatorComponent)
 
 public:
-  explicit DescriptorAllocatorComponent()
-    : allocator_(std::make_unique<hb::DescriptorAllocator>(
-        std::make_shared<hb::AllocationStrategy>()))
+  explicit DescriptorAllocatorComponent(std::shared_ptr<void> lifetime)
+    : allocator_(std::static_pointer_cast<hb::DescriptorAllocator>(
+        oxygen::graphics::AdoptBackendObject(
+          new hb::DescriptorAllocator(
+            std::make_shared<hb::AllocationStrategy>()),
+          [](void* object) noexcept {
+            delete static_cast<hb::DescriptorAllocator*>(object);
+          },
+          std::move(lifetime))))
   {
   }
 
@@ -44,9 +51,13 @@ public:
   ~DescriptorAllocatorComponent() override = default;
 
   [[nodiscard]] auto GetAllocator() const -> const auto& { return *allocator_; }
+  [[nodiscard]] auto ShareAllocator() const -> const auto&
+  {
+    return allocator_;
+  }
 
 private:
-  std::unique_ptr<hb::DescriptorAllocator> allocator_;
+  std::shared_ptr<hb::DescriptorAllocator> allocator_;
 };
 
 } // namespace
@@ -62,13 +73,15 @@ Graphics::Graphics(const SerializedBackendConfig& /*config*/,
   : oxygen::Graphics("HeadlessGraphics")
 {
   AddComponent<internal::EngineShaders>();
-  AddComponent<DescriptorAllocatorComponent>();
+  AddComponent<DescriptorAllocatorComponent>(GetBackendLifetime());
+  SetNativeLifetimeToken(
+    GetComponent<DescriptorAllocatorComponent>().ShareAllocator());
   readback_manager_ = std::make_unique<HeadlessReadbackManager>(*this);
 
   LOG_F(INFO, "Headless Graphics instance created");
 }
 
-Graphics::~Graphics() = default;
+Graphics::~Graphics() { Close(); }
 
 auto Graphics::GetDescriptorAllocator() const -> const DescriptorAllocator&
 {
@@ -90,20 +103,30 @@ auto Graphics::CreateImGuiGraphicsBackend() const
 auto Graphics::CreateTexture(const TextureDesc& desc) const
   -> std::shared_ptr<graphics::Texture>
 {
-  return std::make_shared<Texture>(desc);
+  const auto admission = GetBackendLifetime()->AcquireOperation();
+  return AdoptBackendObject(
+    static_cast<graphics::Texture*>(new Texture(desc)),
+    [](void* object) noexcept {
+      delete static_cast<graphics::Texture*>(object);
+    },
+    GetNativeLifetimeToken());
 }
 
 auto Graphics::CreateTextureFromNativeObject(const TextureDesc& desc,
   const NativeResource& /*native*/) const -> std::shared_ptr<graphics::Texture>
 {
-  return std::make_shared<Texture>(desc);
+  return CreateTexture(desc);
 }
 
 auto Graphics::CreateBuffer(const BufferDesc& desc) const
   -> std::shared_ptr<graphics::Buffer>
 {
-  auto b = std::make_shared<Buffer>(desc);
-  return b;
+  const auto admission = GetBackendLifetime()->AcquireOperation();
+  return AdoptBackendObject(
+    static_cast<graphics::Buffer*>(new Buffer(desc)),
+    [](
+      void* object) noexcept { delete static_cast<graphics::Buffer*>(object); },
+    GetNativeLifetimeToken());
 }
 
 auto Graphics::CreateCommandQueue(const QueueKey& queue_key, QueueRole role)
@@ -116,6 +139,7 @@ auto Graphics::CreateSurface(std::weak_ptr<platform::Window> /*window_weak*/,
   observer_ptr<graphics::CommandQueue> /*command_queue*/) const
   -> std::unique_ptr<Surface>
 {
+  const auto admission = GetBackendLifetime()->AcquireOperation();
   return std::make_unique<HeadlessSurface>("headless-surface");
 }
 
@@ -123,6 +147,7 @@ auto Graphics::CreateSurfaceFromNative(void* /*native_handle*/,
   observer_ptr<graphics::CommandQueue> /*command_queue*/) const
   -> std::shared_ptr<Surface>
 {
+  const auto admission = GetBackendLifetime()->AcquireOperation();
   return std::make_shared<HeadlessSurface>("headless-surface-from-native");
 }
 

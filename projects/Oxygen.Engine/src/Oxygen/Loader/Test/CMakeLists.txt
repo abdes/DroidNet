@@ -34,17 +34,24 @@ add_test(NAME "Oxygen.Loader Link Test" COMMAND "Oxygen.Loader.LinkTest")
 # -- First-access Regression Tests ---------------------------------------------
 
 add_executable("Oxygen.Loader.InitializationTest" "Initialization_test.cpp")
-set_target_properties("Oxygen.Loader.InitializationTest" PROPERTIES FOLDER "Testing")
+set_target_properties(
+  "Oxygen.Loader.InitializationTest"
+  PROPERTIES
+    FOLDER
+      "Testing"
+)
 target_compile_options(
   "Oxygen.Loader.InitializationTest"
-  PRIVATE ${OXYGEN_COMMON_CXX_FLAGS}
+  PRIVATE
+    ${OXYGEN_COMMON_CXX_FLAGS}
 )
 target_link_libraries("Oxygen.Loader.InitializationTest" PRIVATE oxygen::loader)
 foreach(mode IN ITEMS strict relaxed)
   foreach(services IN ITEMS default injected)
     add_test(
       NAME "Oxygen.Loader.Initialization.${mode}.${services}"
-      COMMAND "Oxygen.Loader.InitializationTest" ${mode} ${services}
+      COMMAND
+        "Oxygen.Loader.InitializationTest" ${mode} ${services}
     )
   endforeach()
 endforeach()
@@ -59,3 +66,13 @@ m_gtest_program(
     "GraphicsBackendLoader_test.cpp"
 )
 m_gtest_program("PlatformServices" SOURCES "PlatformServices_test.cpp")
+m_gtest_program(
+  BackendLifetimeIntegration
+  SOURCES
+    "BackendLifetimeIntegration_test.cpp"
+)
+add_dependencies(
+  Oxygen.Loader.BackendLifetimeIntegration.Tests
+  oxygen-graphics-direct3d12
+  oxygen-graphics-headless
+)

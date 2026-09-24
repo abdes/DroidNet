@@ -7,12 +7,14 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
-#include <fmt/format.h>
 #include <memory>
 #include <string>
 
+#include <fmt/format.h>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Detail/FormatUtils.h>
+#include <Oxygen/Graphics/Common/BackendObject.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/ReadbackValidation.h>
@@ -270,33 +272,16 @@ namespace {
   }
 
   template <typename ResourceT>
-  auto TryUnregisterOwnedResource(Graphics& graphics,
-    std::shared_ptr<ResourceT>& resource, const std::string_view debug_name)
-    -> void
+  auto RetireReadbackResource(std::shared_ptr<ResourceT>& resource,
+    RegistrationOwner& registration) noexcept -> void
   {
-    if (resource == nullptr) {
-      return;
-    }
-
-    try {
-      auto& registry = graphics.GetResourceRegistry();
-      if (registry.Contains(*resource)) {
-        registry.UnRegisterResource(*resource);
-      }
-    } catch (const std::exception& ex) {
-      LOG_F(WARNING,
-        "Failed to unregister readback-owned resource `{}` for `{}`: {}",
-        resource->GetName(), debug_name, ex.what());
-    }
-
+    registration = {};
     resource.reset();
   }
 
 } // namespace
 
-class D3D12BufferReadback final
-  : public GpuBufferReadback,
-    public std::enable_shared_from_this<D3D12BufferReadback> {
+class D3D12BufferReadback final : public GpuBufferReadback {
 public:
   D3D12BufferReadback(
     D3D12ReadbackManager& manager, std::string_view debug_name)
@@ -341,6 +326,16 @@ public:
   }
 
 private:
+  auto shared_from_this() -> std::shared_ptr<D3D12BufferReadback>
+  {
+    return std::static_pointer_cast<D3D12BufferReadback>(
+      GpuBufferReadback::shared_from_this());
+  }
+  auto weak_from_this() -> std::weak_ptr<D3D12BufferReadback>
+  {
+    return shared_from_this();
+  }
+
   auto EnsureReadbackBuffer(uint64_t size_bytes) -> bool;
   auto RefreshStateFromTracker() const -> std::expected<void, ReadbackError>;
   auto ReleaseMapping() -> void;
@@ -348,6 +343,7 @@ private:
   D3D12ReadbackManager& manager_;
   std::string debug_name_;
   std::shared_ptr<Buffer> readback_buffer_ {};
+  RegistrationOwner staging_registration_;
   mutable std::optional<ReadbackTicket> ticket_ {};
   mutable std::optional<ReadbackError> last_error_ {};
   mutable ReadbackState state_ { ReadbackState::kIdle };
@@ -363,7 +359,7 @@ auto D3D12BufferReadback::EnsureReadbackBuffer(const uint64_t size_bytes)
   }
 
   ReleaseMapping();
-  TryUnregisterOwnedResource(manager_.graphics_, readback_buffer_, debug_name_);
+  RetireReadbackResource(readback_buffer_, staging_registration_);
 
   readback_buffer_ = manager_.graphics_.CreateBuffer(BufferDesc {
     .size_bytes = size_bytes,
@@ -378,9 +374,11 @@ auto D3D12BufferReadback::EnsureReadbackBuffer(const uint64_t size_bytes)
   }
 
   auto& registry = manager_.graphics_.GetResourceRegistry();
-  if (!registry.Contains(*readback_buffer_)) {
-    registry.Register(readback_buffer_);
+  auto lease = registry.RegisterManaged(readback_buffer_);
+  if (!lease) {
+    return false;
   }
+  staging_registration_ = lease->AllocationOwner();
   return true;
 }
 
@@ -437,6 +435,10 @@ auto D3D12BufferReadback::EnqueueCopy(
   if (!EnsureReadbackBuffer(resolved.size_bytes)) {
     return std::unexpected(ReadbackError::kBackendFailure);
   }
+  if (!recorder.RetainRegistration(
+        manager_.graphics_.GetResourceRegistry(), staging_registration_)) {
+    return std::unexpected(ReadbackError::kBackendFailure);
+  }
   CHECK_NOTNULL_F(readback_buffer_.get(),
     "Readback buffer must exist after successful allocation");
   if (!recorder.IsResourceTracked(source)) {
@@ -461,11 +463,19 @@ auto D3D12BufferReadback::EnqueueCopy(
   recorder.RecordQueueSignal(fence->get());
 
   resolved_range_ = resolved;
-  ticket_ = manager_.tracker_.Register(
+  ticket_ = manager_.tracker_.RegisterPendingSubmission(
     *fence, SizeBytes { resolved.size_bytes }, debug_name_);
   manager_.TrackCancellationHandler(ticket_->id, [weak = weak_from_this()]() {
     if (const auto locked = weak.lock()) {
       locked->OnManagerCancelled();
+    }
+  });
+  recorder.OnSubmission([manager = &manager_, ticket = *ticket_](
+                          graphics::SubmissionOutcome outcome) {
+    if (outcome == graphics::SubmissionOutcome::kSubmitted) {
+      manager->tracker_.MarkSubmitted(ticket.id);
+    } else {
+      static_cast<void>(manager->Cancel(ticket));
     }
   });
   state_ = ReadbackState::kPending;
@@ -533,8 +543,13 @@ auto D3D12BufferReadback::TryMap()
     readback_buffer_->Map(0, resolved_range_.size_bytes));
   CHECK_NOTNULL_F(mapped, "Readback buffer map returned null");
   state_ = ReadbackState::kMapped;
-  auto guard = std::shared_ptr<void>(nullptr,
-    [self = shared_from_this()](void*) mutable { self->ReleaseMapping(); });
+  auto self = shared_from_this();
+  auto guard = AdoptBackendObject(
+    static_cast<void*>(this),
+    [](void* pointer) noexcept {
+      static_cast<D3D12BufferReadback*>(pointer)->ReleaseMapping();
+    },
+    std::move(self));
   return MappedBufferReadback {
     std::move(guard),
     std::span<const std::byte>(
@@ -609,19 +624,9 @@ auto D3D12BufferReadback::Reset() -> void
   ReleaseMapping();
   if (ticket_.has_value()) {
     manager_.UntrackCancellationHandler(ticket_->id);
-    if (state_ != ReadbackState::kPending) {
-      manager_.ForgetTicket(ticket_->id);
-    }
+    manager_.ForgetTicket(ticket_->id);
   }
-  if (state_ == ReadbackState::kPending) {
-    LOG_F(WARNING,
-      "Resetting D3D12 buffer readback `{}` while a copy is still pending; "
-      "retaining staging buffer registration until completion",
-      debug_name_);
-  } else {
-    TryUnregisterOwnedResource(
-      manager_.graphics_, readback_buffer_, debug_name_);
-  }
+  RetireReadbackResource(readback_buffer_, staging_registration_);
   ticket_.reset();
   last_error_.reset();
   resolved_range_ = {};
@@ -630,9 +635,7 @@ auto D3D12BufferReadback::Reset() -> void
 
 D3D12BufferReadback::~D3D12BufferReadback() { Reset(); }
 
-class D3D12TextureReadback final
-  : public GpuTextureReadback,
-    public std::enable_shared_from_this<D3D12TextureReadback> {
+class D3D12TextureReadback final : public GpuTextureReadback {
 public:
   D3D12TextureReadback(
     D3D12ReadbackManager& manager, std::string_view debug_name)
@@ -677,6 +680,16 @@ public:
   }
 
 private:
+  auto shared_from_this() -> std::shared_ptr<D3D12TextureReadback>
+  {
+    return std::static_pointer_cast<D3D12TextureReadback>(
+      GpuTextureReadback::shared_from_this());
+  }
+  auto weak_from_this() -> std::weak_ptr<D3D12TextureReadback>
+  {
+    return shared_from_this();
+  }
+
   auto EnsureReadbackBuffer(SizeBytes size_bytes) -> bool;
   auto EnsureResolveTexture(const TextureDesc& source_desc)
     -> std::expected<void, ReadbackError>;
@@ -686,7 +699,9 @@ private:
   D3D12ReadbackManager& manager_;
   std::string debug_name_;
   std::shared_ptr<Buffer> readback_buffer_ {};
+  RegistrationOwner staging_registration_;
   std::shared_ptr<oxygen::graphics::Texture> resolve_texture_ {};
+  RegistrationOwner resolve_registration_;
   TextureDesc resolve_texture_desc_ {};
   mutable std::optional<ReadbackTicket> ticket_ {};
   mutable std::optional<ReadbackError> last_error_ {};
@@ -704,7 +719,7 @@ auto D3D12TextureReadback::EnsureReadbackBuffer(const SizeBytes size_bytes)
   }
 
   ReleaseMapping();
-  TryUnregisterOwnedResource(manager_.graphics_, readback_buffer_, debug_name_);
+  RetireReadbackResource(readback_buffer_, staging_registration_);
 
   readback_buffer_ = manager_.graphics_.CreateBuffer(BufferDesc {
     .size_bytes = size_bytes.get(),
@@ -719,9 +734,11 @@ auto D3D12TextureReadback::EnsureReadbackBuffer(const SizeBytes size_bytes)
   }
 
   auto& registry = manager_.graphics_.GetResourceRegistry();
-  if (!registry.Contains(*readback_buffer_)) {
-    registry.Register(readback_buffer_);
+  auto lease = registry.RegisterManaged(readback_buffer_);
+  if (!lease) {
+    return false;
   }
+  staging_registration_ = lease->AllocationOwner();
   return true;
 }
 
@@ -734,7 +751,7 @@ auto D3D12TextureReadback::EnsureResolveTexture(const TextureDesc& source_desc)
     return {};
   }
 
-  TryUnregisterOwnedResource(manager_.graphics_, resolve_texture_, debug_name_);
+  RetireReadbackResource(resolve_texture_, resolve_registration_);
 
   resolve_texture_ = manager_.graphics_.CreateTexture(expected_desc);
   if (resolve_texture_ == nullptr) {
@@ -744,9 +761,11 @@ auto D3D12TextureReadback::EnsureResolveTexture(const TextureDesc& source_desc)
   }
 
   auto& registry = manager_.graphics_.GetResourceRegistry();
-  if (!registry.Contains(*resolve_texture_)) {
-    registry.Register(resolve_texture_);
+  auto lease = registry.RegisterManaged(resolve_texture_);
+  if (!lease) {
+    return std::unexpected(ReadbackError::kBackendFailure);
   }
+  resolve_registration_ = lease->AllocationOwner();
 
   resolve_texture_desc_ = expected_desc;
   return {};
@@ -827,6 +846,10 @@ auto D3D12TextureReadback::EnqueueCopy(
       !resolve_result.has_value()) {
       return std::unexpected(resolve_result.error());
     }
+    if (!recorder.RetainRegistration(
+          manager_.graphics_.GetResourceRegistry(), resolve_registration_)) {
+      return std::unexpected(ReadbackError::kBackendFailure);
+    }
     CHECK_NOTNULL_F(resolve_texture_.get(),
       "Resolve texture must exist after successful allocation");
     if (!recorder.IsResourceTracked(source)) {
@@ -889,6 +912,10 @@ auto D3D12TextureReadback::EnqueueCopy(
   if (!EnsureReadbackBuffer(SizeBytes { copy_info.bytes_written })) {
     return std::unexpected(ReadbackError::kBackendFailure);
   }
+  if (!recorder.RetainRegistration(
+        manager_.graphics_.GetResourceRegistry(), staging_registration_)) {
+    return std::unexpected(ReadbackError::kBackendFailure);
+  }
   CHECK_NOTNULL_F(readback_buffer_.get(),
     "Texture readback buffer must exist after successful allocation");
   if (!recorder.IsResourceTracked(*readback_buffer_)) {
@@ -910,10 +937,19 @@ auto D3D12TextureReadback::EnqueueCopy(
   layout_ = BuildTextureReadbackLayout(
     copy_desc, resolved_slice, copy_info.resolved_region, request.aspects);
   mapped_size_ = SizeBytes { copy_info.bytes_written };
-  ticket_ = manager_.tracker_.Register(*fence, mapped_size_, debug_name_);
+  ticket_ = manager_.tracker_.RegisterPendingSubmission(
+    *fence, mapped_size_, debug_name_);
   manager_.TrackCancellationHandler(ticket_->id, [weak = weak_from_this()]() {
     if (const auto locked = weak.lock()) {
       locked->OnManagerCancelled();
+    }
+  });
+  recorder.OnSubmission([manager = &manager_, ticket = *ticket_](
+                          graphics::SubmissionOutcome outcome) {
+    if (outcome == graphics::SubmissionOutcome::kSubmitted) {
+      manager->tracker_.MarkSubmitted(ticket.id);
+    } else {
+      static_cast<void>(manager->Cancel(ticket));
     }
   });
   state_ = ReadbackState::kPending;
@@ -981,8 +1017,13 @@ auto D3D12TextureReadback::TryMap()
     readback_buffer_->Map(0, mapped_size_.get()));
   CHECK_NOTNULL_F(mapped, "Texture readback buffer map returned null");
   state_ = ReadbackState::kMapped;
-  auto guard = std::shared_ptr<void>(nullptr,
-    [self = shared_from_this()](void*) mutable { self->ReleaseMapping(); });
+  auto self = shared_from_this();
+  auto guard = AdoptBackendObject(
+    static_cast<void*>(this),
+    [](void* pointer) noexcept {
+      static_cast<D3D12TextureReadback*>(pointer)->ReleaseMapping();
+    },
+    std::move(self));
   return MappedTextureReadback { std::move(guard), mapped, layout_ };
 }
 
@@ -1031,21 +1072,10 @@ auto D3D12TextureReadback::Reset() -> void
   ReleaseMapping();
   if (ticket_.has_value()) {
     manager_.UntrackCancellationHandler(ticket_->id);
-    if (state_ != ReadbackState::kPending) {
-      manager_.ForgetTicket(ticket_->id);
-    }
+    manager_.ForgetTicket(ticket_->id);
   }
-  if (state_ == ReadbackState::kPending) {
-    LOG_F(WARNING,
-      "Resetting D3D12 texture readback `{}` while a copy is still pending; "
-      "retaining staging resources until completion",
-      debug_name_);
-  } else {
-    TryUnregisterOwnedResource(
-      manager_.graphics_, readback_buffer_, debug_name_);
-    TryUnregisterOwnedResource(
-      manager_.graphics_, resolve_texture_, debug_name_);
-  }
+  RetireReadbackResource(readback_buffer_, staging_registration_);
+  RetireReadbackResource(resolve_texture_, resolve_registration_);
   ticket_.reset();
   last_error_.reset();
   layout_ = {};
@@ -1065,13 +1095,36 @@ D3D12ReadbackManager::~D3D12ReadbackManager() = default;
 auto D3D12ReadbackManager::CreateBufferReadback(
   const std::string_view debug_name) -> std::shared_ptr<GpuBufferReadback>
 {
-  return std::make_shared<D3D12BufferReadback>(*this, debug_name);
+  const auto admission = graphics_.GetBackendLifetime()->AcquireOperation();
+  auto owner = graphics_.RetainBackendOwner();
+  if (!owner) {
+    throw std::logic_error("Readback requires a canonical backend owner");
+  }
+  return AdoptBackendObject(
+    static_cast<GpuBufferReadback*>(new D3D12BufferReadback(*this, debug_name)),
+    [](void* pointer) noexcept {
+      delete static_cast<D3D12BufferReadback*>(
+        static_cast<GpuBufferReadback*>(pointer));
+    },
+    std::move(owner));
 }
 
 auto D3D12ReadbackManager::CreateTextureReadback(
   const std::string_view debug_name) -> std::shared_ptr<GpuTextureReadback>
 {
-  return std::make_shared<D3D12TextureReadback>(*this, debug_name);
+  const auto admission = graphics_.GetBackendLifetime()->AcquireOperation();
+  auto owner = graphics_.RetainBackendOwner();
+  if (!owner) {
+    throw std::logic_error("Readback requires a canonical backend owner");
+  }
+  return AdoptBackendObject(
+    static_cast<GpuTextureReadback*>(
+      new D3D12TextureReadback(*this, debug_name)),
+    [](void* pointer) noexcept {
+      delete static_cast<D3D12TextureReadback*>(
+        static_cast<GpuTextureReadback*>(pointer));
+    },
+    std::move(owner));
 }
 
 auto D3D12ReadbackManager::EnsureTrackedQueue(
@@ -1165,6 +1218,17 @@ auto D3D12ReadbackManager::Await(const ReadbackTicket ticket)
     return *ready;
   }
 
+  if (tracker_.IsSubmissionPending(ticket.id)) {
+    LOG_F(ERROR,
+      "Readback await would deadlock: its copy has not been submitted. Submit "
+      "the command recorder before awaiting the ticket.");
+    return std::unexpected(ReadbackError::kWouldDeadlock);
+  }
+
+  if (const auto status = tracker_.IsComplete(ticket.id); !status) {
+    return std::unexpected(status.error());
+  }
+
   observer_ptr<graphics::CommandQueue> queue;
   bool shutdown = false;
   {
@@ -1224,6 +1288,13 @@ auto D3D12ReadbackManager::AwaitAsync(const ReadbackTicket ticket)
   -> co::Co<void>
 {
   PumpCompletions();
+  if (tracker_.IsSubmissionPending(ticket.id)) {
+    throw std::logic_error(
+      "Cannot await a readback whose recording has not submitted");
+  }
+  if (!tracker_.IsComplete(ticket.id)) {
+    throw std::logic_error("Readback ticket was released");
+  }
   co_await Until(tracker_.CompletedFenceValue() >= ticket.fence);
   co_return;
 }
@@ -1506,8 +1577,34 @@ auto D3D12ReadbackManager::Shutdown(const std::chrono::milliseconds timeout)
     std::lock_guard lock(mutex_);
     shutdown_ = true;
     queue = tracked_queue_;
-    last_fence = tracker_.LastRegisteredFence();
   }
+
+  // Resolve unissued copies without waiting on values that were never emitted.
+  // Move callbacks out before invoking them: late owner release can re-enter
+  // us.
+  for (;;) {
+    std::function<void()> cancel;
+    ReadbackTicketId id { 0 };
+    {
+      std::lock_guard lock(mutex_);
+      const auto pending
+        = std::ranges::find_if(cancellation_handlers_, [&](const auto& item) {
+            return tracker_.IsSubmissionPending(item.first);
+          });
+      if (pending == cancellation_handlers_.end()) {
+        break;
+      }
+      id = pending->first;
+      cancel = std::move(pending->second);
+      cancellation_handlers_.erase(pending);
+    }
+    static_cast<void>(tracker_.Cancel(id));
+    if (cancel) {
+      cancel();
+    }
+  }
+  tracker_.CancelPendingSubmissions();
+  last_fence = tracker_.LastPendingSubmittedFence();
 
   if (queue != nullptr && last_fence.get() > 0 && tracker_.HasPending()) {
     try {
@@ -1517,7 +1614,7 @@ auto D3D12ReadbackManager::Shutdown(const std::chrono::milliseconds timeout)
         last_fence.get(), timeout.count());
       return std::unexpected(ReadbackError::kBackendFailure);
     }
-    tracker_.MarkFenceCompleted(last_fence);
+    tracker_.MarkFenceCompleted(FenceValue { queue->GetCompletedValue() });
   }
   return {};
 }

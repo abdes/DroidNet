@@ -218,6 +218,7 @@ private:
 } // namespace
 
 Graphics::Graphics(const std::string_view name)
+  : backend_lifetime_(std::make_shared<graphics::BackendLifetime>())
 {
   AddComponent<ObjectMetadata>(name);
   AddComponent<ResourceRegistryComponent>(name);
@@ -231,7 +232,8 @@ Graphics::Graphics(const std::string_view name)
     [this](graphics::QueueRole role,
       std::string_view name) -> std::unique_ptr<graphics::CommandList> {
       return this->CreateCommandListImpl(role, name);
-    });
+    },
+    backend_lifetime_);
   // DeferredReclaimer must be created before Commander because Commander
   // depends on oxygen::graphics::detail::DeferredReclaimer.
   AddComponent<DeferredReclaimerComponent>();
@@ -242,7 +244,7 @@ Graphics::~Graphics()
 {
   // Clear the CommandList pool
   auto& command_list_pool = GetComponent<CommandListPool>();
-  command_list_pool.Clear();
+  command_list_pool.Close();
 
   // A retained reader can enqueue retirement after the explicit Stop/Flush
   // protocol and release the final Graphics owner. Run those callbacks while
@@ -268,6 +270,12 @@ auto Graphics::Flush() -> void
   DLOG_SCOPE_FUNCTION(1);
   // Flush all command queues
   FlushCommandQueues();
+
+  PollCompletedUses();
+  if (backend_lifetime_->IsFaulted()) {
+    throw std::runtime_error(
+      "Submission fault must be recovered before frame retirement");
+  }
 
   // Process All deferred releases
   auto& reclaimer = GetComponent<DeferredReclaimerComponent>();
@@ -296,10 +304,116 @@ auto Graphics::Stop() -> void
   DLOG_F(INFO, "Graphics Live Object stopped");
 }
 
+auto Graphics::InstallBackendOwner(std::weak_ptr<Graphics> owner,
+  graphics::BackendIncarnationId id, std::shared_ptr<void> module) -> void
+{
+  backend_lifetime_->Install(id, std::move(module));
+  canonical_owner_ = owner;
+  GetResourceRegistry().InstallManagedContext(
+    std::move(owner), backend_lifetime_, GetNativeLifetimeToken());
+}
+
+auto Graphics::SetNativeLifetimeToken(std::shared_ptr<void> lifetime) -> void
+{
+  GetComponent<CommandListPool>().SetNativeLifetime(lifetime);
+  native_lifetime_ = std::move(lifetime);
+}
+
+auto Graphics::RetainBackendOwner() -> std::shared_ptr<Graphics>
+{
+  if (backend_lifetime_->Id().get() != 0) {
+    auto owner = canonical_owner_.lock();
+    if (!owner) {
+      throw std::logic_error("Canonical backend owner is unavailable");
+    }
+    return owner;
+  }
+  // Directly constructed test/native fixtures have no Loader incarnation.
+  return weak_from_this().lock();
+}
+
+auto Graphics::PollCompletedUses() -> void
+{
+  GetComponent<QueueManager>().ForEachQueue(
+    [](graphics::CommandQueue& queue) { queue.PollCompletedUses(); });
+  GetResourceRegistry().PollManagedRetirements();
+}
+
+auto Graphics::RecoverSubmissionFault() -> bool
+{
+  if (!backend_lifetime_->IsFaulted()) {
+    return true;
+  }
+  backend_lifetime_->SynchronizeOperations();
+  try {
+    auto& queues = GetComponent<QueueManager>();
+    FlushCommandQueues();
+    bool trustworthy = true;
+    queues.ForEachQueue([&](graphics::CommandQueue& queue) {
+      trustworthy = queue.ReconcileQuarantinedStates() && trustworthy;
+    });
+    queues.ForEachQueue([&](const graphics::CommandQueue& queue) {
+      queues.ForEachQueue([&](const graphics::CommandQueue& other) {
+        trustworthy = !queue.HasStateConflictWith(other) && trustworthy;
+      });
+    });
+    if (trustworthy
+      && backend_lifetime_->State() == graphics::BackendLifecycle::kActive) {
+      queues.ForEachQueue([&](graphics::CommandQueue& queue) {
+        trustworthy
+          = queue.RecoverQuarantinedWork(GetResourceRegistry()) && trustworthy;
+      });
+      if (!trustworthy) {
+        Close();
+        return false;
+      }
+      backend_lifetime_->ClearSubmissionFault();
+      PollCompletedUses();
+      return true;
+    }
+  } catch (...) {
+  }
+  Close();
+  return false;
+}
+
+auto Graphics::Close() noexcept -> void
+{
+  if (!backend_lifetime_->BeginClose()) {
+    return;
+  }
+  try {
+    Stop();
+  } catch (...) {
+  }
+  try {
+    FlushCommandQueues();
+    bool drained = true;
+    GetComponent<QueueManager>().ForEachQueue([&](
+                                                graphics::CommandQueue& queue) {
+      drained = queue.RecoverQuarantinedWork(GetResourceRegistry()) && drained;
+    });
+    if (!drained) {
+      throw std::runtime_error("Submission publication is still active");
+    }
+  } catch (...) {
+    GetComponent<QueueManager>().ForEachQueue(
+      [](
+        graphics::CommandQueue& queue) { queue.StopAfterSubmissionFailure(); });
+  }
+  GetResourceRegistry().Close();
+  GetComponent<DeferredReclaimerComponent>().ProcessAllDeferredReleases();
+  GetComponent<CommandListPool>().Close();
+  backend_lifetime_->FinishClose();
+}
+
 auto Graphics::BeginFrame(const frame::SequenceNumber frame_number,
   const frame::Slot frame_slot) -> void
 {
   CHECK_LT_F(frame_slot, frame::kMaxSlot, "Frame slot out of bounds");
+  if (backend_lifetime_->IsFaulted()) {
+    throw std::runtime_error("Submission fault blocks frame retirement");
+  }
 
   {
     auto& qm = GetComponent<QueueManager>();
@@ -308,11 +422,15 @@ auto Graphics::BeginFrame(const frame::SequenceNumber frame_number,
       [](const graphics::CommandQueue& q) { q.BeginProfilingFrame(); });
   }
 
+  PollCompletedUses();
   if (const auto readback_manager = GetReadbackManager();
     readback_manager != nullptr) {
     readback_manager->OnFrameStart(frame_slot);
   }
 
+  if (backend_lifetime_->IsFaulted()) {
+    throw std::runtime_error("Submission fault blocks frame retirement");
+  }
   auto& reclaimer = GetComponent<DeferredReclaimerComponent>();
   reclaimer.OnBeginFrame(frame_slot);
 
@@ -326,6 +444,7 @@ auto Graphics::EndFrame(const frame::SequenceNumber frame_number,
   const frame::Slot frame_slot) -> void
 {
   GetComponent<QueueManager>().SignalFrameSlot(frame_slot);
+  PollCompletedUses();
   if (const auto frame_capture = GetFrameCaptureController();
     frame_capture != nullptr) {
     frame_capture->OnEndFrame(frame_number, frame_slot);
@@ -530,6 +649,13 @@ auto Graphics::ApplyConsoleCVars(const console::Console& console) -> void
 auto Graphics::CreateCommandQueues(
   const graphics::QueuesStrategy& queue_strategy) -> void
 {
+  const auto admission = backend_lifetime_->AcquireOperation();
+  if (backend_lifetime_->HasRecordings()
+    || GetResourceRegistry().HasManagedRegistrations()) {
+    throw std::logic_error("Cannot replace queues with outstanding recordings "
+                           "or managed registrations");
+  }
+  Flush();
   // Delegate queue management to the installed QueueManager component which
   // will call back to this backend's CreateCommandQueue hook when it needs to
   // instantiate actual CommandQueue objects.
@@ -537,7 +663,13 @@ auto Graphics::CreateCommandQueues(
   qm.CreateQueues(queue_strategy,
     [this](const graphics::QueueKey& key, const graphics::QueueRole role)
       -> std::shared_ptr<graphics::CommandQueue> {
-      return this->CreateCommandQueue(key, role);
+      auto queue = this->CreateCommandQueue(key, role);
+      if (!queue) {
+        throw std::runtime_error("Queue factory returned null");
+      }
+      queue->BindBackend(backend_lifetime_, GetNativeLifetimeToken());
+      backend_lifetime_->RegisterQueue(queue->Identity().get(), queue);
+      return queue;
     });
 }
 
@@ -601,6 +733,7 @@ auto Graphics::AcquireCommandRecorder(const graphics::QueueKey& queue_key,
   const std::string_view command_list_name,
   const graphics::SubmissionPolicy policy) -> graphics::CommandRecording
 {
+  const auto admission = backend_lifetime_->AcquireOperation();
   profiling::CpuProfileScope cpu_scope("Graphics.AcquireCommandRecorder",
     profiling::ProfileCategory::kGeneral,
     profiling::Vars(profiling::Var("recording", command_list_name)));
@@ -610,20 +743,22 @@ auto Graphics::AcquireCommandRecorder(const graphics::QueueKey& queue_key,
     queue, "Failed to get command queue for key '{}'", queue_key.get());
 
   // Acquire a command list
-  auto command_list
-    = AcquireCommandList(queue->GetQueueRole(), command_list_name);
+  auto command_list = GetComponent<CommandListPool>().AcquireCommandList(
+    queue->GetQueueRole(), command_list_name);
   DCHECK_NOTNULL_F(command_list, "Failed to acquire command list");
 
   // The returned value owns recording completion and submission policy.
   auto recorder = CreateCommandRecorder(command_list, queue);
   auto& cmdr = GetComponent<Commander>();
-  return cmdr.PrepareCommandRecorder(std::move(recorder), policy);
+  return cmdr.PrepareCommandRecorder(
+    std::move(recorder), policy, RetainBackendOwner(), backend_lifetime_);
 }
 
 auto Graphics::AcquireCommandList(
   graphics::QueueRole queue_role, const std::string_view command_list_name)
   -> std::shared_ptr<graphics::CommandList>
 {
+  const auto admission = backend_lifetime_->AcquireOperation();
   auto& command_list_pool = GetComponent<CommandListPool>();
   return command_list_pool.AcquireCommandList(queue_role, command_list_name);
 }
@@ -682,9 +817,7 @@ auto Graphics::ForgetKnownResourceState(
   }
 
   auto& qm = GetComponent<QueueManager>();
-  qm.ForEachQueue([&](graphics::CommandQueue& queue) {
-    queue.ForgetKnownResourceState(resource);
-  });
+  qm.ForgetKnownResourceState(resource);
 }
 
 auto Graphics::GetTimestampQueryProvider() const
@@ -708,6 +841,7 @@ auto Graphics::CreateImGuiGraphicsBackend() const
 auto Graphics::CreateFramebuffer(const graphics::FramebufferDesc& desc)
   -> std::shared_ptr<graphics::Framebuffer>
 {
+  const auto admission = backend_lifetime_->AcquireOperation();
   return std::make_shared<graphics::internal::FramebufferImpl>(
-    desc, weak_from_this());
+    desc, RetainBackendOwner());
 }

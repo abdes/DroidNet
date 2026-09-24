@@ -7,10 +7,10 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
-#include <numbers>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <numbers>
 #include <tuple>
 
 #include <glm/ext/vector_float3.hpp>
@@ -229,7 +229,8 @@ namespace {
   auto ComputeSunDiskLuminanceRgb(
     const environment::AtmosphereLightModel& light) -> glm::vec3
   {
-    if (light.angular_size_radians == 0.0F) return glm::vec3 { 0.0F };
+    if (light.angular_size_radians == 0.0F)
+      return glm::vec3 { 0.0F };
     const double sine = std::sin(0.5 * light.angular_size_radians);
     const double projected_solid_angle = std::numbers::pi * sine * sine;
     return glm::vec3(glm::dvec3(light.disk_luminance_scale_rgb)
@@ -1179,7 +1180,7 @@ auto EnvironmentLightingService::PublishEnvironmentBindings(RenderContext& ctx,
   recorder.OnSubmission([this, view_id = ctx.current_view.view_id, slot](
                           const graphics::SubmissionOutcome outcome) -> void {
     const auto found = published_views_.find(view_id);
-    if (outcome == graphics::SubmissionOutcome::kDiscarded
+    if (outcome != graphics::SubmissionOutcome::kSubmitted
       && found != published_views_.end() && found->second.slot == slot) {
       published_views_.erase(found);
     }

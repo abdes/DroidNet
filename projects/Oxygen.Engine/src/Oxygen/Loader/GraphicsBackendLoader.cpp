@@ -4,9 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <atomic>
 #include <cstdint>
 #include <exception>
+#include <limits>
 #include <memory>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
@@ -19,6 +22,7 @@
 #include <Oxygen/Base/ReturnAddress.h>
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
+#include <Oxygen/Graphics/Common/BackendObject.h>
 #include <Oxygen/Graphics/Common/Forward.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Loader/Detail/PlatformServices.h>
@@ -274,7 +278,68 @@ auto SerializePathFinderConfigToJson(const oxygen::PathFinderConfig& config)
 
 } // namespace
 
-// Implementation class that handles all the details
+namespace {
+using oxygen::graphics::BackendLifecycle;
+
+struct IncarnationRecord {
+  oxygen::graphics::BackendIncarnationId id { 0 };
+  std::atomic<BackendLifecycle> phase { BackendLifecycle::kActive };
+  std::weak_ptr<oxygen::Graphics> owner;
+};
+struct IncarnationGate {
+  std::mutex mutex;
+  uint64_t next_id { 1 };
+  std::shared_ptr<IncarnationRecord> current;
+};
+auto BackendGate() -> std::shared_ptr<IncarnationGate>
+{
+  // Outlives loader facades, including facade replacement in embedding/tests.
+  static auto gate = std::make_shared<IncarnationGate>();
+  return gate;
+}
+
+struct BackendModulePin {
+  std::shared_ptr<PlatformServices> services;
+  PlatformServices::ModuleHandle module { nullptr };
+  BackendType backend { BackendType::kDirect3D12 };
+  std::shared_ptr<IncarnationRecord> record;
+  ~BackendModulePin() noexcept
+  {
+    if (module) {
+      try {
+        services->CloseModule(module);
+      } catch (const std::exception& error) {
+        LOG_F(ERROR, "Error unloading backend module: {}", error.what());
+      } catch (...) {
+        LOG_F(ERROR, "Error unloading backend module");
+      }
+    }
+    // Weak-pointer expiration alone is insufficient: its deleter may still be
+    // running. Publish Released only after backend cleanup and module release.
+    if (record) {
+      record->phase.store(
+        BackendLifecycle::kReleased, std::memory_order_release);
+    }
+  }
+};
+struct BackendOwner {
+  oxygen::Graphics* graphics { nullptr };
+  oxygen::graphics::DestroyBackendFunc destroy { nullptr };
+  ~BackendOwner() noexcept
+  {
+    if (graphics) {
+      graphics->Close();
+      try {
+        destroy();
+      } catch (...) {
+        LOG_F(ERROR, "Backend destruction threw after close");
+        std::terminate();
+      }
+    }
+  }
+};
+} // namespace
+
 class GraphicsBackendLoader::Impl {
 public:
   explicit Impl(PlatformServices::ModuleHandle origin_module,
@@ -284,89 +349,138 @@ public:
         services ? std::move(services) : std::make_shared<PlatformServices>())
   {
   }
-
   ~Impl() { UnloadBackend(); }
-
   OXYGEN_MAKE_NON_COPYABLE(Impl)
   OXYGEN_MAKE_NON_MOVABLE(Impl)
 
   auto LoadBackend(const BackendType backend, const GraphicsConfig& config,
     const oxygen::PathFinderConfig& path_finder_config) -> GraphicsPtr
   {
-    if (backend_instance) {
-      LOG_F(WARNING,
-        "A graphics backend has already been loaded; call UnloadBackend() "
-        "first...");
-      return backend_instance;
+    // Declare cleanup owners before the lock: unwinding releases the lock
+    // first.
+    std::shared_ptr<BackendModulePin> module;
+    std::shared_ptr<BackendModulePin> discarded_module;
+    std::shared_ptr<void> canonical;
+    std::shared_ptr<IncarnationRecord> record;
+    auto& gate = *gate_;
+    std::unique_lock lock(gate.mutex);
+    if (gate.current
+      && gate.current->phase.load(std::memory_order_acquire)
+        != BackendLifecycle::kReleased) {
+      if (gate.current->phase.load(std::memory_order_acquire)
+        == BackendLifecycle::kActive) {
+        if (auto owner = gate.current->owner.lock()) {
+          if (owner->GetBackendLifetime()->State()
+            == BackendLifecycle::kActive) {
+            return owner;
+          }
+        }
+      }
+      throw oxygen::loader::InvalidOperationError(
+        "BackendRetiring: previous incarnation still owns resources");
     }
-
+    if (gate.next_id == (std::numeric_limits<uint64_t>::max)()) {
+      throw oxygen::loader::InvalidOperationError(
+        "Backend incarnation IDs exhausted");
+    }
+    record = std::make_shared<IncarnationRecord>();
+    record->id = oxygen::graphics::BackendIncarnationId { gate.next_id++ };
+    gate.current = record;
     try {
-      if (backend_module == nullptr) {
-        // We expect the backend module to be in the same directory as the
-        // executable.
-        const auto module_name = GetBackendModuleDllName(backend);
-        // Prefer origin module directory; fallback to executable directory.
-        std::string base_dir
-          = platform_services->GetModuleDirectory(origin_module_);
+      if (failed_module_ && failed_module_->backend != backend) {
+        discarded_module = std::move(failed_module_);
+      }
+      module = failed_module_ ? failed_module_
+                              : std::make_shared<BackendModulePin>();
+      module->backend = backend;
+      module->record = record;
+      if (!module->module) {
+        module->services = platform_services;
+        auto base_dir = platform_services->GetModuleDirectory(origin_module_);
         if (base_dir.empty()) {
           base_dir = platform_services->GetExecutableDirectory();
         }
-        LOG_F(INFO, "Using base directory for backend modules: {}", base_dir);
-        const auto full_path = base_dir + module_name;
-
-        // Load the module directly
-        backend_module = platform_services->LoadModule(full_path);
-        LOG_F(INFO, "Graphics backend for `{}` loaded from module `{}`",
-          nostd::to_string(backend), module_name);
+        module->module = platform_services->LoadModule(
+          base_dir + GetBackendModuleDllName(backend));
       }
-
-      // Use the type-safe function address retrieval
       auto get_api
         = platform_services->GetFunctionAddress<GetGraphicsModuleApiFunc>(
-          backend_module, kGetGraphicsModuleApi);
-      auto* const backend_api = static_cast<GraphicsModuleApi*>(get_api());
-
-      // Create the backend instance
-      CreateBackendInstance(backend_api, backend, config, path_finder_config);
-      return backend_instance;
-    } catch (const std::exception& ex) {
-      LOG_F(ERROR, "Failed to load graphics backend: {}", ex.what());
-      backend_instance.reset();
-      // NB: Do not close the module here as it may still be required until the
-      // exception handling frames are complete. The module, if opened, will be
-      // reused for subsequent calls to `LoadBackend` or will be unloaded if a
-      // call to `UnloadBackend` is made, or when the loader is destroyed.
+          module->module, kGetGraphicsModuleApi);
+      auto* api = static_cast<GraphicsModuleApi*>(get_api());
+      if (!api || !api->CreateBackend || !api->DestroyBackend) {
+        throw std::runtime_error("Invalid graphics backend module API");
+      }
+      const auto config_json = SerializeConfigToJson(config, backend);
+      const auto path_json
+        = SerializePathFinderConfigToJson(path_finder_config);
+      const SerializedBackendConfig serialized_config { config_json.c_str(),
+        config_json.size() };
+      const SerializedPathFinderConfig serialized_path { path_json.c_str(),
+        path_json.size() };
+      auto* owner = new BackendOwner { nullptr, api->DestroyBackend };
+      canonical = oxygen::graphics::AdoptBackendObject(
+        owner,
+        [](
+          void* object) noexcept { delete static_cast<BackendOwner*>(object); },
+        module);
+      owner->graphics = static_cast<oxygen::Graphics*>(
+        api->CreateBackend(serialized_config, serialized_path));
+      if (!owner->graphics) {
+        throw std::runtime_error("Failed to create backend instance");
+      }
+      auto public_owner
+        = std::shared_ptr<oxygen::Graphics>(canonical, owner->graphics);
+      owner->graphics->InstallBackendOwner(public_owner, record->id, module);
+      record->owner = public_owner;
+      backend_instance = public_owner;
+      failed_module_.reset();
+      return public_owner;
+    } catch (...) {
+      record->phase.store(
+        BackendLifecycle::kClosing, std::memory_order_release);
+      // Keep exception vtables/code loaded through the caller's catch frame.
+      failed_module_ = module;
+      lock.unlock();
+      canonical.reset();
+      lock.lock();
+      record->phase.store(
+        BackendLifecycle::kReleased, std::memory_order_release);
       throw;
     }
   }
 
   auto UnloadBackend() noexcept -> void
   {
-    if (backend_module == nullptr) {
-      DCHECK_EQ_F(backend_instance, nullptr);
-      return;
+    std::shared_ptr<oxygen::Graphics> owner;
+    std::shared_ptr<BackendModulePin> failed;
+    std::shared_ptr<IncarnationRecord> record;
+    {
+      auto& gate = *gate_;
+      std::lock_guard lock(gate.mutex);
+      owner = std::move(backend_instance);
+      failed = std::move(failed_module_);
+      if (owner) {
+        record = gate.current;
+        record->phase.store(
+          BackendLifecycle::kClosing, std::memory_order_release);
+      }
     }
-
-    backend_instance.reset();
-
-    // Unload the backend module if it was loaded.
-    try {
-      platform_services->CloseModule(backend_module);
-      backend_module = nullptr;
-    } catch (const std::exception& ex) {
-      LOG_F(ERROR, "Error unloading backend module: {}", ex.what());
+    if (owner) {
+      owner->Close();
+      record->phase.store(
+        BackendLifecycle::kRetiring, std::memory_order_release);
     }
+    // Destruction, device cleanup and module release are outside the loader
+    // lock.
+    owner.reset();
+    failed.reset();
   }
 
   [[nodiscard]] auto GetBackend() noexcept -> std::weak_ptr<Graphics>
   {
-    CHECK_NOTNULL_F(backend_instance,
-      "No graphics backend instance has been created; call LoadBackend() "
-      "first...");
-
+    std::lock_guard lock(gate_->mutex);
     return backend_instance;
   }
-
   [[nodiscard]] auto GetPlatformServices() const
     -> const std::shared_ptr<PlatformServices>&
   {
@@ -374,48 +488,9 @@ public:
   }
 
 private:
-  auto CreateBackendInstance(GraphicsModuleApi* backend_api,
-    const BackendType backend_type, const GraphicsConfig& config,
-    const oxygen::PathFinderConfig& path_finder_config) -> void
-  {
-    if (!backend_instance) {
-      // Create the JSON configuration
-      const std::string config_json
-        = SerializeConfigToJson(config, backend_type);
-      const std::string path_finder_json
-        = SerializePathFinderConfigToJson(path_finder_config);
-
-      // Create the configuration struct
-      SerializedBackendConfig serialized_config {};
-      serialized_config.json_data = config_json.c_str();
-      serialized_config.size = config_json.length();
-      SerializedPathFinderConfig serialized_path_finder_config {};
-      serialized_path_finder_config.json_data = path_finder_json.c_str();
-      serialized_path_finder_config.size = path_finder_json.length();
-
-      // Call the backend create function with the configuration
-      void* instance = backend_api->CreateBackend(
-        serialized_config, serialized_path_finder_config);
-
-      if (instance == nullptr) {
-        throw std::runtime_error("Failed to create backend instance");
-      }
-
-      // Store the instance with a custom deleter that will call the destroy
-      // function
-      backend_instance = std::shared_ptr<Graphics>(
-        static_cast<Graphics*>(instance),
-        [destroyFunc = backend_api->DestroyBackend](const Graphics* instance) {
-          if (instance != nullptr) {
-            destroyFunc();
-          }
-        });
-    }
-  }
-
-  // Member variables
+  std::shared_ptr<IncarnationGate> gate_ { BackendGate() };
   std::shared_ptr<Graphics> backend_instance;
-  PlatformServices::ModuleHandle backend_module { nullptr };
+  std::shared_ptr<BackendModulePin> failed_module_;
   PlatformServices::ModuleHandle origin_module_ { nullptr };
   std::shared_ptr<PlatformServices> platform_services;
 };
@@ -776,9 +851,9 @@ auto GraphicsBackendLoader::LoadBackend(const BackendType backend,
 }
 
 /*!
- Unloads the currently loaded graphics backend, destroying its instance and
- rendering all weak pointers to it unusable. The module's reference count is
- decremented, and if it is no longer referenced, it is automatically unloaded.
+ Closes the backend and drops the loader's canonical owner. Existing external
+ owners remain valid for closed-object inspection; native references keep the
+ module loaded until their destruction. Reload is excluded during retirement.
  In strict initialization mode (see `GetInstance`) main module restriction is
  enforced; in relaxed mode it is skipped. All exceptions are swallowed to
  preserve the noexcept guarantee.

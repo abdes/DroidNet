@@ -19,16 +19,36 @@ SerialExecutor::~SerialExecutor() { Stop(); }
 
 auto SerialExecutor::Enqueue(std::function<void()> task) -> std::future<void>
 {
-  std::lock_guard lk(mutex_);
-  if (stopping_) {
+  auto prepared = Prepare(std::move(task));
+  auto future = prepared->completion.get_future();
+  if (!Commit(prepared)) {
     throw std::runtime_error("SerialExecutor is stopped");
   }
+  return future;
+}
 
-  std::promise<void> p;
-  auto f = p.get_future();
-  tasks_.emplace(std::make_pair(std::move(task), std::move(p)));
+auto SerialExecutor::Prepare(std::function<void()> task) -> Task
+{
+  auto prepared = std::make_unique<PreparedTask>();
+  prepared->callback = std::move(task);
+  return prepared;
+}
+
+auto SerialExecutor::Commit(Task& task) noexcept -> bool
+{
+  std::lock_guard lk(mutex_);
+  if (stopping_ || !task) {
+    return false;
+  }
+  auto* tail = task.get();
+  if (tail_) {
+    tail_->next = std::move(task);
+  } else {
+    tasks_ = std::move(task);
+  }
+  tail_ = tail;
   cv_.notify_one();
-  return f;
+  return true;
 }
 
 auto SerialExecutor::Stop() -> void
@@ -45,38 +65,32 @@ auto SerialExecutor::Stop() -> void
     worker_.join();
   }
 
-  // If there are pending tasks, set exceptions so futures don't hang.
-  while (!tasks_.empty()) {
-    auto& pr = tasks_.front().second;
-    try {
-      pr.set_exception(
-        std::make_exception_ptr(std::runtime_error("executor stopped")));
-    } catch (...) {
-    }
-    tasks_.pop();
-  }
+  // WorkerMain drains the prepared chain before returning.
 }
 
 auto SerialExecutor::WorkerMain() -> void
 {
   for (;;) {
-    std::pair<std::function<void()>, std::promise<void>> item;
+    Task item;
     {
       std::unique_lock lk(mutex_);
-      cv_.wait(lk, [this] { return stopping_ || !tasks_.empty(); });
-      if (stopping_ && tasks_.empty()) {
+      cv_.wait(lk, [this] { return stopping_ || tasks_ != nullptr; });
+      if (stopping_ && !tasks_) {
         return;
       }
-      item = std::move(tasks_.front());
-      tasks_.pop();
+      item = std::move(tasks_);
+      tasks_ = std::move(item->next);
+      if (!tasks_) {
+        tail_ = nullptr;
+      }
     }
 
     try {
-      item.first();
-      item.second.set_value();
+      item->callback();
+      item->completion.set_value();
     } catch (...) {
       try {
-        item.second.set_exception(std::current_exception());
+        item->completion.set_exception(std::current_exception());
       } catch (...) {
       }
     }

@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <limits>
 #include <stdexcept>
 
 #include <fmt/format.h>
@@ -19,6 +20,19 @@ namespace oxygen::graphics::internal {
 QueueManager::QueueManager()
 {
   LOG_F(INFO, "Common QueueManager component created");
+}
+
+auto QueueManager::ForgetKnownResourceState(
+  const NativeResource& resource) noexcept -> void
+{
+  std::lock_guard lock(queue_cache_mutex_);
+  for (const auto& [key, entry] : queues_by_key_) {
+    if (entry.second) {
+      // Aliased queues may be visited again; erasing absent state is harmless
+      // and avoids allocating a deduplication set in retirement.
+      entry.second->ForgetKnownResourceState(resource);
+    }
+  }
 }
 
 /*!
@@ -52,40 +66,36 @@ auto QueueManager::CreateQueues(const QueuesStrategy& queue_strategy,
     const QueueKey&, QueueRole)>
     creator) -> void
 {
-  LOG_SCOPE_FUNCTION(INFO);
-  strategy_ptr_ = queue_strategy.Clone();
-  creator_ = std::move(creator);
-
-  // If queues are already present treat this as a device reset/recovery and
-  // recreate them. Clear existing caches and recreate from the new
-  // strategy. Emit a warning to aid debugging.
-  std::lock_guard lk(queue_cache_mutex_);
-  frames_started_ = false;
-  for (auto& fences : frame_fences_) {
-    fences.clear();
-  }
-  if (!queues_by_key_.empty()) {
-    LOG_F(WARNING, "Recreating all CommandQueues...");
-    queues_by_key_.clear();
-  }
-
-  for (const auto& s : strategy_ptr_->Specifications()) {
-    if (queues_by_key_.find(s.key) != queues_by_key_.end()) {
-      LOG_F(ERROR, "duplicate key detected: '{}'", s.key.get());
-      throw std::invalid_argument(
-        fmt::format("duplicate key in queues strategy: '{}'", s.key.get()));
+  auto strategy = queue_strategy.Clone();
+  decltype(queues_by_key_) replacement;
+  auto snapshot = std::make_shared<QueueSnapshot>();
+  for (const auto& spec : strategy->Specifications()) {
+    if (replacement.contains(spec.key)) {
+      throw std::invalid_argument("Duplicate queue key");
     }
-
-    auto q = creator_(s.key, s.role);
-    if (!q) {
-      throw std::runtime_error(
-        fmt::format("CreateCommandQueue returned nullptr for key='{}' role={}",
-          s.key.get(), nostd::to_string(s.role)));
+    auto queue = creator(spec.key, spec.role);
+    if (!queue) {
+      throw std::runtime_error("Queue factory returned null");
     }
-    LOG_F(INFO, "CommandQueue key='{}' role={}", s.key.get(),
-      nostd::to_string(s.role));
-    queues_by_key_.emplace(s.key, std::make_pair(s, q));
+    replacement.emplace(spec.key, std::make_pair(spec, queue));
+    if (std::ranges::find(*snapshot, queue) == snapshot->end()) {
+      snapshot->push_back(queue);
+    }
   }
+  std::shared_ptr<const QueueSnapshot> previous;
+  {
+    std::lock_guard lock(queue_cache_mutex_);
+    queues_by_key_.swap(replacement);
+    previous = std::move(queue_snapshot_);
+    queue_snapshot_ = std::move(snapshot);
+    strategy_ptr_ = std::move(strategy);
+    creator_ = std::move(creator);
+    frames_started_ = false;
+    for (auto& fences : frame_fences_) {
+      fences.clear();
+    }
+  }
+  // Old queue destruction and native retirement occur outside the cache lock.
 }
 
 /*!
@@ -173,8 +183,23 @@ auto QueueManager::WaitForFrameSlot(const frame::Slot slot) -> void
   }
   auto& fences = frame_fences_.at(slot.get());
   for (const auto& fence : fences) {
+    if (fence.queue->GetCompletedValue()
+      == (std::numeric_limits<uint64_t>::max)()) {
+      if (auto lifetime = fence.queue->BackendLifetimeState()) {
+        lifetime->MarkSubmissionFault();
+      }
+      throw std::runtime_error("Device loss is not a frame completion proof");
+    }
     if (fence.queue->GetCompletedValue() < fence.value) {
       fence.queue->Wait(fence.value);
+      if (fence.queue->GetCompletedValue()
+        == (std::numeric_limits<uint64_t>::max)()) {
+        if (auto lifetime = fence.queue->BackendLifetimeState()) {
+          lifetime->MarkSubmissionFault();
+        }
+        throw std::runtime_error(
+          "Device lost while waiting for frame completion");
+      }
     }
   }
   fences.clear();
@@ -189,8 +214,9 @@ auto QueueManager::SignalFrameSlot(const frame::Slot slot) -> void
     fences.reserve(queues_by_key_.size());
     for (const auto& [key, entry] : queues_by_key_) {
       const auto& queue = entry.second;
-      if (queue && std::ranges::none_of(fences,
-                     [&](const auto& fence) { return fence.queue == queue; })) {
+      if (queue && std::ranges::none_of(fences, [&](const auto& fence) {
+            return fence.queue == queue;
+          })) {
         fences.push_back({ .queue = queue });
       }
     }

@@ -123,6 +123,27 @@ void CommandRecorder::Begin()
   command_list_->OnBeginRecording();
 }
 
+auto CommandRecorder::RetainRegistration(ResourceRegistry& registry,
+  const RegistrationOwner& owner) -> std::expected<void, RegistrationError>
+{
+  return command_list_->Uses().Retain(registry, owner);
+}
+auto CommandRecorder::RetainOpaqueUse(std::shared_ptr<const void> owner,
+  uint64_t kind, void* context, OpaqueUseHooks hooks) -> void
+{
+  command_list_->Uses().RetainOpaque(std::move(owner), kind, context, hooks);
+}
+auto CommandRecorder::RetainsRegistration(
+  RegistrationIdentity identity) const noexcept -> bool
+{
+  return command_list_ && command_list_->Uses().Contains(identity);
+}
+
+auto CommandRecorder::RecordDependency(CompletionReceipt receipt) -> void
+{
+  command_list_->Uses().RecordDependency(receipt);
+}
+
 auto CommandRecorder::End() noexcept -> std::shared_ptr<CommandList>
 {
   DCHECK_NOTNULL_F(command_list_);
@@ -149,7 +170,11 @@ auto CommandRecorder::End() noexcept -> std::shared_ptr<CommandList>
     return std::move(command_list_);
   } catch (const std::exception& e) {
     LOG_F(ERROR, "Recording failed: {}", e.what());
-    command_list_->OnFailed(); // noexcept
+    command_list_->Invalidate();
+    command_list_.reset();
+    return {};
+  } catch (...) {
+    command_list_->Invalidate();
     command_list_.reset();
     return {};
   }

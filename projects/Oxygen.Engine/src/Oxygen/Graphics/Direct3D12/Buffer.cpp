@@ -112,8 +112,8 @@ Buffer::Buffer(BufferDesc desc, const Graphics* gfx)
     auto reservation
       = gfx_->AllocateResource(desc_.allocation_budget, alloc_desc,
         resource_desc, initial_state, nullptr, &allocation, &resource);
-    AddComponent<GraphicResource>(
-      Base::GetName(), resource, allocation, std::move(reservation));
+    AddComponent<GraphicResource>(Base::GetName(), resource, allocation,
+      std::move(reservation), gfx_->GetNativeLifetime());
   } catch (const std::exception& e) {
     ObjectRelease(resource);
     ObjectRelease(allocation);
@@ -153,12 +153,12 @@ auto Buffer::GetGPUVirtualAddress() const -> uint64_t
 
 auto Buffer::CurrentDevice() const -> dx::IDevice*
 {
-  return gfx_->GetCurrentDevice();
+  return GetComponent<GraphicResource>().GetLifetime()->device.Get();
 }
 
 auto Buffer::MemoryAllocator() const -> D3D12MA::Allocator*
 {
-  return gfx_->GetAllocator();
+  return GetComponent<GraphicResource>().GetLifetime()->memory_allocator.Get();
 }
 
 auto Buffer::DoMap(const size_t offset, const size_t size) -> void*

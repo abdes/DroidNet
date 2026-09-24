@@ -22,6 +22,7 @@ namespace oxygen::graphics {
 enum class SubmissionOutcome : uint8_t {
   kSubmitted,
   kDiscarded,
+  kExecutionUncertain,
 };
 
 [[nodiscard]] inline auto to_string(const SubmissionOutcome outcome) noexcept
@@ -32,6 +33,8 @@ enum class SubmissionOutcome : uint8_t {
     return "Submitted";
   case SubmissionOutcome::kDiscarded:
     return "Discarded";
+  case SubmissionOutcome::kExecutionUncertain:
+    return "ExecutionUncertain";
   }
   return "__NotSupported__";
 }

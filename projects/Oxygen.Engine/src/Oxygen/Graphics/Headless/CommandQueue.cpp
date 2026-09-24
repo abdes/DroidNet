@@ -4,230 +4,260 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <deque>
-#include <functional>
-#include <memory>
+#include <atomic>
+#include <limits>
 #include <stdexcept>
 #include <vector>
 
-#include <fmt/format.h>
-
-#include <Oxygen/Graphics/Headless/Command.h>
+#include <Oxygen/Graphics/Common/Internal/QueueSubmission.h>
 #include <Oxygen/Graphics/Headless/CommandList.h>
-
-#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Headless/CommandQueue.h>
 #include <Oxygen/Graphics/Headless/Internal/CommandExecutor.h>
 
 namespace oxygen::graphics::headless {
-
 namespace {
+  constexpr auto kLost = (std::numeric_limits<uint64_t>::max)();
+}
 
-  using QueueStateEntry = oxygen::graphics::CommandQueue::KnownResourceState;
-
-  auto ToKnownStates(
-    std::vector<oxygen::graphics::CommandList::RecordedResourceState>&& states)
-    -> std::vector<QueueStateEntry>
+struct CommandQueue::Timeline {
+  mutable std::mutex mutex;
+  mutable std::condition_variable changed;
+  std::atomic<uint64_t> completed { 0 };
+  auto Publish(uint64_t value) noexcept -> void
   {
-    auto known_states = std::vector<QueueStateEntry> {};
-    known_states.reserve(states.size());
-    for (const auto& state : states) {
-      known_states.push_back(
-        { .resource = state.resource, .state = state.state });
+    std::lock_guard lock(mutex);
+    if (completed.load() != kLost) {
+      completed.store(value, std::memory_order_release);
     }
-    return known_states;
+    changed.notify_all();
   }
+  auto Wait(uint64_t value, const Timeline* cancellation = nullptr) const
+    -> void
+  {
+    std::unique_lock lock(mutex);
+    while (completed.load(std::memory_order_acquire) < value) {
+      if (cancellation && cancellation->completed.load() == kLost) {
+        throw std::runtime_error("Headless dependency wait cancelled");
+      }
+      changed.wait_for(lock, std::chrono::milliseconds(10));
+    }
+    if (completed.load() == kLost) {
+      throw std::runtime_error("Headless device lost");
+    }
+  }
+};
 
-} // namespace
+struct CommandQueue::PreparedSubmission final
+  : graphics::internal::NativeSubmission {
+  CommandQueue& owner;
+  internal::CommandExecutor::Task task;
+  size_t count;
+  uint64_t last_signal;
+  bool private_marker;
+  bool fail_before_private_marker;
+  PreparedSubmission(CommandQueue& queue,
+    internal::CommandExecutor::Task prepared, size_t list_count,
+    uint64_t signal, bool marker, bool fail)
+    : owner(queue)
+    , task(std::move(prepared))
+    , count(list_count)
+    , last_signal(signal)
+    , private_marker(marker)
+    , fail_before_private_marker(fail)
+  {
+  }
+  auto Execute(graphics::internal::NativeSubmissionProgress& progress)
+    -> void override
+  {
+    {
+      std::lock_guard lock(owner.mutex_);
+      owner.current_value_ = std::max(owner.current_value_, last_signal);
+      ++owner.pending_submissions_;
+    }
+    if (!owner.executor_->Commit(task)) {
+      owner.CompleteSubmission();
+      throw std::runtime_error("Headless executor is stopped");
+    }
+    progress.issued_lists = count;
+    progress.last_legacy_signal
+      = std::max(progress.last_legacy_signal, last_signal);
+    if (fail_before_private_marker) {
+      throw graphics::SubmissionException(
+        { graphics::SubmissionOutcome::kExecutionUncertain, {} });
+    }
+    progress.private_marker_emitted = private_marker;
+  }
+};
 
-CommandQueue::~CommandQueue()
+CommandQueue::CommandQueue(std::string_view name, QueueRole role)
+  : graphics::CommandQueue(name)
+  , private_timeline_(std::make_shared<Timeline>())
+  , executor_(new internal::CommandExecutor())
+  , queue_role_(role)
 {
-  if (executor_) {
-    delete executor_;
+}
+CommandQueue::~CommandQueue() { delete executor_; }
+
+auto CommandQueue::PrepareNativeSubmission(
+  const graphics::internal::NativeSubmissionRequest& request,
+  std::unique_ptr<graphics::internal::NativeSubmission> reusable)
+  -> std::unique_ptr<graphics::internal::NativeSubmission>
+{
+  reusable.reset();
+  struct Dependency {
+    std::shared_ptr<Timeline> timeline;
+    uint64_t value;
+  };
+  std::vector<Dependency> dependencies;
+  dependencies.reserve(request.dependencies.size());
+  for (const auto& dependency : request.dependencies) {
+    const auto& producer
+      = static_cast<const CommandQueue&>(*dependency.producer);
+    dependencies.push_back(
+      { producer.private_timeline_, dependency.receipt.Value() });
   }
+  std::vector<internal::SubmissionChunk> chunks;
+  chunks.reserve(request.lists.size());
+  uint64_t last_signal = request.legacy_marker.value_or(0);
+  for (const auto& list : request.lists) {
+    const auto actions = list->SubmitActions();
+    chunks.push_back({ { actions.begin(), actions.end() },
+      static_cast<CommandList&>(*list).StealCommands() });
+    for (const auto& action : actions) {
+      if (action.kind
+        == graphics::CommandList::SubmitQueueActionKind::kSignal) {
+        last_signal = std::max(last_signal, action.value);
+      }
+    }
+  }
+  if (request.fail_after_first_list && !chunks.empty()) {
+    chunks.resize(1);
+  }
+  const auto timeline = private_timeline_;
+  auto task = executor_->Prepare(
+    this, std::move(chunks),
+    [dependencies = std::move(dependencies), timeline] {
+      if (timeline->completed.load() == kLost) {
+        throw std::runtime_error("Headless device lost");
+      }
+      for (const auto& dependency : dependencies) {
+        dependency.timeline->Wait(dependency.value, timeline.get());
+      }
+    },
+    [this, timeline,
+      marker
+      = (request.fail_before_private_marker || request.fail_after_first_list)
+        ? std::nullopt
+        : request.private_marker,
+      legacy = request.legacy_marker] {
+      if (legacy) {
+        SignalImmediate(*legacy);
+      }
+      if (marker) {
+        timeline->Publish(*marker);
+      }
+    },
+    [this] { TearDownUncertainDevice(); });
+  return std::make_unique<PreparedSubmission>(*this, std::move(task),
+    request.fail_after_first_list ? std::min(size_t { 1 }, request.lists.size())
+                                  : request.lists.size(),
+    last_signal, request.private_marker.has_value(),
+    request.fail_before_private_marker || request.fail_after_first_list);
+}
+
+auto CommandQueue::EnqueueLegacyMarker(uint64_t value) -> void
+{
+  auto prepared = PrepareNativeSubmission({ {}, {}, {}, value }, {});
+  graphics::internal::NativeSubmissionProgress progress;
+  prepared->Execute(progress);
+}
+
+auto CommandQueue::QueryPrivateCompletion() const noexcept -> uint64_t
+{
+  return private_timeline_->completed.load(std::memory_order_acquire);
+}
+auto CommandQueue::WaitPrivateCompletion(uint64_t value) const -> void
+{
+  private_timeline_->Wait(value);
+}
+auto CommandQueue::WaitForNativeStop() noexcept -> void { executor_->Stop(); }
+auto CommandQueue::TearDownUncertainDevice() noexcept -> void
+{
+  private_timeline_->Publish(kLost);
+  if (auto lifetime = BackendLifetimeState()) {
+    lifetime->MarkSubmissionFault();
+  }
+  std::lock_guard lock(mutex_);
+  completed_value_ = kLost;
+  cv_.notify_all();
 }
 
 auto CommandQueue::Signal(uint64_t value) const -> void
 {
-  std::lock_guard lk(mutex_);
-  if (value <= current_value_) {
-    throw std::invalid_argument(
-      "New value must be greater than the current value");
+  std::lock_guard lock(mutex_);
+  if (value <= current_value_ || value == kLost) {
+    throw std::invalid_argument("Invalid queue signal reservation");
   }
   current_value_ = value;
 }
-
-[[nodiscard]] auto CommandQueue::Signal() const -> uint64_t
+auto CommandQueue::Signal() const -> uint64_t
 {
-  std::lock_guard lk(mutex_);
-  ++current_value_;
-  return current_value_;
+  std::lock_guard lock(mutex_);
+  if (current_value_ >= kLost - 1) {
+    throw std::overflow_error("Queue timeline exhausted");
+  }
+  return ++current_value_;
 }
-
-auto CommandQueue::SignalImmediate(const uint64_t value) const -> void
+auto CommandQueue::SignalImmediate(uint64_t value) const -> void
 {
-  std::lock_guard lk(mutex_);
-  if (value > current_value_) {
-    current_value_ = value;
+  std::lock_guard lock(mutex_);
+  if (completed_value_ == kLost) {
+    throw std::runtime_error("Headless device lost");
   }
   if (value <= completed_value_) {
-    throw std::invalid_argument(
-      "Immediate signal value must be greater than the completed value");
+    throw std::invalid_argument("Queue signal went backwards");
   }
+  current_value_ = std::max(current_value_, value);
   completed_value_ = value;
   cv_.notify_all();
 }
-
-auto CommandQueue::NoteSubmittedSignal(const uint64_t value) const -> void
-{
-  std::lock_guard lk(mutex_);
-  if (value > current_value_) {
-    current_value_ = value;
-  }
-}
-
-auto CommandQueue::QueueWaitImmediate(const uint64_t value) const -> void
+auto CommandQueue::QueueWaitImmediate(uint64_t value) const -> void
 {
   Wait(value);
 }
-
 auto CommandQueue::Wait(uint64_t value, std::chrono::milliseconds timeout) const
   -> void
 {
-  std::unique_lock lk(mutex_);
-  if (!cv_.wait_for(
-        lk, timeout, [this, value] { return completed_value_ >= value; })) {
-    LOG_F(ERROR, "Headless CommandQueue[{}]::Wait({}) timed out after {} ms",
-      GetName(), value, timeout.count());
-    throw std::runtime_error(
-      fmt::format("Wait({}) timed out after {} ms", value, timeout.count()));
+  std::unique_lock lock(mutex_);
+  if (!cv_.wait_for(lock, timeout, [&] { return completed_value_ >= value; })) {
+    throw std::runtime_error("Headless queue wait timed out");
+  }
+  if (completed_value_ == kLost) {
+    throw std::runtime_error("Headless device lost");
   }
 }
-
-auto CommandQueue::SignalSubmittedWork() -> uint64_t
-{
-  const auto value = Signal();
-  auto chunks = std::vector<internal::SubmissionChunk>(1U);
-  chunks.front().submit_actions.push_back({
-    .kind = graphics::CommandList::SubmitQueueActionKind::kSignal,
-    .value = value,
-  });
-  {
-    std::lock_guard lock(mutex_);
-    if (!executor_) {
-      executor_ = new internal::CommandExecutor();
-    }
-    ++pending_submissions_;
-  }
-  try {
-    static_cast<void>(executor_->ExecuteAsync(this, std::move(chunks)));
-  } catch (...) {
-    CompleteSubmission();
-    throw;
-  }
-  return value;
-}
-
 auto CommandQueue::Wait(uint64_t value) const -> void
 {
-  std::unique_lock lk(mutex_);
-  cv_.wait(lk, [this, value] { return completed_value_ >= value; });
+  std::unique_lock lock(mutex_);
+  cv_.wait(lock, [&] { return completed_value_ >= value; });
+  if (completed_value_ == kLost) {
+    throw std::runtime_error("Headless device lost");
+  }
 }
-
-[[nodiscard]] auto CommandQueue::GetCompletedValue() const -> uint64_t
+auto CommandQueue::GetCompletedValue() const -> uint64_t
 {
-  std::lock_guard lk(mutex_);
+  std::lock_guard lock(mutex_);
   return completed_value_;
 }
-
-[[nodiscard]] auto CommandQueue::GetCurrentValue() const -> uint64_t
+auto CommandQueue::GetCurrentValue() const -> uint64_t
 {
-  std::lock_guard lk(mutex_);
+  std::lock_guard lock(mutex_);
   return current_value_;
 }
-
-auto CommandQueue::Submit(std::shared_ptr<graphics::CommandList> command_list)
-  -> void
-{
-  // Forward to the span overload for a single command list using a tiny
-  // array so std::span has a valid array reference.
-  std::array arr = { command_list };
-  Submit(std::span<std::shared_ptr<graphics::CommandList>> { arr });
-}
-
-auto CommandQueue::Submit(
-  std::span<std::shared_ptr<graphics::CommandList>> command_lists) -> void
-{
-  {
-    std::lock_guard lk(mutex_);
-    if (!executor_) {
-      executor_ = new internal::CommandExecutor();
-    }
-    ++pending_submissions_;
-  }
-
-  std::vector<internal::SubmissionChunk> submission_chunks;
-  submission_chunks.reserve(command_lists.size());
-  for (const auto& base_ptr : command_lists) {
-    if (!base_ptr) {
-      submission_chunks.emplace_back();
-      continue;
-    }
-    if (base_ptr->GetQueueRole() != queue_role_) {
-      LOG_F(WARNING, "Submit: command list role mismatch, ignoring");
-      submission_chunks.emplace_back();
-      continue;
-    }
-
-    auto* hdls = static_cast<CommandList*>(base_ptr.get());
-    try {
-      auto known_states = ToKnownStates(base_ptr->TakeRecordedResourceStates());
-      submission_chunks.push_back(internal::SubmissionChunk {
-        .submit_actions = base_ptr->TakeSubmitQueueActions(),
-        .known_states = std::move(known_states),
-        .commands = hdls->StealCommands(),
-      });
-    } catch (const std::exception& e) {
-      LOG_F(ERROR, "Submit: failed to steal commands: {}", e.what());
-      submission_chunks.emplace_back();
-    }
-  }
-
-  for (const auto& chunk : submission_chunks) {
-    for (const auto& action : chunk.submit_actions) {
-      if (action.kind
-        == graphics::CommandList::SubmitQueueActionKind::kSignal) {
-        NoteSubmittedSignal(action.value);
-      }
-    }
-  }
-
-  const auto returned_id
-    = executor_->ExecuteAsync(this, std::move(submission_chunks));
-  LOG_F(INFO,
-    "Headless Submit(span) enqueued pending submission (role={}) -> id={}",
-    nostd::to_string(queue_role_), returned_id);
-}
-
 auto CommandQueue::CompleteSubmission() const -> void
 {
-  std::lock_guard lk(mutex_);
-  if (pending_submissions_ > 0) {
-    --pending_submissions_;
-  }
+  std::lock_guard lock(mutex_);
+  --pending_submissions_;
   cv_.notify_all();
 }
-
-auto CommandQueue::Flush() const -> void
-{
-  // Wait for all pending submissions to be consumed. We loop because
-  // Signal() may be called concurrently, and we want to wait until
-  // pending_submissions_ reaches zero and completed_value_ reflects
-  // the latest signaled value.
-  std::unique_lock lk(mutex_);
-  cv_.wait(lk, [this] { return pending_submissions_ == 0; });
-  // At this point, completed_value_ should be up-to-date. No further
-  // backend-specific action required for the headless model.
-}
-
 } // namespace oxygen::graphics::headless

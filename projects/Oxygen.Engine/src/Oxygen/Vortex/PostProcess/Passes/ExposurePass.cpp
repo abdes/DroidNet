@@ -103,7 +103,7 @@ namespace {
   {
     recorder.OnSubmission([&certificates, frame = &frame](
                             const graphics::SubmissionOutcome outcome) -> void {
-      if (outcome == graphics::SubmissionOutcome::kDiscarded) {
+      if (outcome != graphics::SubmissionOutcome::kSubmitted) {
         certificates.erase(frame);
       }
     });
@@ -810,7 +810,7 @@ auto ExposurePass::ResolveFrame(RenderContext& ctx,
   }
   recorder.OnSubmission(
     [this, key, frame](const graphics::SubmissionOutcome outcome) -> void {
-      if (outcome == graphics::SubmissionOutcome::kDiscarded) {
+      if (outcome != graphics::SubmissionOutcome::kSubmitted) {
         const auto found = resolved_frames_.find(key);
         if (found != resolved_frames_.end() && found->second == frame) {
           resolved_frames_.erase(found);
@@ -1207,7 +1207,7 @@ auto ExposurePass::GatherFilterGradients(RenderContext& ctx,
   }
   recorder.OnSubmission([this, frame = frame.get(), index](
                           const graphics::SubmissionOutcome outcome) -> void {
-    if (outcome == graphics::SubmissionOutcome::kDiscarded) {
+    if (outcome != graphics::SubmissionOutcome::kSubmitted) {
       const auto found = recorded_filter_gradients_.find(frame);
       if (found != recorded_filter_gradients_.end()) {
         found->second.at(index) = {};
@@ -1806,7 +1806,7 @@ void ExposurePass::CacheBootstrap(graphics::CommandRecorder& recorder,
 {
   recorder.OnSubmission(
     [this, handle, state](const graphics::SubmissionOutcome outcome) -> void {
-      if (outcome == graphics::SubmissionOutcome::kDiscarded) {
+      if (outcome != graphics::SubmissionOutcome::kSubmitted) {
         const auto found = bootstrap_states_.find(handle);
         if (found != bootstrap_states_.end() && found->second == state) {
           bootstrap_states_.erase(found);

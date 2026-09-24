@@ -48,6 +48,7 @@ struct ALLOCATION_DESC;
 namespace oxygen::graphics::d3d12 {
 
 class CommandRecorder;
+struct NativeLifetime;
 struct MemoryStatistics;
 
 namespace detail {
@@ -101,6 +102,11 @@ class Graphics : public oxygen::Graphics {
   using Base = oxygen::Graphics;
 
 public:
+  [[nodiscard]] auto GetNativeLifetime() const
+    -> const std::shared_ptr<NativeLifetime>&
+  {
+    return native_lifetime_;
+  }
   OXGN_D3D12_API explicit Graphics(const SerializedBackendConfig& config,
     const SerializedPathFinderConfig& path_finder_config);
 
@@ -210,6 +216,7 @@ protected:
     -> std::unique_ptr<graphics::CommandList> override;
 
 private:
+  std::shared_ptr<NativeLifetime> native_lifetime_;
   friend class CommandRecorder;
   mutable std::mutex resource_allocation_mutex_;
 

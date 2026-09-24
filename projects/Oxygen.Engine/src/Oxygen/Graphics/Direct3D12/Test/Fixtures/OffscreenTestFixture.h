@@ -7,6 +7,7 @@
 #pragma once
 
 #include <algorithm>
+#include <atomic>
 #include <exception>
 #include <functional>
 #include <memory>
@@ -82,6 +83,9 @@ protected:
 
     graphics_ = CreateBackend(backend_config, path_finder_config);
     ASSERT_NE(graphics_, nullptr);
+    static std::atomic<uint64_t> incarnation { 1 };
+    graphics_->InstallBackendOwner(graphics_,
+      graphics::BackendIncarnationId { incarnation.fetch_add(1) }, {});
 
     graphics_->CreateCommandQueues(*queue_strategy_);
     ASSERT_NE(TryGetQueue(graphics::QueueRole::kGraphics), nullptr);
@@ -94,7 +98,7 @@ protected:
 
     if (graphics_ != nullptr) {
       graphics_->Flush();
-      graphics_->Stop();
+      graphics_->Close();
     }
 
     textures_.clear();
@@ -214,6 +218,7 @@ protected:
     auto queue = GetQueue(role);
     CHECK_NOTNULL_F(queue.get());
     queue->Flush();
+    Backend().PollCompletedUses();
     return graphics::FenceValue { queue->GetCompletedValue() };
   }
 

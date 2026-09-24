@@ -13,6 +13,7 @@
 #include <Oxygen/Base/Windows/ComError.h>
 #include <Oxygen/Base/Windows/Exceptions.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
+#include <Oxygen/Graphics/Common/Internal/QueueSubmission.h>
 #include <Oxygen/Graphics/Common/ObjectRelease.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Graphics/Direct3D12/CommandList.h>
@@ -20,31 +21,157 @@
 #include <Oxygen/Graphics/Direct3D12/Detail/dx12_utils.h>
 #include <Oxygen/Graphics/Direct3D12/Devices/DebugLayer.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
-
 #include <Oxygen/Profiling/CpuProfileScope.h>
 #include <Oxygen/Tracy/D3D12.h>
 
 using oxygen::graphics::d3d12::CommandQueue;
 using oxygen::windows::ThrowOnFailed;
 
+struct CommandQueue::PreparedSubmission final
+  : graphics::internal::NativeSubmission {
+  struct Group {
+    size_t first;
+    size_t count;
+    std::vector<graphics::CommandList::SubmitQueueAction> actions;
+  };
+  struct Dependency {
+    Microsoft::WRL::ComPtr<ID3D12Fence> fence;
+    uint64_t value;
+  };
+  CommandQueue* owner;
+  std::vector<ID3D12CommandList*> lists;
+  std::vector<Group> groups;
+  std::vector<Dependency> dependencies;
+  std::optional<uint64_t> private_marker;
+  std::optional<uint64_t> legacy_marker;
+  bool fail_before_private_marker { false };
+  bool fail_after_first_list { false };
+
+  explicit PreparedSubmission(CommandQueue& queue)
+    : owner(&queue)
+  {
+  }
+  auto Execute(graphics::internal::NativeSubmissionProgress& progress)
+    -> void override
+  {
+    for (const auto& dependency : dependencies) {
+      ThrowOnFailed(
+        owner->command_queue_->Wait(dependency.fence.Get(), dependency.value),
+        "queue wait for producer completion");
+    }
+    for (const auto& group : groups) {
+      for (const auto& action : group.actions) {
+        if (action.kind
+          == graphics::CommandList::SubmitQueueActionKind::kWait) {
+          owner->QueueWaitImmediate(action.value);
+        }
+      }
+      owner->command_queue_->ExecuteCommandLists(
+        static_cast<UINT>(group.count), lists.data() + group.first);
+      progress.issued_lists += group.count;
+      if (fail_after_first_list) {
+        throw graphics::SubmissionException(
+          { graphics::SubmissionOutcome::kExecutionUncertain, {} });
+      }
+      for (const auto& action : group.actions) {
+        if (action.kind
+          == graphics::CommandList::SubmitQueueActionKind::kSignal) {
+          owner->SignalImmediate(action.value);
+          progress.last_legacy_signal = action.value;
+        }
+      }
+    }
+    if (legacy_marker) {
+      owner->SignalImmediate(*legacy_marker);
+      progress.last_legacy_signal = *legacy_marker;
+    }
+    if (fail_before_private_marker) {
+      throw graphics::SubmissionException(
+        { graphics::SubmissionOutcome::kExecutionUncertain, {} });
+    }
+    if (private_marker) {
+      ThrowOnFailed(owner->command_queue_->Signal(
+                      owner->private_fence_.Get(), *private_marker),
+        "signal private submission completion");
+      progress.private_marker_emitted = true;
+    }
+  }
+};
+
+auto CommandQueue::PrepareNativeSubmission(
+  const graphics::internal::NativeSubmissionRequest& request,
+  std::unique_ptr<graphics::internal::NativeSubmission> reusable)
+  -> std::unique_ptr<graphics::internal::NativeSubmission>
+{
+  auto prepared = reusable
+    ? std::unique_ptr<PreparedSubmission>(
+        static_cast<PreparedSubmission*>(reusable.release()))
+    : std::make_unique<PreparedSubmission>(*this);
+  prepared->owner = this;
+  prepared->lists.clear();
+  prepared->groups.clear();
+  prepared->dependencies.clear();
+  prepared->lists.reserve(request.lists.size());
+  prepared->groups.reserve(request.lists.size());
+  prepared->dependencies.reserve(request.dependencies.size());
+  prepared->private_marker = request.private_marker;
+  prepared->legacy_marker = request.legacy_marker;
+  prepared->fail_before_private_marker = request.fail_before_private_marker;
+  prepared->fail_after_first_list = request.fail_after_first_list;
+  for (const auto& dependency : request.dependencies) {
+    // Backend identity was validated before native preparation.
+    const auto& producer
+      = static_cast<const CommandQueue&>(*dependency.producer);
+    prepared->dependencies.push_back(
+      { producer.private_fence_, dependency.receipt.Value() });
+  }
+  for (const auto& list : request.lists) {
+    auto* native = static_cast<CommandList*>(list.get());
+    const auto actions = list->SubmitActions();
+    const auto first = prepared->lists.size();
+    prepared->lists.push_back(native->GetCommandList());
+    if (!request.fail_after_first_list && actions.empty()
+      && !prepared->groups.empty() && prepared->groups.back().actions.empty()) {
+      ++prepared->groups.back().count;
+    } else {
+      prepared->groups.push_back(
+        { first, 1, { actions.begin(), actions.end() } });
+    }
+  }
+  return prepared;
+}
+auto CommandQueue::QueryPrivateCompletion() const noexcept -> uint64_t
+{
+  return private_fence_->GetCompletedValue();
+}
+auto CommandQueue::WaitPrivateCompletion(uint64_t value) const -> void
+{
+  const auto completed = private_fence_->GetCompletedValue();
+  if (completed == (std::numeric_limits<uint64_t>::max)()) {
+    throw std::runtime_error(
+      "Device lost while waiting for submission completion");
+  }
+  if (completed < value) {
+    ThrowOnFailed(private_fence_->SetEventOnCompletion(value, private_event_),
+      "wait for private completion fence");
+    if (WaitForSingleObject(private_event_, INFINITE) != WAIT_OBJECT_0
+      || private_fence_->GetCompletedValue()
+        == (std::numeric_limits<uint64_t>::max)()) {
+      throw std::runtime_error("Private completion wait failed");
+    }
+  }
+}
+auto CommandQueue::TearDownUncertainDevice() noexcept -> void
+{
+  Microsoft::WRL::ComPtr<ID3D12Device5> device;
+  if (SUCCEEDED(device_.As(&device))) {
+    device->RemoveDevice();
+  }
+}
+
 namespace {
 
 using oxygen::graphics::d3d12::CommandList;
-using QueueStateEntry = oxygen::graphics::CommandQueue::KnownResourceState;
-
-auto ToKnownStates(
-  std::vector<oxygen::graphics::CommandList::RecordedResourceState>&& states)
-  -> std::vector<QueueStateEntry>
-{
-  auto known_states = std::vector<QueueStateEntry> {};
-  known_states.reserve(states.size());
-  for (const auto& state : states) {
-    known_states.push_back(
-      { .resource = state.resource, .state = state.state });
-  }
-  return known_states;
-}
-
 auto ReportDeviceRemovalIfPresent(
   oxygen::graphics::d3d12::dx::IDevice* device) noexcept -> void
 {
@@ -75,25 +202,43 @@ CommandQueue::CommandQueue(
   std::string_view name, QueueRole role, const Graphics* gfx)
   : Base(name)
   , queue_role_(role)
-  , gfx_(gfx)
+  , native_lifetime_(gfx->GetNativeLifetimeToken())
+  , device_(gfx->GetCurrentDevice())
 {
-  DCHECK_NOTNULL_F(gfx_, "Graphics context cannot be null!");
+  DCHECK_NOTNULL_F(device_, "Graphics device cannot be null!");
 
-  CreateCommandQueue(role, name);
-  LOG_F(INFO, "D3D12 Command queue [name=`{}`, role=`{}`] created", name,
-    nostd::to_string(role));
+  try {
+    CreateCommandQueue(role, name);
+    LOG_F(INFO, "D3D12 Command queue [name=`{}`, role=`{}`] created", name,
+      nostd::to_string(role));
 
-  const auto fence_name = fmt::format("Fence ({})", name);
-  CreateFence(fence_name, 0ULL);
-  LOG_F(INFO, "D3D12 Fence [name=`{}`] created", fence_name);
+    const auto fence_name = fmt::format("Fence ({})", name);
+    CreateFence(fence_name, 0ULL);
+    ThrowOnFailed(CurrentDevice()->CreateFence(0, D3D12_FENCE_FLAG_NONE,
+                    IID_PPV_ARGS(private_fence_.GetAddressOf())),
+      "create private completion fence");
+    private_event_ = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (!private_event_) {
+      windows::WindowsException::ThrowFromLastError();
+    }
+    LOG_F(INFO, "D3D12 Fence [name=`{}`] created", fence_name);
 
 #if defined(OXYGEN_WITH_TRACY)
-  tracy_context_
-    = oxygen::tracy::d3d12::CreateContext(CurrentDevice(), command_queue_);
-  if (tracy_context_ != nullptr) {
-    oxygen::tracy::d3d12::NameContext(tracy_context_, name);
-  }
+    tracy_context_
+      = oxygen::tracy::d3d12::CreateContext(CurrentDevice(), command_queue_);
+    if (tracy_context_ != nullptr) {
+      oxygen::tracy::d3d12::NameContext(tracy_context_, name);
+    }
 #endif
+  } catch (...) {
+    if (private_event_) {
+      CloseHandle(private_event_);
+      private_event_ = nullptr;
+    }
+    ReleaseFence();
+    ReleaseCommandQueue();
+    throw;
+  }
 }
 
 CommandQueue::~CommandQueue() noexcept
@@ -105,7 +250,17 @@ CommandQueue::~CommandQueue() noexcept
 
   // Flush the command queue to ensure all commands are completed before
   // destruction.
-  Wait(GetCurrentValue());
+  // Close already drained or stopped this incarnation. Late CPU owner release
+  // must not start another native drain on the releasing thread.
+  const auto lifetime = BackendLifetimeState();
+  if (!lifetime || lifetime->State() == graphics::BackendLifecycle::kActive) {
+    try {
+      Flush();
+    } catch (...) {
+      TearDownUncertainDevice();
+    }
+  }
+  ReleaseUsesAfterDeviceLoss();
 
 #if defined(OXYGEN_WITH_TRACY)
   if (tracy_context_ != nullptr) {
@@ -120,6 +275,11 @@ CommandQueue::~CommandQueue() noexcept
   // for logging.
   const auto queue_name = GetObjectName(command_queue_, "Command Queue");
 
+  if (private_event_) {
+    CloseHandle(private_event_);
+    private_event_ = nullptr;
+  }
+  private_fence_.Reset();
   ReleaseFence();
   LOG_F(INFO, "D3D12 Fence [name=`Fence ({})`] destroyed", queue_name);
 
@@ -129,7 +289,7 @@ CommandQueue::~CommandQueue() noexcept
 
 auto CommandQueue::CurrentDevice() const -> dx::IDevice*
 {
-  return gfx_->GetCurrentDevice();
+  return device_.Get();
 }
 
 void CommandQueue::CreateCommandQueue(
@@ -211,54 +371,35 @@ void CommandQueue::ReleaseFence() noexcept
 
 void CommandQueue::Signal(const uint64_t value) const
 {
-  if (value <= current_value_) {
-    DLOG_F(WARNING, "New value {} must be greater than the current value {}",
-      value, current_value_);
-    throw std::invalid_argument(
-      "New value must be greater than the current value");
+  std::lock_guard lock(timeline_mutex_);
+  if (value <= current_value_
+    || value == (std::numeric_limits<uint64_t>::max)()) {
+    throw std::invalid_argument("Invalid queue signal reservation");
   }
   current_value_ = value;
 }
-
 auto CommandQueue::Signal() const -> uint64_t
 {
-  ++current_value_;
-  return current_value_;
+  std::lock_guard lock(timeline_mutex_);
+  if (current_value_ >= (std::numeric_limits<uint64_t>::max)() - 1) {
+    throw std::overflow_error("Queue timeline exhausted");
+  }
+  return ++current_value_;
 }
-
 void CommandQueue::SignalImmediate(const uint64_t value) const
 {
-  DCHECK_NOTNULL_F(fence_, "fence must be initialized");
-  DCHECK_NOTNULL_F(command_queue_, "command queue must be valid");
+  std::lock_guard lock(timeline_mutex_);
   if (value <= last_signaled_value_) {
-    DLOG_F(WARNING,
-      "Immediate signal value {} must be greater than the last signaled value "
-      "{}",
-      value, last_signaled_value_);
-    throw std::invalid_argument(
-      "Immediate signal value must be greater than the last signaled value");
+    throw std::invalid_argument("Queue signal went backwards");
   }
-  if (value > current_value_) {
-    current_value_ = value;
-  }
-
-  DLOG_F(1,
-    "CommandQueue[{}]::SignalImmediate({} / current={} completed={} "
-    "last_signaled={})",
-    GetName(), value, GetCurrentValue(), GetCompletedValue(),
-    last_signaled_value_);
-  ThrowOnFailed((command_queue_->Signal(fence_, value)),
-    fmt::format("SignalImmediate({}) on fence failed", value));
+  current_value_ = std::max(current_value_, value);
+  ThrowOnFailed(
+    command_queue_->Signal(fence_, value), "Queue completion signal failed");
   last_signaled_value_ = value;
 }
-
 void CommandQueue::QueueWaitImmediate(const uint64_t value) const
 {
-  DCHECK_NOTNULL_F(fence_, "fence must be initialized");
-  DCHECK_NOTNULL_F(command_queue_, "command queue must be valid");
-  DLOG_F(1, "CommandQueue[{}]::QueueWaitImmediate({})", GetName(), value);
-  ThrowOnFailed(command_queue_->Wait(fence_, value),
-    fmt::format("QueueWaitImmediate({}) on fence failed", value));
+  ThrowOnFailed(command_queue_->Wait(fence_, value), "Queue wait failed");
 }
 
 void CommandQueue::Wait(
@@ -343,95 +484,6 @@ auto CommandQueue::BeginProfilingFrame() const -> void
     oxygen::tracy::d3d12::CollectContext(tracy_context_);
   }
 #endif
-}
-
-void CommandQueue::Submit(std::shared_ptr<graphics::CommandList> command_list)
-{
-  oxygen::profiling::CpuProfileScope cpu_scope(
-    "D3D12.SubmitCommandList", oxygen::profiling::ProfileCategory::kGeneral);
-  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
-  auto* d3d12_command_list = static_cast<CommandList*>(command_list.get());
-  const auto submit_actions = d3d12_command_list->TakeSubmitQueueActions();
-  for (const auto& action : submit_actions) {
-    if (action.kind == graphics::CommandList::SubmitQueueActionKind::kWait) {
-      QueueWaitImmediate(action.value);
-    }
-  }
-
-  ID3D12CommandList* d3d12_lists[] = { d3d12_command_list->GetCommandList() };
-  {
-    oxygen::profiling::CpuProfileScope driver_scope("D3D12.ExecuteCommandLists",
-      oxygen::profiling::ProfileCategory::kGeneral);
-    command_queue_->ExecuteCommandLists(_countof(d3d12_lists), d3d12_lists);
-  }
-
-  for (const auto& action : submit_actions) {
-    if (action.kind == graphics::CommandList::SubmitQueueActionKind::kSignal) {
-      SignalImmediate(action.value);
-    }
-  }
-
-  const auto known_states
-    = ToKnownStates(command_list->TakeRecordedResourceStates());
-  AdoptKnownResourceStates(known_states);
-}
-
-void CommandQueue::Submit(
-  const std::span<std::shared_ptr<graphics::CommandList>> command_lists)
-{
-  std::vector<ID3D12CommandList*> d3d12_lists;
-  std::vector<std::shared_ptr<graphics::CommandList>> pending_lists;
-  d3d12_lists.reserve(command_lists.size());
-  pending_lists.reserve(command_lists.size());
-  for (const auto& cl : command_lists) {
-    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
-    auto* d3d12_command_list = static_cast<CommandList*>(cl.get());
-    if (d3d12_command_list->HasSubmitQueueActions()) {
-      if (!d3d12_lists.empty()) {
-        command_queue_->ExecuteCommandLists(
-          static_cast<UINT>(d3d12_lists.size()), d3d12_lists.data());
-        for (auto& pending : pending_lists) {
-          const auto known_states
-            = ToKnownStates(pending->TakeRecordedResourceStates());
-          AdoptKnownResourceStates(known_states);
-        }
-        d3d12_lists.clear();
-        pending_lists.clear();
-      }
-      const auto submit_actions = d3d12_command_list->TakeSubmitQueueActions();
-      for (const auto& action : submit_actions) {
-        if (action.kind
-          == graphics::CommandList::SubmitQueueActionKind::kWait) {
-          QueueWaitImmediate(action.value);
-        }
-      }
-
-      ID3D12CommandList* d3d12_list[]
-        = { d3d12_command_list->GetCommandList() };
-      command_queue_->ExecuteCommandLists(_countof(d3d12_list), d3d12_list);
-
-      for (const auto& action : submit_actions) {
-        if (action.kind
-          == graphics::CommandList::SubmitQueueActionKind::kSignal) {
-          SignalImmediate(action.value);
-        }
-      }
-      const auto known_states = ToKnownStates(cl->TakeRecordedResourceStates());
-      AdoptKnownResourceStates(known_states);
-      continue;
-    }
-    d3d12_lists.push_back(d3d12_command_list->GetCommandList());
-    pending_lists.push_back(cl);
-  }
-  if (!d3d12_lists.empty()) {
-    command_queue_->ExecuteCommandLists(
-      static_cast<UINT>(d3d12_lists.size()), d3d12_lists.data());
-    for (auto& pending : pending_lists) {
-      const auto known_states
-        = ToKnownStates(pending->TakeRecordedResourceStates());
-      AdoptKnownResourceStates(known_states);
-    }
-  }
 }
 
 void CommandQueue::SetName(const std::string_view name) noexcept

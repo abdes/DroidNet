@@ -161,7 +161,9 @@ protected:
   }
   auto RunToneProbe(std::span<const std::byte> inputs_data,
     std::uint32_t record_count, std::uint32_t mode = 0U,
-    bool capture_enabled = true) -> std::vector<std::array<float, 8>>;
+    bool capture_enabled = true,
+    const std::function<void(graphics::CommandRecorder&)>& attach = {})
+    -> std::vector<std::array<float, 8>>;
   auto ReadFloatTexture(const graphics::Texture& texture,
     bool allow_half = false) -> std::vector<Pixel>;
   template <typename Payload>

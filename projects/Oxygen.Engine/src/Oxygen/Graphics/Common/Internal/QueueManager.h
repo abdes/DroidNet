@@ -48,9 +48,9 @@ namespace oxygen::graphics::internal {
 
  - Time Complexity: Lookups (`GetQueueByName`, `GetQueueByRole`) are O(N) over
    the number of specifications in the worst case where role-based resolution
-   requires scanning the map. `ForEachQueue` copies unique pointers under lock
-   then invokes the callable outside the lock to avoid holding the mutex during
-   user callbacks.
+   requires scanning the map. `ForEachQueue` retains an immutable queue snapshot
+ under lock and invokes callbacks outside the lock. Frame polling does not
+ allocate.
 
  ### Usage Examples
 
@@ -102,35 +102,36 @@ public:
   //! completion markers for the reused slot gate resource/allocator retirement.
   auto WaitForFrameSlot(frame::Slot slot) -> void;
   auto SignalFrameSlot(frame::Slot slot) -> void;
+  //! Allocation-free retirement; no user callback runs under the cache mutex.
+  auto ForgetKnownResourceState(const NativeResource& resource) noexcept
+    -> void;
 
   //! Invoke a callable for every unique CommandQueue.
   template <std::invocable<graphics::CommandQueue&> Fn>
   auto ForEachQueue(Fn&& fn) const -> void
   {
-    std::vector<std::shared_ptr<graphics::CommandQueue>> queues;
+    std::shared_ptr<const QueueSnapshot> queues;
     {
-      std::lock_guard lk(queue_cache_mutex_);
-      std::unordered_set<graphics::CommandQueue*> seen;
-
-      for (const auto& kv : queues_by_key_) {
-        const auto& sp = kv.second.second;
-        if (sp && seen.insert(sp.get()).second) {
-          queues.push_back(sp);
-        }
-      }
+      std::lock_guard lock(queue_cache_mutex_);
+      queues = queue_snapshot_;
     }
-
-    for (const auto& sp : queues) {
-      std::forward<Fn>(fn)(*sp);
+    if (!queues) {
+      return;
+    }
+    for (const auto& queue : *queues) {
+      std::forward<Fn>(fn)(*queue);
     }
   }
 
 private:
+  using QueueSnapshot = std::vector<std::shared_ptr<graphics::CommandQueue>>;
+  std::shared_ptr<const QueueSnapshot> queue_snapshot_;
   struct FrameFence {
     std::shared_ptr<graphics::CommandQueue> queue;
     std::uint64_t value {};
   };
-  std::array<std::vector<FrameFence>, frame::kFramesInFlight.get()> frame_fences_;
+  std::array<std::vector<FrameFence>, frame::kFramesInFlight.get()>
+    frame_fences_;
   bool frames_started_ { false };
 
   //! Mutex protecting `queues_by_key_` and related state. This mutex is mutable

@@ -4,8 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <utility>
 #include <stdexcept>
+#include <utility>
 
 #include <d3d12.h>
 
@@ -163,8 +163,8 @@ Texture::Texture(TextureDesc desc, const Graphics* gfx)
   }
 
   try {
-    AddComponent<GraphicResource>(
-      desc_.debug_name, resource, d3dmaAllocation, std::move(reservation));
+    AddComponent<GraphicResource>(desc_.debug_name, resource, d3dmaAllocation,
+      std::move(reservation), gfx_->GetNativeLifetime());
   } catch (...) {
     oxygen::graphics::ObjectRelease(resource);
     oxygen::graphics::ObjectRelease(d3dmaAllocation);
@@ -181,7 +181,8 @@ Texture::Texture(
   , desc_(std::move(desc))
 {
   if (desc_.allocation_budget.owner) {
-    throw std::invalid_argument("Imported resources cannot acquire an allocator-owned budget charge");
+    throw std::invalid_argument(
+      "Imported resources cannot acquire an allocator-owned budget charge");
   }
   DCHECK_NOTNULL_F(gfx_, "Graphics pointer cannot be null");
 
@@ -189,9 +190,8 @@ Texture::Texture(
   auto* resource = native->AsPointer<ID3D12Resource>();
   CHECK_NOTNULL_F(resource, "Invalid native object");
 
-  AddComponent<GraphicResource>(desc_.debug_name, resource,
-    nullptr // No allocation object for native resources
-  );
+  AddComponent<GraphicResource>(desc_.debug_name, resource, nullptr,
+    AllocationReservation {}, gfx_->GetNativeLifetime());
 
   resource_desc_ = resource->GetDesc();
   plane_count_
@@ -245,7 +245,7 @@ auto Texture::GetNativeResource() const -> NativeResource
 
 auto Texture::CurrentDevice() const -> dx::IDevice*
 {
-  return gfx_->GetCurrentDevice();
+  return GetComponent<GraphicResource>().GetLifetime()->device.Get();
 }
 
 auto Texture::CreateShaderResourceView(
