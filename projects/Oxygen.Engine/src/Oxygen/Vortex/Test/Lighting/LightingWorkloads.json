@@ -1,5 +1,5 @@
 {
-  "revision": 1,
+  "revision": 2,
   "generator": "Oxygen/Vortex/Test/Support/LightingWorkload.cpp",
   "primary": {
     "light_count": 1024,
@@ -60,6 +60,7 @@
     "projections": ["perspective", "orthographic with matching footprint"],
     "point_shadow_requests": [0, 1, 4, 5],
     "spot_shadow_requests": [0, 1, 8, 9],
+    "shadow_selection": "nearest static grid positions to the main camera axis, stable by source id; primary unshadowed recipe unchanged",
     "finite_source_radius_m": 0.25,
     "wide_spot_outer_half_angle_radians": 1.5707963267948966,
     "content_origin_px": [17, 9],

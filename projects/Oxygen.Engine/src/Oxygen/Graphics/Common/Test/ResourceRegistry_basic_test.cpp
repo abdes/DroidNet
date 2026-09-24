@@ -4,12 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
 #include <atomic>
 #include <optional>
 #include <thread>
 #include <vector>
-
-#include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Composition/Object.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
@@ -18,6 +17,7 @@
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Test/Bindless/Mocks/MockDescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Test/Fakes/FakeResource.h>
+#include <Oxygen/Testing/GTest.h>
 
 using oxygen::graphics::DescriptorAllocationHandle;
 using oxygen::graphics::DescriptorVisibility;
@@ -163,9 +163,49 @@ NOLINT_TEST_F(ResourceRegistryBasicTest, UnRegisterView_RemovesOnlyTarget)
 }
 
 /*!
- UnRegisterView with an invalid or non-existent native view must be a safe no-op
- and must not throw exceptions.
+ Batched retirement must preserve unrelated views, including views owned by
+ another resource, and leave removed descriptions reusable.
 */
+NOLINT_TEST_F(
+  ResourceRegistryBasicTest, BatchRemovalPreservesOtherViewsAndResources)
+{
+  const auto first
+    = TestViewDesc { .view_type = ResourceViewType::kConstantBuffer,
+        .visibility = DescriptorVisibility::kShaderVisible,
+        .id = 101 };
+  auto second = first;
+  second.id = 102;
+  auto retained = first;
+  retained.id = 103;
+  const auto a = RegisterView(*resource1_, first);
+  const auto b = RegisterView(*resource1_, second);
+  (void)RegisterView(*resource1_, retained);
+  (void)RegisterView(*resource2_, first);
+  const auto batch = std::array { a, b, a, NativeView {} };
+  registry_->UnRegisterViews(*resource1_, batch);
+  EXPECT_FALSE(registry_->Contains(*resource1_, first));
+  EXPECT_FALSE(registry_->Contains(*resource1_, second));
+  EXPECT_TRUE(registry_->Contains(*resource1_, retained));
+  EXPECT_TRUE(registry_->Contains(*resource2_, first));
+  EXPECT_TRUE(registry_->Contains(*resource1_));
+  EXPECT_NO_THROW(registry_->UnRegisterViews(*resource1_, batch));
+  // Removed descriptions may be registered again without stale cache entries.
+  (void)RegisterView(*resource1_, first);
+  EXPECT_TRUE(registry_->Contains(*resource1_, first));
+}
+
+NOLINT_TEST_F(
+  ResourceRegistryBasicTest, BatchRemovalValidatesResourceOnlyForNonemptyInput)
+{
+  registry_->UnRegisterResource(*resource1_);
+  EXPECT_NO_THROW(
+    registry_->UnRegisterViews(*resource1_, std::span<const NativeView> {}));
+  const auto batch = std::array { NativeView {} };
+  EXPECT_THROW(
+    registry_->UnRegisterViews(*resource1_, batch), std::runtime_error);
+}
+
+//! An invalid or unknown individual view is a safe no-op.
 NOLINT_TEST_F(ResourceRegistryBasicTest, UnRegisterView_InvalidView_NoThrow)
 {
   constexpr NativeView invalid_view {};

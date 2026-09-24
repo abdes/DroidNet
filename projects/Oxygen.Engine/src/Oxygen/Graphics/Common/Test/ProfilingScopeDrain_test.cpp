@@ -289,6 +289,28 @@ TEST(CommandRecorderProfileScopeDrain, ScopeUsesCollectorThatOpenedIt)
   EXPECT_EQ(second.abort_count, 0);
 }
 
+TEST(
+  CommandRecorderProfileScopeDrain, ManySiblingScopesPreserveParentCollectors)
+{
+  auto recorder = TestRecorder {};
+  auto collector = CountingCollector {};
+  recorder.SetTelemetryCollector(
+    observer_ptr<IGpuProfileCollector>(&collector));
+  recorder.Begin();
+  const auto parent = recorder.BeginProfileScope(MakeScopeDesc());
+  for (unsigned index = 0; index < 4096U; ++index) {
+    const auto child = recorder.BeginProfileScope(MakeScopeDesc());
+    recorder.EndProfileScope(child);
+  }
+  EXPECT_EQ(collector.begin_count, 4097);
+  EXPECT_EQ(collector.end_count, 4096);
+  recorder.EndProfileScope(parent);
+  const auto list = recorder.End();
+  ASSERT_NE(list, nullptr);
+  EXPECT_EQ(collector.end_count, 4097);
+  EXPECT_EQ(collector.abort_count, 0);
+}
+
 TEST(CommandRecorderProfileScopeDrain, BeginFailureAbortsOpenedCollectors)
 {
   auto recorder = TestRecorder {};

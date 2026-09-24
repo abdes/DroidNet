@@ -10,6 +10,7 @@
 #include <vector>
 
 #include <Oxygen/Config/RendererConfig.h>
+#include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
@@ -19,6 +20,7 @@
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/Lighting/LightingService.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/Shadows/ShadowService.h>
@@ -107,7 +109,8 @@ namespace {
     RecordProperty("lighting_allocation_bytes", memory.allocated.get());
   }
 
-  NOLINT_TEST_F(ShadowAdmissionGpuTest, ContactDepthIsConditionalAndSelfDoesNotOcclude)
+  NOLINT_TEST_F(
+    ShadowAdmissionGpuTest, ContactDepthIsConditionalAndSelfDoesNotOcclude)
   {
     auto light_node = AddPoint(0U);
     bool expected_contact = false;
@@ -121,8 +124,9 @@ namespace {
       if (expected_contact) {
         const auto index = data->bindings.contact_depth_srv.get();
         EXPECT_GE(index, bindless::generated::kTexturesShaderIndexBase);
-        EXPECT_LT(index, bindless::generated::kTexturesShaderIndexBase
-          + bindless::generated::kTexturesCapacity);
+        EXPECT_LT(index,
+          bindless::generated::kTexturesShaderIndexBase
+            + bindless::generated::kTexturesCapacity);
       }
     };
     for (const bool forward : { false, true }) {
@@ -144,11 +148,11 @@ namespace {
         }
       }
     }
-    ASSERT_TRUE(light_node.EditLight<scene::PointLight>([](auto& light) {
-      light.Common().affects_world = false;
-    }));
+    ASSERT_TRUE(light_node.EditLight<scene::PointLight>(
+      [](auto& light) { light.Common().affects_world = false; }));
     ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F, 1U));
-    const auto empty = renderer_->InspectViewRenderStatus(ViewId { surface_view_id });
+    const auto empty
+      = renderer_->InspectViewRenderStatus(ViewId { surface_view_id });
     ASSERT_TRUE(empty);
     EXPECT_TRUE(empty->IsCaptureEligible(frame::SequenceNumber { sequence }));
   }
@@ -159,9 +163,12 @@ namespace {
     constexpr unsigned extent = 129U;
     constexpr unsigned center = extent / 2U * extent + extent / 2U;
     view.viewport.width = view.viewport.height = float(extent);
-    camera.GetCameraAs<scene::PerspectiveCamera>()->get().SetViewport(view.viewport);
-    auto output = CreateRegisteredTexture({ .width = extent, .height = extent,
-      .format = Format::kRGBA32Float, .is_render_target = true,
+    camera.GetCameraAs<scene::PerspectiveCamera>()->get().SetViewport(
+      view.viewport);
+    auto output = CreateRegisteredTexture({ .width = extent,
+      .height = extent,
+      .format = Format::kRGBA32Float,
+      .is_render_target = true,
       .initial_state = graphics::ResourceStates::kCommon });
     framebuffer = Backend().CreateFramebuffer(
       graphics::FramebufferDesc {}.AddColorAttachment(output));
@@ -172,22 +179,29 @@ namespace {
       candidate.Common().shadow.bias = 1.0F;
     }));
     auto blocker = scene->CreateNode("Contact blocker");
-    blocker.GetRenderable().SetGeometry(mesh_node.GetRenderable().GetGeometry());
-    blocker.GetRenderable().SetMaterialOverride(0, 0, MakeEmissiveMaterial(0.0F));
+    blocker.GetRenderable().SetGeometry(
+      mesh_node.GetRenderable().GetGeometry());
+    blocker.GetRenderable().SetMaterialOverride(
+      0, 0, MakeEmissiveMaterial(0.0F));
     ASSERT_TRUE(blocker.GetTransform().SetLocalScale({ 0.05F, 0.05F, 0.05F }));
-    ASSERT_TRUE(blocker.GetTransform().SetLocalPosition({ 0.09F, 0.0F, -0.8606F }));
-    mesh_node.GetFlags()->get().SetLocalValue(scene::SceneNodeFlags::kCastsShadows, false);
+    ASSERT_TRUE(
+      blocker.GetTransform().SetLocalPosition({ 0.09F, 0.0F, -0.8606F }));
+    mesh_node.GetFlags()->get().SetLocalValue(
+      scene::SceneNodeFlags::kCastsShadows, false);
     expected_draws = 2U;
     std::shared_ptr<const graphics::Texture> contact_depth;
     probe->inspect = [&](const auto& ctx, const auto&, unsigned) {
-      const auto* owner = RendererPublicationProbe::GetSceneRenderer(*renderer_);
+      const auto* owner
+        = RendererPublicationProbe::GetSceneRenderer(*renderer_);
       contact_depth = RendererPublicationProbe::GetShadowService(*owner)
-        ->InspectContactShadowSurface(ctx.current_view.view_id);
+                        ->InspectContactShadowSurface(ctx.current_view.view_id);
     };
     for (const bool forward : { false, true }) {
       SetSurface(data::MaterialDomain::kOpaque);
-      mesh_node.GetFlags()->get().SetLocalValue(scene::SceneNodeFlags::kReceivesShadows, true);
-      blocker.GetFlags()->get().SetLocalValue(scene::SceneNodeFlags::kCastsShadows, true);
+      mesh_node.GetFlags()->get().SetLocalValue(
+        scene::SceneNodeFlags::kReceivesShadows, true);
+      blocker.GetFlags()->get().SetLocalValue(
+        scene::SceneNodeFlags::kCastsShadows, true);
       ASSERT_TRUE(light.EditLight<scene::PointLight>([](auto& candidate) {
         candidate.Common().shadow.contact_shadows = false;
       }));
@@ -202,14 +216,118 @@ namespace {
       EXPECT_EQ(contact_depth->GetDescriptor().format, Format::kDepth32);
       EXPECT_EQ(contact_depth->GetDescriptor().width, extent);
       EXPECT_EQ(contact_depth->GetDescriptor().height, extent);
-      EXPECT_LT(ReadFloatTexture(*probe->color).at(center).at(0), baseline * 0.8F);
-      blocker.GetFlags()->get().SetLocalValue(scene::SceneNodeFlags::kCastsShadows, false);
+      EXPECT_LT(
+        ReadFloatTexture(*probe->color).at(center).at(0), baseline * 0.8F);
+      blocker.GetFlags()->get().SetLocalValue(
+        scene::SceneNodeFlags::kCastsShadows, false);
       ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0.0F, 1U));
-      EXPECT_NEAR(ReadFloatTexture(*probe->color).at(center).at(0), baseline, baseline * 0.005F);
-      blocker.GetFlags()->get().SetLocalValue(scene::SceneNodeFlags::kCastsShadows, true);
-      mesh_node.GetFlags()->get().SetLocalValue(scene::SceneNodeFlags::kReceivesShadows, false);
+      EXPECT_NEAR(ReadFloatTexture(*probe->color).at(center).at(0), baseline,
+        baseline * 0.005F);
+      blocker.GetFlags()->get().SetLocalValue(
+        scene::SceneNodeFlags::kCastsShadows, true);
+      mesh_node.GetFlags()->get().SetLocalValue(
+        scene::SceneNodeFlags::kReceivesShadows, false);
       ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0.0F, 1U));
-      EXPECT_NEAR(ReadFloatTexture(*probe->color).at(center).at(0), baseline, baseline * 0.005F);
+      EXPECT_NEAR(ReadFloatTexture(*probe->color).at(center).at(0), baseline,
+        baseline * 0.005F);
+    }
+  }
+
+  NOLINT_TEST_F(ShadowAdmissionGpuTest,
+    OffscreenLightAndCasterStillShadowVisibleReceiverInBothPaths)
+  {
+    constexpr unsigned extent = 129U;
+    constexpr unsigned center = extent / 2U * extent + extent / 2U;
+    view.viewport.width = view.viewport.height = float(extent);
+    camera.GetCameraAs<scene::PerspectiveCamera>()->get().SetViewport(
+      view.viewport);
+    auto output = CreateRegisteredTexture({ .width = extent,
+      .height = extent,
+      .format = Format::kRGBA32Float,
+      .is_render_target = true,
+      .initial_state = graphics::ResourceStates::kCommon });
+    framebuffer = Backend().CreateFramebuffer(
+      graphics::FramebufferDesc {}.AddColorAttachment(output));
+    auto light = AddPoint(0U);
+    ASSERT_TRUE(light.GetTransform().SetLocalPosition({ 2.0F, 0.0F, 0.0F }));
+    auto blocker = scene->CreateNode("Offscreen shadow caster");
+    blocker.GetRenderable().SetGeometry(
+      mesh_node.GetRenderable().GetGeometry());
+    blocker.GetRenderable().SetMaterialOverride(
+      0, 0, MakeEmissiveMaterial(0.0F));
+    ASSERT_TRUE(blocker.GetTransform().SetLocalScale({ 0.2F, 0.2F, 0.2F }));
+    ASSERT_TRUE(blocker.GetTransform().SetLocalPosition({ 1.0F, 0.0F, -0.3F }));
+    mesh_node.GetFlags()->get().SetLocalValue(
+      scene::SceneNodeFlags::kCastsShadows, false);
+    expected_draws = 2U;
+    bool is_forward = false;
+    bool is_spot = false;
+    probe->inspect = [&](const auto& ctx, const auto&, unsigned) {
+      const auto frustum = ctx.current_view.resolved_view->GetFrustum();
+      EXPECT_FALSE(frustum.IntersectsSphere({ 2.0F, 0.0F, 0.0F }, 0.0F));
+      EXPECT_TRUE(frustum.IntersectsSphere({ 2.0F, 0.0F, 0.0F }, 3.0F));
+      // The entire blocker lies outside the receiver's view, but intersects
+      // the light-to-receiver ray halfway between its endpoints.
+      EXPECT_FALSE(frustum.IntersectsSphere({ 1.0F, 0.0F, -0.5F }, 0.57F));
+      auto* owner = RendererPublicationProbe::GetSceneRenderer(*renderer_);
+      const auto* shadows
+        = RendererPublicationProbe::GetShadowService(*owner)->InspectShadowData(
+          ctx.current_view.view_id);
+      ASSERT_NE(shadows, nullptr);
+      EXPECT_EQ(shadows->cube_local_records.size(), is_spot ? 0U : 1U);
+      EXPECT_EQ(shadows->projected_local_records.size(), is_spot ? 1U : 0U);
+      if (!is_forward) {
+        const auto& state = RendererPublicationProbe::GetLightingService(*owner)
+                              ->GetLastDeferredLightingState();
+        EXPECT_EQ(state.point_light_count, is_spot ? 0U : 1U);
+        EXPECT_EQ(state.spot_light_count, is_spot ? 1U : 0U);
+      }
+    };
+    for (const bool spot : { false, true }) {
+      is_spot = spot;
+      SCOPED_TRACE(spot);
+      if (spot) {
+        auto candidate = std::make_unique<scene::SpotLight>();
+        candidate->SetLuminousFluxLm(1.0F);
+        candidate->Common().casts_shadows = true;
+        candidate->Common().shadow.resolution_hint
+          = scene::ShadowResolutionHint::kLow;
+        ASSERT_TRUE(light.ReplaceLight(std::move(candidate)));
+        // Rotate local -Y onto the light-to-receiver vector (-2, 0, -1).
+        ASSERT_TRUE(light.GetTransform().SetLocalRotation(
+          glm::quat { 0.70710678F, 0.31622777F, 0.0F, -0.63245553F }));
+      }
+      for (const bool forward : { false, true }) {
+        is_forward = forward;
+        SetSurface(data::MaterialDomain::kOpaque);
+        for (const float range : { 3.0F, 4096.0F }) {
+          SCOPED_TRACE(range);
+          if (spot) {
+            ASSERT_TRUE(light.EditLight<scene::SpotLight>(
+              [range](auto& candidate) { candidate.SetRange(range); }));
+          } else {
+            ASSERT_TRUE(light.EditLight<scene::PointLight>(
+              [range](auto& candidate) { candidate.SetRange(range); }));
+          }
+          auto lit = 0.0F;
+          for (const bool casts : { false, true, false }) {
+            expected_draws = casts ? 2U : 1U;
+            blocker.GetFlags()->get().SetLocalValue(
+              scene::SceneNodeFlags::kCastsShadows, casts);
+            ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0.0F, 3U));
+            const auto measured
+              = ReadFloatTexture(*probe->color).at(center).at(0);
+            if (casts) {
+              EXPECT_LT(measured, lit * 0.5F);
+            } else if (lit == 0.0F) {
+              lit = measured;
+              ASSERT_GT(lit, 1.0e-6F);
+            } else {
+              EXPECT_NEAR(measured, lit, lit * 0.005F + 2.0e-5F);
+            }
+          }
+        }
+      }
     }
   }
 
@@ -237,11 +355,13 @@ namespace {
     }
     ASSERT_NO_FATAL_FAILURE(
       RenderSurface(false, 0.0F, 1U, ExpectedViewOutcome::kRejected));
-    const auto failure = renderer_->InspectViewRenderStatus(ViewId { surface_view_id });
+    const auto failure
+      = renderer_->InspectViewRenderStatus(ViewId { surface_view_id });
     ASSERT_TRUE(failure);
     EXPECT_EQ(failure->state, ViewRenderState::kFailed);
     EXPECT_EQ(failure->failure, ViewRenderFailure::kLighting);
-    EXPECT_FALSE(failure->IsCaptureEligible(frame::SequenceNumber { sequence }));
+    EXPECT_FALSE(
+      failure->IsCaptureEligible(frame::SequenceNumber { sequence }));
     const auto rejected = renderer_->GetLightingAllocationBudget()->Snapshot();
     EXPECT_GT(rejected.rejected_requests, before.rejected_requests);
     EXPECT_GT(rejected.last_requested, rejected.last_available);
@@ -253,9 +373,11 @@ namespace {
     }
     ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F, 1U));
     EXPECT_GT(ReadFloatTexture(*probe->color).at(0).at(0), 1.0e-6F);
-    const auto recovery = renderer_->InspectViewRenderStatus(ViewId { surface_view_id });
+    const auto recovery
+      = renderer_->InspectViewRenderStatus(ViewId { surface_view_id });
     ASSERT_TRUE(recovery);
-    EXPECT_TRUE(recovery->IsCaptureEligible(frame::SequenceNumber { sequence }));
+    EXPECT_TRUE(
+      recovery->IsCaptureEligible(frame::SequenceNumber { sequence }));
     EXPECT_EQ(
       renderer_->GetLightingAllocationBudget()->Snapshot().rejected_requests,
       rejected.rejected_requests);

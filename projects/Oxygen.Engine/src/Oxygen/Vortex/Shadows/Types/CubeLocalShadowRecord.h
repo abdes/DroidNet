@@ -30,7 +30,9 @@ struct alignas(packing::kShaderDataFieldAlignment) CubeLocalShadowRecord {
   float far_plane_m { 0.0F };
   float normal_bias_m { 0.0F };
   float depth_bias { 0.0F };
-  float world_texel_size { 0.0F };
+  float world_texel_size {
+    0.0F
+  }; // Far-plane footprint; scale by receiver depth.
   ShaderVisibleIndex surface_srv { kInvalidShaderVisibleIndex };
   ShadowArrayLayer first_array_layer { kInvalidShadowArrayLayer };
   LightSelectionIndex selection_index { kInvalidLightSelectionIndex };

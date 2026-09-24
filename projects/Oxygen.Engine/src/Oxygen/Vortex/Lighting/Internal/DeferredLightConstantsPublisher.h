@@ -7,6 +7,8 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
+#include <cstdint>
 #include <expected>
 #include <memory>
 #include <optional>
@@ -45,10 +47,13 @@ private:
   struct Batch {
     upload::StagingProvider::Allocation allocation;
     std::vector<graphics::NativeView> views;
+    std::vector<ShaderVisibleIndex> indices;
+    std::uint64_t aligned_offset {};
   };
   struct Slot {
     std::optional<frame::SequenceNumber> sequence;
     std::vector<Batch> batches;
+    std::size_t used_batches {};
   };
   auto ReleaseBatch(Batch& batch) noexcept -> void;
   auto ResetSlot(Slot& slot) noexcept -> void;

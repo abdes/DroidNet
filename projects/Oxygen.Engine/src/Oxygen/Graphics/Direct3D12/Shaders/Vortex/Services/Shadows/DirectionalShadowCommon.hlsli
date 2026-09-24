@@ -32,8 +32,9 @@ static inline float SampleDirectionalShadowSurface(
         return 1.0f;
     }
 
+    // Cascade selection and compact local lists can vary the surface per lane.
     Texture2DArray<float> shadow_surface =
-        ResourceDescriptorHeap[cascade.surface_srv];
+        ResourceDescriptorHeap[NonUniformResourceIndex(cascade.surface_srv)];
     const uint layer =
         cascade.array_layer;
     const float2 inverse_resolution =
@@ -124,7 +125,7 @@ static inline float SampleSpotShadowSurface(
     }
 
     Texture2DArray<float> shadow_surface =
-        ResourceDescriptorHeap[spot.surface_srv];
+        ResourceDescriptorHeap[NonUniformResourceIndex(spot.surface_srv)];
     const uint layer =
         spot.array_layer;
     const float2 inverse_resolution =
@@ -168,7 +169,13 @@ static inline float ComputeSpotShadowVisibility(
         dot(light_direction_to_source, light_direction_to_source) > 1.0e-8f
             ? light_direction_to_source
             : spot.shadow_origin_ws - world_position);
-    const float world_texel_size = max(spot.world_texel_size, 0.0f);
+    // The published footprint is at the far plane. Perspective texels shrink
+    // with receiver depth; using the far footprint can move nearby receivers
+    // by metres for long-range imported lights and erase their shadows.
+    const float receiver_axial_distance = max(0.0f,
+        dot(spot.light_view_projection[3], float4(world_position, 1.0f)));
+    const float world_texel_size = max(spot.world_texel_size, 0.0f)
+        * saturate(receiver_axial_distance / spot.far_plane_m);
     const float normal_bias = max(spot.normal_bias_m, 0.0f)
         + world_texel_size * 0.75f;
     const float receiver_bias = world_texel_size * 0.5f;
@@ -238,7 +245,7 @@ static inline float SamplePointShadowSurface(
     }
 
     Texture2DArray<float> shadow_surface =
-        ResourceDescriptorHeap[point_shadow.surface_srv];
+        ResourceDescriptorHeap[NonUniformResourceIndex(point_shadow.surface_srv)];
     const uint base_layer =
         point_shadow.first_array_layer;
     const uint layer = base_layer + face_index;
@@ -282,7 +289,13 @@ static inline float ComputePointShadowVisibility(
         dot(light_direction_to_source, light_direction_to_source) > 1.0e-8f
             ? light_direction_to_source
             : point_shadow.shadow_origin_ws - world_position);
-    const float world_texel_size = max(point_shadow.world_texel_size, 0.0f);
+    // Each cube face has a 90-degree perspective projection. Its texel
+    // footprint is 2 * axial receiver distance / resolution, not 2 * range.
+    const float3 unbiased_delta = abs(world_position - point_shadow.shadow_origin_ws);
+    const float receiver_axial_distance = max(unbiased_delta.x,
+        max(unbiased_delta.y, unbiased_delta.z));
+    const float world_texel_size = max(point_shadow.world_texel_size, 0.0f)
+        * saturate(receiver_axial_distance / point_shadow.far_plane_m);
     const float normal_bias = max(point_shadow.normal_bias_m, 0.0f)
         + world_texel_size * 0.75f;
     const float receiver_bias = world_texel_size * 0.5f;

@@ -66,7 +66,15 @@ auto DeferredLightConstantsPublisher::OnFrameStart(
   if (storage.sequence == sequence) {
     return;
   }
-  ResetSlot(storage);
+  // The renderer has waited for this slot's GPU consumers. Retain descriptors
+  // for matching arena ranges, and retire batches unused on its previous use.
+  for (std::size_t index = storage.used_batches; index < storage.batches.size();
+    ++index) {
+    ReleaseBatch(storage.batches[index]);
+  }
+  storage.batches.erase(
+    storage.batches.begin() + storage.used_batches, storage.batches.end());
+  storage.used_batches = 0U;
   storage.sequence = sequence;
 }
 
@@ -96,7 +104,9 @@ auto DeferredLightConstantsPublisher::Publish(
   if (!allocation) {
     return std::unexpected(allocation.error());
   }
-  auto batch = Batch { .allocation = std::move(*allocation), .views = {} };
+  auto batch = Batch {
+    .allocation = std::move(*allocation), .views = {}, .indices = {}
+  };
   try {
     auto& registry = gfx->GetResourceRegistry();
     if (!registry.Contains(batch.allocation.Buffer())) {
@@ -109,15 +119,53 @@ auto DeferredLightConstantsPublisher::Publish(
     }
     auto memory = std::span(batch.allocation.Ptr(),
       static_cast<std::size_t>(batch.allocation.Size().get()));
-    auto& batches = slots_.at(current_slot_.get()).batches;
-    batches.reserve(batches.size() + 1U);
-    indices.reserve(records.size());
-    batch.views.reserve(records.size());
+    batch.aligned_offset = base + padding;
+    auto& storage = slots_.at(current_slot_.get());
+    auto& batches = storage.batches;
+    // Copy current values even when the immutable CBV descriptions are reused.
     for (const auto& [index, record] : std::views::enumerate(records)) {
       const auto record_offset = static_cast<std::size_t>(index) * kStride;
       auto destination = memory.subspan(padding + record_offset, kStride);
       std::ranges::fill(destination, std::byte {});
       std::memcpy(destination.data(), &record, sizeof(DeferredLightConstants));
+    }
+    if (transfers_) {
+      transfers_->NotifyInlineWrite(
+        SizeBytes { batch_bytes }, "LightingService.DeferredLight.Constants");
+    }
+    const auto unused = batches.begin() + storage.used_batches;
+    const auto reusable
+      = std::find_if(unused, batches.end(), [&](const Batch& cached) {
+          return &cached.allocation.Buffer() == &batch.allocation.Buffer()
+            && cached.aligned_offset == batch.aligned_offset
+            && cached.views.size() == records.size();
+        });
+    if (reusable != batches.end()) {
+      indices = reusable->indices;
+      std::iter_swap(unused, reusable);
+      unused->allocation = std::move(batch.allocation);
+      ++storage.used_batches;
+      return indices;
+    }
+    // A larger/reordered view can overlap several old batch ranges. Those
+    // unused descriptions must retire before registering the replacement.
+    for (auto it = unused; it != batches.end(); ++it) {
+      if (&it->allocation.Buffer() == &batch.allocation.Buffer()
+        && it->aligned_offset < batch.aligned_offset + batch_bytes
+        && batch.aligned_offset
+          < it->aligned_offset + it->views.size() * kStride) {
+        ReleaseBatch(*it);
+      }
+    }
+    if (storage.used_batches < batches.size()) {
+      ReleaseBatch(batches[storage.used_batches]);
+    } else {
+      batches.reserve(batches.size() + 1U);
+    }
+    batch.views.reserve(records.size());
+    batch.indices.reserve(records.size());
+    for (std::size_t index = 0U; index < records.size(); ++index) {
+      const auto record_offset = index * kStride;
       auto description = graphics::BufferViewDescription {};
       description.view_type = graphics::ResourceViewType::kConstantBuffer;
       description.visibility = graphics::DescriptorVisibility::kShaderVisible;
@@ -137,13 +185,15 @@ auto DeferredLightConstantsPublisher::Publish(
         ReleaseBatch(batch);
         return std::unexpected(UploadError::kResourceAllocFailed);
       }
-      indices.push_back(descriptor);
+      batch.indices.push_back(descriptor);
     }
-    if (transfers_) {
-      transfers_->NotifyInlineWrite(
-        SizeBytes { batch_bytes }, "LightingService.DeferredLight.Constants");
+    indices = batch.indices;
+    if (storage.used_batches < batches.size()) {
+      batches[storage.used_batches] = std::move(batch);
+    } else {
+      batches.push_back(std::move(batch));
     }
-    batches.push_back(std::move(batch));
+    ++storage.used_batches;
     return indices;
   } catch (const std::exception& error) {
     ReleaseBatch(batch);
@@ -157,21 +207,20 @@ auto DeferredLightConstantsPublisher::ReleaseBatch(Batch& batch) noexcept
 {
   auto gfx = graphics_.lock();
   if (!gfx || batch.views.empty()) {
+    batch.views.clear();
+    batch.indices.clear();
     return;
   }
   try {
     auto& registry = gfx->GetResourceRegistry();
     if (registry.Contains(batch.allocation.Buffer())) {
-      for (const auto& view : batch.views) {
-        if (view->IsValid()) {
-          registry.UnRegisterView(batch.allocation.Buffer(), view);
-        }
-      }
+      registry.UnRegisterViews(batch.allocation.Buffer(), batch.views);
     }
   } catch (const std::exception& error) {
     LOG_F(ERROR, "Deferred constant retirement failed: {}", error.what());
   }
   batch.views.clear();
+  batch.indices.clear();
 }
 
 auto DeferredLightConstantsPublisher::ResetSlot(Slot& slot) noexcept -> void
@@ -180,6 +229,7 @@ auto DeferredLightConstantsPublisher::ResetSlot(Slot& slot) noexcept -> void
     ReleaseBatch(batch);
   }
   slot.batches.clear();
+  slot.used_batches = 0U;
   slot.sequence.reset();
 }
 

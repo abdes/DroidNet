@@ -12,6 +12,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <span>
 #include <stdexcept>
 #include <type_traits>
 #include <unordered_map>
@@ -1076,6 +1077,23 @@ public:
       view);
   }
 
+  //! Remove a retired subset of views while retaining the resource and its
+  //! other views. Duplicate and unknown views are ignored. The caller must
+  //! ensure the GPU has finished consuming the supplied views.
+  /*!
+   Scans the resource's descriptors and the view cache once for the batch,
+   avoiding quadratic retirement when many views share an upload arena.
+   @throws std::runtime_error if a nonempty batch names an unregistered
+   resource.
+  */
+  template <SupportedResource Resource>
+  auto UnRegisterViews(
+    const Resource& resource, const std::span<const NativeView> views) -> void
+  {
+    UnRegisterViewBatch(
+      NativeResource { &resource, Resource::ClassTypeId() }, views);
+  }
+
   //! Completely remove a resource and all its associated views from the
   //! registry.
   /*!
@@ -1291,6 +1309,9 @@ private:
 
   OXGN_GFX_API auto UnRegisterView(
     const NativeResource& resource, const NativeView& view) -> void;
+
+  OXGN_GFX_API auto UnRegisterViewBatch(
+    const NativeResource& resource, std::span<const NativeView> views) -> void;
 
   OXGN_GFX_API auto UnRegisterResource(const NativeResource& resource) -> void;
   OXGN_GFX_API auto UnRegisterResourceViews(const NativeResource& resource)

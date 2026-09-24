@@ -40,6 +40,8 @@ target_sources(
     "ResourceCreationCounter.h"
     "LightingWorkload.cpp"
     "LightingWorkload.h"
+    "LightingWorkloadScene.cpp"
+    "LightingWorkloadScene.h"
   PUBLIC
     FILE_SET HEADERS
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
@@ -48,6 +50,7 @@ target_sources(
       "D3D12MemoryCapture.h"
       "ResourceCreationCounter.h"
       "LightingWorkload.h"
+      "LightingWorkloadScene.h"
 )
 arrange_target_files_for_ide(${META_MODULE_TARGET})
 
@@ -68,6 +71,8 @@ target_link_libraries(
   PUBLIC
     oxygen::core
     oxygen::profiling
+    oxygen::scene
+    oxygen::data
     nlohmann_json::nlohmann_json
 )
 

@@ -402,6 +402,12 @@ the current independent 0.1 m range floor cannot silently alter authored range.
 Apply authored depth bias once in its depth-pass owner; receiver normal/texel
 offsets stay separate. Float-packed layer/index metadata is removed.
 
+For both perspective local records, `world_texel_size` denotes the footprint at
+the far plane. Receiver offsets scale it by positive axial receiver depth divided
+by `far_plane_m`; using the far footprint directly can erase nearby shadows when
+support spans kilometres. The cube axial depth is its dominant absolute
+light-relative coordinate; the spot axial depth is its unbiased clip w.
+
 Cube face order remains +X,-X,+Y,-Y,+Z,-Z, with existing world-axis bases and
 matching face selection. For local linear reversed depth, use the selected
 projection's positive axial distance (clip w) and its published far distance;

@@ -6,6 +6,17 @@
 
 ## EX07 production contract
 
+Perspective local-shadow receiver offsets use the texel footprint at the
+receiver's positive axial depth, not at the projection far plane. The published
+`world_texel_size` is the far-plane footprint; multiply it by receiver depth
+divided by `far_plane_m`. Cube faces use the dominant absolute light-relative
+coordinate, and spots use unbiased clip w. Authored normal bias remains in
+metres and separate from this projection-derived footprint. This correction
+retains long-range light and off-screen caster contributions. The full point
+depth/filter/bias implementation is not numerically identical to UE5.7; see the
+[New Sponza analysis](../plan/EX07-NewSponza-regression-analysis.md) for the
+source comparison and remaining qualification work.
+
 The baseline evidence below remains historical. EX07 supersedes its bounded
 arrays and Stage-18 deferral with the [indexed shadow-family ABI](lighting-gpu-abi.md#shadow-association-and-deferred-draws),
 [analytic source and center-support model](../../renderer-core/physically-based-rendering.md#production-local-lighting-and-brdf-model-2)
