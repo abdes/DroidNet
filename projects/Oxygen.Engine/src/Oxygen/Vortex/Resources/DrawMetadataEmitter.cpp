@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -230,6 +231,7 @@ auto DrawMetadataEmitter::OnFrameStart(vortex::RendererTag /*tag*/,
   keys_.clear();
   partitions_.clear();
   draw_bounding_spheres_.clear();
+  shadow_caster_sources_.clear();
   velocity_publication_sources_.clear();
   instance_transform_indices_.clear();
   draw_metadata_buffer_.OnFrameStart(sequence, slot);
@@ -248,6 +250,7 @@ auto DrawMetadataEmitter::ResetViewData() -> void
   keys_.clear();
   partitions_.clear();
   draw_bounding_spheres_.clear();
+  shadow_caster_sources_.clear();
   velocity_publication_sources_.clear();
   instance_transform_indices_.clear();
   draw_metadata_srv_index_ = kInvalidShaderVisibleIndex;
@@ -377,6 +380,18 @@ auto DrawMetadataEmitter::EmitDrawMetadata(
     };
     // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
     draw_bounding_spheres_[index] = item.world_bounding_sphere;
+    if (dm.flags.IsSet(PassMaskBit::kShadowCaster)) {
+      shadow_caster_sources_.push_back(ShadowCasterSource {
+        .draw = dm,
+        .bounds = item.world_bounding_sphere,
+        .node = item.node_handle,
+        .geometry_asset_key = item.geometry.asset_key,
+        .lod_index = item.geometry.lod_index,
+        .geometry_generation = geo_handle.GenerationValue().get(),
+        .geometry_content_revision = indices.content_revision,
+        .material_generation = item.material_handle.GenerationValue().get(),
+      });
+    }
     // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
     velocity_publication_sources_[index]
       = DrawMetadataEmitter::VelocityPublicationSource {
@@ -769,13 +784,18 @@ auto DrawMetadataEmitter::ApplyInstancingBatches() -> void
       glm::vec3 bounds_min { (std::numeric_limits<float>::max)() };
       glm::vec3 bounds_max { (std::numeric_limits<float>::lowest)() };
       bool have_valid_bound = false;
+      bool all_bounds_valid = true;
       for (const auto draw_idx : indices) {
         if (draw_idx >= draw_bounding_spheres_.size()) {
-          continue;
+          all_bounds_valid = false;
+          break;
         }
         const auto& sphere = draw_bounding_spheres_[draw_idx];
-        if (sphere.w <= 0.0F) {
-          continue;
+        if (sphere.w <= 0.0F || !std::isfinite(sphere.x)
+          || !std::isfinite(sphere.y) || !std::isfinite(sphere.z)
+          || !std::isfinite(sphere.w)) {
+          all_bounds_valid = false;
+          break;
         }
         const glm::vec3 center { sphere.x, sphere.y, sphere.z };
         const glm::vec3 radius_vec { sphere.w, sphere.w, sphere.w };
@@ -783,7 +803,7 @@ auto DrawMetadataEmitter::ApplyInstancingBatches() -> void
         bounds_max = glm::max(bounds_max, center + radius_vec);
         have_valid_bound = true;
       }
-      if (have_valid_bound) {
+      if (have_valid_bound && all_bounds_valid) {
         const glm::vec3 merged_center = 0.5F * (bounds_min + bounds_max);
         float merged_radius = 0.0F;
         for (const auto draw_idx : indices) {
@@ -799,8 +819,6 @@ auto DrawMetadataEmitter::ApplyInstancingBatches() -> void
         }
         merged_bound = glm::vec4(
           merged_center.x, merged_center.y, merged_center.z, merged_radius);
-      } else {
-        merged_bound = draw_bounding_spheres_[indices[0]];
       }
     }
     batched_bounds.push_back(merged_bound);

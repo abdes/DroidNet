@@ -30,6 +30,8 @@ public:
   [[nodiscard]] OXGN_VRTX_API auto BuildSpotRecords(
     const PreparedViewShadowInput& view_input,
     std::span<const FrameLocalLightSelection> local_lights,
+    std::span<const ConventionalShadowTargetAllocator::LocalSelection>
+      selections,
     const ConventionalShadowTargetAllocator::SpotAllocation& allocation) const
     -> std::vector<ProjectedLocalShadowRecord>;
 };

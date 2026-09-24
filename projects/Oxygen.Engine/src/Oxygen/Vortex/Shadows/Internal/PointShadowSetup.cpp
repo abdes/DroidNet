@@ -74,6 +74,8 @@ namespace {
 auto PointShadowSetup::BuildPointRecords(
   const PreparedViewShadowInput& view_input,
   const std::span<const FrameLocalLightSelection> local_lights,
+  const std::span<const ConventionalShadowTargetAllocator::LocalSelection>
+    selections,
   const ConventionalShadowTargetAllocator::PointAllocation& allocation) const
   -> std::vector<CubeLocalShadowRecord>
 {
@@ -87,13 +89,14 @@ auto PointShadowSetup::BuildPointRecords(
     ? 1.0F / static_cast<float>(allocation.resolution.x)
     : 0.0F;
 
-  auto point_shadow_index = 0U;
-  for (const auto& [selection_index, light] :
-    std::views::enumerate(local_lights)) {
-    if (!UsesCubeLocalShadow(light) || !HasLocalShadowInfluence(light)) {
+  for (const auto& selection : selections) {
+    const auto selection_index = selection.selection_index.get();
+    const auto& light = local_lights[selection_index];
+    if (!UsesCubeLocalShadow(light)
+      || !HasLocalShadowInfluence(light, view_input.resolved_view.get())) {
       continue;
     }
-    if (point_shadow_index >= allocation.shadow_count) {
+    if (selection.slot.offset >= allocation.shadow_count) {
       break;
     }
 
@@ -124,10 +127,9 @@ auto PointShadowSetup::BuildPointRecords(
     point.surface_srv = allocation.surface_srv;
     point.selection_index
       = LightSelectionIndex { static_cast<std::uint32_t>(selection_index) };
-    point.first_array_layer = ShadowArrayLayer { point_shadow_index
+    point.first_array_layer = ShadowArrayLayer { selection.slot.offset
       * CubeLocalShadowRecord::kFaceCount };
     point.inverse_resolution = { inverse_resolution, inverse_resolution };
-    ++point_shadow_index;
   }
 
   return records;

@@ -14,7 +14,9 @@
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Vortex/ScenePrep/RenderItemData.h>
 #include <Oxygen/Vortex/Types/DrawMetadata.h>
+#include <Oxygen/Vortex/Types/MaterialShadingConstants.h>
 #include <Oxygen/Vortex/Types/PassMask.h>
+#include <Oxygen/Vortex/Types/ShadowCasterSource.h>
 #include <Oxygen/Vortex/Types/VelocityPublications.h>
 
 namespace oxygen::vortex {
@@ -60,6 +62,9 @@ struct PreparedSceneFrame {
     draw_bounding_spheres; // one per draw metadata record
   std::span<const sceneprep::RenderItemData>
     render_items; // per-view collected items captured at scene-prep finalize
+  std::span<const ShadowCasterSource> shadow_caster_sources;
+  std::span<const MaterialShadingConstants> shadow_materials;
+  std::span<const std::uint64_t> shadow_texture_revisions;
   std::span<const SkinnedPosePublication> current_skinned_pose_publications;
   std::span<const SkinnedPosePublication> previous_skinned_pose_publications;
   std::span<const MorphPublication> current_morph_publications;

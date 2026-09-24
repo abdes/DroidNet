@@ -491,6 +491,10 @@ namespace {
       storage.draw_bounding_spheres.assign(
         draw_bounding_spheres.begin(), draw_bounding_spheres.end());
       prepared_frame.draw_bounding_spheres = storage.draw_bounding_spheres;
+      const auto shadow_sources = draw_emitter->GetShadowCasterSources();
+      storage.shadow_caster_sources.assign(
+        shadow_sources.begin(), shadow_sources.end());
+      prepared_frame.shadow_caster_sources = storage.shadow_caster_sources;
       prepared_frame.bindless_draw_metadata_slot
         = draw_emitter->GetDrawMetadataSrvIndex();
       prepared_frame.bindless_draw_bounds_slot
@@ -520,6 +524,9 @@ namespace {
       material_binder != nullptr) {
       prepared_frame.bindless_material_shading_slot
         = material_binder->GetMaterialShadingSrvIndex();
+      const auto constants = material_binder->GetMaterialShadingConstants();
+      storage.shadow_materials.assign(constants.begin(), constants.end());
+      prepared_frame.shadow_materials = storage.shadow_materials;
     }
   }
 
@@ -670,6 +677,15 @@ void InitViewsModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
       *scene, *view_entry.resolved_view, ctx.frame_sequence, scene_prep_state_);
     scene_prep_->FinalizeView(scene_prep_state_);
     PublishPreparedSceneFrame(scene_prep_state_, storage);
+    storage.shadow_texture_revisions.clear();
+    for (const auto& material : storage.shadow_materials) {
+      storage.shadow_texture_revisions.push_back(texture_binder_ != nullptr
+          ? texture_binder_->GetContentRevision(
+              material.base_color_texture_index)
+          : 0U);
+    }
+    storage.prepared_frame.shadow_texture_revisions
+      = storage.shadow_texture_revisions;
     storage.prepared_frame.exposure
       = ResolvePreparedFrameExposure(*scene, view_entry, post_process_);
     PublishVelocityPublications(renderer_, runtime_motion_snapshot,

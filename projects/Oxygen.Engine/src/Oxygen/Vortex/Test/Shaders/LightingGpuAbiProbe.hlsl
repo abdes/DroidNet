@@ -255,7 +255,7 @@ void CS(uint3 thread : SV_DispatchThreadID) {
         output.Store4(address + 80, asuint(float4(value.far_plane_m, value.normal_bias_m,
             value.depth_bias, value.world_texel_size)));
         output.Store4(address + 96, uint4(value.surface_srv, value.array_layer,
-            value.selection_index, value.reserved0));
+            value.selection_index, asuint(value.shadow_strength)));
         output.Store4(address + 112, uint4(asuint(value.inverse_resolution), value.reserved1));
     } else if (g_RecordKind == 15) {
         StructuredBuffer<CubeLocalShadowRecord> inputs = ResourceDescriptorHeap[args.x];
@@ -272,7 +272,7 @@ void CS(uint3 thread : SV_DispatchThreadID) {
         output.Store4(address + 400, asuint(float4(value.far_plane_m, value.normal_bias_m,
             value.depth_bias, value.world_texel_size)));
         output.Store4(address + 416, uint4(value.surface_srv, value.first_array_layer,
-            value.selection_index, value.reserved0));
+            value.selection_index, asuint(value.shadow_strength)));
         output.Store4(address + 432, uint4(asuint(value.inverse_resolution), value.reserved1));
     } else if (g_RecordKind == 16) {
         StructuredBuffer<VortexShadowFrameBindings> inputs = ResourceDescriptorHeap[args.x];

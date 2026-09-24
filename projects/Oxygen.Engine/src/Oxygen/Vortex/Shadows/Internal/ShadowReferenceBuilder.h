@@ -8,6 +8,7 @@
 
 #include <expected>
 
+#include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Vortex/Lighting/Types/LightingPreparationFailure.h>
 #include <Oxygen/Vortex/api_export.h>
 
@@ -20,7 +21,8 @@ namespace shadows::internal {
   //! Build dense selection maps from actual projection records, never kind
   //! counters.
   [[nodiscard]] OXGN_VRTX_API auto BuildShadowReferences(
-    const FrameLightSelection& selection, ShadowFrameData& data)
+    const FrameLightSelection& selection, ShadowFrameData& data,
+    const ResolvedView* view = nullptr)
     -> std::expected<void, LightingPreparationFailure>;
 
 } // namespace shadows::internal

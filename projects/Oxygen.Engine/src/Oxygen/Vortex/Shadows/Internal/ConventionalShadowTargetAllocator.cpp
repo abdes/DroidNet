@@ -11,6 +11,7 @@
 #include <limits>
 #include <memory>
 #include <span>
+#include <stdexcept>
 #include <unordered_set>
 #include <utility>
 
@@ -20,6 +21,7 @@
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Graphics/Common/AllocationBudget.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
@@ -30,6 +32,7 @@
 #include <Oxygen/Scene/Light/LightCommon.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/Shadows/Internal/ConventionalShadowTargetAllocator.h>
+#include <Oxygen/Vortex/Shadows/Internal/ShadowEligibility.h>
 #include <Oxygen/Vortex/Shadows/Types/CubeLocalShadowRecord.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
 #include <Oxygen/Vortex/Types/LightingIndices.h>
@@ -87,20 +90,6 @@ namespace {
       ResolveDirectionalResolutionBudget(quality_tier));
   }
 
-  auto ResolveSpotResolution(const scene::ShadowResolutionHint resolution_hint,
-    const ShadowQualityTier quality_tier) -> std::uint32_t
-  {
-    return (std::min)(ResolveLocalResolutionRequest(resolution_hint),
-      ResolveDirectionalResolutionBudget(quality_tier));
-  }
-
-  auto ResolvePointResolution(const scene::ShadowResolutionHint resolution_hint,
-    const ShadowQualityTier quality_tier) -> std::uint32_t
-  {
-    return (std::min)(ResolveLocalResolutionRequest(resolution_hint),
-      ResolveDirectionalResolutionBudget(quality_tier));
-  }
-
   auto ResolveDepthSrvFormat(const Format format) -> Format
   {
     return format == Format::kDepth32 ? Format::kR32Float : format;
@@ -111,6 +100,10 @@ namespace {
 ConventionalShadowTargetAllocator::ConventionalShadowTargetAllocator(
   Renderer& renderer)
   : renderer_(renderer)
+  , slot_reuse_(slot_reclaimer_, [this](ShadowSlotIndex index, std::monostate) {
+    slots_.at(index.get()).occupied = false;
+    free_slots_.push_back(index);
+  })
 {
 }
 
@@ -119,6 +112,9 @@ ConventionalShadowTargetAllocator::~ConventionalShadowTargetAllocator()
   for (auto& [id, allocations] : views_) {
     Retire(allocations);
   }
+  // Nexus callbacks reference this owner. Drain before its storage is
+  // destroyed.
+  slot_reclaimer_.ProcessAllDeferredReleases();
 }
 
 auto ConventionalShadowTargetAllocator::Retire(SurfaceAllocation& allocation)
@@ -148,28 +144,136 @@ auto ConventionalShadowTargetAllocator::Retire(SurfaceAllocation& allocation)
 auto ConventionalShadowTargetAllocator::Retire(ViewAllocations& allocations)
   -> void
 {
+  for (const auto& [source, slot] : allocations.local_owners) {
+    slot_reuse_.Release(slot.handle);
+  }
+  allocations.local_owners.clear();
   for (auto& [id, surface] : allocations.directional) {
     Retire(surface);
   }
-  Retire(allocations.spot);
-  Retire(allocations.point);
+  for (auto& [resolution, surface] : allocations.spot) {
+    Retire(surface);
+  }
+  for (auto& [resolution, surface] : allocations.point) {
+    Retire(surface);
+  }
 }
 
 auto ConventionalShadowTargetAllocator::OnFrameStart(
-  frame::SequenceNumber sequence) -> void
+  frame::SequenceNumber sequence, frame::Slot slot) -> void
 {
   if (sequence == current_sequence_) {
     return;
   }
+  slot_reuse_.OnBeginFrame(slot);
   for (auto it = views_.begin(); it != views_.end();) {
     if (it->second.last_used != current_sequence_) {
       Retire(it->second);
       it = views_.erase(it);
     } else {
+      const auto retire_unused = [this, view_id = it->first](
+                                   auto& buckets, bool cube) {
+        for (auto bucket = buckets.begin(); bucket != buckets.end();) {
+          const auto [resolution, chunk] = bucket->first;
+          const auto capacity = LocalChunkCapacity(resolution, cube);
+          const auto occupied
+            = std::ranges::any_of(slots_, [&](const auto& location) {
+                return location.occupied && location.view_id == view_id
+                  && location.resolution == resolution && location.cube == cube
+                  && location.ordinal / capacity == chunk;
+              });
+          if (!occupied && bucket->second.last_used != current_sequence_) {
+            Retire(bucket->second);
+            bucket = buckets.erase(bucket);
+          } else {
+            ++bucket;
+          }
+        }
+      };
+      retire_unused(it->second.spot, false);
+      retire_unused(it->second.point, true);
       ++it;
     }
   }
   current_sequence_ = sequence;
+}
+
+auto ConventionalShadowTargetAllocator::RetainLocalSources(ViewId view_id,
+  std::uint64_t scene_generation,
+  std::span<const FrameLocalLightSelection> lights) -> void
+{
+  auto& view = Touch(view_id);
+  auto active = std::unordered_set<scene::NodeHandle> {};
+  for (const auto& light : lights) {
+    // Camera rejection never ends a light's ownership.
+    if (HasLocalShadowInfluence(light)) {
+      active.insert(light.source_node);
+    }
+  }
+  std::erase_if(view.local_owners, [&](const auto& owner) {
+    if (view.scene_generation != scene_generation
+      || !active.contains(owner.first)) {
+      slot_reuse_.Release(owner.second.handle);
+      return true;
+    }
+    return false;
+  });
+  view.scene_generation = scene_generation;
+}
+
+auto ConventionalShadowTargetAllocator::AcquireLocalSlot(ViewId view_id,
+  scene::NodeHandle source, std::uint32_t resolution, bool cube) -> LocalSlot
+{
+  if (!source.IsValid() || resolution == 0U) {
+    throw std::invalid_argument(
+      "Local shadow ownership requires a light identity and resolution");
+  }
+  auto& view = Touch(view_id);
+  auto& owners = view.local_owners;
+  if (auto found = owners.find(source); found != owners.end()) {
+    if (found->second.resolution == resolution && found->second.cube == cube) {
+      return found->second;
+    }
+    slot_reuse_.Release(found->second.handle);
+    owners.erase(found);
+  }
+  auto occupied = std::unordered_set<std::uint32_t> {};
+  for (const auto& location : slots_) {
+    if (location.occupied && location.view_id == view_id
+      && location.resolution == resolution && location.cube == cube) {
+      occupied.insert(location.ordinal);
+    }
+  }
+  const auto capacity = LocalChunkCapacity(resolution, cube);
+  const auto& surfaces = cube ? view.point : view.spot;
+  auto ordinal = 0U;
+  for (;;) {
+    if (occupied.contains(ordinal)) {
+      ++ordinal;
+      continue;
+    }
+    const auto surface = surfaces.find({ resolution, ordinal / capacity });
+    if (surface != surfaces.end() && surface->second.surface
+      && ordinal % capacity >= surface->second.layers / (cube ? 6U : 1U)) {
+      // A budget-tight chunk may have been created without spare layers.
+      // Append a new chunk instead of replacing its existing owners' surface.
+      ordinal = (ordinal / capacity + 1U) * capacity;
+      continue;
+    }
+    break;
+  }
+  auto index = ShadowSlotIndex { static_cast<std::uint32_t>(slots_.size()) };
+  if (free_slots_.empty()) {
+    slots_.emplace_back();
+  } else {
+    index = free_slots_.back();
+    free_slots_.pop_back();
+  }
+  slots_[index.get()] = { view_id, resolution, ordinal, cube, true };
+  auto slot = LocalSlot { slot_reuse_.ActivateSlot(index), resolution,
+    ordinal / capacity, ordinal % capacity, cube };
+  owners.emplace(source, slot);
+  return slot;
 }
 
 auto ConventionalShadowTargetAllocator::Touch(ViewId view_id)
@@ -199,13 +303,14 @@ auto ConventionalShadowTargetAllocator::RetainDirectionalSurfaces(
 
 auto ConventionalShadowTargetAllocator::AcquireSurface(
   SurfaceAllocation& current, std::uint32_t layers, std::uint32_t resolution,
-  bool cube, const char* name) -> bool
+  bool cube, const char* name, std::uint32_t capacity_layers) -> bool
 {
   if (layers == 0U || resolution == 0U) {
     return false;
   }
-  if (current.surface && current.srv.IsValid() && current.layers == layers
+  if (current.surface && current.srv.IsValid() && current.layers >= layers
     && current.resolution == glm::uvec2 { resolution, resolution }) {
+    current.last_used = current_sequence_;
     return true;
   }
   auto gfx = renderer_.GetGraphics();
@@ -214,8 +319,8 @@ auto ConventionalShadowTargetAllocator::AcquireSurface(
   }
   graphics::TextureDesc desc {};
   desc.width = desc.height = resolution;
-  desc.array_size = layers;
-  desc.format = Format::kDepth32Stencil8;
+  desc.array_size = (std::max)(layers, capacity_layers);
+  desc.format = Format::kDepth32;
   desc.texture_type
     = cube ? TextureType::kTextureCubeArray : TextureType::kTexture2DArray;
   desc.debug_name = name;
@@ -224,7 +329,17 @@ auto ConventionalShadowTargetAllocator::AcquireSurface(
   desc.clear_value = graphics::Color { 0.0F, 0.0F, 0.0F, 0.0F };
   desc.initial_state = graphics::ResourceStates::kDepthWrite;
   desc.allocation_budget = { .owner = renderer_.GetLightingAllocationBudget() };
-  auto surface = gfx->CreateTexture(desc);
+  auto surface = std::shared_ptr<graphics::Texture> {};
+  try {
+    surface = gfx->CreateTexture(desc);
+  } catch (const graphics::AllocationBudgetExceeded&) {
+    if (desc.array_size == layers) {
+      throw;
+    }
+    // Spare chunk capacity must not reject otherwise admissible shadows.
+    desc.array_size = layers;
+    surface = gfx->CreateTexture(desc);
+  }
   if (!surface) {
     return false;
   }
@@ -263,7 +378,8 @@ auto ConventionalShadowTargetAllocator::AcquireSurface(
     .surface = std::move(surface),
     .srv = srv,
     .resolution = { resolution, resolution },
-    .layers = layers,
+    .layers = desc.array_size,
+    .last_used = current_sequence_,
   };
   return true;
 }
@@ -287,48 +403,74 @@ auto ConventionalShadowTargetAllocator::AcquireDirectionalSurface(
     .surface = surface.surface,
     .surface_srv = surface.srv,
     .resolution = surface.resolution,
-    .cascade_count = surface.layers,
+    .cascade_count = cascade_count,
   };
 }
 
-auto ConventionalShadowTargetAllocator::AcquireSpotSurface(
-  ViewId view_id, std::uint32_t shadow_count, scene::ShadowResolutionHint hint)
+auto ConventionalShadowTargetAllocator::AcquireSpotSurface(ViewId view_id,
+  std::uint32_t shadow_count, std::uint32_t resolution, std::uint32_t chunk)
   -> SpotAllocation
 {
-  auto& surface = Touch(view_id).spot;
-  if (!AcquireSurface(surface, shadow_count,
-        ResolveSpotResolution(hint, renderer_.GetShadowQualityTier()), false,
-        "Vortex.SpotShadowSurface")) {
+  const auto capacity = LocalChunkCapacity(resolution, false);
+  if (shadow_count == 0U || shadow_count > capacity) {
+    return {};
+  }
+  auto& surface = Touch(view_id).spot[{ resolution, chunk }];
+  if (!AcquireSurface(surface, shadow_count, resolution, false,
+        "Vortex.SpotShadowSurface", capacity)) {
     return {};
   }
   return {
     .surface = surface.surface,
     .surface_srv = surface.srv,
     .resolution = surface.resolution,
-    .shadow_count = surface.layers,
+    .shadow_count = shadow_count,
   };
 }
 
-auto ConventionalShadowTargetAllocator::AcquirePointSurface(
-  ViewId view_id, std::uint32_t shadow_count, scene::ShadowResolutionHint hint)
+auto ConventionalShadowTargetAllocator::AcquirePointSurface(ViewId view_id,
+  std::uint32_t shadow_count, std::uint32_t resolution, std::uint32_t chunk)
   -> PointAllocation
 {
   constexpr auto faces = CubeLocalShadowRecord::kFaceCount;
-  if (shadow_count > std::numeric_limits<std::uint32_t>::max() / faces) {
+  const auto capacity = LocalChunkCapacity(resolution, true);
+  if (shadow_count == 0U || shadow_count > capacity) {
     return {};
   }
-  auto& surface = Touch(view_id).point;
-  if (!AcquireSurface(surface, shadow_count * faces,
-        ResolvePointResolution(hint, renderer_.GetShadowQualityTier()), true,
-        "Vortex.PointShadowCubeSurface")) {
+  auto& surface = Touch(view_id).point[{ resolution, chunk }];
+  if (!AcquireSurface(surface, shadow_count * faces, resolution, true,
+        "Vortex.PointShadowCubeSurface", capacity * faces)) {
     return {};
   }
   return {
     .surface = surface.surface,
     .surface_srv = surface.srv,
     .resolution = surface.resolution,
-    .shadow_count = surface.layers / faces,
+    .shadow_count = shadow_count,
   };
+}
+
+auto ConventionalShadowTargetAllocator::ResolveLocalResolution(
+  const scene::ShadowResolutionHint hint) const -> std::uint32_t
+{
+  return (std::min)(ResolveLocalResolutionRequest(hint),
+    ResolveDirectionalResolutionBudget(renderer_.GetShadowQualityTier()));
+}
+
+auto ConventionalShadowTargetAllocator::LocalChunkCapacity(
+  const std::uint32_t resolution, const bool cube) -> std::uint32_t
+{
+  // Append bounded chunks instead of replacing a multi-gigabyte array when
+  // one more light becomes relevant. Existing chunks keep their allocations.
+  constexpr std::uint64_t kTargetChunkBytes = 64ULL * 1024ULL * 1024ULL;
+  const auto bytes_per_light = static_cast<std::uint64_t>(resolution)
+    * resolution * sizeof(float)
+    * (cube ? CubeLocalShadowRecord::kFaceCount : 1U);
+  if (bytes_per_light == 0U) {
+    return 0U;
+  }
+  return static_cast<std::uint32_t>(
+    std::clamp<std::uint64_t>(kTargetChunkBytes / bytes_per_light, 1U, 64U));
 }
 
 } // namespace oxygen::vortex::shadows::internal

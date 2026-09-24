@@ -386,13 +386,20 @@ inline auto EmitPerVisibleSubmesh(const ScenePrepContext& ctx,
       .mesh = item.ResolvedMesh(),
     };
 
+    auto world_bound = item.Renderable().GetWorldBoundingSphere();
+    if (const auto bounds
+      = item.Renderable().GetWorldSubMeshBoundingBox(index)) {
+      const auto center = 0.5F * (bounds->first + bounds->second);
+      world_bound = glm::vec4(center, glm::length(bounds->second - center));
+    }
+
     state.CollectItem(RenderItemData {
       .submesh_index = index,
       .node_handle = item.GetNodeHandle(),
       .geometry = std::move(geo_ref),
       .material = std::move(mat_ref),
       .material_handle = mat_handle,
-      .world_bounding_sphere = item.Renderable().GetWorldBoundingSphere(),
+      .world_bounding_sphere = world_bound,
       .sort_distance2 = sort_distance2,
       .transform_handle = item.GetTransformHandle(),
       .cast_shadows = item.CastsShadows(),

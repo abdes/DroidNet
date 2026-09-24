@@ -29,6 +29,7 @@ struct ShadowFrameData {
   ShaderVisibleIndex local_shadow_map_srv { kInvalidShaderVisibleIndex };
   std::vector<LightShadowReference> directional_shadow_references;
   std::vector<LightShadowReference> local_shadow_references;
+  std::vector<LightSelectionIndex> local_quality_omissions;
   std::vector<DirectionalShadowRecord> directional_records;
   std::vector<ShadowCascadeBinding> cascades;
   std::vector<ProjectedLocalShadowRecord> projected_local_records;

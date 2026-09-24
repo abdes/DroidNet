@@ -26,6 +26,8 @@
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Vortex/Lighting/Types/LightingPreparationFailure.h>
 #include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/Shadows/Internal/ShadowCasterDependencies.h>
+#include <Oxygen/Vortex/Shadows/Internal/ShadowEligibility.h>
 #include <Oxygen/Vortex/Shadows/Internal/ShadowReferenceBuilder.h>
 #include <Oxygen/Vortex/Shadows/Passes/CascadeShadowPass.h>
 #include <Oxygen/Vortex/Shadows/ShadowService.h>
@@ -188,15 +190,39 @@ auto ShadowService::RenderShadowDepths(const FrameShadowInputs& inputs) -> void
         inputs.frame_light_set->directional_lights)
     : std::span<const FrameDirectionalLightSelection> {};
   cascade_shadow_pass_->RetainDirectionalSources(directional_lights);
-  for (const auto& view_input : inputs.active_views) {
+  for (auto view_input : inputs.active_views) {
+    view_input.scene_generation = inputs.frame_light_set != nullptr
+      ? inputs.frame_light_set->scene_generation
+      : 0U;
+    auto dependencies = std::vector<ShadowCasterDependency> {};
+    if (view_input.prepared_scene != nullptr) {
+      dependencies = shadows::internal::BuildShadowCasterDependencies(
+        *view_input.prepared_scene);
+      view_input.shadow_caster_dependencies = dependencies;
+      for (const auto& draw : view_input.prepared_scene->GetDrawMetadata()) {
+        view_input.shadow_caster_draw_count
+          += draw.flags.IsSet(PassMaskBit::kShadowCaster) ? 1U : 0U;
+      }
+      view_input.shadow_dependencies_available
+        = view_input.shadow_caster_draw_count == 0U
+        || !view_input.prepared_scene->shadow_caster_sources.empty();
+    }
     published_views_.erase(view_input.view_id);
     failed_views_.erase(view_input.view_id);
     try {
+      // Reconcile even an empty selection, before any rendering can fail.
+      cascade_shadow_pass_->RetainLocalSources(view_input,
+        inputs.frame_light_set != nullptr
+          ? std::span<const FrameLocalLightSelection>(
+              inputs.frame_light_set->local_lights)
+          : std::span<const FrameLocalLightSelection> {});
       auto view_data = ShadowFrameData {};
       auto directional_surfaces
         = std::vector<std::shared_ptr<graphics::Texture>> {};
-      auto spot_shadow_surface = std::shared_ptr<graphics::Texture> {};
-      auto point_shadow_surface = std::shared_ptr<graphics::Texture> {};
+      auto spot_shadow_surfaces
+        = std::vector<std::shared_ptr<graphics::Texture>> {};
+      auto point_shadow_surfaces
+        = std::vector<std::shared_ptr<graphics::Texture>> {};
       auto rendered_cascade_count = 0U;
       auto rendered_spot_shadow_count = 0U;
       auto rendered_point_shadow_count = 0U;
@@ -206,8 +232,7 @@ auto ShadowService::RenderShadowDepths(const FrameShadowInputs& inputs) -> void
       for (const auto& [index, light] :
         std::views::enumerate(directional_lights)) {
         if (light.cascade_count == 0U
-          || (light.shadow_flags & kDirectionalLightShadowFlagCastsShadows)
-            == 0U) {
+          || !shadows::internal::HasDirectionalShadowInfluence(light)) {
           continue;
         }
         const auto selection_index
@@ -237,7 +262,9 @@ auto ShadowService::RenderShadowDepths(const FrameShadowInputs& inputs) -> void
         auto spot_state = cascade_shadow_pass_->RenderSpotView(
           view_input, std::span(inputs.frame_light_set->local_lights));
         view_data.projected_local_records = std::move(spot_state.records);
-        spot_shadow_surface = spot_state.shadow_surface;
+        view_data.local_quality_omissions
+          = std::move(spot_state.quality_omissions);
+        spot_shadow_surfaces = std::move(spot_state.shadow_surfaces);
         rendered_spot_shadow_count = spot_state.rendered_shadow_count;
         rendered_draw_count += spot_state.rendered_draw_count;
         shadow_caster_draw_count = (std::max)(shadow_caster_draw_count,
@@ -246,7 +273,11 @@ auto ShadowService::RenderShadowDepths(const FrameShadowInputs& inputs) -> void
         auto point_state = cascade_shadow_pass_->RenderPointView(
           view_input, std::span(inputs.frame_light_set->local_lights));
         view_data.cube_local_records = std::move(point_state.records);
-        point_shadow_surface = point_state.shadow_surface;
+        view_data.local_quality_omissions.insert(
+          view_data.local_quality_omissions.end(),
+          point_state.quality_omissions.begin(),
+          point_state.quality_omissions.end());
+        point_shadow_surfaces = std::move(point_state.shadow_surfaces);
         rendered_point_shadow_count += point_state.rendered_shadow_count;
         rendered_draw_count += point_state.rendered_draw_count;
         shadow_caster_draw_count = (std::max)(shadow_caster_draw_count,
@@ -285,7 +316,7 @@ auto ShadowService::RenderShadowDepths(const FrameShadowInputs& inputs) -> void
       published_views_.erase(view_input.view_id);
       if (inputs.frame_light_set != nullptr) {
         const auto references = shadows::internal::BuildShadowReferences(
-          *inputs.frame_light_set, view_data);
+          *inputs.frame_light_set, view_data, view_input.resolved_view.get());
         if (!references) {
           auto failure = references.error();
           failure.view_id = view_input.view_id;
@@ -336,8 +367,8 @@ auto ShadowService::RenderShadowDepths(const FrameShadowInputs& inputs) -> void
           .slot = slot,
           .data = std::move(view_data),
           .directional_surfaces = std::move(directional_surfaces),
-          .spot_surface = spot_shadow_surface,
-          .point_surface = point_shadow_surface,
+          .spot_surfaces = std::move(spot_shadow_surfaces),
+          .point_surfaces = std::move(point_shadow_surfaces),
         });
     } catch (const graphics::AllocationBudgetExceeded&) {
       const auto snapshot = renderer_.GetLightingAllocationBudget()->Snapshot();
@@ -382,19 +413,24 @@ auto ShadowService::InspectDirectionalShadowSurfaces(const ViewId view_id) const
     : std::span<const std::shared_ptr<graphics::Texture>> {};
 }
 
-auto ShadowService::InspectSpotShadowSurface(const ViewId view_id) const
-  -> const graphics::Texture*
+auto ShadowService::InspectSpotShadowSurfaces(const ViewId view_id) const
+  -> std::span<const std::shared_ptr<graphics::Texture>>
 {
   const auto it = published_views_.find(view_id);
-  return it != published_views_.end() ? it->second.spot_surface.get() : nullptr;
+  return it != published_views_.end()
+    ? std::span<const std::shared_ptr<graphics::Texture>>(
+        it->second.spot_surfaces)
+    : std::span<const std::shared_ptr<graphics::Texture>> {};
 }
 
-auto ShadowService::InspectPointShadowSurface(const ViewId view_id) const
-  -> const graphics::Texture*
+auto ShadowService::InspectPointShadowSurfaces(const ViewId view_id) const
+  -> std::span<const std::shared_ptr<graphics::Texture>>
 {
   const auto it = published_views_.find(view_id);
-  return it != published_views_.end() ? it->second.point_surface.get()
-                                      : nullptr;
+  return it != published_views_.end()
+    ? std::span<const std::shared_ptr<graphics::Texture>>(
+        it->second.point_surfaces)
+    : std::span<const std::shared_ptr<graphics::Texture>> {};
 }
 
 auto ShadowService::ResolveShadowFrameSlot(const ViewId view_id) const

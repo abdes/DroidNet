@@ -17,6 +17,7 @@ static const uint SHADOW_COVERAGE_NO_REQUEST = 0u;
 static const uint SHADOW_COVERAGE_NO_INFLUENCE = 1u;
 static const uint SHADOW_COVERAGE_COMPLETE = 2u;
 static const uint SHADOW_COVERAGE_OUTSIDE_AUTHORED = 3u;
+static const uint SHADOW_COVERAGE_QUALITY_OMITTED = 4u;
 
 // Matches Vortex/Shadows/Types/LightShadowReference.h (16 bytes).
 struct LightShadowReference {

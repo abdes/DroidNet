@@ -46,6 +46,10 @@ using ShadowCascadeIndex = NamedType<std::uint32_t,
 using ShadowArrayLayer = NamedType<std::uint32_t, struct ShadowArrayLayerTag,
   Comparable, Printable, Hashable>;
 
+//! Persistent local-shadow owner index; Nexus supplies its generation.
+using ShadowSlotIndex = NamedType<std::uint32_t, struct ShadowSlotIndexTag,
+  Comparable, Printable, Hashable>;
+
 //! Element offset into the current view's compact local-light index list.
 using LightListOffset = NamedType<std::uint32_t, struct LightListOffsetTag,
   Comparable, Printable, Hashable>;

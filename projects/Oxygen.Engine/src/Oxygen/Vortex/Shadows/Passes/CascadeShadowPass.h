@@ -8,6 +8,7 @@
 
 #include <memory>
 #include <span>
+#include <unordered_map>
 
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Texture.h>
@@ -29,7 +30,6 @@ namespace shadows {
     class CascadeShadowSetup;
     class ConventionalShadowTargetAllocator;
     class PointShadowSetup;
-    class ShadowCasterCulling;
     class SpotShadowSetup;
   } // namespace internal
 
@@ -45,7 +45,8 @@ namespace shadows {
 
     struct ViewSpotShadowPassState {
       std::vector<ProjectedLocalShadowRecord> records;
-      std::shared_ptr<graphics::Texture> shadow_surface;
+      std::vector<LightSelectionIndex> quality_omissions;
+      std::vector<std::shared_ptr<graphics::Texture>> shadow_surfaces;
       std::uint32_t shadow_caster_draw_count { 0U };
       std::uint32_t rendered_shadow_count { 0U };
       std::uint32_t rendered_draw_count { 0U };
@@ -53,7 +54,8 @@ namespace shadows {
 
     struct ViewPointShadowPassState {
       std::vector<CubeLocalShadowRecord> records;
-      std::shared_ptr<graphics::Texture> shadow_surface;
+      std::vector<LightSelectionIndex> quality_omissions;
+      std::vector<std::shared_ptr<graphics::Texture>> shadow_surfaces;
       std::uint32_t shadow_caster_draw_count { 0U };
       std::uint32_t rendered_shadow_count { 0U };
       std::uint32_t rendered_draw_count { 0U };
@@ -69,6 +71,8 @@ namespace shadows {
 
     OXGN_VRTX_API auto OnFrameStart(
       frame::SequenceNumber sequence, frame::Slot slot) -> void;
+    OXGN_VRTX_API auto RetainLocalSources(const PreparedViewShadowInput& view,
+      std::span<const FrameLocalLightSelection> lights) -> void;
     OXGN_VRTX_API auto RetainDirectionalSources(
       std::span<const FrameDirectionalLightSelection> lights) -> void;
     [[nodiscard]] OXGN_VRTX_API auto RenderDirectionalView(
@@ -85,12 +89,20 @@ namespace shadows {
       -> ViewPointShadowPassState;
 
   private:
+    struct ViewQuality {
+      std::uint64_t scene_generation { 0U };
+      frame::SequenceNumber last_used { 0U };
+      std::unordered_map<scene::NodeHandle, std::uint32_t> resolutions;
+    };
+    auto PrepareQualityHistory(const PreparedViewShadowInput& view,
+      std::span<const FrameLocalLightSelection> lights) -> ViewQuality&;
+    frame::SequenceNumber current_sequence_ { 0U };
+    std::unordered_map<ViewId, ViewQuality> quality_history_;
     Renderer& renderer_;
     std::unique_ptr<internal::CascadeShadowSetup> cascade_setup_;
     std::unique_ptr<internal::SpotShadowSetup> spot_setup_;
     std::unique_ptr<internal::PointShadowSetup> point_setup_;
     std::unique_ptr<internal::ConventionalShadowTargetAllocator> allocator_;
-    std::unique_ptr<internal::ShadowCasterCulling> shadow_caster_culling_;
     std::unique_ptr<ShadowDepthPass> depth_pass_;
   };
 

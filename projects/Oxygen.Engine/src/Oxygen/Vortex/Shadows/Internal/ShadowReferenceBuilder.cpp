@@ -14,6 +14,7 @@
 #include <glm/ext/vector_float3.hpp>
 
 #include <Oxygen/Vortex/Lighting/Types/LightingPreparationFailure.h>
+#include <Oxygen/Vortex/Shadows/Internal/ShadowEligibility.h>
 #include <Oxygen/Vortex/Shadows/Internal/ShadowReferenceBuilder.h>
 #include <Oxygen/Vortex/Shadows/Types/LightShadowReference.h>
 #include <Oxygen/Vortex/Shadows/Types/ShadowFrameData.h>
@@ -21,16 +22,9 @@
 #include <Oxygen/Vortex/Types/LightingIndices.h>
 
 namespace oxygen::vortex::shadows::internal {
-namespace {
-  auto HasEnergy(const float power, const glm::vec3 color) -> bool
-  {
-    return power != 0.0F
-      && (color.x != 0.0F || color.y != 0.0F || color.z != 0.0F);
-  }
-} // namespace
-
 auto BuildShadowReferences(const FrameLightSelection& selection,
-  ShadowFrameData& data) -> std::expected<void, LightingPreparationFailure>
+  ShadowFrameData& data, const ResolvedView* view)
+  -> std::expected<void, LightingPreparationFailure>
 {
   auto failure = LightingPreparationFailure {};
   constexpr auto kMaxCount = std::numeric_limits<std::uint32_t>::max();
@@ -51,7 +45,7 @@ auto BuildShadowReferences(const FrameLightSelection& selection,
     reference.selection_index
       = LightSelectionIndex { static_cast<std::uint32_t>(index) };
     if ((light.shadow_flags & kDirectionalLightShadowFlagCastsShadows) != 0U) {
-      reference.coverage_state = HasEnergy(light.illuminance_lux, light.color)
+      reference.coverage_state = HasDirectionalShadowInfluence(light)
         ? kShadowCoverageComplete
         : kShadowCoverageNoInfluence;
     }
@@ -62,11 +56,18 @@ auto BuildShadowReferences(const FrameLightSelection& selection,
     reference.selection_index
       = LightSelectionIndex { static_cast<std::uint32_t>(index) };
     if ((light.flags & kLocalLightFlagCastsShadows) != 0U) {
-      reference.coverage_state
-        = light.range != 0.0F && HasEnergy(light.luminous_flux_lm, light.color)
+      reference.coverage_state = HasLocalShadowInfluence(light, view)
         ? kShadowCoverageComplete
         : kShadowCoverageNoInfluence;
     }
+  }
+  for (const auto index : data.local_quality_omissions) {
+    if (index.get() >= local.size()
+      || local[index.get()].coverage_state != kShadowCoverageComplete) {
+      failure.selection_index = index;
+      return std::unexpected(failure);
+    }
+    local[index.get()].coverage_state = kShadowCoverageQualityOmitted;
   }
   const auto associate = [&](auto& references, const LightSelectionIndex source,
                            const std::uint32_t projection,
@@ -76,7 +77,7 @@ auto BuildShadowReferences(const FrameLightSelection& selection,
       return false;
     }
     auto& reference = references.at(source.get());
-    if (reference.coverage_state == kShadowCoverageNoRequest
+    if (reference.coverage_state != kShadowCoverageComplete
       || (reference.record_index != kInvalidShadowRecordIndex)) {
       return false;
     }

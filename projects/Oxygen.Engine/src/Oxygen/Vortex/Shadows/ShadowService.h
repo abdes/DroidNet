@@ -70,10 +70,12 @@ public:
   [[nodiscard]] OXGN_VRTX_API auto InspectDirectionalShadowSurfaces(
     ViewId view_id) const
     -> std::span<const std::shared_ptr<graphics::Texture>>;
-  [[nodiscard]] OXGN_VRTX_API auto InspectSpotShadowSurface(
-    ViewId view_id) const -> const graphics::Texture*;
-  [[nodiscard]] OXGN_VRTX_API auto InspectPointShadowSurface(
-    ViewId view_id) const -> const graphics::Texture*;
+  [[nodiscard]] OXGN_VRTX_API auto InspectSpotShadowSurfaces(
+    ViewId view_id) const
+    -> std::span<const std::shared_ptr<graphics::Texture>>;
+  [[nodiscard]] OXGN_VRTX_API auto InspectPointShadowSurfaces(
+    ViewId view_id) const
+    -> std::span<const std::shared_ptr<graphics::Texture>>;
   [[nodiscard]] OXGN_VRTX_API auto ResolveShadowFrameSlot(ViewId view_id) const
     -> ShaderVisibleIndex;
   [[nodiscard]] OXGN_VRTX_NDAPI auto HasVsm() const -> bool { return false; }
@@ -88,8 +90,8 @@ private:
     ShaderVisibleIndex slot { kInvalidShaderVisibleIndex };
     ShadowFrameData data {};
     std::vector<std::shared_ptr<graphics::Texture>> directional_surfaces;
-    std::shared_ptr<graphics::Texture> spot_surface;
-    std::shared_ptr<graphics::Texture> point_surface;
+    std::vector<std::shared_ptr<graphics::Texture>> spot_surfaces;
+    std::vector<std::shared_ptr<graphics::Texture>> point_surfaces;
   };
 
   auto EnsurePublishResources() -> bool;

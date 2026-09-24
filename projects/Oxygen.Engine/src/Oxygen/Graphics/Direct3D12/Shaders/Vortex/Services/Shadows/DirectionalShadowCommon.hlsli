@@ -196,8 +196,8 @@ static inline float ComputeSpotShadowVisibility(
     const float receiver_depth =
         saturate(1.0f - axial_distance / spot.far_plane_m);
 
-    return SampleSpotShadowSurface(
-        bindings, spot_shadow_index, shadow_uv, receiver_depth);
+    return lerp(1.0f, SampleSpotShadowSurface(
+        bindings, spot_shadow_index, shadow_uv, receiver_depth), saturate(spot.shadow_strength));
 }
 
 static inline uint SelectPointShadowFace(float3 light_to_receiver)
@@ -320,9 +320,9 @@ static inline float ComputePointShadowVisibility(
     const float receiver_depth =
         saturate(1.0f - axial_distance / point_shadow.far_plane_m);
 
-    return SamplePointShadowSurface(
+    return lerp(1.0f, SamplePointShadowSurface(
         bindings, point_shadow, point_shadow_index, face_index, shadow_uv,
-        receiver_depth);
+        receiver_depth), saturate(point_shadow.shadow_strength));
 }
 
 // Apply the retained center-source visibility approximation exactly once,

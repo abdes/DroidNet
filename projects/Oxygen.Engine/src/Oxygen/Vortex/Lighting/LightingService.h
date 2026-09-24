@@ -105,8 +105,8 @@ public:
     const ShadowFrameData* shadow_data,
     std::span<const std::shared_ptr<graphics::Texture>>
       directional_shadow_surfaces,
-    const graphics::Texture* spot_shadow_surface,
-    const graphics::Texture* point_shadow_surface,
+    std::span<const std::shared_ptr<graphics::Texture>> spot_shadow_surfaces,
+    std::span<const std::shared_ptr<graphics::Texture>> point_shadow_surfaces,
     bool static_sky_light_available) -> bool;
 
   [[nodiscard]] OXGN_VRTX_API auto InspectForwardLightBindings(
