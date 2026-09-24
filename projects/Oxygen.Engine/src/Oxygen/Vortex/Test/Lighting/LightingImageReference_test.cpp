@@ -39,12 +39,15 @@
 #include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/Lighting/LightingService.h>
 #include <Oxygen/Vortex/Lighting/Types/ForwardLocalLightRecord.h>
 #include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureLightingFixture.h>
+#include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
 #include <Oxygen/Vortex/Test/Lighting/Reference/Photometry.h>
 #include <Oxygen/Vortex/Test/Lighting/UnculledLightingFixture.h>
+#include <Oxygen/Vortex/Types/FrameLightSelection.h>
 #include <Oxygen/Vortex/ViewExtension.h>
 
 namespace oxygen::vortex::testing {
@@ -87,7 +90,8 @@ namespace {
     LightingImageReferenceTest, OrthographicHighlightsStayUniformAcrossTheImage)
   {
     for (unsigned channel = 0; channel < 3U; ++channel) {
-      auto sun = scene->CreateNode("Directional channel " + std::to_string(channel));
+      auto sun
+        = scene->CreateNode("Directional channel " + std::to_string(channel));
       auto light = std::make_unique<scene::DirectionalLight>();
       light->Common().casts_shadows = false;
       light->Common().color_rgb = glm::vec3 { 0.0F };
@@ -179,8 +183,128 @@ namespace {
 
   using FiniteEmitterImageTest = exposure::ExposureLightingGpuTest;
 
-  NOLINT_TEST_F(
-    FiniteEmitterImageTest, CenterSupportAndAnalyticHorizonAgreeAcrossProductionPaths)
+  NOLINT_TEST_F(FiniteEmitterImageTest,
+    LightGatherUsesUpdatedHierarchyAndPreservesUnscaledSpotDirection)
+  {
+    auto parent = scene->CreateNode("Light parent");
+    ASSERT_TRUE(parent.GetTransform().SetLocalPosition({ 1, 2, -5 }));
+    ASSERT_TRUE(parent.GetTransform().SetLocalScale({ 2, 3, 4 }));
+    ASSERT_TRUE(parent.GetTransform().SetLocalRotation(
+      glm::quat { 0.70710678F, 0, 0, 0.70710678F }));
+    auto point_node = scene->CreateChildNode(parent, "Child point");
+    auto spot_node = scene->CreateChildNode(parent, "Child spot");
+    ASSERT_TRUE(point_node);
+    ASSERT_TRUE(spot_node);
+    auto& point = *point_node;
+    auto& spot = *spot_node;
+    auto point_light = std::make_unique<scene::PointLight>();
+    point_light->SetRange(50);
+    point_light->Common().casts_shadows = false;
+    auto spot_light = std::make_unique<scene::SpotLight>();
+    spot_light->SetRange(50);
+    spot_light->Common().casts_shadows = false;
+    ASSERT_TRUE(point.AttachLight(std::move(point_light)));
+    ASSERT_TRUE(spot.AttachLight(std::move(spot_light)));
+    for (auto* node : { &point, &spot }) {
+      ASSERT_TRUE(node->GetTransform().SetLocalPosition({ 1, 2, 3 }));
+      ASSERT_TRUE(node->GetTransform().SetLocalRotation(
+        glm::quat { 0.92387953F, 0.38268343F, 0, 0 }));
+    }
+    SetSurface(data::MaterialDomain::kOpaque);
+    auto observed = std::vector<FrameLocalLightSelection> {};
+    probe->inspect = [&](const auto&, const auto&, unsigned) {
+      const auto* owner
+        = RendererPublicationProbe::GetSceneRenderer(*renderer_);
+      observed
+        = RendererPublicationProbe::GetFrameLightSelection(*owner).local_lights;
+    };
+    for (const unsigned phase : { 0U, 1U, 2U }) {
+      if (phase == 1U) {
+        ASSERT_TRUE(parent.GetTransform().SetLocalPosition({ 2, -3, -4 }));
+      } else if (phase == 2U) {
+        for (auto* node : { &point, &spot }) {
+          node->GetFlags()->get().SetLocalValue(
+            scene::SceneNodeFlags::kIgnoreParentTransform, true);
+        }
+      }
+      ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F, 2U));
+      ASSERT_EQ(observed.size(), 2U);
+      const auto expected_position = phase == 0U ? glm::vec3 { -5, 4, 7 }
+        : phase == 1U                            ? glm::vec3 { -4, -1, 8 }
+                                                 : glm::vec3 { 1, 2, 3 };
+      for (const auto& light : observed) {
+        for (unsigned axis = 0; axis < 3U; ++axis) {
+          EXPECT_NEAR(light.position[axis], expected_position[axis], 2.0e-5F);
+        }
+        if (light.kind == LocalLightKind::kSpot) {
+          const auto expected_direction = phase == 2U
+            ? glm::vec3 { 0, -0.70710678F, -0.70710678F }
+            : glm::vec3 { 0.70710678F, 0, -0.70710678F };
+          for (unsigned axis = 0; axis < 3U; ++axis) {
+            EXPECT_NEAR(
+              light.direction[axis], expected_direction[axis], 2.0e-5F);
+          }
+        }
+      }
+    }
+  }
+
+  NOLINT_TEST_F(FiniteEmitterImageTest,
+    MixedPunctualAndFinitePointPipelinesPreserveForwardReference)
+  {
+    auto nodes = std::vector<scene::SceneNode> {};
+    for (unsigned index = 0; index < 4U; ++index) {
+      auto node = scene->CreateNode("Mixed source " + std::to_string(index));
+      auto light = std::make_unique<scene::PointLight>();
+      light->SetRange(3.0F);
+      light->SetLuminousFluxLm(10.0F);
+      light->Common().casts_shadows = false;
+      ASSERT_TRUE(node.AttachLight(std::move(light)));
+      ASSERT_TRUE(node.GetTransform().SetLocalPosition(
+        { 0.25F * static_cast<float>(index), 0.0F,
+          index == 2U ? -1.05F : -0.25F }));
+      nodes.push_back(node);
+    }
+    SetSurface(data::MaterialDomain::kOpaque);
+    auto forward = false;
+    probe->inspect = [&](const auto&, const auto&, unsigned) {
+      if (forward) {
+        return;
+      }
+      const auto& state
+        = RendererPublicationProbe::GetLightingService(*renderer_)
+            ->GetLastDeferredLightingState();
+      EXPECT_EQ(state.point_light_count, 4U);
+      EXPECT_EQ(state.punctual_point_light_draw_count, 2U);
+      EXPECT_LE(state.pipeline_bind_count,
+        state.directional_draw_count + state.static_sky_light_draw_count + 2U);
+    };
+    for (const bool reverse : { false, true }) {
+      const auto radii = std::array { 0.0F, 0.5F, 1.0e-6F, 0.0F };
+      for (unsigned index = 0; index < 4U; ++index) {
+        ASSERT_TRUE(nodes[index].EditLight<scene::PointLight>([&](auto& light) {
+          light.SetSourceRadius(radii[reverse ? 3U - index : index]);
+        }));
+      }
+      forward = false;
+      ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F, 3U));
+      const auto deferred = ReadFloatTexture(*probe->color);
+      forward = true;
+      ASSERT_NO_FATAL_FAILURE(RenderSurface(true, 0.0F, 3U));
+      const auto reference = ReadFloatTexture(*probe->color);
+      ASSERT_EQ(deferred.size(), reference.size());
+      for (std::size_t pixel = 0; pixel < reference.size(); ++pixel) {
+        for (unsigned channel = 0; channel < 3U; ++channel) {
+          EXPECT_GT(reference[pixel][channel], 0.0F);
+          EXPECT_NEAR(deferred[pixel][channel], reference[pixel][channel],
+            reference[pixel][channel] * 0.005F + 2.0e-5F);
+        }
+      }
+    }
+  }
+
+  NOLINT_TEST_F(FiniteEmitterImageTest,
+    CenterSupportAndAnalyticHorizonAgreeAcrossProductionPaths)
   {
     auto node = scene->CreateNode("Finite source");
     unsigned cases = 0;
@@ -307,8 +431,8 @@ namespace {
             if (spot) {
               auto light = std::make_unique<scene::SpotLight>();
               light->SetInnerConeAngleRadians(0.25F);
-              light->SetOuterConeAngleRadians(source_kind == 1U
-                ? std::numbers::pi_v<float> / 2.0F : 1.2F);
+              light->SetOuterConeAngleRadians(
+                source_kind == 1U ? std::numbers::pi_v<float> / 2.0F : 1.2F);
               light->SetRange(3.0F);
               light->SetSourceRadius(0.1F);
               light->SetLuminousFluxLm(10.0F);
@@ -332,7 +456,8 @@ namespace {
               mesh_node.GetFlags()->get().SetLocalValue(
                 scene::SceneNodeFlags::kReceivesShadows, false);
               ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0.0F, 2U));
-              const auto unshadowed = ReadFloatTexture(*probe->color).at(0).at(0);
+              const auto unshadowed
+                = ReadFloatTexture(*probe->color).at(0).at(0);
               EXPECT_NEAR(unshadowed, baseline, 0.005F * baseline + 2.0e-5F);
               mesh_node.GetFlags()->get().SetLocalValue(
                 scene::SceneNodeFlags::kReceivesShadows, true);
@@ -409,9 +534,12 @@ namespace {
       record.emitted_direction_ws = { 0.0F, 0.0F, -1.0F };
       record.kind = static_cast<std::uint32_t>(index % 2U);
       if (record.kind == 1U) {
-        const auto inner_cosine = static_cast<float>(std::cos(static_cast<double>(0.2F)));
-        record.outer_cone_cosine = static_cast<float>(std::cos(static_cast<double>(1.2F)));
-        record.inverse_cone_cosine_width = 1.0F / (inner_cosine - record.outer_cone_cosine);
+        const auto inner_cosine
+          = static_cast<float>(std::cos(static_cast<double>(0.2F)));
+        record.outer_cone_cosine
+          = static_cast<float>(std::cos(static_cast<double>(1.2F)));
+        record.inverse_cone_cosine_width
+          = 1.0F / (inner_cosine - record.outer_cone_cosine);
       }
       if (index % 2U == 0U) {
         auto light = std::make_unique<scene::PointLight>();

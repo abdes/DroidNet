@@ -568,26 +568,12 @@ namespace {
     return rotation;
   }
 
-  auto ResolveWorldMatrix(
-    const scene::Scene& scene, const scene::SceneNodeImpl& node) -> glm::mat4
+  auto ResolveWorldPosition(const scene::SceneNodeImpl& node) -> glm::vec3
   {
-    const auto& transform
-      = node.GetComponent<scene::detail::TransformComponent>();
-    const auto ignore_parent = node.GetFlags().GetEffectiveValue(
-      scene::SceneNodeFlags::kIgnoreParentTransform);
-    auto world = transform.GetLocalMatrix();
-    if (const auto parent = node.AsGraphNode().GetParent();
-      parent.IsValid() && !ignore_parent) {
-      world = ResolveWorldMatrix(scene, scene.GetNodeImplRef(parent)) * world;
-    }
-    return world;
-  }
-
-  auto ResolveWorldPosition(
-    const scene::Scene& scene, const scene::SceneNodeImpl& node) -> glm::vec3
-  {
-    const auto world = ResolveWorldMatrix(scene, node);
-    return glm::vec3(world[3]);
+    // The caller updates the scene before gathering. Reuse that authoritative
+    // hierarchy result instead of multiplying the ancestor chain per light.
+    return node.GetComponent<scene::detail::TransformComponent>()
+      .GetWorldPosition();
   }
 
   auto ComputeDirectionWs(
@@ -604,7 +590,7 @@ namespace {
 
   auto BuildFrameLightSelection(const scene::Scene& scene_ref,
     const scene::DirectionalLightResolver& resolver,
-    const std::uint64_t selection_epoch) -> FrameLightSelection
+    const std::uint64_t selection_epoch, FrameLightSelection& selection) -> void
   {
     // Cache the owning label; steady-state scope entry needs no label
     // allocation.
@@ -613,7 +599,8 @@ namespace {
       .category = profiling::ProfileCategory::kPass,
     };
     const auto profile = profiling::CpuProfileScope(kProfile);
-    auto selection = FrameLightSelection {};
+    selection.directional_lights.clear();
+    selection.local_lights.clear();
     selection.selection_epoch = selection_epoch;
     selection.scene_generation = scene_ref.GetLifetimeId().get();
     const auto environment = scene_ref.GetEnvironment();
@@ -715,12 +702,14 @@ namespace {
         selection.local_lights.push_back(FrameLocalLightSelection {
           .source_node = visited.handle,
           .kind = LocalLightKind::kPoint,
-          .position = ResolveWorldPosition(scene_ref, node),
+          .position = ResolveWorldPosition(node),
           .range = light.GetRange(),
           .color = light.Common().color_rgb,
           .luminous_flux_lm = light.GetLuminousFluxLm(),
           .exposure_compensation_ev = light.Common().exposure_compensation_ev,
-          .direction = ComputeDirectionWs(scene_ref, node),
+          // Point emitters and their world-axis cube maps are isotropic.
+          // The evaluation publisher already uses this canonical direction.
+          .direction = space::move::Forward,
           .source_radius = light.GetSourceRadius(),
           .flags
           = (light.Common().casts_shadows ? kLocalLightFlagCastsShadows : 0U)
@@ -742,7 +731,7 @@ namespace {
         selection.local_lights.push_back(FrameLocalLightSelection {
           .source_node = visited.handle,
           .kind = LocalLightKind::kSpot,
-          .position = ResolveWorldPosition(scene_ref, node),
+          .position = ResolveWorldPosition(node),
           .range = light.GetRange(),
           .color = light.Common().color_rgb,
           .luminous_flux_lm = light.GetLuminousFluxLm(),
@@ -767,7 +756,6 @@ namespace {
     [[maybe_unused]] const auto traversal_result
       = scene_ref.Traverse().Traverse(
         visitor, scene::TraversalOrder::kPreOrder, scene::VisibleFilter {});
-    return selection;
   }
 
   auto CollectLightingViewInputs(const RenderContext& ctx,
@@ -1342,7 +1330,8 @@ auto SceneRenderer::ReportLightingFailure(
       failure.available_bytes.get());
   }
   reported_lighting_failures_.insert_or_assign(failure.view_id, failure);
-  if (const auto found = view_render_status_.find(failure.view_id); found != view_render_status_.end()) {
+  if (const auto found = view_render_status_.find(failure.view_id);
+    found != view_render_status_.end()) {
     found->second.failure = ViewRenderFailure::kLighting;
     found->second.lighting_failure = failure;
   }
@@ -1421,8 +1410,8 @@ void SceneRenderer::BeginFrame(const frame::SequenceNumber sequence,
   // Keep the last outcome until this view renders again or is removed. Capture
   // consumers can inspect it after EndFrame; frame identity prevents stale use.
   std::erase_if(view_render_status_, [sequence](const auto& entry) {
-    return sequence.get() > entry.second.frame_sequence.get()
-        + frame::kFramesInFlight.get();
+    return sequence.get()
+      > entry.second.frame_sequence.get() + frame::kFramesInFlight.get();
   });
   setup_mode_.Reset();
   scene_texture_bindings_.Invalidate();
@@ -1630,10 +1619,12 @@ void SceneRenderer::RenderViewFamily(RenderContext& ctx)
     PrimePreparedViews(ctx);
   } catch (const std::exception& error) {
     for (auto& view : ctx.frame_views) {
-      if (!view.is_scene_view) continue;
+      if (!view.is_scene_view)
+        continue;
       view.rendered = false;
       view_render_status_[view.view_id] = { .view_id = view.view_id,
-        .frame_sequence = ctx.frame_sequence, .state = ViewRenderState::kFailed,
+        .frame_sequence = ctx.frame_sequence,
+        .state = ViewRenderState::kFailed,
         .failure = ViewRenderFailure::kRequiredInput };
     }
     ResetPerViewSceneProducts();
@@ -1654,8 +1645,10 @@ void SceneRenderer::RenderViewFamily(RenderContext& ctx)
 
     ctx.frame_views[view_index].rendered = false;
     auto& result = view_render_status_[entry.view_id];
-    result = { .view_id = entry.view_id, .frame_sequence = ctx.frame_sequence,
-      .state = ViewRenderState::kFailed, .failure = ViewRenderFailure::kRequiredInput };
+    result = { .view_id = entry.view_id,
+      .frame_sequence = ctx.frame_sequence,
+      .state = ViewRenderState::kFailed,
+      .failure = ViewRenderFailure::kRequiredInput };
     for (const auto& input : entry.resolved_aux_inputs) {
       if (input.valid && input.input.required) {
         result.required_input_views.push_back(input.producer_view_id);
@@ -1694,7 +1687,8 @@ void SceneRenderer::RenderViewFamily(RenderContext& ctx)
       auto restore_scene_texture_family = ScopeGuard([this] noexcept -> void {
         active_scene_textures_ = &scene_textures_;
         // Attachment reuse waits for its submitted frame, independently of any
-        // retained color reader. No callback reaches the pool after destruction.
+        // retained color reader. No callback reaches the pool after
+        // destruction.
         active_scene_texture_lease_->Retire(gfx_);
         active_scene_texture_lease_.reset();
       });
@@ -1749,8 +1743,8 @@ void SceneRenderer::RenderViewFamily(RenderContext& ctx)
         auto& source = *product_it->second.texture;
         TrackAuxiliaryColorTexture(gfx_, recorder, source);
         TrackAuxiliaryColorTexture(gfx_, recorder, *target);
-        CopyAuxiliaryTextureToRegion(recorder, source, *target,
-          BuildAuxiliaryConsumerViewport(*target));
+        CopyAuxiliaryTextureToRegion(
+          recorder, source, *target, BuildAuxiliaryConsumerViewport(*target));
         recorder.RequireResourceStateFinal(
           source, graphics::ResourceStates::kRenderTarget);
         recorder.RequireResourceStateFinal(
@@ -1761,11 +1755,13 @@ void SceneRenderer::RenderViewFamily(RenderContext& ctx)
           "consumer_view={} texture='{}' target='{}'",
           ctx.frame_sequence.get(), input.input.id.get(),
           input.producer_view_id.get(), entry.view_id.get(),
-          source.GetDescriptor().debug_name, target->GetDescriptor().debug_name);
+          source.GetDescriptor().debug_name,
+          target->GetDescriptor().debug_name);
       }
       if (!entry.produced_aux_outputs.empty()
         && !ResolveFramebufferColorTexture(ResolveViewOutputTarget(ctx))) {
-        throw std::runtime_error("Required auxiliary output has no color texture");
+        throw std::runtime_error(
+          "Required auxiliary output has no color texture");
       }
       renderer_.PublishCurrentViewPostSceneFrameBindings(ctx, *this);
       renderer_.DispatchViewExtensionsOnPostRenderViewGpu(ctx, recorder);
@@ -1778,9 +1774,12 @@ void SceneRenderer::RenderViewFamily(RenderContext& ctx)
       result.state = ViewRenderState::kSubmitted;
       result.failure = ViewRenderFailure::kNone;
       const auto* lighting_bindings = lighting_
-        ? lighting_->InspectForwardLightBindings(entry.view_id) : nullptr;
-      result.lighting_validated = !lighting_bindings || lighting_bindings->local_count == 0U;
-      result.output_checks_lighting = published_view_frame_bindings_.post_process_frame_slot.IsValid();
+        ? lighting_->InspectForwardLightBindings(entry.view_id)
+        : nullptr;
+      result.lighting_validated
+        = !lighting_bindings || lighting_bindings->local_count == 0U;
+      result.output_checks_lighting
+        = published_view_frame_bindings_.post_process_frame_slot.IsValid();
       ++rendered_scene_view_count;
 
       for (const auto& output : entry.produced_aux_outputs) {
@@ -1790,7 +1789,8 @@ void SceneRenderer::RenderViewFamily(RenderContext& ctx)
         auto texture
           = ResolveFramebufferColorTexture(ResolveViewOutputTarget(ctx));
         CHECK_F(static_cast<bool>(texture),
-          "SceneRenderer: auxiliary output {} from view {} has no color texture",
+          "SceneRenderer: auxiliary output {} from view {} has no color "
+          "texture",
           output.id.get(), entry.view_id.get());
         auxiliary_products.insert_or_assign(output.id,
           AuxiliaryProduct {
@@ -1805,8 +1805,10 @@ void SceneRenderer::RenderViewFamily(RenderContext& ctx)
 
     } catch (const std::exception& error) {
       result.state = ViewRenderState::kFailed;
-      if (result.failure == ViewRenderFailure::kNone) result.failure = ViewRenderFailure::kRecording;
-      if (ctx.frame_views[view_index].rendered) --rendered_scene_view_count;
+      if (result.failure == ViewRenderFailure::kNone)
+        result.failure = ViewRenderFailure::kRecording;
+      if (ctx.frame_views[view_index].rendered)
+        --rendered_scene_view_count;
       ctx.frame_views[view_index].rendered = false;
       ResetPerViewSceneProducts();
       LOG_F(ERROR, "View {} failed: {}", entry.view_id.get(), error.what());
@@ -1828,14 +1830,17 @@ auto SceneRenderer::InspectViewRenderStatus(ViewId view_id) const
   -> std::optional<ViewRenderStatus>
 {
   const auto found = view_render_status_.find(view_id);
-  if (found == view_render_status_.end()) return std::nullopt;
+  if (found == view_render_status_.end())
+    return std::nullopt;
   auto result = found->second;
-  if (result.state == ViewRenderState::kSubmitted && !result.lighting_validated) {
+  if (result.state == ViewRenderState::kSubmitted
+    && !result.lighting_validated) {
     if (!lighting_ || !lighting_->InspectGridResources(view_id).status) {
       result.lighting_validated = true;
     } else if (const auto completed = lighting_->InspectCompletedGrid(view_id);
       completed && completed->sequence == result.frame_sequence) {
-      result.lighting_validated = completed->status.state == kLightGridBuildValid;
+      result.lighting_validated
+        = completed->status.state == kLightGridBuildValid;
       if (completed->status.state == kLightGridBuildFailed) {
         result.state = ViewRenderState::kFailed;
         result.failure = ViewRenderFailure::kLighting;
@@ -1859,9 +1864,11 @@ auto SceneRenderer::InspectViewRenderStatus(ViewId view_id) const
   return result;
 }
 
-auto SceneRenderer::ResolveViewLightingFrameSlot(ViewId view_id) const -> ShaderVisibleIndex
+auto SceneRenderer::ResolveViewLightingFrameSlot(ViewId view_id) const
+  -> ShaderVisibleIndex
 {
-  return lighting_ ? lighting_->ResolveLightingFrameSlot(view_id) : kInvalidShaderVisibleIndex;
+  return lighting_ ? lighting_->ResolveLightingFrameSlot(view_id)
+                   : kInvalidShaderVisibleIndex;
 }
 
 auto SceneRenderer::OnRender(RenderContext& ctx) -> bool
@@ -1873,8 +1880,10 @@ auto SceneRenderer::OnRender(RenderContext& ctx) -> bool
       ctx.frame_views, [](const auto& view) -> auto { return view.rendered; });
   }
   auto& result = view_render_status_[ctx.current_view.view_id];
-  result = { .view_id = ctx.current_view.view_id, .frame_sequence = ctx.frame_sequence,
-    .state = ViewRenderState::kFailed, .failure = ViewRenderFailure::kRecording };
+  result = { .view_id = ctx.current_view.view_id,
+    .frame_sequence = ctx.frame_sequence,
+    .state = ViewRenderState::kFailed,
+    .failure = ViewRenderFailure::kRecording };
   try {
     auto recording = gfx_.AcquireCommandRecorder(
       gfx_.QueueKeyFor(graphics::QueueRole::kGraphics), "Vortex View",
@@ -1907,16 +1916,19 @@ auto SceneRenderer::OnRender(RenderContext& ctx) -> bool
     result.state = ViewRenderState::kSubmitted;
     result.failure = ViewRenderFailure::kNone;
     const auto* lighting_bindings = lighting_
-      ? lighting_->InspectForwardLightBindings(ctx.current_view.view_id) : nullptr;
-    result.lighting_validated = !lighting_bindings || lighting_bindings->local_count == 0U;
-    result.output_checks_lighting = published_view_frame_bindings_.post_process_frame_slot.IsValid();
+      ? lighting_->InspectForwardLightBindings(ctx.current_view.view_id)
+      : nullptr;
+    result.lighting_validated
+      = !lighting_bindings || lighting_bindings->local_count == 0U;
+    result.output_checks_lighting
+      = published_view_frame_bindings_.post_process_frame_slot.IsValid();
     return true;
   } catch (const std::exception& error) {
     ResetPerViewSceneProducts();
-    LOG_F(ERROR, "View {} failed: {}", ctx.current_view.view_id.get(), error.what());
+    LOG_F(ERROR, "View {} failed: {}", ctx.current_view.view_id.get(),
+      error.what());
     return false;
   }
-
 }
 
 auto SceneRenderer::RenderCurrentView(
@@ -2024,8 +2036,8 @@ auto SceneRenderer::RenderCurrentView(
       scene_mutable->Update(false);
       auto& resolver = scene_mutable->GetDirectionalLightResolver();
       resolver.Validate();
-      frame_light_selection_ = BuildFrameLightSelection(
-        *scene_mutable, resolver, ctx.frame_sequence.get());
+      BuildFrameLightSelection(*scene_mutable, resolver,
+        ctx.frame_sequence.get(), frame_light_selection_);
     } else {
       frame_light_selection_ = FrameLightSelection {
         .selection_epoch = ctx.frame_sequence.get(),
@@ -2057,7 +2069,8 @@ auto SceneRenderer::RenderCurrentView(
       = lighting_bindings->view_generation;
     deferred_lighting_state_.published_lighting_frame_slot
       = published_view_frame_bindings_.lighting_frame_slot;
-    ctx.current_view.lighting_frame_slot = published_view_frame_bindings_.lighting_frame_slot;
+    ctx.current_view.lighting_frame_slot
+      = published_view_frame_bindings_.lighting_frame_slot;
     RecordDiagnosticsPass(renderer_,
       DiagnosticsPassRecord {
         .name = "Vortex.Stage6.ForwardLightData",
@@ -2280,9 +2293,11 @@ auto SceneRenderer::RenderCurrentView(
       "Vortex.Stage8.ShadowDepth",
       published_view_frame_bindings_.shadow_frame_slot);
   }
-  ctx.current_view.lighting_frame_slot = published_view_frame_bindings_.lighting_frame_slot;
+  ctx.current_view.lighting_frame_slot
+    = published_view_frame_bindings_.lighting_frame_slot;
   if (reported_lighting_failures_.erase(ctx.current_view.view_id) != 0U) {
-    LOG_F(INFO, "Lighting recovered for view {}", ctx.current_view.view_id.get());
+    LOG_F(
+      INFO, "Lighting recovered for view {}", ctx.current_view.view_id.get());
   }
   if (environment_ != nullptr && wants_environment) {
     const auto enable_static_sky_light_ambient_bridge

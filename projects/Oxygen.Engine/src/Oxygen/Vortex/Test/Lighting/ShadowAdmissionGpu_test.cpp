@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <array>
 #include <memory>
 #include <span>
@@ -60,11 +61,272 @@ namespace {
   };
 
   NOLINT_TEST_F(ShadowAdmissionGpuTest,
+    CubeComparisonFiltersVisibilityAndAppliesReversedDepthBias)
+  {
+    constexpr unsigned size = 8U;
+    constexpr unsigned row_pitch = 256U;
+    constexpr unsigned layer_bytes = row_pitch * size;
+    auto texture = CreateRegisteredTexture({ .width = size,
+      .height = size,
+      .array_size = 12U,
+      .format = Format::kR32Float,
+      .texture_type = TextureType::kTextureCubeArray,
+      .is_shader_resource = true,
+      .initial_state = graphics::ResourceStates::kCommon });
+    auto upload = CreateUploadBuffer(SizeBytes { layer_bytes * 12U });
+    for (unsigned layer = 0; layer < 12U; ++layer) {
+      for (unsigned y = 0; y < size; ++y) {
+        for (unsigned x = 0; x < size; ++x) {
+          const float depth = ((x < size / 2U) == (layer < 6U)) ? 0.25F : 0.75F;
+          upload->Update(&depth, sizeof(depth),
+            layer * layer_bytes + y * row_pitch + x * sizeof(float));
+        }
+      }
+    }
+    SubmitCommands(
+      "Cube comparison fixture", [&](graphics::CommandRecorder& recorder) {
+        EnsureTracked(recorder, upload, graphics::ResourceStates::kGenericRead);
+        EnsureTracked(recorder, texture, graphics::ResourceStates::kCommon);
+        recorder.RequireResourceState(
+          *texture, graphics::ResourceStates::kCopyDest);
+        recorder.FlushBarriers();
+        for (unsigned layer = 0; layer < 12U; ++layer) {
+          recorder.CopyBufferToTexture(*upload,
+            { .buffer_offset = layer * layer_bytes,
+              .buffer_row_pitch = row_pitch,
+              .buffer_slice_pitch = layer_bytes,
+              .dst_slice = { .width = size,
+                .height = size,
+                .depth = 1,
+                .array_slice = layer },
+              .dst_subresources
+              = { .base_array_slice = layer, .num_array_slices = 1U } },
+            *texture);
+        }
+        recorder.RequireResourceStateFinal(
+          *texture, graphics::ResourceStates::kShaderResource);
+      });
+    WaitForQueueIdle();
+    auto& allocator = renderer_->GetGraphics()->GetDescriptorAllocator();
+    auto handle
+      = allocator.AllocateRaw(graphics::ResourceViewType::kTexture_SRV,
+        graphics::DescriptorVisibility::kShaderVisible);
+    ASSERT_TRUE(handle.IsValid());
+    const auto srv = allocator.GetShaderVisibleIndex(handle);
+    const auto view_handle = Backend().GetResourceRegistry().RegisterView(
+      *texture, std::move(handle),
+      graphics::TextureViewDescription { .format = Format::kR32Float,
+        .dimension = TextureType::kTextureCubeArray,
+        .sub_resources = graphics::TextureSubResourceSet::EntireTexture() });
+    ASSERT_TRUE(view_handle->IsValid());
+    auto inputs = std::vector<std::array<std::uint32_t, 12>> {};
+    auto expected = std::vector<float> {};
+    for (unsigned cube = 0; cube < 2U; ++cube) {
+      for (unsigned face = 0; face < 6U; ++face) {
+        for (const float s : { -0.5F, 0.0F, 0.5F }) {
+          const auto directions
+            = std::array { glm::vec3 { 1, 0, -s }, glm::vec3 { -1, 0, s },
+                glm::vec3 { s, 1, 0 }, glm::vec3 { s, -1, 0 },
+                glm::vec3 { s, 0, 1 }, glm::vec3 { -s, 0, -1 } };
+          for (const float bias : { -0.3F, 0.0F, 0.3F }) {
+            const auto direction = directions[face];
+            inputs.push_back({ srv.get(), cube, 1U, size,
+              std::bit_cast<std::uint32_t>(direction.x),
+              std::bit_cast<std::uint32_t>(direction.y),
+              std::bit_cast<std::uint32_t>(direction.z),
+              std::bit_cast<std::uint32_t>(0.5F),
+              std::bit_cast<std::uint32_t>(bias), 0, 0, 0 });
+            expected.push_back(bias < 0 ? 0.0F
+                : bias > 0              ? 1.0F
+                : s == 0                ? 0.5F
+                         : ((s < 0) == (cube == 0) ? 1.0F : 0.0F));
+          }
+        }
+      }
+    }
+    const auto result = RunToneProbe(std::as_bytes(std::span { inputs }),
+      static_cast<unsigned>(inputs.size()), 65536U, false);
+    ASSERT_EQ(result.size(), expected.size());
+    for (std::size_t index = 0; index < result.size(); ++index) {
+      EXPECT_NEAR(result[index][0], expected[index], 1.0e-6F) << index;
+    }
+    RecordProperty(
+      "bilinear_comparison_cases", static_cast<int>(result.size()));
+  }
+
+  NOLINT_TEST_F(ShadowAdmissionGpuTest,
+    CubeHardwarePcfUsesProjectedDepthAcrossFacesSeamsAndDescriptors)
+  {
+    for (unsigned index = 0; index < 3U; ++index) {
+      auto light = AddPoint(index);
+      ASSERT_TRUE(light.EditLight<scene::PointLight>([index](auto& value) {
+        value.Common().shadow.bias = static_cast<float>(index) * 0.25F;
+        if (index == 1U) {
+          value.Common().shadow.resolution_hint
+            = scene::ShadowResolutionHint::kHigh;
+        }
+      }));
+    }
+    SetSurface(data::MaterialDomain::kOpaque);
+    const glm::vec3 extent { 1.0F, 1.3F, 1.6F };
+    auto vertices = std::vector<data::Vertex> {};
+    auto indices = std::vector<std::uint32_t> {};
+    for (unsigned axis = 0; axis < 3U; ++axis) {
+      for (const float sign : { -1.0F, 1.0F }) {
+        const auto first = static_cast<std::uint32_t>(vertices.size());
+        const unsigned u = (axis + 1U) % 3U;
+        const unsigned v = (axis + 2U) % 3U;
+        glm::vec3 normal { 0 };
+        normal[axis] = -sign;
+        for (const auto corner : std::array { glm::vec2 { -1, -1 },
+               glm::vec2 { 1, -1 }, glm::vec2 { 1, 1 }, glm::vec2 { -1, 1 } }) {
+          glm::vec3 position {};
+          position[axis] = extent[axis] * sign;
+          position[u] = extent[u] * corner.x;
+          position[v] = extent[v] * corner.y;
+          vertices.push_back({ .position = position,
+            .normal = normal,
+            .texcoord = { 0.5F, 0.5F },
+            .tangent = { 1, 0, 0 },
+            .bitangent = { 0, 1, 0 },
+            .color = { 1, 1, 1, 1 } });
+        }
+        const auto corners = sign < 0 ? std::array { 0U, 1U, 2U, 0U, 2U, 3U }
+                                      : std::array { 0U, 2U, 1U, 0U, 3U, 2U };
+        for (const auto corner : corners) {
+          indices.push_back(first + corner);
+        }
+      }
+    }
+    std::shared_ptr<data::Mesh> mesh
+      = data::MeshBuilder()
+          .WithVertices(vertices)
+          .WithIndices(indices)
+          .BeginSubMesh("Box", data::MaterialAsset::CreateDefault())
+          .WithMeshView({ .first_index = 0,
+            .index_count = 36,
+            .first_vertex = 0,
+            .vertex_count = 24 })
+          .EndSubMesh()
+          .Build();
+    data::pak::geometry::GeometryAssetDesc desc {};
+    desc.lod_count = 1U;
+    for (unsigned axis = 0; axis < 3U; ++axis) {
+      desc.bounding_box_min[axis] = -extent[axis];
+      desc.bounding_box_max[axis] = extent[axis];
+    }
+    mesh_node.GetRenderable().SetGeometry(std::make_shared<data::GeometryAsset>(
+      data::AssetKey::FromVirtualPath("/Test/PointPcf/Box.ogeo"), desc,
+      std::vector<std::shared_ptr<data::Mesh>> { mesh }));
+    // Exercise ordinary one-sided winding as well as the cube orientation.
+    mesh_node.GetRenderable().SetMaterialOverride(
+      0, 0, data::MaterialAsset::CreateDefault());
+    auto records = std::vector<CubeLocalShadowRecord> {};
+    probe->inspect = [&](const auto& ctx, const auto&, unsigned) {
+      auto* owner = RendererPublicationProbe::GetSceneRenderer(*renderer_);
+      const auto* data
+        = RendererPublicationProbe::GetShadowService(*owner)->InspectShadowData(
+          ctx.current_view.view_id);
+      ASSERT_NE(data, nullptr);
+      records = data->cube_local_records;
+    };
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F, 3U));
+    ASSERT_EQ(records.size(), 3U);
+    EXPECT_EQ(records[0].surface_srv, records[1].surface_srv);
+    EXPECT_NE(records[0].first_array_layer, records[1].first_array_layer);
+    EXPECT_NE(records[0].surface_srv, records[2].surface_srv);
+    auto rays = std::vector<glm::vec3> {};
+    for (int x = -1; x <= 1; ++x) {
+      for (int y = -1; y <= 1; ++y) {
+        for (int z = -1; z <= 1; ++z) {
+          if (x != 0 || y != 0 || z != 0) {
+            rays.emplace_back(x, y, z);
+          }
+        }
+      }
+    }
+    rays.insert(rays.end(),
+      { { 1, 0.21F, -0.37F }, { -0.31F, 1, 0.47F }, { 0.27F, -0.39F, 1 },
+        { 1, 0.999F, 0 }, { 0.999F, 1, 0 }, { 0, 0.00001F, 1 },
+        { 0, 0.00001F, -1 } });
+    auto inputs = std::vector<std::array<std::uint32_t, 12>> {};
+    auto expected = std::vector<float> {};
+    auto expected_depth = std::vector<float> {};
+    for (const auto ray : rays) {
+      const auto direction = glm::normalize(ray);
+      const auto abs_direction = glm::abs(direction);
+      const auto hit = 1.0F
+        / (std::max)({ abs_direction.x / extent.x, abs_direction.y / extent.y,
+          abs_direction.z / extent.z });
+      const auto axial
+        = (std::max)({ abs_direction.x, abs_direction.y, abs_direction.z });
+      for (const unsigned count : { 1U, 5U, 29U }) {
+        for (const float scale : { 0.7F, 1.3F }) {
+          // Interleave backing descriptors and nonzero cube indices per lane.
+          for (const auto& record : records) {
+            EXPECT_EQ(record.pcf_sample_count, 29U);
+            const auto depth = [&](float distance) {
+              return record.near_plane_m * (record.far_plane_m - distance)
+                / (distance * (record.far_plane_m - record.near_plane_m));
+            };
+            inputs.push_back({ record.surface_srv.get(),
+              record.first_array_layer.get() / 6U, count,
+              static_cast<unsigned>(
+                std::lround(1 / record.inverse_resolution.x)),
+              std::bit_cast<std::uint32_t>(-direction.x),
+              std::bit_cast<std::uint32_t>(-direction.y),
+              std::bit_cast<std::uint32_t>(-direction.z),
+              std::bit_cast<std::uint32_t>(depth(hit * axial * scale)), 0, 0, 0,
+              0 });
+            expected.push_back(scale < 1 ? 1.0F : 0.0F);
+            expected_depth.push_back(depth(hit * axial));
+          }
+        }
+      }
+    }
+    const auto result = RunToneProbe(std::as_bytes(std::span { inputs }),
+      static_cast<unsigned>(inputs.size()), 65536U, false);
+    ASSERT_EQ(result.size(), inputs.size());
+    for (std::size_t index = 0; index < result.size(); ++index) {
+      EXPECT_NEAR(result[index][0], expected[index], 1.0e-6F) << index;
+      EXPECT_NEAR(result[index][1], expected_depth[index], 5.0e-4F) << index;
+    }
+    RecordProperty(
+      "cube_hardware_pcf_samples", static_cast<int>(result.size()));
+    // The cube permutation must retain alpha discard, and a material change
+    // must invalidate the cached depth before either lighting path consumes it.
+    for (const bool rejected : { true, false }) {
+      SetSurface(data::MaterialDomain::kMasked, 0.0F, rejected);
+      ASSERT_NO_FATAL_FAILURE(RenderSurface(!rejected, 0.0F, 2U));
+      const auto masked = RunToneProbe(std::as_bytes(std::span { inputs }),
+        static_cast<unsigned>(inputs.size()), 65536U, false);
+      ASSERT_EQ(masked.size(), inputs.size());
+      for (std::size_t index = 0; index < masked.size(); ++index) {
+        EXPECT_NEAR(
+          masked[index][0], rejected ? 1.0F : expected[index], 1.0e-6F)
+          << index;
+        EXPECT_NEAR(
+          masked[index][1], rejected ? 0.0F : expected_depth[index], 5.0e-4F)
+          << index;
+      }
+    }
+  }
+
+  NOLINT_TEST_F(ShadowAdmissionGpuTest,
     NonuniformCasterTransformMatchesBakedGeometryWithSlopeBias)
   {
-    auto light = AddPoint(0U);
-    ASSERT_TRUE(light.EditLight<scene::PointLight>(
-      [](auto& candidate) { candidate.Common().shadow.bias = 0.1F; }));
+    // Projected spots retain caster slope bias; cube hardware PCF applies
+    // its bias on receivers and would no longer exercise this regression.
+    auto light = scene->CreateNode("Normal regression spot");
+    auto spot = std::make_unique<scene::SpotLight>();
+    spot->SetRange(3.0F);
+    spot->SetLuminousFluxLm(1.0F);
+    spot->Common().casts_shadows = true;
+    spot->Common().shadow.bias = 0.1F;
+    spot->Common().shadow.resolution_hint = scene::ShadowResolutionHint::kLow;
+    ASSERT_TRUE(light.AttachLight(std::move(spot)));
+    ASSERT_TRUE(light.GetTransform().SetLocalRotation(
+      glm::quat { 0.70710678F, 0.70710678F, 0, 0 }));
     SetSurface(data::MaterialDomain::kOpaque);
     std::shared_ptr<const graphics::Texture> surface;
     std::uint32_t layer = 0U;
@@ -74,13 +336,13 @@ namespace {
       auto* shadows = RendererPublicationProbe::GetShadowService(*owner);
       const auto* data = shadows->InspectShadowData(ctx.current_view.view_id);
       ASSERT_NE(data, nullptr);
-      ASSERT_EQ(data->cube_local_records.size(), 1U);
+      ASSERT_EQ(data->projected_local_records.size(), 1U);
       const auto surfaces
-        = shadows->InspectPointShadowSurfaces(ctx.current_view.view_id);
+        = shadows->InspectSpotShadowSurfaces(ctx.current_view.view_id);
       ASSERT_EQ(surfaces.size(), 1U);
       surface = surfaces.front();
-      layer = data->cube_local_records.front().first_array_layer.get() + 5U;
-      surface_srv = data->cube_local_records.front().surface_srv.get();
+      layer = data->projected_local_records.front().array_layer.get();
+      surface_srv = data->projected_local_records.front().surface_srv.get();
     };
     std::array<float, 2> depths {};
     for (const bool baked : { false, true }) {
@@ -272,7 +534,8 @@ namespace {
     auto light = AddPoint(0U);
     ASSERT_TRUE(light.GetTransform().SetLocalPosition({ 1.0F, 0.0F, 0.0F }));
     ASSERT_TRUE(light.EditLight<scene::PointLight>([](auto& candidate) {
-      // Suppress map occlusion to measure contact visibility independently.
+      // Keep the small blocker partly visible through the map filter so the
+      // contact pass has a measurable contribution of its own.
       candidate.Common().shadow.bias = 1.0F;
     }));
     auto blocker = scene->CreateNode("Contact blocker");
@@ -298,13 +561,18 @@ namespace {
       mesh_node.GetFlags()->get().SetLocalValue(
         scene::SceneNodeFlags::kReceivesShadows, true);
       blocker.GetFlags()->get().SetLocalValue(
-        scene::SceneNodeFlags::kCastsShadows, true);
+        scene::SceneNodeFlags::kCastsShadows, false);
       ASSERT_TRUE(light.EditLight<scene::PointLight>([](auto& candidate) {
         candidate.Common().shadow.contact_shadows = false;
       }));
       ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0.0F, 2U));
+      const auto unshadowed = ReadFloatTexture(*probe->color).at(center).at(0);
+      blocker.GetFlags()->get().SetLocalValue(
+        scene::SceneNodeFlags::kCastsShadows, true);
+      ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0.0F, 1U));
       const auto baseline = ReadFloatTexture(*probe->color).at(center).at(0);
       ASSERT_GT(baseline, 1.0e-6F);
+      EXPECT_LE(baseline, unshadowed);
       ASSERT_TRUE(light.EditLight<scene::PointLight>([](auto& candidate) {
         candidate.Common().shadow.contact_shadows = true;
       }));
@@ -318,15 +586,15 @@ namespace {
       blocker.GetFlags()->get().SetLocalValue(
         scene::SceneNodeFlags::kCastsShadows, false);
       ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0.0F, 1U));
-      EXPECT_NEAR(ReadFloatTexture(*probe->color).at(center).at(0), baseline,
-        baseline * 0.005F);
+      EXPECT_NEAR(ReadFloatTexture(*probe->color).at(center).at(0), unshadowed,
+        unshadowed * 0.005F);
       blocker.GetFlags()->get().SetLocalValue(
         scene::SceneNodeFlags::kCastsShadows, true);
       mesh_node.GetFlags()->get().SetLocalValue(
         scene::SceneNodeFlags::kReceivesShadows, false);
       ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0.0F, 1U));
-      EXPECT_NEAR(ReadFloatTexture(*probe->color).at(center).at(0), baseline,
-        baseline * 0.005F);
+      EXPECT_NEAR(ReadFloatTexture(*probe->color).at(center).at(0), unshadowed,
+        unshadowed * 0.005F);
     }
   }
 

@@ -71,6 +71,8 @@ public:
     std::uint32_t outside_volume_local_light_count { 0U };
     std::uint32_t camera_inside_local_light_count { 0U };
     std::uint32_t local_light_draw_count { 0U };
+    std::uint32_t punctual_point_light_draw_count { 0U };
+    std::uint32_t pipeline_bind_count { 0U };
     std::uint32_t non_perspective_local_light_count { 0U };
     bool consumed_directional_shadow_product { false };
     bool directional_shadow_vsm_active { false };

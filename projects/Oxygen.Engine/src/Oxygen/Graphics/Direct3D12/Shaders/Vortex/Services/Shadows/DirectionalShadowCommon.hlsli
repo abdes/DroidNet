@@ -8,6 +8,7 @@
 #define OXYGEN_D3D12_SHADERS_VORTEX_SERVICES_SHADOWS_DIRECTIONALSHADOWCOMMON_HLSLI
 
 #include "Vortex/Contracts/Shadows/ShadowFrameBindings.hlsli"
+#include "Vortex/Services/Shadows/PointShadowFiltering.hlsli"
 
 static inline uint SelectDirectionalShadowCascade(
     VortexShadowFrameBindings bindings, DirectionalShadowRecord family,
@@ -219,56 +220,6 @@ static inline uint SelectPointShadowFace(float3 light_to_receiver)
     return light_to_receiver.z >= 0.0f ? 4u : 5u;
 }
 
-static inline float3 PointShadowFaceDirection(uint face_index)
-{
-    static const float3 kFaceDirections[6] = {
-        float3(1.0f, 0.0f, 0.0f),
-        float3(-1.0f, 0.0f, 0.0f),
-        float3(0.0f, 1.0f, 0.0f),
-        float3(0.0f, -1.0f, 0.0f),
-        float3(0.0f, 0.0f, 1.0f),
-        float3(0.0f, 0.0f, -1.0f),
-    };
-    return kFaceDirections[min(face_index, 5u)];
-}
-
-static inline float SamplePointShadowSurface(
-    VortexShadowFrameBindings bindings,
-    CubeLocalShadowRecord point_shadow,
-    uint point_shadow_index,
-    uint face_index,
-    float2 shadow_uv,
-    float receiver_depth)
-{
-    if (point_shadow.surface_srv == K_INVALID_BINDLESS_INDEX) {
-        return 1.0f;
-    }
-
-    Texture2DArray<float> shadow_surface =
-        ResourceDescriptorHeap[NonUniformResourceIndex(point_shadow.surface_srv)];
-    const uint base_layer =
-        point_shadow.first_array_layer;
-    const uint layer = base_layer + face_index;
-    const float2 inverse_resolution = max(point_shadow.inverse_resolution, float2(0.000001f, 0.000001f));
-    const float2 texture_size = 1.0f / inverse_resolution;
-    const int2 max_coord =
-        max(int2(texture_size) - int2(1, 1), int2(0, 0));
-    const int2 center = int2(shadow_uv * texture_size);
-
-    float visibility = 0.0f;
-    [unroll]
-    for (int y = -1; y <= 1; ++y) {
-        [unroll]
-        for (int x = -1; x <= 1; ++x) {
-            const int2 coord = clamp(center + int2(x, y), int2(0, 0), max_coord);
-            const float stored_depth = shadow_surface.Load(int4(coord, (int)layer, 0));
-            visibility += receiver_depth >= stored_depth ? 1.0f : 0.0f;
-        }
-    }
-
-    return visibility * (1.0f / 9.0f);
-}
-
 static inline float ComputePointShadowVisibility(
     VortexShadowFrameBindings bindings,
     uint point_shadow_index,
@@ -283,59 +234,39 @@ static inline float ComputePointShadowVisibility(
 
     const CubeLocalShadowRecord point_shadow =
         LoadCubeLocalShadow(bindings, point_shadow_index);
+    if (point_shadow.surface_srv == K_INVALID_BINDLESS_INDEX) {
+        return 1.0f;
+    }
     const float3 safe_normal = normalize(
-        dot(world_normal, world_normal) > 1.0e-8f ? world_normal : float3(0.0f, 1.0f, 0.0f));
-    const float3 safe_light_dir = normalize(
-        dot(light_direction_to_source, light_direction_to_source) > 1.0e-8f
-            ? light_direction_to_source
-            : point_shadow.shadow_origin_ws - world_position);
-    // Each cube face has a 90-degree perspective projection. Its texel
-    // footprint is 2 * axial receiver distance / resolution, not 2 * range.
-    const float3 unbiased_delta = abs(world_position - point_shadow.shadow_origin_ws);
-    const float receiver_axial_distance = max(unbiased_delta.x,
-        max(unbiased_delta.y, unbiased_delta.z));
-    const float world_texel_size = max(point_shadow.world_texel_size, 0.0f)
-        * saturate(receiver_axial_distance / point_shadow.far_plane_m);
-    const float normal_bias = max(point_shadow.normal_bias_m, 0.0f)
-        + world_texel_size * 0.75f;
-    const float receiver_bias = world_texel_size * 0.5f;
-    const float3 biased_world_position =
-        world_position + safe_normal * normal_bias + safe_light_dir * receiver_bias;
-
-    const float3 light_to_receiver =
-        biased_world_position - point_shadow.shadow_origin_ws;
-    const float distance_to_light = length(light_to_receiver);
-    if (distance_to_light >= point_shadow.far_plane_m) {
+        dot(world_normal, world_normal) > 1.0e-8f ? world_normal : float3(0, 1, 0));
+    const float3 biased_position = world_position
+        + safe_normal * max(point_shadow.normal_bias_m, 0.0f);
+    const float3 receiver_to_light = point_shadow.shadow_origin_ws - biased_position;
+    const float distance_squared = dot(receiver_to_light, receiver_to_light);
+    if (distance_squared <= 1.0e-12f
+        || distance_squared >= point_shadow.far_plane_m * point_shadow.far_plane_m) {
         return 1.0f;
     }
 
-    const uint face_index = SelectPointShadowFace(light_to_receiver);
-    const float4 shadow_clip = mul(
+    // Producer faces and native cube addressing both use receiver-to-light.
+    const uint face_index = SelectPointShadowFace(receiver_to_light);
+    const float4 clip = mul(
         LoadCubeLocalShadowFaceMatrix(bindings, point_shadow_index, face_index),
-        float4(biased_world_position, 1.0f));
-    if (abs(shadow_clip.w) <= 1.0e-6f) {
+        float4(biased_position, 1.0f));
+    if (clip.w <= 0.0f || clip.z < 0.0f || clip.z > clip.w) {
         return 1.0f;
     }
-
-    const float3 shadow_ndc = shadow_clip.xyz / shadow_clip.w;
-    const float2 shadow_uv = float2(
-        shadow_ndc.x * 0.5f + 0.5f,
-        shadow_ndc.y * -0.5f + 0.5f);
-    if (shadow_uv.x < 0.0f || shadow_uv.x > 1.0f
-        || shadow_uv.y < 0.0f || shadow_uv.y > 1.0f
-        || shadow_ndc.z < 0.0f || shadow_ndc.z > 1.0f) {
-        return 1.0f;
-    }
-
-    const float axial_distance = max(
-        0.0f,
-        dot(light_to_receiver, PointShadowFaceDirection(face_index)));
-    const float receiver_depth =
-        saturate(1.0f - axial_distance / point_shadow.far_plane_m);
-
-    return lerp(1.0f, SamplePointShadowSurface(
-        bindings, point_shadow, point_shadow_index, face_index, shadow_uv,
-        receiver_depth), saturate(point_shadow.shadow_strength));
+    const float receiver_depth = clip.z / clip.w;
+    // UE's point receiver adds constant + slope coefficient; the slope is
+    // 3 * the default authored slope multiplier 0.5. No caster bias is stored.
+    const float comparison_bias = point_shadow.depth_bias * 2.5f / clip.w;
+    TextureCubeArray<float> surface =
+        ResourceDescriptorHeap[NonUniformResourceIndex(point_shadow.surface_srv)];
+    const float visibility = SamplePointShadowHardwarePcf(surface,
+        point_shadow.first_array_layer / 6u, receiver_to_light,
+        point_shadow.inverse_resolution.x, receiver_depth, comparison_bias,
+        point_shadow.pcf_sample_count);
+    return lerp(1.0f, visibility, saturate(point_shadow.shadow_strength));
 }
 
 // Apply the retained center-source visibility approximation exactly once,

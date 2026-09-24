@@ -29,45 +29,42 @@ namespace oxygen::vortex::shadows::internal {
 namespace {
 
   constexpr float kMinPointNearPlane = 0.1F;
-  constexpr float kMinPointRange = 0.1F;
-  // Oxygen's retained linear-depth profile, not UE's projected-depth bias.
-  constexpr float kPointShadowDepthBiasScale = 3.0F;
+  // UE's point coefficient is relative to a one-unit projection near plane.
+  // Scale by our metric near plane before publishing a clip-space bias.
+  constexpr float kPointShadowDepthBiasScale = 0.02F;
   constexpr float kMaxUserShadowBias = 10.0F;
 
   constexpr auto kPointFaceDirections = std::array {
-    glm::vec3 { 1.0F, 0.0F, 0.0F },
     glm::vec3 { -1.0F, 0.0F, 0.0F },
-    glm::vec3 { 0.0F, 1.0F, 0.0F },
+    glm::vec3 { 1.0F, 0.0F, 0.0F },
     glm::vec3 { 0.0F, -1.0F, 0.0F },
-    glm::vec3 { 0.0F, 0.0F, 1.0F },
+    glm::vec3 { 0.0F, 1.0F, 0.0F },
     glm::vec3 { 0.0F, 0.0F, -1.0F },
+    glm::vec3 { 0.0F, 0.0F, 1.0F },
   };
 
   constexpr auto kPointFaceUps = std::array {
-    glm::vec3 { 0.0F, 0.0F, 1.0F },
-    glm::vec3 { 0.0F, 0.0F, 1.0F },
-    glm::vec3 { 0.0F, 0.0F, 1.0F },
-    glm::vec3 { 0.0F, 0.0F, 1.0F },
     glm::vec3 { 0.0F, -1.0F, 0.0F },
-    glm::vec3 { 0.0F, 1.0F, 0.0F },
+    glm::vec3 { 0.0F, -1.0F, 0.0F },
+    glm::vec3 { 0.0F, 0.0F, 1.0F },
+    glm::vec3 { 0.0F, 0.0F, -1.0F },
+    glm::vec3 { 0.0F, -1.0F, 0.0F },
+    glm::vec3 { 0.0F, -1.0F, 0.0F },
   };
 
   [[nodiscard]] auto ComputePointDepthBias(
-    const FrameLocalLightSelection& light, const float depth_span,
+    const FrameLocalLightSelection& light, const float near_plane,
     const std::uint32_t resolution) -> float
   {
     if (!std::isfinite(light.shadow_bias) || light.shadow_bias <= 0.0F) {
       return 0.0F;
     }
 
-    const auto safe_depth_span = (std::max)(depth_span, kMinPointRange);
     const auto safe_resolution = (std::max)(resolution, 1U);
     const auto user_bias
       = std::clamp(light.shadow_bias, 0.0F, kMaxUserShadowBias);
-    const auto bias = kPointShadowDepthBiasScale * 512.0F
-      / (safe_depth_span * static_cast<float>(safe_resolution)) * 2.0F
-      * user_bias;
-    return std::clamp(bias, 0.0F, 0.1F);
+    return kPointShadowDepthBiasScale * near_plane * 512.0F
+      / static_cast<float>(safe_resolution) * 2.0F * user_bias;
   }
 
 } // namespace
@@ -105,13 +102,14 @@ auto PointShadowSetup::BuildPointRecords(
     const auto near_plane = (std::min)(kMinPointNearPlane, range * 0.01F);
     const auto projection = MakeReversedZPerspectiveProjectionRH_ZO(
       glm::half_pi<float>(), 1.0F, near_plane, range);
-    const auto depth_span = range - near_plane;
     const auto depth_bias
-      = ComputePointDepthBias(light, depth_span, allocation.resolution.x);
+      = ComputePointDepthBias(light, near_plane, allocation.resolution.x);
     const auto world_texel_size = (2.0F * range)
       / static_cast<float>((std::max)(allocation.resolution.x, 1U));
 
     auto& point = records.emplace_back();
+    // Native cube sampling uses receiver-to-light, so each physical face
+    // looks along the negative cube axis. These RH bases preserve winding.
     for (std::size_t face_index = 0U; face_index < kPointFaceDirections.size();
       ++face_index) {
       const auto view = glm::lookAtRH(light.position,

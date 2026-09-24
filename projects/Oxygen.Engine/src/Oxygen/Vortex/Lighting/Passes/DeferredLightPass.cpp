@@ -93,6 +93,37 @@ namespace {
     std::uint32_t geometry_vertex_count { 0U };
   };
 
+  auto IsPunctualPoint(const DeferredLightDraw& draw) -> bool
+  {
+    return draw.kind == DeferredLightKind::kPoint
+      && draw.packet.light != nullptr
+      && draw.packet.light->source_radius_m == 0.0F;
+  }
+
+  constexpr std::size_t kPipelineCount = 10U;
+
+  auto PipelineIndex(const DeferredLightDraw& draw) -> std::size_t
+  {
+    if (draw.kind == DeferredLightKind::kDirectional
+      || draw.kind == DeferredLightKind::kStaticSkyLight) {
+      return 0U;
+    }
+    return 1U
+      + (draw.kind == DeferredLightKind::kSpot ? 6U
+          : IsPunctualPoint(draw)              ? 3U
+                                               : 0U)
+      + static_cast<std::size_t>(draw.draw_mode);
+  }
+
+  auto DrawOrderBucket(const DeferredLightDraw& draw) -> std::size_t
+  {
+    // Keep directional lighting first and sky last. Only local additive
+    // contributions are regrouped; preserve their order within each bucket.
+    return draw.kind == DeferredLightKind::kStaticSkyLight
+      ? kPipelineCount
+      : PipelineIndex(draw);
+  }
+
   auto RangeTypeToViewType(const bindless_d3d12::RangeType type)
     -> graphics::ResourceViewType
   {
@@ -462,7 +493,7 @@ namespace {
 
   auto BuildDeferredLocalPipelineDesc(const SceneTextures& scene_textures,
     const DeferredLightKind light_kind, const bool reverse_z,
-    const DeferredLocalLightDrawMode draw_mode)
+    const DeferredLocalLightDrawMode draw_mode, const bool punctual_point)
     -> graphics::GraphicsPipelineDesc
   {
     static const auto root_bindings = BuildVortexRootBindings();
@@ -521,6 +552,11 @@ namespace {
     // evaluates the actual receiver against the light's finite support.
     rasterizer.depth_clip_enable = false;
 
+    auto pixel_defines = std::vector<graphics::ShaderDefine> {};
+    if (punctual_point) {
+      pixel_defines.push_back({ .name = "PUNCTUAL_POINT", .value = "1" });
+    }
+
     return graphics::GraphicsPipelineDesc::Builder {}
     .SetVertexShader(graphics::ShaderRequest {
       .stage = ShaderType::kVertex,
@@ -531,6 +567,7 @@ namespace {
       .stage = ShaderType::kPixel,
       .source_path = source_path,
       .entry_point = pixel_entry,
+      .defines = std::move(pixel_defines),
     })
     .SetPrimitiveTopology(graphics::PrimitiveType::kTriangleList)
     .SetRasterizerState(rasterizer)
@@ -779,7 +816,8 @@ auto DeferredLightPass::Record(RenderContext& ctx,
         observer_ptr { &renderer_.GetInlineTransfersCoordinator() });
   }
   constants_publisher_->OnFrameStart(ctx.frame_sequence, ctx.frame_slot);
-  auto constants_records = std::vector<DeferredLightConstants> {};
+  auto& constants_records = constants_scratch_;
+  constants_records.clear();
   constants_records.reserve(draws.size());
   for (const auto& draw : draws) {
     auto constants = DeferredLightConstants {};
@@ -801,10 +839,36 @@ auto DeferredLightPass::Record(RenderContext& ctx,
   }
   const auto& pass_constants_indices = *publication;
 
-  graphics::GpuEventScope stage_scope(recorder,
-    "Vortex.Stage12.DeferredLighting",
-    profiling::ProfileGranularity::kTelemetry,
-    profiling::ProfileCategory::kPass);
+  // Owning labels are initialized once, even when GPU tracing is disabled.
+  // The string-view constructor allocates before checking capture policy.
+  static const auto kStageProfile = profiling::GpuProfileScopeDesc {
+    .label = "Vortex.Stage12.DeferredLighting",
+    .granularity = profiling::ProfileGranularity::kTelemetry,
+    .category = profiling::ProfileCategory::kPass,
+  };
+  static const auto kLightProfiles = std::array {
+    profiling::GpuProfileScopeDesc {
+      .label = "Vortex.Stage12.DirectionalLight",
+      .granularity = profiling::ProfileGranularity::kDiagnostic,
+      .category = profiling::ProfileCategory::kPass,
+    },
+    profiling::GpuProfileScopeDesc {
+      .label = "Vortex.Stage12.PointLight",
+      .granularity = profiling::ProfileGranularity::kDiagnostic,
+      .category = profiling::ProfileCategory::kPass,
+    },
+    profiling::GpuProfileScopeDesc {
+      .label = "Vortex.Stage12.SpotLight",
+      .granularity = profiling::ProfileGranularity::kDiagnostic,
+      .category = profiling::ProfileCategory::kPass,
+    },
+    profiling::GpuProfileScopeDesc {
+      .label = "Vortex.Stage12.StaticSkyLight",
+      .granularity = profiling::ProfileGranularity::kDiagnostic,
+      .category = profiling::ProfileCategory::kPass,
+    },
+  };
+  graphics::GpuEventScope stage_scope(recorder, kStageProfile);
 
   RequireKnownPersistentState(recorder, scene_textures.GetSceneColor());
   RequireKnownPersistentState(recorder, scene_textures.GetSceneDepth());
@@ -841,27 +905,27 @@ auto DeferredLightPass::Record(RenderContext& ctx,
     = static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants);
   const auto reverse_z = IsReverseZ(ctx);
   auto pipeline_descriptions
-    = std::array<std::optional<graphics::GraphicsPipelineDesc>, 7> {};
+    = std::array<std::optional<graphics::GraphicsPipelineDesc>,
+      kPipelineCount> {};
   auto bound_pipeline = std::optional<std::size_t> {};
   const graphics::Framebuffer* bound_framebuffer = nullptr;
   const auto bind_pipeline = [&](const DeferredLightDraw& draw) {
     const bool local = draw.kind == DeferredLightKind::kPoint
       || draw.kind == DeferredLightKind::kSpot;
-    const auto index = local
-      ? 1U + (draw.kind == DeferredLightKind::kSpot ? 3U : 0U)
-        + static_cast<std::size_t>(draw.draw_mode)
-      : 0U;
+    const auto index = PipelineIndex(draw);
     if (bound_pipeline == index) {
       return;
     }
     auto& description = pipeline_descriptions.at(index);
     if (!description) {
-      description = local ? BuildDeferredLocalPipelineDesc(scene_textures,
-                              draw.kind, reverse_z, draw.draw_mode)
-                          : BuildDeferredDirectionalPipelineDesc(
-                              scene_textures, ctx.shader_debug_mode);
+      description = local
+        ? BuildDeferredLocalPipelineDesc(scene_textures, draw.kind, reverse_z,
+            draw.draw_mode, IsPunctualPoint(draw))
+        : BuildDeferredDirectionalPipelineDesc(
+            scene_textures, ctx.shader_debug_mode);
     }
     recorder.SetPipelineState(*description);
+    ++state.pipeline_bind_count;
     recorder.SetGraphicsRootConstantBufferView(
       view_constants_param, ctx.view_constants->GetGPUVirtualAddress());
     recorder.SetGraphicsRoot32BitConstant(root_constants_param, 0U, 0U);
@@ -884,18 +948,31 @@ auto DeferredLightPass::Record(RenderContext& ctx,
   recorder.RequireResourceState(
     scene_textures.GetSceneColor(), graphics::ResourceStates::kRenderTarget);
 
+  // Counting sort avoids temporary allocations and repeated PSO switches for
+  // interleaved point/spot lists. Constants keep the original draw index, so
+  // selection and shadow-reference identities are unchanged.
+  auto cursors = std::array<std::size_t, kPipelineCount + 1U> {};
+  for (const auto& draw : draws) {
+    ++cursors[DrawOrderBucket(draw)];
+  }
+  std::size_t offset = 0U;
+  for (auto& cursor : cursors) {
+    const auto count = cursor;
+    cursor = offset;
+    offset += count;
+  }
+  draw_order_scratch_.resize(draws.size());
   for (std::size_t i = 0; i < draws.size(); ++i) {
+    draw_order_scratch_[cursors[DrawOrderBucket(draws[i])]++] = i;
+  }
+  for (const auto i : draw_order_scratch_) {
     const auto& draw = draws[i];
     const auto pass_index = pass_constants_indices[i];
+    graphics::GpuEventScope light_scope(
+      recorder, kLightProfiles[static_cast<std::size_t>(draw.kind)]);
 
     if (draw.kind == DeferredLightKind::kDirectional
       || draw.kind == DeferredLightKind::kStaticSkyLight) {
-      graphics::GpuEventScope light_scope(recorder,
-        draw.kind == DeferredLightKind::kDirectional
-          ? "Vortex.Stage12.DirectionalLight"
-          : "Vortex.Stage12.StaticSkyLight",
-        profiling::ProfileGranularity::kDiagnostic,
-        profiling::ProfileCategory::kPass);
       bind_framebuffer(*directional_framebuffer_);
       bind_pipeline(draw);
       bind_draw_constants(pass_index);
@@ -904,11 +981,6 @@ auto DeferredLightPass::Record(RenderContext& ctx,
       continue;
     }
 
-    graphics::GpuEventScope local_scope(recorder,
-      draw.kind == DeferredLightKind::kPoint ? "Vortex.Stage12.PointLight"
-                                             : "Vortex.Stage12.SpotLight",
-      profiling::ProfileGranularity::kDiagnostic,
-      profiling::ProfileCategory::kPass);
     CHECK_NOTNULL_F(local_framebuffer_.get(),
       "DeferredLightPass: local framebuffer must exist before local-light "
       "draws");
@@ -921,6 +993,9 @@ auto DeferredLightPass::Record(RenderContext& ctx,
     bind_draw_constants(pass_index);
     recorder.Draw(draw.geometry_vertex_count, 1U, 0U, 0U);
     ++state.local_light_draw_count;
+    if (IsPunctualPoint(draw)) {
+      ++state.punctual_point_light_draw_count;
+    }
     if (draw.draw_mode == DeferredLocalLightDrawMode::kCameraInsideVolume) {
       ++state.camera_inside_local_light_count;
       state.used_camera_inside_local_lights = true;

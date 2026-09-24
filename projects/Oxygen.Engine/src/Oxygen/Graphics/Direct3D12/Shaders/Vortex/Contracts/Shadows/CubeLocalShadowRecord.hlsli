@@ -21,7 +21,8 @@ struct CubeLocalShadowRecord {
     uint selection_index;
     float shadow_strength;
     float2 inverse_resolution;
-    uint2 reserved1;
+    uint pcf_sample_count;
+    uint reserved1;
 };
 
 #endif

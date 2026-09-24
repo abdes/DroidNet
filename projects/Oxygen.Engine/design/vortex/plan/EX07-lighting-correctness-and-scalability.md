@@ -238,6 +238,11 @@ EX07 exit requirements remain unchanged.
 
 ### EX07E handoff — active
 
+**Execution paused at the pre-E06 checkpoint by user request, 2026-09-24.**
+The heading anchor is retained for existing links. Resume only on the user's
+signal; the [authoritative checkpoint](../IMPLEMENTATION_STATUS.md#ex07e--work-items-and-resume-checkpoint)
+records completed pre-E06 checks and the dependent final acceptance gates.
+
 **Active: the user authorized EX07E on 2026-09-24.** The authoritative
 [E01–E08 work ledger and resume checkpoint](../IMPLEMENTATION_STATUS.md#ex07e--work-items-and-resume-checkpoint)
 record all eight investigation/delivery obligations, completion evidence and

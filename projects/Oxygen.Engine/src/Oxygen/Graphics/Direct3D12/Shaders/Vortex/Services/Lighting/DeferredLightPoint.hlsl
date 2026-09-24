@@ -56,6 +56,14 @@ float4 DeferredLightPointPS(DeferredLightVolumeVSOutput input) : SV_Target0
     const LightingFrameBindings lighting_bindings = LoadResolvedLightingFrameBindings();
     ForwardLocalLightRecord light;
     if (!TryLoadLocalLight(lighting_bindings, light_constants.selection_index, light)) return 0.0f.xxxx;
+    // This entry point is selected only for point-light packets. Publish that
+    // invariant to the compiler rather than retaining spot attenuation work.
+    light.kind = FORWARD_LOCAL_LIGHT_POINT;
+#if defined(PUNCTUAL_POINT)
+    // CPU selection requires an exactly zero radius; finite lights retain the
+    // ordinary variant, including arbitrarily small nonzero source radii.
+    light.source_radius_m = 0.0f;
+#endif
     LocalEmitterInput source;
     if (!PrepareLocalEmitterInput(light, world_position, source)) return 0.0f.xxxx;
     const DeferredLightingSurfaceData surface = LoadDeferredLightingSurface(
@@ -63,11 +71,16 @@ float4 DeferredLightPointPS(DeferredLightVolumeVSOutput input) : SV_Target0
     if (!LocalEmitterFacesSurface(light, source, surface.world_normal)) return 0.0f.xxxx;
     const LightShadowReference shadow_reference = LoadLightShadowReference(
         lighting_bindings.local_shadow_map_srv, light.selection_index);
-    const float shadow_visibility = surface.receives_shadows
-        ? ComputeLocalShadowVisibility(shadow_reference,
-            world_position, surface.world_normal, source.direction_to_center)
-            * ComputeContactShadowVisibility(light.flags, true, world_position,
-                surface.geometric_normal, source.direction_to_center) : 1.0f;
+    float shadow_visibility = 1.0f;
+    if (surface.receives_shadows) {
+        if (shadow_reference.record_index != K_INVALID_BINDLESS_INDEX) {
+            shadow_visibility = ComputePointShadowVisibility(
+                LoadVortexShadowFrameBindings(), shadow_reference.record_index,
+                world_position, surface.world_normal, source.direction_to_center);
+        }
+        shadow_visibility *= ComputeContactShadowVisibility(light.flags, true,
+            world_position, surface.geometric_normal, source.direction_to_center);
+    }
     if (shadow_visibility <= 0.0) return 0.0f.xxxx;
     const GgxDirectContext brdf = PrepareGgxDirect(surface.world_normal,
         surface.view_direction, surface.specular_f0,

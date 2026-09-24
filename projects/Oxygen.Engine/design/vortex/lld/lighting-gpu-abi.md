@@ -391,27 +391,37 @@ term still runs outside CSM distance coverage when the light contributes.
 | 416, 420, 424 | uint `surface_srv`, `first_array_layer`, `selection_index`       |
 |           428 | float `shadow_strength` (0–1; default 1)                         |
 |           432 | float2 `inverse_resolution`                                      |
-|           440 | uint2 `reserved1` (zero)                                         |
+|           440 | uint `pcf_sample_count` (1, 5 or 29; default 29)                 |
+|           444 | uint `reserved1` (zero)                                          |
 
 Both local records describe derived shadow projection, not another authored
-light. `far_plane_m` covers the physical finite-emitter influence, not just the
-old center range. Preserve the current local depth producer/receiver's linear
-reversed-depth convention together; do not compare perspective NDC depth with a
-linear-depth map. Select near clipping from validated support/precision needs;
-the current independent 0.1 m range floor cannot silently alter authored range.
-Apply authored depth bias once in its depth-pass owner; receiver normal/texel
-offsets stay separate. Float-packed layer/index metadata is removed.
+light. `far_plane_m` covers the authored center-based influence range; a nonzero
+source radius does not extend attenuation support. Near clipping cannot silently
+alter that range. Float-packed layer/index metadata is removed.
+
+Projected spots retain linear reversed depth and apply authored depth bias once
+in the depth pass. Cube-local records use unbiased projected reversed-Z depth
+and hardware comparison, with authored depth bias applied once at the receiver.
+Do not mix these encodings or bias owners. The
+[EX07E04 contract](../plan/EX07E-point-pcf-contract.md) specifies the conversion,
+units, normal displacement and quality mapping; implementation is tested, while
+new baseline visual acceptance remains open.
 
 For both perspective local records, `world_texel_size` denotes the footprint at
-the far plane. Receiver offsets scale it by positive axial receiver depth divided
-by `far_plane_m`; using the far footprint directly can erase nearby shadows when
-support spans kilometres. The cube axial depth is its dominant absolute
-light-relative coordinate; the spot axial depth is its unbiased clip w.
+the far plane. The projected-spot receiver scales it by positive axial depth
+(unbiased clip W) divided by `far_plane_m`; using the far footprint directly can
+erase nearby shadows when support spans kilometres. Cube hardware PCF retains
+the field's ABI position but no longer uses the old automatic receiver texel
+offsets. Its authored normal displacement remains separate from comparison bias.
 
-Cube face order remains +X,-X,+Y,-Y,+Z,-Z, with existing world-axis bases and
-matching face selection. For local linear reversed depth, use the selected
-projection's positive axial distance (clip w) and its published far distance;
-the projection's NDC z is only a frustum test, not the stored-depth encoding.
+The cube SRV is `TextureCubeArray<float>` and its cube index is
+`first_array_layer / 6`. Native cube axes are +X,-X,+Y,-Y,+Z,-Z in the sampled
+receiver-to-light vector; physical views therefore look along
+-X,+X,-Y,+Y,-Z,+Z. Their right-handed up vectors are -Y,-Y,+Z,-Z,-Y,-Y.
+The receiver compares projected clip Z/W with the rasterized depth and adds
+the positive reversed-Z comparison bias divided by clip W. Low/Medium/High/Ultra
+publish 1/5/29/29 comparisons. Ordinary projected spots still use their positive
+axial distance and published far distance for linear-depth comparison.
 
 Each descriptor identifies an allocation/resolution bucket with checked layers.
 Grow or create another bucket within D1/D6 budgets and backend array limits;

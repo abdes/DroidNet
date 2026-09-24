@@ -29,16 +29,17 @@ struct alignas(packing::kShaderDataFieldAlignment) CubeLocalShadowRecord {
   float near_plane_m { 0.0F };
   float far_plane_m { 0.0F };
   float normal_bias_m { 0.0F };
-  float depth_bias { 0.0F };
+  float depth_bias { 0.0F }; // Clip-space receiver bias; divide by clip W.
   float world_texel_size {
     0.0F
   }; // Far-plane footprint; scale by receiver depth.
-  ShaderVisibleIndex surface_srv { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex surface_srv { kInvalidShaderVisibleIndex }; // Cube array.
   ShadowArrayLayer first_array_layer { kInvalidShadowArrayLayer };
   LightSelectionIndex selection_index { kInvalidLightSelectionIndex };
   float shadow_strength { 1.0F };
   glm::vec2 inverse_resolution { 0.0F };
-  glm::uvec2 reserved1 { 0U };
+  std::uint32_t pcf_sample_count { 29U };
+  std::uint32_t reserved1 { 0U };
 };
 
 // NOLINTBEGIN(*-magic-numbers)
@@ -59,7 +60,8 @@ static_assert(offsetof(CubeLocalShadowRecord, first_array_layer) == 420U);
 static_assert(offsetof(CubeLocalShadowRecord, selection_index) == 424U);
 static_assert(offsetof(CubeLocalShadowRecord, shadow_strength) == 428U);
 static_assert(offsetof(CubeLocalShadowRecord, inverse_resolution) == 432U);
-static_assert(offsetof(CubeLocalShadowRecord, reserved1) == 440U);
+static_assert(offsetof(CubeLocalShadowRecord, pcf_sample_count) == 440U);
+static_assert(offsetof(CubeLocalShadowRecord, reserved1) == 444U);
 // NOLINTEND(*-magic-numbers)
 
 } // namespace oxygen::vortex

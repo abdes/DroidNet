@@ -1,0 +1,485 @@
+{
+  "scope": "Automated correctness qualification; not timing or visual baseline acceptance.",
+  "rows": [
+    {
+      "case": "moving-1024",
+      "family": "deferred",
+      "images": 4,
+      "max_budget_fraction": 0.0,
+      "failed_channels": 0,
+      "test": {
+        "tests": 1,
+        "failures": 0,
+        "disabled": 1,
+        "errors": 0,
+        "timestamp": "2026-09-24T16:55:19Z",
+        "time": "1.031s",
+        "name": "AllTests",
+        "testsuites": [
+          {
+            "name": "ManyLightBaseline",
+            "tests": 1,
+            "failures": 0,
+            "disabled": 1,
+            "errors": 0,
+            "timestamp": "2026-09-24T16:55:19Z",
+            "time": "1.031s",
+            "testsuite": [
+              {
+                "name": "DISABLED_RenderAndMeasure",
+                "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Benchmarks\\ManyLightBaseline_bench.cpp",
+                "line": 325,
+                "status": "RUN",
+                "result": "COMPLETED",
+                "timestamp": "2026-09-24T16:55:19Z",
+                "time": "1.031s",
+                "classname": "ManyLightBaseline",
+                "baseline_manifest": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\analysis\\ex07e\\e05-interactions\\moving-1024-deferred\\qualification\\manifest.json"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "case": "moving-1024",
+      "family": "forward",
+      "images": 4,
+      "max_budget_fraction": 0.0,
+      "failed_channels": 0,
+      "test": {
+        "tests": 1,
+        "failures": 0,
+        "disabled": 1,
+        "errors": 0,
+        "timestamp": "2026-09-24T16:55:24Z",
+        "time": "0.998s",
+        "name": "AllTests",
+        "testsuites": [
+          {
+            "name": "ManyLightBaseline",
+            "tests": 1,
+            "failures": 0,
+            "disabled": 1,
+            "errors": 0,
+            "timestamp": "2026-09-24T16:55:24Z",
+            "time": "0.997s",
+            "testsuite": [
+              {
+                "name": "DISABLED_RenderAndMeasure",
+                "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Benchmarks\\ManyLightBaseline_bench.cpp",
+                "line": 325,
+                "status": "RUN",
+                "result": "COMPLETED",
+                "timestamp": "2026-09-24T16:55:24Z",
+                "time": "0.997s",
+                "classname": "ManyLightBaseline",
+                "baseline_manifest": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\analysis\\ex07e\\e05-interactions\\moving-1024-forward\\qualification\\manifest.json"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "case": "orthographic-1024",
+      "family": "deferred",
+      "images": 1,
+      "max_budget_fraction": 0.0,
+      "failed_channels": 0,
+      "test": {
+        "tests": 1,
+        "failures": 0,
+        "disabled": 1,
+        "errors": 0,
+        "timestamp": "2026-09-24T16:55:32Z",
+        "time": "0.922s",
+        "name": "AllTests",
+        "testsuites": [
+          {
+            "name": "ManyLightBaseline",
+            "tests": 1,
+            "failures": 0,
+            "disabled": 1,
+            "errors": 0,
+            "timestamp": "2026-09-24T16:55:32Z",
+            "time": "0.922s",
+            "testsuite": [
+              {
+                "name": "DISABLED_RenderAndMeasure",
+                "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Benchmarks\\ManyLightBaseline_bench.cpp",
+                "line": 325,
+                "status": "RUN",
+                "result": "COMPLETED",
+                "timestamp": "2026-09-24T16:55:32Z",
+                "time": "0.922s",
+                "classname": "ManyLightBaseline",
+                "baseline_manifest": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\analysis\\ex07e\\e05-interactions\\orthographic-1024-deferred\\qualification\\manifest.json"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "case": "orthographic-1024",
+      "family": "forward",
+      "images": 1,
+      "max_budget_fraction": 0.0,
+      "failed_channels": 0,
+      "test": {
+        "tests": 1,
+        "failures": 0,
+        "disabled": 1,
+        "errors": 0,
+        "timestamp": "2026-09-24T16:55:35Z",
+        "time": "0.832s",
+        "name": "AllTests",
+        "testsuites": [
+          {
+            "name": "ManyLightBaseline",
+            "tests": 1,
+            "failures": 0,
+            "disabled": 1,
+            "errors": 0,
+            "timestamp": "2026-09-24T16:55:35Z",
+            "time": "0.832s",
+            "testsuite": [
+              {
+                "name": "DISABLED_RenderAndMeasure",
+                "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Benchmarks\\ManyLightBaseline_bench.cpp",
+                "line": 325,
+                "status": "RUN",
+                "result": "COMPLETED",
+                "timestamp": "2026-09-24T16:55:35Z",
+                "time": "0.832s",
+                "classname": "ManyLightBaseline",
+                "baseline_manifest": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\analysis\\ex07e\\e05-interactions\\orthographic-1024-forward\\qualification\\manifest.json"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "case": "shadows-5-9",
+      "family": "deferred",
+      "images": 1,
+      "max_budget_fraction": 0.0,
+      "failed_channels": 0,
+      "test": {
+        "tests": 1,
+        "failures": 0,
+        "disabled": 1,
+        "errors": 0,
+        "timestamp": "2026-09-24T16:55:38Z",
+        "time": "0.891s",
+        "name": "AllTests",
+        "testsuites": [
+          {
+            "name": "ManyLightBaseline",
+            "tests": 1,
+            "failures": 0,
+            "disabled": 1,
+            "errors": 0,
+            "timestamp": "2026-09-24T16:55:38Z",
+            "time": "0.891s",
+            "testsuite": [
+              {
+                "name": "DISABLED_RenderAndMeasure",
+                "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Benchmarks\\ManyLightBaseline_bench.cpp",
+                "line": 325,
+                "status": "RUN",
+                "result": "COMPLETED",
+                "timestamp": "2026-09-24T16:55:38Z",
+                "time": "0.891s",
+                "classname": "ManyLightBaseline",
+                "baseline_manifest": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\analysis\\ex07e\\e05-interactions\\shadows-5-9-deferred\\qualification\\manifest.json"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "case": "shadows-5-9",
+      "family": "forward",
+      "images": 1,
+      "max_budget_fraction": 0.0,
+      "failed_channels": 0,
+      "test": {
+        "tests": 1,
+        "failures": 0,
+        "disabled": 1,
+        "errors": 0,
+        "timestamp": "2026-09-24T16:55:41Z",
+        "time": "0.842s",
+        "name": "AllTests",
+        "testsuites": [
+          {
+            "name": "ManyLightBaseline",
+            "tests": 1,
+            "failures": 0,
+            "disabled": 1,
+            "errors": 0,
+            "timestamp": "2026-09-24T16:55:41Z",
+            "time": "0.842s",
+            "testsuite": [
+              {
+                "name": "DISABLED_RenderAndMeasure",
+                "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Benchmarks\\ManyLightBaseline_bench.cpp",
+                "line": 325,
+                "status": "RUN",
+                "result": "COMPLETED",
+                "timestamp": "2026-09-24T16:55:41Z",
+                "time": "0.842s",
+                "classname": "ManyLightBaseline",
+                "baseline_manifest": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\analysis\\ex07e\\e05-interactions\\shadows-5-9-forward\\qualification\\manifest.json"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "case": "shadows-finite",
+      "family": "deferred",
+      "images": 1,
+      "max_budget_fraction": 0.0,
+      "failed_channels": 0,
+      "test": {
+        "tests": 1,
+        "failures": 0,
+        "disabled": 1,
+        "errors": 0,
+        "timestamp": "2026-09-24T16:55:43Z",
+        "time": "0.906s",
+        "name": "AllTests",
+        "testsuites": [
+          {
+            "name": "ManyLightBaseline",
+            "tests": 1,
+            "failures": 0,
+            "disabled": 1,
+            "errors": 0,
+            "timestamp": "2026-09-24T16:55:43Z",
+            "time": "0.906s",
+            "testsuite": [
+              {
+                "name": "DISABLED_RenderAndMeasure",
+                "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Benchmarks\\ManyLightBaseline_bench.cpp",
+                "line": 325,
+                "status": "RUN",
+                "result": "COMPLETED",
+                "timestamp": "2026-09-24T16:55:43Z",
+                "time": "0.906s",
+                "classname": "ManyLightBaseline",
+                "baseline_manifest": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\analysis\\ex07e\\e05-interactions\\shadows-finite-deferred\\qualification\\manifest.json"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "case": "shadows-finite",
+      "family": "forward",
+      "images": 1,
+      "max_budget_fraction": 0.0,
+      "failed_channels": 0,
+      "test": {
+        "tests": 1,
+        "failures": 0,
+        "disabled": 1,
+        "errors": 0,
+        "timestamp": "2026-09-24T16:55:46Z",
+        "time": "0.822s",
+        "name": "AllTests",
+        "testsuites": [
+          {
+            "name": "ManyLightBaseline",
+            "tests": 1,
+            "failures": 0,
+            "disabled": 1,
+            "errors": 0,
+            "timestamp": "2026-09-24T16:55:46Z",
+            "time": "0.822s",
+            "testsuite": [
+              {
+                "name": "DISABLED_RenderAndMeasure",
+                "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Benchmarks\\ManyLightBaseline_bench.cpp",
+                "line": 325,
+                "status": "RUN",
+                "result": "COMPLETED",
+                "timestamp": "2026-09-24T16:55:46Z",
+                "time": "0.822s",
+                "classname": "ManyLightBaseline",
+                "baseline_manifest": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\analysis\\ex07e\\e05-interactions\\shadows-finite-forward\\qualification\\manifest.json"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "case": "shadows-wide",
+      "family": "deferred",
+      "images": 1,
+      "max_budget_fraction": 0.0,
+      "failed_channels": 0,
+      "test": {
+        "tests": 1,
+        "failures": 0,
+        "disabled": 1,
+        "errors": 0,
+        "timestamp": "2026-09-24T16:55:48Z",
+        "time": "0.914s",
+        "name": "AllTests",
+        "testsuites": [
+          {
+            "name": "ManyLightBaseline",
+            "tests": 1,
+            "failures": 0,
+            "disabled": 1,
+            "errors": 0,
+            "timestamp": "2026-09-24T16:55:48Z",
+            "time": "0.914s",
+            "testsuite": [
+              {
+                "name": "DISABLED_RenderAndMeasure",
+                "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Benchmarks\\ManyLightBaseline_bench.cpp",
+                "line": 325,
+                "status": "RUN",
+                "result": "COMPLETED",
+                "timestamp": "2026-09-24T16:55:48Z",
+                "time": "0.914s",
+                "classname": "ManyLightBaseline",
+                "baseline_manifest": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\analysis\\ex07e\\e05-interactions\\shadows-wide-deferred\\qualification\\manifest.json"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "case": "shadows-wide",
+      "family": "forward",
+      "images": 1,
+      "max_budget_fraction": 0.0,
+      "failed_channels": 0,
+      "test": {
+        "tests": 1,
+        "failures": 0,
+        "disabled": 1,
+        "errors": 0,
+        "timestamp": "2026-09-24T16:55:51Z",
+        "time": "0.808s",
+        "name": "AllTests",
+        "testsuites": [
+          {
+            "name": "ManyLightBaseline",
+            "tests": 1,
+            "failures": 0,
+            "disabled": 1,
+            "errors": 0,
+            "timestamp": "2026-09-24T16:55:51Z",
+            "time": "0.808s",
+            "testsuite": [
+              {
+                "name": "DISABLED_RenderAndMeasure",
+                "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Benchmarks\\ManyLightBaseline_bench.cpp",
+                "line": 325,
+                "status": "RUN",
+                "result": "COMPLETED",
+                "timestamp": "2026-09-24T16:55:51Z",
+                "time": "0.808s",
+                "classname": "ManyLightBaseline",
+                "baseline_manifest": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\analysis\\ex07e\\e05-interactions\\shadows-wide-forward\\qualification\\manifest.json"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "case": "two-view-1024",
+      "family": "deferred",
+      "images": 2,
+      "max_budget_fraction": 0.0,
+      "failed_channels": 0,
+      "test": {
+        "tests": 1,
+        "failures": 0,
+        "disabled": 1,
+        "errors": 0,
+        "timestamp": "2026-09-24T16:55:27Z",
+        "time": "0.998s",
+        "name": "AllTests",
+        "testsuites": [
+          {
+            "name": "ManyLightBaseline",
+            "tests": 1,
+            "failures": 0,
+            "disabled": 1,
+            "errors": 0,
+            "timestamp": "2026-09-24T16:55:27Z",
+            "time": "0.998s",
+            "testsuite": [
+              {
+                "name": "DISABLED_RenderAndMeasure",
+                "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Benchmarks\\ManyLightBaseline_bench.cpp",
+                "line": 325,
+                "status": "RUN",
+                "result": "COMPLETED",
+                "timestamp": "2026-09-24T16:55:27Z",
+                "time": "0.998s",
+                "classname": "ManyLightBaseline",
+                "baseline_manifest": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\analysis\\ex07e\\e05-interactions\\two-view-1024-deferred\\qualification\\manifest.json"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "case": "two-view-1024",
+      "family": "forward",
+      "images": 2,
+      "max_budget_fraction": 0.0,
+      "failed_channels": 0,
+      "test": {
+        "tests": 1,
+        "failures": 0,
+        "disabled": 1,
+        "errors": 0,
+        "timestamp": "2026-09-24T16:55:30Z",
+        "time": "0.859s",
+        "name": "AllTests",
+        "testsuites": [
+          {
+            "name": "ManyLightBaseline",
+            "tests": 1,
+            "failures": 0,
+            "disabled": 1,
+            "errors": 0,
+            "timestamp": "2026-09-24T16:55:30Z",
+            "time": "0.859s",
+            "testsuite": [
+              {
+                "name": "DISABLED_RenderAndMeasure",
+                "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Benchmarks\\ManyLightBaseline_bench.cpp",
+                "line": 325,
+                "status": "RUN",
+                "result": "COMPLETED",
+                "timestamp": "2026-09-24T16:55:30Z",
+                "time": "0.859s",
+                "classname": "ManyLightBaseline",
+                "baseline_manifest": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\analysis\\ex07e\\e05-interactions\\two-view-1024-forward\\qualification\\manifest.json"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

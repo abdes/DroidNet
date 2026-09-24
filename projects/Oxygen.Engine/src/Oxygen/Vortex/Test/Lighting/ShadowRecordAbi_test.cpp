@@ -4,18 +4,18 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <array>
 #include <bit>
-#include <cstddef>
 #include <cmath>
-#include <algorithm>
-
-#include <glm/ext/matrix_clip_space.hpp>
-#include <glm/geometric.hpp>
+#include <cstddef>
 #include <cstdint>
 #include <span>
 #include <type_traits>
 #include <vector>
+
+#include <glm/ext/matrix_clip_space.hpp>
+#include <glm/geometric.hpp>
 
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Testing/GTest.h>
@@ -31,7 +31,8 @@
 namespace oxygen::vortex::testing {
 namespace {
 
-  NOLINT_TEST_F(LightingGpuAbiTest, ContactShadowMetricRayThicknessSelfRejectionAndFades)
+  NOLINT_TEST_F(
+    LightingGpuAbiTest, ContactShadowMetricRayThicknessSelfRejectionAndFades)
   {
     struct Probe {
       glm::mat4 view { 1.0F };
@@ -40,7 +41,8 @@ namespace {
       std::uint32_t reversed_depth;
       glm::vec3 normal { 0.0F, 0.0F, 1.0F };
       ShaderVisibleIndex depth_srv;
-      glm::vec3 light_direction { glm::normalize(glm::vec3 { 1.0F, 0.0F, 1.0F }) };
+      glm::vec3 light_direction { glm::normalize(
+        glm::vec3 { 1.0F, 0.0F, 1.0F }) };
       std::uint32_t extent { 64U };
     };
     static_assert(sizeof(Probe) == 176U);
@@ -72,8 +74,8 @@ namespace {
           };
           const auto hit_ndc = project(sample);
           const auto uv = glm::vec2(hit_ndc) * glm::vec2(0.5F, -0.5F) + 0.5F;
-          auto pixels = std::vector<std::uint32_t>(64U * 64U,
-            std::bit_cast<std::uint32_t>(reverse ? 0.0F : 1.0F));
+          auto pixels = std::vector<std::uint32_t>(
+            64U * 64U, std::bit_cast<std::uint32_t>(reverse ? 0.0F : 1.0F));
           float expected = 1.0F;
           if (uv.x >= 0.0F && uv.x < 1.0F && uv.y >= 0.0F && uv.y < 1.0F) {
             const auto gap = scenario == 2U ? 0.003F : 0.001F;
@@ -83,23 +85,28 @@ namespace {
             pixels.at(y * 64U + x) = std::bit_cast<std::uint32_t>(stored);
             if (scenario == 3U) {
               const auto start = project(origin);
-              const auto start_uv = glm::vec2(start) * glm::vec2(0.5F, -0.5F) + 0.5F;
+              const auto start_uv
+                = glm::vec2(start) * glm::vec2(0.5F, -0.5F) + 0.5F;
               pixels.at(static_cast<unsigned>(start_uv.y * 64U) * 64U
-                + static_cast<unsigned>(start_uv.x * 64U)) = std::bit_cast<std::uint32_t>(stored);
+                + static_cast<unsigned>(start_uv.x * 64U))
+                = std::bit_cast<std::uint32_t>(stored);
             } else if (scenario != 2U) {
               const auto t = std::clamp((distance - 0.20F) / 0.05F, 0.0F, 1.0F);
               const auto end = 1.0F - t * t * (3.0F - 2.0F * t);
               const auto edge = std::clamp(64.0F
-                * (std::min)({ uv.x, uv.y, 1.0F - uv.x, 1.0F - uv.y }) / 8.0F,
+                  * (std::min)({ uv.x, uv.y, 1.0F - uv.x, 1.0F - uv.y }) / 8.0F,
                 0.0F, 1.0F);
               expected = 1.0F - end * edge;
             }
           }
-          input.depth_srv = PublishPackedTexture(Format::kR32Float, pixels, 64U);
-          const auto decoded = Decode({
-            .records = std::as_bytes(std::span(&input, 1U)),
-            .stride = sizeof(Probe), .record_kind = 26U, .decoded_words = 1U,
-            .count = 1U });
+          input.depth_srv
+            = PublishPackedTexture(Format::kR32Float, pixels, 64U);
+          const auto decoded
+            = Decode({ .records = std::as_bytes(std::span(&input, 1U)),
+              .stride = sizeof(Probe),
+              .record_kind = 26U,
+              .decoded_words = 1U,
+              .count = 1U });
           ASSERT_EQ(decoded.size(), 1U);
           EXPECT_NEAR(std::bit_cast<float>(decoded[0]), expected, 2.0e-5F);
         }
@@ -357,6 +364,7 @@ namespace {
       .selection_index = projected.selection_index,
       .shadow_strength = projected.shadow_strength,
       .inverse_resolution = projected.inverse_resolution,
+      .pcf_sample_count = 5U,
     };
     for (std::size_t face = 0U; face < cube.face_light_view_projection.size();
       ++face) {
@@ -369,6 +377,7 @@ namespace {
     projected_second.array_layer = kInvalidShadowArrayLayer;
     projected_second.selection_index = kInvalidLightSelectionIndex;
     auto cube_second = cube;
+    cube_second.pcf_sample_count = 29U;
     for (auto& face : cube_second.face_light_view_projection) {
       face *= 8.0F;
     }
@@ -410,7 +419,7 @@ namespace {
           word(0.25F),
           word(0.0625F),
           word(0.03125F),
-          0U,
+          cube_projection ? (second ? 29U : 5U) : 0U,
           0U,
         };
         expected.insert(expected.end(), tail.begin(), tail.end());

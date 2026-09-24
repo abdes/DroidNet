@@ -351,7 +351,7 @@ namespace {
     });
     framebuffer = Backend().CreateFramebuffer(
       graphics::FramebufferDesc {}.AddColorAttachment(output));
-    auto observed_counts = std::array<std::uint32_t, 3> {};
+    auto observed_counts = std::array<std::uint32_t, 5> {};
     probe->inspect = [&](const auto&, const auto&, unsigned) -> void {
       const auto* lighting
         = RendererPublicationProbe::GetLightingService(*renderer_);
@@ -360,6 +360,8 @@ namespace {
         lighting->GetLastGridBuildState().local_light_count,
         lighting->GetLastDeferredLightingState().point_light_count,
         lighting->GetLastDeferredLightingState().spot_light_count,
+        lighting->GetLastDeferredLightingState().pipeline_bind_count,
+        lighting->GetLastDeferredLightingState().local_light_draw_count,
       };
     };
     for (const bool forward : { false, true }) {
@@ -367,6 +369,10 @@ namespace {
       ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0.0F, 3U));
       EXPECT_EQ(observed_counts.at(0), 1024U);
       if (!forward) {
+        EXPECT_LE(observed_counts.at(3), 11U);
+        EXPECT_LT(observed_counts.at(3), observed_counts.at(4));
+        RecordProperty("deferred_pipeline_binds", observed_counts.at(3));
+        RecordProperty("deferred_local_draws", observed_counts.at(4));
         EXPECT_LE(observed_counts.at(1), 512U);
         EXPECT_LE(observed_counts.at(2), 512U);
         const auto drawn = observed_counts.at(1) + observed_counts.at(2);

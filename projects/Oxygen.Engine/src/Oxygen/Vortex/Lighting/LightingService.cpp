@@ -193,6 +193,9 @@ auto LightingService::RenderDeferredLighting(RenderContext& ctx,
     .camera_inside_local_light_count
     = pass_state.camera_inside_local_light_count,
     .local_light_draw_count = pass_state.local_light_draw_count,
+    .punctual_point_light_draw_count
+    = pass_state.punctual_point_light_draw_count,
+    .pipeline_bind_count = pass_state.pipeline_bind_count,
     .non_perspective_local_light_count
     = pass_state.non_perspective_local_light_count,
     .consumed_directional_shadow_product
