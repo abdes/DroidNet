@@ -734,7 +734,9 @@ auto TextureImportJob::CookTexture(
   item.texture_id = texture_id.empty() ? source.source_id : texture_id;
   item.desc = desc;
   item.packing_policy_id = tuning.enabled ? tuning.packing_policy_id : "d3d12";
-  item.output_format_is_override = tuning.enabled;
+  item.output_format_policy = tuning.enabled
+      ? TexturePipeline::OutputFormatPolicy::kExplicit
+      : TexturePipeline::OutputFormatPolicy::kPreserveSource;
   item.failure_policy = FailurePolicyForTextureTuning(tuning);
   item.equirect_to_cubemap = tuning.equirect_to_cubemap;
   item.cubemap_face_size = tuning.cubemap_face_size;

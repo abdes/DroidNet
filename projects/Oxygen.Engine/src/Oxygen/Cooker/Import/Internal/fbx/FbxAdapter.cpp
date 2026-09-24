@@ -1538,8 +1538,7 @@ namespace {
       }
       scene_material_index_by_ptr.emplace(mat, mat_i);
     }
-    const auto mesh_count = static_cast<uint32_t>(scene.meshes.count);
-    DLOG_F(2, "FBX scene meshes={} skin_deformers={}", mesh_count,
+    DLOG_F(2, "FBX scene meshes={} skin_deformers={}", scene.meshes.count,
       scene.skin_deformers.count);
 
     const auto scene_name = input.request.GetSceneName();
@@ -2326,7 +2325,9 @@ auto FbxAdapter::BuildWorkItems(TextureWorkTag, TextureWorkItemSink& sink,
     item.desc = std::move(desc);
     item.packing_policy_id
       = tuning.enabled ? tuning.packing_policy_id : "d3d12";
-    item.output_format_is_override = tuning.enabled;
+    item.output_format_policy = tuning.enabled
+      ? TexturePipeline::OutputFormatPolicy::kExplicit
+      : TexturePipeline::OutputFormatPolicy::kMaterialPreset;
     item.failure_policy
       = input.request.options.texture_tuning.placeholder_on_failure
       ? TexturePipeline::FailurePolicy::kPlaceholder

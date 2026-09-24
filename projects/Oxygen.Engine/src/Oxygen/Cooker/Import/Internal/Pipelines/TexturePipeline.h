@@ -95,6 +95,13 @@ public:
     kPlaceholder,
   };
 
+  //! Distinguish decoded-source storage, material-role defaults and user intent.
+  enum class OutputFormatPolicy : uint8_t {
+    kPreserveSource,
+    kMaterialPreset, //!< Use the role preset for LDR; preserve floating HDR.
+    kExplicit,
+  };
+
   //! Source bytes for a single texture payload.
   struct SourceBytes {
     std::span<const std::byte> bytes;
@@ -126,8 +133,8 @@ public:
     //! Packing policy identifier (e.g., "d3d12", "tight").
     std::string packing_policy_id;
 
-    //! True when output format is explicitly overridden.
-    bool output_format_is_override = false;
+    //! How decoded source format and the import descriptor select storage.
+    OutputFormatPolicy output_format_policy = OutputFormatPolicy::kPreserveSource;
 
     //! Failure policy for this work item.
     FailurePolicy failure_policy = FailurePolicy::kPlaceholder;
