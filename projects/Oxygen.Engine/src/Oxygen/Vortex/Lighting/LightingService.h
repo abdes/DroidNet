@@ -14,6 +14,7 @@
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Vortex/Lighting/Types/FrameLightingInputs.h>
+#include <Oxygen/Vortex/Lighting/Types/LightGridResources.h>
 #include <Oxygen/Vortex/Lighting/Types/LightingPreparationFailure.h>
 #include <Oxygen/Vortex/Shadows/Types/ShadowFrameData.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
@@ -113,6 +114,8 @@ public:
     ViewId view_id) const -> const LightingFrameBindings*;
   [[nodiscard]] OXGN_VRTX_API auto ResolveLightingFrameSlot(
     ViewId view_id) const -> ShaderVisibleIndex;
+  [[nodiscard]] OXGN_VRTX_API auto InspectGridResources(ViewId view_id) const
+    -> LightGridResources;
   [[nodiscard]] OXGN_VRTX_NDAPI auto GetLastGridBuildState() const noexcept
     -> const GridBuildState&
   {

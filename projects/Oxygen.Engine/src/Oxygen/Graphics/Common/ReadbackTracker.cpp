@@ -249,7 +249,9 @@ auto ReadbackTracker::OnFrameStart(const frame::Slot slot) -> void
     }
   }
 
-  if (same_slot_count > 0U) {
+  // Completed readbacks may remain owned until the renderer consumes them
+  // after BeginFrame. Only unfinished work warrants a slot-reuse warning.
+  if (pending_same_slot_count > 0U) {
     LOG_F(WARNING,
       "ReadbackTracker::OnFrameStart re-entered frame slot {} while {} "
       "readback ticket(s) from that slot are still tracked (pending={}); "

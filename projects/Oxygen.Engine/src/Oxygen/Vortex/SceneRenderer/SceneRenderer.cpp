@@ -1954,7 +1954,9 @@ auto SceneRenderer::RenderCurrentView(
     RecordDiagnosticsPass(renderer_,
       DiagnosticsPassRecord {
         .name = "Vortex.Stage6.ForwardLightData",
-        .kind = DiagnosticsPassKind::kCpuOnly,
+        .kind = lighting_bindings->local_count != 0U
+          ? DiagnosticsPassKind::kCompute
+          : DiagnosticsPassKind::kCpuOnly,
         .executed = published_view_frame_bindings_.lighting_frame_slot
           != kInvalidShaderVisibleIndex,
         .inputs = { "FrameLightSelection" },

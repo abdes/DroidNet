@@ -217,6 +217,9 @@ auto LightGridBuilder::Build(const FrameLightingInputs& inputs)
       .view_id = view_input.view_id,
       .bindings = bindings,
       .metadata = metadata,
+      .view_matrix = view_input.resolved_view->ViewMatrix(),
+      .projection = view_input.resolved_view->ProjectionMatrix(),
+      .inverse_projection = view_input.resolved_view->InverseProjection(),
     });
   }
 

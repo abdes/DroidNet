@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <memory>
 #include <numbers>
 #include <string>
@@ -32,12 +33,210 @@
 #include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Lighting/LightingService.h>
+#include <Oxygen/Vortex/Lighting/Types/ClusterLightRange.h>
+#include <Oxygen/Vortex/Lighting/Types/LightGridBuildStatus.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureLightingFixture.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
 #include <Oxygen/Vortex/Test/Support/LightingWorkload.h>
+#include <Oxygen/Vortex/Types/LightCullingConfig.h>
 
 namespace oxygen::vortex::testing {
 namespace {
+  class SpatialLightGridGpuTest : public exposure::ExposureLightingGpuTest {
+  protected:
+    LightingFrameBindings grid_bindings {};
+    LightGridResources grid_resources {};
+    scene::NodeHandle near_light;
+    std::uint32_t near_light_index = kInvalidLightSelectionIndex.get();
+    void SetUp() override
+    {
+      initial_scene_capacity = 16U;
+      ExposureLightingGpuTest::SetUp();
+      probe->inspect = [this](const auto& ctx, const auto&, unsigned) {
+        auto* lighting
+          = RendererPublicationProbe::GetLightingService(*renderer_);
+        const auto* bindings
+          = lighting->InspectForwardLightBindings(ctx.current_view.view_id);
+        ASSERT_NE(bindings, nullptr);
+        grid_bindings = *bindings;
+        grid_resources
+          = lighting->InspectGridResources(ctx.current_view.view_id);
+        auto* owner = RendererPublicationProbe::GetSceneRenderer(*renderer_);
+        const auto& lights
+          = RendererPublicationProbe::GetFrameLightSelection(*owner)
+              .local_lights;
+        for (std::uint32_t i = 0U; i < lights.size(); ++i) {
+          if (lights[i].source_node == near_light) {
+            near_light_index = i;
+          }
+        }
+      };
+    }
+    void TearDown() override
+    {
+      grid_resources = {};
+      ExposureLightingGpuTest::TearDown();
+    }
+    void CheckSpatialMembership(const bool fallback)
+    {
+      for (unsigned index = 0U; index < 2U; ++index) {
+        auto node
+          = scene->CreateNode("Spatial grid light " + std::to_string(index));
+        auto light = std::make_unique<scene::PointLight>();
+        light->SetRange(1.0F);
+        light->SetLuminousFluxLm(100.0F);
+        ASSERT_TRUE(node.AttachLight(std::move(light)));
+        if (index == 0U) {
+          near_light = node.GetHandle();
+        }
+        if (index != 0U) {
+          node.GetTransform().SetLocalPosition(
+            { 100000.0F, 100000.0F, 100000.0F });
+        }
+      }
+      SetSurface(data::MaterialDomain::kOpaque, 1.0F);
+      ASSERT_NO_FATAL_FAILURE(RenderSurface(true, 0.0F, 3U));
+      const auto* bindings = &grid_bindings;
+      ASSERT_NE(bindings, nullptr);
+      ASSERT_EQ(bindings->local_count, 2U);
+      const auto resources = grid_resources;
+      ASSERT_NE(resources.status, nullptr);
+      const auto status = Read<LightGridBuildStatus>(
+        *resources.status, graphics::ResourceStates::kShaderResource);
+      EXPECT_EQ(status.state, kLightGridBuildValid);
+      EXPECT_EQ(status.required_index_count[1], 0U);
+      EXPECT_GT(status.required_index_count[0], 0U);
+      EXPECT_LT(status.required_index_count[0],
+        bindings->cluster_count * bindings->local_count);
+      if (fallback) {
+        EXPECT_EQ(bindings->index_capacity, 0U);
+        EXPECT_GT(status.fallback_cell_count, 0U);
+        EXPECT_EQ(status.written_index_count, 0U);
+      } else {
+        ASSERT_NE(resources.indices, nullptr);
+        EXPECT_EQ(status.fallback_cell_count, 0U);
+        ASSERT_EQ(status.written_index_count, status.required_index_count[0]);
+        const auto values
+          = GetReadbackManager()->ReadBufferNow(*resources.indices,
+            { 0U,
+              static_cast<std::uint64_t>(status.written_index_count)
+                * sizeof(std::uint32_t) });
+        ASSERT_TRUE(values.has_value());
+        for (std::uint32_t index = 0U; index < status.written_index_count;
+          ++index) {
+          auto value = std::uint32_t {};
+          std::memcpy(
+            &value, values->data() + index * sizeof(value), sizeof(value));
+          EXPECT_EQ(value, near_light_index)
+            << "An out-of-frustum light entered a compact cell";
+        }
+      }
+    }
+  };
+
+  NOLINT_TEST_F(SpatialLightGridGpuTest, ProductionGridRejectsDistantLight)
+  {
+    CheckSpatialMembership(false);
+  }
+
+  NOLINT_TEST_F(
+    SpatialLightGridGpuTest, BoundaryPointAndSpotContributeToEveryAdjacentTile)
+  {
+    constexpr auto extent = 2U * LightCullingConfig::kLightGridPixelSize;
+    view.viewport.width = view.viewport.height = static_cast<float>(extent);
+    auto lens = camera.GetCameraAs<scene::PerspectiveCamera>();
+    ASSERT_TRUE(lens.has_value());
+    lens->get().SetViewport(view.viewport);
+    lens->get().SetAspectRatio(1.0F);
+    lens->get().SetNearPlane(0.1F);
+    lens->get().SetFarPlane(10.0F);
+    auto output = CreateRegisteredTexture({ .width = extent,
+      .height = extent,
+      .format = Format::kRGBA32Float,
+      .is_render_target = true,
+      .initial_state = graphics::ResourceStates::kCommon });
+    framebuffer = Backend().CreateFramebuffer(
+      graphics::FramebufferDesc {}.AddColorAttachment(output));
+    auto point_node = scene->CreateNode("Boundary point");
+    auto spot_node = scene->CreateNode("Boundary spot");
+    point_node.GetTransform().SetLocalPosition({ 0.0F, 0.0F, -1.0F });
+    spot_node.GetTransform().SetLocalPosition({ 0.0F, 0.0F, -1.0F });
+    auto point = std::make_unique<scene::PointLight>();
+    point->SetRange(0.01F);
+    point->SetLuminousFluxLm(100.0F);
+    auto spot = std::make_unique<scene::SpotLight>();
+    spot->SetRange(0.01F);
+    spot->SetLuminousFluxLm(100.0F);
+    ASSERT_TRUE(point_node.AttachLight(std::move(point)));
+    ASSERT_TRUE(spot_node.AttachLight(std::move(spot)));
+    SetSurface(data::MaterialDomain::kOpaque, 1.0F);
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(true, 0.0F, 3U));
+    const auto resources = grid_resources;
+    ASSERT_NE(resources.status, nullptr);
+    const auto status = Read<LightGridBuildStatus>(
+      *resources.status, graphics::ResourceStates::kShaderResource);
+    ASSERT_EQ(status.state, kLightGridBuildValid);
+    ASSERT_EQ(status.fallback_cell_count, 0U);
+    const auto bytes = GetReadbackManager()->ReadBufferNow(*resources.ranges,
+      { 0U,
+        4U * LightCullingConfig::kLightGridSizeZ * sizeof(ClusterLightRange) });
+    ASSERT_TRUE(bytes.has_value());
+    auto contributing_slices = 0U;
+    for (unsigned z = 0U; z < LightCullingConfig::kLightGridSizeZ; ++z) {
+      auto ranges = std::array<ClusterLightRange, 4> {};
+      std::memcpy(
+        ranges.data(), bytes->data() + z * sizeof(ranges), sizeof(ranges));
+      if (ranges[0].count == 0U) {
+        continue;
+      }
+      ++contributing_slices;
+      for (const auto& range : ranges) {
+        EXPECT_EQ(range.count, 2U);
+      }
+    }
+    EXPECT_GT(contributing_slices, 0U);
+  }
+
+  NOLINT_TEST_F(SpatialLightGridGpuTest, CompletedCountsGrowEveryFrameSlot)
+  {
+    for (unsigned i = 0U; i < 8U; ++i) {
+      auto node = scene->CreateNode("Dense grid light " + std::to_string(i));
+      auto light = std::make_unique<scene::PointLight>();
+      light->SetRange(10000.0F);
+      light->SetLuminousFluxLm(100.0F);
+      ASSERT_TRUE(node.AttachLight(std::move(light)));
+    }
+    SetSurface(data::MaterialDomain::kOpaque, 1.0F);
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(true, 0.0F, 9U));
+    for (unsigned slot = 0U; slot < 3U; ++slot) {
+      ASSERT_NO_FATAL_FAILURE(RenderSurface(true, 0.0F, 1U));
+      const auto* bindings = &grid_bindings;
+      ASSERT_NE(bindings, nullptr);
+      const auto resources = grid_resources;
+      ASSERT_NE(resources.status, nullptr);
+      const auto status = Read<LightGridBuildStatus>(
+        *resources.status, graphics::ResourceStates::kShaderResource);
+      EXPECT_EQ(status.state, kLightGridBuildValid);
+      EXPECT_GT(status.required_index_count[0], bindings->cluster_count * 4U);
+      EXPECT_LE(status.required_index_count[0], bindings->index_capacity);
+      EXPECT_EQ(status.fallback_cell_count, 0U);
+    }
+  }
+
+  class SpatialLightGridFallbackGpuTest : public SpatialLightGridGpuTest {
+  protected:
+    void ConfigureRenderer(RendererConfig& config) const override
+    {
+      config.lighting_compact_index_limit_bytes = 0U;
+    }
+  };
+
+  NOLINT_TEST_F(
+    SpatialLightGridFallbackGpuTest, ExhaustedIndexBudgetPreservesCompleteCells)
+  {
+    CheckSpatialMembership(true);
+  }
+
   class LightingWorkloadGpuTest : public exposure::ExposureLightingGpuTest {
   protected:
     auto SetUp() -> void override

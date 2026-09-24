@@ -25,6 +25,9 @@ namespace lighting::internal {
     ViewId view_id { kInvalidViewId };
     LightingFrameBindings bindings {};
     LightGridMetadata metadata {};
+    glm::mat4 view_matrix { 1.0F };
+    glm::mat4 projection { 1.0F };
+    glm::mat4 inverse_projection { 1.0F };
   };
 
   struct BuiltLightGridFrame {

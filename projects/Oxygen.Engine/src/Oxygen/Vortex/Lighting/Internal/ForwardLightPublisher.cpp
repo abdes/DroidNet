@@ -25,6 +25,7 @@
 #include <Oxygen/Vortex/Lighting/Internal/BrdfEnergyResources.h>
 #include <Oxygen/Vortex/Lighting/Internal/ForwardLightPublisher.h>
 #include <Oxygen/Vortex/Lighting/Internal/LightGridBuilder.h>
+#include <Oxygen/Vortex/Lighting/Internal/SpatialLightGrid.h>
 #include <Oxygen/Vortex/Lighting/Types/ClusterLightRange.h>
 #include <Oxygen/Vortex/Lighting/Types/DirectionalLightForwardData.h>
 #include <Oxygen/Vortex/Lighting/Types/ForwardLocalLightRecord.h>
@@ -42,6 +43,7 @@ namespace oxygen::vortex::lighting::internal {
 ForwardLightPublisher::ForwardLightPublisher(Renderer& renderer)
   : renderer_(renderer)
   , brdf_energy_(std::make_unique<BrdfEnergyResources>(renderer))
+  , spatial_grid_(std::make_unique<SpatialLightGrid>(renderer))
 {
 }
 
@@ -50,8 +52,7 @@ ForwardLightPublisher::~ForwardLightPublisher() = default;
 auto ForwardLightPublisher::EnsurePublishResources() -> bool
 {
   if (lighting_bindings_publisher_ != nullptr && local_light_buffer_ != nullptr
-    && grid_metadata_buffer_ != nullptr && grid_indirection_buffer_ != nullptr
-    && directional_light_buffer_ != nullptr
+    && grid_metadata_buffer_ != nullptr && directional_light_buffer_ != nullptr
     && build_status_buffer_ != nullptr) {
     return true;
   }
@@ -82,13 +83,6 @@ auto ForwardLightPublisher::EnsurePublishResources() -> bool
       static_cast<std::uint32_t>(sizeof(LightGridMetadata)), inline_transfers,
       "LightingService.GridMetadata");
   }
-  if (grid_indirection_buffer_ == nullptr) {
-    grid_indirection_buffer_
-      = std::make_unique<upload::TransientStructuredBuffer>(
-        observer_ptr { gfx.get() }, staging,
-        static_cast<std::uint32_t>(sizeof(ClusterLightRange)), inline_transfers,
-        "LightingService.GridIndirection");
-  }
   if (directional_light_buffer_ == nullptr) {
     directional_light_buffer_
       = std::make_unique<upload::TransientStructuredBuffer>(
@@ -110,6 +104,7 @@ auto ForwardLightPublisher::OnFrameStart(
 {
   current_sequence_ = sequence;
   current_slot_ = slot;
+  spatial_grid_->OnFrameStart(sequence, slot);
   published_views_.clear();
   if (!EnsurePublishResources()) {
     return;
@@ -118,7 +113,6 @@ auto ForwardLightPublisher::OnFrameStart(
   lighting_bindings_publisher_->OnFrameStart(sequence, slot);
   local_light_buffer_->OnFrameStart(sequence, slot);
   grid_metadata_buffer_->OnFrameStart(sequence, slot);
-  grid_indirection_buffer_->OnFrameStart(sequence, slot);
   directional_light_buffer_->OnFrameStart(sequence, slot);
   build_status_buffer_->OnFrameStart(sequence, slot);
 }
@@ -171,6 +165,8 @@ auto ForwardLightPublisher::Publish(const BuiltLightGridFrame& built_frame)
     return std::unexpected(failure);
   }
   auto candidate = std::unordered_map<ViewId, PublishedLightingView> {};
+  spatial_grid_->SetActiveViewCount(
+    static_cast<std::uint32_t>(built_frame.per_view.size()));
   for (const auto& view : built_frame.per_view) {
     failure.view_id = view.view_id;
     auto bindings = view.bindings;
@@ -183,32 +179,18 @@ auto ForwardLightPublisher::Publish(const BuiltLightGridFrame& built_frame)
     };
     if (bindings.local_count != 0U) {
       const auto metadata = std::array { view.metadata };
-      auto ranges = std::vector<ClusterLightRange>(bindings.cluster_count,
-        ClusterLightRange {
-          .offset = kCompleteLightListOffset,
-          .count = bindings.local_count,
-        });
       if (!write(*grid_metadata_buffer_, std::span(metadata),
             bindings.grid_metadata_srv)
-        || !write(*grid_indirection_buffer_, std::span(ranges),
-          bindings.cluster_ranges_srv)) {
+        || !spatial_grid_->Prepare(view, bindings)) {
         return std::unexpected(failure);
       }
-      status.fallback_cell_count = bindings.cluster_count;
-      const auto required = static_cast<std::uint64_t>(bindings.cluster_count)
-        * bindings.local_count;
-      status.required_index_count = {
-        static_cast<std::uint32_t>(required),
-        static_cast<std::uint32_t>(required
-          >> static_cast<unsigned>(std::numeric_limits<std::uint32_t>::digits)),
-      };
     } else {
       bindings.cluster_count = 0U;
-    }
-    const auto statuses = std::array { status };
-    if (!write(*build_status_buffer_, std::span(statuses),
-          bindings.build_status_srv)) {
-      return std::unexpected(failure);
+      const auto statuses = std::array { status };
+      if (!write(*build_status_buffer_, std::span(statuses),
+            bindings.build_status_srv)) {
+        return std::unexpected(failure);
+      }
     }
     bindings.publication_state
       = bindings.local_count == 0U && bindings.directional_count == 0U
@@ -219,11 +201,21 @@ auto ForwardLightPublisher::Publish(const BuiltLightGridFrame& built_frame)
     if (slot == kInvalidShaderVisibleIndex) {
       return std::unexpected(failure);
     }
+    if (bindings.local_count != 0U && !spatial_grid_->Record(view, slot)) {
+      return std::unexpected(failure);
+    }
     candidate.insert_or_assign(view.view_id,
       PublishedLightingView { .slot = slot, .bindings = bindings });
   }
   published_views_ = std::move(candidate);
   return {};
+}
+
+auto ForwardLightPublisher::InspectGridResources(ViewId view_id) const
+  -> LightGridResources
+{
+  return published_views_.contains(view_id) ? spatial_grid_->Inspect(view_id)
+                                            : LightGridResources {};
 }
 
 auto ForwardLightPublisher::PublishShadowReferences(
