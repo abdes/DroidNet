@@ -1,4 +1,61 @@
 {
-  "version": 6,
-  "include": ["./tools/presets/WindowsPresets.json"]
+  "version": 9,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 30,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "oxygen-configure-defaults",
+      "hidden": true,
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "OXYGEN_USE_CCACHE": "ON"
+      }
+    },
+    {
+      "name": "oxygen-windows-defaults",
+      "inherits": "oxygen-configure-defaults",
+      "hidden": true,
+      "cacheVariables": {
+        "OXYGEN_PHYSICS_BACKEND": "jolt"
+      }
+    },
+    {
+      "name": "oxygen-posix-defaults",
+      "inherits": "oxygen-configure-defaults",
+      "hidden": true,
+      "installDir": "${sourceDir}/out/install",
+      "environment": {
+        "caexcludepath": "${sourceDir}/third_party;${sourceDir}/out;$env{userprofile}/.cache/CPM"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "oxygen-build-defaults",
+      "hidden": true,
+      "jobs": 8,
+      "verbose": false
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "oxygen-test-defaults",
+      "hidden": true,
+      "output": {
+        "outputOnFailure": true,
+        "verbosity": "default"
+      }
+    },
+    {
+      "name": "oxygen-test-debug-defaults",
+      "inherits": "oxygen-test-defaults",
+      "hidden": true,
+      "output": {
+        "verbosity": "verbose"
+      }
+    }
+  ]
 }

@@ -45,7 +45,7 @@ The project uses CMake with Conan for dependency management.
 The project uses CMake presets.
 
 ```powershell
-cmake --build --preset windows-debug
+cmake --build --preset oxygen-ninja-debug
 ```
 
 ### Output Locations

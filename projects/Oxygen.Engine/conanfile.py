@@ -86,6 +86,7 @@ class OxygenConan(ConanFile):
         "README.md",
         "LICENSE",
         "CMakeLists.txt",
+        "CMakePresets.json",
         ".clangd.in",
         "cmake/**",
         "src/**",
@@ -210,16 +211,24 @@ class OxygenConan(ConanFile):
         """Determine the subfolder for deployment/installation: (Debug, Release, Asan)."""
         return "Asan" if self._with_asan else str(self.settings.build_type)
 
+    @property
+    def _build_variant(self):
+        """Use one identity for the build directory and its preset namespace."""
+        parts = []
+        if self.options.get_safe("with_tracy", False):
+            parts.append("tracy")
+        if self._with_asan:
+            parts.append("asan")
+        parts.append("ninja" if self._is_ninja else "vs")
+        return "-".join(parts)
+
     def generate(self):
         tc = CMakeToolchain(self)
         tc.absolute_paths = True
-        # Use distinct preset names to allow simultaneous builds without collisions
-        # Match the exact MixedCase naming used in tools/presets/BasePresets.json
-        tc.user_presets_path = (
-            "ConanPresets-Ninja.json"
-            if self._is_ninja
-            else "ConanPresets-VS.json"
-        )
+        tc.presets_prefix = f"conan-{self._build_variant}"
+        # Oxygen owns the user presets that combine project policy with Conan's
+        # generated presets. Leave Conan's per-tree files entirely native.
+        tc.user_presets_path = False
 
         self._set_cmake_defs(tc.variables)
         if is_msvc(self):
@@ -237,12 +246,9 @@ class OxygenConan(ConanFile):
             "\\", "/"
         )
 
-        # Restored ASAN logic
-        # Only enable ASan when the explicit option `with_asan` is set.
-        # Do not fall back to the `sanitizer` setting to avoid
-        # unpredictable behavior from implicit profile values.
         enable_asan = self._with_asan
         tc.variables["OXYGEN_WITH_ASAN"] = "ON" if enable_asan else "OFF"
+        tc.cache_variables["OXYGEN_WITH_ASAN"] = tc.variables["OXYGEN_WITH_ASAN"]
 
         if self.options.with_coverage:
             tc.cache_variables["OXYGEN_WITH_COVERAGE"] = "ON"
@@ -250,129 +256,98 @@ class OxygenConan(ConanFile):
         # Propagate Tracy option to CMake
         enable_tracy = self.options.get_safe("with_tracy", False)
         tc.variables["OXYGEN_WITH_TRACY"] = "ON" if enable_tracy else "OFF"
+        tc.cache_variables["OXYGEN_WITH_TRACY"] = tc.variables["OXYGEN_WITH_TRACY"]
 
-
+        self._reset_legacy_presets(tc.presets_prefix)
         tc.generate()
+        self._generate_project_presets()
 
         deps = CMakeDeps(self)
         deps.generate()
 
-        # When ASan builds are requested, augment the generated CMakePresets
-        # by adding '-asan' variants of the generated presets so users can
-        # select ASan-specific presets without replacing Conan's originals.
-        if self._with_asan:
-            try:
-                self._append_asan_to_presets()
-            except Exception as e:
-                # Don't fail the generation step if post-processing fails
-                self.output.warning(f"Failed to append -asan presets: {e}")
+    def _generate_project_presets(self):
+        """Derive project presets only for installed trees and configurations.
 
-    def _append_asan_to_presets(self):
-        """Duplicate generated presets appending '-asan' to their names.
-
-        This creates copies of configure, build and test presets with
-        an '-asan' suffix and updates configurePreset/inherits references
-        inside the duplicated entries so they point to each other.
-        This is intentionally non-destructive (duplicates rather than
-        renames) to avoid breaking repo presets that may inherit the
-        original Conan-generated preset names.
+        CMakeUserPresets implicitly includes CMakePresets, so ordinary CMake
+        inheritance joins the root policy and native Conan metadata without
+        editing either. Missing trees never need placeholder presets.
         """
-        build_dir = getattr(self.folders, "build", None)
-
-        # Build folder may not yet be available during `generate()`. Try multiple
-        # candidate locations (explicit build_dir first, then the expected
-        # repo-relative build path used in `layout()`). Log diagnostics to aid
-        # debugging when post-processing is skipped.
-        candidates = []
-        if build_dir:
-            candidates.append(Path(build_dir))
-
-        suffix = "ninja" if self._is_ninja else "vs"
-        if self._with_asan:
-            suffix = f"asan-{suffix}"
-        if self.options.get_safe("with_tracy"):
-            suffix = f"tracy-{suffix}"
-        expected = Path(self.recipe_folder) / f"out/build-{suffix}"
-        candidates.append(expected)
-
-        found = None
-        for cand in candidates:
-            presets_path_obj = cand / "generators" / "CMakePresets.json"
-            # Use info so it is visible in normal logs; keep concise.
-            self.output.info(f"Looking for CMakePresets at {presets_path_obj}")
-            if presets_path_obj.exists():
-                found = presets_path_obj
-                break
-
-        if not found:
-            self.output.info(
-                "Presets not found in candidate locations; skipping -asan augmentation"
-            )
+        if not self.source_folder or self.source_folder == self.generators_folder:
             return
-
-        presets_path = str(found)
-
-        with open(presets_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-
-        # Rename generated presets in-place to append '-asan' to every preset name
-        # This removes the original non-ASan preset names entirely so only ASan
-        # variants exist in the generated file.
-        name_map = {}
-
-        cfgs = data.get("configurePresets", [])
-
-        # First pass: compute renames and apply to configure presets
-        for p in cfgs:
-            name = p.get("name")
-            if not name or name.endswith("-asan"):
+        path = Path(self.source_folder) / "CMakeUserPresets.json"
+        owner = "oxygenengine.org/presets/1.0"
+        previous = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+        if previous and not ({owner, "conan"} & previous.get("vendor", {}).keys()):
+            raise ConanInvalidConfiguration(
+                f"{path} is not generated by Oxygen or Conan; refusing to overwrite it."
+            )
+        # Preserve the platform of other installed trees when regenerating one.
+        platforms = previous.get("vendor", {}).get(owner, {}).get("platforms", {})
+        platform_defaults = {
+            "Windows": "oxygen-windows-defaults",
+            "Linux": "oxygen-posix-defaults",
+            "Macos": "oxygen-posix-defaults",
+        }.get(str(self.settings.os), "oxygen-configure-defaults")
+        current = (Path(self.generators_folder) / "CMakePresets.json").resolve()
+        includes = {current}
+        includes.update((path.parent / p).resolve() for p in previous.get("include", []))
+        data = {"version": 9, "vendor": {owner: {"platforms": {}}}, "include": [],
+                "configurePresets": [], "buildPresets": [], "testPresets": []}
+        for included in sorted(includes):
+            if not included.is_file():
                 continue
-            new_name = name + "-asan"
-            name_map[name] = new_name
-            p["name"] = new_name
-            if "displayName" in p:
-                p["displayName"] = p["displayName"].replace(name, new_name)
-            else:
-                p["displayName"] = f"'{new_name}' config"
-            if "description" in p and "ASan" not in p["description"]:
-                p["description"] = p["description"] + " (ASan)"
+            native = json.loads(included.read_text(encoding="utf-8"))
+            if "conan" not in native.get("vendor", {}):
+                raise ConanInvalidConfiguration(f"Expected Conan presets in {included}")
+            data["include"].append(included.as_posix())
+            configure = native["configurePresets"][0]
+            name = configure["name"]
+            defaults = platform_defaults if included == current else platforms.get(name, platform_defaults)
+            data["vendor"][owner]["platforms"][name] = defaults
+            project_name = name.replace("conan-", "oxygen-", 1)
+            data["configurePresets"].append({
+                "name": project_name, "inherits": [defaults, name],
+                "displayName": project_name.removeprefix("oxygen-").removesuffix("-default"),
+            })
+            for section in ("buildPresets", "testPresets"):
+                for preset in native.get(section, []):
+                    parents = [preset["name"]]
+                    if section == "buildPresets":
+                        parents.insert(0, "oxygen-build-defaults")
+                    elif preset.get("configuration") in ("Debug", "Release"):
+                        parents.insert(0, "oxygen-test-debug-defaults" if preset["configuration"] == "Debug"
+                                       else "oxygen-test-defaults")
+                    data[section].append({
+                        "name": preset["name"].replace("conan-", "oxygen-", 1),
+                        "inherits": parents, "configurePreset": project_name,
+                    })
+        temporary = path.with_suffix(".json.tmp")
+        temporary.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8", newline="\n")
+        temporary.replace(path)
 
-        # Second pass: update 'inherits' references among configure presets
-        for p in cfgs:
-            inherits = p.get("inherits")
-            if inherits and inherits in name_map:
-                p["inherits"] = name_map[inherits]
+    def _reset_legacy_presets(self, prefix):
+        """Let Conan regenerate legacy metadata on the first install.
 
-        # Update build and test presets to reference the renamed configure presets
-        for section in ("buildPresets", "testPresets"):
-            presets = data.get(section, [])
-            for p in presets:
-                cfg = p.get("configurePreset")
-                if cfg and cfg in name_map:
-                    p["configurePreset"] = name_map[cfg]
-                # Rename the build/test preset itself to have '-asan' suffix as well
-                pname = p.get("name")
-                if pname and not pname.endswith("-asan"):
-                    p["name"] = pname + "-asan"
-
-        # Write back the modified presets file
-        with open(presets_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=4)
-
-        self.output.info(
-            f"Renamed presets to '-asan' variants in {presets_path}"
-        )
+        Conan merges multi-config build/test entries by name. Retaining the old
+        names would leave colliding entries pointing at removed configure presets.
+        Also discard metadata changed by the former defaults postprocessor.
+        Only Conan-owned preset metadata is removed; build products stay intact.
+        """
+        path = Path(self.generators_folder) / "CMakePresets.json"
+        if not path.exists():
+            return
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if "conan" not in data.get("vendor", {}):
+            return  # Conan reports the ownership error without overwriting it.
+        presets = (p for section in ("configurePresets", "buildPresets", "testPresets")
+                   for p in data.get(section, []))
+        if (data.get("include")
+                or any(not p["name"].startswith(prefix + "-") or "inherits" in p for p in presets)):
+            path.unlink()
+            self.output.info(f"Regenerating legacy presets with prefix '{prefix}'")
 
     def layout(self):
-        # Dynamically set build folder based on the generator and ASAN status
-        suffix = "ninja" if self._is_ninja else "vs"
-        if self._with_asan:
-            suffix = f"asan-{suffix}"
-        if self.options.get_safe("with_tracy"):
-            suffix = f"tracy-{suffix}"
-
-        build_folder = f"out/build-{suffix}"
-        cmake_layout(self, build_folder=build_folder)
+        cmake_layout(self, build_folder=f"out/build-{self._build_variant}")
 
         # Ensure generated headers are available to the build
         self.cpp.build.includedirs.append(

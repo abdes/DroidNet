@@ -1,13 +1,15 @@
 <#
 .SYNOPSIS
-Generate both Ninja and Visual Studio build trees with a single command.
+Generate selected Ninja and Visual Studio build trees with a single command.
 
 .DESCRIPTION
 - Ninja Multi-Config (for VSCode development)
 - Visual Studio (for standard solution-based development)
 
-The script performs dual Conan installations (Debug & Release) for both trees
-to ensure all multi-config metadata is available.
+The script installs Debug, Release and RelWithDebInfo dependencies for both
+generators (Debug only for ASan), or just the selected -Generator.
+Each tree has its own Conan preset namespace.
+Standard, Tracy and ASan trees can coexist in the root preset list.
 
 .PARAMETER BuildProfile
 Required positional path to the Conan profile used for both host and build.
@@ -26,6 +28,9 @@ Do not clean existing build directories.
 
 .PARAMETER WithTracy
 Generate Tracy (profiler enabled) build trees instead of standard builds.
+
+.PARAMETER Generator
+Generate Ninja, VisualStudio, or All (the default).
 
 .PARAMETER Help
 Show this help message and exit.
@@ -46,12 +51,16 @@ param(
     [string]$DeployerFolder = "out/install",
     [string]$DeployerPackage = "Oxygen/0.1.0",
     [switch]$NoClean,
-    [switch]$WithTracy
+    [switch]$WithTracy,
+    [ValidateSet('All', 'Ninja', 'VisualStudio')][string]$Generator = 'All'
 )
+
+$ErrorActionPreference = 'Stop'
+$PSNativeCommandUseErrorActionPreference = $false
 
 function Show-Usage {
     Write-Host ""
-    Write-Host "Usage: .\tools\generate-builds.ps1 <profile> [-Build <mode>] [-DeployerFolder <path>] [-DeployerPackage <pkg>] [-NoClean] [-Help]" -ForegroundColor Cyan
+    Write-Host "Usage: .\tools\generate-builds.ps1 <profile> [-Generator All|Ninja|VisualStudio] [-Build <mode>] [-DeployerFolder <path>] [-DeployerPackage <pkg>] [-NoClean] [-WithTracy] [-Help]" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "Parameters:" -ForegroundColor Gray
     Write-Host "  profile             Path to Conan profile used for both host and build (required, positional)"
@@ -59,7 +68,8 @@ function Show-Usage {
     Write-Host "  -DeployerFolder     Deployer output folder (default: out/install)"
     Write-Host "  -DeployerPackage    Deployer package (default: Oxygen/0.1.0)"
     Write-Host "  -NoClean            Do not clean existing build directories"
-    Write-Host "  -WithTracy          Generate additional Tracy build trees"
+    Write-Host "  -WithTracy          Generate Tracy build trees; keep standard trees"
+    Write-Host "  -Generator          All (default), Ninja, or VisualStudio"
     Write-Host "  -Help, -h, -?       Show this help message and exit"
     Write-Host ""
     Write-Host "Note: Relative paths for profiles and output (e.g. 'out') are resolved relative to the repository root." -ForegroundColor Gray
@@ -87,7 +97,7 @@ if (-not $Help -and -not $BuildProfile) {
 $BuildProfileHost = $BuildProfile
 $BuildProfileBuild = $BuildProfile
 
-$repoRoot = Resolve-Path "$PSScriptRoot/.."
+$repoRoot = (Resolve-Path "$PSScriptRoot/..").Path
 
 # Resolve profiles and output paths relative to the repository root when they are not absolute.
 if (-not [System.IO.Path]::IsPathRooted($BuildProfileHost)) {
@@ -128,24 +138,21 @@ if ($hostProfilePath) {
 }
 
 $suffix = if ($isAsan) { "asan-" } else { "" }
-$vsBuildDir = "out/build-${suffix}vs"
-$ninjaBuildDir = "out/build-${suffix}ninja"
+$prefix = if ($WithTracy) { 'tracy-' } else { '' }
+$trees = @(
+    @{ Selection = 'Ninja'; Name = 'ninja'; Generator = 'Ninja Multi-Config' }
+    @{ Selection = 'VisualStudio'; Name = 'vs'; Generator = 'Visual Studio 18 2026' }
+) | Where-Object { $Generator -eq 'All' -or $_.Selection -eq $Generator }
 $configurations = if ($isAsan) { @("Debug") } else { @("Debug", "Release", "RelWithDebInfo") }
 
 $sanitizer = if ($isAsan) { 'asan' } else { 'none' }
 
 # Clean up specific directories
-$tracyModes = if ($WithTracy) { @( $true ) } else { @( $false ) }
-
 if (-not $NoClean) {
     Write-Host "Cleaning build environment..." -ForegroundColor Gray
     $targetsToClean = @()
-    foreach ($tracy in $tracyModes) {
-        $prefix = if ($tracy) { "tracy-" } else { "" }
-        $vsBuildDir = "out/build-${prefix}${suffix}vs"
-        $ninjaBuildDir = "out/build-${prefix}${suffix}ninja"
-        $targetsToClean += (Join-Path $repoRoot $vsBuildDir)
-        $targetsToClean += (Join-Path $repoRoot $ninjaBuildDir)
+    foreach ($tree in $trees) {
+        $targetsToClean += (Join-Path $repoRoot "out/build-${prefix}${suffix}$($tree.Name)")
     }
 
     foreach ($config in $configurations) {
@@ -162,8 +169,6 @@ if (-not $NoClean) {
     Write-Host "Skipping clean step (--no-clean)..." -ForegroundColor Gray
 }
 
-$ninjaPreset = "windows-ninja"
-
 # Common base args
 $conanBaseArgs = @(
     "install", ".",
@@ -171,6 +176,8 @@ $conanBaseArgs = @(
     "--build=$Build",
     "--deployer-folder=$DeployerFolder",
     "--deployer-package=$DeployerPackage",
+    "-o", "with_asan=$isAsan",
+    "-o", "with_tracy=$([bool]$WithTracy)",
     # NOTE: CMakeConfigDeps is required for multi-config generators (Ninja Multi-Config, Visual Studio).
     # Conan only generates Debug/Release packages, but multi-config generators (especially Ninja)
     # may request other configurations (RelWithDebInfo, MinSizeRel, etc.). CMakeDeps cannot map
@@ -183,52 +190,32 @@ $conanBaseArgs = @(
     "-c", "user.oxygen:sanitizer=$sanitizer"
 )
 
-foreach ($tracy in $tracyModes) {
-    $tracyName = if ($tracy) { " (Tracy)" } else { "" }
-    $tracyArg = if ($tracy) { @("-o", "with_tracy=True") } else { @("-o", "with_tracy=False") }
-    $prefix = if ($tracy) { "tracy-" } else { "" }
-    $vsBuildDir = "out/build-${prefix}${suffix}vs"
-    $ninjaBuildDir = "out/build-${prefix}${suffix}ninja"
+Push-Location $repoRoot
+try {
+    foreach ($tree in $trees) {
+        Write-Host "`n=== $($tree.Generator): ${prefix}${suffix}$($tree.Name) ===" -ForegroundColor Cyan
+        $conanArgs = $conanBaseArgs + @(
+            "-c", "tools.cmake.cmaketoolchain:generator=$($tree.Generator)"
+        )
 
-    Write-Host "`n=== Phase 1: Ninja Multi-Config$tracyName ===" -ForegroundColor Cyan
-    $ninjaConanArgs = $conanBaseArgs + $tracyArg + @(
-        "-c", "tools.cmake.cmaketoolchain:generator=Ninja Multi-Config"
-    )
+        Write-Host "Installing dependencies ($($configurations -join ', '))..." -ForegroundColor Gray
+        foreach ($config in $configurations) {
+            conan @conanArgs -s build_type=$config
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        }
 
-    Write-Host "Installing dependencies (Debug + Release)..." -ForegroundColor Gray
-    foreach ($config in $configurations) {
-        conan @ninjaConanArgs -s build_type=$config
+        Write-Host "Configuring $($tree.Name) build tree..." -ForegroundColor Gray
+        $preset = "oxygen-${prefix}${suffix}$($tree.Name)-default"
+        cmake --preset $preset
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     }
-
-    Write-Host "Configuring Ninja build tree..." -ForegroundColor Gray
-    cmake --preset $ninjaPreset
-    if ($LASTEXITCODE -ne 0) { Write-Host "Ninja configuration failed" -ForegroundColor Yellow }
-
-    Write-Host "`n=== Phase 2: Visual Studio 18$tracyName ===" -ForegroundColor Cyan
-    $vsConanArgs = $conanBaseArgs + $tracyArg + @(
-        "-c", "tools.cmake.cmaketoolchain:generator=Visual Studio 18 2026"
-    )
-
-    Write-Host "Installing dependencies (Debug + Release)..." -ForegroundColor Gray
-    foreach ($config in $configurations) {
-        conan @vsConanArgs -s build_type=$config
-        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-    }
-
-    Write-Host "Generating Visual Studio solution (Plain old CMake)..." -ForegroundColor Gray
-    $vsToolchain = "$vsBuildDir/generators/conan_toolchain.cmake"
-    cmake -G "Visual Studio 18 2026" -A x64 -S . -B $vsBuildDir -D "CMAKE_TOOLCHAIN_FILE=$vsToolchain"
-    if ($LASTEXITCODE -ne 0) { Write-Host "VS configuration failed" -ForegroundColor Yellow }
+} finally {
+    Pop-Location
 }
 
 Write-Host "`n=== Success ===" -ForegroundColor Green
-foreach ($tracy in $tracyModes) {
-    $prefix = if ($tracy) { "tracy-" } else { "" }
-    $vsBuildDir = "out/build-${prefix}${suffix}vs"
-    $ninjaBuildDir = "out/build-${prefix}${suffix}ninja"
-    Write-Host "Ninja Folder:  $ninjaBuildDir/"
-    Write-Host "VS Folder:     $vsBuildDir/"
+foreach ($tree in $trees) {
+    Write-Host "$($tree.Name) Folder: out/build-${prefix}${suffix}$($tree.Name)/"
 }
 
 Write-Host "`nRuntime dependency PATH is resolved per build configuration by CMake custom commands and tools/cli/oxyrun.ps1." -ForegroundColor Gray

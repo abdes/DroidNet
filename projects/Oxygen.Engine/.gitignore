@@ -1,4 +1,5 @@
 ConanPresets-*.json
+CMakeUserPresets.json
 .omx/
 conductor/
 .planning/
