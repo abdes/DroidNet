@@ -58,10 +58,10 @@ bool CellBounds(uint cell, LightGridMetadata grid, LightGridPassConstants pass,
     return true;
 }
 
-bool Intersects(ForwardLocalLightRecord light, LightGridPassConstants pass,
-    float3 lower, float3 upper)
+float4 PrepareLightBounds(ForwardLocalLightRecord light, LightGridPassConstants pass)
 {
-    if (light.range_m <= 0.0f || !any(light.intensity_rgb_cd > 0.0f)) return false;
+    if (light.range_m <= 0.0f || !any(light.intensity_rgb_cd > 0.0f))
+        return float4(0.0f, 0.0f, 0.0f, -1.0f);
     float3 center = mul(pass.view_matrix, float4(light.position_ws, 1.0f)).xyz;
     // The row-sum bound on A*A^T covers non-rigid view transforms as well.
     float3 a = pass.view_matrix[0].xyz;
@@ -72,13 +72,53 @@ bool Intersects(ForwardLocalLightRecord light, LightGridPassConstants pass,
             dot(c, c) + abs(dot(a, c)) + abs(dot(b, c))));
     float radius = light.range_m * sqrt(max(scale2, 0.0f));
     radius += 1.0e-4f * max(1.0f, max(radius, max(abs(center.x), max(abs(center.y), abs(center.z)))));
-    float3 delta = center - clamp(center, lower, upper);
-    return dot(delta, delta) <= radius * radius;
+    return float4(center, radius);
+}
+
+groupshared float4 g_LocalLightBounds[64];
+groupshared uint g_ActiveCells;
+
+uint VisitLocalLights(StructuredBuffer<ForwardLocalLightRecord> lights,
+    LightingFrameBindings lighting, LightGridPassConstants pass,
+    uint group_index, bool active, float3 lower, float3 upper,
+    bool emit_indices, uint output_offset)
+{
+    if (group_index == 0u) g_ActiveCells = 0u;
+    GroupMemoryBarrierWithGroupSync();
+    if (active) InterlockedOr(g_ActiveCells, 1u);
+    GroupMemoryBarrierWithGroupSync();
+    // This decision is uniform for the group, including partially filled groups.
+    if (g_ActiveCells == 0u) return 0u;
+
+    uint count = 0u;
+    for (uint first = 0u; first < lighting.local_count;) {
+        const uint batch_count = min(64u, lighting.local_count - first);
+        if (group_index < batch_count)
+            g_LocalLightBounds[group_index] = PrepareLightBounds(lights[first + group_index], pass);
+        GroupMemoryBarrierWithGroupSync();
+        if (active) {
+            for (uint i = 0u; i < batch_count; ++i) {
+                const float4 bound = g_LocalLightBounds[i];
+                const float3 delta = bound.xyz - clamp(bound.xyz, lower, upper);
+                if (bound.w >= 0.0f && dot(delta, delta) <= bound.w * bound.w) {
+                    if (emit_indices) {
+                        RWStructuredBuffer<uint> indices = ResourceDescriptorHeap[pass.indices_uav];
+                        indices[output_offset + count] = first + i;
+                    }
+                    ++count;
+                }
+            }
+        }
+        // No lane may overwrite a batch while another cell still consumes it.
+        GroupMemoryBarrierWithGroupSync();
+        first += batch_count;
+    }
+    return count;
 }
 
 [shader("compute")]
 [numthreads(64, 1, 1)]
-void SpatialLightGridCS(uint3 dispatch_id : SV_DispatchThreadID)
+void SpatialLightGridCS(uint3 dispatch_id : SV_DispatchThreadID, uint group_index : SV_GroupIndex)
 {
     StructuredBuffer<LightGridPassConstants> passes = ResourceDescriptorHeap[g_PassConstantsIndex];
     LightGridPassConstants pass = passes[0];
@@ -106,9 +146,9 @@ void SpatialLightGridCS(uint3 dispatch_id : SV_DispatchThreadID)
         }
         return;
     }
-    if (cell >= pass.work_count) return;
     if (pass.subpass == 2u)
     {
+        if (cell >= pass.work_count) return;
         RWStructuredBuffer<uint2> destination = ResourceDescriptorHeap[pass.scan_destination_uav];
         uint2 sum = source[cell];
         if (cell >= pass.scan_stride) sum = AddCount(sum, source[cell - pass.scan_stride]);
@@ -119,53 +159,53 @@ void SpatialLightGridCS(uint3 dispatch_id : SV_DispatchThreadID)
     StructuredBuffer<LightGridMetadata> metadata = ResourceDescriptorHeap[lighting.grid_metadata_srv];
     StructuredBuffer<ForwardLocalLightRecord> lights = ResourceDescriptorHeap[lighting.local_records_srv];
     RWStructuredBuffer<uint> counts = ResourceDescriptorHeap[pass.counts_uav];
-    float3 lower, upper;
-    bool valid = CellBounds(cell, metadata[0], pass, lower, upper);
+    const bool owns_cell = cell < pass.work_count;
+    float3 lower = 0.0f.xxx, upper = 0.0f.xxx;
+    bool valid = false;
+    if (owns_cell) valid = CellBounds(cell, metadata[0], pass, lower, upper);
     if (pass.subpass == 1u)
     {
-        uint count = 0u;
-        if (!valid)
+        if (owns_cell && !valid)
         {
             InterlockedMax(status[0].state, LIGHT_GRID_BUILD_FAILED);
             InterlockedOr(status[0].reason, LIGHT_GRID_REASON_INVALID_BOUNDS);
         }
-        else
-        {
-            for (uint i = 0u; i < lighting.local_count; ++i)
-                count += Intersects(lights[i], pass, lower, upper) ? 1u : 0u;
+        const uint count = VisitLocalLights(lights, lighting, pass,
+            group_index, valid, lower, upper, false, 0u);
+        if (owns_cell) {
+            counts[cell] = count;
+            source[cell] = uint2(count, 0u);
         }
-        counts[cell] = count;
-        source[cell] = uint2(count, 0u);
         return;
     }
 
     RWStructuredBuffer<ClusterLightRange> ranges = ResourceDescriptorHeap[pass.ranges_uav];
-    uint count = counts[cell];
     ClusterLightRange range = (ClusterLightRange)0;
-    if (count == 0u)
-    {
-        ranges[cell] = range;
-        return;
+    uint count = 0u;
+    uint2 offset = 0u.xx;
+    bool emit_indices = false;
+    if (owns_cell) {
+        count = counts[cell];
+        if (count != 0u) {
+            const uint2 end = source[cell];
+            offset = uint2(end.x - count, end.y - (end.x < count ? 1u : 0u));
+            if (offset.y != 0u || offset.x > lighting.index_capacity
+                || count > lighting.index_capacity - offset.x) {
+                range.offset = COMPLETE_LIGHT_LIST_OFFSET;
+                range.count = lighting.local_count;
+                InterlockedAdd(status[0].fallback_cell_count, 1u);
+                if (status[0].state != LIGHT_GRID_BUILD_FAILED)
+                    InterlockedOr(status[0].reason, LIGHT_GRID_REASON_CAPACITY);
+            } else {
+                range.offset = offset.x;
+                range.count = count;
+                emit_indices = valid;
+            }
+        }
     }
-    uint2 end = source[cell];
-    uint2 offset = uint2(end.x - count, end.y - (end.x < count ? 1u : 0u));
-    if (offset.y != 0u || offset.x > lighting.index_capacity
-        || count > lighting.index_capacity - offset.x)
-    {
-        range.offset = COMPLETE_LIGHT_LIST_OFFSET;
-        range.count = lighting.local_count;
-        ranges[cell] = range;
-        InterlockedAdd(status[0].fallback_cell_count, 1u);
-        if (status[0].state != LIGHT_GRID_BUILD_FAILED)
-            InterlockedOr(status[0].reason, LIGHT_GRID_REASON_CAPACITY);
-        return;
-    }
-    RWStructuredBuffer<uint> indices = ResourceDescriptorHeap[pass.indices_uav];
-    uint ordinal = 0u;
-    for (uint i = 0u; i < lighting.local_count; ++i)
-        if (Intersects(lights[i], pass, lower, upper)) indices[offset.x + ordinal++] = i;
-    range.offset = offset.x;
-    range.count = count;
-    ranges[cell] = range;
-    InterlockedAdd(status[0].written_index_count, count);
+    // Empty/fallback/padded cells cannot return before the group's barriers.
+    VisitLocalLights(lights, lighting, pass, group_index, emit_indices,
+        lower, upper, true, offset.x);
+    if (owns_cell) ranges[cell] = range;
+    if (emit_indices) InterlockedAdd(status[0].written_index_count, count);
 }

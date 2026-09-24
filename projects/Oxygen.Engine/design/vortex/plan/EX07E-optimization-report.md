@@ -181,3 +181,75 @@ lighting architecture. Compile and inspect before timing; keep it separate from
 the already measured matrix-access candidate. Acceptance requires unchanged
 qualified images/lists, measured grid and whole-frame improvement, no hidden
 small-count regression and unchanged memory/admission semantics.
+
+### E03 implementation checkpoint
+
+The cooperative shader is implemented without a resource/ABI change. Full
+native RenderScene, benchmark and image-test builds pass. All 18 native image
+tests pass, including the new 65-light test: a partial 32-cell thread group,
+one-light tail batch, complete ordered lists, and moving the tail light out of
+influence. Existing capacity/fallback and boundary tests also pass. The test's
+initial compile error used the strong offset type directly; it was corrected to
+use its explicit numeric accessor before execution. Endpoint timing is running;
+no grid speedup or E03 baseline acceptance is yet claimed.
+
+### E03 accepted endpoint comparisons
+
+| Workload / family       | Initial D grid ms | Candidate grid ms | Initial D frame ms | Candidate frame ms |
+| ----------------------- | ----------------: | ----------------: | -----------------: | -----------------: |
+| 1 light / deferred      |           0.09710 |           0.09695 |              1.935 |              1.432 |
+| 1 light / forward       |           0.09731 |           0.10420 |              1.904 |              1.378 |
+| 4,096 lights / deferred |          10.95920 |           0.71686 |             22.077 |             10.669 |
+| 4,096 lights / forward  |          10.80007 |           0.67628 |             20.341 |              5.591 |
+
+All four output images match D's recorded hashes exactly. The user visually
+validated Sponza and Instancing and approved the grid comparison records for
+commit on 2026-09-24. These comparisons include the accepted matrix-access change;
+the matched control below isolates the grid change and its small-count cost.
+Results are under `out/analysis/ex07e/e03-grid-endpoints`; the control is under
+`out/analysis/ex07e/e03-grid-control`. This is the bounded matched follow-up,
+not permission for repeated tuning until a favorable number appears.
+
+### E03 matched control
+
+The endpoint control differs only in `shaders.bin`; it retains the accepted
+matrix-access fix and the same runtime binaries. Grid mean times are:
+
+| Workload / family       | Matrix-access-only control ms | Cooperative grid ms |
+| ----------------------- | ----------------------------: | ------------------: |
+| 1 light / deferred      |                      0.095855 |            0.096947 |
+| 1 light / forward       |                      0.097220 |            0.104198 |
+| 4,096 lights / deferred |                     10.822310 |            0.716857 |
+| 4,096 lights / forward  |                     11.445794 |            0.676279 |
+
+This isolates a roughly 15–17x grid speedup at 4,096 lights. Small-count
+synchronization adds about 1 microsecond deferred / 7 microseconds forward in
+these captures; report that cost explicitly. Whole-frame means improved in both
+small-count runs, but desktop timing variability prevents assigning those
+whole-frame differences to this tiny shader change. There is no sustained
+whole-frame small-count regression demonstrated by these measurements.
+Boundary, dense, irrelevant, moving, 4K, multi-view, orthographic and shadow
+interaction qualification passes: **26 rows / 40 images, all byte-identical to D**.
+The four endpoint images also match D exactly. Both endpoint/control sets have
+zero new buffers/textures in their measured windows. The user's 2026-09-24
+response was "Visually validated; accept and commit". Durable records are in
+[the cooperative-grid register](baselines/ex07e-20260924/cooperative-grid/register.json).
+
+## E04/E07 discovered defect: caster normal under nonuniform transforms
+
+**E07.1, open; source-confirmed, native reproduction pending.**
+`DirectionalShadowDepth.hlsl` currently computes the caster normal with the
+world matrix. `BasePassGBuffer.hlsl` uses the published inverse-transpose normal
+matrix, indexed through the instance transform index. Shadow pass constants omit
+that normal-matrix descriptor even though `PreparedSceneFrame` publishes it.
+Thus nonuniform scale/shear can give the wrong slope-bias normal when authored
+depth bias is nonzero. For `A=diag(2,1,1)` and local normal `(1,1,0)`, `A*n` is
+not perpendicular to the transformed tangent `A*(1,-1,0)`; `inverse(A)^T*n` is.
+
+Repair direction: use the existing normal-matrix publication and instance index
+in the shadow-depth path, with a native regression for transform-equivalent
+caster geometry and nonzero bias. Preserve depth encoding, bias constants and
+filter policy. This is a correctness repair, not permission to retune bias or
+claim complete UE5.7 filter parity. Investigate/reproduce and fix after E03's
+bounded qualification; do not let the finding disappear into the performance
+work. It is separate from the already fixed receiver-depth footprint defect.
