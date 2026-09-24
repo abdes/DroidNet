@@ -86,7 +86,6 @@ public:
 
 private:
   asio::io_context io_context_;
-  asio::executor_work_guard<asio::io_context::executor_type> work_guard_;
   std::atomic<bool> running_ { false };
   std::thread::id running_thread_id_ {};
 };

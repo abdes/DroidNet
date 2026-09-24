@@ -9,12 +9,11 @@
 #include <thread>
 #include <vector>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/ThreadPool.h>
+#include <Oxygen/Testing/GTest.h>
 
 using namespace std::chrono_literals;
 using namespace oxygen::content::import;
@@ -219,6 +218,23 @@ NOLINT_TEST_F(ImportEventLoopThreadPoolTest, RunCpuBoundTaskReturnsResult)
 
   // Assert
   EXPECT_EQ(result, 42);
+}
+
+//! A completed run must not let a later run exit before worker results arrive.
+NOLINT_TEST_F(
+  ImportEventLoopThreadPoolTest, RepeatedRunsWaitForWorkerCompletion)
+{
+  for (int cycle = 0; cycle < 3; ++cycle) {
+    int result = -1;
+    co::Run(*loop_, [&]() -> Co<> {
+      result = co_await pool_->Run([cycle]() {
+        std::this_thread::sleep_for(10ms);
+        return cycle;
+      });
+    });
+    EXPECT_EQ(result, cycle);
+    EXPECT_FALSE(loop_->IsRunning());
+  }
 }
 
 //! Verify ThreadPool executes on worker thread, not event loop thread.

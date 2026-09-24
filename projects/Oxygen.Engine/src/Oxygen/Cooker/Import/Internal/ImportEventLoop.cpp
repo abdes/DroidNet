@@ -10,11 +10,7 @@
 
 namespace oxygen::content::import {
 
-ImportEventLoop::ImportEventLoop()
-  : work_guard_(asio::make_work_guard(io_context_))
-{
-  DLOG_F(INFO, "Created");
-}
+ImportEventLoop::ImportEventLoop() { DLOG_F(INFO, "Created"); }
 
 ImportEventLoop::~ImportEventLoop()
 {
@@ -44,9 +40,15 @@ auto ImportEventLoop::Run() -> void
 
   DLOG_F(INFO, "Run starting");
 
+  // Every run needs its own guard: a restarted context may initially be
+  // waiting only for a ThreadPool completion that has not been posted yet.
+  auto work_guard = asio::make_work_guard(io_context_);
   // Run until Stop() is called
   io_context_.run();
 
+  // Drop outstanding work before restart, since releasing the last guard can
+  // stop the context again. Stop() itself only touches thread-safe ASIO state.
+  work_guard.reset();
   // Reset for potential reuse
   io_context_.restart();
   running_.store(false, std::memory_order_release);
@@ -58,9 +60,6 @@ auto ImportEventLoop::Run() -> void
 auto ImportEventLoop::Stop() -> void
 {
   DLOG_F(INFO, "Stop called");
-
-  // Release the work guard to allow run() to exit
-  work_guard_.reset();
 
   // Stop the io_context immediately
   io_context_.stop();
