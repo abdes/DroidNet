@@ -48,6 +48,8 @@ selection uses shadow-caster eligibility, independently of main-view geometry
 visibility. No eligible contact request means no allocation, recording or usable
 binding. Resizing and view removal retire textures/descriptors through the
 existing retained-texture pool; allocations count against the lighting budget.
+The depth SRV belongs to the generated bindless texture domain, matching the
+shader's domain guard. A retained texture reuses its registered SRV.
 
 The shared contact shader implements the fixed 0.25 m/16-sample profile in the
 [editor rendering contract](../plan/editor-v01-rendering-contract.md#5-contactshadowcasterdepth-and-contact-attenuation).

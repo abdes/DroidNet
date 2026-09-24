@@ -101,15 +101,16 @@ auto ContactShadowCasterDepthPass::Record(const PreparedViewShadowInput& input,
     .sub_resources = graphics::TextureSubResourceSet::EntireTexture(),
   };
   auto& descriptors = gfx->GetDescriptorAllocator();
-  auto allocation = descriptors.AllocateRaw(srv_desc.view_type, srv_desc.visibility);
-  if (!allocation.IsValid()) {
-    return {};
-  }
-  const auto srv = descriptors.GetShaderVisibleIndex(allocation);
-  const auto resource_view = gfx->GetResourceRegistry().RegisterView(
-    *texture, std::move(allocation), srv_desc);
-  if (!resource_view->IsValid()) {
-    return {};
+  auto& registry = gfx->GetResourceRegistry();
+  auto srv = registry.FindShaderVisibleIndex(*texture, srv_desc);
+  if (!srv) {
+    auto allocation = descriptors.AllocateBindless(
+      bindless::generated::kTexturesDomain, srv_desc.view_type);
+    if (!allocation.IsValid()) return {};
+    srv = descriptors.GetShaderVisibleIndex(allocation);
+    const auto resource_view = registry.RegisterView(
+      *texture, std::move(allocation), srv_desc);
+    if (!resource_view->IsValid()) return {};
   }
   graphics::FramebufferDesc framebuffer_desc;
   framebuffer_desc.SetDepthAttachment({ .texture = texture,
@@ -159,7 +160,7 @@ auto ContactShadowCasterDepthPass::Record(const PreparedViewShadowInput& input,
   if (!recorder.Submit()) {
     return {};
   }
-  bindings.contact_depth_srv = srv;
+  bindings.contact_depth_srv = *srv;
   bindings.contact_enabled = 1U;
   bindings.contact_content_origin_px = { viewport.top_left_x, viewport.top_left_y };
   bindings.contact_content_extent_px = { viewport.width, viewport.height };
