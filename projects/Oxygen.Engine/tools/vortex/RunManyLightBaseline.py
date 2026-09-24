@@ -86,6 +86,7 @@ def freeze(executable: Path, output: Path) -> dict:
                ROOT / "src/Oxygen/Vortex/Upload/RingBufferStaging.cpp",
                ROOT / "src/Oxygen/Vortex/Lighting/Internal/DeferredLightConstantsPublisher.cpp",
                ROOT / "src/Oxygen/Graphics/Common/ResourceRegistry.cpp",
+               Path(__file__).with_name("CheckBenchmarkLoad.ps1"),
                Path(__file__).resolve()]
     source_hashes = {}
     for source in sources:
@@ -187,6 +188,26 @@ def run_case(executable: Path, output: Path, name: str, family: str, variant: di
                                     "runtime_environment": runtime_environment,
                                     "hardware_before": hardware_sample()})
     print(f"{name} {family}: {mode}", flush=True)
+    if mode == "baseline":
+        # Check before starting either the benchmark or its capture process.
+        # Busy attempts remain evidence; only an accepted window admits timing.
+        for attempt in range(60):
+            preflight = directory / f"load-preflight-{attempt:02d}.json"
+            result = subprocess.run(["pwsh", "-NoProfile", "-File",
+                                     str(Path(__file__).with_name("CheckBenchmarkLoad.ps1")),
+                                     "-OutputPath", str(preflight)], capture_output=True, text=True)
+            if result.returncode == 0:
+                gate = json.loads(preflight.read_text(encoding="utf-8-sig"))
+                if not gate["accepted"]:
+                    raise RuntimeError("Load preflight returned inconsistent acceptance")
+                save(directory / "load-preflight.json", gate)
+                break
+            if result.returncode != 2:
+                raise RuntimeError(f"Load preflight unavailable: {result.stderr}")
+            print(f"Machine busy; delaying {name} {family}: {result.stdout.strip()}", flush=True)
+            time.sleep(10)
+        else:
+            raise RuntimeError("Machine remained busy; no baseline was measured")
     capture = None
     capture_log = None
     try:
@@ -222,6 +243,8 @@ def main() -> None:
                         help="Measure the same scene in both supported rendering families")
     parser.add_argument("--qualify-only", action="store_true")
     parser.add_argument("--resume", action="store_true")
+    parser.add_argument("--qualified-from", type=Path,
+                        help="Reuse prior reference/qualification images with identical frozen binary, shader and recipe identities; collect new timing with load preflight")
     parser.add_argument("--tracy-capture", type=Path, help="Matching Tracy capture executable; captures each baseline run with the same instrumentation")
     args = parser.parse_args()
     output = args.output.resolve()
@@ -244,13 +267,30 @@ def main() -> None:
         runtime_environment = selection["RuntimeEnvironment"]
         print(f"Using {selection['BuildPreset']}: {executable}", flush=True)
     output.mkdir(parents=True, exist_ok=True)
-    freeze(executable, output)
+    identity = freeze(executable, output)
+    qualified = args.qualified_from.resolve() if args.qualified_from else None
+    if qualified:
+        prior = json.loads((qualified / "checkpoint.json").read_text())
+        if prior["hashes"] != identity["hashes"]:
+            raise RuntimeError("Cannot reuse image qualification from different binary/shader/recipe identities")
+        save(output / "reused-qualification.json", {"directory": str(qualified),
+             "checkpoint_sha256": digest(qualified / "checkpoint.json")})
     for name in args.cases:
         for family in args.families:
             freeze(executable, output)
-            reference = run_case(executable, output, name, family, presets()[name], "reference", args.resume, runtime_environment=runtime_environment)
-            qualification = run_case(executable, output, name, family, presets()[name], "qualification", args.resume, runtime_environment=runtime_environment)
-            compare_images(reference, qualification)
+            if qualified:
+                reference = qualified / f"{name}-{family}" / "reference"
+                qualification = qualified / f"{name}-{family}" / "qualification"
+                proof = json.loads((qualification / "image-comparison.json").read_text())
+                if not proof["complete"] or not proof["passed"]:
+                    raise RuntimeError(f"Unqualified prior images: {qualification}")
+                for directory in (reference, qualification):
+                    run_case(executable, qualified, name, family, presets()[name], directory.name,
+                             True, runtime_environment=runtime_environment)
+            else:
+                reference = run_case(executable, output, name, family, presets()[name], "reference", args.resume, runtime_environment=runtime_environment)
+                qualification = run_case(executable, output, name, family, presets()[name], "qualification", args.resume, runtime_environment=runtime_environment)
+                compare_images(reference, qualification)
             if not args.qualify_only:
                 baseline = run_case(executable, output, name, family, presets()[name], "baseline", args.resume,
                                     args.tracy_capture.resolve() if args.tracy_capture else None, runtime_environment=runtime_environment)
