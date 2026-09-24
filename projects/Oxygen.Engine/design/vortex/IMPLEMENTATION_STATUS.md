@@ -84,7 +84,7 @@ and [CPU decision](lld/post-process-service.md#approved-ex051-13ab-joint-cpu-cor
 | 5.1 — Exposure performance         | validated   | Closed 2026-09-21: format/policy, independent SceneColor ownership, CPU corrections, correctness and final GPU acceptance complete. User accepts measured CPU cost; further CPU optimization is deferred to a later milestone. | [Current work](#31-current-work), [final CPU decision](lld/post-process-service.md#approved-ex051-13ab-joint-cpu-correction)                                                                                                                                                                                                                                    |
 | 5.2 — Focused exposure quality     | validated   | Approved residual owner fixes and Release include repair committed; 65 Debug and 65 Release cases pass, scoped changed code is tidy-clean, and one matched I02 preservation run passes.                                        | [Bounded scope and result](#322-slice-52-code-quality-and-test-structure)                                                                                                                                                                                                                                                                                       |
 | 6 — Authoring and persistence      | validated   | Strict source/cook/load/script/editor migration, C++20 editor boundary, PAK repacking, rendered UI acceptance and configuration isolation closed.                                                                              | [Detailed items](#33-slice-6-work-items), [acceptance evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice6/slice6-progress.json)                                                                                                                                                                                                          |
-| 7 — Physical and scalable lighting | in_progress | EX07A/B validated; EX07D/E closed. Remaining C caller-target validation and F acceptance keep EX07 open.                                                                                                                       | [A checkpoint](plan/EX07A-contract-review.md), [EX07 items](#34-slice-7-work-items), [workloads and gates](plan/EX07-lighting-correctness-and-scalability.md)                                                                                                                                                                                                   |
+| 7 — Physical and scalable lighting | in_progress | EX07A–E closed. Only F final combined acceptance keeps EX07 open.                                                                                                                                                              | [A checkpoint](plan/EX07A-contract-review.md), [EX07 items](#34-slice-7-work-items), [workloads and gates](plan/EX07-lighting-correctness-and-scalability.md)                                                                                                                                                                                                   |
 | 8 — Measured Neutral Reference     | planned     | Qualified instruments plus the first usable interactive/batch experiment.                                                                                                                                                      | [EX08 and automation follow-ups](#35-slice-8-work-items)                                                                                                                                                                                                                                                                                                        |
 | 8.1 — Console controls             | planned     | Existing console drives validated post-process settings and transitions.                                                                                                                                                       | [EX08.1](#351-slice-81-post-processing-console-controls)                                                                                                                                                                                                                                                                                                        |
 | 8.2 — ImGui UI automation          | planned     | Actual widget workflows and EX06 regressions run in an opt-in native test configuration.                                                                                                                                       | [EX08.2](#352-slice-82-imgui-interaction-automation)                                                                                                                                                                                                                                                                                                            |
@@ -99,7 +99,7 @@ complete. The TexturedCube panel-refresh regression is covered by automated
 tests and the user's successful rebuilt-app test. See the
 [EX06 result and evidence](#33-slice-6-work-items).
 
-**Current: EX07A/B and EX07D are closed. EX07E is closed (2026-09-25): implementation, qualification, user visual approval and requested numeric review are complete.** The [E01–E08 ledger and resume checkpoint](#ex07e--work-items-and-resume-checkpoint) record the completed E work. Remaining EX07C caller-target validation and F acceptance stay open.
+**Current: EX07A–E are closed. EX07C final caller/importer qualification is recorded in the [C closure report](plan/EX07C-completion-report.md); EX07E implementation, qualification and user acceptance are complete.** The [E01–E08 ledger and resume checkpoint](#ex07e--work-items-and-resume-checkpoint) record the completed E work. Only F final combined acceptance remains open.
 
 [Section 3.4](#34-slice-7-work-items) is the single authoritative EX07 progress
 tracker. It shows the execution stages, numbered deliverables, completed portions
@@ -687,7 +687,7 @@ No EX06 delivery item remains open.
 
 ### 3.4 Slice 7 work items
 
-**EX07 overall: in progress. A/B and D are closed. E06 implementation is active after independent review.** C retains its separately recorded caller-target validation gap; F remains open.
+**EX07 overall: in progress. A–E are closed; only F final combined acceptance remains open.**
 
 **Production model 2 is implemented and test-validated; the user accepted the
 measured MultiView quality/performance result.** It uses analytic finite sources,
@@ -697,8 +697,7 @@ The current [PBR specification](../renderer-core/physically-based-rendering.md#p
 and [GPU ABI](lld/lighting-gpu-abi.md) describe the implementation. Native/image
 tests, numerical differences, memory and controlled 1440p measurements are below.
 The broader EX07 workload and integration qualification remains open. The
-conventional-shadow implementation sequence below precedes remaining EX07C
-integration. Reuse its code, unit tests, Tracy results and user visual confirmation
+conventional-shadow implementation sequence below was delivered before C integration. Reuse its code, unit tests, Tracy results and user visual confirmation
 in later C/D/E work. All five steps are implemented and tested. The user visually approved the
 conventional-shadow changes on 2026-09-24; this prerequisite is complete.
 
@@ -713,7 +712,7 @@ production repair, performance work and final qualification have later owners.
 | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | **A — Contracts**                     | Reviewed model, property inventory, canonical CPU/HLSL interface, capacities and failure contracts.               | **Complete** — [audit](plan/EX07A-completion-audit.md)                                                                                                                                                                                                                                                                                | Contract/interface groundwork, especially 04 and 12; grid, lifetime and shadow contracts for 08/10/11. |
 | **B — References and instruments**    | Independent physical/material/image references, native probes, frozen workloads and bounded instruments.          | **Complete** — [audit](plan/EX07B-completion-audit.md)                                                                                                                                                                                                                                                                                | Reference/oracle portions of 01–06; workload portion of 07; instrument portion of 13.                  |
-| **C — Correctness repair**            | Validated light ingress/transport, explicit atmosphere roles, receiver/contact shadows and isolated view failure. | **In progress — remaining caller fixes await target build validation**                                                                                                                                                                                                                                                                | Remaining correctness in 01–04, 06, 08, 10–12.                                                         |
+| **C — Correctness repair**            | Validated light ingress/transport, explicit atmosphere roles, receiver/contact shadows and isolated view failure. | **Closed (2026-09-25)** — omitted caller targets built/qualified, importer lifecycle repaired, corrected Sponza content verified; [759 fresh checks and credited evidence](plan/EX07C-completion-report.md)                                                                                                                           | Correctness portions of 01–04, 06, 08, 10–12.                                                          |
 | **D — Many-light scene and baseline** | Reproducible benchmark and application-scene records for E/F.                                                     | **Closed (2026-09-24)** — 54 timed/image-qualified benchmark rows, four current application runs, versioned traces/settings/images and historical controls. CPU preflight coverage is 24/54 benchmark rows plus all application runs; remaining limits and noisy B05-D are explicit in the [register](plan/EX07D-baseline-report.md). | 07; many-light baseline/shadow-cost portions of 11/13.                                                 |
 | **E — Scalable optimization**         | Fix measured deferred submission/resource costs while preserving lighting and shadows.                            | **Closed (2026-09-25)** — S1–S9 complete, 22 final benchmark rows and four final scene captures, lifetime/memory qualification and user visual approval; [results and commit sequence](plan/EX07E-shadow-sharing-results.md).                                                                                                         | Optimization portions of 08–11; culling/performance diagnostics in 13.                                 |
 | **F — Final delivery**                | Final-code numerical, native/editor, visual and performance gates; operating documentation and supported limits.  | **Not started**                                                                                                                                                                                                                                                                                                                       | 14 and EX07-GATE, rechecking the final implementation of all IDs.                                      |
@@ -919,7 +918,7 @@ Point/punctual specialization is now test-validated source with an
 exact-zero-radius PSO variant and mixed-source native coverage. It lowers measured
 point-draw GPU time, but the Sponza capture pair does not establish a whole-frame
 gain; retain that limitation in the report and stop further PCF-side iterations.
-**Final E06/S9 checkpoint (2026-09-25):** the [durable report](plan/EX07E-shadow-sharing-results.md) supersedes the pre-E06 measurement gaps above. Final native Sponza is **29.451 ms / 33.95 FPS** versus D **62.229 ms / 16.07 FPS**; Instancing is **14.606 ms / 68.46 FPS** versus D **27.416 ms / 36.48 FPS**. Four final scene runs close normally. Compatible views share **40 MiB**, with **12 moving writers for 24 map uses**; retained-reader copy-on-write is measured at **128 -> 64 MiB** after release. The user approved visual acceptance and the numeric comparison on 2026-09-25; accepted evidence is committed in `b8f1376e1`. E implementation and qualification are complete; C caller-target validation and F acceptance retain their separate scope.
+**Final E06/S9 checkpoint (2026-09-25):** the [durable report](plan/EX07E-shadow-sharing-results.md) supersedes the pre-E06 measurement gaps above. Final native Sponza is **29.451 ms / 33.95 FPS** versus D **62.229 ms / 16.07 FPS**; Instancing is **14.606 ms / 68.46 FPS** versus D **27.416 ms / 36.48 FPS**. Four final scene runs close normally. Compatible views share **40 MiB**, with **12 moving writers for 24 map uses**; retained-reader copy-on-write is measured at **128 -> 64 MiB** after release. The user approved visual acceptance and the numeric comparison on 2026-09-25; accepted evidence is committed in `b8f1376e1`. E implementation and qualification are complete; C caller-target validation is subsequently closed in the [C report](plan/EX07C-completion-report.md); F acceptance remains separate.
 
 **Continuation discipline:** update the owning row and this checkpoint after
 each substantive investigation or accepted change, before switching work items.
@@ -1036,15 +1035,16 @@ depths. Captures followed implementation and focused tests. User visual approval
 received on 2026-09-24, closing the remaining acceptance item. These results close the
 bounded static conventional-shadow repair, not the wider EX07 qualification.
 
-C integration is implemented, with the two remaining caller fixes awaiting build validation:
-`Oxygen.Vortex.Exposure.Benchmarks` now edits attached light intensity through
-`EditLight`; `Oxygen.Scene.EnvironmentComponents.Tests` uses RGB disk scale.
-These targets were omitted from the prior build coverage. The fixes are source-reviewed;
-no build or test was run for this follow-up. The RenderScene re-import regression also
-has a source fix pending validation: glTF/FBX LDR material textures retain their
-BC7 presets and mip chains, HDR source format is preserved, and scoped allocation
-admission no longer adds a hard driver-budget limit to unowned resources.
-The existing uncompressed Sponza content must be recooked with the corrected importer.
+**C final follow-up closed (2026-09-25):** both omitted caller targets build in
+Release and Debug. EnvironmentComponents passes 5/5 in each configuration; the
+Release exposure I02 scenario executes all 16 events, including both `EditLight`
+intensity changes, and passes its existing acceptance gates. Importer validation
+found and repaired a repeat-run event-loop work-guard defect (`3fb0a8b17`); all
+374 importer cases pass per configuration. **759 fresh cases pass with no skips.**
+Current Sponza has 72 BC7 textures with full 13-level mip chains and unchanged
+accepted scene/container hashes. The stale uncompressed-recook note is resolved.
+The [durable C closure report](plan/EX07C-completion-report.md) preserves fresh and
+credited evidence, including the rejected short-window exposure attempt.
 
 | Area                            | Current behavior                                                                                                                                                                                                                                                                                                          |
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1061,7 +1061,7 @@ final contact/receiver/failure/ABI cases passing as well; **123 PakGen cases**;
 commands/undo, Interop and a running native engine's property observation. Release
 and Debug engine SDKs are installed; the WorldEditor UI test project compiles.
 The user owns interactive visual acceptance; D's workload baselines are closed,
-while candidate scaling and final combined acceptance remain E/F responsibilities. No new reference
+while accepted E scaling results are recorded separately and F owns final combined acceptance. No new reference
 framework or repeat BRDF campaign was introduced.
 
 All 16 maintained example scenes and their sidecars were recooked and packaged
@@ -1069,7 +1069,7 @@ as 124 assets / 29 resources, with no packaging warnings or errors. Original
 example generations are preserved in `out/analysis/ex07c-completion/content-before-v7`.
 Corrected Sponza is a separate cooked source: `HDRI_SKY` remains a 200 cd point
 light with a 4,096 m range. Its original renderer/performance baseline is retained.
-Details and named proof artifacts: [C completion report](../../out/analysis/ex07c-completion/REPORT.md).
+Details and named proof artifacts: [durable C completion report](plan/EX07C-completion-report.md).
 
 #### Numbered deliverables — what is complete and what remains
 
@@ -1452,7 +1452,7 @@ Evidence in `out/build-tracy-ninja/analysis/vortex/exposure-lightbench/ex07c`:
 `multiview-1440p-model2-final.tracy`, and `model2-settled-report.{txt,png}`.
 The user accepted this measured quality/performance result. It is credited to D
 within its measured MultiView scope; no new capture is required to transfer that
-credit. Other EX07C-F obligations remain owned by the existing stage table.
+credit. The existing stage table records closed C–E work and the remaining F obligations.
 
 ### 3.5 Slice 8 work items
 
