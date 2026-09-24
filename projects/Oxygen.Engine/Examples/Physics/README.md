@@ -37,14 +37,14 @@ From the `Oxygen.Engine` root directory:
 
 ```powershell
 # 1. Configure the project using the repository presets
-cmake --preset windows-default
+cmake --preset oxygen-ninja-default
 
 # 2. Build the Physics Example target
 # For a Debug build:
-cmake --build --preset windows-debug --target Oxygen.Examples.Physics
+cmake --build --preset oxygen-ninja-debug --target oxygen-examples-physics
 
 # For a Release build:
-cmake --build --preset windows-release --target Oxygen.Examples.Physics
+cmake --build --preset oxygen-ninja-release --target oxygen-examples-physics
 ```
 
 ## Running the Example

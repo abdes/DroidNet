@@ -1,158 +1,66 @@
 <#
 .SYNOPSIS
-Build a target using the standardized Oxygen Engine build workflow.
-
+Build a target from an initialized CMake preset.
 .DESCRIPTION
-Builds the specified CMake target using the standardized build workflow that ensures
-all dependencies and configuration are properly set up. This script is designed for
-use in CI/CD pipelines and developer workflows where only building (not running) is required.
-
-The script follows the standardized build workflow:
-1. Require an initialized build tree; initialize dependencies separately with generate-builds.
-2. Check if CMake is configured -> if not, run CMake configure preset
-3. Build the target using appropriate CMake preset or direct cmake command
-
-Uses the default out/build-ninja tree unless -BuildTree is specified.
-
+Without overrides, selects an existing preset by configuration (Release,
+RelWithDebInfo, MinSizeRel, Debug), then ordinary before ASan/Tracy, then Ninja
+before Visual Studio. Prints the selection. Never installs Conan dependencies.
 .PARAMETER Target
-The name of the target to build. This must match a CMake target name defined
-in your CMakeLists.txt files.
-
-Supports intelligent fuzzy matching:
-- Exact match: "oxygen-base" matches exactly
-- Substring match: "base" matches "oxygen-base"
-- Component match: "gr-common" matches "oxygen-graphics-common"
-- Abbreviation match: "async" matches "oxygen-examples-async"
-- Interactive selection: "graphics" shows menu of graphics-related targets
-
-If multiple targets match, an interactive selection menu will be displayed.
-
-.PARAMETER Config
-The build configuration (Debug, Release, etc.). Defaults to "Debug". The script will
-use platform-specific Conan profiles and CMake presets based on this configuration.
-
+CMake target name or fuzzy search pattern.
 .PARAMETER BuildTree
-Optional build tree name or path to use instead of the default tree.
-Examples: "build-tracy-ninja", "build-vs", "out/build-tracy-ninja".
-
-ASAN is selected explicitly with -Sanitized; **sanitized builds
-are always Debug and you must not pass `-Config` together with `-Sanitized`.**
-Regular Debug builds do not implicitly enable ASAN.
-
+Constrain selection to a tree name, out-relative path, or absolute path.
+.PARAMETER Config
+Constrain selection to a configuration. No implicit change to another config.
+.PARAMETER Preset
+Select an exact CMake build preset.
+.PARAMETER Sanitized
+Require an ASan Debug preset. A conflicting explicit choice is an error.
+.PARAMETER ListBuilds
+List available build/configuration choices in preference order.
 .PARAMETER DryRun
-Show what would be executed without actually running it. Displays all commands
-(CMake configure, build) without performing any actions. Note: these helpers
-will not run Conan automatically; initialize build roots with
-`tools\generate-builds.ps1` or `tools\generate-builds.bat`.
-
-NOTE (Sanitized builds): Sanitized builds are always Debug. Use `-Sanitized` to
-select ASan presets (e.g., `windows-asan`). Do not pass `-Config` together with
-`-Sanitized`.
-
+Show selection and commands without configuring or building.
+.PARAMETER Help
+Show usage, options and examples. Alias: -h.
 .EXAMPLE
-oxybuild.ps1 oxygen-examples-async
-Build the oxygen-examples-async target using default Debug configuration.
-
+oxybuild oxygen-base
 .EXAMPLE
-oxybuild.ps1 async
-Build the oxygen-examples-async target using fuzzy matching abbreviation.
-
+oxybuild oxygen-base -Preset oxygen-tracy-ninja-debug
 .EXAMPLE
-oxybuild.ps1 gr-common -Config Release
-Build the oxygen-graphics-common target using component matching and Release configuration.
-
-.EXAMPLE
-oxybuild.ps1 base
-Display interactive menu to select from oxygen-base and other base-related targets.
-
-.EXAMPLE
-oxybuild.ps1 my-target -DryRun
-Show what build commands would be executed without actually building.
-
-.EXAMPLE
-oxybuild.ps1 my-target -Config Release
-Build using Release configuration with optimized Conan profile.
-
-.EXAMPLE
-oxybuild.ps1 oxygen-vortex -BuildTree build-tracy-ninja
-Build the oxygen-vortex target using out/build-tracy-ninja.
-
-.NOTES
-Build System Integration:
-- Defaults to out/build-ninja; -Sanitized selects out/build-asan-ninja
-- Requires the build root to be initialized (use tools\generate-builds.bat); this script will NOT run Conan automatically
-- Uses platform-specific CMake presets: "windows", "linux", "mac"
-- Runs CMake configure automatically if build system is not configured
-- Falls back to direct cmake --build commands if no presets are found
-
-Compiler profiles and dependency deployment are selected when initializing the build tree.
-
-Target Validation:
-- Uses CMake File API codemodel to validate target existence when available
-- Continues with build even if codemodel validation fails (useful for CI)
-- Prefers target configurations matching the specified Config parameter
-
-Error Handling:
-- Exits with build tool's exit code for proper CI/CD integration
-- Provides detailed logging with modern CLI styling and icons
-- Validates all prerequisites before proceeding with build
-
-Designed for CI/CD:
-- Focused on building only (no execution)
-- Preserves exit codes for pipeline integration
-- Consistent environment setup through Conan and CMake presets
+oxybuild -ListBuilds
 #>
+[CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true, Position = 0)][string]$Target,
-    [string]$Config = "Debug",
+    [Parameter(Position = 0)][string]$Target,
+    [string]$Config,
     [string]$BuildTree,
+    [string]$Preset,
     [switch]$DryRun,
-    [switch]$Sanitized
+    [switch]$Sanitized,
+    [switch]$ListBuilds,
+    [Alias('h')][switch]$Help
 )
 
+if ($Help) {
+    Get-Help $PSCommandPath -Detailed
+    return
+}
+
+$ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'oxy-targets.ps1')
-
-# Set global verbose mode based on PowerShell's built-in VerbosePreference
 $global:VerboseMode = ($VerbosePreference -eq 'Continue')
-
-# Validation: -Sanitized implies Debug-only builds. Forbid passing -Config when -Sanitized is used.
-if ($Sanitized -and $PSBoundParameters.ContainsKey('Config')) {
-    $errMsg = @"
-The -Sanitized switch implies Debug-only builds.
-Do not pass -Config when using -Sanitized. Omit -Config (default is Debug).
-"@
-    Write-LogErrorAndExit $errMsg 1
-}
-
-$buildRoot = Get-StandardBuildRoot -Sanitized:$Sanitized -BuildTree $BuildTree
-
-# Resolve target name using fuzzy matching
-$resolvedTarget = Resolve-TargetName $Target $buildRoot
-if (-not $resolvedTarget) {
-    Write-LogErrorAndExit "Target resolution failed or cancelled" 1
-}
-
-# We don't require target-metadata.json; prefer codemodel for hinting but allow
-# builds even if codemodel is absent.
 try {
-    $found = Get-TargetFromCodemodel $buildRoot $resolvedTarget
-} catch {
-    Write-LogVerbose "Codemodel lookup failed: $($_.Exception.Message)"
-    $found = $null
-}
-
-# If multiple, prefer matching config
-if ($found -and $found.Count -gt 1) {
-    $sel = $found | Where-Object { $_.reply_file -and ($_.reply_file -match "-$Config-") } | Select-Object -First 1
-    if ($sel) {
-        $found = $sel
-    } else {
-        $found = $found | Select-Object -First 1
+    if ($ListBuilds) {
+        Get-OxygenBuildCandidates | Sort-Object ConfigRank, InstrumentationRank, GeneratorRank, BuildPreset |
+            Format-Table BuildPreset, Config, Generator, BuildRoot -AutoSize
+        return
     }
-}
-
-Invoke-BuildForTarget -Target $resolvedTarget -Config $Config -DryRun:$DryRun -Sanitized:$Sanitized -BuildTree $BuildTree
-
-if ($DryRun) {
-    Write-Host ""
+    if (-not $Target) { throw 'Specify a target, or use -ListBuilds to see available presets.' }
+    $selection = Resolve-OxygenBuildSelection -BuildTree $BuildTree -Config $Config -Preset $Preset -Sanitized:$Sanitized
+    Write-OxygenBuildSelection $selection
+    $resolved = Resolve-TargetName $Target $selection.BuildRoot
+    if (-not $resolved) { throw 'Target resolution failed or was cancelled.' }
+    $null = Invoke-BuildForTarget $resolved $selection -DryRun:$DryRun
+} catch {
+    Write-Error $_ -ErrorAction Continue
+    exit 1
 }

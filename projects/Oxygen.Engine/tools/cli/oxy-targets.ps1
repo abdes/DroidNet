@@ -16,11 +16,9 @@
 
 .NOTES
     Conventions and important behavior:
-    - Build roots:
-      - Regular builds: `out/build-ninja`
-      - Sanitized ASan builds: `out/build-asan-ninja` (use `-Sanitized` to select)
-    - Sanitized builds are always Debug and are implemented by selecting the `*-asan` presets
-      (for example `windows-asan`).
+    - Build selection is shared in BuildSelection.ps1: Release, ordinary, then Ninja.
+    - Explicit tree/config/preset constraints are retained throughout the operation.
+    - Sanitized builds are always Debug.
     - These helper scripts *do not* invoke Conan automatically. If a required build root is
       missing, they will error and instruct the user to run `tools\generate-builds.ps1` or
       `tools\generate-builds.bat` to initialize the build environment.
@@ -28,7 +26,7 @@
 .NOTES
     File Name   : oxy-targets.ps1
     Author      : Oxygen Engine Project
-    Requires    : PowerShell 7.0+, CMake 3.29+, initialized Conan dependencies
+    Requires    : PowerShell 7.0+, CMake 3.30+, initialized Conan dependencies
     Dependencies: CMakePresets.json, CMake File API replies, Conan profiles
 
 .LINK
@@ -37,7 +35,7 @@
 .EXAMPLE
     # Discover and build a target using presets
     $buildRoot = Get-StandardBuildRoot
-    Invoke-BuildForTarget -Target "MyTarget" -Config "Debug"
+    Invoke-BuildForTarget -Target "MyTarget" -Selection (Resolve-OxygenBuildSelection -Config Debug)
 
 .EXAMPLE
     # Find target artifact for execution
@@ -46,12 +44,8 @@
     if ($executable) { & $executable }
 #>
 
-# Constants
-# Default build root base (regular builds use 'out/build-ninja').
-# Sanitized builds append '-asan' (for example 'out/build-asan-ninja').
-$script:BUILD_DIR = "out/build-ninja"
-$script:CONAN_DEPLOY_DIR = "out/full_deploy"
-$script:CONAN_PROFILES_DIR = "profiles"
+. (Join-Path $PSScriptRoot 'BuildSelection.ps1')
+
 
 <#
 .SYNOPSIS
@@ -141,7 +135,7 @@ function Write-LogErrorAndExit($msg, $code = 1) {
     The message to display.
 
 .EXAMPLE
-    Write-LogDim "Using build directory: out/build/windows-debug"
+    Write-LogDim "Using build directory: out/build-ninja"
 #>
 function Write-LogDim($msg) {
   Write-Host "  $msg" -ForegroundColor DarkGray
@@ -352,80 +346,8 @@ function Get-FuzzyPattern($targetName) {
 .EXAMPLE
     $buildRoot = Get-StandardBuildRoot
 #>
-function Get-StandardBuildRoot([switch]$Sanitized, [string]$BuildTree) {
-  if (-not [string]::IsNullOrWhiteSpace($BuildTree)) {
-    if ([System.IO.Path]::IsPathRooted($BuildTree)) {
-      return $BuildTree
-    }
-
-    if ($BuildTree.StartsWith("out/") -or $BuildTree.StartsWith("out\")) {
-      return Join-Path (Get-Location) $BuildTree
-    }
-
-    return Join-Path (Join-Path (Get-Location) "out") $BuildTree
-  }
-
-  # Default base like "out/build-ninja". For sanitized builds we want
-  # "out/build-asan-ninja" (insert "-asan" before the "-ninja" suffix).
-  $base = $script:BUILD_DIR
-  if ($Sanitized) {
-    if ($base -match "-ninja$") {
-      $base = $base -replace "-ninja$", "-asan-ninja"
-    } else {
-      # Fallback: append '-asan' if pattern not present
-      $base = $base + "-asan"
-    }
-  }
-  return Join-Path (Get-Location) $base
-}
-
-function Get-DirectConfigureCommand($buildRoot) {
-  $projectRoot = (Get-Location).Path
-  $cacheFile = Join-Path $buildRoot "CMakeCache.txt"
-  if (Test-Path $cacheFile) {
-    return "cmake -S `"$projectRoot`" -B `"$buildRoot`""
-  }
-
-  $conanPresetsFile = Join-Path $buildRoot "generators/CMakePresets.json"
-  if (-not (Test-Path $conanPresetsFile)) {
-    return $null
-  }
-
-  $presets = Read-Presets $conanPresetsFile
-  $configurePreset = $presets.configurePresets | Select-Object -First 1
-  if (-not $configurePreset) {
-    return $null
-  }
-
-  $parts = @(
-    "cmake",
-    "-S `"$projectRoot`"",
-    "-B `"$buildRoot`""
-  )
-
-  if ($configurePreset.generator) {
-    $parts += "-G `"$($configurePreset.generator)`""
-  }
-
-  if ($configurePreset.toolchainFile) {
-    $parts += "-DCMAKE_TOOLCHAIN_FILE=`"$($configurePreset.toolchainFile)`""
-  }
-
-  if ($configurePreset.architecture -and $configurePreset.architecture.value) {
-    $parts += "-A `"$($configurePreset.architecture.value)`""
-  }
-
-  if ($configurePreset.toolset -and $configurePreset.toolset.value) {
-    $parts += "-T `"$($configurePreset.toolset.value)`""
-  }
-
-  if ($configurePreset.cacheVariables) {
-    foreach ($property in $configurePreset.cacheVariables.PSObject.Properties) {
-      $parts += "-D$($property.Name)=`"$($property.Value)`""
-    }
-  }
-
-  return ($parts -join ' ')
+function Get-StandardBuildRoot([switch]$Sanitized, [string]$BuildTree, [string]$Config) {
+  return (Resolve-OxygenBuildSelection -BuildTree $BuildTree -Config $Config -Sanitized:$Sanitized).BuildRoot
 }
 
 <#
@@ -494,7 +416,7 @@ function Get-ConanProfile($Config) {
     Runs CMake configuration using the appropriate preset.
 
 .DESCRIPTION
-    Executes cmake configuration using platform-specific presets to configure
+    Executes cmake configuration for the selected build tree to configure
     the build system when the build directory exists but isn't configured.
 
 .PARAMETER Config
@@ -504,68 +426,25 @@ function Get-ConanProfile($Config) {
     If specified, shows what command would be executed without running it.
 
 .EXAMPLE
-    Invoke-CMakeConfigure "Debug"
+    Invoke-CMakeConfigure -Selection (Resolve-OxygenBuildSelection -Config Debug)
 
 .NOTES
     Requires that Conan has already been run to set up the build environment.
-    Uses platform-specific configure presets.
+    Uses the selected project configure preset or existing cache.
 #>
-function Invoke-CMakeConfigure($Config, [switch]$DryRun, [switch]$Sanitized, [string]$BuildTree) {
-  $platformName = Get-PlatformName
-  $configurePreset = $platformName
-
-  if ($Sanitized) {
-    # Prefer the '-asan' configure preset for sanitized builds (e.g. 'windows-asan')
-    $configurePreset = "$platformName-asan"
-  }
-
-  # Ensure CMake File API query exists for target discovery
-  $buildRoot = Get-StandardBuildRoot -Sanitized:$Sanitized -BuildTree $BuildTree
-  $apiQueryDir = Join-Path $buildRoot ".cmake/api/v1/query"
-  if (-not (Test-Path $apiQueryDir)) {
-    if (-not $DryRun) {
-      New-Item -Path $apiQueryDir -ItemType Directory -Force | Out-Null
-      # Request codemodel-v2 for target discovery
-      $codeModelQuery = Join-Path $apiQueryDir "codemodel-v2"
-      "" | Out-File -FilePath $codeModelQuery -Encoding ASCII
-      Write-LogVerbose "Created CMake File API query for codemodel-v2"
-    }
-  }
-
-  if (-not [string]::IsNullOrWhiteSpace($BuildTree)) {
-    $cmakeCmd = Get-DirectConfigureCommand $buildRoot
-    if (-not $cmakeCmd) {
-      $msg = @"
-Unable to configure custom build tree: $(Format-CompactPath $buildRoot).
-Expected either an existing CMakeCache.txt or Conan generator presets under
-$(Format-CompactPath (Join-Path $buildRoot "generators/CMakePresets.json")).
-"@
-      Write-LogErrorAndExit $msg 3
-    }
-  } else {
-    $cmakeCmd = "cmake --preset $configurePreset"
-  }
-
+function Invoke-CMakeConfigure($Selection, [switch]$DryRun) {
+  $PSNativeCommandUseErrorActionPreference = $false
+  $arguments = if ($Selection.ConfigurePreset) { @('--preset', $Selection.ConfigurePreset) }
+  else { @('-S', $Selection.SourceRoot, '-B', $Selection.BuildRoot) }
   if ($DryRun) {
-    Write-Host ""
-    Write-Host "Dry Run Mode - Would Execute:" -ForegroundColor Magenta
-    Write-Host "  Command: " -NoNewline -ForegroundColor DarkGray
-    Write-Host $cmakeCmd -ForegroundColor White
-    Write-Host ""
+    Write-Host "Would configure: cmake $($arguments -join ' ')"
     return
   }
-
-  Write-LogAction "Configuring CMake build system"
-  Write-LogDim $cmakeCmd
-
-  Invoke-Expression $cmakeCmd
-  $exitCode = $LASTEXITCODE
-  if ($exitCode -ne 0) {
-    Write-LogErrorAndExit "CMake configuration failed with exit code $exitCode" $exitCode
-  }
-
-  Write-LogSuccess "CMake configuration completed"
-  Write-Host ""
+  Push-Location $Selection.SourceRoot
+  try {
+    & cmake @arguments | Out-Host
+    if ($LASTEXITCODE -ne 0) { Write-LogErrorAndExit 'CMake configuration failed' $LASTEXITCODE }
+  } finally { Pop-Location }
 }
 
 <#
@@ -704,14 +583,8 @@ function Resolve-TargetName($targetPattern, $buildRoot, [switch]$NoInteractive) 
       return $targetPattern # Return as-is, let build process handle validation
     }
 
-    $codemodel = Get-ChildItem -Path $cmakeReplyDir -Filter "codemodel-v2*.json" -File -ErrorAction SilentlyContinue |
-    Select-Object -First 1
-    if (-not $codemodel) {
-      Write-LogVerbose "CMake codemodel not found, target resolution will be limited"
-      return $targetPattern
-    }
-
-    $cm = Get-Content $codemodel.FullName -Raw | ConvertFrom-Json
+    $cm = Get-OxygenCodemodel $buildRoot
+    if (-not $cm) { return $targetPattern }
     $targetNames = @()
     foreach ($cfg in $cm.configurations) {
       foreach ($tref in $cfg.targets) {
@@ -726,7 +599,7 @@ function Resolve-TargetName($targetPattern, $buildRoot, [switch]$NoInteractive) 
         }
       }
     }
-    $allTargets = $targetNames | Sort-Object
+    $allTargets = @($targetNames | Sort-Object)
   } catch {
     Write-LogVerbose "Target discovery failed: $($_.Exception.Message)"
     return $targetPattern
@@ -827,7 +700,7 @@ function Resolve-TargetName($targetPattern, $buildRoot, [switch]$NoInteractive) 
   }
 
   # Sort candidates by score (descending)
-  $candidates = $candidates | Sort-Object Score -Descending
+  $candidates = @($candidates | Sort-Object Score -Descending)
 
   if ($candidates.Count -eq 0) {
     Write-LogWarn "No fuzzy matches found for target pattern '$targetPattern'"
@@ -957,72 +830,6 @@ function Get-FileUpwards($startDir, $fileName) {
 
 <#
 .SYNOPSIS
-    Parses CMake presets from a CMakePresets.json file, including included files.
-
-.DESCRIPTION
-    Reads and parses a CMakePresets.json file, extracting both build and configure presets.
-    Automatically processes any included preset files referenced in the "include" array.
-    Returns a structured object containing all available presets.
-
-.PARAMETER presetsFile
-    The full path to the CMakePresets.json file to parse.
-
-.OUTPUTS
-    PSCustomObject. An object with 'buildPresets' and 'configurePresets' arrays
-    containing all preset definitions from the file and its includes.
-
-.EXAMPLE
-    $presets = Read-Presets "C:\project\CMakePresets.json"
-    foreach ($preset in $presets.buildPresets) {
-        Write-Host "Available build preset: $($preset.name)"
-    }
-
-.NOTES
-    Returns an empty object with empty arrays if the file cannot be parsed.
-    Handles include resolution relative to the main presets file directory.
-#>
-function Read-Presets($presetsFile) {
-  try {
-    $raw = Get-Content $presetsFile -Raw -ErrorAction Stop
-    $json = $raw | ConvertFrom-Json
-  } catch {
-    return @{}
-  }
-
-  $all = @{}
-  if ($json.buildPresets) {
-    $all.buildPresets = @($json.buildPresets)
-  } else {
-    $all.buildPresets = @()
-  }
-
-  if ($json.configurePresets) {
-    $all.configurePresets = @($json.configurePresets)
-  } else {
-    $all.configurePresets = @()
-  }
-
-  if ($json.include) {
-    foreach ($inc in $json.include) {
-      $incPath = Join-Path (Split-Path $presetsFile -Parent) $inc
-      if (Test-Path $incPath) {
-        try {
-          $incRaw = Get-Content $incPath -Raw -ErrorAction Stop
-          $incJson = $incRaw | ConvertFrom-Json
-        } catch {
-          continue
-        }
-        if ($incJson.buildPresets) { $all.buildPresets += $incJson.buildPresets }
-        if ($incJson.configurePresets) { $all.configurePresets += $incJson.configurePresets }
-      }
-    }
-  }
-
-  return $all
-}
-
-<#
-.SYNOPSIS
     Returns a normalized platform name for CMake preset selection.
 
 .DESCRIPTION
@@ -1050,50 +857,6 @@ function Get-PlatformName() {
 
 <#
 .SYNOPSIS
-    Finds a matching CMake build preset for the given platform and configuration.
-
-.DESCRIPTION
-    Searches for a CMake build preset that matches the current platform and specified
-    configuration using the naming convention '<platform>-<config>'. Uses Read-Presets
-    to parse available presets from CMakePresets.json files.
-
-.PARAMETER buildRoot
-    The build directory path to search from for CMakePresets.json.
-
-.PARAMETER Config
-    The build configuration (e.g., "Debug", "Release").
-
-.OUTPUTS
-    String. The name of the matching build preset, or $null if not found.
-
-.EXAMPLE
-    $preset = Find-BuildPreset (Join-Path $script:BUILD_DIR "windows-debug") "Debug"
-    if ($preset) {
-        Write-Host "Using build preset: $preset"
-    }
-
-.NOTES
-    Preset names are expected to follow the pattern '<platform>-<config>' where
-    platform comes from Get-PlatformName and config is lowercased.
-#>
-function Find-BuildPreset($buildRoot, $Config, [switch]$Sanitized) {
-  $projectPresetsFile = Get-FileUpwards $buildRoot 'CMakePresets.json'
-  if (-not $projectPresetsFile) { return $null }
-  $presets = Read-Presets $projectPresetsFile
-  $platformName = Get-PlatformName
-  if ($Sanitized) {
-    $desired = "$platformName-asan"
-  } else {
-    $desired = "$platformName-$(($Config).ToLower())"
-  }
-  $available = @()
-  foreach ($bp in $presets.buildPresets) { if ($bp.name) { $available += $bp.name } }
-  if ($available -contains $desired) { return $desired }
-  return $null
-}
-
-<#
-.SYNOPSIS
     Builds a CMake target using the standardized Oxygen Engine build workflow.
 
 .DESCRIPTION
@@ -1111,10 +874,10 @@ function Find-BuildPreset($buildRoot, $Config, [switch]$Sanitized) {
     If specified, shows what commands would be executed without running them.
 
 .EXAMPLE
-    Invoke-BuildForTarget -Target "oxygen-asyncengine-simulator" -Config "Release"
+    Invoke-BuildForTarget -Target "oxygen-asyncengine-simulator" -Selection (Resolve-OxygenBuildSelection -Config Release)
 
 .EXAMPLE
-    Invoke-BuildForTarget -Target "asyncsim" -Config "Debug" -DryRun
+    Invoke-BuildForTarget -Target "asyncsim" -Selection (Resolve-OxygenBuildSelection -Config Debug) -DryRun
 
 .NOTES
     Workflow:
@@ -1123,84 +886,42 @@ function Find-BuildPreset($buildRoot, $Config, [switch]$Sanitized) {
     3. If configure ran, resolve target name using CMake File API
     4. Build the target using appropriate preset or direct cmake command
 
-    Defaults to out/build-ninja, or out/build-asan-ninja with -Sanitized. -BuildTree overrides the default.
+    Receives the selection resolved by the caller; never changes build trees.
     Target resolution happens automatically when CMake configure runs during this function.
 #>
-function Invoke-BuildForTarget($Target, $Config, [switch]$DryRun, [switch]$Sanitized, [string]$BuildTree) {
-  $buildRoot = Get-StandardBuildRoot -Sanitized:$Sanitized -BuildTree $BuildTree
-
-  # Step 1: Ensure build root exists. Do NOT run Conan automatically.
-  if (-not (Test-Path $buildRoot)) {
-    $errMsg = @"
-Build root not found: $(Format-CompactPath $buildRoot).
-Please initialize the build environments using `tools\generate-builds.bat <profile>`
-(e.g. `tools\generate-builds.bat profiles/smape.ini`)
-"@
-    Write-LogErrorAndExit $errMsg 2
+function Invoke-BuildForTarget($Target, $Selection, [switch]$DryRun) {
+  $PSNativeCommandUseErrorActionPreference = $false
+  $cachePath = Join-Path $Selection.BuildRoot 'CMakeCache.txt'
+  $needsConfigure = -not (Test-Path -LiteralPath $cachePath)
+  if (-not $needsConfigure) {
+    $cacheTime = (Get-Item -LiteralPath $cachePath).LastWriteTimeUtc
+    foreach ($path in @((Join-Path $Selection.SourceRoot 'CMakePresets.json'),
+        (Join-Path $Selection.SourceRoot 'CMakeUserPresets.json'),
+        (Join-Path $Selection.BuildRoot 'generators/CMakePresets.json'),
+        (Join-Path $Selection.BuildRoot 'generators/conan_toolchain.cmake'))) {
+      if ((Test-Path -LiteralPath $path) -and (Get-Item -LiteralPath $path).LastWriteTimeUtc -gt $cacheTime) {
+        $needsConfigure = $true
+      }
+    }
   }
-
-  # Step 2: Check if we need to run CMake configure
-  $cmakeReplyDir = Join-Path $buildRoot ".cmake/api/v1/reply"
-  $hasCodemodel = $false
-  if (Test-Path $cmakeReplyDir) {
-    $cmFiles = Get-ChildItem -Path $cmakeReplyDir -Filter "codemodel-v2*.json" -File -ErrorAction SilentlyContinue
-    if ($cmFiles -and $cmFiles.Count -gt 0) { $hasCodemodel = $true }
+  if ($needsConfigure -or -not (Test-OxygenFileApiReply $Selection.BuildRoot)) {
+    Invoke-CMakeConfigure $Selection -DryRun:$DryRun
+    if (-not $DryRun) { $Target = Resolve-TargetName $Target $Selection.BuildRoot }
   }
-
-  # Step 3: Run configure if needed
-  $configureRan = $false
-  if ($conanRan -or -not $hasCodemodel) {
-    Write-LogInfo "CMake not configured. Running CMake configuration..."
-    Invoke-CMakeConfigure $Config -DryRun:$DryRun -Sanitized:$Sanitized -BuildTree $BuildTree
-    $configureRan = $true
-  }
-
-  # If configure ran, we may be able to resolve the fuzzy target name using the CMake codemodel
-  $resolvedTarget = $Target
-  if ($configureRan) {
-    $resolvedTarget = Resolve-TargetName $Target $buildRoot
-  }
-
-  # Step 4: Build the target
-  Write-LogInfo "Building target: $resolvedTarget"
-  $preset = $null
-  if ([string]::IsNullOrWhiteSpace($BuildTree)) {
-    $preset = Find-BuildPreset $buildRoot $Config -Sanitized:$Sanitized
-  }
-  if ($preset) {
-    $buildCmd = "cmake --build --preset $preset --target $resolvedTarget"
-    Write-LogVerbose "Using build preset: $preset"
-  } else {
-    $buildCmd = "cmake --build `"$buildRoot`" --config $Config --target $resolvedTarget"
-    Write-LogVerbose "No build preset found, using direct cmake build"
-  }
-
+  if (-not $Target) { Write-LogErrorAndExit 'Target resolution failed or was cancelled' 1 }
+  $arguments = if ($Selection.BuildPreset) { @('--build', '--preset', $Selection.BuildPreset, '--target', $Target) }
+  else { @('--build', $Selection.BuildRoot, '--config', $Selection.Config, '--target', $Target) }
   if ($DryRun) {
-    Write-Host ""
-    Write-Host "Dry Run Mode - Would Execute:" -ForegroundColor Magenta
-    Write-Host "  Command: " -NoNewline -ForegroundColor DarkGray
-    Write-Host $buildCmd -ForegroundColor White
-    Write-Host ""
-    return
+    Write-Host "Would build: cmake $($arguments -join ' ')"
+    return $Target
   }
-
-  Write-LogDim $buildCmd
-
-  Write-Host ""
-  Invoke-Expression $buildCmd
-  if ($LASTEXITCODE -ne 0) {
-    Write-LogErrorAndExit "Build failed with exit code $LASTEXITCODE" $LASTEXITCODE
-  }
-  Write-Host ""
-
-  # After a successful build, try to resolve the target using the codemodel (non-interactive)
+  Push-Location $Selection.SourceRoot
   try {
-    $finalResolved = Resolve-TargetName $Target $buildRoot -NoInteractive
-    if ($finalResolved) { $resolvedTarget = $finalResolved; Write-LogVerbose "Resolved target after build: $resolvedTarget" }
-  } catch {}
-
-  Write-LogSuccess "Build completed: $resolvedTarget"
-  Write-Host ""
+    # Native arguments are passed as an array, never evaluated as shell code.
+    & cmake @arguments | Out-Host
+    if ($LASTEXITCODE -ne 0) { Write-LogErrorAndExit 'Build failed' $LASTEXITCODE }
+  } finally { Pop-Location }
+  return $Target
 }
 
 <#
@@ -1305,50 +1026,7 @@ function Get-TargetFromCodemodel($buildRoot, $Target) {
     Logs the discovery method used for transparency.
 #>
 function Get-ReplyFileForTarget($buildRoot, $Target, $Config) {
-  # Discover a suitable CMake File API target reply JSON using only PowerShell.
-  $cmakeReplyDir = Join-Path $buildRoot ".cmake/api/v1/reply"
-  if (-not (Test-Path $cmakeReplyDir)) {
-    Write-LogWarn "CMake reply directory not present: $cmakeReplyDir"
-    return $null
-  }
-
-  $patterns = @()
-  $patterns += "target-$($Target)-$Config-*.json"
-  $patterns += "target-$($Target)-*.json"
-  $patterns += "target-$($($Target.ToLower()))-$Config-*.json"
-  $patterns += "target-$($($Target.ToLower()))-*.json"
-
-  foreach ($pat in $patterns) {
-    try {
-      $c = Get-ChildItem -Path $cmakeReplyDir -Filter $pat -File -ErrorAction SilentlyContinue
-      if ($c -and $c.Count -gt 0) {
-        $f = $c | Select-Object -First 1
-        Write-LogVerbose "Discovered reply file: $($f.Name)"
-        return $f.FullName
-      }
-    } catch {}
-  }
-
-  # Fallback: parse codemodel and find the target entry and its reply_file
-  try {
-    $entries = Get-TargetFromCodemodel $buildRoot $Target
-    if ($entries -and $entries.Count -gt 0) {
-      # Prefer reply file matching config if present in filename
-      $byConfig = $entries | Where-Object { $_.reply_file -and ($_.reply_file -match "-$Config-") } |
-      Select-Object -First 1
-      $sel = $byConfig ? $byConfig : ($entries | Select-Object -First 1)
-      if ($sel.reply_file -and (Test-Path $sel.reply_file)) {
-        Write-LogInfo "Using reply file from codemodel: $($sel.reply_file)"
-        return $sel.reply_file
-      }
-    }
-  } catch {
-    Write-LogWarn "Codemodel parsing fallback failed: $($_.Exception.Message)"
-  }
-
-  $msg = "Unable to discover a reply file for target '$Target' (config: $Config) in $cmakeReplyDir"
-  Write-LogWarn $msg
-  return $null
+  return Get-OxygenTargetReply $buildRoot $Target $Config
 }
 
 <#

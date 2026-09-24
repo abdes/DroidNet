@@ -1,11 +1,11 @@
 # Oxygen Engine CLI tools
 
-Run these commands from the Oxygen.Engine directory. The build/run scripts use
-that working directory to resolve build trees and runtime dependencies.
+Use the helpers from the intended Oxygen.Engine checkout. They resolve its
+presets from their own location, so invoking them from a subdirectory is safe.
 
 | Command     | Purpose                                  | Prerequisites                                                        |
 | ----------- | ---------------------------------------- | -------------------------------------------------------------------- |
-| `oxybuild`  | Build a CMake target                     | Initialized build tree, CMake 3.29+, configured compiler environment |
+| `oxybuild`  | Build a CMake target                     | Initialized build tree, CMake 3.30+, configured compiler environment |
 | `oxyrun`    | Build and run an executable target       | Same as `oxybuild`; `-NoBuild` uses an existing executable           |
 | `oxytidy`   | Analyze selected C++ sources and headers | Python 3.10+, uv, LLVM 23.x tools, compilation database              |
 | `oxyformat` | Check or format owned C++ files          | Python 3.10+, shared tools installed, clang-format 23.x              |
@@ -32,47 +32,92 @@ when needed. See the [shared Python tools setup](../oxytools/README.md).
 
 ## Build and run
 
-Initialize the build tree separately using `tools/generate-builds.ps1` or its
-batch launcher; use `./tools/generate-builds.ps1 -Help` for its arguments. The
-build/run commands do not install Conan dependencies automatically. They can
-configure an initialized tree when CMake File API replies are missing.
+Initialize dependencies separately with `tools/generate-builds.ps1`. The helpers
+never install dependencies. They select only initialized trees declared by the
+project/user CMake presets, then print the selected preset, directory and config.
+
+Without explicit constraints, choices are ranked in this order:
+
+1. Release, RelWithDebInfo, MinSizeRel, Debug, then other configurations.
+2. Ordinary builds before ASan or Tracy builds.
+3. Ninja before Visual Studio, then other generators.
+
+The order is lexicographic: a Tracy Release build precedes an ordinary Debug
+build. Equal choices use preset-name order for deterministic selection. Missing
+directories and disabled presets are excluded. To see all current choices:
 
 ```powershell
+oxybuild -ListBuilds
+oxybuild -h
+oxyrun -Help
 oxybuild oxygen-base
-oxybuild oxygen-graphics-common -Config Release
-oxyrun oxygen-examples-async
-oxyrun oxygen-examples-async -NoBuild -- --help
-oxybuild oxygen-base -BuildTree build-tracy-ninja
+oxyrun oxygen-examples-renderscene
+oxyrun oxygen-examples-renderscene -NoBuild -- --help
+oxybuild oxygen-base -Preset oxygen-tracy-ninja-debug
+oxybuild oxygen-base -BuildTree build-vs -Config Debug
 oxybuild oxygen-base -Sanitized
 oxybuild oxygen-base -DryRun
 ```
 
-Arguments after `--` are forwarded to the executable by `oxyrun`.
-`-DryRun` displays commands without building or running the target.
+| Parameter     | Behavior                                                                  |
+| ------------- | ------------------------------------------------------------------------- |
+| `Target`      | Target name or fuzzy search pattern                                       |
+| `-Preset`     | Exact build preset name                                                   |
+| `-BuildTree`  | Tree name under `out`, an engine-relative path, or absolute path          |
+| `-Config`     | Required configuration; never silently changes to another one             |
+| `-Sanitized`  | Require an ASan Debug preset; compatible explicit constraints are allowed |
+| `-NoBuild`    | Run only an already-built artifact; `oxyrun` only                         |
+| `-DryRun`     | Print selection and commands without configuring, building or running     |
+| `-ListBuilds` | List available presets in preference order                                |
+| `-Help`, `-h` | Show usage without a target or initialized build tree                     |
 
-| Parameter    | Behavior                                                |
-| ------------ | ------------------------------------------------------- |
-| `Target`     | Required target name or search pattern                  |
-| `-Config`    | Build configuration; defaults to `Debug`                |
-| `-BuildTree` | Build tree name or path; defaults to `out/build-ninja`  |
-| `-Sanitized` | Select the Debug-only ASan tree, `out/build-asan-ninja` |
-| `-NoBuild`   | Skip building; available only on `oxyrun`               |
-| `-DryRun`    | Show the commands instead of executing the build/run    |
+Explicit options constrain the candidate set. A missing explicit tree, preset,
+configuration or executable is an error; it does not redirect the command to a
+different choice. Explicit cached custom trees remain supported even without a
+registered preset, provided they belong to this checkout.
 
-Do not combine `-Sanitized` with `-Config`, even `-Config Debug`.
-`-BuildTree build-tracy-ninja` resolves beneath `out/`;
-`-BuildTree out/build-tracy-ninja` and absolute paths are also accepted.
-An explicit build tree takes precedence over the default tree selection.
+`oxyrun -NoBuild` skips candidates without the requested executable. The active
+CMake File API index and exact configuration identify the artifact; the launcher
+never substitutes a Debug executable for a Release request. For VS builds made
+without File API metadata, it accepts only one matching Oxygen module filename
+inside the requested configuration directory. Arguments after
+`--` remain separate arguments. The selected tree's Conan runtime environment is
+applied for execution and restored afterward. Build/child exit codes propagate.
 
-Target discovery uses CMake File API replies. Exact names are preferable in
-scripts. Interactive use also supports substring, component, and abbreviation
-matching; ambiguous matches produce a selection menu. Available matches depend
-on the configured targets, so short patterns are not stable aliases.
+The selection is resolved once and retained through configure, target discovery,
+build and run. A missing or incomplete File API reply, or newer preset/toolchain
+metadata, causes a configure using that selected preset. The CMake project owns
+the complete IDE metadata request; the scripts do not create query files.
+Native commands receive argument arrays, not shell-evaluated command text.
 
-The helpers select a matching build preset when available and otherwise invoke
-`cmake --build` directly. Executable discovery uses codemodel artifacts and
-fallback searches in the configured build/runtime directories. Build failures
-propagate a nonzero exit code.
+Interactive fuzzy matching is retained; use exact target names in automation.
+
+## Other build-dependent tools
+
+`BuildSelection.ps1` is the shared selector for build/run, Content cooking and
+packaging, RenderScene reimport, test executable runners and runtime validation
+launchers. These tools accept `-BuildTree`; generic launchers also accept
+`-Config` and/or `-Preset`. Explicit `-ToolPath`/`--executable` still wins when
+provided. Native content tools must exist before selection; the reimporter picks
+an ImportTool/Inspector pair from the same tree and configuration.
+
+Native workflow callers use `Resolve-OxygenExecutables` with CMake target names,
+then `Invoke-OxygenTool` with argument arrays. This is also `oxyrun`'s launch
+path. Workflow scripts must not concatenate executable paths, implement their
+own ranking/environment rules, or launch explicit overrides directly. Optional
+log capture and checked exit status belong to the shared invoker. Explicit paths
+use the caller's inherited environment through that same invocation path;
+unspecified companion tools are resolved beside the explicit executable.
+
+`run-test-exes.ps1` runs one selected configuration, rather than recursively
+mixing Debug and Release executables. Rendering qualification scripts retain
+mandatory Debug configurations, and performance baselines retain Release. Their
+tree choice still follows the common instrumentation/generator preference.
+`RunManyLightBaseline.py` requires a Tracy tree when `--tracy-capture` is used
+without an explicit executable, and uses the same selector through its JSON mode.
+
+Analysis tools that explicitly select `--build-dir` or a compilation database
+in `.clangd` retain that explicit input. Formatting has no build-tree dependency.
 
 ## Analyze and format
 
@@ -125,9 +170,7 @@ When Oxygen.Engine is the opened workspace folder, add a terminal profile to
 ```
 
 If VS Code opens the DroidNet monorepo root instead, use
-`${workspaceFolder}/projects/Oxygen.Engine/.vscode/default-profile.ps1` and change
-the terminal's working directory to `projects/Oxygen.Engine` before build/run
-commands. The profile discovers the engine from its own location and also loads
+`${workspaceFolder}/projects/Oxygen.Engine/.vscode/default-profile.ps1` for commands bound to that checkout. The profile discovers the engine from its own location and also loads
 VS Code shell integration when applicable.
 
 To refresh aliases in an existing engine terminal, dot-source the same profile

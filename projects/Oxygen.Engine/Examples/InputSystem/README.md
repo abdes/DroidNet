@@ -35,15 +35,15 @@ From the `Oxygen.Engine` root (PowerShell):
 
 ```powershell
 # Configure + build using repository CMake presets (recommended)
-# Use 'windows-release' for an optimized build and 'windows-debug' for debug builds.
+# Use 'oxygen-ninja-release' for an optimized build and 'oxygen-ninja-debug' for debug builds.
 
 # Configure & build (release preset):
-cmake --preset windows-release
-cmake --build --preset windows-release --target Oxygen.Examples.InputSystem
+cmake --preset oxygen-ninja-default
+cmake --build --preset oxygen-ninja-release --target oxygen-examples-inputsystem
 
 # Configure & build (debug preset):
-cmake --preset windows-debug
-cmake --build --preset windows-debug --target oxygen-examples-inputsystem
+cmake --preset oxygen-ninja-default
+cmake --build --preset oxygen-ninja-debug --target oxygen-examples-inputsystem
 ```
 
 ## Run

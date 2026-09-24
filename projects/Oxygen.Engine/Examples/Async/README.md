@@ -106,12 +106,12 @@ From the `Oxygen.Engine` root (PowerShell):
 
 ```powershell
 # Configure & build (release preset):
-cmake --preset windows-release
-cmake --build --preset windows-release --target oxygen-examples-async
+cmake --preset oxygen-ninja-default
+cmake --build --preset oxygen-ninja-release --target oxygen-examples-async
 
 # Configure & build (debug preset):
-cmake --preset windows-debug
-cmake --build --preset windows-debug --target oxygen-examples-async
+cmake --preset oxygen-ninja-default
+cmake --build --preset oxygen-ninja-debug --target oxygen-examples-async
 ```
 
 ## Run

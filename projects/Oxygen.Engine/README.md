@@ -202,11 +202,11 @@ without requiring per-dependency options.
 # ASan (recommended)
 .\tools\generate-builds.ps1 profiles/windows-msvc-asan.ini
 
-# Non-ASan
-.\tools\generate-builds.ps1 profiles/windows-msvc.ini
+# Non-ASan, preserving existing build products
+.\tools\generate-builds.ps1 profiles/windows-msvc.ini -NoClean
 
-# Generate Tracy-enabled builds
-.\tools\generate-builds.ps1 profiles/windows-msvc.ini -WithTracy
+# Generate Tracy-enabled builds alongside standard builds
+.\tools\generate-builds.ps1 profiles/windows-msvc.ini -WithTracy -NoClean
 
 # Show usage
 .\tools\generate-builds.ps1 -Help
@@ -214,16 +214,26 @@ without requiring per-dependency options.
 
 **CLI tools (oxybuild / oxyrun / oxytidy):**
 
+Conan generates native presets per tree. The recipe adds Oxygen presets for
+installed configurations to `CMakeUserPresets.json`, inheriting both the native
+presets and the shared root defaults. CMake and VS Code use the same names:
+configure `oxygen-ninja-default` or `oxygen-tracy-ninja-default`, then build with
+`oxygen-ninja-debug` or `oxygen-tracy-ninja-release`, for example. Run
+`cmake --list-presets=all` to see initialized trees. See the
+[preset guide](tools/presets/README.md) for migration, schema compatibility, and
+VS Code selection. The old platform wrapper names are no longer used.
+
 - Use `tools\oxybuild.ps1` and `tools\oxyrun.ps1` to build and run targets with convenient, preset-based workflows.
 - Use `tools\cli\oxytidy.ps1` to run scoped parallel `clang-tidy` with the repo's `.clang-tidy`, `.clangd`, and CMake compile database.
 - Important: these CLI helpers **do not** run Conan automatically. Initialize build roots with `tools\generate-builds.ps1` (or `tools\generate-builds.bat`).
 - Build-root conventions:
-  - Regular builds: `out/build-ninja`
-  - Sanitized ASan builds: `out/build-asan-ninja`
+  - Automatic selection uses initialized CMake presets: Release first, ordinary
+    builds before ASan/Tracy, then Ninja before VS. Use `oxybuild -ListBuilds`.
+  - `-BuildTree`, `-Config`, and `-Preset` constrain the selection.
 - Sanitized builds details:
-  - Use `-Sanitized` to request an ASan build/run.`
-  - **Sanitized builds are always Debug.** Do **not** pass `-Config` together with `-Sanitized`.
-  - When `-Sanitized` is used, the CLI will prefer `*-asan` configure and build presets (e.g., `windows-asan`).
+  - Use `-Sanitized` to require an ASan Debug build/run.
+  - **Sanitized builds are always Debug.** An incompatible explicit configuration is rejected.
+  - With `-Sanitized`, the available ASan Debug tree is selected using the same generator preference.
 
 Examples:
 
