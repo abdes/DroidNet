@@ -1,5 +1,5 @@
 {
-  "version": 6,
+  "version": 7,
   "name": "SpotShadowValidation",
   "nodes": [
     {
@@ -127,7 +127,6 @@
         "common": {
           "affects_world": true,
           "color_rgb": [1.0, 0.92, 0.82],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.0,
@@ -136,8 +135,6 @@
           }
         },
         "range": 9.0,
-        "attenuation_model": 0,
-        "decay_exponent": 2.0,
         "inner_cone_angle_radians": 0.35,
         "outer_cone_angle_radians": 0.68,
         "source_radius": 0.03,

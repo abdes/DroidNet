@@ -31,7 +31,6 @@ public:
   static constexpr float kDefaultRange = 10.0F;
   static constexpr float kDefaultLuminousFluxLm = 800.0F;
   static constexpr float kDefaultSourceRadius = 0.0F;
-  static constexpr float kDefaultDecayExponent = 2.0F;
 
   //! Creates a default point light.
   PointLight() = default;
@@ -59,30 +58,6 @@ public:
 
   //! Gets the effective range (radius) of the light in world units.
   OXGN_SCN_NDAPI auto GetRange() const noexcept -> float { return range_; }
-
-  //! Sets the attenuation model used by shaders.
-  auto SetAttenuationModel(const AttenuationModel model) noexcept -> void
-  {
-    attenuation_model_ = model;
-  }
-
-  //! Gets the attenuation model used by shaders.
-  OXGN_SCN_NDAPI auto GetAttenuationModel() const noexcept -> AttenuationModel
-  {
-    return attenuation_model_;
-  }
-
-  //! Sets the custom decay exponent (used only for kCustomExponent).
-  auto SetDecayExponent(const float decay_exponent) noexcept -> void
-  {
-    decay_exponent_ = decay_exponent;
-  }
-
-  //! Gets the custom decay exponent.
-  OXGN_SCN_NDAPI auto GetDecayExponent() const noexcept -> float
-  {
-    return decay_exponent_;
-  }
 
   //! Sets the source radius in world units.
   auto SetSourceRadius(const float source_radius) noexcept -> void
@@ -114,6 +89,16 @@ protected:
     -> void override;
 
 private:
+  friend class SceneNode;
+  // Commit only authored values; composition dependencies retain their identity.
+  void CopyPropertiesFrom(const PointLight& candidate) noexcept
+  {
+    common_ = candidate.common_;
+    range_ = candidate.range_;
+    source_radius_ = candidate.source_radius_;
+    luminous_flux_lm_ = candidate.luminous_flux_lm_;
+  }
+
   CommonLightProperties common_ {};
 
   //! Maximum reach of the light in world units.
@@ -122,8 +107,6 @@ private:
   //! culling.
   float range_ = kDefaultRange;
 
-  AttenuationModel attenuation_model_ = AttenuationModel::kInverseSquare;
-  float decay_exponent_ = kDefaultDecayExponent;
 
   //! Radius of the emission sphere in world units.
   //! Scale: linear (meters).

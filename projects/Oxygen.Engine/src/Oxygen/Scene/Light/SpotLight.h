@@ -31,7 +31,6 @@ class SpotLight final : public Component {
 public:
   static constexpr float kDefaultRange = 10.0F;
   static constexpr float kDefaultLuminousFluxLm = 800.0F;
-  static constexpr float kDefaultDecayExponent = 2.0F;
   static constexpr float kDefaultInnerConeAngle = 0.4F;
   static constexpr float kDefaultOuterConeAngle = 0.6F;
   static constexpr float kDefaultSourceRadius = 0.0F;
@@ -63,44 +62,25 @@ public:
   //! Gets the effective range (length) of the light in world units.
   OXGN_SCN_NDAPI auto GetRange() const noexcept -> float { return range_; }
 
-  //! Sets the attenuation model used by shaders.
-  auto SetAttenuationModel(const AttenuationModel model) noexcept -> void
-  {
-    attenuation_model_ = model;
-  }
-
-  //! Gets the attenuation model used by shaders.
-  OXGN_SCN_NDAPI auto GetAttenuationModel() const noexcept -> AttenuationModel
-  {
-    return attenuation_model_;
-  }
-
-  //! Sets the custom decay exponent (used only for kCustomExponent).
-  auto SetDecayExponent(const float decay_exponent) noexcept -> void
-  {
-    decay_exponent_ = decay_exponent;
-  }
-
-  //! Gets the custom decay exponent.
-  OXGN_SCN_NDAPI auto GetDecayExponent() const noexcept -> float
-  {
-    return decay_exponent_;
-  }
-
   //! Sets the inner cone angle in radians.
   auto SetInnerConeAngleRadians(const float inner_cone_angle_radians) noexcept
     -> void
   {
-    inner_cone_angle_radians_
-      = std::clamp(inner_cone_angle_radians, 0.0F, outer_cone_angle_radians_);
+    inner_cone_angle_radians_ = inner_cone_angle_radians;
   }
 
   //! Sets the outer cone angle in radians.
   auto SetOuterConeAngleRadians(const float outer_cone_angle_radians) noexcept
     -> void
   {
-    outer_cone_angle_radians_
-      = std::max(outer_cone_angle_radians, inner_cone_angle_radians_);
+    outer_cone_angle_radians_ = outer_cone_angle_radians;
+  }
+
+  //! Sets both authored angles on a detached candidate; attachment validates the pair.
+  auto SetConeAnglesRadians(float inner, float outer) noexcept -> void
+  {
+    inner_cone_angle_radians_ = inner;
+    outer_cone_angle_radians_ = outer;
   }
 
   //! Gets the inner cone angle in radians.
@@ -145,6 +125,18 @@ protected:
     -> void override;
 
 private:
+  friend class SceneNode;
+  // Commit only authored values; composition dependencies retain their identity.
+  void CopyPropertiesFrom(const SpotLight& candidate) noexcept
+  {
+    common_ = candidate.common_;
+    range_ = candidate.range_;
+    inner_cone_angle_radians_ = candidate.inner_cone_angle_radians_;
+    outer_cone_angle_radians_ = candidate.outer_cone_angle_radians_;
+    source_radius_ = candidate.source_radius_;
+    luminous_flux_lm_ = candidate.luminous_flux_lm_;
+  }
+
   CommonLightProperties common_ {};
 
   //! Maximum reach of the light in world units.
@@ -157,8 +149,6 @@ private:
   //! culling.
   float range_ = kDefaultRange;
 
-  AttenuationModel attenuation_model_ = AttenuationModel::kInverseSquare;
-  float decay_exponent_ = kDefaultDecayExponent;
 
   //! Angle of the inner cone where attenuation starts.
   //! Scale: radians. Must be <= outer angle.

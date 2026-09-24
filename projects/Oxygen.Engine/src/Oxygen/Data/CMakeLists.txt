@@ -72,6 +72,7 @@ set(
   "PakFormat.h"
   "PakFormat_core.h"
   "PakFormat_world.h"
+  "LightValidation.h"
   "PakFormat_geometry.h"
   "PakFormat_render.h"
   "PakFormat_scripting.h"

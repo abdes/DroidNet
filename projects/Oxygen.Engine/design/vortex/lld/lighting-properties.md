@@ -65,7 +65,7 @@ position uses world transform and orientation uses normalized world rotation.
 
 Defaults distinguish low-level native construction from authored creation.
 `common.*` denotes fields inside J/P common records; all source domains below
-are target requirements, not an assertion that today's schema enforces them.
+are enforced by the current schema and complete-candidate validation.
 
 | ID / field                             | Source, default and domain                                                                                                           | Selection / final consumer                                                                                                                                                            | Invalidation / additional tests                                                                                                                                                            |
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -73,13 +73,13 @@ are target requirements, not an assertion that today's schema enforces them.
 | LP02 node visibility/hierarchy         | Scene flags Local/Inherit; authored root Shown, children Inherit; preserve existing root resolution                                  | Effective visibility AND affects-world selects lights; traversal rejects node without pruning a locally Shown child                                                                   | Q/H/A. Hidden parent/shown child, hidden slot occupant conflict, visibility-only edits. Geometry hidden/cast rules are separate.                                                           |
 | LP03 `common.affects_world`            | N/S/J/P/L/E/I/M; default true, bool                                                                                                  | Eligibility before all direct/atmospheric consumers; retain stored values and slot while off                                                                                          | Q/H/A. Toggle off/on without changing lux/color/assignment; zero-light clearing.                                                                                                           |
 | LP04 `common.color_rgb`                | N/S/J/P/L/E/I/M; (1,1,1), linear RGB; finite nonnegative native components and finite derived output; inspector clamps [0,1]         | Resolved RGB intensity/illuminance, shared BRDF and assigned atmosphere tint                                                                                                          | V/A. RGB primaries/black/tinted luminance; picker conversion once; reject negative/nonfinite/overflow.                                                                                     |
-| LP05 `common.exposure_compensation_ev` | N/S/J/P/L/E/I/M; 0 EV; inspector [-10,10]; native finite value with representable resolved intensity                                 | CPU retains EV/base units; evaluation boundary resolves `2^EV` exactly once into lux/candela; atmosphere uses the same effective source                                               | V/A. +/-1 EV, zero intensity, compensation overflow, change camera exposure without changing authored light. Resolved once for direct lighting; shared atmosphere conversion remains open. |
+| LP05 `common.exposure_compensation_ev` | N/S/J/P/L/E/I/M; 0 EV; inspector [-10,10]; native finite value with representable resolved intensity                                 | CPU retains EV/base units; evaluation boundary resolves `2^EV` exactly once into lux/candela; atmosphere uses the same effective source                                               | V/A. +/-1 EV, zero intensity, compensation overflow, change camera exposure without changing authored light. Direct lighting and atmosphere share the Core photometry conversion. |
 | LP06 `common.mobility`                 | Native enum Realtime/Mixed/Baked; default Realtime. Canonical V0.1 authoring is Realtime, without redundant stored mobility choice   | Native capability validation; no fabricated bake contribution. Remove obsolete source/editor mobility choices in strict migration, preserve native enum API where otherwise supported | Q. Reject unknown values and unavailable authored bake modes. Explicit exclusion EV01-LIGHT-BAKING, not proof of a bake renderer.                                                          |
 | LP07 `common.casts_shadows`            | N/S/J/P/L/E/I/M; native false; explicit authored directional creation true under inspector contract                                  | `flags` bit 0; ShadowService request, per-view reference and both direct-light families                                                                                               | H. On/off, unassigned/Primary/Secondary, missing requested map fails. Do not derive from geometry Cast Shadows.                                                                            |
-| LP08 `common.shadow.bias`              | N/S/J/P/L/E; I directional, local gap; M gap. Native 0, inspector [0,10] dimensionless                                               | CPU shadow request; existing per-light depth-bias owner, applied once                                                                                                                 | H. Nonzero signed depth convention, no double application, local live/round-trip tuning.                                                                                                   |
-| LP09 `common.shadow.normal_bias`       | Same routes/gaps as LP08; native 0.02 m, finite >=0; packed default currently differs (0)                                            | CPU shadow request; per-light receiver normal/texel offset                                                                                                                            | H. Nonzero effect independent of raster bias; source creation writes explicit default.                                                                                                     |
-| LP10 `common.shadow.contact_shadows`   | Same routes/gaps as LP08; default false                                                                                              | `flags` bit 1, Cast Shadows and receiver gates; ShadowService Stage 8 contact depth and shared attenuation                                                                            | H. Fixed 0.25 m/16-sample contract, missing depth failure, no allocation on disabled frames, one multiplication with map visibility. Currently absent from selection.                      |
-| LP11 `common.shadow.resolution_hint`   | Same routes/gaps as LP08; Medium=1, enum exactly Low/Medium/High/Ultra (0..3); source currently permits 255                          | CPU shadow request, selected quality/capability resolution reported to caller                                                                                                         | H. Every enum, reject 4/255, mixed-resolution lights retain individual requests; no incidental maximum-hint override or silent quality reduction.                                          |
+| LP08 `common.shadow.bias`              | N/S/J/P/L/E/I/M. Native 0, inspector [0,10] dimensionless                                               | CPU shadow request; existing per-light depth-bias owner, applied once                                                                                                                 | H. Nonzero signed depth convention, no double application, local live/round-trip tuning.                                                                                                   |
+| LP09 `common.shadow.normal_bias`       | Same routes as LP08; native 0.02 m, finite >=0; packed default also 0.02 m                                            | CPU shadow request; per-light receiver normal/texel offset                                                                                                                            | H. Nonzero effect independent of raster bias; source creation writes explicit default.                                                                                                     |
+| LP10 `common.shadow.contact_shadows`   | Same routes as LP08; default false                                                                                              | `flags` bit 1, Cast Shadows and receiver gates; ShadowService Stage 8 contact depth and shared attenuation                                                                            | H. Fixed 0.25 m/16-sample contract, missing depth failure, no allocation on disabled frames, one multiplication with map visibility.                      |
+| LP11 `common.shadow.resolution_hint`   | Same routes as LP08; Medium=1, enum exactly Low/Medium/High/Ultra (0..3); source and binary loading reject values outside 0..3                          | CPU shadow request, selected quality/capability resolution reported to caller                                                                                                         | H. Every enum, reject 4/255, mixed-resolution lights retain individual requests; no incidental maximum-hint override or silent quality reduction.                                          |
 | LP12 geometry cast/receive             | Node modes, authored root On/children Inherit, opaque/masked casting; material Blend caster excluded                                 | ScenePrep per-instance bits; caster filtering and forward/GBuffer receiver eligibility                                                                                                | H. Different flags on instances sharing material/mesh, off-screen caster, Receive Off retains illumination/AO/IBL and own casting.                                                         |
 | LP13 position/orientation              | Node local/world transform, parent hierarchy, IgnoreParentTransform; finite position and usable normalized rotation                  | Local `position_ws`/`emitted_direction_ws`; directional opposite ray as `direction_to_source_ws`                                                                                      | Q/V/H/A. Parented transforms, ignore-parent, translate/rotate/scale, axis/sign fixture and no stale bounds.                                                                                |
 
@@ -89,8 +89,8 @@ are target requirements, not an assertion that today's schema enforces them.
 | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | LP14 `luminous_flux_lm`                                     | N/S/J/P/L/E/I/M/T; point/spot 800 lm, finite >=0 and representable resolved candela                                                              | CPU flux retained; shared physical conversion -> `intensity_rgb_cd`; no per-draw conversion copy                                                                                  | V. Point 4*pi and independently integrated squared-cone solid angle; zero/bright/endpoints; exactly-once receiver cosine.                                      |
 | LP15 `range`                                                | N/S/J/P/L/E/I/M/T; 10 m; finite >=0 with representable inverse; zero has zero influence                                                          | Center-based range and quartic fade; point sphere and spot cone bounds use range without source-radius expansion                                                                  | V/H. Zero clearing/reactivation, near/at/beyond range, rejection of invalid values, projection and shadow coverage.                                            |
-| LP16 `attenuation_model`                                    | Current N/S/J/P/L/T field; **removal approved by D2**                                                                                            | Remove enum, API, script binding, source/packed field and all producer/consumer plumbing; no GPU selector                                                                         | Reject the obsolete key including former value 0; reject old packed layouts; migrate importers/assets/fixtures and verify no compatibility aliases.            |
-| LP17 `decay_exponent`                                       | Current N/S/J/P/L/E/I/M field; **removal approved by D2**                                                                                        | Remove local exponent and accessors across native/script/editor/source/packed/tooling; no evaluator or GPU member                                                                 | Reject obsolete key including former value 2; migrate serializers/commands/fixtures. Keep unrelated directional CSM distribution_exponent.                     |
+| LP16 `attenuation_model`                                    | Removed from N/S/J/P/L/T under D2                                                                                            | Remove enum, API, script binding, source/packed field and all producer/consumer plumbing; no GPU selector                                                                         | Reject the obsolete key including former value 0; reject old packed layouts; migrate importers/assets/fixtures and verify no compatibility aliases.            |
+| LP17 `decay_exponent`                                       | Removed from N/S/J/P/L/E/I/M under D2                                                                                        | Remove local exponent and accessors across native/script/editor/source/packed/tooling; no evaluator or GPU member                                                                 | Reject obsolete key including former value 2; migrate serializers/commands/fixtures. Keep unrelated directional CSM distribution_exponent.                     |
 | LP18 `source_radius`                                        | N/S/J/P/L/E/I/M; 0 m, finite >=0 with representable derived evaluation                                                                           | Analytic source-size diffuse horizon and specular highlight response; zero selects the punctual response                                                                          | V. Source-size edits update shading; range/cone support and ordinary-spot shadow projection are unchanged. Compare images and numerical-reference differences. |
 | LP19 `inner_cone_angle_radians`, `outer_cone_angle_radians` | Spot N/S/J/P/L/E/I/M/T; 0.4/0.6 rad half-angles; soft 0<=inner<outer<=pi/2, hard 0<inner=outer<pi/2; GPU cosine parameters must be representable | CPU retains radians and normalizes flux with both angles; GPU receives outer cosine and inverse cosine width. Ordinary spots use projected shadows; hemispheres use cube coverage | V/H. Atomic cone pairs, invalid/unrepresentable interval rejection, hard step, soft hemisphere, cone bounds, glTF candela conversion and shadow routing.       |
 
@@ -103,7 +103,7 @@ are target requirements, not an assertion that today's schema enforces them.
 | LP22 `AngularSizeRadians`                                      | N/S/J/P/L/E/I/M; native 0; authored 0.00935 rad full diameter. Finite nonnegative with valid atmosphere solid-angle calculation                                              | Atmosphere disk geometry/luminance only; not directional surface record radius                                              | A. Full versus half angle, zero/positive disk behavior, role None inactivity; no claimed PCSS/GGX broadening (EV01-LIGHT-FINITE-SOURCE).         |
 | LP23 `UsePerPixelAtmosphereTransmittance`                      | Native false; missing explicit J/P and editor/script transport                                                                                                               | CPU authority flag -> GPU mode bit; common atmosphere directional helper in each surface family                             | V/A. On/off with controlled altitude/path and each slot, no double ground+per-pixel attenuation.                                                 |
 | LP24 `AtmosphereDiskLuminanceScale`                            | Native current Vec4 defaults (1,1,1,1); retained RGB is finite >=0 with checked radiance. Fourth lane has no defined consumer and is removed, not assigned opacity semantics | RGB atmosphere-model/disk publication; new source/packed/native/script/editor transport preserves RGB. Direct lux unchanged | A. Non-default RGB scale, both slots, save/cook/load/live mutation, radiance validation; no unused alpha lane or invented alpha control.         |
-| LP25 old `environment_contribution`, `is_sun_light`, SunNodeId | Present in current N/S/J/P/L/E/I/M; obsolete duplicate authority under editor rendering contract                                                                             | Remove with current-format migration of producers/consumers/examples/tests, not a precedence rule alongside slots           | Q/A. Old source keys/packed record sizes rejected; explicit requested demo inference/injection uses ordinary slot assignment and scene lifetime. |
+| LP25 old `environment_contribution`, `is_sun_light`, SunNodeId | Removed from N/S/J/P/L/E/I/M; explicit per-light atmosphere slot is the sole authority                                                                             | Remove with current-format migration of producers/consumers/examples/tests, not a precedence rule alongside slots           | Q/A. Old source keys/packed record sizes rejected; explicit requested demo inference/injection uses ordinary slot assignment and scene lifetime. |
 
 ## Directional shadow fields
 
@@ -134,8 +134,7 @@ stored atmosphere-slot conflicts. A failed batch changes no property, identity,
 revision, undo/redo state or accepted scene. Keep these descriptors/results
 C++20-compatible and renderer-private headers out of the SDK boundary.
 
-The current source/packed scene version is 6. This strict light migration uses
-**scene version 7**, with the existing scene descriptor/header envelope and
+The current source and packed format is **scene version 7**, with the existing scene descriptor/header envelope and
 component table routing. Reject version 6, old record sizes and removed source
 keys; recook/repack all affected fixtures and dependent sidecars instead of
 adding a runtime compatibility reader. One current version is authoritative in
@@ -163,14 +162,10 @@ native defaults. Existing importer policy stays explicit. Canonical V0.1 source
 has no mobility selector; its runtime mode is Realtime. Native bake capabilities
 remain a separate capability boundary, not new EX07 authored controls.
 
-Add the directional source keys corresponding to the three fields at offsets
-42, 43 and 44. Keep existing CSM/source field names and remove
-`environment_contribution`/`is_sun_light`. Source arrays and each RGB/range/angle
-field follow the validated domains above. The native disk-scale Vec4's fourth
-component is currently hashed but has no consumer or defined opacity contract;
-the retained contract is **RGB luminance scale**. Migrate that unused lane out of
-native/model APIs instead of inventing an alpha control. This corrects the initial
-inventory's provisional alpha assumption; no rendered opacity behavior is removed.
+Directional source keys map directly to the fields at offsets 42, 43 and 44.
+CSM field names are retained; `environment_contribution` and `is_sun_light` are
+rejected. Disk scale is **RGB luminance scale** in source, native, editor and
+shader contracts. The former fourth lane had no opacity consumer and is removed.
 
 Zero local range remains valid with **zero influence**, following the current
 source schema and the physical rule that contribution is zero at/beyond range.
@@ -186,9 +181,26 @@ it cannot manufacture a minimum disk. RGB disk scale is finite nonnegative with
 checked resulting radiance; it never changes the underlying direct-light lux.
 The existing atmosphere-only angular-size exclusion remains.
 
-The table is the target format; no producer or loader has been migrated yet.
-Add size/offset/adjacent-record round-trip tests and malformed byte/value cases
-with the code cutover. LP16/LP17 are removed fields, not reserved bytes.
+Native cooking/loading, PakGen, DemoShell, managed source generation and live
+Interop use this layout. LP16/LP17 are removed fields, not reserved bytes.
+
+### Atomic authoring and source assignment
+
+`SceneNode::EditLight<T>` validates a detached stack candidate, then copies only
+its properties into the existing component. Failed edits preserve component
+identity, values and mutation notifications. Accepted edits use the existing
+Scene observer collection. Ordinary value edits allocate no replacement component
+and do not rescan slot ownership; a changed assignment checks all stored lights,
+including hidden and inactive owners, and names any conflicting node.
+
+Script `light_update(table)`, editor command validation and Interop property batches
+follow the same whole-candidate rule. The environment Primary picker edits the
+selected light's slot. It stores no parallel scene sun identifier. A conflicting
+assignment is rejected without changing another light, dirty state or undo history.
+Visibility changes invalidate directional resolution; hiding a parent does not
+prune a child explicitly marked Shown. `Core/Lighting/LightPhotometry` owns shared
+RGB tint, EV, spot cone and physical-unit conversion for direct and atmospheric
+lighting, so authored exposure compensation is applied once.
 
 ### Imported local-light range
 
@@ -219,10 +231,14 @@ performance comparison.
 The source-to-cooked check on Sponza's `HDRI_SKY` confirms a source point light
 at 200 cd with no range or shadow override. The cooked node remains a point at
 2513.27417 lm (200 cd), with the expected axis conversion; shadowing follows the
-importer's explicit default. Its 10 m cutoff comes from the range defect. There
+importer's explicit default. The original 10 m cutoff came from the range defect; the corrected v7 content
+uses the approved 4,096 m fallback. There
 is no basis for converting this named node into an environment light. The bounded
 check, source declarations and file hashes are in
 [`hdri-sky-source-cooked-check.json`](../../../out/build-tracy-ninja/analysis/vortex/exposure-lightbench/ex07c/hdri-sky-source-cooked-check.json).
+
+The corrected-content field/identity check is in
+[`sponza-v7-content-check.json`](../../../out/analysis/ex07c-completion/sponza-v7-content-check.json).
 
 ### Suite ownership
 

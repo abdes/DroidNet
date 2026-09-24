@@ -49,7 +49,7 @@ inline constexpr uint32_t kSceneNodeFlags_Known = kSceneNodeFlags_Inheritable
 //!
 //! @note Scene descriptors include a trailing SceneEnvironment block (empty
 //! allowed).
-inline constexpr uint8_t kSceneAssetVersion = 6;
+inline constexpr uint8_t kSceneAssetVersion = 7;
 //! Index type for scene node tables.
 using SceneNodeIndexT = uint32_t;
 
@@ -752,7 +752,7 @@ inline constexpr std::array kKnownEnvironmentRecordSizes {
 #pragma pack(push, 1)
 struct LightShadowSettingsRecord {
   float bias = 0.0F;
-  float normal_bias = 0.0F;
+  float normal_bias = 0.02F;
   uint32_t contact_shadows = 0;
   uint8_t resolution_hint = 1; // ShadowResolutionHint
 };
@@ -772,14 +772,13 @@ struct LightCommonRecord {
   float color_rgb[3] = { 1.0F, 1.0F, 1.0F };
   // intensity REMOVED - now in specific light records with physical units
 
-  uint8_t mobility = 0; // LightMobility
   uint8_t casts_shadows = 0;
 
   LightShadowSettingsRecord shadow = {};
   float exposure_compensation_ev = 0.0F;
 };
 #pragma pack(pop)
-static_assert(sizeof(LightCommonRecord) == 35);
+static_assert(sizeof(LightCommonRecord) == 34);
 
 //! Packed directional light component record.
 /*!
@@ -792,9 +791,9 @@ struct DirectionalLightRecord {
   world::SceneNodeIndexT node_index = 0;
   LightCommonRecord common = {};
   float angular_size_radians = 0.0F;
-  uint32_t environment_contribution = 0;
-
-  uint32_t is_sun_light = 0;
+  uint8_t atmosphere_light_slot = 0; // None=0, Primary=1, Secondary=2
+  uint8_t use_per_pixel_atmosphere_transmittance = 0;
+  float atmosphere_disk_luminance_scale_rgb[3] = { 1.0F, 1.0F, 1.0F };
 
   uint32_t cascade_count = 4;
   float cascade_distances[4] = { 8.0F, 24.0F, 64.0F, 160.0F };
@@ -807,7 +806,7 @@ struct DirectionalLightRecord {
   float intensity_lux = 100000.0F; //!< Illuminance in lux (lm/m²)
 };
 #pragma pack(pop)
-static_assert(sizeof(DirectionalLightRecord) == 92);
+static_assert(sizeof(DirectionalLightRecord) == 97);
 
 //! Packed point light component record.
 /*!
@@ -819,13 +818,11 @@ struct PointLightRecord {
   world::SceneNodeIndexT node_index = 0;
   LightCommonRecord common = {};
   float range = 10.0F;
-  float decay_exponent = 2.0F;
   float source_radius = 0.0F;
   float luminous_flux_lm = 800.0F; //!< Luminous flux in lumens (lm)
-  uint8_t attenuation_model = 0; // AttenuationModel
 };
 #pragma pack(pop)
-static_assert(sizeof(PointLightRecord) == 56);
+static_assert(sizeof(PointLightRecord) == 50);
 
 //! Packed spot light component record.
 /*!
@@ -837,15 +834,35 @@ struct SpotLightRecord {
   world::SceneNodeIndexT node_index = 0;
   LightCommonRecord common = {};
   float range = 10.0F;
-  float decay_exponent = 2.0F;
   float inner_cone_angle_radians = 0.4F;
   float outer_cone_angle_radians = 0.6F;
   float source_radius = 0.0F;
   float luminous_flux_lm = 800.0F; //!< Luminous flux in lumens (lm)
-  uint8_t attenuation_model = 0; // AttenuationModel
 };
 #pragma pack(pop)
-static_assert(sizeof(SpotLightRecord) == 64);
+static_assert(sizeof(SpotLightRecord) == 58);
+static_assert(offsetof(LightCommonRecord, casts_shadows) == 16);
+static_assert(offsetof(LightCommonRecord, shadow) == 17);
+static_assert(offsetof(LightCommonRecord, exposure_compensation_ev) == 30);
+static_assert(offsetof(PointLightRecord, range) == 38);
+static_assert(offsetof(PointLightRecord, source_radius) == 42);
+static_assert(offsetof(PointLightRecord, luminous_flux_lm) == 46);
+static_assert(offsetof(SpotLightRecord, inner_cone_angle_radians) == 42);
+static_assert(offsetof(SpotLightRecord, outer_cone_angle_radians) == 46);
+static_assert(offsetof(SpotLightRecord, source_radius) == 50);
+static_assert(offsetof(SpotLightRecord, luminous_flux_lm) == 54);
+static_assert(offsetof(DirectionalLightRecord, angular_size_radians) == 38);
+static_assert(offsetof(DirectionalLightRecord, atmosphere_light_slot) == 42);
+static_assert(offsetof(DirectionalLightRecord, use_per_pixel_atmosphere_transmittance) == 43);
+static_assert(offsetof(DirectionalLightRecord, atmosphere_disk_luminance_scale_rgb) == 44);
+static_assert(offsetof(DirectionalLightRecord, cascade_count) == 56);
+static_assert(offsetof(DirectionalLightRecord, cascade_distances) == 60);
+static_assert(offsetof(DirectionalLightRecord, distribution_exponent) == 76);
+static_assert(offsetof(DirectionalLightRecord, split_mode) == 80);
+static_assert(offsetof(DirectionalLightRecord, max_shadow_distance) == 81);
+static_assert(offsetof(DirectionalLightRecord, transition_fraction) == 85);
+static_assert(offsetof(DirectionalLightRecord, distance_fadeout_fraction) == 89);
+static_assert(offsetof(DirectionalLightRecord, intensity_lux) == 93);
 
 } // namespace oxygen::data::pak::world
 

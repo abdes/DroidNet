@@ -859,10 +859,6 @@ namespace {
         common.color_rgb[i] = color.at(i).get<float>();
       }
     }
-    if (common_doc.contains("mobility")) {
-      common.mobility
-        = static_cast<uint8_t>(common_doc.at("mobility").get<uint32_t>());
-    }
     if (common_doc.contains("casts_shadows")) {
       common.casts_shadows
         = common_doc.at("casts_shadows").get<bool>() ? 1U : 0U;
@@ -1170,13 +1166,14 @@ namespace {
             light.angular_size_radians
               = light_doc.at("angular_size_radians").get<float>();
           }
-          if (light_doc.contains("environment_contribution")) {
-            light.environment_contribution
-              = light_doc.at("environment_contribution").get<bool>() ? 1U : 0U;
-          }
-          if (light_doc.contains("is_sun_light")) {
-            light.is_sun_light
-              = light_doc.at("is_sun_light").get<bool>() ? 1U : 0U;
+          light.atmosphere_light_slot = light_doc.value("atmosphere_light_slot", uint8_t { 0U });
+          light.use_per_pixel_atmosphere_transmittance = light_doc.value(
+            "use_per_pixel_atmosphere_transmittance", false) ? 1U : 0U;
+          if (light_doc.contains("atmosphere_disk_luminance_scale_rgb")) {
+            for (std::size_t channel = 0U; channel < 3U; ++channel) {
+              light.atmosphere_disk_luminance_scale_rgb[channel]
+                = light_doc.at("atmosphere_disk_luminance_scale_rgb").at(channel).get<float>();
+            }
           }
           if (light_doc.contains("cascade_count")) {
             light.cascade_count = light_doc.at("cascade_count").get<uint32_t>();
@@ -1243,13 +1240,6 @@ namespace {
           if (light_doc.contains("range")) {
             light.range = light_doc.at("range").get<float>();
           }
-          if (light_doc.contains("attenuation_model")) {
-            light.attenuation_model = static_cast<uint8_t>(
-              light_doc.at("attenuation_model").get<uint32_t>());
-          }
-          if (light_doc.contains("decay_exponent")) {
-            light.decay_exponent = light_doc.at("decay_exponent").get<float>();
-          }
           if (light_doc.contains("source_radius")) {
             light.source_radius = light_doc.at("source_radius").get<float>();
           }
@@ -1283,13 +1273,6 @@ namespace {
           }
           if (light_doc.contains("range")) {
             light.range = light_doc.at("range").get<float>();
-          }
-          if (light_doc.contains("attenuation_model")) {
-            light.attenuation_model = static_cast<uint8_t>(
-              light_doc.at("attenuation_model").get<uint32_t>());
-          }
-          if (light_doc.contains("decay_exponent")) {
-            light.decay_exponent = light_doc.at("decay_exponent").get<float>();
           }
           if (light_doc.contains("inner_cone_angle_radians")) {
             light.inner_cone_angle_radians

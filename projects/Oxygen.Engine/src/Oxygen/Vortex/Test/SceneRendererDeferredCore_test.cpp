@@ -426,7 +426,8 @@ protected:
     return context;
   }
 
-  auto AddDirectionalLight(std::string_view name) -> oxygen::scene::SceneNode
+  auto AddDirectionalLight(std::string_view name,
+    oxygen::scene::AtmosphereLightSlot slot = oxygen::scene::AtmosphereLightSlot::kPrimary) -> oxygen::scene::SceneNode
   {
     auto node = scene_->CreateNode(std::string(name));
     auto light = std::make_unique<DirectionalLight>();
@@ -438,9 +439,7 @@ protected:
       0.8F,
     };
     light->SetIntensityLux(1500.0F);
-    light->SetEnvironmentContribution(true);
-    light->SetIsSunLight(true);
-    light->SetAtmosphereLightSlot(oxygen::scene::AtmosphereLightSlot::kNone);
+    light->SetAtmosphereLightSlot(slot);
     EXPECT_TRUE(node.AttachLight(std::move(light)));
     UpdateSceneTransforms();
     return node;
@@ -1713,10 +1712,10 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   auto node = AddDirectionalLight("StandaloneSource");
   auto source = node.GetLightAs<DirectionalLight>();
   ASSERT_TRUE(source.has_value());
-  source->get().SetIsSunLight(false);
-  source->get().SetEnvironmentContribution(false);
-  source->get().SetAtmosphereLightSlot(
+  ASSERT_TRUE(node.EditLight<DirectionalLight>([](auto& light) {
+  light.SetAtmosphereLightSlot(
     oxygen::scene::AtmosphereLightSlot::kNone);
+  }));
   UpdateSceneTransforms();
   std::ignore = RenderForView(first_view_id_, first_resolved_view_);
   const auto& selection
@@ -1736,10 +1735,10 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   auto node = AddDirectionalLight("StandaloneSource");
   auto source = node.GetLightAs<DirectionalLight>();
   ASSERT_TRUE(source.has_value());
-  source->get().SetIsSunLight(false);
-  source->get().SetEnvironmentContribution(true);
-  source->get().SetAtmosphereLightSlot(
+  ASSERT_TRUE(node.EditLight<DirectionalLight>([](auto& light) {
+  light.SetAtmosphereLightSlot(
     oxygen::scene::AtmosphereLightSlot::kSecondary);
+  }));
   UpdateSceneTransforms();
   std::ignore = RenderForView(first_view_id_, first_resolved_view_);
   const auto& selection
@@ -1760,20 +1759,17 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   if (!sun_light.has_value()) {
     FAIL() << "Expected sun_light to have a value";
   }
-  auto& csm = sun_light->get().CascadedShadows();
-  csm.cascade_count = 3U;
-  csm.split_mode = oxygen::scene::DirectionalCsmSplitMode::kManualDistances;
-  csm.max_shadow_distance = 96.0F;
-  csm.cascade_distances = {
-    12.0F,
-    36.0F,
-    96.0F,
-    160.0F,
-  };
-  csm.transition_fraction = 0.2F;
-  csm.distance_fadeout_fraction = 0.25F;
-  sun_light->get().Common().shadow.bias = 0.001F;
-  sun_light->get().Common().shadow.normal_bias = 0.04F;
+  ASSERT_TRUE(sun.EditLight<DirectionalLight>([](auto& light) {
+    auto& csm = light.CascadedShadows();
+    csm.cascade_count = 3U;
+    csm.split_mode = oxygen::scene::DirectionalCsmSplitMode::kManualDistances;
+    csm.max_shadow_distance = 96.0F;
+    csm.cascade_distances = { 12.0F, 36.0F, 96.0F, 160.0F };
+    csm.transition_fraction = 0.2F;
+    csm.distance_fadeout_fraction = 0.25F;
+    light.Common().shadow.bias = 0.001F;
+    light.Common().shadow.normal_bias = 0.04F;
+  }));
   sun.GetTransform().SetLocalRotation(
     glm::angleAxis(-oxygen::math::HalfPi, oxygen::space::move::Right));
   UpdateSceneTransforms();
@@ -1814,14 +1810,14 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   DirectionalLightSelectionRetainsUnassignedFillAndAssignedSun)
 {
-  auto fill = AddDirectionalLight("Fill");
+  auto fill = AddDirectionalLight("Fill", oxygen::scene::AtmosphereLightSlot::kNone);
   auto fill_light = fill.GetLightAs<DirectionalLight>();
   if (!fill_light.has_value()) {
     FAIL() << "Expected fill_light to have a value";
   }
-  fill_light->get().Common().affects_world = true;
-  fill_light->get().SetEnvironmentContribution(false);
-  fill_light->get().SetIsSunLight(false);
+  ASSERT_TRUE(fill.EditLight<DirectionalLight>([](auto& light) {
+  light.Common().affects_world = true;
+  }));
   fill.GetTransform().SetLocalRotation(
     glm::angleAxis(+oxygen::math::HalfPi, oxygen::space::move::Right));
 
@@ -1830,9 +1826,9 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   if (!sun_light.has_value()) {
     FAIL() << "Expected sun_light to have a value";
   }
-  sun_light->get().Common().affects_world = true;
-  sun_light->get().SetEnvironmentContribution(true);
-  sun_light->get().SetIsSunLight(true);
+  ASSERT_TRUE(sun.EditLight<DirectionalLight>([](auto& light) {
+  light.Common().affects_world = true;
+  }));
   sun.GetTransform().SetLocalRotation(
     glm::angleAxis(-oxygen::math::HalfPi, oxygen::space::move::Right));
 
@@ -2170,9 +2166,11 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   if (!spot_light.has_value()) {
     FAIL() << "Expected spot_light to have a value";
   }
-  spot_light->get().Common().casts_shadows = true;
-  spot_light->get().Common().shadow.bias = 0.5F;
-  spot_light->get().Common().shadow.normal_bias = 0.03F;
+  ASSERT_TRUE(spot.EditLight<SpotLight>([](auto& light) {
+  light.Common().casts_shadows = true;
+  light.Common().shadow.bias = 0.5F;
+  light.Common().shadow.normal_bias = 0.03F;
+  }));
 
   std::ignore = RenderForView(first_view_id_, first_resolved_view_);
 
@@ -2199,9 +2197,11 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   if (!point_light.has_value()) {
     FAIL() << "Expected point_light to have a value";
   }
-  point_light->get().Common().casts_shadows = true;
-  point_light->get().Common().shadow.bias = 0.5F;
-  point_light->get().Common().shadow.normal_bias = 0.03F;
+  ASSERT_TRUE(point.EditLight<PointLight>([](auto& light) {
+  light.Common().casts_shadows = true;
+  light.Common().shadow.bias = 0.5F;
+  light.Common().shadow.normal_bias = 0.03F;
+  }));
 
   std::ignore = RenderForView(first_view_id_, first_resolved_view_);
 

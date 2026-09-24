@@ -342,185 +342,147 @@ def _f(value: Any, default: float = 0.0) -> float:
     return float(value)
 
 
+def _light_float(value: Any, field: str, minimum: float | None = 0.0,
+                 maximum: float = 3.4028234663852886e38) -> float:
+    value = _finite_f32(value, field)
+    if (minimum is not None and value < minimum) or value > maximum:
+        raise PakError("E_RANGE", f"{field} is outside its supported range")
+    return value
+
+
+def _light_enum(value: Any, field: str, maximum: int, minimum: int = 0) -> int:
+    if not isinstance(value, int) or isinstance(value, bool) or not minimum <= value <= maximum:
+        raise PakError("E_RANGE", f"{field} is not a declared value")
+    return value
+
+
+def _light_bool(value: Any, field: str) -> int:
+    if not isinstance(value, (bool, int)) or value not in (0, 1):
+        raise PakError("E_RANGE", f"{field} must be a boolean")
+    return int(value)
+
+
+def _light_rgb(value: Any, field: str) -> tuple[float, float, float]:
+    if not isinstance(value, (list, tuple)) or len(value) != 3:
+        raise PakError("E_RANGE", f"{field} must contain three components")
+    return tuple(_light_float(v, field) for v in value)
+
+
+def _light_photometry(light: Dict[str, Any], strength: float, solid_angle: float) -> tuple[float, ...]:
+    color = _light_rgb(light.get("color_rgb", light.get("color", [1, 1, 1])), "color_rgb")
+    ev = _light_float(light.get("exposure_compensation_ev", 0), "exposure_compensation_ev", None)
+    rgb = []
+    for tint in color:
+        if strength == 0 or tint == 0:
+            rgb.append(0.0)
+            continue
+        log_value = math.log2(strength * tint / solid_angle) + ev
+        if not -126 <= log_value <= math.log2(3.4028234663852886e38):
+            raise PakError("E_RANGE", "Resolved light intensity is not representable")
+        rgb.append(2.0 ** log_value)
+    return tuple(rgb)
+
+
 def _pack_light_shadow_settings_record(shadow: Dict[str, Any] | None) -> bytes:
-    shadow = shadow or {}
-    bias = _f(shadow.get("bias"), 0.0)
-    normal_bias = _f(shadow.get("normal_bias"), 0.0)
-    contact_shadows = _u32_bool(shadow.get("contact_shadows"), 0)
-    resolution_hint = _u8(shadow.get("resolution_hint"), 1)
-    out = (
-        struct.pack("<ffI", bias, normal_bias, int(contact_shadows))
-        + struct.pack("<B", int(resolution_hint))
-    )
-    if len(out) != 13:
-        raise PakError(
-            "E_SIZE", f"LightShadowSettingsRecord size mismatch: {len(out)}"
-        )
-    return out
+    shadow = {} if shadow is None else shadow
+    if not isinstance(shadow, dict):
+        raise PakError("E_TYPE", "shadow must be an object")
+    return struct.pack("<ffIB",
+        _light_float(shadow.get("bias", 0), "shadow.bias"),
+        _light_float(shadow.get("normal_bias", 0.02), "shadow.normal_bias"),
+        _light_bool(shadow.get("contact_shadows", False), "shadow.contact_shadows"),
+        _light_enum(shadow.get("resolution_hint", 1), "shadow.resolution_hint", 3))
 
 
 def _pack_light_common_record(light: Dict[str, Any]) -> bytes:
-    affects_world = _u32_bool(light.get("affects_world"), 1)
-    color = light.get("color_rgb", light.get("color", [1.0, 1.0, 1.0]))
-    cr, cg, cb = _vec3(color, [1.0, 1.0, 1.0])
-    mobility = _u8(light.get("mobility"), 0)
-    casts_shadows = _u8(light.get("casts_shadows"), 0)
-    shadow = _pack_light_shadow_settings_record(light.get("shadow"))
-    exposure_comp = _f(light.get("exposure_compensation_ev"), 0.0)
-
-    out = (
-        struct.pack("<I3f", int(affects_world), cr, cg, cb)
-        + struct.pack("<BB", int(mobility), int(casts_shadows))
-        + shadow
-        + struct.pack("<f", exposure_comp)
-    )
-    if len(out) != 35:
-        raise PakError("E_SIZE", f"LightCommonRecord size mismatch: {len(out)}")
-    return out
+    obsolete = {"attenuation_model", "decay_exponent", "mobility",
+        "environment_contribution", "is_sun_light", "is_sunlight", "IsSunLight"}
+    removed = obsolete.intersection(light)
+    if removed:
+        raise PakError("E_SCHEMA", f"Removed light properties: {', '.join(sorted(removed))}")
+    color = _light_rgb(light.get("color_rgb", light.get("color", [1, 1, 1])), "color_rgb")
+    return (struct.pack("<I3fB", _light_bool(light.get("affects_world", True), "affects_world"),
+        *color, _light_bool(light.get("casts_shadows", False), "casts_shadows"))
+        + _pack_light_shadow_settings_record(light.get("shadow"))
+        + struct.pack("<f", _light_float(light.get("exposure_compensation_ev", 0),
+            "exposure_compensation_ev", None)))
 
 
-def _pack_directional_light_record(
-    light: Dict[str, Any], *, node_count: int
-) -> bytes:
-    node_index = light.get("node_index", 0)
-    if (
-        not isinstance(node_index, int)
-        or node_index < 0
-        or node_index >= node_count
-    ):
-        raise PakError(
-            "E_REF", f"DirectionalLight node_index out of range: {node_index}"
-        )
+def _light_node(light: Dict[str, Any], node_count: int) -> int:
+    return _light_enum(light.get("node_index", 0), "node_index", node_count - 1)
 
+
+def _pack_directional_light_record(light: Dict[str, Any], *, node_count: int) -> bytes:
+    node = _light_node(light, node_count)
     common = _pack_light_common_record(light)
-    angular_size = _f(light.get("angular_size_radians"), 0.0)
-    env_contrib = _u32_bool(light.get("environment_contribution"), 0)
-    is_sun_light = _u32_bool(
-        light.get(
-            "is_sun_light",
-            light.get("is_sunlight", light.get("IsSunLight")),
-        ),
-        0,
-    )
-    intensity_lux = _f(light.get("intensity_lux"), 100000.0)
-    cascade_count = int(light.get("cascade_count", 4) or 0)
-    if cascade_count < 0 or cascade_count > 4:
-        raise PakError(
-            "E_RANGE",
-            f"DirectionalLight cascade_count out of range: {cascade_count}",
-        )
-    distances = light.get("cascade_distances", [0.0, 0.0, 0.0, 0.0])
+    intensity = _light_float(light.get("intensity_lux", 100000), "intensity_lux")
+    rgb = _light_photometry(light, intensity, 1.0)
+    diameter = _light_float(light.get("angular_size_radians", 0), "angular_size_radians",
+        maximum=3.1415927410125732)
+    slot = _light_enum(light.get("atmosphere_light_slot", 0), "atmosphere_light_slot", 2)
+    per_pixel = _light_bool(light.get("use_per_pixel_atmosphere_transmittance", False),
+        "use_per_pixel_atmosphere_transmittance")
+    scale = _light_rgb(light.get("atmosphere_disk_luminance_scale_rgb", [1, 1, 1]),
+        "atmosphere_disk_luminance_scale_rgb")
+    if diameter > 0:
+        area = math.pi * math.sin(diameter * 0.5) ** 2
+        for radiance, multiplier in zip(rgb, scale):
+            value = radiance * multiplier / area
+            if not math.isfinite(value) or value > 3.4028234663852886e38 or (0 < value < 2 ** -126):
+                raise PakError("E_RANGE", "Disk radiance is not representable")
+    count = _light_enum(light.get("cascade_count", 4), "cascade_count", 4, 1)
+    distances = light.get("cascade_distances", [8, 24, 64, 160])
     if not isinstance(distances, list) or len(distances) != 4:
-        distances = [0.0, 0.0, 0.0, 0.0]
-    cascade_distances = [float(d) for d in distances]
-    split_mode = int(light.get("split_mode", 1 if "cascade_distances" in light else 0) or 0)
-    if split_mode < 0 or split_mode > 1:
-        raise PakError(
-            "E_RANGE",
-            f"DirectionalLight split_mode out of range: {split_mode}",
-        )
-    max_shadow_distance_default = (
-        float(cascade_distances[3])
-        if "max_shadow_distance" not in light and split_mode == 1
-        else 160.0
-    )
-    max_shadow_distance = _f(
-        light.get("max_shadow_distance"), max_shadow_distance_default
-    )
-    distribution = _f(light.get("distribution_exponent"), 3.0)
-    transition_fraction = _f(light.get("transition_fraction"), 0.1)
-    distance_fadeout_fraction = _f(light.get("distance_fadeout_fraction"), 0.1)
-
-    out = (
-        struct.pack("<I", int(node_index))
-        + common
-        + struct.pack("<f", angular_size)
-        + struct.pack("<I", int(env_contrib))
-        + struct.pack("<I", int(is_sun_light))
-        + struct.pack("<I", int(cascade_count))
-        + struct.pack("<4f", *cascade_distances)
-        + struct.pack("<f", distribution)
-        + struct.pack("<B", int(split_mode))
-        + struct.pack("<f", max_shadow_distance)
-        + struct.pack("<f", transition_fraction)
-        + struct.pack("<f", distance_fadeout_fraction)
-        + struct.pack("<f", intensity_lux)
-    )
-    if len(out) != 92:
-        raise PakError(
-            "E_SIZE", f"DirectionalLightRecord size mismatch: {len(out)}"
-        )
-    return out
+        raise PakError("E_RANGE", "cascade_distances must contain four values")
+    distances = [_light_float(d, "cascade_distances", None) for d in distances]
+    previous = 0.0
+    for distance in distances[:count]:
+        if distance <= previous:
+            raise PakError("E_RANGE", "Active cascade distances must be positive and increasing")
+        previous = distance
+    mode = _light_enum(light.get("split_mode", 1 if "cascade_distances" in light else 0), "split_mode", 1)
+    maximum = _light_float(light.get("max_shadow_distance", distances[3] if mode else 160),
+        "max_shadow_distance")
+    if maximum == 0:
+        raise PakError("E_RANGE", "max_shadow_distance must be positive")
+    return (struct.pack("<I", node) + common + struct.pack("<fBB3fI4ffB4f",
+        diameter, slot, per_pixel, *scale, count, *distances,
+        _light_float(light.get("distribution_exponent", 3), "distribution_exponent", 1), mode,
+        maximum, _light_float(light.get("transition_fraction", 0.1), "transition_fraction", maximum=1),
+        _light_float(light.get("distance_fadeout_fraction", 0.1), "distance_fadeout_fraction", maximum=1),
+        intensity))
 
 
-def _pack_point_light_record(
-    light: Dict[str, Any], *, node_count: int
-) -> bytes:
-    node_index = light.get("node_index", 0)
-    if (
-        not isinstance(node_index, int)
-        or node_index < 0
-        or node_index >= node_count
-    ):
-        raise PakError(
-            "E_REF", f"PointLight node_index out of range: {node_index}"
-        )
+def _local_light_values(light: Dict[str, Any]) -> tuple[float, float, float]:
+    radius = _light_float(light.get("source_radius", 0), "source_radius")
+    distance = _light_float(light.get("range", 10), "range")
+    if distance + radius > 3.4028234663852886e38 or (distance > 0 and not 2 ** -126 <= 1 / distance <= 3.4028234663852886e38):
+        raise PakError("E_RANGE", "Local light range/radius is not representable")
+    return distance, radius, _light_float(light.get("luminous_flux_lm", 800), "luminous_flux_lm")
 
+
+def _pack_point_light_record(light: Dict[str, Any], *, node_count: int) -> bytes:
     common = _pack_light_common_record(light)
-    rng = _f(light.get("range"), 10.0)
-    attenuation_model = _u8(light.get("attenuation_model"), 0)
-    decay = _f(light.get("decay_exponent"), 2.0)
-    source_radius = _f(light.get("source_radius"), 0.0)
-    luminous_flux_lm = _f(light.get("luminous_flux_lm"), 800.0)
-
-    out = (
-        struct.pack("<I", int(node_index))
-        + common
-        + struct.pack("<f", rng)
-        + struct.pack("<f", decay)
-        + struct.pack("<f", source_radius)
-        + struct.pack("<f", luminous_flux_lm)
-        + struct.pack("<B", int(attenuation_model))
-    )
-    if len(out) != 56:
-        raise PakError("E_SIZE", f"PointLightRecord size mismatch: {len(out)}")
-    return out
+    distance, radius, flux = _local_light_values(light)
+    _light_photometry(light, flux, 4 * math.pi)
+    return struct.pack("<I", _light_node(light, node_count)) + common + struct.pack("<3f", distance, radius, flux)
 
 
 def _pack_spot_light_record(light: Dict[str, Any], *, node_count: int) -> bytes:
-    node_index = light.get("node_index", 0)
-    if (
-        not isinstance(node_index, int)
-        or node_index < 0
-        or node_index >= node_count
-    ):
-        raise PakError(
-            "E_REF", f"SpotLight node_index out of range: {node_index}"
-        )
-
     common = _pack_light_common_record(light)
-    rng = _f(light.get("range"), 10.0)
-    attenuation_model = _u8(light.get("attenuation_model"), 0)
-    decay = _f(light.get("decay_exponent"), 2.0)
-    inner = _f(light.get("inner_cone_angle_radians"), 0.4)
-    outer = _f(light.get("outer_cone_angle_radians"), 0.6)
-    source_radius = _f(light.get("source_radius"), 0.0)
-    luminous_flux_lm = _f(light.get("luminous_flux_lm"), 800.0)
-
-    out = (
-        struct.pack("<I", int(node_index))
-        + common
-        + struct.pack("<f", rng)
-        + struct.pack("<f", decay)
-        + struct.pack("<f", inner)
-        + struct.pack("<f", outer)
-        + struct.pack("<f", source_radius)
-        + struct.pack("<f", luminous_flux_lm)
-        + struct.pack("<B", int(attenuation_model))
-    )
-    if len(out) != 64:
-        raise PakError("E_SIZE", f"SpotLightRecord size mismatch: {len(out)}")
-    return out
+    distance, radius, flux = _local_light_values(light)
+    inner = _light_float(light.get("inner_cone_angle_radians", 0.4), "inner_cone_angle_radians", maximum=1.5707963705062866)
+    outer = _light_float(light.get("outer_cone_angle_radians", 0.6), "outer_cone_angle_radians", maximum=1.5707963705062866)
+    if outer <= 0 or inner > outer or inner == outer == 1.5707963705062866:
+        raise PakError("E_RANGE", "Invalid spot cone pair")
+    inner_sin2 = 0.5 if inner == 1.5707963705062866 else math.sin(inner / 2) ** 2
+    outer_sin2 = 0.5 if outer == 1.5707963705062866 else math.sin(outer / 2) ** 2
+    inner_cos = struct.unpack("<f", struct.pack("<f", 1 - 2 * inner_sin2))[0]
+    outer_cos = struct.unpack("<f", struct.pack("<f", 1 - 2 * outer_sin2))[0]
+    if outer_cos >= 1 or (inner != outer and inner_cos <= outer_cos):
+        raise PakError("E_RANGE", "Spot cone is not representable by the renderer")
+    _light_photometry(light, flux, 4 * math.pi * (inner_sin2 + (outer_sin2 - inner_sin2) / 3))
+    return struct.pack("<I", _light_node(light, node_count)) + common + struct.pack("<5f", distance, inner, outer, radius, flux)
 
 
 def _pack_env_record_header(system_type: int, record_size: int) -> bytes:
@@ -1453,30 +1415,36 @@ def pack_scene_asset_descriptor_and_payload(
         for c in ortho_cameras
     )
 
-    directional_lights = scene.get("directional_lights", []) or []
-    if not isinstance(directional_lights, list):
-        raise PakError("E_TYPE", "scene.directional_lights must be a list")
-    directional_lights = [light for light in directional_lights if isinstance(light, dict)]
-    directional_lights.sort(key=lambda light: int(light.get("node_index", 0) or 0))
-    directional_light_records = b"".join(
-        _pack_directional_light_record(light, node_count=node_count)
-        for light in directional_lights
-    )
+    light_owners: set[int] = set()
+    slot_owners: dict[int, int] = {}
 
-    point_lights = scene.get("point_lights", []) or []
-    if not isinstance(point_lights, list):
-        raise PakError("E_TYPE", "scene.point_lights must be a list")
-    point_lights = [light for light in point_lights if isinstance(light, dict)]
-    point_lights.sort(key=lambda light: int(light.get("node_index", 0) or 0))
+    def lights_for(kind: str) -> list[Dict[str, Any]]:
+        values = scene.get(kind, [])
+        if not isinstance(values, list) or any(not isinstance(v, dict) for v in values):
+            raise PakError("E_TYPE", f"scene.{kind} must contain light objects")
+        values = sorted(values, key=lambda light: _light_node(light, node_count))
+        for light in values:
+            node = _light_node(light, node_count)
+            if node in light_owners:
+                raise PakError("E_REF", f"Node {node} has more than one light")
+            light_owners.add(node)
+            if kind == "directional_lights":
+                slot = _light_enum(light.get("atmosphere_light_slot", 0), "atmosphere_light_slot", 2)
+                if slot and slot in slot_owners:
+                    raise PakError("E_REF", f"Atmosphere slot {slot} is already owned by node {slot_owners[slot]}")
+                if slot:
+                    slot_owners[slot] = node
+        return values
+
+    directional_lights = lights_for("directional_lights")
+    point_lights = lights_for("point_lights")
+    spot_lights = lights_for("spot_lights")
+    directional_light_records = b"".join(
+        _pack_directional_light_record(light, node_count=node_count) for light in directional_lights
+    )
     point_light_records = b"".join(
         _pack_point_light_record(light, node_count=node_count) for light in point_lights
     )
-
-    spot_lights = scene.get("spot_lights", []) or []
-    if not isinstance(spot_lights, list):
-        raise PakError("E_TYPE", "scene.spot_lights must be a list")
-    spot_lights = [light for light in spot_lights if isinstance(light, dict)]
-    spot_lights.sort(key=lambda light: int(light.get("node_index", 0) or 0))
     spot_light_records = b"".join(
         _pack_spot_light_record(light, node_count=node_count) for light in spot_lights
     )
@@ -1529,7 +1497,7 @@ def pack_scene_asset_descriptor_and_payload(
             (
                 _COMPONENT_TYPE_DIRECTIONAL_LIGHT,
                 len(directional_lights),
-                92,
+                97,
                 directional_light_records,
             )
         )
@@ -1538,7 +1506,7 @@ def pack_scene_asset_descriptor_and_payload(
             (
                 _COMPONENT_TYPE_POINT_LIGHT,
                 len(point_lights),
-                56,
+                50,
                 point_light_records,
             )
         )
@@ -1547,7 +1515,7 @@ def pack_scene_asset_descriptor_and_payload(
             (
                 _COMPONENT_TYPE_SPOT_LIGHT,
                 len(spot_lights),
-                64,
+                58,
                 spot_light_records,
             )
         )

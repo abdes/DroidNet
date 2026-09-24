@@ -148,8 +148,8 @@ NOLINT_TEST_F(EnvironmentSceneSnapshotTest,
     = glm::angleAxis(0.3F, glm::vec3(1.0F, 0.0F, 0.0F));
   ASSERT_TRUE(sun->GetTransform().SetLocalRotation(original_rotation));
   auto light = std::make_unique<scene::DirectionalLight>();
-  light->SetIsSunLight(true);
-  light->SetEnvironmentContribution(true);
+  light->SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kPrimary);
+
   light->SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kPrimary);
   light->SetIntensityLux(4321.0F);
   light->SetAngularSizeRadians(0.013F);
@@ -177,8 +177,8 @@ NOLINT_TEST_F(EnvironmentSceneSnapshotTest,
 
   const auto restored = sun->GetLightAs<scene::DirectionalLight>();
   ASSERT_TRUE(restored.has_value());
-  EXPECT_TRUE(restored->get().IsSunLight());
-  EXPECT_TRUE(restored->get().GetEnvironmentContribution());
+  EXPECT_TRUE(restored->get().GetAtmosphereLightSlot() == scene::AtmosphereLightSlot::kPrimary);
+
   EXPECT_EQ(restored->get().GetAtmosphereLightSlot(),
     scene::AtmosphereLightSlot::kPrimary);
   EXPECT_FLOAT_EQ(restored->get().GetIntensityLux(), 4321.0F);

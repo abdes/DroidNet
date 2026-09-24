@@ -14,6 +14,7 @@
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scene/SceneTraversal.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
 #include <Oxygen/Scene/Types/Flags.h>
@@ -693,61 +694,10 @@ auto SceneNode::HasCamera() noexcept -> bool
  @warning Passing a null pointer or an unsupported light type will fail.
  @see DetachLight, ReplaceLight, GetLight
 */
-auto SceneNode::AttachLight(std::unique_ptr<Component> light) noexcept -> bool
+auto SceneNode::AttachLight(std::unique_ptr<Component> light,
+  LightValidationError* error) noexcept -> bool
 {
-  if (!light) {
-    LOG_F(ERROR, "Cannot attach a null light. SceneNode: {}",
-      nostd::to_string(*this));
-    return false;
-  }
-
-  return SafeCall(
-    NodeIsValidAndInScene(), [&](const SafeCallState& state) noexcept -> bool {
-      DCHECK_EQ_F(state.node, this);
-      DCHECK_NOTNULL_F(state.scene);
-      DCHECK_NOTNULL_F(state.node_impl);
-
-      const bool already_exists
-        = state.node_impl->HasComponent<DirectionalLight>()
-        || state.node_impl->HasComponent<PointLight>()
-        || state.node_impl->HasComponent<SpotLight>();
-      if (already_exists) {
-        LOG_F(ERROR,
-          "SceneNode {} already has a light component. Cannot attach another.",
-          nostd::to_string(*this));
-        return false;
-      }
-
-      const auto type_id = light->GetTypeId();
-      if (type_id == DirectionalLight::ClassTypeId()) {
-        state.node_impl->AddComponent<DirectionalLight>(std::move(light));
-        if (const auto collector = state.scene->AsMutationCollector();
-          collector != nullptr) {
-          collector->CollectLightChanged(state.node->GetHandle());
-        }
-        return true;
-      }
-      if (type_id == PointLight::ClassTypeId()) {
-        state.node_impl->AddComponent<PointLight>(std::move(light));
-        if (const auto collector = state.scene->AsMutationCollector();
-          collector != nullptr) {
-          collector->CollectLightChanged(state.node->GetHandle());
-        }
-        return true;
-      }
-      if (type_id == SpotLight::ClassTypeId()) {
-        state.node_impl->AddComponent<SpotLight>(std::move(light));
-        if (const auto collector = state.scene->AsMutationCollector();
-          collector != nullptr) {
-          collector->CollectLightChanged(state.node->GetHandle());
-        }
-        return true;
-      }
-
-      LOG_F(ERROR, "Unsupported light type: {}/{}. SceneNode: {}", type_id,
-        light->GetTypeNamePretty(), nostd::to_string(*this));
-      return false;
-    });
+  return CommitLight(std::move(light), false, error);
 }
 
 /*!
@@ -803,62 +753,94 @@ auto SceneNode::DetachLight() noexcept -> bool
  @warning Passing a null pointer or an unsupported light type will fail.
  @see AttachLight, DetachLight, GetLight
 */
-auto SceneNode::ReplaceLight(std::unique_ptr<Component> light) noexcept -> bool
+auto SceneNode::ReplaceLight(std::unique_ptr<Component> light,
+  LightValidationError* error) noexcept -> bool
 {
+  return CommitLight(std::move(light), true, error);
+}
+
+auto SceneNode::CommitLight(std::unique_ptr<Component> light,
+  const bool replace, LightValidationError* error) noexcept -> bool
+{
+  if (error) *error = {};
   if (!light) {
-    LOG_F(ERROR, "Cannot attach a null light. SceneNode: {}",
-      nostd::to_string(*this));
+    if (error) *error = { .field = "type", .message = "A light component is required" };
     return false;
   }
+  return CommitLightCandidate(*light, &light, replace, error);
+}
 
-  return SafeCall(
-    NodeIsValidAndInScene(), [&](const SafeCallState& state) noexcept -> bool {
-      DCHECK_EQ_F(state.node, this);
-      DCHECK_NOTNULL_F(state.scene);
-      DCHECK_NOTNULL_F(state.node_impl);
-
-      const auto type_id = light->GetTypeId();
-      if (type_id != DirectionalLight::ClassTypeId()
-        && type_id != PointLight::ClassTypeId()
-        && type_id != SpotLight::ClassTypeId()) {
-        LOG_F(ERROR, "Unsupported light type: {}/{}. SceneNode: {}", type_id,
-          light->GetTypeNamePretty(), nostd::to_string(*this));
-        return false;
+auto SceneNode::CommitLightCandidate(const Component& candidate,
+  std::unique_ptr<Component>* replacement, const bool replace,
+  LightValidationError* error) noexcept -> bool
+{
+  if (error) *error = {};
+  const auto reject = [error](LightValidationError failure) {
+    LOG_F(ERROR, "Light edit rejected: {}: {}", failure.field, failure.message);
+    if (error) *error = std::move(failure);
+    return false;
+  };
+  if (const auto failure = ValidateLight(candidate)) {
+    return reject(*failure);
+  }
+  return SafeCall(NodeIsValidAndInScene(), [&](const SafeCallState& state) noexcept -> bool {
+    const bool existing = state.node_impl->HasComponent<DirectionalLight>()
+      || state.node_impl->HasComponent<PointLight>()
+      || state.node_impl->HasComponent<SpotLight>();
+    if (existing && !replace) {
+      return reject({ .field = "type", .message = "The node already owns a light" });
+    }
+    if (candidate.GetTypeId() == DirectionalLight::ClassTypeId()) {
+      const auto slot = static_cast<const DirectionalLight&>(candidate).GetAtmosphereLightSlot();
+      const bool retains_slot = state.node_impl->HasComponent<DirectionalLight>()
+        && state.node_impl->GetComponent<DirectionalLight>().GetAtmosphereLightSlot() == slot;
+      // Ordinary intensity/color edits retain already validated ownership.
+      if (slot != AtmosphereLightSlot::kNone && !retains_slot) {
+        std::optional<LightValidationError> conflict;
+        static_cast<void>(state.scene->Traverse().Traverse(
+          [&](const auto& visited, bool) -> VisitResult {
+            if (visited.handle != GetHandle()
+              && visited.node_impl->template HasComponent<DirectionalLight>()
+              && visited.node_impl->template GetComponent<DirectionalLight>().GetAtmosphereLightSlot() == slot) {
+              conflict = LightValidationError { .field = "atmosphere_light_slot",
+                .message = "Atmosphere slot is already owned by '"
+                  + std::string(visited.node_impl->GetName()) + "'",
+                .conflicting_node = visited.handle };
+            }
+            return VisitResult::kContinue;
+          }));
+        if (conflict) return reject(*conflict);
       }
-
+    }
+    const auto install = [&]<typename T>() -> bool {
+      if (replacement == nullptr) {
+        if (!state.node_impl->HasComponent<T>()) {
+          return reject({ .field = "type", .message = "The light type changed during this edit" });
+        }
+        state.node_impl->GetComponent<T>().CopyPropertiesFrom(static_cast<const T&>(candidate));
+        return true;
+      }
       if (state.node_impl->HasComponent<DirectionalLight>()) {
-        state.node_impl->RemoveComponent<DirectionalLight>();
-      }
-      if (state.node_impl->HasComponent<PointLight>()) {
-        state.node_impl->RemoveComponent<PointLight>();
-      }
-      if (state.node_impl->HasComponent<SpotLight>()) {
-        state.node_impl->RemoveComponent<SpotLight>();
-      }
-
-      if (type_id == DirectionalLight::ClassTypeId()) {
-        state.node_impl->AddComponent<DirectionalLight>(std::move(light));
-        if (const auto collector = state.scene->AsMutationCollector();
-          collector != nullptr) {
-          collector->CollectLightChanged(state.node->GetHandle());
-        }
-        return true;
-      }
-      if (type_id == PointLight::ClassTypeId()) {
-        state.node_impl->AddComponent<PointLight>(std::move(light));
-        if (const auto collector = state.scene->AsMutationCollector();
-          collector != nullptr) {
-          collector->CollectLightChanged(state.node->GetHandle());
-        }
-        return true;
-      }
-      state.node_impl->AddComponent<SpotLight>(std::move(light));
-      if (const auto collector = state.scene->AsMutationCollector();
-        collector != nullptr) {
-        collector->CollectLightChanged(state.node->GetHandle());
+        state.node_impl->ReplaceComponent<DirectionalLight, T>(std::move(*replacement));
+      } else if (state.node_impl->HasComponent<PointLight>()) {
+        state.node_impl->ReplaceComponent<PointLight, T>(std::move(*replacement));
+      } else if (state.node_impl->HasComponent<SpotLight>()) {
+        state.node_impl->ReplaceComponent<SpotLight, T>(std::move(*replacement));
+      } else {
+        state.node_impl->AddComponent<T>(std::move(*replacement));
       }
       return true;
-    });
+    };
+    const bool installed = candidate.GetTypeId() == DirectionalLight::ClassTypeId()
+      ? install.template operator()<DirectionalLight>()
+      : candidate.GetTypeId() == PointLight::ClassTypeId()
+        ? install.template operator()<PointLight>() : install.template operator()<SpotLight>();
+    if (!installed) return false;
+    if (const auto collector = state.scene->AsMutationCollector()) {
+      collector->CollectLightChanged(GetHandle());
+    }
+    return true;
+  });
 }
 
 /*!

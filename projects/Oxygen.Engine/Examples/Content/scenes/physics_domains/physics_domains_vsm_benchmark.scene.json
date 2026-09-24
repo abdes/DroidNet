@@ -1,5 +1,5 @@
 {
-  "version": 6,
+  "version": 7,
   "name": "physics_domains_vsm_benchmark",
   "nodes": [
     {
@@ -384,7 +384,6 @@
           "color_rgb": [1.0, 0.98, 0.95],
           "affects_world": true,
           "casts_shadows": true,
-          "mobility": 0,
           "exposure_compensation_ev": 0.0,
           "shadow": {
             "bias": 0.0,
@@ -394,8 +393,7 @@
         },
         "intensity_lux": 120000.0,
         "angular_size_radians": 0.01862,
-        "is_sun_light": true,
-        "environment_contribution": true,
+        "atmosphere_light_slot": 1,
         "cascade_count": 4,
         "cascade_distances": [12.0, 32.0, 80.0, 200.0]
       }

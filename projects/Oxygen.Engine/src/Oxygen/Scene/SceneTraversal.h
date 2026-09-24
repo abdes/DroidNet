@@ -550,6 +550,7 @@ auto SceneTraversal<SceneT>::PrepareDirtyFlagsAndSubtreeCounts(
         }
         if (has_dirty_flags) {
           ++processed_nodes_with_dirty_flags;
+          GetScene().NotifyLightFlagsChanged(node.handle);
         }
         return VisitResult::kContinue;
       }

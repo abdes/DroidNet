@@ -1,4 +1,4 @@
-"""Independent scene-v6 wire-layout and invalid-input checks."""
+"""Exposure wire layout and invalid inputs in the current scene format."""
 
 import math
 import struct
@@ -112,7 +112,7 @@ def test_inspector_rejects_obsolete_scene_descriptor(tmp_path):
     data[scene["desc_offset"] + 65] = 5
     obsolete = tmp_path / "obsolete-scene.pak"
     obsolete.write_bytes(data)
-    with pytest.raises(ValueError, match="requires descriptor version 6"):
+    with pytest.raises(ValueError, match="requires descriptor version 7"):
         inspect_pak(obsolete)
 
 
@@ -131,7 +131,7 @@ def test_file_build_rejects_retired_spec_version(tmp_path):
     assert not (tmp_path / "old.pak").exists()
 
 
-@pytest.mark.parametrize("asset_type, version", [("material", 2), ("geometry", 1), ("scene", 6)])
+@pytest.mark.parametrize("asset_type, version", [("material", 2), ("geometry", 1), ("scene", 7)])
 def test_asset_headers_emit_only_current_descriptor_versions(asset_type, version):
     from pakgen.packing.packers import pack_asset_header
 

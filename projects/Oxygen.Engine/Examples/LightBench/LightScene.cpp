@@ -126,18 +126,14 @@ auto LightScene::Update() -> void
     EnsurePointLightNode();
     ApplyPointLightState();
   } else if (point_light_node_.IsAlive()) {
-    if (auto point = point_light_node_.GetLightAs<scene::PointLight>()) {
-      point->get().Common().affects_world = false;
-    }
+    point_light_node_.EditLight<scene::PointLight>([](auto& light) { light.Common().affects_world = false; });
   }
 
   if (spot_light_state_.enabled) {
     EnsureSpotLightNode();
     ApplySpotLightState();
   } else if (spot_light_node_.IsAlive()) {
-    if (auto spot = spot_light_node_.GetLightAs<scene::SpotLight>()) {
-      spot->get().Common().affects_world = false;
-    }
+    spot_light_node_.EditLight<scene::SpotLight>([](auto& light) { light.Common().affects_world = false; });
   }
 }
 
@@ -390,14 +386,13 @@ auto LightScene::ApplyPointLightState() -> void
   point_light_node_.GetTransform().SetLocalPosition(
     point_light_state_.position);
 
-  if (auto point = point_light_node_.GetLightAs<scene::PointLight>()) {
-    auto& light = point->get();
+  point_light_node_.EditLight<scene::PointLight>([this](auto& light) {
     light.Common().affects_world = point_light_state_.enabled;
     light.Common().color_rgb = point_light_state_.color_rgb;
     light.SetLuminousFluxLm(point_light_state_.intensity);
     light.SetRange(point_light_state_.range);
     light.SetSourceRadius(point_light_state_.source_radius);
-  }
+  });
 }
 
 auto LightScene::ApplySpotLightState() -> void
@@ -411,8 +406,7 @@ auto LightScene::ApplySpotLightState() -> void
   const Quat rot = RotationFromForwardToDir(direction);
   spot_light_node_.GetTransform().SetLocalRotation(rot);
 
-  if (auto spot = spot_light_node_.GetLightAs<scene::SpotLight>()) {
-    auto& light = spot->get();
+  spot_light_node_.EditLight<scene::SpotLight>([this](auto& light) {
     light.Common().affects_world = spot_light_state_.enabled;
     light.Common().color_rgb = spot_light_state_.color_rgb;
     light.SetLuminousFluxLm(spot_light_state_.intensity);
@@ -424,7 +418,7 @@ auto LightScene::ApplySpotLightState() -> void
       = glm::radians(spot_light_state_.outer_angle_deg);
     light.SetInnerConeAngleRadians(inner_angle_rad);
     light.SetOuterConeAngleRadians(outer_angle_rad);
-  }
+  });
 }
 
 auto LightScene::BuildSurfaceGeometry(std::string_view generator,

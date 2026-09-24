@@ -39,24 +39,23 @@ local function apply_sun_node_settings(sun_node, azimuth_deg, elevation_deg, col
     return
   end
 
-  if not sun_node:has_light() then
-    sun_node:attach_directional_light({
-      affects_world = true,
-      casts_shadows = true,
-      environment_contribution = true,
-      is_sun_light = true,
-      intensity_lux = lux,
-      color_rgb = color_rgb,
-      angular_size_radians = 0.00935,
-    })
+  local values = {
+    casts_shadows = true,
+    atmosphere_light_slot = "primary",
+    intensity_lux = lux,
+    color_rgb = color_rgb,
+    angular_size_radians = 0.00935,
+  }
+  local accepted
+  if sun_node:has_light() then
+    accepted = sun_node:light_update(values)
+  else
+    accepted = sun_node:attach_directional_light(values)
   end
-
-  sun_node:light_set_is_sun_light(true)
-  sun_node:light_set_environment_contribution(true)
-  sun_node:light_set_casts_shadows(true)
-  sun_node:light_set_intensity_lux(lux)
-  sun_node:light_set_color_rgb(color_rgb)
-  sun_node:light_set_angular_size_radians(0.00935)
+  if not accepted then
+    log.error("Day-night light update rejected")
+    return
+  end
 
   local pitch = math.rad(-elevation_deg)
   local yaw = math.rad(azimuth_deg)

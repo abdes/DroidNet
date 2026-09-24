@@ -40,7 +40,7 @@ struct PreviewSunSources {
 //! explicit Primary/Secondary atmosphere-light role.
 //!
 //! Reuses an existing directional light or creates one when none exists.
-//! Only a reused light's active/environment/sun flags and atmosphere role are
+//! Only a reused light's affects-world flag and atmosphere role are
 //! temporarily changed. Intensity, transforms, other lights, and environment
 //! systems are untouched. Call Update with false before releasing a live scene
 //! if its authored state must be restored; Reset is for scene lifetime
@@ -78,12 +78,10 @@ public:
 private:
   struct AuthoredDirectionalState {
     bool affects_world;
-    bool environment_contribution;
-    bool is_sun_light;
     scene::AtmosphereLightSlot atmosphere_slot;
   };
 
-  auto ReleaseSun(scene::Scene& scene) -> void;
+  auto ReleaseSun(scene::Scene& scene, bool synchronize = true) -> void;
 
   scene::Scene* bound_scene_ { nullptr };
   scene::SceneNode sun_;

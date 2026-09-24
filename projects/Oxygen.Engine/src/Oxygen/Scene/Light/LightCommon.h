@@ -34,13 +34,6 @@ enum class ShadowResolutionHint : std::uint8_t {
   kUltra,
 };
 
-//! Enumerates supported attenuation/falloff models for local lights.
-enum class AttenuationModel : std::uint8_t {
-  kInverseSquare,
-  kLinear,
-  kCustomExponent,
-};
-
 inline constexpr float kDefaultShadowBias = 0.0F;
 inline constexpr float kDefaultShadowNormalBias = 0.02F;
 

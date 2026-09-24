@@ -5,6 +5,8 @@
 //===----------------------------------------------------------------------===//
 
 #include <string>
+#include <array>
+#include <unordered_set>
 #include <string_view>
 
 #include <Oxygen/Base/NoStd.h>
@@ -212,6 +214,8 @@ auto SceneAsset::ParseAndValidate() -> void
     const auto dir_span
       = data_.subspan(desc_.component_table_directory_offset, dir_bytes);
 
+    std::unordered_set<std::uint32_t> light_nodes;
+    std::array<bool, 3> atmosphere_slots {};
     component_tables_.clear();
     component_tables_.reserve(desc_.component_table_count);
     for (uint32_t i = 0; i < desc_.component_table_count; ++i) {
@@ -287,6 +291,27 @@ auto SceneAsset::ParseAndValidate() -> void
           }
         }
       }
+
+      const auto validate_lights = [&]<typename T>() {
+        for (std::uint32_t index = 0U; index < entry.table.count; ++index) {
+          const auto record = ReadPackedRecord<T>(data_.subspan(entry.table.offset
+              + static_cast<std::size_t>(index) * entry.table.entry_size,
+            entry.table.entry_size), "SceneAsset light");
+          if (record.node_index >= desc_.nodes.count
+            || !light_nodes.insert(record.node_index).second) {
+            throw std::runtime_error("SceneAsset light node ownership is invalid");
+          }
+          if constexpr (requires { record.atmosphere_light_slot; }) {
+            const auto slot = record.atmosphere_light_slot;
+            if (slot != 0U && std::exchange(atmosphere_slots[slot], true)) {
+              throw std::runtime_error("SceneAsset atmosphere slot has multiple owners");
+            }
+          }
+        }
+      };
+      if (type == ComponentType::kDirectionalLight) validate_lights.template operator()<pak::world::DirectionalLightRecord>();
+      else if (type == ComponentType::kPointLight) validate_lights.template operator()<pak::world::PointLightRecord>();
+      else if (type == ComponentType::kSpotLight) validate_lights.template operator()<pak::world::SpotLightRecord>();
 
       component_tables_.push_back({ .type = type,
         .offset = entry.table.offset,

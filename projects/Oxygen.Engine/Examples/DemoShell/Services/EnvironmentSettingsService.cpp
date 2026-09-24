@@ -196,8 +196,7 @@ namespace {
       }
 
       if (const auto light = node.GetLightAs<scene::DirectionalLight>();
-        light.has_value() && light->get().IsSunLight()
-        && light->get().GetEnvironmentContribution()) {
+        light.has_value() && light->get().GetAtmosphereLightSlot() == scene::AtmosphereLightSlot::kPrimary) {
         candidate = candidate.value_or(node);
         ++candidate_count;
       }
@@ -211,8 +210,7 @@ namespace {
 
     if (candidate_count > 1U) {
       throw scene::DirectionalLightContractError(
-        "scene has more than one directional light with is_sun_light=true "
-        "and environment_contribution=true");
+        "scene has more than one Primary atmosphere light");
     }
 
     return candidate;
@@ -734,25 +732,6 @@ namespace {
       | (static_cast<std::uint32_t>(bytes[3]) << 24U);
   }
 
-  auto ApplyDirectionalSunRole(scene::SceneNode& node, const bool affects_world,
-    const bool casts_shadows, const bool environment_contribution,
-    const bool is_sun_light) -> bool
-  {
-    auto light = node.GetLightAs<scene::DirectionalLight>();
-    if (!light.has_value()) {
-      return false;
-    }
-
-    auto& directional = light->get();
-    directional.SetIsSunLight(is_sun_light);
-    directional.SetEnvironmentContribution(environment_contribution);
-
-    auto& common = directional.Common();
-    common.affects_world = affects_world;
-    common.casts_shadows = casts_shadows;
-
-    return true;
-  }
 
 } // namespace
 
@@ -1230,9 +1209,7 @@ auto EnvironmentSettingsService::OnLightChanged(
   preview_reconcile_pending_ = true;
   if (auto node = scene->GetNode(node_handle)) {
     if (const auto light = node->GetLightAs<scene::DirectionalLight>(); light
-      && (light->get().IsSunLight()
-        || light->get().GetAtmosphereLightSlot()
-          != scene::AtmosphereLightSlot::kNone)) {
+      && light->get().GetAtmosphereLightSlot() != scene::AtmosphereLightSlot::kNone) {
       // Scalar role restoration is safe during mutation dispatch. Creation,
       // removal, and observer sync wait for the normal apply phase.
       preview_sun_.YieldToAuthoredSun(*scene);
@@ -3028,13 +3005,13 @@ auto EnvironmentSettingsService::SetSunUsePerPixelAtmosphereTransmittance(
 }
 
 auto EnvironmentSettingsService::GetSunAtmosphereDiskLuminanceScale() const
-  -> glm::vec4
+  -> glm::vec3
 {
   return sun_atmosphere_disk_luminance_scale_;
 }
 
 auto EnvironmentSettingsService::SetSunAtmosphereDiskLuminanceScale(
-  const glm::vec4& value) -> void
+  const glm::vec3& value) -> void
 {
   if (sun_atmosphere_disk_luminance_scale_ == value) {
     return;
@@ -3342,57 +3319,23 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
     env = config_.scene->GetEnvironment();
   }
 
-  if (apply_sun && !sun_enabled_) {
+  if (apply_sun) {
     UpdateSunLightCandidate();
     if (sun_light_available_) {
-      if (auto light = sun_light_node_.GetLightAs<scene::DirectionalLight>()) {
-        ApplySunShadowSettingsToLight(light->get());
-      }
-      if (ApplyDirectionalSunRole(sun_light_node_, false, false, true, true)) {
-        LOG_F(INFO,
-          "disabled scene sun candidate '{}' while sun system is disabled",
-          sun_light_node_.GetName());
-      }
-    }
-  }
-
-  if (apply_sun && sun_enabled_) {
-    const auto scene_name
-      = config_.scene ? config_.scene->GetName() : std::string_view {};
-    UpdateSunLightCandidate();
-    if (sun_light_available_) {
-      if (auto light = sun_light_node_.GetLightAs<scene::DirectionalLight>()) {
-        CHECK_F(ApplyDirectionalSunRole(
-                  sun_light_node_, sun_enabled_, true, true, true),
-          "failed to apply scene sun role to directional node '{}'",
-          sun_light_node_.GetName());
-
-        ApplySunShadowSettingsToLight(light->get());
-        light->get().SetIntensityLux(sun_illuminance_lx_);
-        auto& common = light->get().Common();
+      const bool accepted = sun_light_node_.EditLight<scene::DirectionalLight>([this](auto& light) {
+        ApplySunShadowSettingsToLight(light);
+        auto& common = light.Common();
+        common.affects_world = sun_enabled_;
+        common.casts_shadows = sun_enabled_;
+        light.SetIntensityLux(sun_illuminance_lx_);
         common.color_rgb = sun_use_temperature_
-          ? KelvinToLinearRgb(sun_temperature_kelvin_)
-          : sun_color_rgb_;
-
-        const auto sun_dir
-          = DirectionFromAzimuthElevation(sun_azimuth_deg_, sun_elevation_deg_);
-        const glm::vec3 light_dir = -sun_dir;
-        ApplyLightDirectionWorldSpace(sun_light_node_, light_dir);
+          ? KelvinToLinearRgb(sun_temperature_kelvin_) : sun_color_rgb_;
+      });
+      if (accepted && sun_enabled_) {
+        const auto sun_dir = DirectionFromAzimuthElevation(sun_azimuth_deg_, sun_elevation_deg_);
+        ApplyLightDirectionWorldSpace(sun_light_node_, -sun_dir);
       }
-
-      LOG_F(INFO,
-        "using scene directional '{}' as sun "
-        "(source=scene, casts_shadows=true, environment_contribution=true)",
-        sun_light_node_.GetName());
-    } else {
-      LOG_F(1, "no resolved scene sun is currently available in scene '{}'",
-        scene_name);
     }
-  }
-
-  if (apply_sun && sun_light_available_) {
-    config_.scene->GetDirectionalLightResolver().OnLightChanged(
-      sun_light_node_.GetHandle());
   }
   auto atmo = env->TryGetSystem<scene::environment::SkyAtmosphere>();
   if (apply_atmosphere && sky_atmo_enabled_ && !atmo) {
@@ -4085,7 +4028,6 @@ auto EnvironmentSettingsService::ValidateAndClampState() -> void
   clamp_float(sun_atmosphere_disk_luminance_scale_.x, 0.0F, 1.0e9F);
   clamp_float(sun_atmosphere_disk_luminance_scale_.y, 0.0F, 1.0e9F);
   clamp_float(sun_atmosphere_disk_luminance_scale_.z, 0.0F, 1.0e9F);
-  clamp_float(sun_atmosphere_disk_luminance_scale_.w, 0.0F, 1.0e9F);
   clamp_float(sun_shadow_bias_, 0.0F, 10.0F);
   clamp_float(sun_shadow_normal_bias_, 0.0F, 10.0F);
   clamp_int(sun_shadow_resolution_hint_,
@@ -4377,7 +4319,7 @@ auto EnvironmentSettingsService::LoadSettings(const bool custom_only) -> void
       |= load_int(kSunAtmosphereLightSlotKey, sun_atmosphere_light_slot_);
     any_loaded |= load_bool(kSunPerPixelAtmosphereTransmittanceKey,
       sun_use_per_pixel_atmosphere_transmittance_);
-    any_loaded |= load_vec4(kSunAtmosphereDiskLuminanceScaleKey,
+    any_loaded |= load_vec3(kSunAtmosphereDiskLuminanceScaleKey,
       sun_atmosphere_disk_luminance_scale_);
     any_loaded |= load_float(kSunShadowBiasKey, sun_shadow_bias_);
     any_loaded |= load_float(kSunShadowNormalBiasKey, sun_shadow_normal_bias_);
@@ -4641,7 +4583,7 @@ auto EnvironmentSettingsService::SaveSettings() const -> void
   save_int(kSunAtmosphereLightSlotKey, sun_atmosphere_light_slot_);
   save_bool(kSunPerPixelAtmosphereTransmittanceKey,
     sun_use_per_pixel_atmosphere_transmittance_);
-  save_vec4(
+  save_vec3(
     kSunAtmosphereDiskLuminanceScaleKey, sun_atmosphere_disk_luminance_scale_);
   save_float(kSunShadowBiasKey, sun_shadow_bias_);
   save_float(kSunShadowNormalBiasKey, sun_shadow_normal_bias_);

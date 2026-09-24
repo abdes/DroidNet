@@ -93,38 +93,6 @@ public:
     return intensity_lux_;
   }
 
-  //! Enables or disables environment contribution.
-  auto SetEnvironmentContribution(const bool enabled) noexcept -> void
-  {
-    environment_contribution_ = enabled;
-  }
-
-  //! Returns true if this light contributes to environment systems.
-  OXGN_SCN_NDAPI auto GetEnvironmentContribution() const noexcept -> bool
-  {
-    return environment_contribution_;
-  }
-
-  //! Designates this light as the authored primary sun candidate.
-  /*!
-   Contract:
-   - `is_sun_light == true` requires `environment_contribution == true`
-   - at most one directional light in a scene may satisfy both
-   - the scene-owned DirectionalLightResolver validates and enforces this
-     contract before renderer/runtime consumers resolve primary/secondary suns
-  */
-  auto SetIsSunLight(const bool is_sun) noexcept -> void
-  {
-    is_sun_light_ = is_sun;
-  }
-
-  //! Returns true if this light is designated as the authored primary sun
-  //! candidate.
-  [[nodiscard]] auto IsSunLight() const noexcept -> bool
-  {
-    return is_sun_light_;
-  }
-
   auto SetAtmosphereLightSlot(const AtmosphereLightSlot slot) noexcept -> void
   {
     atmosphere_light_slot_ = slot;
@@ -146,12 +114,12 @@ public:
     return use_per_pixel_atmosphere_transmittance_;
   }
 
-  auto SetAtmosphereDiskLuminanceScale(const Vec4& rgba) noexcept -> void
+  auto SetAtmosphereDiskLuminanceScale(const Vec3& rgb) noexcept -> void
   {
-    atmosphere_disk_luminance_scale_ = rgba;
+    atmosphere_disk_luminance_scale_ = rgb;
   }
   [[nodiscard]] auto GetAtmosphereDiskLuminanceScale() const noexcept
-    -> const Vec4&
+    -> const Vec3&
   {
     return atmosphere_disk_luminance_scale_;
   }
@@ -175,6 +143,19 @@ protected:
     -> void override;
 
 private:
+  friend class SceneNode;
+  // Commit only authored values; composition dependencies retain their identity.
+  void CopyPropertiesFrom(const DirectionalLight& candidate) noexcept
+  {
+    common_ = candidate.common_;
+    angular_size_radians_ = candidate.angular_size_radians_;
+    intensity_lux_ = candidate.intensity_lux_;
+    atmosphere_light_slot_ = candidate.atmosphere_light_slot_;
+    use_per_pixel_atmosphere_transmittance_ = candidate.use_per_pixel_atmosphere_transmittance_;
+    atmosphere_disk_luminance_scale_ = candidate.atmosphere_disk_luminance_scale_;
+    csm_ = candidate.csm_;
+  }
+
   CommonLightProperties common_ {};
 
   //! Full source angle / angular diameter of the light source in radians.
@@ -192,11 +173,9 @@ private:
   //! mood or time-of-day.
   float intensity_lux_ = 100000.0F;
 
-  bool environment_contribution_ = false;
-  bool is_sun_light_ = false;
   AtmosphereLightSlot atmosphere_light_slot_ = AtmosphereLightSlot::kNone;
   bool use_per_pixel_atmosphere_transmittance_ = false;
-  Vec4 atmosphere_disk_luminance_scale_ { 1.0F, 1.0F, 1.0F, 1.0F };
+  Vec3 atmosphere_disk_luminance_scale_ { 1.0F, 1.0F, 1.0F };
   CascadedShadowSettings csm_ {};
   detail::TransformComponent* transform_ { nullptr };
 };

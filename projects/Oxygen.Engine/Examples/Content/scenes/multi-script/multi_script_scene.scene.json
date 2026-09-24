@@ -1,5 +1,5 @@
 {
-  "version": 6,
+  "version": 7,
   "name": "multi_script_scene",
   "nodes": [
     {
@@ -85,15 +85,13 @@
         "common": {
           "affects_world": true,
           "color_rgb": [1.0, 0.98, 0.92],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03
           }
         },
         "angular_size_radians": 0.00935,
-        "environment_contribution": true,
-        "is_sun_light": true,
+        "atmosphere_light_slot": 1,
         "intensity_lux": 120000.0
       }
     ]

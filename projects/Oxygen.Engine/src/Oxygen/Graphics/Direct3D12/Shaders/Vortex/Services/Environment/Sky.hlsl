@@ -162,6 +162,7 @@ static float3 GetLightDiskLuminance(
 {
     const float view_dot_light = dot(world_dir, atmosphere_light_direction);
     const float cos_half_apex = atmosphere_light_disc_cos_half_apex_angle;
+    const float edge_width = max(fwidth(view_dot_light), 1.17549435e-38f);
     if (view_dot_light > cos_half_apex)
     {
         const float3 transmittance_to_light = GetAtmosphereTransmittance(
@@ -170,7 +171,7 @@ static float3 GetLightDiskLuminance(
             atmo,
             transmittance_lut_srv);
         const float soft_edge = saturate(
-            2.0f * (view_dot_light - cos_half_apex) / max(1.0f - cos_half_apex, 1.0e-4f));
+            (view_dot_light - cos_half_apex) / edge_width);
         return transmittance_to_light * atmosphere_light_disc_luminance * soft_edge;
     }
     return 0.0f.xxx;

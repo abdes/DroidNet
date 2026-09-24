@@ -734,8 +734,7 @@ auto MakeSceneWithSolidSkySphere() -> std::shared_ptr<oxygen::scene::Scene>
 
 struct AtmosphereLightOptions {
   oxygen::scene::AtmosphereLightSlot slot {};
-  bool is_sun_light {};
-  std::uint32_t cascade_count {};
+  std::uint32_t cascade_count { 4U };
   bool use_per_pixel_transmittance {};
   glm::vec3 disk_scale {};
   glm::vec3 color_rgb {};
@@ -754,31 +753,17 @@ auto AddAtmosphereDirectionalLight(oxygen::scene::Scene& scene,
 {
   auto node = scene.CreateNode(std::string(name));
   EXPECT_TRUE(node.IsAlive());
-  EXPECT_TRUE(
-    node.AttachLight(std::make_unique<oxygen::scene::DirectionalLight>()));
   node.GetTransform().SetLocalRotation(options.local_rotation);
-
-  auto light = node.GetLightAs<oxygen::scene::DirectionalLight>();
-  EXPECT_TRUE(light.has_value());
-  if (light.has_value()) {
-    light->get().Common().affects_world = true;
-    light->get().SetEnvironmentContribution(true);
-    light->get().SetIsSunLight(options.is_sun_light);
-    light->get().SetAngularSizeRadians(
-      2.0F * oxygen::engine::atmos::kDefaultSunDiskAngularRadiusRad);
-    light->get().SetAtmosphereLightSlot(options.slot);
-    light->get().SetUsePerPixelAtmosphereTransmittance(
-      options.use_per_pixel_transmittance);
-    light->get().SetAtmosphereDiskLuminanceScale({
-      options.disk_scale.x,
-      options.disk_scale.y,
-      options.disk_scale.z,
-      1.0F,
-    });
-    light->get().Common().color_rgb = options.color_rgb;
-    light->get().SetIntensityLux(options.illuminance_lux);
-    light->get().CascadedShadows().cascade_count = options.cascade_count;
-  }
+  auto light = std::make_unique<oxygen::scene::DirectionalLight>();
+  light->Common().affects_world = true;
+  light->SetAngularSizeRadians(2.0F * oxygen::engine::atmos::kDefaultSunDiskAngularRadiusRad);
+  light->SetAtmosphereLightSlot(options.slot);
+  light->SetUsePerPixelAtmosphereTransmittance(options.use_per_pixel_transmittance);
+  light->SetAtmosphereDiskLuminanceScale(options.disk_scale);
+  light->Common().color_rgb = options.color_rgb;
+  light->SetIntensityLux(options.illuminance_lux);
+  light->CascadedShadows().cascade_count = options.cascade_count;
+  EXPECT_TRUE(node.AttachLight(std::move(light)));
 
   return node;
 }
@@ -1497,7 +1482,7 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   std::ignore = AddAtmosphereDirectionalLight(*scene, "Sun",
     {
       .slot = oxygen::scene::AtmosphereLightSlot::kPrimary,
-      .is_sun_light = true,
+
       .cascade_count = 2U,
       .use_per_pixel_transmittance = true,
       .disk_scale = { 1.0F, 1.0F, 1.0F },
@@ -1604,7 +1589,7 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   auto primary = AddAtmosphereDirectionalLight(*scene, "Primary",
     {
       .slot = oxygen::scene::AtmosphereLightSlot::kPrimary,
-      .is_sun_light = true,
+
       .cascade_count = 2U,
       .use_per_pixel_transmittance = true,
       .disk_scale = { 1.1F, 1.0F, 0.9F },
@@ -1614,7 +1599,7 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   auto secondary = AddAtmosphereDirectionalLight(*scene, "Secondary",
     {
       .slot = oxygen::scene::AtmosphereLightSlot::kSecondary,
-      .is_sun_light = false,
+
       .cascade_count = 4U,
       .use_per_pixel_transmittance = false,
       .disk_scale = { 0.4F, 0.5F, 0.6F },
@@ -1690,19 +1675,14 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
       & oxygen::vortex::kEnvironmentContractFlagAtmosphereLight1Enabled,
     0U);
 
-  constexpr auto kPi = std::numbers::pi_v<float>;
   const auto primary_half_apex_angle
-    = 0.5F * light_state.atmosphere_lights.at(0).angular_size_radians;
-  const auto primary_solid_angle
-    = 2.0F * kPi * (1.0F - std::cos(primary_half_apex_angle));
-  const auto expected_primary_disk_luminance
-    = glm::vec3(light_state.atmosphere_lights.at(0).disk_luminance_scale_rgba.x
-          * light_state.atmosphere_lights.at(0).illuminance_rgb_lux.x,
-        light_state.atmosphere_lights.at(0).disk_luminance_scale_rgba.y
-          * light_state.atmosphere_lights.at(0).illuminance_rgb_lux.y,
-        light_state.atmosphere_lights.at(0).disk_luminance_scale_rgba.z
-          * light_state.atmosphere_lights.at(0).illuminance_rgb_lux.z)
-    / primary_solid_angle;
+    = 0.5 * light_state.atmosphere_lights.at(0).angular_size_radians;
+  const auto primary_solid_angle = std::numbers::pi
+    * std::sin(primary_half_apex_angle) * std::sin(primary_half_apex_angle);
+  const auto expected_primary_disk_luminance = glm::vec3(
+    glm::dvec3(light_state.atmosphere_lights.at(0).disk_luminance_scale_rgb)
+    * glm::dvec3(light_state.atmosphere_lights.at(0).illuminance_rgb_lux)
+    / primary_solid_angle);
   EXPECT_NEAR(view_data->atmosphere_light0_direction_angular_size.x,
     light_state.atmosphere_lights.at(0).direction_to_light_ws.x, 1.0e-5F);
   EXPECT_NEAR(view_data->atmosphere_light0_direction_angular_size.y,
@@ -1735,7 +1715,7 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   auto sun = AddAtmosphereDirectionalLight(*scene, "Sun",
     {
       .slot = oxygen::scene::AtmosphereLightSlot::kPrimary,
-      .is_sun_light = true,
+
       .cascade_count = 2U,
       .use_per_pixel_transmittance = true,
       .disk_scale = { 1.0F, 0.95F, 0.9F },
@@ -1778,7 +1758,7 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
 }
 
 NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
-  StableAtmosphereStateFallsBackSlot0ToFirstSunWhenNoExplicitPrimaryExists)
+  StableAtmosphereStateKeepsExplicitPrimaryAlongsideSecondaryAndFill)
 {
   auto service = EnvironmentLightingService(*renderer_);
   service.OnFrameStart(
@@ -1792,17 +1772,16 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   auto secondary = AddAtmosphereDirectionalLight(*scene, "SecondaryOnly",
     {
       .slot = oxygen::scene::AtmosphereLightSlot::kSecondary,
-      .is_sun_light = false,
+
       .cascade_count = 1U,
       .use_per_pixel_transmittance = false,
       .disk_scale = { 0.7F, 0.7F, 0.9F },
       .color_rgb = { 0.6F, 0.7F, 1.0F },
       .illuminance_lux = 2000.0F,
     });
-  auto sun = AddAtmosphereDirectionalLight(*scene, "FallbackSun",
+  auto sun = AddAtmosphereDirectionalLight(*scene, "ExplicitSun",
     {
-      .slot = oxygen::scene::AtmosphereLightSlot::kNone,
-      .is_sun_light = true,
+      .slot = oxygen::scene::AtmosphereLightSlot::kPrimary,
       .cascade_count = 3U,
       .use_per_pixel_transmittance = true,
       .disk_scale = { 1.0F, 1.0F, 1.0F },
@@ -1812,7 +1791,7 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   auto fill = AddAtmosphereDirectionalLight(*scene, "Fill",
     {
       .slot = oxygen::scene::AtmosphereLightSlot::kNone,
-      .is_sun_light = false,
+
       .cascade_count = 4U,
       .use_per_pixel_transmittance = false,
       .disk_scale = { 0.2F, 0.2F, 0.2F },
@@ -1823,7 +1802,6 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   if (!fill_light.has_value()) {
     FAIL() << "Expected fill_light to have a value";
   }
-  fill_light->get().SetEnvironmentContribution(false);
   scene->Update();
 
   auto resolved_view = MakeResolvedView(64.0F, 64.0F);
@@ -1855,7 +1833,7 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   EXPECT_EQ(light_state.source_nodes.at(0).Index(), sun.GetHandle().Index());
   EXPECT_EQ(
     light_state.source_nodes.at(1).Index(), secondary.GetHandle().Index());
-  EXPECT_FALSE(light_state.explicit_slot_claims.at(0));
+  EXPECT_TRUE(light_state.explicit_slot_claims.at(0));
   EXPECT_TRUE(light_state.explicit_slot_claims.at(1));
 }
 
@@ -1874,7 +1852,7 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   auto first = AddAtmosphereDirectionalLight(*scene, "FirstPrimary",
     {
       .slot = oxygen::scene::AtmosphereLightSlot::kPrimary,
-      .is_sun_light = false,
+
       .cascade_count = 2U,
       .use_per_pixel_transmittance = false,
       .disk_scale = { 0.9F, 0.8F, 0.7F },
@@ -1883,14 +1861,17 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
     });
   auto second = AddAtmosphereDirectionalLight(*scene, "SecondPrimary",
     {
-      .slot = oxygen::scene::AtmosphereLightSlot::kPrimary,
-      .is_sun_light = true,
+      .slot = oxygen::scene::AtmosphereLightSlot::kNone,
+
       .cascade_count = 4U,
       .use_per_pixel_transmittance = true,
       .disk_scale = { 0.5F, 0.4F, 0.3F },
       .color_rgb = { 0.7F, 0.8F, 1.0F },
       .illuminance_lux = 20000.0F,
     });
+  EXPECT_FALSE(second.EditLight<oxygen::scene::DirectionalLight>([](auto& light) {
+    light.SetAtmosphereLightSlot(oxygen::scene::AtmosphereLightSlot::kPrimary);
+  }));
   ASSERT_TRUE(scene->ReparentNode(second, first, true));
   scene->Update();
 
@@ -1925,7 +1906,7 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
       return oxygen::scene::VisitResult::kContinue;
     }
     const auto& light = node.GetComponent<oxygen::scene::DirectionalLight>();
-    if (light.Common().affects_world && light.GetEnvironmentContribution()
+    if (light.Common().affects_world
       && light.GetAtmosphereLightSlot()
         == oxygen::scene::AtmosphereLightSlot::kPrimary) {
       traversal_order.push_back(visited.handle);
@@ -1936,13 +1917,12 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
     visitor, oxygen::scene::TraversalOrder::kPreOrder);
   ASSERT_FALSE(traversal_order.empty());
 
-  // first-wins conflict handling keeps the earliest slot 0 claimant in the
-  // deterministic scene traversal order.
+  // Rejected replacement preserves the accepted owner without a partial publication.
   EXPECT_EQ(
     light_state.source_nodes.at(0).Index(), traversal_order.front().Index());
   EXPECT_NE(first.GetHandle().Index(), second.GetHandle().Index());
-  EXPECT_EQ(light_state.conflict_count, 1U);
-  EXPECT_EQ(light_state.first_conflict_slot, 0U);
+  EXPECT_EQ(light_state.conflict_count, 0U);
+  EXPECT_EQ(light_state.first_conflict_slot, oxygen::vortex::environment::kInvalidAtmosphereLightSlot);
   EXPECT_TRUE(light_state.explicit_slot_claims.at(0));
 }
 
@@ -1960,8 +1940,7 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   auto scene = MakeSceneWithAtmosphereEnvironment();
   auto sun = AddAtmosphereDirectionalLight(*scene, "Sun",
     {
-      .slot = oxygen::scene::AtmosphereLightSlot::kNone,
-      .is_sun_light = true,
+      .slot = oxygen::scene::AtmosphereLightSlot::kPrimary,
       .cascade_count = 2U,
       .use_per_pixel_transmittance = false,
       .disk_scale = { 1.0F, 0.95F, 0.9F },
@@ -1971,7 +1950,7 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   std::ignore = AddAtmosphereDirectionalLight(*scene, "MoonCandidate",
     {
       .slot = oxygen::scene::AtmosphereLightSlot::kNone,
-      .is_sun_light = false,
+
       .cascade_count = 1U,
       .use_per_pixel_transmittance = false,
       .disk_scale = { 0.5F, 0.6F, 0.8F },
@@ -2004,7 +1983,7 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   EXPECT_TRUE(light_state.atmosphere_lights.at(0).enabled);
   EXPECT_FALSE(light_state.atmosphere_lights.at(1).enabled);
   EXPECT_EQ(light_state.source_nodes.at(0).Index(), sun.GetHandle().Index());
-  EXPECT_FALSE(light_state.explicit_slot_claims.at(0));
+  EXPECT_TRUE(light_state.explicit_slot_claims.at(0));
   EXPECT_FALSE(light_state.explicit_slot_claims.at(1));
   EXPECT_EQ(light_state.active_light_count, 1U);
 }
@@ -2024,7 +2003,7 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   auto primary = AddAtmosphereDirectionalLight(*scene, "Primary",
     {
       .slot = oxygen::scene::AtmosphereLightSlot::kPrimary,
-      .is_sun_light = true,
+
       .cascade_count = 3U,
       .use_per_pixel_transmittance = false,
       .disk_scale = { 1.0F, 1.0F, 1.0F },
@@ -2080,11 +2059,10 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   EXPECT_EQ(
     service.InspectAtmosphereState().stable_revision, base_stable_revision);
 
-  auto primary_light = primary.GetLightAs<oxygen::scene::DirectionalLight>();
-  if (!primary_light.has_value()) {
-    FAIL() << "Expected primary_light to have a value";
-  }
-  primary_light->get().SetUsePerPixelAtmosphereTransmittance(true);
+  ASSERT_TRUE(primary.EditLight<oxygen::scene::DirectionalLight>([](auto& light) {
+    light.SetUsePerPixelAtmosphereTransmittance(true);
+  }));
+  scene->SyncObservers();
 
   std::ignore = oxygen::graphics::testing::SubmitCommands(*graphics_,
     "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
@@ -2168,7 +2146,7 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   auto primary = AddAtmosphereDirectionalLight(*scene, "Primary",
     {
       .slot = oxygen::scene::AtmosphereLightSlot::kPrimary,
-      .is_sun_light = true,
+
       .cascade_count = 2U,
       .use_per_pixel_transmittance = true,
       .disk_scale = { 1.0F, 1.0F, 1.0F },
@@ -2373,7 +2351,7 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   std::ignore = AddAtmosphereDirectionalLight(*scene, "Primary",
     {
       .slot = oxygen::scene::AtmosphereLightSlot::kPrimary,
-      .is_sun_light = true,
+
       .cascade_count = 2U,
       .use_per_pixel_transmittance = true,
       .disk_scale = { 1.0F, 1.0F, 1.0F },
@@ -2614,7 +2592,7 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   std::ignore = AddAtmosphereDirectionalLight(*scene, "Primary",
     {
       .slot = oxygen::scene::AtmosphereLightSlot::kPrimary,
-      .is_sun_light = true,
+
       .cascade_count = 2U,
       .use_per_pixel_transmittance = true,
       .disk_scale = { 1.0F, 1.0F, 1.0F },
@@ -2624,7 +2602,7 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   std::ignore = AddAtmosphereDirectionalLight(*scene, "Secondary",
     {
       .slot = oxygen::scene::AtmosphereLightSlot::kSecondary,
-      .is_sun_light = false,
+
       .cascade_count = 1U,
       .use_per_pixel_transmittance = false,
       .disk_scale = { 0.5F, 0.5F, 0.7F },
@@ -3387,7 +3365,7 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   std::ignore = AddAtmosphereDirectionalLight(*scene, "Primary",
     {
       .slot = oxygen::scene::AtmosphereLightSlot::kPrimary,
-      .is_sun_light = true,
+
       .cascade_count = 4U,
       .use_per_pixel_transmittance = true,
       .disk_scale = { 1.0F, 1.0F, 1.0F },
@@ -3536,7 +3514,7 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   std::ignore = AddAtmosphereDirectionalLight(*scene, "Primary",
     {
       .slot = oxygen::scene::AtmosphereLightSlot::kPrimary,
-      .is_sun_light = true,
+
       .cascade_count = 4U,
       .use_per_pixel_transmittance = true,
       .disk_scale = { 1.0F, 1.0F, 1.0F },
@@ -3662,7 +3640,7 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   std::ignore = AddAtmosphereDirectionalLight(*scene, "Primary",
     {
       .slot = oxygen::scene::AtmosphereLightSlot::kPrimary,
-      .is_sun_light = true,
+
       .cascade_count = 4U,
       .use_per_pixel_transmittance = true,
       .disk_scale = { 1.0F, 1.0F, 1.0F },
@@ -3793,7 +3771,7 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   std::ignore = AddAtmosphereDirectionalLight(*scene, "Primary",
     {
       .slot = oxygen::scene::AtmosphereLightSlot::kPrimary,
-      .is_sun_light = true,
+
       .cascade_count = 4U,
       .use_per_pixel_transmittance = true,
       .disk_scale = { 1.0F, 1.0F, 1.0F },
@@ -4281,7 +4259,7 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   std::ignore = AddAtmosphereDirectionalLight(*scene, "Primary",
     {
       .slot = oxygen::scene::AtmosphereLightSlot::kPrimary,
-      .is_sun_light = true,
+
       .cascade_count = 4U,
       .use_per_pixel_transmittance = true,
       .disk_scale = { 1.0F, 1.0F, 1.0F },
@@ -4500,7 +4478,7 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   std::ignore = AddAtmosphereDirectionalLight(*scene, "Primary",
     {
       .slot = oxygen::scene::AtmosphereLightSlot::kPrimary,
-      .is_sun_light = true,
+
       .cascade_count = 2U,
       .use_per_pixel_transmittance = true,
       .disk_scale = { 1.0F, 1.0F, 1.0F },

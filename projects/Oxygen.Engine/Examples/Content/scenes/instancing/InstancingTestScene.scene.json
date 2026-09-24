@@ -1,5 +1,5 @@
 {
-  "version": 6,
+  "version": 7,
   "name": "InstancingTestScene",
   "nodes": [
     {
@@ -17736,14 +17736,12 @@
         "common": {
           "affects_world": true,
           "color_rgb": [1.0, 0.98, 0.92],
-          "mobility": 0,
           "casts_shadows": false,
           "shadow": {
             "bias": 0.03
           }
         },
         "angular_size_radians": 0.02,
-        "environment_contribution": true,
         "intensity_lux": 2.5
       }
     ],
@@ -17752,7 +17750,6 @@
         "node": 3,
         "common": {
           "color_rgb": [1.0, 0.3, 0.3],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03
@@ -17765,7 +17762,6 @@
         "node": 4,
         "common": {
           "color_rgb": [0.3, 1.0, 0.3],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03
@@ -17778,7 +17774,6 @@
         "node": 5,
         "common": {
           "color_rgb": [0.3, 0.3, 1.0],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03
@@ -17791,7 +17786,6 @@
         "node": 6,
         "common": {
           "color_rgb": [1.0, 1.0, 0.3],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03
@@ -17804,7 +17798,6 @@
         "node": 7,
         "common": {
           "color_rgb": [1.0, 0.3, 1.0],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03
@@ -17817,7 +17810,6 @@
         "node": 8,
         "common": {
           "color_rgb": [0.3, 1.0, 1.0],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03
@@ -17830,7 +17822,6 @@
         "node": 9,
         "common": {
           "color_rgb": [1.0, 0.6, 0.3],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03
@@ -17843,7 +17834,6 @@
         "node": 10,
         "common": {
           "color_rgb": [0.6, 0.3, 1.0],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03
@@ -17856,7 +17846,6 @@
         "node": 11,
         "common": {
           "color_rgb": [1.0, 1.0, 1.0],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03
@@ -17869,7 +17858,6 @@
         "node": 12,
         "common": {
           "color_rgb": [1.0, 0.8, 0.8],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03
@@ -17882,7 +17870,6 @@
         "node": 13,
         "common": {
           "color_rgb": [0.8, 1.0, 0.8],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03
@@ -17895,7 +17882,6 @@
         "node": 14,
         "common": {
           "color_rgb": [0.8, 0.8, 1.0],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03
@@ -17908,7 +17894,6 @@
         "node": 15,
         "common": {
           "color_rgb": [1.0, 0.5, 0.2],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03
@@ -17921,7 +17906,6 @@
         "node": 16,
         "common": {
           "color_rgb": [0.2, 1.0, 0.5],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03
@@ -17934,7 +17918,6 @@
         "node": 17,
         "common": {
           "color_rgb": [0.5, 0.2, 1.0],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03
@@ -17947,7 +17930,6 @@
         "node": 18,
         "common": {
           "color_rgb": [1.0, 1.0, 0.5],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03
@@ -17960,7 +17942,6 @@
         "node": 19,
         "common": {
           "color_rgb": [1.0, 1.0, 1.0],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03
@@ -17973,7 +17954,6 @@
         "node": 20,
         "common": {
           "color_rgb": [1.0, 0.8, 0.6],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03
@@ -17986,7 +17966,6 @@
         "node": 21,
         "common": {
           "color_rgb": [0.6, 1.0, 0.8],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03
@@ -17999,7 +17978,6 @@
         "node": 22,
         "common": {
           "color_rgb": [0.8, 0.6, 1.0],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03
@@ -18012,7 +17990,6 @@
         "node": 23,
         "common": {
           "color_rgb": [1.0, 0.5, 0.5],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03
@@ -18025,7 +18002,6 @@
         "node": 24,
         "common": {
           "color_rgb": [0.5, 1.0, 0.5],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03
@@ -18038,7 +18014,6 @@
         "node": 25,
         "common": {
           "color_rgb": [0.5, 0.5, 1.0],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03
@@ -18051,7 +18026,6 @@
         "node": 26,
         "common": {
           "color_rgb": [1.0, 1.0, 0.5],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03
@@ -18064,7 +18038,6 @@
         "node": 27,
         "common": {
           "color_rgb": [0.5, 1.0, 1.0],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03
@@ -18077,7 +18050,6 @@
         "node": 28,
         "common": {
           "color_rgb": [1.0, 0.5, 1.0],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03
@@ -18090,7 +18062,6 @@
         "node": 29,
         "common": {
           "color_rgb": [0.9, 0.9, 0.9],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03
@@ -18103,7 +18074,6 @@
         "node": 30,
         "common": {
           "color_rgb": [0.8, 0.8, 0.6],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03
@@ -18116,7 +18086,6 @@
         "node": 31,
         "common": {
           "color_rgb": [0.6, 0.8, 0.8],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03
@@ -18129,7 +18098,6 @@
         "node": 32,
         "common": {
           "color_rgb": [0.8, 0.6, 0.8],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03
@@ -18142,7 +18110,6 @@
         "node": 33,
         "common": {
           "color_rgb": [1.0, 0.7, 0.4],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03
@@ -18155,7 +18122,6 @@
         "node": 34,
         "common": {
           "color_rgb": [0.4, 1.0, 0.7],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03
@@ -18168,7 +18134,6 @@
         "node": 35,
         "common": {
           "color_rgb": [0.7, 0.4, 1.0],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03
@@ -18181,7 +18146,6 @@
         "node": 36,
         "common": {
           "color_rgb": [1.0, 1.0, 1.0],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03
@@ -18194,7 +18158,6 @@
         "node": 37,
         "common": {
           "color_rgb": [1.0, 0.9, 0.8],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03
@@ -18207,7 +18170,6 @@
         "node": 38,
         "common": {
           "color_rgb": [0.8, 1.0, 0.9],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03
@@ -18220,7 +18182,6 @@
         "node": 39,
         "common": {
           "color_rgb": [0.9, 0.8, 1.0],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03
@@ -18233,7 +18194,6 @@
         "node": 40,
         "common": {
           "color_rgb": [1.0, 0.7, 0.7],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03
@@ -18246,7 +18206,6 @@
         "node": 41,
         "common": {
           "color_rgb": [0.7, 1.0, 0.7],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03
@@ -18259,7 +18218,6 @@
         "node": 42,
         "common": {
           "color_rgb": [0.7, 0.7, 1.0],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03
@@ -18272,7 +18230,6 @@
         "node": 43,
         "common": {
           "color_rgb": [1.0, 1.0, 0.7],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03
@@ -18285,7 +18242,6 @@
         "node": 44,
         "common": {
           "color_rgb": [0.7, 1.0, 1.0],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03
@@ -18298,7 +18254,6 @@
         "node": 45,
         "common": {
           "color_rgb": [1.0, 0.7, 1.0],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03
@@ -18311,7 +18266,6 @@
         "node": 46,
         "common": {
           "color_rgb": [0.9, 0.9, 0.7],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03
@@ -18324,7 +18278,6 @@
         "node": 47,
         "common": {
           "color_rgb": [0.7, 0.9, 0.9],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03
@@ -18337,7 +18290,6 @@
         "node": 48,
         "common": {
           "color_rgb": [0.9, 0.7, 0.9],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03
@@ -18350,7 +18302,6 @@
         "node": 49,
         "common": {
           "color_rgb": [1.0, 0.6, 0.6],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03
@@ -18363,7 +18314,6 @@
         "node": 50,
         "common": {
           "color_rgb": [0.6, 1.0, 0.6],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03
@@ -18376,7 +18326,6 @@
         "node": 51,
         "common": {
           "color_rgb": [0.6, 0.6, 1.0],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03

@@ -24,7 +24,10 @@
 #include <Oxygen/Scene/Internal/MutationCollector.h>
 #include <Oxygen/Scene/Internal/MutationDispatcher.h>
 #include <Oxygen/Scene/Internal/ScriptSlotMutationProcessor.h>
+#include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Light/DirectionalLightResolver.h>
+#include <Oxygen/Scene/Light/PointLight.h>
+#include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneQuery.h>
 #include <Oxygen/Scene/SceneTraversal.h>
@@ -811,6 +814,18 @@ auto Scene::UnregisterObserver(
   }
   UpdateMutationCollectionState();
   return changed;
+}
+
+void Scene::NotifyLightFlagsChanged(const NodeHandle& node_handle)
+{
+  const auto* node = TryGetNodeImpl(node_handle);
+  if (node && (node->HasComponent<DirectionalLight>()
+                || node->HasComponent<PointLight>()
+                || node->HasComponent<SpotLight>())) {
+    if (const auto collector = AsMutationCollector()) {
+      collector->CollectLightChanged(node_handle);
+    }
+  }
 }
 
 auto Scene::AsMutationCollector() const noexcept

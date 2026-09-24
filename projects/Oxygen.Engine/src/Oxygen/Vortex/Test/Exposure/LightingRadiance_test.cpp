@@ -85,7 +85,7 @@ NOLINT_TEST_F(
     .5F,
     1.0F,
   };
-  directional->SetEnvironmentContribution(true);
+  directional->SetAtmosphereLightSlot(oxygen::scene::AtmosphereLightSlot::kPrimary);
   ASSERT_TRUE(sun.AttachLight(std::move(directional)));
   sun.GetTransform().SetLocalRotation(glm::quat {
     .70710678F,
@@ -158,14 +158,12 @@ NOLINT_TEST_F(
         if (!spot_light.has_value()) {
           FAIL() << "Expected spot_light to contain a value";
         }
-        directional_light->get().Common().affects_world = kind == 0;
-        point_light->get().Common().affects_world = kind == 1;
-        spot_light->get().Common().affects_world = kind == 2;
-        // Replace the authoring component to publish a light mutation and
-        // invalidate the resolver's cached directional membership.
-        ASSERT_TRUE(sun.ReplaceLight(
-          std::make_unique<scene::DirectionalLight>(directional_light->get())));
+        ASSERT_TRUE(sun.EditLight<scene::DirectionalLight>([kind](auto& light) { light.Common().affects_world = kind == 0; }));
+        ASSERT_TRUE(point_node.EditLight<scene::PointLight>([kind](auto& light) { light.Common().affects_world = kind == 1; }));
+        ASSERT_TRUE(spot_node.EditLight<scene::SpotLight>([kind](auto& light) { light.Common().affects_world = kind == 2; }));
         directional_light = sun.GetLightAs<scene::DirectionalLight>();
+        point_light = point_node.GetLightAs<scene::PointLight>();
+        spot_light = spot_node.GetLightAs<scene::SpotLight>();
         if (!directional_light.has_value()) {
           FAIL() << "Expected directional_light to contain a value";
         }
@@ -205,9 +203,9 @@ NOLINT_TEST_F(
             SCOPED_TRACE(radiance);
             SCOPED_TRACE(ev);
             const auto intensity = static_cast<float>(radiance / coefficient);
-            directional_light->get().SetIntensityLux(intensity);
-            point_light->get().SetLuminousFluxLm(intensity);
-            spot_light->get().SetLuminousFluxLm(intensity);
+            ASSERT_TRUE(sun.EditLight<scene::DirectionalLight>([intensity](auto& light) { light.SetIntensityLux(intensity); }));
+            ASSERT_TRUE(point_node.EditLight<scene::PointLight>([intensity](auto& light) { light.SetLuminousFluxLm(intensity); }));
+            ASSERT_TRUE(spot_node.EditLight<scene::SpotLight>([intensity](auto& light) { light.SetLuminousFluxLm(intensity); }));
             ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, ev));
             const auto pixels = ReadFloatTexture(*probe->color);
             ASSERT_EQ(pixels.size(), 1U);
@@ -279,10 +277,8 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
           SCOPED_TRACE(prepass);
           depth_mode = prepass ? DepthPrePassMode::kOpaqueAndMasked
                                : DepthPrePassMode::kDisabled;
-          point_node.GetLightAs<scene::PointLight>()->get().SetLuminousFluxLm(
-            invalid_light ? 0.0F : 100.0F);
-          fill_node.GetLightAs<scene::PointLight>()->get().SetLuminousFluxLm(
-            invalid_light ? 200.0F : 0.0F);
+          ASSERT_TRUE(point_node.EditLight<scene::PointLight>([invalid_light](auto& light) { light.SetLuminousFluxLm(invalid_light ? 0.0F : 100.0F); }));
+          ASSERT_TRUE(fill_node.EditLight<scene::PointLight>([invalid_light](auto& light) { light.SetLuminousFluxLm(invalid_light ? 200.0F : 0.0F); }));
           SetSurface(domain, 1);
           ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0));
           const auto before
@@ -295,8 +291,8 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
           EXPECT_EQ(before.flags & 12U, 12U);
           if (invalid_light) {
             const auto previous_exposure = probe->exposure;
-            point_node.GetLightAs<scene::PointLight>()->get().SetLuminousFluxLm(
-              -100.0F);
+            // Deliberately bypass ingress to exercise the renderer's defensive failure gate.
+            point_node.GetImpl()->get().GetComponent<scene::PointLight>().SetLuminousFluxLm(-100.0F);
             ASSERT_NO_FATAL_FAILURE(
               RenderSurface(forward, 0, 1, ExpectedViewOutcome::kRejected));
             const auto retained = Read<ExposureStateData>(

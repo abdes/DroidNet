@@ -19,6 +19,7 @@
 #include <Oxygen/Composition/Object.h>
 #include <Oxygen/Core/Resources.h>
 #include <Oxygen/Core/SafeCall.h>
+#include <Oxygen/Scene/Light/LightValidation.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
 #include <Oxygen/Scene/Scripting/ScriptingComponent.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
@@ -238,7 +239,8 @@ public:
 
   //! Attaches a light component to this SceneNode. If a light already exists,
   //! this will fail.
-  OXGN_SCN_API auto AttachLight(std::unique_ptr<Component> light) noexcept
+  OXGN_SCN_API auto AttachLight(std::unique_ptr<Component> light,
+    LightValidationError* error = nullptr) noexcept
     -> bool;
 
   //! Detaches the light component from this SceneNode, if present.
@@ -246,7 +248,8 @@ public:
 
   //! Replaces the current light component with a new one. If no light exists,
   //! this acts as attach.
-  OXGN_SCN_API auto ReplaceLight(std::unique_ptr<Component> light) noexcept
+  OXGN_SCN_API auto ReplaceLight(std::unique_ptr<Component> light,
+    LightValidationError* error = nullptr) noexcept
     -> bool;
 
   //! Checks if this SceneNode has an attached light component.
@@ -274,15 +277,37 @@ public:
    @see AttachLight, DetachLight, ReplaceLight
   */
   template <typename T>
-  auto GetLightAs() noexcept -> std::optional<std::reference_wrapper<T>>
+  auto GetLightAs() noexcept -> std::optional<std::reference_wrapper<const T>>
   {
     const auto light_opt = GetLight();
     if (!light_opt) {
       return std::nullopt;
     }
     return light_opt->get().GetTypeId() == T::ClassTypeId()
-      ? std::optional { std::ref(static_cast<T&>(light_opt->get())) }
+      ? std::optional { std::cref(static_cast<const T&>(light_opt->get())) }
       : std::nullopt;
+  }
+
+  //! Edit a detached copy and atomically replace the accepted light after validation.
+  //! Mutable references never escape from the attached scene component. Returning
+  //! false from the edit discards the candidate. Accepted value edits allocate no
+  //! component and preserve its composition dependencies.
+  template <typename T, typename Edit>
+  auto EditLight(Edit&& edit, LightValidationError* error = nullptr) -> bool
+  {
+    const auto current = GetLightAs<T>();
+    if (!current) {
+      if (error) *error = { .field = "type", .message = "The node has no light of this type" };
+      return false;
+    }
+    T candidate(current->get());
+    if constexpr (std::is_same_v<std::invoke_result_t<Edit, T&>, bool>) {
+      if (!std::invoke(std::forward<Edit>(edit), candidate)) return false;
+    } else {
+      static_assert(std::is_void_v<std::invoke_result_t<Edit, T&>>);
+      std::invoke(std::forward<Edit>(edit), candidate);
+    }
+    return CommitLightCandidate(candidate, nullptr, true, error);
   }
 
   //=== Name Access ===-------------------------------------------------------//
@@ -309,6 +334,13 @@ private:
   //! Gets the attached light component if present.
   OXGN_SCN_NDAPI auto GetLight() noexcept
     -> std::optional<std::reference_wrapper<Component>>;
+
+  OXGN_SCN_API auto CommitLight(std::unique_ptr<Component> light,
+    bool replace, LightValidationError* error) noexcept -> bool;
+
+  OXGN_SCN_API auto CommitLightCandidate(const Component& candidate,
+    std::unique_ptr<Component>* replacement, bool replace,
+    LightValidationError* error) noexcept -> bool;
 
   OXGN_SCN_API auto CollectTransformChangedMutation() const noexcept -> void;
 

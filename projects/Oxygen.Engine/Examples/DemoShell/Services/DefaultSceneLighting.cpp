@@ -102,11 +102,9 @@ namespace {
     light->Common().color_rgb = desc.sun_color_rgb;
     light->SetAngularSizeRadians(glm::radians(desc.sun_source_angle_degrees));
     light->SetIntensityLux(desc.sun_intensity_lux);
-    light->SetEnvironmentContribution(true);
-    light->SetIsSunLight(true);
     light->SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kPrimary);
     light->SetUsePerPixelAtmosphereTransmittance(true);
-    light->SetAtmosphereDiskLuminanceScale({ 1.0F, 0.95F, 0.9F, 1.0F });
+    light->SetAtmosphereDiskLuminanceScale({ 1.0F, 0.95F, 0.9F });
     CHECK_F(sun_node.AttachLight(std::move(light)),
       "failed to attach DirectionalLight to '{}'",
       std::string(desc.sun_node_name));

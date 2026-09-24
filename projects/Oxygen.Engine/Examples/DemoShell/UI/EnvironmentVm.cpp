@@ -560,7 +560,7 @@ auto EnvironmentVm::ApplyPreset(int index, const bool persist) -> void
   SetSunAtmosphereLightSlot(
     static_cast<int>(scene::AtmosphereLightSlot::kPrimary));
   SetSunUsePerPixelAtmosphereTransmittance(false);
-  SetSunAtmosphereDiskLuminanceScale({ 1.0F, 1.0F, 1.0F, 1.0F });
+  SetSunAtmosphereDiskLuminanceScale({ 1.0F, 1.0F, 1.0F });
 
   // Sky Atmosphere
   SetSunDiskEnabled(preset.sky_atmo_sun_disk_enabled);
@@ -1945,12 +1945,12 @@ auto EnvironmentVm::SetSunUsePerPixelAtmosphereTransmittance(bool enabled)
   service_->SetSunUsePerPixelAtmosphereTransmittance(enabled);
 }
 
-auto EnvironmentVm::GetSunAtmosphereDiskLuminanceScale() const -> glm::vec4
+auto EnvironmentVm::GetSunAtmosphereDiskLuminanceScale() const -> glm::vec3
 {
   return service_->GetSunAtmosphereDiskLuminanceScale();
 }
 
-auto EnvironmentVm::SetSunAtmosphereDiskLuminanceScale(const glm::vec4& value)
+auto EnvironmentVm::SetSunAtmosphereDiskLuminanceScale(const glm::vec3& value)
   -> void
 {
   PrepareForManualOverride();

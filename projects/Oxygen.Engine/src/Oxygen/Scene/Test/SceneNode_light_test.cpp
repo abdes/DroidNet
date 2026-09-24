@@ -10,6 +10,7 @@
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/SceneNode.h>
+#include <limits>
 
 using oxygen::scene::DirectionalLight;
 using oxygen::scene::PointLight;
@@ -210,6 +211,43 @@ NOLINT_TEST_F(SceneNodeLightTest, AttachLight_Nullptr_ReturnsFalse)
 
   // Act & Assert
   EXPECT_FALSE(node.AttachLight(std::move(null_light)));
+}
+
+NOLINT_TEST_F(SceneNodeLightTest, InvalidWholeCandidatePreservesLightAndMutationSequence)
+{
+  auto node = scene_->CreateNode("Atomic spot");
+  ASSERT_TRUE(node.AttachLight(std::make_unique<SpotLight>()));
+  scene_->SyncObservers();
+  const auto sequence = scene_->GetMutationDispatchCounters().drained_records;
+  oxygen::scene::LightValidationError error;
+  EXPECT_FALSE(node.EditLight<SpotLight>([](auto& light) {
+    light.SetRange(27.0F);
+    light.SetConeAnglesRadians(0.8F, 0.4F);
+    light.Common().color_rgb = { 0.2F, 0.3F, 0.4F };
+  }, &error));
+  EXPECT_EQ(error.field, "cone_angles");
+  scene_->SyncObservers();
+  EXPECT_EQ(scene_->GetMutationDispatchCounters().drained_records, sequence);
+  const auto& accepted = node.GetLightAs<SpotLight>()->get();
+  EXPECT_EQ(accepted.GetRange(), 10.0F);
+  EXPECT_EQ(accepted.Common().color_rgb, oxygen::Vec3(1.0F));
+  ASSERT_TRUE(node.EditLight<SpotLight>([](auto& light) {
+    light.SetRange(0.0F);
+    light.SetConeAnglesRadians(0.7F, 0.9F);
+  }));
+  EXPECT_EQ(node.GetLightAs<SpotLight>()->get().GetRange(), 0.0F);
+  EXPECT_EQ(node.GetLightAs<SpotLight>()->get().GetInnerConeAngleRadians(), 0.7F);
+}
+
+NOLINT_TEST_F(SceneNodeLightTest, InvalidReplacementDoesNotDetachAcceptedComponent)
+{
+  auto node = scene_->CreateNode("Accepted point");
+  ASSERT_TRUE(node.AttachLight(std::make_unique<PointLight>()));
+  auto invalid = std::make_unique<DirectionalLight>();
+  invalid->SetIntensityLux(std::numeric_limits<float>::infinity());
+  EXPECT_FALSE(node.ReplaceLight(std::move(invalid)));
+  EXPECT_TRUE(node.GetLightAs<PointLight>());
+  EXPECT_FALSE(node.GetLightAs<DirectionalLight>());
 }
 
 } // namespace
