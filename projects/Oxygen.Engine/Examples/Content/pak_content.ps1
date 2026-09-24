@@ -32,7 +32,8 @@ Canonical lowercase UUIDv7 source identity for the pak line.
 
 .PARAMETER ToolPath
 Optional explicit path to `Oxygen.Cooker.PakTool.exe`. If omitted, the script
-uses `out/build-vs/bin/Debug/Oxygen.Cooker.PakTool.exe`.
+selects an available preset with a built PakTool, preferring Release, ordinary
+builds, then Ninja. -BuildTree, -Config and -Preset constrain that selection.
 
 .PARAMETER DiagnosticsFile
 Optional explicit diagnostics report path. If omitted, no diagnostics report is
@@ -40,6 +41,18 @@ emitted.
 
 .PARAMETER NoManifest
 Suppress manifest emission for the build.
+
+.PARAMETER BuildTree
+Optional build tree name or path, resolved by the shared launcher.
+
+.PARAMETER Config
+Optional required build configuration.
+
+.PARAMETER Preset
+Optional exact CMake build preset.
+
+.PARAMETER Help
+Show usage, options and examples without selecting tools or packaging. Alias: -h.
 
 .EXAMPLE
 .\pak_content.ps1
@@ -68,35 +81,39 @@ param(
 
     [string]$DiagnosticsFile,
 
-    [switch]$NoManifest
+    [switch]$NoManifest,
+
+    [string]$BuildTree,
+
+    [string]$Config,
+
+    [string]$Preset,
+
+    [Alias('h')][switch]$Help
 )
+
+if ($Help) {
+    Get-Help $PSCommandPath -Detailed
+    return
+}
 
 $ErrorActionPreference = "Stop"
 
 function Get-FullPath([string]$Path) {
-    return [System.IO.Path]::GetFullPath($Path)
+    return [System.IO.Path]::GetFullPath($Path, $PWD.Path)
 }
 
 $RepoRoot = (Get-Item $PSScriptRoot).Parent.Parent.FullName
 
-if ([string]::IsNullOrWhiteSpace($ToolPath)) {
-    $ToolPath = Join-Path $RepoRoot "out/build-vs/bin/Debug/Oxygen.Cooker.PakTool.exe"
-}
+. (Join-Path $RepoRoot 'tools/cli/BuildSelection.ps1')
+$tools = Resolve-OxygenExecutables -SourceRoot $RepoRoot -Targets 'oxygen-cooker-paktool' -BuildTree $BuildTree -Config $Config -Preset $Preset -Overrides @{ 'oxygen-cooker-paktool' = $ToolPath }
+Write-OxygenExecutableSelection $tools
 
-$ToolPath = Get-FullPath $ToolPath
 $CookedRoot = Get-FullPath $CookedRoot
 $OutputDir = Get-FullPath $OutputDir
 
-if (-not (Test-Path $ToolPath -PathType Leaf)) {
-    throw "PakTool not found: $ToolPath"
-}
-
 if (-not (Test-Path $CookedRoot -PathType Container)) {
     throw "Cooked root not found: $CookedRoot"
-}
-
-if (-not (Test-Path $OutputDir -PathType Container)) {
-    $null = New-Item -ItemType Directory -Path $OutputDir -Force
 }
 
 $PakPath = Join-Path $OutputDir ($BaseName + ".pak")
@@ -121,14 +138,16 @@ if (-not [string]::IsNullOrWhiteSpace($DiagnosticsFile)) {
     $Arguments += @("--diagnostics-file", $DiagnosticsFile)
 }
 
-Write-Host "Using PakTool: $ToolPath" -ForegroundColor DarkGray
 Write-Host "Cooked root : $CookedRoot" -ForegroundColor DarkGray
 Write-Host "Output dir  : $OutputDir" -ForegroundColor DarkGray
 Write-Host "Base name   : $BaseName" -ForegroundColor DarkGray
 Write-Host "Source key  : $SourceKey" -ForegroundColor DarkGray
 
 if ($PSCmdlet.ShouldProcess($PakPath, "Build pak from loose-cooked root")) {
-    & $ToolPath @Arguments
+    if (-not (Test-Path -LiteralPath $OutputDir -PathType Container)) {
+        $null = New-Item -ItemType Directory -Path $OutputDir -Force
+    }
+    Invoke-OxygenTool -Context $tools -Target 'oxygen-cooker-paktool' -Arguments $Arguments
     $ExitCode = $LASTEXITCODE
 
     if ($ExitCode -ne 0) {

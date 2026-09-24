@@ -37,8 +37,14 @@ param(
   [string]$RenderDocLibrary = 'C:\Program Files\RenderDoc\renderdoc.dll',
 
   [Parameter()]
-  [string]$DebuggerPath = ''
+  [string]$DebuggerPath = '',
+
+  [Alias('h')][switch]$Help,
+
+  [string]$BuildTree
 )
+
+if ($Help) { Get-Help $PSCommandPath -Detailed; return }
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -158,7 +164,10 @@ function Resolve-DebuggerToolPath {
 }
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-$buildRoot = Join-Path $repoRoot 'out\build-ninja'
+. (Join-Path $repoRoot 'tools/cli/BuildSelection.ps1')
+$selection = Resolve-OxygenBuildSelection -SourceRoot $repoRoot -BuildTree $BuildTree -Config Debug
+Write-OxygenBuildSelection $selection
+$buildRoot = $selection.BuildRoot
 $binaryDirectory = Join-Path $buildRoot 'bin\Debug'
 $vortexBasicExe = Join-Path $binaryDirectory 'Oxygen.Examples.VortexBasic.exe'
 $verifyScript = Join-Path $PSScriptRoot 'Verify-VortexBasicRuntimeProof.ps1'

@@ -12,12 +12,16 @@ validated whole-candidate updates.
 From this directory, using tools built in the current engine checkout:
 
 ```powershell
-.\cook_scenes.ps1 -All -NoTUI -ToolPath ..\..\out\build-ninja\bin\Debug\Oxygen.Cooker.ImportTool.exe
-.\pak_content.ps1 -ToolPath ..\..\out\build-ninja\bin\Debug\Oxygen.Cooker.PakTool.exe -DiagnosticsFile .\pak\all.report.json
+.\cook_scenes.ps1 -h
+.\pak_content.ps1 -Help
+.\cook_scenes.ps1 -All -NoTUI
+.\pak_content.ps1 -DiagnosticsFile .\pak\all.report.json
 ```
 
-`cook_scenes.ps1` also supports `-Scene <folder>` and resolves its tool from
-`-Preset windows-debug` or `windows-release` when `-ToolPath` is omitted.
+`cook_scenes.ps1` also supports `-Scene <folder>` and selects an available built
+tool from CMake presets when `-ToolPath` is omitted, preferring
+Release, ordinary builds, then Ninja. `-Preset`, `-BuildTree`, and `-Config` can
+constrain that selection.
 It reads presets without configuring or building the engine. Manifest and
 descriptor validation belongs to the native ImportTool and its current
 schemas; the wrapper does not duplicate schema version checks.
@@ -64,6 +68,13 @@ PAKs; run `pak_content.ps1` after cooking.
 
 `make_pak.py` accepts PakGen YAML specifications. It is not the native
 manifest-based example-content refresh entry point.
+It uses the Python API under `src/Oxygen/Cooker/Tools/PakGen`; `python make_pak.py
+--help` (or `-h`) works without loading PakGen. The PowerShell workflows offer
+`-Help`/`-h` without requiring scene arguments or initialized build trees.
+
+Native tools are resolved and invoked by the same shared script library as
+`oxyrun`. The workflows supply target names and argument arrays; they do not
+construct executable locations or bypass the launcher for `-ToolPath` overrides.
 
 ## Imported asset names
 

@@ -1,10 +1,10 @@
 [CmdletBinding()]
 param(
   [Parameter()]
-  [string]$BuildTree = "out/build-ninja",
+  [string]$BuildTree,
 
   [Parameter()]
-  [string]$Config = "Debug",
+  [string]$Config,
 
   [Parameter()]
   [ValidateRange(-2, 9)]
@@ -14,8 +14,14 @@ param(
   [switch]$StopOnFailure,
 
   [Parameter()]
-  [switch]$ShowFullOutput
+  [switch]$ShowFullOutput,
+
+  [Alias('h')][switch]$Help,
+
+  [string]$Preset
 )
+
+if ($Help) { Get-Help $PSCommandPath -Detailed; return }
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
@@ -62,7 +68,12 @@ function Get-FailedTestNames {
   return $failed
 }
 
-$exeRoot = Join-Path -Path $BuildTree -ChildPath (Join-Path -Path "bin" -ChildPath $Config)
+. (Join-Path $PSScriptRoot 'cli/BuildSelection.ps1')
+$selection = Resolve-OxygenBuildSelection -BuildTree $BuildTree -Config $Config -Preset $Preset -RequiredExecutables $testPrograms
+Write-OxygenBuildSelection $selection
+$BuildTree = $selection.BuildRoot
+$Config = $selection.Config
+$exeRoot = Join-Path $BuildTree "bin/$Config"
 
 Write-Host "Build tree : $BuildTree"
 Write-Host "Config     : $Config"
@@ -94,7 +105,7 @@ foreach ($program in $testPrograms) {
   Write-Host "==== Running $program ===="
 
   $arguments = @("-v", $Verbosity.ToString())
-  $output = @(& $exePath @arguments 2>&1 | ForEach-Object { $_.ToString() })
+  $output = @(Invoke-OxygenSelectedExecutable $selection $exePath $arguments 2>&1 | ForEach-Object { $_.ToString() })
   $exitCode = $LASTEXITCODE
 
   if ($ShowFullOutput) {

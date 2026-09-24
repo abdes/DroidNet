@@ -9,7 +9,7 @@
 Run from any directory.
 
 Example:
-    F:/projects/.venv/Scripts/python.exe make_pak.py cube_scene_spec.yaml
+    python make_pak.py cube_scene_spec.yaml
 
 Outputs:
     pak/<name>.pak
@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 
 
 def _workspace_root_from_here() -> Path:
-    # Examples/RenderScene/make_pak.py -> Examples/RenderScene -> Examples -> repo root
+    # Examples/Content/make_pak.py -> Content -> Examples -> engine root.
     return Path(__file__).resolve().parents[2]
 
 
@@ -37,7 +37,7 @@ def _import_pakgen_api(
     repo_root: Path,
 ) -> "tuple[type[_BuildOptions], Callable[[_BuildOptions], _BuildResult]]":
     pakgen_src = (
-        repo_root / "src" / "Oxygen" / "Content" / "Tools" / "PakGen" / "src"
+        repo_root / "src" / "Oxygen" / "Cooker" / "Tools" / "PakGen" / "src"
     ).resolve()
     sys.path.insert(0, str(pakgen_src))
     from pakgen.api import BuildOptions, build_pak  # type: ignore
@@ -84,8 +84,6 @@ def main(argv: list[str] | None = None) -> int:
         if not input_path.exists():
             raise SystemExit(f"Input file not found: {input_path}")
 
-        output_dir.mkdir(parents=True, exist_ok=True)
-
         suffix = input_path.suffix.lower()
         stem = input_path.stem
         pak_path = output_dir / f"{stem}.pak"
@@ -102,6 +100,7 @@ def main(argv: list[str] | None = None) -> int:
         repo_root = _workspace_root_from_here()
         BuildOptions, build_pak = _import_pakgen_api(repo_root)
 
+        output_dir.mkdir(parents=True, exist_ok=True)
         build_pak(
             BuildOptions(
                 input_spec=spec_path,

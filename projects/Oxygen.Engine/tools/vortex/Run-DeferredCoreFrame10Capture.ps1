@@ -11,8 +11,14 @@ build + capture + analysis validation flow.
 [CmdletBinding()]
 param(
   [Parameter()]
-  [string]$Output = ''
+  [string]$Output = '',
+
+  [Alias('h')][switch]$Help,
+
+  [string]$BuildTree
 )
+
+if ($Help) { Get-Help $PSCommandPath -Detailed; return }
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -99,8 +105,11 @@ function Invoke-LoggedCommand {
 }
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+. (Join-Path $repoRoot 'tools/cli/BuildSelection.ps1')
+$selection = Resolve-OxygenBuildSelection -SourceRoot $repoRoot -BuildTree $BuildTree -Config Debug
+Write-OxygenBuildSelection $selection
 if ([string]::IsNullOrWhiteSpace($Output)) {
-  $Output = Join-Path $repoRoot 'out\build-ninja\analysis\vortex\deferred-core\frame10'
+  $Output = Join-Path $selection.BuildRoot 'analysis/vortex/deferred-core/frame10'
 }
 
 $outputDirectory = Resolve-RepoPath -RepoRoot $repoRoot -Path $Output
@@ -115,8 +124,9 @@ $buildResult = Invoke-LoggedCommand `
   -FilePath 'cmake' `
   -ArgumentList @(
     '--build',
-    '--preset',
-    'windows-debug',
+    $selection.BuildRoot,
+    '--config',
+    $selection.Config,
     '--target',
     'oxygen-vortex',
     'oxygen-graphics-direct3d12',
@@ -132,7 +142,7 @@ $testResult = Invoke-LoggedCommand `
   -FilePath 'ctest' `
   -ArgumentList @(
     '--test-dir',
-    'out/build-ninja',
+    $selection.BuildRoot,
     '-C',
     'Debug',
     '--output-on-failure',
@@ -174,6 +184,8 @@ $tidyArguments = @(
 )
 $tidyArguments += $tidyTargets
 $tidyArguments += @(
+  '--build-dir',
+  $selection.BuildRoot,
   '--include-tests',
   '--configuration',
   'Debug',

@@ -29,8 +29,14 @@ param(
 
   [Parameter()]
   [ValidateRange(1, [int]::MaxValue)]
-  [int]$Fps = 30
+  [int]$Fps = 30,
+
+  [Alias('h')][switch]$Help,
+
+  [string]$BuildTree
 )
+
+if ($Help) { Get-Help $PSCommandPath -Detailed; return }
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -58,7 +64,10 @@ function Get-BenchmarkSettingsSummary {
 }
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-$buildRoot = Join-Path $repoRoot 'out\build-ninja'
+. (Join-Path $repoRoot 'tools/cli/BuildSelection.ps1')
+$selection = Resolve-OxygenBuildSelection -SourceRoot $repoRoot -BuildTree $BuildTree -Config Release -RequiredExecutables 'Oxygen.Examples.RenderScene.exe'
+Write-OxygenBuildSelection $selection
+$buildRoot = $selection.BuildRoot
 $renderSceneExe = Join-Path $buildRoot 'bin\Release\Oxygen.Examples.RenderScene.exe'
 $settingsPath = Join-Path $repoRoot 'Examples\RenderScene\demo_settings.json'
 $baselineSettingsPath = Join-Path $PSScriptRoot 'demo_settings.json'
