@@ -77,6 +77,8 @@ public:
   [[nodiscard]] OXGN_VRTX_API auto InspectPointShadowSurfaces(
     ViewId view_id) const
     -> std::span<const std::shared_ptr<graphics::Texture>>;
+  [[nodiscard]] OXGN_VRTX_API auto InspectContactShadowSurface(ViewId view_id) const
+    -> std::shared_ptr<const graphics::Texture>;
   [[nodiscard]] OXGN_VRTX_API auto ResolveShadowFrameSlot(ViewId view_id) const
     -> ShaderVisibleIndex;
   [[nodiscard]] OXGN_VRTX_NDAPI auto HasVsm() const -> bool { return false; }

@@ -5,6 +5,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
+#include "Vortex/Contracts/Lighting/LightingFrameBindings.hlsli"
+#include "Vortex/Shared/FailedViewPresentation.hlsli"
 
 struct CompositingVSOutput
 {
@@ -27,7 +29,9 @@ struct CompositingPassConstants {
     uint source_texture_index;
     uint sampler_index;
     float alpha;
-    float pad0;
+    uint failed_view;
+    uint lighting_frame_slot;
+    uint3 reserved;
 };
 
 float4 PS(CompositingVSOutput input) : SV_TARGET
@@ -39,6 +43,10 @@ float4 PS(CompositingVSOutput input) : SV_TARGET
     ConstantBuffer<CompositingPassConstants> pass
         = ResourceDescriptorHeap[g_PassConstantsIndex];
 
+    if (pass.failed_view != 0u || (pass.lighting_frame_slot != K_INVALID_BINDLESS_INDEX
+        && !IsLightingPublicationReady(LoadLightingFrameBindings(pass.lighting_frame_slot)))) {
+        return FailedViewColor(input.position.xy);
+    }
     if (pass.source_texture_index == K_INVALID_BINDLESS_INDEX) {
         return float4(0.0, 0.0, 0.0, 0.0);
     }

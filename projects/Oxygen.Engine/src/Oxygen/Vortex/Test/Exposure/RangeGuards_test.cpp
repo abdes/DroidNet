@@ -53,6 +53,8 @@
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestTags.h>
 #include <Oxygen/Vortex/Types/ExposureStateData.h>
+#include <Oxygen/Vortex/Types/LightingFrameBindings.h>
+#include <Oxygen/Vortex/Lighting/Types/LightGridBuildStatus.h>
 #include <Oxygen/Vortex/Types/ExposureTransition.h>
 #include <Oxygen/Vortex/ViewExtension.h>
 
@@ -637,6 +639,47 @@ NOLINT_TEST_F(ExposureGpuTest,
     FAIL() << "Expected status to contain a value";
   }
   EXPECT_EQ(status->applied_generation, transition->generation);
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, FailedLightingHoldsExposureMarksOutputAndRecovers)
+{
+  auto settings = scene::ExposureSettings {};
+  settings.mode = engine::ExposureMode::kAuto;
+  const auto dim = Uniform(0.25F, 4U, 4U);
+  const auto bright = Uniform(16.0F, 4U, 4U);
+  const auto accepted = Run(dim, settings, 1.0F).state;
+
+  auto grid = LightGridBuildStatus {
+    .state = kLightGridBuildFailed,
+    .reason = kLightGridReasonGenerationMismatch,
+    .selection_revision = { 7U, 0U },
+  };
+  auto lighting = LightingFrameBindings {};
+  lighting.publication_state = kLightingPublicationRecorded;
+  lighting.selection_revision = grid.selection_revision;
+  lighting.build_status_srv = PublishFixtureData(grid);
+  ctx_.current_view.lighting_frame_slot = PublishFixtureData(lighting);
+  const auto failed = Run(bright, settings, 1.0F).state;
+  EXPECT_FLOAT_EQ(failed.displayed_scale, accepted.displayed_scale);
+  EXPECT_FLOAT_EQ(failed.latent_scale, accepted.latent_scale);
+  EXPECT_EQ(failed.applied_generation, accepted.applied_generation);
+  EXPECT_EQ(failed.flags & 12U, 0U);
+  const auto status = Read<ExposureStatusStorage>(
+    *last_state_->status_buffer, graphics::ResourceStates::kCopySource);
+  EXPECT_NE(status.completed.flags & 16U, 0U);
+  EXPECT_EQ(status.completed.first_failure_product, 12U);
+
+  auto service = PostProcessService(*renderer_);
+  EXPECT_FLOAT_EQ(ServicePixel(service, bright, settings), 0.075F);
+  grid.state = kLightGridBuildValid;
+  grid.reason = kLightGridReasonNone;
+  lighting.build_status_srv = PublishFixtureData(grid);
+  ctx_.current_view.lighting_frame_slot = PublishFixtureData(lighting);
+  const auto recovered = Run(bright, settings, 1.0F).state;
+  EXPECT_NE(recovered.displayed_scale, accepted.displayed_scale);
+  EXPECT_NE(recovered.flags & 12U, 0U);
+  EXPECT_NE(ServicePixel(service, bright, settings), 0.075F);
 }
 
 NOLINT_TEST_F(

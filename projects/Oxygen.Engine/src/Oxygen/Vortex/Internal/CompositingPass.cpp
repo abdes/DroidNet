@@ -99,11 +99,13 @@ namespace {
     uint32_t source_texture_index;
     uint32_t sampler_index;
     float alpha;
-    float pad0;
+    std::uint32_t failed_view;
+    std::uint32_t lighting_frame_slot;
+    std::array<std::uint32_t, 3> reserved {};
   };
 
-  static_assert(sizeof(CompositingPassConstants) == 16,
-    "CompositingPassConstants must be 16 bytes");
+  static_assert(sizeof(CompositingPassConstants) == 32,
+    "CompositingPassConstants must be 32 bytes");
 
   auto ClampViewport(const ViewPort& viewport, const uint32_t target_width,
     const uint32_t target_height) -> ViewPort
@@ -143,7 +145,7 @@ auto CompositingPass::ValidateConfig() -> void
   if (!config_) {
     throw std::runtime_error("CompositingPass: missing configuration");
   }
-  if (!config_->source_texture) {
+  if (!config_->source_texture && !config_->failed_view) {
     throw std::runtime_error("CompositingPass: source texture is required");
   }
   if (!config_->viewport.IsValid()) {
@@ -151,7 +153,7 @@ auto CompositingPass::ValidateConfig() -> void
   }
 
   const auto& output = GetOutputTexture();
-  if (&GetSourceTexture() == &output) {
+  if (!config_->failed_view && &GetSourceTexture() == &output) {
     throw std::runtime_error(
       "CompositingPass: source texture and output texture must be distinct");
   }
@@ -174,7 +176,6 @@ auto CompositingPass::ValidateConfig() -> void
 auto CompositingPass::DoPrepareResources(graphics::CommandRecorder& recorder)
   -> co::Co<>
 {
-  const auto& source = GetSourceTexture();
   const auto& output = GetOutputTexture();
 
   if (!has_drawable_region_) {
@@ -182,19 +183,23 @@ auto CompositingPass::DoPrepareResources(graphics::CommandRecorder& recorder)
     co_return;
   }
 
-  CheckTrackedTexture(recorder, source, "source");
   CheckTrackedTexture(recorder, output, "output");
 
-  recorder.RequireResourceState(
-    source, graphics::ResourceStates::kShaderResource);
   recorder.RequireResourceState(
     output, graphics::ResourceStates::kRenderTarget);
   recorder.FlushBarriers();
 
   EnsurePassConstantsBuffer();
 
-  const auto source_srv = EnsureSourceTextureSrv(source);
-  if (!source_srv.IsValid()) {
+  auto source_srv = kInvalidShaderVisibleIndex;
+  if (!config_->failed_view) {
+    const auto& source = GetSourceTexture();
+    CheckTrackedTexture(recorder, source, "source");
+    recorder.RequireResourceState(source, graphics::ResourceStates::kShaderResource);
+    recorder.FlushBarriers();
+    source_srv = EnsureSourceTextureSrv(source);
+  }
+  if (!config_->failed_view && !source_srv.IsValid()) {
     throw std::runtime_error("CompositingPass: invalid source SRV index");
   }
   UpdatePassConstants(source_srv);
@@ -472,7 +477,8 @@ auto CompositingPass::UpdatePassConstants(
     .source_texture_index = source_texture_index.get(),
     .sampler_index = 0U,
     .alpha = alpha,
-    .pad0 = 0.0F,
+    .failed_view = config_->failed_view ? 1U : 0U,
+    .lighting_frame_slot = config_->lighting_frame_slot.get(),
   };
 
   auto& state = GetCurrentFramePassConstantsState();

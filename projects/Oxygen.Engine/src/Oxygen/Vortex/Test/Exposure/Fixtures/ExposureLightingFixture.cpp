@@ -530,8 +530,10 @@ auto ExposureLightingGpuTest::RenderSurface(
       ASSERT_TRUE(session.has_value());
       ASSERT_EQ(session->ExecuteInsideFrame(frame),
         outcome == ExpectedViewOutcome::kRendered);
+      WaitForQueueIdle();
+      EXPECT_EQ(session->IsOutputCaptureEligible(),
+        outcome == ExpectedViewOutcome::kRendered);
     }
-    WaitForQueueIdle();
   }
   if (outcome == ExpectedViewOutcome::kRejected) {
     EXPECT_EQ(probe->draws, 0U);

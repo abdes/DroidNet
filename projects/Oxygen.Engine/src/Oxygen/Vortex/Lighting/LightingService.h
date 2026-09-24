@@ -8,6 +8,7 @@
 
 #include <expected>
 #include <memory>
+#include <optional>
 #include <span>
 #include <vector>
 
@@ -114,6 +115,8 @@ public:
     ViewId view_id) const -> const LightingFrameBindings*;
   [[nodiscard]] OXGN_VRTX_API auto ResolveLightingFrameSlot(
     ViewId view_id) const -> ShaderVisibleIndex;
+  [[nodiscard]] OXGN_VRTX_API auto InspectCompletedGrid(ViewId view_id) const
+    -> std::optional<CompletedLightGridBuild>;
   [[nodiscard]] OXGN_VRTX_API auto InspectGridResources(ViewId view_id) const
     -> LightGridResources;
   [[nodiscard]] OXGN_VRTX_NDAPI auto GetLastGridBuildState() const noexcept

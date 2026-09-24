@@ -43,6 +43,7 @@
 #include <Oxygen/Vortex/Types/GroundGridConfig.h>
 #include <Oxygen/Vortex/Types/ViewConstants.h>
 #include <Oxygen/Vortex/Types/ViewHistoryFrameBindings.h>
+#include <Oxygen/Vortex/Types/ViewRenderStatus.h>
 #include <Oxygen/Vortex/ViewExtension.h>
 #include <Oxygen/Vortex/ViewFeatureProfile.h>
 #include <Oxygen/Vortex/api_export.h>
@@ -438,10 +439,13 @@ public:
       return pipeline_.feature_profile;
     }
 
+    //! Returns whether recording and submission succeeded. Before saving a
+    //! capture, wait for its GPU readback and call IsOutputCaptureEligible().
     OXGN_VRTX_API auto ExecuteNow() -> bool;
     OXGN_VRTX_API auto ExecuteInsideFrame(engine::FrameContext& frame_context)
       -> bool;
     OXGN_VRTX_API auto Execute() -> co::Co<bool>;
+    [[nodiscard]] OXGN_VRTX_API auto IsOutputCaptureEligible() const -> bool;
 
   private:
     observer_ptr<Renderer> renderer_ { nullptr };
@@ -450,7 +454,11 @@ public:
     OffscreenSceneViewInput view_intent_;
     OutputTargetInput output_target_ {};
     OffscreenPipelineInput pipeline_ {};
+    std::optional<frame::SequenceNumber> executed_sequence_;
   };
+
+  [[nodiscard]] OXGN_VRTX_API auto InspectViewRenderStatus(ViewId view_id) const
+    -> std::optional<ViewRenderStatus>;
 
   class OffscreenSceneFacade {
   public:

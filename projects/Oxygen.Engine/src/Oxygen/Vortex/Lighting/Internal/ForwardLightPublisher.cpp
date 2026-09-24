@@ -211,6 +211,12 @@ auto ForwardLightPublisher::Publish(const BuiltLightGridFrame& built_frame)
   return {};
 }
 
+auto ForwardLightPublisher::InspectCompletedGrid(ViewId view_id) const
+  -> std::optional<CompletedLightGridBuild>
+{
+  return spatial_grid_->InspectCompleted(view_id);
+}
+
 auto ForwardLightPublisher::InspectGridResources(ViewId view_id) const
   -> LightGridResources
 {

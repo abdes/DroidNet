@@ -195,6 +195,7 @@ struct RenderContext {
     std::uint32_t screen_hzb_mip_count { 0U };
     bool screen_hzb_available { false };
     bool screen_hzb_has_previous { false };
+    ShaderVisibleIndex lighting_frame_slot { kInvalidShaderVisibleIndex };
     observer_ptr<const OcclusionFrameResults> occlusion_results;
     bool is_reflection_capture { false };
     bool with_atmosphere { false };

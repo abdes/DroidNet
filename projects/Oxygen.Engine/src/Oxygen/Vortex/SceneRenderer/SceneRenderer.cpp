@@ -16,6 +16,7 @@
 #include <memory>
 #include <optional>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -1327,11 +1328,11 @@ auto SceneRenderer::ReportLightingFailure(
   if (failure.view_id == kInvalidViewId) {
     failure.view_id = fallback_view;
   }
-  if (!reported_lighting_failure_
-    || reported_lighting_failure_->error != failure.error
-    || reported_lighting_failure_->view_id != failure.view_id
-    || reported_lighting_failure_->selection_index != failure.selection_index
-    || reported_lighting_failure_->requested_bytes != failure.requested_bytes) {
+  const auto previous = reported_lighting_failures_.find(failure.view_id);
+  if (previous == reported_lighting_failures_.end()
+    || previous->second.error != failure.error
+    || previous->second.selection_index != failure.selection_index
+    || previous->second.requested_bytes != failure.requested_bytes) {
     LOG_F(ERROR,
       "Lighting preparation failed: reason={} family={} index={} view={} "
       "required_bytes={} available_bytes={}",
@@ -1340,7 +1341,11 @@ auto SceneRenderer::ReportLightingFailure(
       failure.view_id.get(), failure.requested_bytes.get(),
       failure.available_bytes.get());
   }
-  reported_lighting_failure_ = failure;
+  reported_lighting_failures_.insert_or_assign(failure.view_id, failure);
+  if (const auto found = view_render_status_.find(failure.view_id); found != view_render_status_.end()) {
+    found->second.failure = ViewRenderFailure::kLighting;
+    found->second.lighting_failure = failure;
+  }
 }
 
 SceneRenderer::SceneRenderer(Renderer& renderer, Graphics& gfx,
@@ -1413,6 +1418,12 @@ void SceneRenderer::BeginFrame(const frame::SequenceNumber sequence,
     ResizeSceneTextureFamily(*frame_extent);
   }
 
+  // Keep the last outcome until this view renders again or is removed. Capture
+  // consumers can inspect it after EndFrame; frame identity prevents stale use.
+  std::erase_if(view_render_status_, [sequence](const auto& entry) {
+    return sequence.get() > entry.second.frame_sequence.get()
+        + frame::kFramesInFlight.get();
+  });
   setup_mode_.Reset();
   scene_texture_bindings_.Invalidate();
   ResetExtractArtifacts();
@@ -1535,6 +1546,7 @@ auto SceneRenderer::DescribeExposureProductLayout(const RenderContext& ctx)
 auto SceneRenderer::PrepareExposureDomain(
   RenderContext& ctx, graphics::CommandRecorder& recorder) -> bool
 {
+  ctx.current_view.lighting_frame_slot = kInvalidShaderVisibleIndex;
   profiling::CpuProfileScope cpu_scope(
     "Vortex.SceneRenderer.PrepareExposureDomain",
     profiling::ProfileCategory::kPass);
@@ -1614,7 +1626,20 @@ void SceneRenderer::RenderViewFamily(RenderContext& ctx)
     std::shared_ptr<graphics::Texture> texture;
   };
 
-  PrimePreparedViews(ctx);
+  try {
+    PrimePreparedViews(ctx);
+  } catch (const std::exception& error) {
+    for (auto& view : ctx.frame_views) {
+      if (!view.is_scene_view) continue;
+      view.rendered = false;
+      view_render_status_[view.view_id] = { .view_id = view.view_id,
+        .frame_sequence = ctx.frame_sequence, .state = ViewRenderState::kFailed,
+        .failure = ViewRenderFailure::kRequiredInput };
+    }
+    ResetPerViewSceneProducts();
+    LOG_F(ERROR, "Scene preparation failed: {}", error.what());
+    return;
+  }
   const auto allocations_before_frame
     = scene_texture_pool_.GetAllocationCount();
   auto rendered_scene_view_count = std::size_t { 0U };
@@ -1628,6 +1653,14 @@ void SceneRenderer::RenderViewFamily(RenderContext& ctx)
     }
 
     ctx.frame_views[view_index].rendered = false;
+    auto& result = view_render_status_[entry.view_id];
+    result = { .view_id = entry.view_id, .frame_sequence = ctx.frame_sequence,
+      .state = ViewRenderState::kFailed, .failure = ViewRenderFailure::kRequiredInput };
+    for (const auto& input : entry.resolved_aux_inputs) {
+      if (input.valid && input.input.required) {
+        result.required_input_views.push_back(input.producer_view_id);
+      }
+    }
     if (std::ranges::any_of(entry.resolved_aux_inputs,
           [&auxiliary_products](const auto& input) -> auto {
             return input.valid && input.input.required
@@ -1636,136 +1669,147 @@ void SceneRenderer::RenderViewFamily(RenderContext& ctx)
       continue;
     }
     internal::PerViewScope view_scope { ctx, view_index };
-    if (post_process_
-      && ctx.current_view.feature_mask.Has(
-        CompositionView::ViewFeatureMask::kSceneLighting)) {
-      ctx.current_view.hdr_color_format = Format::kRGBA32Float;
-    }
-    const auto lease_key = BuildSceneTextureLeaseKey(ctx);
-    auto color_config = scene_textures_.GetConfig();
-    color_config.extent = lease_key.extent;
-    color_config.scene_color_format = lease_key.scene_color_format;
-    color_config.msaa_sample_count = lease_key.msaa_sample_count;
-    auto color = scene_color_pool_->Acquire(ctx.current_view.view_id,
-      SceneTextures::SceneColorDescriptor(color_config),
-      ctx.current_view.view_state_handle
-        != CompositionView::kInvalidViewStateHandle);
-    auto scene_texture_lease = std::make_shared<SceneTextureLease>(
-      scene_texture_pool_.Acquire(lease_key, std::move(color)));
-    active_scene_texture_lease_ = scene_texture_lease;
-    auto& leased_scene_textures = scene_texture_lease->GetSceneTextures();
-    active_scene_textures_ = &leased_scene_textures;
-    inspected_scene_textures_ = &leased_scene_textures;
-    auto restore_scene_texture_family = ScopeGuard([this] noexcept -> void {
-      active_scene_textures_ = &scene_textures_;
-      // Attachment reuse waits for its submitted frame, independently of any
-      // retained color reader. No callback reaches the pool after destruction.
-      active_scene_texture_lease_->Retire(gfx_);
-      active_scene_texture_lease_.reset();
-    });
-    BindPreparedView(ctx);
-    ResetPerViewSceneProducts();
-    renderer_.DispatchViewExtensionsOnViewSetup(ctx);
-    auto recording = gfx_.AcquireCommandRecorder(
-      gfx_.QueueKeyFor(graphics::QueueRole::kGraphics), "Vortex View",
-      graphics::SubmissionPolicy::kExplicit);
-    if (!recording) {
-      continue;
-    }
-    auto& recorder = *recording;
-    renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(recorder);
-    recorder.OnSubmission(
-      [this](const graphics::SubmissionOutcome outcome) -> void {
-        if (outcome == graphics::SubmissionOutcome::kDiscarded) {
-          ResetPerViewSceneProducts();
-        }
+    try {
+      result.failure = ViewRenderFailure::kAllocation;
+      if (post_process_
+        && ctx.current_view.feature_mask.Has(
+          CompositionView::ViewFeatureMask::kSceneLighting)) {
+        ctx.current_view.hdr_color_format = Format::kRGBA32Float;
+      }
+      const auto lease_key = BuildSceneTextureLeaseKey(ctx);
+      auto color_config = scene_textures_.GetConfig();
+      color_config.extent = lease_key.extent;
+      color_config.scene_color_format = lease_key.scene_color_format;
+      color_config.msaa_sample_count = lease_key.msaa_sample_count;
+      auto color = scene_color_pool_->Acquire(ctx.current_view.view_id,
+        SceneTextures::SceneColorDescriptor(color_config),
+        ctx.current_view.view_state_handle
+          != CompositionView::kInvalidViewStateHandle);
+      auto scene_texture_lease = std::make_shared<SceneTextureLease>(
+        scene_texture_pool_.Acquire(lease_key, std::move(color)));
+      active_scene_texture_lease_ = scene_texture_lease;
+      auto& leased_scene_textures = scene_texture_lease->GetSceneTextures();
+      active_scene_textures_ = &leased_scene_textures;
+      inspected_scene_textures_ = &leased_scene_textures;
+      auto restore_scene_texture_family = ScopeGuard([this] noexcept -> void {
+        active_scene_textures_ = &scene_textures_;
+        // Attachment reuse waits for its submitted frame, independently of any
+        // retained color reader. No callback reaches the pool after destruction.
+        active_scene_texture_lease_->Retire(gfx_);
+        active_scene_texture_lease_.reset();
       });
-    if (!renderer_.PublishCurrentViewPreSceneFrameBindings(
-          ctx, recorder, *this)) {
-      continue;
-    }
-    renderer_.DispatchViewExtensionsOnPreRenderViewGpu(ctx, recorder);
-    if (!RenderCurrentView(ctx, recorder)) {
-      continue;
-    }
-    renderer_.PublishCurrentViewPostSceneFrameBindings(ctx, *this);
-    renderer_.DispatchViewExtensionsOnPostRenderViewGpu(ctx, recorder);
-    if (!recording.Submit()) {
+      BindPreparedView(ctx);
       ResetPerViewSceneProducts();
-      continue;
-    }
-    ctx.frame_views[view_index].rendered = true;
-    ++rendered_scene_view_count;
-
-    for (const auto& output : entry.produced_aux_outputs) {
-      if (output.kind != CompositionView::AuxOutputKind::kColorTexture) {
+      renderer_.DispatchViewExtensionsOnViewSetup(ctx);
+      result.failure = ViewRenderFailure::kRecording;
+      auto recording = gfx_.AcquireCommandRecorder(
+        gfx_.QueueKeyFor(graphics::QueueRole::kGraphics), "Vortex View",
+        graphics::SubmissionPolicy::kExplicit);
+      if (!recording) {
         continue;
       }
-      auto texture
-        = ResolveFramebufferColorTexture(ResolveViewOutputTarget(ctx));
-      CHECK_F(static_cast<bool>(texture),
-        "SceneRenderer: auxiliary output {} from view {} has no color texture",
-        output.id.get(), entry.view_id.get());
-      auxiliary_products.insert_or_assign(output.id,
-        AuxiliaryProduct {
-          .texture = texture,
+      auto& recorder = *recording;
+      renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(recorder);
+      recorder.OnSubmission(
+        [this](const graphics::SubmissionOutcome outcome) -> void {
+          if (outcome == graphics::SubmissionOutcome::kDiscarded) {
+            ResetPerViewSceneProducts();
+          }
         });
-      LOG_F(INFO,
-        "Vortex.AuxView.Extract frame={} aux_id={} producer_view={} "
-        "texture='{}' debug_name='{}'",
-        ctx.frame_sequence.get(), output.id.get(), entry.view_id.get(),
-        texture->GetDescriptor().debug_name, output.debug_name);
-    }
-
-    for (const auto& input : entry.resolved_aux_inputs) {
-      if (!input.valid
-        || input.kind != CompositionView::AuxOutputKind::kColorTexture) {
+      if (!renderer_.PublishCurrentViewPreSceneFrameBindings(
+            ctx, recorder, *this)) {
         continue;
       }
-      const auto product_it = auxiliary_products.find(input.input.id);
-      if (product_it == auxiliary_products.end()) {
+      renderer_.DispatchViewExtensionsOnPreRenderViewGpu(ctx, recorder);
+      if (!RenderCurrentView(ctx, recorder)) {
         continue;
       }
-      auto target
-        = ResolveFramebufferColorTexture(ResolveViewOutputTarget(ctx));
-      CHECK_F(static_cast<bool>(target),
-        "SceneRenderer: auxiliary consumer view {} has no color target",
-        entry.view_id.get());
-      CHECK_F(product_it->second.texture.get() != target.get(),
-        "SceneRenderer: auxiliary consumer view {} cannot copy from its own "
-        "target texture",
-        entry.view_id.get());
+      for (const auto& input : entry.resolved_aux_inputs) {
+        if (!input.valid
+          || input.kind != CompositionView::AuxOutputKind::kColorTexture) {
+          continue;
+        }
+        const auto product_it = auxiliary_products.find(input.input.id);
+        if (product_it == auxiliary_products.end()) {
+          continue;
+        }
+        auto target
+          = ResolveFramebufferColorTexture(ResolveViewOutputTarget(ctx));
+        if (!target || product_it->second.texture.get() == target.get()) {
+          throw std::runtime_error("Invalid auxiliary consumer color target");
+        }
 
-      const auto queue_key = gfx_.QueueKeyFor(graphics::QueueRole::kGraphics);
-      auto auxiliary_recording = gfx_.AcquireCommandRecorder(
-        queue_key, "Vortex Auxiliary View Consumption");
-      CHECK_F(static_cast<bool>(auxiliary_recording),
-        "SceneRenderer: failed to acquire auxiliary consumption recorder");
-      renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(
-        *auxiliary_recording);
-      graphics::GpuEventScope consume_scope(*auxiliary_recording,
-        "Vortex.AuxView.Consume", profiling::ProfileGranularity::kTelemetry,
-        profiling::ProfileCategory::kPass,
-        profiling::Vars(profiling::Var("aux_id", input.input.id.get()),
-          profiling::Var("producer_view", input.producer_view_id.get()),
-          profiling::Var("consumer_view", entry.view_id.get()),
-          profiling::Var("debug_name", input.debug_name)));
-      auto& source = *product_it->second.texture;
-      TrackAuxiliaryColorTexture(gfx_, *auxiliary_recording, source);
-      TrackAuxiliaryColorTexture(gfx_, *auxiliary_recording, *target);
-      CopyAuxiliaryTextureToRegion(*auxiliary_recording, source, *target,
-        BuildAuxiliaryConsumerViewport(*target));
-      auxiliary_recording->RequireResourceStateFinal(
-        source, graphics::ResourceStates::kRenderTarget);
-      auxiliary_recording->RequireResourceStateFinal(
-        *target, graphics::ResourceStates::kRenderTarget);
-      auxiliary_recording->FlushBarriers();
-      LOG_F(INFO,
-        "Vortex.AuxView.Consume frame={} aux_id={} producer_view={} "
-        "consumer_view={} texture='{}' target='{}'",
-        ctx.frame_sequence.get(), input.input.id.get(),
-        input.producer_view_id.get(), entry.view_id.get(),
-        source.GetDescriptor().debug_name, target->GetDescriptor().debug_name);
+        graphics::GpuEventScope consume_scope(recorder,
+          "Vortex.AuxView.Consume", profiling::ProfileGranularity::kTelemetry,
+          profiling::ProfileCategory::kPass,
+          profiling::Vars(profiling::Var("aux_id", input.input.id.get()),
+            profiling::Var("producer_view", input.producer_view_id.get()),
+            profiling::Var("consumer_view", entry.view_id.get()),
+            profiling::Var("debug_name", input.debug_name)));
+        auto& source = *product_it->second.texture;
+        TrackAuxiliaryColorTexture(gfx_, recorder, source);
+        TrackAuxiliaryColorTexture(gfx_, recorder, *target);
+        CopyAuxiliaryTextureToRegion(recorder, source, *target,
+          BuildAuxiliaryConsumerViewport(*target));
+        recorder.RequireResourceStateFinal(
+          source, graphics::ResourceStates::kRenderTarget);
+        recorder.RequireResourceStateFinal(
+          *target, graphics::ResourceStates::kRenderTarget);
+        recorder.FlushBarriers();
+        LOG_F(INFO,
+          "Vortex.AuxView.Consume frame={} aux_id={} producer_view={} "
+          "consumer_view={} texture='{}' target='{}'",
+          ctx.frame_sequence.get(), input.input.id.get(),
+          input.producer_view_id.get(), entry.view_id.get(),
+          source.GetDescriptor().debug_name, target->GetDescriptor().debug_name);
+      }
+      if (!entry.produced_aux_outputs.empty()
+        && !ResolveFramebufferColorTexture(ResolveViewOutputTarget(ctx))) {
+        throw std::runtime_error("Required auxiliary output has no color texture");
+      }
+      renderer_.PublishCurrentViewPostSceneFrameBindings(ctx, *this);
+      renderer_.DispatchViewExtensionsOnPostRenderViewGpu(ctx, recorder);
+      result.failure = ViewRenderFailure::kSubmission;
+      if (!recording.Submit()) {
+        ResetPerViewSceneProducts();
+        continue;
+      }
+      ctx.frame_views[view_index].rendered = true;
+      result.state = ViewRenderState::kSubmitted;
+      result.failure = ViewRenderFailure::kNone;
+      const auto* lighting_bindings = lighting_
+        ? lighting_->InspectForwardLightBindings(entry.view_id) : nullptr;
+      result.lighting_validated = !lighting_bindings || lighting_bindings->local_count == 0U;
+      result.output_checks_lighting = published_view_frame_bindings_.post_process_frame_slot.IsValid();
+      ++rendered_scene_view_count;
+
+      for (const auto& output : entry.produced_aux_outputs) {
+        if (output.kind != CompositionView::AuxOutputKind::kColorTexture) {
+          continue;
+        }
+        auto texture
+          = ResolveFramebufferColorTexture(ResolveViewOutputTarget(ctx));
+        CHECK_F(static_cast<bool>(texture),
+          "SceneRenderer: auxiliary output {} from view {} has no color texture",
+          output.id.get(), entry.view_id.get());
+        auxiliary_products.insert_or_assign(output.id,
+          AuxiliaryProduct {
+            .texture = texture,
+          });
+        LOG_F(INFO,
+          "Vortex.AuxView.Extract frame={} aux_id={} producer_view={} "
+          "texture='{}' debug_name='{}'",
+          ctx.frame_sequence.get(), output.id.get(), entry.view_id.get(),
+          texture->GetDescriptor().debug_name, output.debug_name);
+      }
+
+    } catch (const std::exception& error) {
+      result.state = ViewRenderState::kFailed;
+      if (result.failure == ViewRenderFailure::kNone) result.failure = ViewRenderFailure::kRecording;
+      if (ctx.frame_views[view_index].rendered) --rendered_scene_view_count;
+      ctx.frame_views[view_index].rendered = false;
+      ResetPerViewSceneProducts();
+      LOG_F(ERROR, "View {} failed: {}", entry.view_id.get(), error.what());
     }
   }
 
@@ -1780,6 +1824,46 @@ void SceneRenderer::RenderViewFamily(RenderContext& ctx)
     scene_texture_pool_.GetLiveLeaseCount());
 }
 
+auto SceneRenderer::InspectViewRenderStatus(ViewId view_id) const
+  -> std::optional<ViewRenderStatus>
+{
+  const auto found = view_render_status_.find(view_id);
+  if (found == view_render_status_.end()) return std::nullopt;
+  auto result = found->second;
+  if (result.state == ViewRenderState::kSubmitted && !result.lighting_validated) {
+    if (!lighting_ || !lighting_->InspectGridResources(view_id).status) {
+      result.lighting_validated = true;
+    } else if (const auto completed = lighting_->InspectCompletedGrid(view_id);
+      completed && completed->sequence == result.frame_sequence) {
+      result.lighting_validated = completed->status.state == kLightGridBuildValid;
+      if (completed->status.state == kLightGridBuildFailed) {
+        result.state = ViewRenderState::kFailed;
+        result.failure = ViewRenderFailure::kLighting;
+        result.gpu_lighting_failure = completed->status.reason;
+      }
+    }
+  }
+  if (result.state == ViewRenderState::kSubmitted) {
+    for (const auto source : result.required_input_views) {
+      const auto dependency = InspectViewRenderStatus(source);
+      if (!dependency || dependency->frame_sequence != result.frame_sequence
+        || dependency->state == ViewRenderState::kFailed) {
+        result.state = ViewRenderState::kFailed;
+        result.failure = ViewRenderFailure::kRequiredInput;
+        result.lighting_validated = false;
+        break;
+      }
+      result.lighting_validated &= dependency->lighting_validated;
+    }
+  }
+  return result;
+}
+
+auto SceneRenderer::ResolveViewLightingFrameSlot(ViewId view_id) const -> ShaderVisibleIndex
+{
+  return lighting_ ? lighting_->ResolveLightingFrameSlot(view_id) : kInvalidShaderVisibleIndex;
+}
+
 auto SceneRenderer::OnRender(RenderContext& ctx) -> bool
 {
   if (!ctx.frame_views.empty() && ctx.current_view.view_id == kInvalidViewId
@@ -1788,36 +1872,58 @@ auto SceneRenderer::OnRender(RenderContext& ctx) -> bool
     return std::ranges::any_of(
       ctx.frame_views, [](const auto& view) -> auto { return view.rendered; });
   }
-  auto recording = gfx_.AcquireCommandRecorder(
-    gfx_.QueueKeyFor(graphics::QueueRole::kGraphics), "Vortex View",
-    graphics::SubmissionPolicy::kExplicit);
-  if (!recording) {
-    return false;
-  }
-  auto& recorder = *recording;
-  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(recorder);
-  recorder.OnSubmission(
-    [this](const graphics::SubmissionOutcome outcome) -> void {
-      if (outcome == graphics::SubmissionOutcome::kDiscarded) {
-        ResetPerViewSceneProducts();
-      }
-    });
-  if (post_process_ && !ctx.current_view.frame_exposure
-    && !renderer_.PublishCurrentViewPreSceneFrameBindings(
-      ctx, recorder, *this)) {
-    return false;
-  }
-  if (!RenderCurrentView(ctx, recorder) || !recording.Submit()) {
+  auto& result = view_render_status_[ctx.current_view.view_id];
+  result = { .view_id = ctx.current_view.view_id, .frame_sequence = ctx.frame_sequence,
+    .state = ViewRenderState::kFailed, .failure = ViewRenderFailure::kRecording };
+  try {
+    auto recording = gfx_.AcquireCommandRecorder(
+      gfx_.QueueKeyFor(graphics::QueueRole::kGraphics), "Vortex View",
+      graphics::SubmissionPolicy::kExplicit);
+    if (!recording) {
+      return false;
+    }
+    auto& recorder = *recording;
+    renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(recorder);
+    recorder.OnSubmission(
+      [this](const graphics::SubmissionOutcome outcome) -> void {
+        if (outcome == graphics::SubmissionOutcome::kDiscarded) {
+          ResetPerViewSceneProducts();
+        }
+      });
+    if (post_process_ && !ctx.current_view.frame_exposure
+      && !renderer_.PublishCurrentViewPreSceneFrameBindings(
+        ctx, recorder, *this)) {
+      return false;
+    }
+    if (!RenderCurrentView(ctx, recorder)) {
+      ResetPerViewSceneProducts();
+      return false;
+    }
+    result.failure = ViewRenderFailure::kSubmission;
+    if (!recording.Submit()) {
+      ResetPerViewSceneProducts();
+      return false;
+    }
+    result.state = ViewRenderState::kSubmitted;
+    result.failure = ViewRenderFailure::kNone;
+    const auto* lighting_bindings = lighting_
+      ? lighting_->InspectForwardLightBindings(ctx.current_view.view_id) : nullptr;
+    result.lighting_validated = !lighting_bindings || lighting_bindings->local_count == 0U;
+    result.output_checks_lighting = published_view_frame_bindings_.post_process_frame_slot.IsValid();
+    return true;
+  } catch (const std::exception& error) {
     ResetPerViewSceneProducts();
+    LOG_F(ERROR, "View {} failed: {}", ctx.current_view.view_id.get(), error.what());
     return false;
   }
-  return true;
+
 }
 
 auto SceneRenderer::RenderCurrentView(
   RenderContext& ctx, graphics::CommandRecorder& recorder) -> bool
 {
   deferred_lighting_state_ = {};
+  ctx.current_view.lighting_frame_slot = kInvalidShaderVisibleIndex;
   auto& scene_textures = ActiveSceneTextures();
   if (!ctx.current_view.frame_exposure) {
     ctx.current_view.hdr_color_format
@@ -1951,6 +2057,7 @@ auto SceneRenderer::RenderCurrentView(
       = lighting_bindings->view_generation;
     deferred_lighting_state_.published_lighting_frame_slot
       = published_view_frame_bindings_.lighting_frame_slot;
+    ctx.current_view.lighting_frame_slot = published_view_frame_bindings_.lighting_frame_slot;
     RecordDiagnosticsPass(renderer_,
       DiagnosticsPassRecord {
         .name = "Vortex.Stage6.ForwardLightData",
@@ -2173,9 +2280,9 @@ auto SceneRenderer::RenderCurrentView(
       "Vortex.Stage8.ShadowDepth",
       published_view_frame_bindings_.shadow_frame_slot);
   }
-  if (reported_lighting_failure_
-    && reported_lighting_failure_->view_id == ctx.current_view.view_id) {
-    reported_lighting_failure_.reset();
+  ctx.current_view.lighting_frame_slot = published_view_frame_bindings_.lighting_frame_slot;
+  if (reported_lighting_failures_.erase(ctx.current_view.view_id) != 0U) {
+    LOG_F(INFO, "Lighting recovered for view {}", ctx.current_view.view_id.get());
   }
   if (environment_ != nullptr && wants_environment) {
     const auto enable_static_sky_light_ambient_bridge
@@ -2764,6 +2871,8 @@ void SceneRenderer::PreserveRemovedExposureSource(
 void SceneRenderer::RemoveViewState(const ViewId view_id,
   const CompositionView::ViewStateHandle view_state_handle)
 {
+  view_render_status_.erase(view_id);
+  reported_lighting_failures_.erase(view_id);
   InvalidatePublishedViewFrameBindings();
   exposure_product_layouts_.erase(view_state_handle);
   scene_color_pool_->RemoveView(view_id);

@@ -557,7 +557,11 @@ void VortexVolumetricFogCS(uint3 dispatch_id : SV_DispatchThreadID)
     float4 history_value = output_value;
     const bool fp32_only = IsFp32OnlyExposure();
     bool certified_history = true;
-    if (!fp32_only && pass.exposure_status_uav != K_INVALID_BINDLESS_INDEX) {
+    if (pass.previous_error_bounds_srv != K_INVALID_BINDLESS_INDEX) {
+        ByteAddressBuffer previous_status = ResourceDescriptorHeap[pass.previous_error_bounds_srv];
+        certified_history = (previous_status.Load(48u) & 18u) == 0u;
+    }
+    if (certified_history && !fp32_only && pass.exposure_status_uav != K_INVALID_BINDLESS_INDEX) {
         certified_history = pass.previous_error_bounds_srv != K_INVALID_BINDLESS_INDEX;
         if (certified_history) {
             ByteAddressBuffer previous_status = ResourceDescriptorHeap[pass.previous_error_bounds_srv];

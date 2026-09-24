@@ -62,6 +62,12 @@ auto LightingService::OnFrameStart(
   deferred_pass_->OnFrameStart(sequence, slot);
 }
 
+auto LightingService::InspectCompletedGrid(ViewId view_id) const
+  -> std::optional<CompletedLightGridBuild>
+{
+  return publisher_->InspectCompletedGrid(view_id);
+}
+
 auto LightingService::InspectGridResources(ViewId view_id) const
   -> LightGridResources
 {

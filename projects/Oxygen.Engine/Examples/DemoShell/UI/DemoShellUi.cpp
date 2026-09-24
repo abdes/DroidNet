@@ -171,6 +171,34 @@ namespace {
     }
   }
 
+  void DrawViewFailures(const engine::FrameContext& frame,
+    const vortex::Renderer& renderer)
+  {
+    bool opened = false;
+    bool visible = false;
+    for (const auto entry : frame.GetViews()) {
+      const auto& view = entry.get();
+      if (!view.metadata.is_scene_view) continue;
+      const auto status = renderer.InspectViewRenderStatus(view.id);
+      if (!status || status->state != vortex::ViewRenderState::kFailed) continue;
+      if (!opened) {
+        const auto* viewport = ImGui::GetMainViewport();
+        ImGui::SetNextWindowPos(
+          { viewport->WorkPos.x + viewport->WorkSize.x * 0.5F,
+            viewport->WorkPos.y + 12.0F },
+          ImGuiCond_Always, { 0.5F, 0.0F });
+        visible = ImGui::Begin("Rendering failed", nullptr,
+          ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize
+            | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoSavedSettings);
+        opened = true;
+      }
+      if (visible) {
+        ImGui::Text("%s: rendering failed", view.metadata.name.c_str());
+      }
+    }
+    if (opened) ImGui::End();
+  }
+
 } // namespace
 
 struct DemoShellUi::Impl {
@@ -526,6 +554,7 @@ auto DemoShellUi::Draw(observer_ptr<engine::FrameContext> fc) -> void
   // Settings now flow through UiSettingsVm instead of view-owned state.
   impl_->axes_widget.Draw(impl_->ui_settings_vm.GetActiveCamera());
   impl_->stats_overlay.Draw(fc);
+  if (fc) DrawViewFailures(*fc, renderer);
 
   if (impl_->file_browser_service) {
     impl_->file_browser_service->UpdateAndDraw();

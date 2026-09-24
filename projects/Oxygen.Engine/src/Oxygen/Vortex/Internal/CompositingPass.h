@@ -13,6 +13,7 @@
 #include <vector>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Vortex/Passes/GraphicsRenderPass.h>
@@ -36,6 +37,8 @@ struct CompositingPassConfig {
   std::shared_ptr<graphics::Texture> source_texture;
   ViewPort viewport {};
   float alpha { 1.0F };
+  bool failed_view { false };
+  ShaderVisibleIndex lighting_frame_slot { kInvalidShaderVisibleIndex };
   std::string debug_name { "CompositingPass" };
 };
 

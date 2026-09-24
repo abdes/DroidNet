@@ -308,7 +308,7 @@ left/top/width/height at 16/20/24/28, mode/radius at 32/36, mask index/backgroun
 flag at 40/44, fixture inverse P/black influence at 48/52, frame-exposure SRV at
 56, and zero padding at 60. With a valid frame SRV, metering reads 1/P from that
 GPU record; the scalar is used only when no numerical-domain record is supplied.
-The 112-byte unified solve record retains histogram/state indices at 0/4,
+The 128-byte unified solve record retains histogram/state indices at 0/4,
 minimum log luminance/span at 8/12, low/high percentiles at 16/20, minimum EV/D
 at 24/28 (D stored as log2), log2 up/down speed at 32/36, log2 delta/target SRV at 40/44, settings revision
 at 48 and frame sequence at 56. The control tail is specified under
@@ -1963,14 +1963,20 @@ The flag follows the actual destination format, not an inferred exposure mode.
 
 ## Unified solve controls (slice 4 implementation)
 
-The solve record is 112 bytes. Its original 64-byte metering/rate/revision prefix
+The solve record is 128 bytes. Its original 64-byte metering/rate/revision prefix
 is followed by previous-state SRV at 64, exact fixed scale at 68, mode at 72
 (Manual=0, ManualCamera=1, Auto=2, disabled=3), control flags at 76 (invalid seed
 bit 0, source initialization fallback bit 1, captured rejection reason in bits
 2..5, source-loss continuity bit 6, preserve current producer status bit 7), request generation uint2 at 80,
 policy at 88 (none=0, Preserve=1, Remeter=2, Seed=3), seed log gain at 92,
 status UAV at 96, borrowed prior-state SRV at 100 (invalid for owner solves),
-and view lifetime uint2 at 104. State flags add mode in bits 10..11,
+view lifetime uint2 at 104, lighting-frame SRV at 112 and zero padding at 116..127.
+A failed lighting publication preserves accepted gains and pending transition
+acknowledgements, clears current meter validity, and publishes producer failure.
+Tonemap checks the same lighting publication before reading scene color and writes
+the display-space failed-view marker. Fog rejects histories whose completed
+exposure status records a producer failure, including FP32-only histories.
+State flags add mode in bits 10..11,
 request rejection in bit 12 and its reason in bits 16..19 (1=not Auto,
 2=unsupported seed, 3=sharing consumer). The 80-byte exposure state remains
 unchanged in size. Borrowed records set bit 7 and do not claim a local metered
