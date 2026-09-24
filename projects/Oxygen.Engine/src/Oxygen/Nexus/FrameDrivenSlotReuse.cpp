@@ -13,20 +13,26 @@ FrameDrivenSlotReuse::FrameDrivenSlotReuse(AllocateFn allocate, FreeFn free,
   graphics::detail::DeferredReclaimer& per_frame)
   : allocate_(std::move(allocate))
   , free_(std::move(free))
-  , impl_(per_frame, [this](bindless::HeapIndex idx, DomainKey key) {
-    if (free_) {
-      free_(key, idx);
-    }
-  })
+  , impl_(per_frame,
+      [free = free_](bindless::HeapIndex idx, DomainKey key) noexcept {
+        if (free) {
+          free(key, idx);
+        }
+      })
 {
 }
 
 auto FrameDrivenSlotReuse::Allocate(DomainKey domain) -> VersionedBindlessHandle
 {
   const auto idx = allocate_(domain);
-  const auto versioned_idx = impl_.ActivateSlot(idx);
-  return VersionedBindlessHandle { versioned_idx.index,
-    versioned_idx.generation };
+  try {
+    const auto versioned_idx = impl_.ActivateSlot(idx);
+    return VersionedBindlessHandle { versioned_idx.index,
+      versioned_idx.generation };
+  } catch (...) {
+    free_(domain, idx);
+    throw;
+  }
 }
 
 auto FrameDrivenSlotReuse::Release(DomainKey domain, VersionedBindlessHandle h)

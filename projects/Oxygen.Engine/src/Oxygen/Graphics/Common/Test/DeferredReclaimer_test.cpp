@@ -16,6 +16,61 @@ using namespace oxygen::graphics::detail;
 using testing::Test;
 namespace frame = oxygen::frame;
 
+NOLINT_TEST(PreparedDeferredReclaimerTest, PreservesMixedEnqueueOrder)
+{
+  DeferredReclaimer reclaimer;
+  std::vector<int> observed;
+  observed.reserve(4);
+  auto first = reclaimer.PrepareDeferredAction([&] { observed.push_back(2); });
+  auto second = reclaimer.PrepareDeferredAction([&] { observed.push_back(4); });
+  reclaimer.RegisterDeferredAction([&] { observed.push_back(1); });
+  reclaimer.CommitDeferredAction(std::move(first));
+  reclaimer.RegisterDeferredAction([&] { observed.push_back(3); });
+  reclaimer.CommitDeferredAction(std::move(second));
+  reclaimer.OnBeginFrame(frame::Slot { 0 });
+  EXPECT_EQ(observed, (std::vector<int> { 1, 2, 3, 4 }));
+}
+
+NOLINT_TEST(PreparedDeferredReclaimerTest, ReentrantEnqueueWaitsForNextDrain)
+{
+  DeferredReclaimer reclaimer;
+  int count = 0;
+  auto nested = reclaimer.PrepareDeferredAction([&] { ++count; });
+  reclaimer.RegisterDeferredAction([&] {
+    ++count;
+    reclaimer.CommitDeferredAction(std::move(nested));
+  });
+  reclaimer.OnBeginFrame(frame::Slot { 0 });
+  EXPECT_EQ(count, 1);
+  reclaimer.OnBeginFrame(frame::Slot { 0 });
+  EXPECT_EQ(count, 2);
+}
+
+NOLINT_TEST(
+  PreparedDeferredReclaimerTest, ThrowingActionCannotSkipLaterRetirements)
+{
+  DeferredReclaimer reclaimer;
+  int count = 0;
+  reclaimer.RegisterDeferredAction([] { throw std::runtime_error("test"); });
+  auto action = reclaimer.PrepareDeferredAction([&] { ++count; });
+  reclaimer.CommitDeferredAction(std::move(action));
+  reclaimer.RegisterDeferredAction([&] { ++count; });
+  EXPECT_NO_THROW(reclaimer.OnBeginFrame(frame::Slot { 0 }));
+  EXPECT_EQ(count, 2);
+}
+
+NOLINT_TEST(
+  PreparedDeferredReclaimerTest, DroppingUncommittedActionDoesNotInvokeIt)
+{
+  DeferredReclaimer reclaimer;
+  bool called = false;
+  {
+    auto action = reclaimer.PrepareDeferredAction([&] { called = true; });
+  }
+  reclaimer.OnRendererShutdown();
+  EXPECT_FALSE(called);
+}
+
 //===----------------------------------------------------------------------===//
 // Test Fixtures and Helper Classes
 //===----------------------------------------------------------------------===//

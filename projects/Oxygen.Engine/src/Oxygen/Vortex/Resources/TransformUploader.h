@@ -15,9 +15,8 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Frame.h>
-#include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
-#include <Oxygen/Nexus/FrameDrivenSlotReuse.h>
+#include <Oxygen/Nexus/GenerationTracker.h>
 #include <Oxygen/Vortex/RendererTag.h>
 #include <Oxygen/Vortex/ScenePrep/Handles.h>
 #include <Oxygen/Vortex/Upload/StagingProvider.h>
@@ -71,13 +70,9 @@ namespace oxygen::vortex::resources {
 
  ### Semantics and guarantees
 
- - Handle stability: A `TransformHandle` is valid iff the index+generation pair
-
- matches the current Nexus slot state and its index is less than
-
- `GetWorldMatrices().size()`. Handles are stable across frames when the
-
- allocation pattern reuses slots in the same order.
+ - Handle stability: A `TransformHandle` is valid iff its generation matches
+   the stored stamp and its index is less than `GetWorldMatrices().size()`.
+   Handles are stable across frames when allocation order reuses the same slots.
  - Slot reuse: The uploader
  reuses existing slots in the order transforms are requested within a frame.
  This is intentional and allows handles to be deterministic across frames for
@@ -155,8 +150,8 @@ private:
   observer_ptr<Graphics> gfx_;
   observer_ptr<ProviderT> staging_provider_;
   observer_ptr<CoordinatorT> inline_transfers_;
-  graphics::detail::DeferredReclaimer slot_reclaimer_;
-  nexus::FrameDrivenSlotReuse slot_reuse_;
+  nexus::GenerationTracker generations_;
+  std::uint32_t generation_capacity_ { 0U };
 
   // Transient per-frame GPU buffers for transforms (direct-write strategy)
   using StagingBufferT = vortex::upload::TransientStructuredBuffer;

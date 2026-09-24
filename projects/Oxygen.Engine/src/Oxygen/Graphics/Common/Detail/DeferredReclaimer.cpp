@@ -12,11 +12,34 @@
 
 using oxygen::graphics::detail::DeferredReclaimer;
 
+struct DeferredReclaimer::PreparedDeferredAction::Node {
+  std::function<void()> action;
+  uint64_t sequence { 0 };
+  std::unique_ptr<Node> next;
+};
+
+DeferredReclaimer::PreparedDeferredAction::PreparedDeferredAction() noexcept
+  = default;
+DeferredReclaimer::PreparedDeferredAction::~PreparedDeferredAction() = default;
+DeferredReclaimer::PreparedDeferredAction::PreparedDeferredAction(
+  PreparedDeferredAction&&) noexcept = default;
+auto DeferredReclaimer::PreparedDeferredAction::operator=(
+  PreparedDeferredAction&&) noexcept -> PreparedDeferredAction& = default;
+
 struct DeferredReclaimer::Impl {
   std::atomic<frame::Slot::UnderlyingType> current_frame_slot { 0 };
   static constexpr std::size_t kFrameBuckets = frame::kFramesInFlight.get();
-  std::array<std::vector<std::function<void()>>, kFrameBuckets>
-    deferred_releases_ {};
+  struct Action {
+    uint64_t sequence;
+    std::function<void()> invoke;
+  };
+  struct Bucket {
+    std::vector<Action> ordinary;
+    std::unique_ptr<PreparedDeferredAction::Node> prepared;
+    PreparedDeferredAction::Node* tail { nullptr };
+    uint64_t next_sequence { 0 };
+  };
+  std::array<Bucket, kFrameBuckets> deferred_releases_ {};
   std::array<std::mutex, kFrameBuckets> deferred_mutexes_ {};
 };
 
@@ -28,8 +51,9 @@ DeferredReclaimer::DeferredReclaimer()
 DeferredReclaimer::~DeferredReclaimer()
 {
   if (!std::all_of(impl_->deferred_releases_.begin(),
-        impl_->deferred_releases_.end(),
-        [](const auto& vec) { return vec.empty(); })) {
+        impl_->deferred_releases_.end(), [](const auto& bucket) {
+          return bucket.ordinary.empty() && !bucket.prepared;
+        })) {
     LOG_F(
       WARNING, "DeferredReclaimer destroyed with pending deferred releases");
     ProcessAllDeferredReleases();
@@ -65,23 +89,39 @@ auto DeferredReclaimer::ReleaseDeferredResources(const frame::Slot frame_slot)
   // Acquire lock, swap vector with a local one and release lock so that the
   // callbacks can run without holding the mutex. This allows worker threads
   // to register actions concurrently.
-  std::vector<std::function<void()>> local_releases;
+  Impl::Bucket detached;
   {
     std::lock_guard<std::mutex> lock(impl_->deferred_mutexes_[u_frame_slot]);
-    local_releases = std::move(impl_->deferred_releases_[u_frame_slot]);
-    impl_->deferred_releases_[u_frame_slot].clear();
+    std::swap(detached, impl_->deferred_releases_[u_frame_slot]);
   }
 
 #if !defined(NDEBUG)
-  if (!local_releases.empty()) {
+  if (!detached.ordinary.empty() || detached.prepared) {
     LOG_SCOPE_FUNCTION(2);
     DLOG_F(2, "Frame [{}]", frame_slot);
-    DLOG_F(2, "{} objects to release", local_releases.size());
+    DLOG_F(2, "{} ordinary actions to release", detached.ordinary.size());
   }
 #endif // NDEBUG
 
-  for (auto& release : local_releases) {
-    release();
+  const auto dispatch = [](std::function<void()>& action) noexcept {
+    try {
+      action();
+    } catch (...) {
+      LOG_F(ERROR, "Deferred action threw; continuing detached releases");
+    }
+  };
+  auto ordinary = detached.ordinary.begin();
+  while (ordinary != detached.ordinary.end() || detached.prepared) {
+    if (detached.prepared
+      && (ordinary == detached.ordinary.end()
+        || detached.prepared->sequence < ordinary->sequence)) {
+      auto node = std::move(detached.prepared);
+      detached.prepared = std::move(node->next);
+      dispatch(node->action);
+    } else {
+      dispatch(ordinary->invoke);
+      ++ordinary;
+    }
   }
 }
 
@@ -124,5 +164,34 @@ auto DeferredReclaimer::RegisterDeferredAction(std::function<void()> action)
     = impl_->current_frame_slot.load(std::memory_order_acquire);
   auto& bucket = impl_->deferred_releases_[frame_idx];
   std::lock_guard<std::mutex> lock(impl_->deferred_mutexes_[frame_idx]);
-  bucket.emplace_back(std::move(action));
+  bucket.ordinary.push_back({ bucket.next_sequence, std::move(action) });
+  ++bucket.next_sequence;
+}
+
+auto DeferredReclaimer::PrepareDeferredAction(std::function<void()> action)
+  -> PreparedDeferredAction
+{
+  PreparedDeferredAction prepared;
+  prepared.node_ = std::make_unique<PreparedDeferredAction::Node>();
+  prepared.node_->action = std::move(action);
+  return prepared;
+}
+
+auto DeferredReclaimer::CommitDeferredAction(
+  PreparedDeferredAction&& action) noexcept -> void
+{
+  if (!action.node_) {
+    return;
+  }
+  const auto index = impl_->current_frame_slot.load(std::memory_order_acquire);
+  std::lock_guard lock(impl_->deferred_mutexes_[index]);
+  auto& bucket = impl_->deferred_releases_[index];
+  action.node_->sequence = bucket.next_sequence++;
+  auto* tail = action.node_.get();
+  if (bucket.tail) {
+    bucket.tail->next = std::move(action.node_);
+  } else {
+    bucket.prepared = std::move(action.node_);
+  }
+  bucket.tail = tail;
 }

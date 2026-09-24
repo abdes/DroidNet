@@ -7,11 +7,10 @@
 #include <variant>
 #include <vector>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Nexus/FrameDrivenIndexReuse.h>
+#include <Oxygen/Testing/GTest.h>
 
 using oxygen::graphics::detail::DeferredReclaimer;
 using oxygen::nexus::FrameDrivenIndexReuse;
@@ -136,3 +135,59 @@ NOLINT_TEST_F(GenericFrameDrivenIndexReuseTest, ReuseIncrementsGeneration)
 }
 
 } // namespace
+
+NOLINT_TEST_F(
+  GenericFrameDrivenIndexReuseTest, CallbackCanReactivateAndRetireSameIndex)
+{
+  DeferredReclaimer reclaimer;
+  using Strategy = FrameDrivenIndexReuse<uint32_t>;
+  Strategy* active = nullptr;
+  int callbacks = 0;
+  VersionedIndex<uint32_t> second;
+  Strategy strategy(reclaimer, [&](uint32_t index, std::monostate) noexcept {
+    ++callbacks;
+    if (callbacks == 1) {
+      second = active->ActivateSlot(index);
+      active->Release(second);
+    }
+  });
+  active = &strategy;
+  strategy.Release(strategy.ActivateSlot(0));
+  reclaimer.OnBeginFrame(oxygen::frame::Slot { 0 });
+  EXPECT_EQ(callbacks, 1);
+  EXPECT_EQ(strategy.GetTelemetrySnapshot().pending_count, 1U);
+  EXPECT_FALSE(strategy.IsHandleCurrent(second));
+  reclaimer.OnBeginFrame(oxygen::frame::Slot { 0 });
+  EXPECT_EQ(callbacks, 2);
+  EXPECT_EQ(strategy.GetTelemetrySnapshot().pending_count, 0U);
+}
+
+NOLINT_TEST_F(
+  GenericFrameDrivenIndexReuseTest, FacadeDestructionClosesQueuedCallback)
+{
+  DeferredReclaimer reclaimer;
+  bool called = false;
+  {
+    FrameDrivenIndexReuse<uint32_t> strategy(
+      reclaimer, [&](uint32_t, std::monostate) noexcept { called = true; });
+    strategy.Release(strategy.ActivateSlot(7));
+  }
+  reclaimer.OnRendererShutdown();
+  EXPECT_FALSE(called);
+}
+
+NOLINT_TEST_F(
+  GenericFrameDrivenIndexReuseTest, DuplicateActivationPreservesPreparedRelease)
+{
+  DeferredReclaimer reclaimer;
+  int callbacks = 0;
+  FrameDrivenIndexReuse<uint32_t> strategy(
+    reclaimer, [&](uint32_t, std::monostate) noexcept { ++callbacks; });
+  const auto handle = strategy.ActivateSlot(2);
+  EXPECT_THROW(strategy.ActivateSlot(2), std::logic_error);
+  strategy.Release(handle);
+  strategy.Release(handle);
+  reclaimer.OnRendererShutdown();
+  EXPECT_EQ(callbacks, 1);
+  EXPECT_EQ(strategy.GetTelemetrySnapshot().duplicate_reject_count, 1U);
+}

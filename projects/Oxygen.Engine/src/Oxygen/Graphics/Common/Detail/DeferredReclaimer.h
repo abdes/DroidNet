@@ -42,6 +42,22 @@ concept HasGetTypeName = requires(T t) {
 class DeferredReclaimer {
 
 public:
+  //! An allocated action node; committing it to a frame bucket cannot allocate.
+  class PreparedDeferredAction {
+  public:
+    OXGN_GFX_API PreparedDeferredAction() noexcept;
+    OXGN_GFX_API ~PreparedDeferredAction();
+    OXGN_GFX_API PreparedDeferredAction(PreparedDeferredAction&&) noexcept;
+    OXGN_GFX_API auto operator=(PreparedDeferredAction&&) noexcept
+      -> PreparedDeferredAction&;
+    OXYGEN_MAKE_NON_COPYABLE(PreparedDeferredAction)
+
+  private:
+    friend class DeferredReclaimer;
+    struct Node;
+    std::unique_ptr<Node> node_;
+  };
+
   OXGN_GFX_API DeferredReclaimer();
   OXGN_GFX_API ~DeferredReclaimer();
 
@@ -100,6 +116,11 @@ public:
   //! Enqueue an arbitrary action to run when the observed frame slot cycles.
   OXGN_GFX_API auto RegisterDeferredAction(std::function<void()> action)
     -> void;
+
+  OXGN_GFX_API auto PrepareDeferredAction(std::function<void()> action)
+    -> PreparedDeferredAction;
+  OXGN_GFX_API auto CommitDeferredAction(
+    PreparedDeferredAction&& action) noexcept -> void;
 
   //! Called at the beginning of a new frame to release resources from the
   //! last render of that same frame slot.

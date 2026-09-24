@@ -114,6 +114,15 @@ auto AtlasBuffer::EnsureCapacity(const std::uint32_t min_elements,
     return EnsureBufferResult::kUnchanged;
   }
 
+  // Every allocated element can be returned to any frame bucket. Reserve before
+  // publishing capacity so release (including failed caller activation) and
+  // frame reclamation cannot allocate.
+  const auto return_capacity = static_cast<std::size_t>(target_bytes / stride_);
+  free_list_.reserve(return_capacity);
+  for (auto& retired : retire_lists_) {
+    retired.reserve(return_capacity);
+  }
+
   auto result = internal::EnsureBufferAndSrv(*gfx_, primary_buffer_,
     primary_srv_, target_bytes, stride_, debug_label_, domain_);
   if (!result) {
@@ -205,7 +214,7 @@ auto AtlasBuffer::Allocate(const std::uint32_t count)
  ### Performance Characteristics
 
  - Time Complexity: O(1) push into retire list.
- - Memory: No allocation; vector may occasionally grow.
+ - Memory: No allocation; return capacity is reserved before allocation.
 
  @note Releasing an ElementRef whose SRV does not match the primary is ignored
    (Phase 1 invariant enforcement).

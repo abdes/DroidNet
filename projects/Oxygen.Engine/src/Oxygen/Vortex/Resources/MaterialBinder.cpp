@@ -24,6 +24,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Content/EvictionEvents.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/ResourceKey.h>
@@ -675,7 +676,7 @@ MaterialBinder::Impl::Impl(const observer_ptr<Graphics> gfx,
   , asset_loader_(asset_loader)
   , slot_reuse_(slot_reclaimer_,
       [free_indices = free_indices_](
-        bindless::HeapIndex index, std::monostate /*unused*/) -> void {
+        bindless::HeapIndex index, std::monostate /*unused*/) noexcept -> void {
         if (free_indices) {
           free_indices->push_back(index);
         }
@@ -1071,11 +1072,21 @@ auto MaterialBinder::Impl::GetOrAllocate(
 
   std::uint32_t index = 0U;
   if (free_indices_->empty()) {
+    if (free_indices_->capacity() <= next_handle_index_) {
+      free_indices_->reserve((std::max)(free_indices_->capacity() * 2U,
+        static_cast<std::size_t>(next_handle_index_) + 1U));
+    }
     index = next_handle_index_++;
   } else {
     index = free_indices_->back().get();
     free_indices_->pop_back();
   }
+  bool activated = false;
+  const auto restore_index = ScopeGuard([&]() noexcept {
+    if (!activated) {
+      free_indices_->push_back(bindless::HeapIndex { index });
+    }
+  });
   const auto constants
     = SerializeMaterialShadingConstants(material, *texture_binder_);
   const auto procedural_grid_constants
@@ -1086,6 +1097,19 @@ auto MaterialBinder::Impl::GetOrAllocate(
     return vortex::sceneprep::kInvalidMaterialHandle;
   }
 
+  if (materials_.size() <= index) {
+    material_shading_constants_.resize(static_cast<std::size_t>(index) + 1U);
+    procedural_grid_material_constants_.resize(
+      static_cast<std::size_t>(index) + 1U);
+    material_refs_.resize(static_cast<std::size_t>(index) + 1U);
+    procedural_grid_material_refs_.resize(static_cast<std::size_t>(index) + 1U);
+    // Publish the common size last; a failed earlier growth must be retried.
+    materials_.resize(static_cast<std::size_t>(index) + 1U);
+  }
+  if (material_handle_generations_.size() <= index) {
+    material_handle_generations_.resize(
+      static_cast<std::size_t>(index) + 1U, 0U);
+  }
   auto ref = materials_atlas_->Allocate(1);
   if (!ref.has_value()) {
     LOG_F(ERROR, "Failed to allocate material atlas element");
@@ -1098,26 +1122,22 @@ auto MaterialBinder::Impl::GetOrAllocate(
     return vortex::sceneprep::kInvalidMaterialHandle;
   }
 
-  const auto versioned_handle
-    = slot_reuse_.ActivateSlot(bindless::HeapIndex { index });
+  const auto versioned_handle = [&] {
+    try {
+      return slot_reuse_.ActivateSlot(bindless::HeapIndex { index });
+    } catch (...) {
+      materials_atlas_->Release(*ref, current_frame_slot_);
+      procedural_grid_materials_atlas_->Release(*grid_ref, current_frame_slot_);
+      throw;
+    }
+  }();
   const auto handle = vortex::sceneprep::MaterialHandle {
     vortex::sceneprep::MaterialHandle::Index { versioned_handle.index.get() },
     vortex::sceneprep::MaterialHandle::Generation {
       versioned_handle.generation.get() },
   };
 
-  if (materials_.size() <= index) {
-    materials_.resize(static_cast<std::size_t>(index) + 1U);
-    material_shading_constants_.resize(static_cast<std::size_t>(index) + 1U);
-    procedural_grid_material_constants_.resize(
-      static_cast<std::size_t>(index) + 1U);
-    material_refs_.resize(static_cast<std::size_t>(index) + 1U);
-    procedural_grid_material_refs_.resize(static_cast<std::size_t>(index) + 1U);
-  }
-  if (material_handle_generations_.size() <= index) {
-    material_handle_generations_.resize(
-      static_cast<std::size_t>(index) + 1U, 0U);
-  }
+  activated = true;
 
   // NOLINTBEGIN(*-pro-bounds-avoid-unchecked-container-access)
   materials_[index] = material.resolved_asset;

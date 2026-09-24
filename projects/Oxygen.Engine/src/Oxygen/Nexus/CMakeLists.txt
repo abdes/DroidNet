@@ -58,6 +58,7 @@ set(
   "FrameDrivenSlotReuse.h"
   "FrameDrivenIndexReuse.h"
   "GenerationTracker.h"
+  "IndexReuse.h"
   "TimelineGatedSlotReuse.h"
   "Types/Domain.h"
 )

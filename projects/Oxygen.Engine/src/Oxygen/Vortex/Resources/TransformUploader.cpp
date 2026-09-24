@@ -20,34 +20,18 @@
 #include <Oxygen/Core/Transforms/IsFinite.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
-#include <Oxygen/Nexus/Types/Domain.h>
 #include <Oxygen/Vortex/RendererTag.h>
 #include <Oxygen/Vortex/Resources/TransformUploader.h>
 #include <Oxygen/Vortex/ScenePrep/Handles.h>
 #include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
 
 namespace oxygen::vortex::resources {
-namespace {
-
-  constexpr oxygen::nexus::DomainKey kTransformDomain {
-    .domain = oxygen::bindless::generated::kGlobalSrvDomain,
-  };
-
-} // namespace
-
 TransformUploader::TransformUploader(const observer_ptr<Graphics> gfx,
   const observer_ptr<ProviderT> provider,
   const observer_ptr<CoordinatorT> inline_transfers)
   : gfx_(gfx)
   , staging_provider_(provider)
   , inline_transfers_(inline_transfers)
-  , slot_reuse_(
-      [this](oxygen::nexus::DomainKey /*domain*/) -> bindless::HeapIndex {
-        return bindless::HeapIndex { frame_write_count_ };
-      },
-      [](oxygen::nexus::DomainKey /*domain*/,
-        bindless::HeapIndex /*index*/) -> void { },
-      slot_reclaimer_)
   , worlds_buffer_(gfx_, *staging_provider_,
       static_cast<std::uint32_t>(sizeof(glm::mat4)), inline_transfers_,
       "TransformUploader.Worlds")
@@ -65,32 +49,14 @@ TransformUploader::TransformUploader(const observer_ptr<Graphics> gfx,
 
 TransformUploader::~TransformUploader()
 {
-  const auto telemetry = slot_reuse_.GetTelemetrySnapshot();
-  const auto expected_zero_marker = [](const uint64_t value) -> const char* {
-    return value == 0U ? " ✓" : " (expected 0) !";
-  };
-
   LOG_SCOPE_F(INFO, "TransformUploader Statistics");
   LOG_F(INFO, "frames started            : {}", frames_started_count_);
-  LOG_F(INFO, "nexus.allocate_calls      : {}", telemetry.allocate_calls);
-  LOG_F(INFO, "nexus.release_calls       : {}{}", telemetry.release_calls,
-    expected_zero_marker(telemetry.release_calls));
-  LOG_F(INFO, "nexus.stale_reject_count  : {}{}", telemetry.stale_reject_count,
-    expected_zero_marker(telemetry.stale_reject_count));
-  LOG_F(INFO, "nexus.duplicate_rejects   : {}{}",
-    telemetry.duplicate_reject_count,
-    expected_zero_marker(telemetry.duplicate_reject_count));
-  LOG_F(INFO, "nexus.reclaimed_count     : {}{}", telemetry.reclaimed_count,
-    expected_zero_marker(telemetry.reclaimed_count));
-  LOG_F(INFO, "nexus.pending_count       : {}{}", telemetry.pending_count,
-    expected_zero_marker(telemetry.pending_count));
   LOG_F(INFO, "peak transform slots      : {}", transforms_.size());
 }
 
 auto TransformUploader::OnFrameStart(RendererTag /*tag*/,
   const frame::SequenceNumber sequence, const frame::Slot slot) -> void
 {
-  slot_reuse_.OnBeginFrame(slot);
   ++frames_started_count_;
   frame_write_count_ = 0U;
 
@@ -121,10 +87,13 @@ auto TransformUploader::GetOrAllocate(const glm::mat4& transform,
   DCHECK_F(transforms::IsFinite(previous_transform),
     "GetOrAllocate received non-finite previous matrix");
 
-  // Strategy A remains deterministic here because allocation order is driven by
-  // frame_write_count_ and reset at each OnFrameStart.
-  const auto versioned_handle = slot_reuse_.Allocate(kTransformDomain);
-  const auto index = versioned_handle.ToBindlessHandle().get();
+  const auto index = frame_write_count_;
+  if (index >= generation_capacity_) {
+    const auto capacity = (std::max)(64U, generation_capacity_ * 2U);
+    generations_.Resize(bindless::Capacity { capacity });
+    generation_capacity_ = capacity;
+  }
+  const auto generation = generations_.Load(bindless::HeapIndex { index });
 
   if (index >= transforms_.size()) {
     transforms_.push_back(transform);
@@ -149,7 +118,7 @@ auto TransformUploader::GetOrAllocate(const glm::mat4& transform,
   const auto handle = vortex::sceneprep::TransformHandle {
     vortex::sceneprep::TransformHandle::Index { index },
     vortex::sceneprep::TransformHandle::Generation {
-      versioned_handle.GenerationValue(),
+      generation,
     },
   };
   return handle;
@@ -166,10 +135,8 @@ auto TransformUploader::IsHandleValid(
     return false;
   }
 
-  return slot_reuse_.IsHandleCurrent(oxygen::VersionedBindlessHandle {
-    bindless::HeapIndex { handle.get() },
-    handle.GenerationValue(),
-  });
+  return generations_.Load(bindless::HeapIndex { idx })
+    == handle.GenerationValue();
 }
 
 auto TransformUploader::EnsureFrameResources() -> void
