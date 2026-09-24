@@ -156,13 +156,13 @@ internal sealed partial class NativeRuntimeCommandTransport(EngineContext contex
                 this.world.SetVisibility(value.NodeId, value.Visible);
                 break;
             case RuntimeAttachDirectionalLight value:
-                this.world.AttachDirectionalLight(value.NodeId, value.IntensityLux, value.AngularSizeRadians, value.Color, value.AffectsWorld, value.Mobility, value.CastsShadows, value.ShadowBias, value.ShadowNormalBias, value.ContactShadows, value.ShadowResolutionHint, value.ExposureCompensation, value.EnvironmentContribution, value.IsSunLight, value.CascadeCount, value.SplitMode, value.MaxShadowDistance, value.CascadeDistances, value.DistributionExponent, value.TransitionFraction, value.DistanceFadeoutFraction);
+                this.world.AttachDirectionalLight(value.NodeId, value.IntensityLux, value.AngularSizeRadians, value.Color, value.AffectsWorld, value.Mobility, value.CastsShadows, value.ShadowBias, value.ShadowNormalBias, value.ContactShadows, value.ShadowResolutionHint, value.ExposureCompensation, value.AtmosphereLightSlot, value.UsePerPixelAtmosphereTransmittance, value.AtmosphereDiskLuminanceScaleRgb, value.CascadeCount, value.SplitMode, value.MaxShadowDistance, value.CascadeDistances, value.DistributionExponent, value.TransitionFraction, value.DistanceFadeoutFraction);
                 break;
             case RuntimeAttachPointLight value:
-                this.world.AttachPointLight(value.NodeId, value.LuminousFluxLumens, value.Range, value.SourceRadius, value.DecayExponent, value.Color, value.AffectsWorld, value.CastsShadows, value.ExposureCompensation);
+                this.world.AttachPointLight(value.NodeId, value.LuminousFluxLumens, value.Range, value.SourceRadius, value.Color, value.AffectsWorld, value.CastsShadows, value.ShadowBias, value.ShadowNormalBias, value.ContactShadows, value.ShadowResolutionHint, value.ExposureCompensation);
                 break;
             case RuntimeAttachSpotLight value:
-                this.world.AttachSpotLight(value.NodeId, value.LuminousFluxLumens, value.Range, value.SourceRadius, value.DecayExponent, value.InnerConeAngleRadians, value.OuterConeAngleRadians, value.Color, value.AffectsWorld, value.CastsShadows, value.ExposureCompensation);
+                this.world.AttachSpotLight(value.NodeId, value.LuminousFluxLumens, value.Range, value.SourceRadius, value.InnerConeAngleRadians, value.OuterConeAngleRadians, value.Color, value.AffectsWorld, value.CastsShadows, value.ShadowBias, value.ShadowNormalBias, value.ContactShadows, value.ShadowResolutionHint, value.ExposureCompensation);
                 break;
             case RuntimeDetachLight value:
                 this.world.DetachLight(value.NodeId);

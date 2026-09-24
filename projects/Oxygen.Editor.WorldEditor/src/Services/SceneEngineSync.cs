@@ -874,13 +874,12 @@ public sealed partial class SceneEngineSync(
                 cancellationToken,
                 out var readinessOutcome))
         {
-            return EnvironmentResult(readinessOutcome, readinessOutcome, readinessOutcome);
+            return EnvironmentResult(readinessOutcome, readinessOutcome);
         }
 
-        var sunOutcome = await this.SyncSunBindingAsync(scene, environment, cancellationToken, dispatchOverride).ConfigureAwait(false);
         var environmentOutcome = await this.SyncEnvironmentSystemsAsync(scene, environment, cancellationToken, dispatchOverride).ConfigureAwait(false);
         var backgroundOutcome = await this.SyncBackgroundAsync(scene, environment, cancellationToken, dispatchOverride).ConfigureAwait(false);
-        return EnvironmentResult(sunOutcome, environmentOutcome, backgroundOutcome);
+        return EnvironmentResult(environmentOutcome, backgroundOutcome);
     }
 
     private async Task<bool> BuildSceneInEngineAsync(
@@ -933,12 +932,6 @@ public sealed partial class SceneEngineSync(
         }
 
         if (!this.ApplyHierarchyAndComponents(scene, world) || !this.PropagateTransforms(scene, world))
-        {
-            return false;
-        }
-
-        if (scene.Environment.SunNodeId is { } sunId
-            && FindNode(scene, sunId)?.Components.OfType<DirectionalLightComponent>().FirstOrDefault() is null)
         {
             return false;
         }
@@ -1021,45 +1014,6 @@ public sealed partial class SceneEngineSync(
                 ex.Message,
                 ex);
         }
-    }
-
-    private async Task<SyncOutcome> SyncSunBindingAsync(
-        Scene scene,
-        SceneEnvironmentData environment,
-        CancellationToken cancellationToken,
-        WorldDispatch? dispatchOverride = null)
-    {
-        if (environment.SunNodeId is not { } sunNodeId)
-        {
-            return Accepted(SceneOperationKinds.EditEnvironment, Scope(scene));
-        }
-
-        var sunNode = FindNode(scene, sunNodeId);
-        return sunNode is null
-            ? Rejected(
-                SceneOperationKinds.EditEnvironment,
-                Scope(scene, nodeId: sunNodeId, componentType: nameof(DirectionalLightComponent)),
-                LiveSyncDiagnosticCodes.EnvironmentRejected,
-                $"Environment sun node '{sunNodeId}' does not exist in the scene.")
-            : sunNode.Components.OfType<DirectionalLightComponent>().FirstOrDefault() is null
-            ? Rejected(
-                SceneOperationKinds.EditEnvironment,
-                Scope(scene, sunNode, componentType: nameof(DirectionalLightComponent)),
-                LiveSyncDiagnosticCodes.EnvironmentRejected,
-                $"Environment sun node '{sunNode.Name}' does not have a directional light component.")
-            : dispatchOverride is null
-            ? await this.AttachLightAsync(scene, sunNode, cancellationToken).ConfigureAwait(false)
-            : await this.ExecuteNodeSyncAsync(
-                scene,
-                sunNode,
-                sunNode.Id,
-                SceneOperationKinds.EditDirectionalLight,
-                nameof(DirectionalLightComponent),
-                LiveSyncDiagnosticCodes.LightRejected,
-                LiveSyncDiagnosticCodes.LightFailed,
-                world => ApplyLight(world, sunNode, sunNode.Components.OfType<DirectionalLightComponent>().First()),
-                cancellationToken,
-                dispatchOverride).ConfigureAwait(false);
     }
 
     private Task<SyncOutcome> SyncEnvironmentSystemsAsync(

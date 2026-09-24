@@ -238,10 +238,9 @@
             HeaderIcon="{ui:FontIcon Glyph='&#xE706;'}"
             IsExpanded="True">
             <editorcontrols:PropertiesExpander.Items>
-                <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Sun Light">
+                <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Primary source">
                     <Grid ColumnSpacing="8" RowSpacing="6">
                         <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
@@ -256,17 +255,11 @@
                         <Button
                             Grid.Column="1"
                             Command="{x:Bind ViewModel.ClearSunCommand}"
-                            ToolTipService.ToolTip="Clear sun binding">
+                            ToolTipService.ToolTip="Clear Primary assignment">
                             <FontIcon Glyph="&#xE711;" />
                         </Button>
-                        <InfoBar
-                            Grid.Row="1"
-                            Grid.ColumnSpan="2"
-                            IsOpen="{x:Bind ViewModel.HasStaleSun, Mode=OneWay}"
-                            Message="{x:Bind ViewModel.StaleSunText, Mode=OneWay}"
-                            Severity="Warning" />
                         <TextBlock
-                            Grid.Row="2"
+                            Grid.Row="1"
                             Grid.ColumnSpan="2"
                             AutomationProperties.LiveSetting="Polite"
                             Foreground="{ThemeResource SystemFillColorCriticalBrush}"

@@ -37,7 +37,6 @@ public sealed partial class NativeLoopCleanupTests
         new(3, 1, 0.3f),
         new(3, 2, 0.4f),
         new(3, 3, 1f),
-        new(3, 4, 2f),
         new(3, 5, 0f),
         new(3, 6, 0.02f),
         new(3, 7, 0.03f),
@@ -46,8 +45,6 @@ public sealed partial class NativeLoopCleanupTests
         new(3, 10, 1.5f),
         new(3, 11, 80000f),
         new(3, 12, 0.04f),
-        new(3, 13, 1f),
-        new(3, 14, 1f),
         new(3, 15, 4f),
         new(3, 16, 0f),
         new(3, 17, 1000f),
@@ -58,6 +55,11 @@ public sealed partial class NativeLoopCleanupTests
         new(3, 22, 2f),
         new(3, 23, 0.15f),
         new(3, 24, 0.2f),
+        new(3, 25, 1f),
+        new(3, 26, 1f),
+        new(3, 27, 0.5f),
+        new(3, 28, 1.25f),
+        new(3, 29, 2f),
     ];
 
     private async Task CheckNativeNodeAsync(RuntimeCommandDispatcher commands)
@@ -70,7 +72,7 @@ public sealed partial class NativeLoopCleanupTests
             => _ = commands.Execute(new RuntimeWorldRequest(Guid.NewGuid(), target, command), this.TestContext.CancellationToken).Succeeded.Should().BeTrue();
 
         Send(new RuntimeAttachPerspectiveCamera(node, 1f, 1.5f, 0.1f, 1000f));
-        Send(new RuntimeAttachDirectionalLight(node, 1000f, 0.01f, Vector3.One, AffectsWorld: true, Mobility: 2, CastsShadows: true, ShadowBias: 0, ShadowNormalBias: 0, ContactShadows: false, ShadowResolutionHint: 0, ExposureCompensation: 0, EnvironmentContribution: true, IsSunLight: true, CascadeCount: 4, SplitMode: 0, MaxShadowDistance: 1000f, CascadeDistances: new Vector4(50, 150, 400, 1000), DistributionExponent: 2, TransitionFraction: 0.1f, DistanceFadeoutFraction: 0.1f));
+        Send(new RuntimeAttachDirectionalLight(node, 1000f, 0.01f, Vector3.One, AffectsWorld: true, Mobility: 0, CastsShadows: true, ShadowBias: 0, ShadowNormalBias: 0, ContactShadows: false, ShadowResolutionHint: 0, ExposureCompensation: 0, AtmosphereLightSlot: 1, UsePerPixelAtmosphereTransmittance: true, AtmosphereDiskLuminanceScaleRgb: Vector3.One, CascadeCount: 4, SplitMode: 0, MaxShadowDistance: 1000f, CascadeDistances: new Vector4(50, 150, 400, 1000), DistributionExponent: 2, TransitionFraction: 0.1f, DistanceFadeoutFraction: 0.1f));
         var expected = ObservedNodeProperties();
         Send(new RuntimeSetProperties(node, expected));
         Send(new RuntimeSetGeometry(node, "asset:///Engine/Generated/BasicShapes/Cube"));

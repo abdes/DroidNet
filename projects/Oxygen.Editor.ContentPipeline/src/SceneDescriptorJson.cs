@@ -77,23 +77,37 @@ internal sealed record NativeLightCommon(
     [property: JsonPropertyName("affects_world")] bool AffectsWorld,
     [property: JsonPropertyName("color_rgb")] float[] ColorRgb,
     [property: JsonPropertyName("casts_shadows")] bool CastsShadows,
-    [property: JsonPropertyName("exposure_compensation_ev")] float ExposureCompensation);
+    [property: JsonPropertyName("exposure_compensation_ev")] float ExposureCompensation,
+    [property: JsonPropertyName("shadow")] NativeLightShadow Shadow);
+
+internal sealed record NativeLightShadow(
+    [property: JsonPropertyName("bias")] float Bias,
+    [property: JsonPropertyName("normal_bias")] float NormalBias,
+    [property: JsonPropertyName("contact_shadows")] bool ContactShadows,
+    [property: JsonPropertyName("resolution_hint")] int ResolutionHint);
 
 internal sealed record NativeDirectionalLight(
     [property: JsonPropertyName("node")] int Node,
     [property: JsonPropertyName("common")] NativeLightCommon Common,
     [property: JsonPropertyName("intensity_lux")] float IntensityLux,
     [property: JsonPropertyName("angular_size_radians")] float AngularSizeRadians,
-    [property: JsonPropertyName("environment_contribution")] bool EnvironmentContribution,
-    [property: JsonPropertyName("is_sun_light")] bool IsSunLight);
+    [property: JsonPropertyName("atmosphere_light_slot")] int AtmosphereLightSlot,
+    [property: JsonPropertyName("use_per_pixel_atmosphere_transmittance")] bool UsePerPixelAtmosphereTransmittance,
+    [property: JsonPropertyName("atmosphere_disk_luminance_scale_rgb")] float[] AtmosphereDiskLuminanceScaleRgb,
+    [property: JsonPropertyName("cascade_count")] int CascadeCount,
+    [property: JsonPropertyName("split_mode")] int SplitMode,
+    [property: JsonPropertyName("max_shadow_distance")] float MaxShadowDistance,
+    [property: JsonPropertyName("cascade_distances")] float[] CascadeDistances,
+    [property: JsonPropertyName("distribution_exponent")] float DistributionExponent,
+    [property: JsonPropertyName("transition_fraction")] float TransitionFraction,
+    [property: JsonPropertyName("distance_fadeout_fraction")] float DistanceFadeoutFraction);
 
 internal sealed record NativePointLight(
     [property: JsonPropertyName("node")] int Node,
     [property: JsonPropertyName("common")] NativeLightCommon Common,
     [property: JsonPropertyName("luminous_flux_lm")] float LuminousFluxLumens,
     [property: JsonPropertyName("range")] float Range,
-    [property: JsonPropertyName("source_radius")] float SourceRadius,
-    [property: JsonPropertyName("decay_exponent")] float DecayExponent);
+    [property: JsonPropertyName("source_radius")] float SourceRadius);
 
 internal sealed record NativeSpotLight(
     [property: JsonPropertyName("node")] int Node,
@@ -101,7 +115,6 @@ internal sealed record NativeSpotLight(
     [property: JsonPropertyName("luminous_flux_lm")] float LuminousFluxLumens,
     [property: JsonPropertyName("range")] float Range,
     [property: JsonPropertyName("source_radius")] float SourceRadius,
-    [property: JsonPropertyName("decay_exponent")] float DecayExponent,
     [property: JsonPropertyName("inner_cone_angle_radians")] float InnerConeAngleRadians,
     [property: JsonPropertyName("outer_cone_angle_radians")] float OuterConeAngleRadians);
 

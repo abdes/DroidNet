@@ -25,6 +25,7 @@ public partial class EnvironmentViewModel(
     private readonly InspectorFieldDiagnostics fieldDiagnostics = new();
 
     private InspectorEditSessionCoordinator? edits;
+    private InspectorEditSessionCoordinator? lightAssignments;
     private Scene? scene;
     private bool isApplyingEditorValues;
 
@@ -163,11 +164,7 @@ public partial class EnvironmentViewModel(
     [ObservableProperty]
     public partial bool SunDiskEnabled { get; set; }
 
-    [ObservableProperty]
-    public partial bool HasStaleSun { get; set; }
 
-    [ObservableProperty]
-    public partial string StaleSunText { get; set; } = string.Empty;
 
     /// <summary>
     /// Gets available exposure modes.
@@ -219,7 +216,7 @@ public partial class EnvironmentViewModel(
     public InspectorFieldDiagnostic AtmosphereEnabledDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.AtmosphereEnabled.Id);
 
     /// <summary>Gets current feedback for the scene's sun reference.</summary>
-    public InspectorFieldDiagnostic SunReferenceDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.SunNodeId.Id);
+    public InspectorFieldDiagnostic SunReferenceDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.DirectionalLight.AtmosphereSlot.Id);
 
     /// <summary>Gets current diagnostics for ExposureEnabled.</summary>
     public InspectorFieldDiagnostic ExposureEnabledDiagnostic => this.fieldDiagnostics.Get(SceneDocumentCommandService.SceneEnvironment.ExposureEnabled.Id);
@@ -354,7 +351,9 @@ public partial class EnvironmentViewModel(
     internal string? PendingFieldFocus { get; private set; }
 
     /// <summary>Gets completion of submitted inspector edits.</summary>
-    internal Task PendingEdits => this.edits?.Pending ?? Task.CompletedTask;
+    internal Task PendingEdits => Task.WhenAll(
+        this.edits?.Pending ?? Task.CompletedTask,
+        this.lightAssignments?.Pending ?? Task.CompletedTask);
 
     /// <summary>Validates an Aerial Start candidate and exposes feedback on its field.</summary>
     /// <param name="value">The proposed distance in meters.</param>
@@ -405,12 +404,16 @@ public partial class EnvironmentViewModel(
         {
             this.edits = new(commandService, commandContextProvider, "Edit Environment", this.RefreshFromScene, environment: true, this.fieldDiagnostics);
             this.edits.SetInputEnabled(this.IsInputEnabled);
+            this.lightAssignments = new(commandService, commandContextProvider, "Assign Primary Atmosphere Light",
+                this.RefreshFromScene, environment: false, this.fieldDiagnostics);
+            this.lightAssignments.SetInputEnabled(this.IsInputEnabled);
             this.edits.Diagnostics.Relate(SceneDocumentCommandService.SceneEnvironment.AutoExposureMinEv.Id, SceneDocumentCommandService.SceneEnvironment.AutoExposureMaxEv.Id);
             this.edits.Diagnostics.Relate(SceneDocumentCommandService.SceneEnvironment.AutoExposureLowPercentile.Id, SceneDocumentCommandService.SceneEnvironment.AutoExposureHighPercentile.Id);
         }
 
         this.DetachSceneObservers();
         this.edits?.Bind(value is null ? [] : [value.Id]);
+        this.lightAssignments?.Bind([]);
         this.scene = value;
         this.AttachSceneObservers();
         this.RefreshFromScene();
@@ -472,6 +475,7 @@ public partial class EnvironmentViewModel(
         {
             this.DetachSceneObservers();
             this.edits?.Dispose();
+            this.lightAssignments?.Dispose();
         }
     }
 
@@ -504,7 +508,7 @@ public partial class EnvironmentViewModel(
             this.isApplyingEditorValues = false;
         }
 
-        this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.SunNodeId, (Guid?)null);
+        this.ApplyPrimaryAssignment(null);
     }
 
     partial void OnAtmosphereEnabledChanged(bool value)
@@ -522,7 +526,7 @@ public partial class EnvironmentViewModel(
             return;
         }
 
-        this.ApplyEnvironmentProperty(SceneDocumentCommandService.SceneEnvironment.SunNodeId, value.NodeId);
+        this.ApplyPrimaryAssignment(value.NodeId);
     }
 
     partial void OnExposureModeChanged(ExposureMode value)
@@ -679,7 +683,7 @@ public partial class EnvironmentViewModel(
         this.isApplyingEditorValues = true;
         try
         {
-            this.RebuildSunOptions(environment.SunNodeId);
+            this.RebuildSunOptions(this.FindPrimarySource()?.Id);
             this.AtmosphereEnabled = environment.AtmosphereEnabled;
             this.ApplyPostProcessEditorValues(environment.PostProcess);
             this.BackgroundR = environment.BackgroundColor.X;
@@ -695,6 +699,20 @@ public partial class EnvironmentViewModel(
         this.NotifyBackgroundChanged();
     }
 
+    private SceneNode? FindPrimarySource()
+        => this.scene?.AllNodes.FirstOrDefault(node => node.Components.OfType<DirectionalLightComponent>()
+            .Any(light => light.AtmosphereSlot == AtmosphereLightSlot.Primary));
+
+    private void ApplyPrimaryAssignment(Guid? selected)
+    {
+        if (this.isApplyingEditorValues || !this.IsInputEnabled) return;
+        var target = selected ?? this.FindPrimarySource()?.Id;
+        if (target is null) return;
+        this.lightAssignments?.Bind([target.Value]);
+        this.lightAssignments?.Submit(PropertyEdit.Single(SceneDocumentCommandService.DirectionalLight.AtmosphereSlot,
+            selected.HasValue ? AtmosphereLightSlot.Primary : AtmosphereLightSlot.None));
+    }
+
     private void RebuildSunOptions(Guid? selectedSunNodeId)
     {
         this.SunOptions.Clear();
@@ -704,8 +722,6 @@ public partial class EnvironmentViewModel(
 
         if (this.scene is null)
         {
-            this.HasStaleSun = false;
-            this.StaleSunText = string.Empty;
             return;
         }
 
@@ -723,9 +739,6 @@ public partial class EnvironmentViewModel(
                 this.SelectedSun = option;
             }
         }
-
-        this.HasStaleSun = selectedSunNodeId.HasValue && this.SunOptions.All(option => option.NodeId != selectedSunNodeId);
-        this.StaleSunText = this.HasStaleSun ? $"Stale sun: {selectedSunNodeId:N}" : string.Empty;
     }
 
     private void ApplyPostProcessEditorValues(PostProcessEnvironmentData? value)

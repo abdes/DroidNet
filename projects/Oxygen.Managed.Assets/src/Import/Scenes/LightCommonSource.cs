@@ -10,4 +10,8 @@ public sealed record LightCommonSource(
     float Green,
     float Blue,
     bool CastsShadows,
-    float ExposureCompensation);
+    float ExposureCompensation,
+    LightShadowSource Shadow);
+
+public sealed record LightShadowSource(float Bias, float NormalBias,
+    bool ContactShadows, int ResolutionHint);

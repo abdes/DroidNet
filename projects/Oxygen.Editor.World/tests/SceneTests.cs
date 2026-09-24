@@ -22,6 +22,37 @@ public class SceneTests
     private IProject ExampleProject => this.projectMock.Object;
 
     [TestMethod]
+    public void DuplicateStoredLightAssignmentRejectsHydrationBeforeReplacingScene()
+    {
+        var scene = new Scene(this.ExampleProject) { Name = "Accepted" };
+        var retained = new SceneNode(scene) { Name = "Retained" };
+        scene.RootNodes.Add(retained);
+        var candidate = new SceneData
+        {
+            Id = Guid.NewGuid(),
+            Name = "Invalid lights",
+            RootNodes =
+            [
+                new SceneNodeData
+                {
+                    Id = Guid.NewGuid(),
+                    Name = "Hidden owner", IsVisible = false,
+                    Components = [new DirectionalLightData { Name = "Light", AtmosphereSlot = AtmosphereLightSlot.Primary }],
+                },
+                new SceneNodeData
+                {
+                    Id = Guid.NewGuid(),
+                    Name = "Duplicate",
+                    Components = [new DirectionalLightData { Name = "Light", AtmosphereSlot = AtmosphereLightSlot.Primary }],
+                },
+            ],
+        };
+        var hydrate = () => scene.Hydrate(candidate);
+        _ = hydrate.Should().Throw<ArgumentException>().WithMessage("*Hidden owner*");
+        _ = scene.RootNodes.Should().ContainSingle().Which.Should().BeSameAs(retained);
+    }
+
+    [TestMethod]
     public void Dehydrate_Returns_SceneData_With_RootNodes()
     {
         // Arrange
@@ -127,7 +158,7 @@ public class SceneTests
         var expected = new SceneEnvironmentData
         {
             AtmosphereEnabled = false,
-            SunNodeId = Guid.Parse("22222222-2222-2222-2222-222222222222"),
+
             BackgroundColor = new Vector3(0.2f, 0.3f, 0.4f),
             SkyAtmosphere = new SkyAtmosphereEnvironmentData
             {
@@ -192,20 +223,11 @@ public class SceneTests
     }
 
     [TestMethod]
-    public async Task Environment_StaleSunNodeId_SurvivesJsonRoundTrip()
+    public void Environment_ObsoleteSunNodeIdIsRejected()
     {
-        var staleSunNodeId = Guid.Parse("33333333-3333-3333-3333-333333333333");
-        var scene = new Scene(this.ExampleProject) { Name = "Stale Sun Scene" };
-        scene.SetEnvironment(new SceneEnvironmentData { SunNodeId = staleSunNodeId });
-
-        var serializer = new SceneSerializer(this.ExampleProject);
-        using var stream = new MemoryStream();
-        await serializer.SerializeAsync(stream, scene).ConfigureAwait(false);
-        stream.Position = 0;
-
-        var restored = await serializer.DeserializeAsync(stream).ConfigureAwait(false);
-
-        _ = restored.Environment.SunNodeId.Should().Be(staleSunNodeId);
+        Action read = () => System.Text.Json.JsonSerializer.Deserialize<SceneEnvironmentData>(
+            "{\"SunNodeId\":\"33333333-3333-3333-3333-333333333333\"}");
+        _ = read.Should().Throw<System.Text.Json.JsonException>();
     }
 
     [TestMethod]

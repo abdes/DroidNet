@@ -20,13 +20,13 @@ internal sealed class DirectionalLightDescriptors
     private DirectionalLightDescriptors(
         PropertyDescriptor<Vector3> color,
         PropertyDescriptor<float> intensityLux,
-        PropertyDescriptor<bool> isSunLight,
-        PropertyDescriptor<bool> environmentContribution,
+        PropertyDescriptor<AtmosphereLightSlot> atmosphereSlot,
+        PropertyDescriptor<bool> usePerPixelAtmosphereTransmittance,
         PropertyDescriptor<bool> castsShadows,
         PropertyDescriptor<bool> affectsWorld,
         PropertyDescriptor<float> angularSizeRadians,
         PropertyDescriptor<float> exposureCompensation,
-        PropertyDescriptor<LightMobility> mobility,
+        PropertyDescriptor<Vector3> atmosphereDiskLuminanceScaleRgb,
         PropertyDescriptor<float> shadowBias,
         PropertyDescriptor<float> shadowNormalBias,
         PropertyDescriptor<bool> contactShadows,
@@ -44,13 +44,13 @@ internal sealed class DirectionalLightDescriptors
     {
         this.ColorDescriptor = color;
         this.IntensityLuxDescriptor = intensityLux;
-        this.IsSunLightDescriptor = isSunLight;
-        this.EnvironmentContributionDescriptor = environmentContribution;
+        this.AtmosphereSlotDescriptor = atmosphereSlot;
+        this.UsePerPixelAtmosphereTransmittanceDescriptor = usePerPixelAtmosphereTransmittance;
         this.CastsShadowsDescriptor = castsShadows;
         this.AffectsWorldDescriptor = affectsWorld;
         this.AngularSizeRadiansDescriptor = angularSizeRadians;
         this.ExposureCompensationDescriptor = exposureCompensation;
-        this.MobilityDescriptor = mobility;
+        this.AtmosphereDiskLuminanceScaleRgbDescriptor = atmosphereDiskLuminanceScaleRgb;
         this.ShadowBiasDescriptor = shadowBias;
         this.ShadowNormalBiasDescriptor = shadowNormalBias;
         this.ContactShadowsDescriptor = contactShadows;
@@ -70,13 +70,13 @@ internal sealed class DirectionalLightDescriptors
         {
             [color.Id] = color,
             [intensityLux.Id] = intensityLux,
-            [isSunLight.Id] = isSunLight,
-            [environmentContribution.Id] = environmentContribution,
+            [atmosphereSlot.Id] = atmosphereSlot,
+            [usePerPixelAtmosphereTransmittance.Id] = usePerPixelAtmosphereTransmittance,
             [castsShadows.Id] = castsShadows,
             [affectsWorld.Id] = affectsWorld,
             [angularSizeRadians.Id] = angularSizeRadians,
             [exposureCompensation.Id] = exposureCompensation,
-            [mobility.Id] = mobility,
+            [atmosphereDiskLuminanceScaleRgb.Id] = atmosphereDiskLuminanceScaleRgb,
             [shadowBias.Id] = shadowBias,
             [shadowNormalBias.Id] = shadowNormalBias,
             [contactShadows.Id] = contactShadows,
@@ -100,11 +100,11 @@ internal sealed class DirectionalLightDescriptors
     /// <summary>Gets the typed property id for intensity in lux.</summary>
     internal PropertyId<float> IntensityLux => new(this.IntensityLuxDescriptor.Id);
 
-    /// <summary>Gets the typed property id for the sun-light flag.</summary>
-    internal PropertyId<bool> IsSunLight => new(this.IsSunLightDescriptor.Id);
+    /// <summary>Gets the typed property id for the atmosphere source assignment.</summary>
+    internal PropertyId<AtmosphereLightSlot> AtmosphereSlot => new(this.AtmosphereSlotDescriptor.Id);
 
-    /// <summary>Gets the typed property id for environment contribution.</summary>
-    internal PropertyId<bool> EnvironmentContribution => new(this.EnvironmentContributionDescriptor.Id);
+    /// <summary>Gets the typed property id for per-pixel atmosphere transmittance.</summary>
+    internal PropertyId<bool> UsePerPixelAtmosphereTransmittance => new(this.UsePerPixelAtmosphereTransmittanceDescriptor.Id);
 
     /// <summary>Gets the typed property id for shadow casting.</summary>
     internal PropertyId<bool> CastsShadows => new(this.CastsShadowsDescriptor.Id);
@@ -118,8 +118,8 @@ internal sealed class DirectionalLightDescriptors
     /// <summary>Gets the typed property id for exposure compensation.</summary>
     internal PropertyId<float> ExposureCompensation => new(this.ExposureCompensationDescriptor.Id);
 
-    /// <summary>Gets the typed property id for light mobility.</summary>
-    internal PropertyId<LightMobility> Mobility => new(this.MobilityDescriptor.Id);
+    /// <summary>Gets the typed property id for RGB disk luminance scale.</summary>
+    internal PropertyId<Vector3> AtmosphereDiskLuminanceScaleRgb => new(this.AtmosphereDiskLuminanceScaleRgbDescriptor.Id);
 
     /// <summary>Gets the typed property id for shadow depth bias.</summary>
     internal PropertyId<float> ShadowBias => new(this.ShadowBiasDescriptor.Id);
@@ -169,11 +169,11 @@ internal sealed class DirectionalLightDescriptors
     /// <summary>Gets the descriptor for intensity in lux.</summary>
     internal PropertyDescriptor<float> IntensityLuxDescriptor { get; }
 
-    /// <summary>Gets the descriptor for the sun-light flag.</summary>
-    internal PropertyDescriptor<bool> IsSunLightDescriptor { get; }
+    /// <summary>Gets the descriptor for the atmosphere source assignment.</summary>
+    internal PropertyDescriptor<AtmosphereLightSlot> AtmosphereSlotDescriptor { get; }
 
-    /// <summary>Gets the descriptor for environment contribution.</summary>
-    internal PropertyDescriptor<bool> EnvironmentContributionDescriptor { get; }
+    /// <summary>Gets the descriptor for per-pixel atmosphere transmittance.</summary>
+    internal PropertyDescriptor<bool> UsePerPixelAtmosphereTransmittanceDescriptor { get; }
 
     /// <summary>Gets the descriptor for shadow casting.</summary>
     internal PropertyDescriptor<bool> CastsShadowsDescriptor { get; }
@@ -187,8 +187,8 @@ internal sealed class DirectionalLightDescriptors
     /// <summary>Gets the descriptor for exposure compensation.</summary>
     internal PropertyDescriptor<float> ExposureCompensationDescriptor { get; }
 
-    /// <summary>Gets the descriptor for light mobility.</summary>
-    internal PropertyDescriptor<LightMobility> MobilityDescriptor { get; }
+    /// <summary>Gets the descriptor for RGB disk luminance scale.</summary>
+    internal PropertyDescriptor<Vector3> AtmosphereDiskLuminanceScaleRgbDescriptor { get; }
 
     /// <summary>Gets the descriptor for shadow depth bias.</summary>
     internal PropertyDescriptor<float> ShadowBiasDescriptor { get; }
@@ -247,13 +247,13 @@ internal sealed class DirectionalLightDescriptors
         return new(
             light.Color,
             light.IntensityLux,
-            light.IsSunLight,
-            light.EnvironmentContribution,
+            light.AtmosphereSlot,
+            light.UsePerPixelAtmosphereTransmittance,
             light.CastsShadows,
             light.AffectsWorld,
             light.AngularSizeRadians,
             light.ExposureCompensation,
-            light.Mobility,
+            light.AtmosphereDiskLuminanceScaleRgb,
             shadow.ShadowBias,
             shadow.ShadowNormalBias,
             shadow.ContactShadows,
@@ -273,40 +273,40 @@ internal sealed class DirectionalLightDescriptors
     private static DirectionalLightDescriptorGroup BuildLightDescriptors()
         => new(
             BuildColorDescriptor(),
-            FloatDescriptor("/intensity_lux", "Intensity", static light => light.IntensityLux, static (light, value) => light.IntensityLux = Math.Max(0f, value), "directional_light.intensity_lux"),
-            BoolDescriptor("/is_sun_light", "Sun", static light => light.IsSunLight, static (light, value) => light.IsSunLight = value, "directional_light.is_sun_light"),
-            BoolDescriptor("/environment_contribution", "Environment", static light => light.EnvironmentContribution, static (light, value) => light.EnvironmentContribution = value, "directional_light.environment_contribution"),
+            FloatDescriptor("/intensity_lux", "Intensity", static light => light.IntensityLux, static (light, value) => light.IntensityLux = value, "directional_light.intensity_lux"),
+            EnumDescriptor("/atmosphere_light_slot", "Atmosphere source", static light => light.AtmosphereSlot, static (light, value) => light.AtmosphereSlot = value, "directional_light.atmosphere_light_slot"),
+            BoolDescriptor("/use_per_pixel_atmosphere_transmittance", "Per-pixel transmittance", static light => light.UsePerPixelAtmosphereTransmittance, static (light, value) => light.UsePerPixelAtmosphereTransmittance = value, "directional_light.use_per_pixel_atmosphere_transmittance"),
             BoolDescriptor("/casts_shadows", "Shadows", static light => light.CastsShadows, static (light, value) => light.CastsShadows = value, "directional_light.casts_shadows"),
             BoolDescriptor("/affects_world", "Affects World", static light => light.AffectsWorld, static (light, value) => light.AffectsWorld = value, "directional_light.affects_world"),
-            FloatDescriptor("/angular_size_radians", "Angular Size", static light => light.AngularSizeRadians, static (light, value) => light.AngularSizeRadians = Math.Max(0f, value), "directional_light.angular_size_radians"),
-            FloatDescriptor("/exposure_compensation", "Exposure Compensation", static light => light.ExposureCompensation, static (light, value) => light.ExposureCompensation = Math.Clamp(value, -10f, 10f), "directional_light.exposure_compensation"),
-            EnumDescriptor("/mobility", "Mobility", static light => light.Mobility, static (light, value) => light.Mobility = value, "directional_light.mobility"));
+            FloatDescriptor("/angular_size_radians", "Angular Size", static light => light.AngularSizeRadians, static (light, value) => light.AngularSizeRadians = value, "directional_light.angular_size_radians"),
+            FloatDescriptor("/exposure_compensation", "Exposure Compensation", static light => light.ExposureCompensation, static (light, value) => light.ExposureCompensation = value, "directional_light.exposure_compensation"),
+            BuildDiskScaleDescriptor());
 
     private static DirectionalShadowDescriptorGroup BuildShadowDescriptors()
         => new(
             FloatDescriptor("/shadow/bias", "Shadow Bias", static light => light.ShadowBias, static (light, value) => light.ShadowBias = value, "directional_light.shadow.bias"),
-            FloatDescriptor("/shadow/normal_bias", "Normal Bias", static light => light.ShadowNormalBias, static (light, value) => light.ShadowNormalBias = Math.Max(0f, value), "directional_light.shadow.normal_bias"),
+            FloatDescriptor("/shadow/normal_bias", "Normal Bias", static light => light.ShadowNormalBias, static (light, value) => light.ShadowNormalBias = value, "directional_light.shadow.normal_bias"),
             BoolDescriptor("/shadow/contact_shadows", "Contact Shadows", static light => light.ContactShadows, static (light, value) => light.ContactShadows = value, "directional_light.shadow.contact_shadows"),
             EnumDescriptor("/shadow/resolution_hint", "Resolution", static light => light.ShadowResolutionHint, static (light, value) => light.ShadowResolutionHint = value, "directional_light.shadow.resolution_hint"));
 
     private static DirectionalCsmDescriptorGroup BuildCsmDescriptors()
         => new(
-            IntDescriptor("/csm/cascade_count", "Cascade Count", static light => light.CascadeCount, static (light, value) => light.CascadeCount = Math.Clamp(value, 1, 4), "directional_light.cascade_count"),
+            IntDescriptor("/csm/cascade_count", "Cascade Count", static light => light.CascadeCount, static (light, value) => light.CascadeCount = value, "directional_light.cascade_count"),
             EnumDescriptor("/csm/split_mode", "Split Mode", static light => light.SplitMode, static (light, value) => light.SplitMode = value, "directional_light.split_mode"),
-            PositiveFloatDescriptor("/csm/max_shadow_distance", "Max Distance", static light => light.MaxShadowDistance, static (light, value) => light.MaxShadowDistance = Math.Max(0.001f, value), "directional_light.max_shadow_distance"),
+            PositiveFloatDescriptor("/csm/max_shadow_distance", "Max Distance", static light => light.MaxShadowDistance, static (light, value) => light.MaxShadowDistance = value, "directional_light.max_shadow_distance"),
             CascadeDistanceDescriptor(0, "/csm/cascade_distances/0", "Cascade 1", "directional_light.cascade_distance_0"),
             CascadeDistanceDescriptor(1, "/csm/cascade_distances/1", "Cascade 2", "directional_light.cascade_distance_1"),
             CascadeDistanceDescriptor(2, "/csm/cascade_distances/2", "Cascade 3", "directional_light.cascade_distance_2"),
             CascadeDistanceDescriptor(3, "/csm/cascade_distances/3", "Cascade 4", "directional_light.cascade_distance_3"),
-            PositiveFloatDescriptor("/csm/distribution_exponent", "Distribution", static light => light.DistributionExponent, static (light, value) => light.DistributionExponent = Math.Max(1f, value), "directional_light.distribution_exponent"),
-            FractionDescriptor("/csm/transition_fraction", "Transition", static light => light.TransitionFraction, static (light, value) => light.TransitionFraction = Math.Clamp(value, 0f, 1f), "directional_light.transition_fraction"),
-            FractionDescriptor("/csm/distance_fadeout_fraction", "Fadeout", static light => light.DistanceFadeoutFraction, static (light, value) => light.DistanceFadeoutFraction = Math.Clamp(value, 0f, 1f), "directional_light.distance_fadeout_fraction"));
+            PositiveFloatDescriptor("/csm/distribution_exponent", "Distribution", static light => light.DistributionExponent, static (light, value) => light.DistributionExponent = value, "directional_light.distribution_exponent"),
+            FractionDescriptor("/csm/transition_fraction", "Transition", static light => light.TransitionFraction, static (light, value) => light.TransitionFraction = value, "directional_light.transition_fraction"),
+            FractionDescriptor("/csm/distance_fadeout_fraction", "Fadeout", static light => light.DistanceFadeoutFraction, static (light, value) => light.DistanceFadeoutFraction = value, "directional_light.distance_fadeout_fraction"));
 
     private static PropertyDescriptor<Vector3> BuildColorDescriptor()
         => new(
             id: new PropertyId<Vector3>(SceneDocumentCommandService.DirectionalLightKind, "/color"),
             reader: static target => ((DirectionalLightComponent)target).Color,
-            writer: static (target, value) => ((DirectionalLightComponent)target).Color = Vector3.Clamp(value, Vector3.Zero, Vector3.One),
+            writer: static (target, value) => ((DirectionalLightComponent)target).Color = value,
             validator: static value => IsFinite(value)
                 ? ValidationResult.Ok
                 : ValidationResult.Fail(SceneDiagnosticCodes.DirectionalLightFieldNotFinite, "Directional light values must be finite numbers."),
@@ -314,6 +314,16 @@ internal sealed class DirectionalLightDescriptors
                 "directional_light.color",
                 new EditorAnnotation { Group = "Light", Label = "Color", Renderer = "color-rgb" }),
             engineCommandKey: "directional_light.color");
+
+    private static PropertyDescriptor<Vector3> BuildDiskScaleDescriptor()
+        => new(
+            id: new PropertyId<Vector3>(SceneDocumentCommandService.DirectionalLightKind, "/atmosphere_disk_luminance_scale_rgb"),
+            reader: static target => ((DirectionalLightComponent)target).AtmosphereDiskLuminanceScaleRgb,
+            writer: static (target, value) => ((DirectionalLightComponent)target).AtmosphereDiskLuminanceScaleRgb = value,
+            validator: static value => IsFinite(value) && value.X >= 0 && value.Y >= 0 && value.Z >= 0
+                ? ValidationResult.Ok : ValidationResult.Fail("LIGHT_DISK_SCALE_INVALID", "Disk scale must be finite and nonnegative."),
+            annotation: Annotation("directional_light.atmosphere_disk_luminance_scale_rgb", new EditorAnnotation { Group = "Atmosphere", Label = "Disk luminance scale", Renderer = "color-rgb" }),
+            engineCommandKey: "directional_light.atmosphere_disk_luminance_scale_rgb");
 
     private static PropertyDescriptor<float> CascadeDistanceDescriptor(
         int index,
@@ -430,13 +440,14 @@ internal sealed class DirectionalLightDescriptors
         {
             "directional_light.color" => "#/definitions/light_common/color_rgb",
             "directional_light.intensity_lux" => "#/definitions/directional_light/intensity_lux",
-            "directional_light.is_sun_light" => "#/definitions/directional_light/is_sun_light",
-            "directional_light.environment_contribution" => "#/definitions/directional_light/environment_contribution",
+            "directional_light.atmosphere_light_slot" => "#/definitions/directional_light/atmosphere_light_slot",
+            "directional_light.use_per_pixel_atmosphere_transmittance" => "#/definitions/directional_light/use_per_pixel_atmosphere_transmittance",
             "directional_light.casts_shadows" => "#/definitions/light_common/casts_shadows",
             "directional_light.affects_world" => "#/definitions/light_common/affects_world",
             "directional_light.angular_size_radians" => "#/definitions/directional_light/angular_size_radians",
             "directional_light.exposure_compensation" => "#/definitions/light_common/exposure_compensation_ev",
-            "directional_light.mobility" => "#/definitions/light_common/mobility",
+            "directional_light.atmosphere_disk_luminance_scale_rgb" => "#/definitions/directional_light/atmosphere_disk_luminance_scale_rgb",
+
             "directional_light.shadow.bias" => "#/definitions/light_shadow/bias",
             "directional_light.shadow.normal_bias" => "#/definitions/light_shadow/normal_bias",
             "directional_light.shadow.contact_shadows" => "#/definitions/light_shadow/contact_shadows",
@@ -468,10 +479,10 @@ internal sealed class DirectionalLightDescriptors
         var distances = light.CascadeDistances;
         var updated = index switch
         {
-            0 => new Vector4(Math.Max(0.001f, value), distances.Y, distances.Z, distances.W),
-            1 => new Vector4(distances.X, Math.Max(0.001f, value), distances.Z, distances.W),
-            2 => new Vector4(distances.X, distances.Y, Math.Max(0.001f, value), distances.W),
-            _ => new Vector4(distances.X, distances.Y, distances.Z, Math.Max(0.001f, value)),
+            0 => new Vector4(value, distances.Y, distances.Z, distances.W),
+            1 => new Vector4(distances.X, value, distances.Z, distances.W),
+            2 => new Vector4(distances.X, distances.Y, value, distances.W),
+            _ => new Vector4(distances.X, distances.Y, distances.Z, value),
         };
         light.CascadeDistances = updated;
     }
@@ -482,13 +493,13 @@ internal sealed class DirectionalLightDescriptors
     private sealed record DirectionalLightDescriptorGroup(
         PropertyDescriptor<Vector3> Color,
         PropertyDescriptor<float> IntensityLux,
-        PropertyDescriptor<bool> IsSunLight,
-        PropertyDescriptor<bool> EnvironmentContribution,
+        PropertyDescriptor<AtmosphereLightSlot> AtmosphereSlot,
+        PropertyDescriptor<bool> UsePerPixelAtmosphereTransmittance,
         PropertyDescriptor<bool> CastsShadows,
         PropertyDescriptor<bool> AffectsWorld,
         PropertyDescriptor<float> AngularSizeRadians,
         PropertyDescriptor<float> ExposureCompensation,
-        PropertyDescriptor<LightMobility> Mobility);
+        PropertyDescriptor<Vector3> AtmosphereDiskLuminanceScaleRgb);
 
     private sealed record DirectionalShadowDescriptorGroup(
         PropertyDescriptor<float> ShadowBias,

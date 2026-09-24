@@ -23,7 +23,7 @@ public sealed partial class SceneEngineSync
         if (cancellationToken.IsCancellationRequested)
         {
             var cancelled = Cancelled(SceneOperationKinds.EditEnvironment, scope);
-            return EnvironmentResult(cancelled, cancelled, cancelled);
+            return EnvironmentResult(cancelled, cancelled);
         }
 
         Task<EnvironmentSyncResult> application;
@@ -36,7 +36,7 @@ public sealed partial class SceneEngineSync
                 || (lifetime.EnvironmentRevision is { } latest && revision.IsAtOrBefore(latest)))
             {
                 var superseded = Cancelled(SceneOperationKinds.EditEnvironment, scope) with { Message = "The environment delivery was superseded or its document closed." };
-                return EnvironmentResult(superseded, superseded, superseded);
+                return EnvironmentResult(superseded, superseded);
             }
 
             request = new(Guid.NewGuid(), revision, environment);
@@ -46,7 +46,7 @@ public sealed partial class SceneEngineSync
             {
                 var pending = RuntimeWorldUnavailable(SceneOperationKinds.EditEnvironment, scope) with { Message = "The environment will replay after the current scene snapshot." };
                 this.OnPendingPropertySyncCountChanged(scene.Id, this.GetPendingPropertySyncCount(scene.Id));
-                return ScopeEnvironmentResult(EnvironmentResult(pending, pending, pending), lifetime, revision);
+                return ScopeEnvironmentResult(EnvironmentResult(pending, pending), lifetime, revision);
             }
 
             application = this.ApplyEnvironmentAsync(scene, environment, cancellationToken);

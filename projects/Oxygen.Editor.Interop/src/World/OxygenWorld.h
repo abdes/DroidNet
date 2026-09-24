@@ -168,23 +168,24 @@ namespace Oxygen::Interop::World {
       float farPlane);
     void DetachCamera(System::Guid nodeId);
     void SetVisibility(System::Guid nodeId, bool visible);
-    void AttachDirectionalLight(System::Guid nodeId, float intensityLux,
-      float angularSizeRadians, System::Numerics::Vector3 color,
-      bool affectsWorld, int mobility, bool castsShadows, float shadowBias,
-      float shadowNormalBias, bool contactShadows, int shadowResolutionHint,
-      float exposureCompensation, bool environmentContribution, bool isSunLight,
-      int cascadeCount, int splitMode, float maxShadowDistance,
-      System::Numerics::Vector4 cascadeDistances, float distributionExponent,
-      float transitionFraction, float distanceFadeoutFraction);
+    void AttachDirectionalLight(System::Guid nodeId,
+    float intensityLux, float angularSizeRadians, System::Numerics::Vector3 color,
+    bool affectsWorld, int mobility, bool castsShadows, float shadowBias,
+    float shadowNormalBias, bool contactShadows, int shadowResolutionHint,
+    float exposureCompensation, int atmosphereLightSlot, bool usePerPixelAtmosphereTransmittance,
+    System::Numerics::Vector3 atmosphereDiskLuminanceScaleRgb,
+    int cascadeCount, int splitMode, float maxShadowDistance,
+    System::Numerics::Vector4 cascadeDistances, float distributionExponent,
+    float transitionFraction, float distanceFadeoutFraction);
     void AttachPointLight(System::Guid nodeId, float luminousFluxLumens,
-      float range, float sourceRadius, float decayExponent,
-      System::Numerics::Vector3 color, bool affectsWorld, bool castsShadows,
-      float exposureCompensation);
+    float range, float sourceRadius, System::Numerics::Vector3 color,
+    bool affectsWorld, bool castsShadows, float shadowBias, float shadowNormalBias,
+    bool contactShadows, int shadowResolutionHint, float exposureCompensation);
     void AttachSpotLight(System::Guid nodeId, float luminousFluxLumens,
-      float range, float sourceRadius, float decayExponent,
-      float innerConeAngleRadians, float outerConeAngleRadians,
-      System::Numerics::Vector3 color, bool affectsWorld, bool castsShadows,
-      float exposureCompensation);
+    float range, float sourceRadius, float innerConeAngleRadians, float outerConeAngleRadians,
+    System::Numerics::Vector3 color, bool affectsWorld, bool castsShadows,
+    float shadowBias, float shadowNormalBias, bool contactShadows,
+    int shadowResolutionHint, float exposureCompensation);
     void DetachLight(System::Guid nodeId);
 
     // Selection (Editor-side state)

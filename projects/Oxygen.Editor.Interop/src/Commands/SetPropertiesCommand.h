@@ -81,7 +81,6 @@ namespace oxygen::interop::module {
 
     auto& registry = PropertyApplierRegistry::Instance();
     bool applied = false;
-    bool touched_directional_light = false;
     auto begin = entries_.begin();
     while (begin != entries_.end()) {
       const auto component = begin->component;
@@ -95,7 +94,6 @@ namespace oxygen::interop::module {
           static_cast<std::size_t>(end - begin));
         applier->Apply(*sceneNode, run);
         applied = true;
-        touched_directional_light |= component == ComponentId::kDirectionalLight;
       } else {
         LOG_F(WARNING,
           "SetPropertiesCommand skipped {} entries: no applier registered "
@@ -109,10 +107,6 @@ namespace oxygen::interop::module {
 
     if (!applied) {
       return;
-    }
-
-    if (touched_directional_light) {
-      context.Scene->GetDirectionalLightResolver().OnLightChanged(node_);
     }
 
     context.Scene->Update(false);

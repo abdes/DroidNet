@@ -11,5 +11,9 @@ public partial class EnvironmentViewModel
     internal override InspectorFieldDiagnostics? ValidationFeedback => this.fieldDiagnostics;
 
     /// <inheritdoc />
-    protected override void OnInputEnabledChanged(bool enabled) => this.edits?.SetInputEnabled(enabled);
+    protected override void OnInputEnabledChanged(bool enabled)
+    {
+        this.edits?.SetInputEnabled(enabled);
+        this.lightAssignments?.SetInputEnabled(enabled);
+    }
 }

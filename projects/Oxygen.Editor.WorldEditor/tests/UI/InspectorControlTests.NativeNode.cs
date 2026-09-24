@@ -39,7 +39,9 @@ public sealed partial class InspectorControlTests
     [DataRow("Light", "ColorG")]
     [DataRow("Light", "ColorB")]
     [DataRow("Light", "AffectsWorld")]
-    [DataRow("Light", "Mobility")]
+    [DataRow("Light", "DiskScaleR")]
+    [DataRow("Light", "DiskScaleG")]
+    [DataRow("Light", "DiskScaleB")]
     [DataRow("Light", "CastsShadows")]
     [DataRow("Light", "ShadowBias")]
     [DataRow("Light", "ShadowNormalBias")]
@@ -48,8 +50,8 @@ public sealed partial class InspectorControlTests
     [DataRow("Light", "ExposureCompensation")]
     [DataRow("Light", "IntensityLux")]
     [DataRow("Light", "AngularSizeRadians")]
-    [DataRow("Light", "EnvironmentContribution")]
-    [DataRow("Light", "IsSunLight")]
+    [DataRow("Light", "UsePerPixelAtmosphereTransmittance")]
+    [DataRow("Light", "AtmosphereSlot")]
     [DataRow("Light", "CascadeCount")]
     [DataRow("Light", "SplitMode")]
     [DataRow("Light", "MaxShadowDistance")]
@@ -83,10 +85,6 @@ public sealed partial class InspectorControlTests
         await SetEnvironmentControlValueAsync(control, field.ControlValue).ConfigureAwait(true);
         await WaitForNodeControlCommitAsync(fixture, model, timeout.Token).ConfigureAwait(true);
         var expected = new Dictionary<(ushort component, ushort field), float>(before) { [(field.Component, field.NativeField)] = field.ExpectedValue };
-        if (string.Equals(field.Field, "EnvironmentContribution", StringComparison.Ordinal))
-        {
-            expected[(3, 14)] = 0;
-        }
 
         await AssertNodeValuesAsync(fixture, node.Id, expected, model, timeout.Token).ConfigureAwait(true);
         await fixture.Context.History.UndoAsync(timeout.Token).ConfigureAwait(true);
@@ -165,12 +163,11 @@ public sealed partial class InspectorControlTests
         return model is DirectionalLightViewModel light
             ? field.Field switch
             {
-                "IsSunLight" => view.FindDescendant<ToggleSwitch>(toggle => Equals(toggle.Header, "Sun")),
-                "EnvironmentContribution" => view.FindDescendant<ToggleSwitch>(toggle => Equals(toggle.Header, "Contributes")),
+                "AtmosphereSlot" => view.FindDescendant<ComboBox>(combo => ReferenceEquals(combo.ItemsSource, light.AtmosphereSlotOptions)),
+                "UsePerPixelAtmosphereTransmittance" => view.FindDescendant<ToggleSwitch>(toggle => Equals(toggle.Header, "Per-pixel transmittance")),
                 "AffectsWorld" => view.FindDescendant<ToggleSwitch>(toggle => Equals(toggle.Header, "Affects World")),
                 "CastsShadows" => view.FindDescendant<ToggleSwitch>(toggle => Equals(toggle.Header, "Cast")),
                 "ContactShadows" => view.FindDescendant<ToggleSwitch>(toggle => Equals(toggle.Header, "Contact")),
-                "Mobility" => view.FindDescendant<ComboBox>(combo => ReferenceEquals(combo.ItemsSource, light.MobilityOptions)),
                 "ShadowResolutionHint" => view.FindDescendant<ComboBox>(combo => ReferenceEquals(combo.ItemsSource, light.ShadowResolutionOptions)),
                 "SplitMode" => view.FindDescendant<ComboBox>(combo => ReferenceEquals(combo.ItemsSource, light.SplitModeOptions)),
                 _ => view.FindDescendant<NumberBox>(number => Equals(number.Tag, field.Field)),

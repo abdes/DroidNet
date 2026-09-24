@@ -22,9 +22,6 @@ public enum DirectionalLightField
     /// <summary>World-lighting participation flag.</summary>
     AffectsWorld = 3,
 
-    /// <summary>Light mobility enum value.</summary>
-    Mobility = 4,
-
     /// <summary>Shadow-casting flag.</summary>
     CastsShadows = 5,
 
@@ -48,12 +45,6 @@ public enum DirectionalLightField
 
     /// <summary>Directional light angular size in radians.</summary>
     AngularSizeRadians = 12,
-
-    /// <summary>Environment contribution flag.</summary>
-    EnvironmentContribution = 13,
-
-    /// <summary>Primary sun candidate flag.</summary>
-    IsSunLight = 14,
 
     /// <summary>Cascade count.</summary>
     CascadeCount = 15,
@@ -84,4 +75,15 @@ public enum DirectionalLightField
 
     /// <summary>Shadow distance fadeout fraction.</summary>
     DistanceFadeoutFraction = 24,
+
+    /// <summary>Explicit None/Primary/Secondary atmosphere assignment.</summary>
+    AtmosphereLightSlot = 25,
+    /// <summary>Per-pixel atmosphere transmittance.</summary>
+    UsePerPixelAtmosphereTransmittance = 26,
+    /// <summary>Red disk luminance multiplier.</summary>
+    DiskScaleR = 27,
+    /// <summary>Green disk luminance multiplier.</summary>
+    DiskScaleG = 28,
+    /// <summary>Blue disk luminance multiplier.</summary>
+    DiskScaleB = 29,
 }

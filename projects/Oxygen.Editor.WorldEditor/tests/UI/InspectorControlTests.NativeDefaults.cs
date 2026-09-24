@@ -36,7 +36,6 @@ public sealed partial class InspectorControlTests
         var view = new EnvironmentView { ViewModel = model };
         await LoadTestContentAsync(new ScrollViewer { Content = view }).ConfigureAwait(true);
         _ = model.AtmosphereEnabled.Should().BeTrue();
-        _ = fixture.Source.Environment.SunNodeId.Should().BeNull();
         var expected = NativeEnvironmentFields.ToDictionary(field => field.Field, field => field.ReadSource(fixture.Source.Environment), StringComparer.Ordinal);
         await AssertEnvironmentFieldValuesAsync(fixture, expected, timeout.Token).ConfigureAwait(true);
         await fixture.SaveAndReopenAsync(timeout.Token).ConfigureAwait(true);

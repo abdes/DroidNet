@@ -86,7 +86,11 @@ public sealed partial class SceneDescriptorGeneratorTests
         });
         _ = node.AddComponent(geometry);
         _ = node.AddComponent(new PerspectiveCamera { Name = "Camera" });
-        _ = node.AddComponent(new DirectionalLightComponent { Name = "Sun", IsSunLight = true });
+        _ = node.AddComponent(new DirectionalLightComponent { Name = "Sun",
+            AtmosphereSlot = Oxygen.Editor.World.Serialization.AtmosphereLightSlot.Primary,
+            UsePerPixelAtmosphereTransmittance = true, AtmosphereDiskLuminanceScaleRgb = new Vector3(1.2f, 0.8f, 0.5f),
+            ShadowBias = 0.001f, ShadowNormalBias = 0.04f, ContactShadows = true,
+            CascadeCount = 3, CascadeDistances = new Vector4(5, 15, 40, 90), MaxShadowDistance = 90 });
         scene.RootNodes.Add(node);
 
         var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
@@ -111,7 +115,7 @@ public sealed partial class SceneDescriptorGeneratorTests
 
         using var document = JsonDocument.Parse(await File.ReadAllTextAsync(result.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false));
         var root = document.RootElement;
-        _ = root.GetProperty("version").GetInt32().Should().Be(6);
+        _ = root.GetProperty("version").GetInt32().Should().Be(7);
         _ = root.GetProperty("name").GetString().Should().Be("Main");
         _ = root.GetProperty("renderables")[0].GetProperty("geometry_ref").GetString()
             .Should().Be("/Content/Geometry/Engine_Generated_BasicShapes_Cube.ogeo");
@@ -121,6 +125,14 @@ public sealed partial class SceneDescriptorGeneratorTests
             .Should().Be("/Content/Materials/Red.omat");
         _ = root.GetProperty("cameras").GetProperty("perspective").GetArrayLength().Should().Be(1);
         _ = root.GetProperty("lights").GetProperty("directional").GetArrayLength().Should().Be(1);
+        var light = root.GetProperty("lights").GetProperty("directional")[0];
+        _ = light.GetProperty("atmosphere_light_slot").GetInt32().Should().Be(1);
+        _ = light.GetProperty("use_per_pixel_atmosphere_transmittance").GetBoolean().Should().BeTrue();
+        _ = light.GetProperty("atmosphere_disk_luminance_scale_rgb")[0].GetSingle().Should().Be(1.2f);
+        _ = light.GetProperty("cascade_count").GetInt32().Should().Be(3);
+        _ = light.GetProperty("cascade_distances")[3].GetSingle().Should().Be(90);
+        _ = light.GetProperty("common").GetProperty("shadow").GetProperty("contact_shadows").GetBoolean().Should().BeTrue();
+        _ = light.GetProperty("common").GetProperty("shadow").GetProperty("normal_bias").GetSingle().Should().Be(0.04f);
     }
 
     /// <summary>Preserves saved boolean intent as explicit local source choices at every hierarchy depth.</summary>
@@ -171,8 +183,8 @@ public sealed partial class SceneDescriptorGeneratorTests
         _ = result.Diagnostics.Should().BeEmpty();
         using var document = JsonDocument.Parse(await File.ReadAllTextAsync(result.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false));
         var root = document.RootElement;
-        _ = root.GetProperty("$schema").GetString().Should().Be("oxygen.scene-descriptor.v6");
-        _ = root.GetProperty("version").GetInt32().Should().Be(6);
+        _ = root.GetProperty("$schema").GetString().Should().Be("oxygen.scene-descriptor.v7");
+        _ = root.GetProperty("version").GetInt32().Should().Be(7);
         var nodes = root.GetProperty("nodes");
         _ = nodes.GetArrayLength().Should().Be(2);
         _ = nodes[1].GetProperty("parent").GetInt32().Should().Be(0);

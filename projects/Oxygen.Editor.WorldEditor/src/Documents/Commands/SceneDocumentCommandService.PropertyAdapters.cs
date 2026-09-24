@@ -60,13 +60,13 @@ public sealed partial class SceneDocumentCommandService
         => new(
             GetOptional(edit, DirectionalLight.Color),
             GetOptional(edit, DirectionalLight.IntensityLux),
-            GetOptional(edit, DirectionalLight.IsSunLight),
-            GetOptional(edit, DirectionalLight.EnvironmentContribution),
+            GetOptional(edit, DirectionalLight.AtmosphereSlot),
+            GetOptional(edit, DirectionalLight.UsePerPixelAtmosphereTransmittance),
             GetOptional(edit, DirectionalLight.CastsShadows),
             GetOptional(edit, DirectionalLight.AffectsWorld),
             GetOptional(edit, DirectionalLight.AngularSizeRadians),
             GetOptional(edit, DirectionalLight.ExposureCompensation),
-            GetOptional(edit, DirectionalLight.Mobility),
+            GetOptional(edit, DirectionalLight.AtmosphereDiskLuminanceScaleRgb),
             GetOptional(edit, DirectionalLight.ShadowBias),
             GetOptional(edit, DirectionalLight.ShadowNormalBias),
             GetOptional(edit, DirectionalLight.ContactShadows),
@@ -254,9 +254,6 @@ public sealed partial class SceneDocumentCommandService
         var atmosphereEnabled = edit.Contains(SceneEnvironment.AtmosphereEnabled.Id)
             ? OptionalEditValues.Supplied<bool>(after.AtmosphereEnabled)
             : OptionalEditValues.Unspecified<bool>();
-        var sunNodeId = edit.Contains(SceneEnvironment.SunNodeId.Id)
-            ? OptionalEditValues.Supplied<Guid?>(after.SunNodeId)
-            : OptionalEditValues.Unspecified<Guid?>();
         var backgroundColor = edit.Contains(SceneEnvironment.BackgroundColor.Id)
             ? OptionalEditValues.Supplied<Vector3>(after.BackgroundColor)
             : OptionalEditValues.Unspecified<Vector3>();
@@ -270,7 +267,6 @@ public sealed partial class SceneDocumentCommandService
         return new SceneEnvironmentEditConversion(
             new SceneEnvironmentEdit(
                 atmosphereEnabled,
-                sunNodeId,
                 OptionalEditValues.Unspecified<ExposureMode>(),
                 OptionalEditValues.Unspecified<float>(),
                 OptionalEditValues.Unspecified<float>(),
@@ -283,7 +279,6 @@ public sealed partial class SceneDocumentCommandService
         static SceneEnvironmentEdit EmptyEnvironmentEdit()
             => new(
                 OptionalEditValues.Unspecified<bool>(),
-                OptionalEditValues.Unspecified<Guid?>(),
                 OptionalEditValues.Unspecified<ExposureMode>(),
                 OptionalEditValues.Unspecified<float>(),
                 OptionalEditValues.Unspecified<float>(),

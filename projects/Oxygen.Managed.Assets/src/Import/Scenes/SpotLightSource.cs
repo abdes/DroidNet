@@ -9,6 +9,5 @@ public sealed record SpotLightSource(
     float LuminousFluxLumens,
     float Range,
     float SourceRadius,
-    float DecayExponent,
     float InnerConeAngleRadians,
     float OuterConeAngleRadians);

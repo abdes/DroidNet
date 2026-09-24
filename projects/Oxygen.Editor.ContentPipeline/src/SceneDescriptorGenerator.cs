@@ -24,7 +24,7 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <param name="proceduralGeometryDescriptors">The generated geometry descriptor service.</param>
 public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescriptorService proceduralGeometryDescriptors) : ISceneDescriptorGenerator
 {
-    private const int NativeSceneDescriptorVersion = 6;
+    private const int NativeSceneDescriptorVersion = 7;
     private const double MaximumExposureLogLuminance = 32;
     private static readonly Lazy<EditorSchemaCatalog> SceneSchemas = new(() =>
         EditorSchemaCatalog.LoadFromDirectory(Path.Combine(
@@ -103,6 +103,14 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
                 diagnostics);
         }
 
+        var lightIssue = LightValidation.ValidateScene(scene);
+        if (lightIssue is not null)
+        {
+            diagnostics.Add(CreateDiagnostic(operationId, DiagnosticSeverity.Error,
+                ContentPipelineDiagnosticCodes.SceneDescriptorGenerationFailed,
+                lightIssue, descriptorPath, descriptorVirtualPath));
+            return new(sceneInput.AssetUri, descriptorPath, descriptorVirtualPath, Dependencies: [], diagnostics);
+        }
         var exposureIssue = ValidatePostProcess(scene.Environment.PostProcess);
         if (exposureIssue is not null)
         {
@@ -282,8 +290,16 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
                     ToCommon(light),
                     light.IntensityLux,
                     light.AngularSizeRadians,
-                    light.EnvironmentContribution,
-                    IsSceneSunLight(scene, node, light)));
+                    (int)light.AtmosphereSlot,
+                    light.UsePerPixelAtmosphereTransmittance,
+                    ToArray(light.AtmosphereDiskLuminanceScaleRgb),
+                    light.CascadeCount,
+                    (int)light.SplitMode,
+                    light.MaxShadowDistance,
+                    [light.CascadeDistances.X, light.CascadeDistances.Y, light.CascadeDistances.Z, light.CascadeDistances.W],
+                    light.DistributionExponent,
+                    light.TransitionFraction,
+                    light.DistanceFadeoutFraction));
             }
 
             foreach (var light in node.Components.OfType<PointLightComponent>())
@@ -293,8 +309,7 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
                     ToCommon(light),
                     light.LuminousFluxLumens,
                     light.Range,
-                    light.SourceRadius,
-                    light.DecayExponent));
+                    light.SourceRadius));
             }
 
             foreach (var light in node.Components.OfType<SpotLightComponent>())
@@ -305,7 +320,6 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
                     light.LuminousFluxLumens,
                     light.Range,
                     light.SourceRadius,
-                    light.DecayExponent,
                     light.InnerConeAngleRadians,
                     light.OuterConeAngleRadians));
             }
@@ -463,12 +477,9 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
             light.AffectsWorld,
             ToArray(light.Color),
             light.CastsShadows,
-            light.ExposureCompensation);
-
-    private static bool IsSceneSunLight(Scene scene, SceneNode node, DirectionalLightComponent light)
-        => scene.Environment.SunNodeId is { } sunNodeId
-            ? light.IsSunLight && sunNodeId == node.Id
-            : light.IsSunLight;
+            light.ExposureCompensation,
+            new NativeLightShadow(light.ShadowBias, light.ShadowNormalBias,
+                light.ContactShadows, (int)light.ShadowResolutionHint));
 
     private static string? ValidateExposureRelationships(PostProcessEnvironmentData exposure)
     {

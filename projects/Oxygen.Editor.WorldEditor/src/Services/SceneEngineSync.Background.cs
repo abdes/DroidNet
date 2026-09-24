@@ -11,12 +11,11 @@ namespace Oxygen.Editor.World.Services;
 /// <summary>Keeps background application and field outcomes independent from other environment systems.</summary>
 public sealed partial class SceneEngineSync
 {
-    private static EnvironmentSyncResult EnvironmentResult(SyncOutcome sun, SyncOutcome environment, SyncOutcome background)
+    private static EnvironmentSyncResult EnvironmentResult(SyncOutcome environment, SyncOutcome background)
     {
         var fields = new Dictionary<string, SyncOutcome>(StringComparer.Ordinal)
         {
             [nameof(SceneEnvironmentData.AtmosphereEnabled)] = environment,
-            [nameof(SceneEnvironmentData.SunNodeId)] = sun,
             [nameof(SceneEnvironmentData.BackgroundColor)] = background,
             [nameof(SceneEnvironmentData.SkyAtmosphere)] = environment,
             [nameof(SceneEnvironmentData.PostProcess)] = environment,

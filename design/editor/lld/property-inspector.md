@@ -227,8 +227,11 @@ off lights. Reject occupied-slot edits with the occupant's identity and no
 partial reassignment. Disabling/hiding retains assignment; Secondary-only never
 promotes to Primary. The names imply no brightness priority or Moon type.
 Keep native AtmosphereLightSlot and its setter/getter names; no A/B aliases.
-Remove duplicate SunNodeId/IsSunLight/Contributes authoring through migration.
-An optional scene summary is read-only.
+SceneEnvironmentData stores no SunNodeId, IsSunLight or Contributes authority.
+The environment Primary picker edits the selected directional light through the
+same validated property command and undo history as its inspector. An occupied
+slot rejects the edit and identifies its existing owner; clear that assignment
+before choosing another source.
 
 Both atmospheric sources must illuminate and cast requested shadows in surface
 paths/applicable fog, and drive atmosphere plus captured-sky diffuse/specular

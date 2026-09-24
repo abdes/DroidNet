@@ -15,7 +15,6 @@ public abstract partial class LightComponent : GameComponent
 {
     private bool affectsWorld = true;
     private Vector3 color = Vector3.One;
-    private LightMobility mobility = LightMobility.Realtime;
     private bool castsShadows;
     private float shadowBias;
     private float shadowNormalBias = 0.02f;
@@ -41,14 +40,6 @@ public abstract partial class LightComponent : GameComponent
         set => _ = this.SetProperty(ref this.color, value);
     }
 
-    /// <summary>
-    /// Gets or sets the runtime participation mode for this light.
-    /// </summary>
-    public LightMobility Mobility
-    {
-        get => this.mobility;
-        set => _ = this.SetProperty(ref this.mobility, value);
-    }
 
     /// <summary>
     /// Gets or sets a value indicating whether this light casts shadows.
@@ -107,6 +98,10 @@ public abstract partial class LightComponent : GameComponent
     /// <inheritdoc/>
     public override void Hydrate(ComponentData data)
     {
+        if (data is LightComponentData candidate && LightValidation.Validate(candidate) is { } error)
+        {
+            throw new ArgumentException(error, nameof(data));
+        }
         base.Hydrate(data);
 
         if (data is not LightComponentData light)
@@ -118,7 +113,7 @@ public abstract partial class LightComponent : GameComponent
         {
             this.AffectsWorld = light.AffectsWorld;
             this.Color = light.Color;
-            this.Mobility = light.Mobility;
+
             this.CastsShadows = light.CastsShadows;
             this.ShadowBias = light.Shadow?.Bias ?? 0f;
             this.ShadowNormalBias = light.Shadow?.NormalBias ?? 0.02f;

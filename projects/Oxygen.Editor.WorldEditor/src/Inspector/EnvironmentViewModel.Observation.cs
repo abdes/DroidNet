@@ -13,6 +13,7 @@ public partial class EnvironmentViewModel
 {
     private readonly HashSet<SceneNode> observedNodes = [];
     private Guid? observedSunId;
+    private readonly HashSet<DirectionalLightComponent> observedLights = [];
 
     private void AttachSceneObservers()
     {
@@ -22,7 +23,7 @@ public partial class EnvironmentViewModel
         }
 
         current.PropertyChanged += this.OnSceneModelChanged;
-        this.observedSunId = current.Environment.SunNodeId;
+        this.observedSunId = this.FindPrimarySource()?.Id;
         current.RootNodes.CollectionChanged += this.OnSceneTopologyChanged;
         foreach (var node in current.RootNodes)
         {
@@ -54,6 +55,10 @@ public partial class EnvironmentViewModel
         node.Children.CollectionChanged += this.OnSceneTopologyChanged;
         node.Components.CollectionChanged += this.OnSunComponentsChanged;
         node.PropertyChanged += this.OnSunNodeChanged;
+        foreach (var light in node.Components.OfType<DirectionalLightComponent>())
+        {
+            if (this.observedLights.Add(light)) light.PropertyChanged += this.OnLightAssignmentChanged;
+        }
         foreach (var child in node.Children)
         {
             this.ObserveSubtree(child);
@@ -70,9 +75,23 @@ public partial class EnvironmentViewModel
         node.Children.CollectionChanged -= this.OnSceneTopologyChanged;
         node.Components.CollectionChanged -= this.OnSunComponentsChanged;
         node.PropertyChanged -= this.OnSunNodeChanged;
+        foreach (var light in node.Components.OfType<DirectionalLightComponent>())
+        {
+            if (this.observedLights.Remove(light)) light.PropertyChanged -= this.OnLightAssignmentChanged;
+        }
         foreach (var child in node.Children)
         {
             this.UnobserveSubtree(child);
+        }
+    }
+
+    private void OnLightAssignmentChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        if (string.IsNullOrEmpty(args.PropertyName) || args.PropertyName == nameof(DirectionalLightComponent.AtmosphereSlot))
+        {
+            this.observedSunId = this.FindPrimarySource()?.Id;
+            this.lightAssignments?.ModelChanged(SceneDocumentCommandService.DirectionalLight.AtmosphereSlot.Id);
+            this.RefreshSunDependencies();
         }
     }
 
@@ -82,10 +101,10 @@ public partial class EnvironmentViewModel
             && (string.IsNullOrEmpty(args.PropertyName) || string.Equals(args.PropertyName, nameof(Scene.Environment), StringComparison.Ordinal)))
         {
             this.RefreshFromScene();
-            if (this.observedSunId != this.scene?.Environment.SunNodeId)
+            if (this.observedSunId != this.FindPrimarySource()?.Id)
             {
-                this.observedSunId = this.scene?.Environment.SunNodeId;
-                this.edits?.ModelChanged(SceneDocumentCommandService.SceneEnvironment.SunNodeId.Id);
+                this.observedSunId = this.FindPrimarySource()?.Id;
+                this.lightAssignments?.ModelChanged(SceneDocumentCommandService.DirectionalLight.AtmosphereSlot.Id);
             }
         }
     }
@@ -120,6 +139,18 @@ public partial class EnvironmentViewModel
 
     private void OnSunComponentsChanged(object? sender, NotifyCollectionChangedEventArgs args)
     {
+        var currentLights = this.observedNodes.SelectMany(node => node.Components.OfType<DirectionalLightComponent>()).ToHashSet();
+        foreach (var removed in this.observedLights.Except(currentLights).ToArray())
+        {
+            removed.PropertyChanged -= this.OnLightAssignmentChanged;
+            this.observedLights.Remove(removed);
+        }
+        foreach (var added in currentLights.Except(this.observedLights))
+        {
+            added.PropertyChanged += this.OnLightAssignmentChanged;
+            this.observedLights.Add(added);
+        }
+
         if (this.observedNodes.Any(node => ReferenceEquals(sender, node.Components)))
         {
             this.RefreshSunDependencies();
@@ -142,10 +173,10 @@ public partial class EnvironmentViewModel
         try
         {
             var previousTargets = this.SunOptions.Select(option => option.NodeId).ToHashSet();
-            this.RebuildSunOptions(this.scene?.Environment.SunNodeId);
+            this.RebuildSunOptions(this.FindPrimarySource()?.Id);
             if (!previousTargets.SetEquals(this.SunOptions.Select(option => option.NodeId)))
             {
-                this.edits?.ModelChanged(SceneDocumentCommandService.SceneEnvironment.SunNodeId.Id);
+                this.lightAssignments?.ModelChanged(SceneDocumentCommandService.DirectionalLight.AtmosphereSlot.Id);
             }
         }
         finally

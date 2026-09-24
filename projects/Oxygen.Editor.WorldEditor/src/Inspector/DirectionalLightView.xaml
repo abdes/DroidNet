@@ -176,32 +176,43 @@
                     </StackPanel>
                 </Grid>
             </editorcontrols:PropertyCard>
-            <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Environment">
-                <Grid ColumnSpacing="12">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <ToggleSwitch Header="Sun" IsOn="{x:Bind ViewModel.IsSunLight, Mode=TwoWay}" />
-                    <ToggleSwitch
-                        Grid.Column="1"
-                        Header="Contributes"
-                        IsOn="{x:Bind ViewModel.EnvironmentContribution, Mode=TwoWay}" />
-                </Grid>
+            <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Atmosphere">
+                <StackPanel Spacing="8">
+                    <ComboBox Header="Source assignment" HorizontalAlignment="Stretch"
+                        ItemsSource="{x:Bind ViewModel.AtmosphereSlotOptions}"
+                        SelectedItem="{x:Bind ViewModel.AtmosphereSlot, Mode=TwoWay}" />
+                    <TextBlock Foreground="{ThemeResource SystemFillColorCriticalBrush}" TextWrapping="Wrap"
+                        Text="{x:Bind ViewModel.AtmosphereSlotDiagnostic.Message, Mode=OneWay}"
+                        Visibility="{x:Bind ViewModel.AtmosphereSlotDiagnostic.Visibility, Mode=OneWay}" />
+                    <ToggleSwitch Header="Per-pixel transmittance"
+                        IsOn="{x:Bind ViewModel.UsePerPixelAtmosphereTransmittance, Mode=TwoWay}" />
+                </StackPanel>
             </editorcontrols:PropertyCard>
-            <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Common">
-                <Grid ColumnSpacing="8">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <ToggleSwitch Header="Affects World" IsOn="{x:Bind ViewModel.AffectsWorld, Mode=TwoWay}" />
-                    <ComboBox
-                        Grid.Column="1"
-                        HorizontalAlignment="Stretch"
-                        ItemsSource="{x:Bind ViewModel.MobilityOptions}"
-                        SelectedItem="{x:Bind ViewModel.Mobility, Mode=TwoWay}" />
-                </Grid>
+            <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Disk luminance scale">
+                <StackPanel Spacing="4">
+                    <Grid ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <controls:NumberBox Label="R" LabelPosition="Left" Mask="~.###" Tag="DiskScaleR"
+                            EditSessionStarted="NumberEditStarted" EditSessionCompleted="NumberEditCompleted"
+                            NumberValue="{x:Bind ViewModel.DiskScaleR, Mode=TwoWay}" />
+                        <controls:NumberBox Grid.Column="1" Label="G" LabelPosition="Left" Mask="~.###" Tag="DiskScaleG"
+                            EditSessionStarted="NumberEditStarted" EditSessionCompleted="NumberEditCompleted"
+                            NumberValue="{x:Bind ViewModel.DiskScaleG, Mode=TwoWay}" />
+                        <controls:NumberBox Grid.Column="2" Label="B" LabelPosition="Left" Mask="~.###" Tag="DiskScaleB"
+                            EditSessionStarted="NumberEditStarted" EditSessionCompleted="NumberEditCompleted"
+                            NumberValue="{x:Bind ViewModel.DiskScaleB, Mode=TwoWay}" />
+                    </Grid>
+                    <TextBlock Foreground="{ThemeResource SystemFillColorCriticalBrush}" TextWrapping="Wrap"
+                        Text="{x:Bind ViewModel.AtmosphereDiskLuminanceScaleRgbDiagnostic.Message, Mode=OneWay}"
+                        Visibility="{x:Bind ViewModel.AtmosphereDiskLuminanceScaleRgbDiagnostic.Visibility, Mode=OneWay}" />
+                </StackPanel>
+            </editorcontrols:PropertyCard>
+            <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Participation">
+                <ToggleSwitch Header="Affects World" IsOn="{x:Bind ViewModel.AffectsWorld, Mode=TwoWay}" />
             </editorcontrols:PropertyCard>
             <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Exposure">
                 <StackPanel Spacing="2">

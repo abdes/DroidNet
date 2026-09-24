@@ -120,10 +120,6 @@ public sealed partial class SceneDocumentCommandService
         if (string.Equals(kind, SceneEnvironmentKind, StringComparison.Ordinal) && targets[context.Scene.Id] is SceneEnvironmentPropertyTarget environment)
         {
             context.Scene.SetEnvironment(environment.Value);
-            if (snapshot.PerNode[context.Scene.Id].Contains(SceneEnvironment.SunNodeId.Id))
-            {
-                ApplyEnvironmentSunBinding(context.Scene, environment.Value.SunNodeId);
-            }
         }
     }
 
@@ -250,6 +246,13 @@ public sealed partial class SceneDocumentCommandService
             }
         }
 
+        if (string.Equals(kind, DirectionalLightKind, StringComparison.Ordinal)
+            && ValidateDirectionalLightCandidates(context.Scene, requested.PerNode.ToDictionary(
+                pair => pair.Key, pair => BuildDirectionalLightEditFromPropertyEdit(pair.Value))) is { } candidateFailure)
+        {
+            return this.ValidationFailure(OperationKindForPropertyKind(kind), candidateFailure.Code,
+                candidateFailure.Title, candidateFailure.Message, context);
+        }
         return null;
     }
 
