@@ -37,6 +37,9 @@ private:
     double frame_start_ms {};
     double scene_update_ms {};
     double submission_ms {};
+    unsigned shadow_writers {};
+    unsigned shadow_map_uses {};
+    unsigned shadow_backing_uses {};
   };
   struct CapturedView {
     std::shared_ptr<const graphics::Texture> hdr;
@@ -73,6 +76,9 @@ private:
   bool measure_ {};
   bool capture_ {};
   bool recording_ {};
+  unsigned frame_shadow_writers_ { 0 };
+  unsigned frame_shadow_map_uses_ { 0 };
+  unsigned frame_shadow_backing_uses_ { 0 };
   unsigned warmup_frames_ { 120U };
   unsigned sample_frames_ { 240U };
 };

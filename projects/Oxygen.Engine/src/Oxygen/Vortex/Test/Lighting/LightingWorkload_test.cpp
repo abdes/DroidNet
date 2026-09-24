@@ -191,4 +191,23 @@ namespace {
       std::invalid_argument);
   }
 } // namespace
+NOLINT_TEST(LightingWorkloadTest,
+  ExplicitSecondaryLayoutsPreserveLegacyDefaultAndSupportSharing)
+{
+  LightingWorkloadOptions options;
+  options.secondary_view = true;
+  const auto legacy = BuildLightingWorkload(options);
+  ASSERT_EQ(legacy.views.size(), 2U);
+  EXPECT_EQ(legacy.views[1].width, options.width / 2U);
+  EXPECT_EQ(legacy.views[1].eye_ws[0], 16.0F);
+  options.secondary_layout = WorkloadSecondaryLayout::kMatched;
+  const auto matched = BuildLightingWorkload(options);
+  EXPECT_EQ(matched.views[0].width, matched.views[1].width);
+  EXPECT_EQ(matched.views[0].eye_ws, matched.views[1].eye_ws);
+  EXPECT_NE(matched.views[0].id, matched.views[1].id);
+  options.secondary_layout = WorkloadSecondaryLayout::kPartialOverlap;
+  const auto partial = BuildLightingWorkload(options);
+  EXPECT_EQ(partial.views[1].width, options.width);
+  EXPECT_EQ(partial.views[1].eye_ws[0], 26.0F);
+}
 } // namespace oxygen::vortex::testing

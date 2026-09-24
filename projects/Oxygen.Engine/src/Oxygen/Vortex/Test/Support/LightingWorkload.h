@@ -29,6 +29,12 @@ enum class WorkloadMutation : std::uint8_t {
 };
 enum class WorkloadProjection : std::uint8_t { kPerspective, kOrthographic };
 
+enum class WorkloadSecondaryLayout : std::uint8_t {
+  kOffsetHalf,
+  kMatched,
+  kOffsetFull,
+  kPartialOverlap
+};
 struct LightingWorkloadOptions {
   std::uint32_t light_count { 1024U };
   WorkloadDistribution distribution { WorkloadDistribution::kSparse };
@@ -37,6 +43,9 @@ struct LightingWorkloadOptions {
   bool moving { false };
   std::uint32_t motion_frame { 0U };
   bool secondary_view { false };
+  WorkloadSecondaryLayout secondary_layout {
+    WorkloadSecondaryLayout::kOffsetHalf
+  };
   bool reverse_lights { false };
   bool reverse_views { false };
   std::uint32_t point_shadow_requests { 0U };
