@@ -2719,7 +2719,6 @@ void SceneLoaderService::AttachLights(const data::SceneAsset& asset)
       dst.affects_world = (src.affects_world != 0U);
       dst.color_rgb = { src.color_rgb[0], src.color_rgb[1], src.color_rgb[2] };
       // intensity REMOVED from common - set via specific light class methods
-      dst.mobility = static_cast<scene::LightMobility>(src.mobility);
       dst.casts_shadows = (src.casts_shadows != 0U);
       dst.shadow.bias = src.shadow.bias;
       dst.shadow.normal_bias = src.shadow.normal_bias;
@@ -2741,8 +2740,10 @@ void SceneLoaderService::AttachLights(const data::SceneAsset& asset)
     ApplyCommonLight(light->Common(), rec.common);
     light->SetIntensityLux(rec.intensity_lux);
     light->SetAngularSizeRadians(rec.angular_size_radians);
-    light->SetEnvironmentContribution(rec.environment_contribution != 0U);
-    light->SetIsSunLight(rec.is_sun_light != 0U);
+    light->SetAtmosphereLightSlot(static_cast<scene::AtmosphereLightSlot>(rec.atmosphere_light_slot));
+    light->SetUsePerPixelAtmosphereTransmittance(rec.use_per_pixel_atmosphere_transmittance != 0U);
+    light->SetAtmosphereDiskLuminanceScale({ rec.atmosphere_disk_luminance_scale_rgb[0],
+      rec.atmosphere_disk_luminance_scale_rgb[1], rec.atmosphere_disk_luminance_scale_rgb[2] });
 
     auto& csm = light->CascadedShadows();
     csm.cascade_count = std::clamp<std::uint32_t>(
@@ -2781,9 +2782,6 @@ void SceneLoaderService::AttachLights(const data::SceneAsset& asset)
     ApplyCommonLight(light->Common(), rec.common);
     light->SetLuminousFluxLm(rec.luminous_flux_lm);
     light->SetRange(std::abs(rec.range));
-    light->SetAttenuationModel(
-      static_cast<scene::AttenuationModel>(rec.attenuation_model));
-    light->SetDecayExponent(rec.decay_exponent);
     light->SetSourceRadius(std::abs(rec.source_radius));
 
     const bool attached
@@ -2808,9 +2806,6 @@ void SceneLoaderService::AttachLights(const data::SceneAsset& asset)
     ApplyCommonLight(light->Common(), rec.common);
     light->SetLuminousFluxLm(rec.luminous_flux_lm);
     light->SetRange(std::abs(rec.range));
-    light->SetAttenuationModel(
-      static_cast<scene::AttenuationModel>(rec.attenuation_model));
-    light->SetDecayExponent(rec.decay_exponent);
     light->SetInnerConeAngleRadians(rec.inner_cone_angle_radians);
     light->SetOuterConeAngleRadians(rec.outer_cone_angle_radians);
     light->SetSourceRadius(std::abs(rec.source_radius));

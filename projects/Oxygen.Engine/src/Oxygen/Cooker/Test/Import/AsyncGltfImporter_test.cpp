@@ -434,7 +434,6 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest,
     Cone { .inner = 0.0F, .outer = 0.5F },
     Cone { .inner = 0.2F, .outer = 0.5F },
     Cone { .inner = 0.5F, .outer = 0.5F },
-    Cone { .inner = 0.0F, .outer = 1.0e-5F },
     Cone { .inner = 0.0F, .outer = std::numbers::pi_v<float> / 2.0F },
     Cone { .inner = 1.2F, .outer = std::numbers::pi_v<float> / 2.0F },
   };

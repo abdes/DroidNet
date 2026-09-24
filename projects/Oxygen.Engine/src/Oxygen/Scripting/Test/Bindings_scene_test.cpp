@@ -762,6 +762,23 @@ function on_scene_mutation()
   if light_node:light_set_affects_world(1) ~= false then
     error("light_set_affects_world should reject non-boolean")
   end
+  assert(light_node:light_update({ intensity_lux = 1234, atmosphere_light_slot = "primary" }))
+  assert(not light_node:light_update({ intensity_lux = 9000, cascade_count = 0 }))
+  assert(light_node:light_get_intensity_lux() == 1234, "failed patch changed intensity")
+  assert(not light_node:light_update({ is_sun_light = true }), "removed sun flag accepted")
+  assert(not light_node:light_update({ decay_exponent = 2 }), "removed attenuation field accepted")
+  local other = scene.create_node("OtherLight", nil)
+  assert(other:attach_directional_light({ atmosphere_light_slot = "secondary" }))
+  assert(not other:light_update({ affects_world = false, atmosphere_light_slot = "primary" }))
+  assert(other:light_get_atmosphere_light_slot() == "secondary", "slot conflict partially applied")
+  assert(other:light_get_affects_world(), "slot conflict changed participation")
+  local spot = scene.create_node("AtomicSpot", nil)
+  assert(spot:attach_spot_light({ inner_cone_angle_radians = 0.2, outer_cone_angle_radians = 0.4 }))
+  assert(not spot:light_set_inner_cone_angle_radians(0.6))
+  assert(spot:light_set_cone_angles_radians(0.6, 0.8))
+  assert(math.abs(spot:light_get_inner_cone_angle_radians() - 0.6) < 0.0001)
+  assert(not spot:light_update({ luminous_flux_lm = 123, range = -1 }))
+  assert(spot:light_get_luminous_flux_lm() ~= 123, "invalid range partially applied")
 
   local camera_node = scene.create_node("CameraHostInvalidArgs", nil)
   if camera_node == nil then error("camera node create failed") end

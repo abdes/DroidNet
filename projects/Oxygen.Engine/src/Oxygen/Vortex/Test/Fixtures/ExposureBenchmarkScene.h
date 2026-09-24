@@ -432,8 +432,8 @@ struct MixedExposureBenchmarkScene {
   result.sun = scene.CreateNode("AtmosphereProofSun");
   auto sun = std::make_unique<scene::DirectionalLight>();
   sun->SetIntensityLux(110000.0F);
-  sun->SetEnvironmentContribution(true);
-  sun->SetIsSunLight(true);
+  sun->SetAtmosphereLightSlot(oxygen::scene::AtmosphereLightSlot::kPrimary);
+
   sun->SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kPrimary);
   sun->Common().casts_shadows = true;
   CHECK_F(result.sun.AttachLight(std::move(sun)));

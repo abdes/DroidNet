@@ -13,6 +13,7 @@
 #include <type_traits>
 
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/LightValidation.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Serio/Reader.h>
 
@@ -714,6 +715,9 @@ inline auto Load(AnyReader& reader,
   CHECK_RESULT(reader.ReadInto(r.contact_shadows));
   CHECK_RESULT(reader.ReadInto(r.resolution_hint));
 
+  if (!data::IsValidLightRecord(r)) {
+    return ::oxygen::Err(std::errc::invalid_argument);
+  }
   return {};
 }
 
@@ -728,12 +732,14 @@ inline auto Load(AnyReader& reader, data::pak::world::LightCommonRecord& r)
   }
   // intensity REMOVED from common - now in specific light records
 
-  CHECK_RESULT(reader.ReadInto(r.mobility));
   CHECK_RESULT(reader.ReadInto(r.casts_shadows));
 
   CHECK_RESULT(reader.ReadInto(r.shadow));
   CHECK_RESULT(reader.ReadInto(r.exposure_compensation_ev));
 
+  if (!data::IsValidLightRecord(r)) {
+    return ::oxygen::Err(std::errc::invalid_argument);
+  }
   return {};
 }
 
@@ -745,8 +751,11 @@ inline auto Load(AnyReader& reader, data::pak::world::DirectionalLightRecord& r)
   CHECK_RESULT(reader.ReadInto(r.node_index));
   CHECK_RESULT(reader.ReadInto(r.common));
   CHECK_RESULT(reader.ReadInto(r.angular_size_radians));
-  CHECK_RESULT(reader.ReadInto(r.environment_contribution));
-  CHECK_RESULT(reader.ReadInto(r.is_sun_light));
+  CHECK_RESULT(reader.ReadInto(r.atmosphere_light_slot));
+  CHECK_RESULT(reader.ReadInto(r.use_per_pixel_atmosphere_transmittance));
+  for (auto& value : r.atmosphere_disk_luminance_scale_rgb) {
+    CHECK_RESULT(reader.ReadInto(value));
+  }
 
   CHECK_RESULT(reader.ReadInto(r.cascade_count));
   for (auto& v : r.cascade_distances) {
@@ -759,6 +768,9 @@ inline auto Load(AnyReader& reader, data::pak::world::DirectionalLightRecord& r)
   CHECK_RESULT(reader.ReadInto(r.distance_fadeout_fraction));
   CHECK_RESULT(reader.ReadInto(r.intensity_lux));
 
+  if (!data::IsValidLightRecord(r)) {
+    return ::oxygen::Err(std::errc::invalid_argument);
+  }
   return {};
 }
 
@@ -770,11 +782,12 @@ inline auto Load(AnyReader& reader, data::pak::world::PointLightRecord& r)
   CHECK_RESULT(reader.ReadInto(r.node_index));
   CHECK_RESULT(reader.ReadInto(r.common));
   CHECK_RESULT(reader.ReadInto(r.range));
-  CHECK_RESULT(reader.ReadInto(r.decay_exponent));
   CHECK_RESULT(reader.ReadInto(r.source_radius));
   CHECK_RESULT(reader.ReadInto(r.luminous_flux_lm));
-  CHECK_RESULT(reader.ReadInto(r.attenuation_model));
 
+  if (!data::IsValidLightRecord(r)) {
+    return ::oxygen::Err(std::errc::invalid_argument);
+  }
   return {};
 }
 
@@ -786,13 +799,14 @@ inline auto Load(AnyReader& reader, data::pak::world::SpotLightRecord& r)
   CHECK_RESULT(reader.ReadInto(r.node_index));
   CHECK_RESULT(reader.ReadInto(r.common));
   CHECK_RESULT(reader.ReadInto(r.range));
-  CHECK_RESULT(reader.ReadInto(r.decay_exponent));
   CHECK_RESULT(reader.ReadInto(r.inner_cone_angle_radians));
   CHECK_RESULT(reader.ReadInto(r.outer_cone_angle_radians));
   CHECK_RESULT(reader.ReadInto(r.source_radius));
   CHECK_RESULT(reader.ReadInto(r.luminous_flux_lm));
-  CHECK_RESULT(reader.ReadInto(r.attenuation_model));
 
+  if (!data::IsValidLightRecord(r)) {
+    return ::oxygen::Err(std::errc::invalid_argument);
+  }
   return {};
 }
 

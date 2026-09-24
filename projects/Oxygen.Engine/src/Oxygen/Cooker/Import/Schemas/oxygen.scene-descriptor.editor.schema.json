@@ -168,12 +168,6 @@
           "x-editor-order": 0,
           "x-editor-renderer": "color-rgb"
         },
-        "mobility": {
-          "x-editor-label": "Mobility",
-          "x-editor-group": "Common",
-          "x-editor-order": 10,
-          "x-editor-renderer": "combo"
-        },
         "casts_shadows": {
           "x-editor-label": "Cast Shadows",
           "x-editor-group": "Shadows",
@@ -213,18 +207,6 @@
           "x-editor-renderer": "numberbox",
           "x-editor-step": 0.001,
           "x-editor-unit": "rad"
-        },
-        "environment_contribution": {
-          "x-editor-label": "Contributes",
-          "x-editor-group": "Environment",
-          "x-editor-order": 10,
-          "x-editor-renderer": "toggle"
-        },
-        "is_sun_light": {
-          "x-editor-label": "Sun",
-          "x-editor-group": "Environment",
-          "x-editor-order": 0,
-          "x-editor-renderer": "toggle"
         },
         "cascade_count": {
           "x-editor-label": "Cascade Count",
@@ -275,6 +257,24 @@
           "x-editor-order": 10,
           "x-editor-renderer": "numberbox",
           "x-editor-step": 0.01
+        },
+        "atmosphere_light_slot": {
+          "x-editor-label": "Source assignment",
+          "x-editor-group": "Atmosphere",
+          "x-editor-order": 0,
+          "x-editor-renderer": "combo"
+        },
+        "use_per_pixel_atmosphere_transmittance": {
+          "x-editor-label": "Per-pixel transmittance",
+          "x-editor-group": "Atmosphere",
+          "x-editor-order": 10,
+          "x-editor-renderer": "toggle"
+        },
+        "atmosphere_disk_luminance_scale_rgb": {
+          "x-editor-label": "Disk luminance scale",
+          "x-editor-group": "Atmosphere",
+          "x-editor-order": 20,
+          "x-editor-renderer": "vector3-box"
         }
       }
     },
@@ -285,12 +285,6 @@
           "x-editor-group": "Environment",
           "x-editor-order": 0,
           "x-editor-renderer": "toggle"
-        },
-        "sun_node_id": {
-          "x-editor-label": "Sun Light",
-          "x-editor-group": "Environment",
-          "x-editor-order": 10,
-          "x-editor-renderer": "combo"
         },
         "background_color": {
           "x-editor-label": "Background",

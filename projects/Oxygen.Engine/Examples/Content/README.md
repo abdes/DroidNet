@@ -3,6 +3,9 @@
 The native ImportTool cooks the authored manifests in `scenes/` into the shared
 `.cooked` root. PakTool packages that root into `pak/all.pak` and its catalog
 and manifest. RenderScene can load either the loose root or the PAK.
+Scene descriptors use version 7; older cooked scenes must be recooked.
+Atmosphere sources use explicit per-light slots, and scripted light changes use
+validated whole-candidate updates.
 
 ## Cook and package
 

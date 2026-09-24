@@ -1,5 +1,5 @@
 {
-  "version": 6,
+  "version": 7,
   "name": "PointShadowValidation",
   "nodes": [
     {
@@ -123,7 +123,6 @@
         "common": {
           "affects_world": true,
           "color_rgb": [1.0, 0.92, 0.82],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.0,
@@ -132,8 +131,6 @@
           }
         },
         "range": 8.0,
-        "attenuation_model": 0,
-        "decay_exponent": 2.0,
         "source_radius": 0.05,
         "luminous_flux_lm": 42000.0
       }

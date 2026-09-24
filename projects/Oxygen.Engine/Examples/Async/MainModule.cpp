@@ -725,7 +725,6 @@ auto MainModule::EnsureCameraSpotLight() -> void
     light->Common().mobility = scene::LightMobility::kRealtime;
     light->Common().casts_shadows = casts_shadows;
     light->SetRange(range);
-    light->SetAttenuationModel(scene::AttenuationModel::kInverseSquare);
     const float clamped_inner = std::min(inner_cone, outer_cone);
     const float clamped_outer = std::max(inner_cone, outer_cone);
     light->SetInnerConeAngleRadians(clamped_inner);
@@ -1155,11 +1154,9 @@ auto MainModule::EnsureSunDirectionalLight(scene::Scene& scene) -> void
     light->Common().color_rgb = { 1.0F, 0.97F, 0.92F };
     light->SetAngularSizeRadians(glm::radians(0.53F));
     light->SetIntensityLux(100000.0F);
-    light->SetEnvironmentContribution(true);
-    light->SetIsSunLight(true);
     light->SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kPrimary);
     light->SetUsePerPixelAtmosphereTransmittance(true);
-    light->SetAtmosphereDiskLuminanceScale({ 1.0F, 0.95F, 0.9F, 1.0F });
+    light->SetAtmosphereDiskLuminanceScale({ 1.0F, 0.95F, 0.9F });
     CHECK_F(
       sun_light_.AttachLight(std::move(light)), "Failed to attach SunLight");
   }

@@ -1,5 +1,5 @@
 {
-  "version": 6,
+  "version": 7,
   "name": "VsmBug1LargePlane",
   "nodes": [
     {
@@ -79,7 +79,6 @@
         "common": {
           "color_rgb": [1.0, 0.98, 0.95],
           "casts_shadows": true,
-          "mobility": 0,
           "exposure_compensation_ev": 0.0,
           "shadow": {
             "bias": 0.0,
@@ -89,8 +88,7 @@
         },
         "intensity_lux": 100000.0,
         "angular_size_radians": 0.01862,
-        "is_sun_light": true,
-        "environment_contribution": true,
+        "atmosphere_light_slot": 1,
         "cascade_count": 4,
         "cascade_distances": [5.0, 15.0, 40.0, 100.0]
       }

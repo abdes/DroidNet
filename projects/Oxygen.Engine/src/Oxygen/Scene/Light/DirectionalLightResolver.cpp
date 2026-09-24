@@ -8,6 +8,7 @@
 #include <array>
 #include <string>
 #include <vector>
+#include <utility>
 
 #include <glm/geometric.hpp>
 
@@ -88,53 +89,6 @@ namespace {
     static_cast<void>(scene.Traverse().Traverse(
       visitor, TraversalOrder::kPreOrder, VisibleFilter {}));
     return resolved;
-  }
-
-  auto IsEnvironmentContributingLight(const ResolvedDirectionalLightView& entry)
-    -> bool
-  {
-    return entry.Light().GetEnvironmentContribution();
-  }
-
-  auto IsExplicitPrimary(const ResolvedDirectionalLightView& entry) -> bool
-  {
-    return IsEnvironmentContributingLight(entry)
-      && entry.Light().GetAtmosphereLightSlot()
-      == AtmosphereLightSlot::kPrimary;
-  }
-
-  auto IsExplicitSecondary(const ResolvedDirectionalLightView& entry) -> bool
-  {
-    return IsEnvironmentContributingLight(entry)
-      && entry.Light().GetAtmosphereLightSlot()
-      == AtmosphereLightSlot::kSecondary;
-  }
-
-  auto IsNodeAlreadyAssigned(const ResolvedAtmosphereDirectionalLights& result,
-    const NodeHandle node) -> bool
-  {
-    return std::ranges::any_of(result.slots,
-      [node](const std::optional<ResolvedDirectionalLightView>& entry) {
-        return entry.has_value() && entry->NodeHandle() == node;
-      });
-  }
-
-  auto FindFirstUnassignedEnvironmentLight(
-    const std::vector<ResolvedDirectionalLightView>& directional_lights,
-    const ResolvedAtmosphereDirectionalLights& result,
-    const std::function<bool(const ResolvedDirectionalLightView&)>& predicate)
-    -> std::optional<ResolvedDirectionalLightView>
-  {
-    const auto found = std::ranges::find_if(directional_lights,
-      [&result, &predicate](const ResolvedDirectionalLightView& entry) {
-        return IsEnvironmentContributingLight(entry)
-          && !IsNodeAlreadyAssigned(result, entry.NodeHandle())
-          && predicate(entry);
-      });
-    if (found == directional_lights.end()) {
-      return std::nullopt;
-    }
-    return *found;
   }
 
 } // namespace
@@ -289,52 +243,12 @@ auto DirectionalLightResolver::ResolveCanonicalAtmosphereLights() const
 {
   auto result = ResolvedAtmosphereDirectionalLights {};
 
-  const auto assign_explicit = [this, &result](const std::uint32_t slot_index,
-                                 const ResolvedDirectionalLightView& entry) {
-    if (result.slots[slot_index].has_value()) {
-      ++result.conflict_count;
-      if (result.first_conflict_slot == 0xFFFFFFFFU) {
-        result.first_conflict_slot = slot_index;
-      }
-      const auto& kept = *result.slots[slot_index];
-      const auto scene_name
-        = scene_ != nullptr ? scene_->GetName() : "<unbound>";
-      LOG_F(ERROR,
-        "scene '{}' has multiple explicit atmosphere-light slot {} claims; "
-        "keeping '{}' and ignoring '{}'",
-        scene_name, slot_index, kept.Node().GetName().data(),
-        entry.Node().GetName().data());
-      return;
-    }
-
-    result.slots[slot_index] = entry;
-    result.explicit_slot_claims[slot_index] = true;
-  };
-
   for (const auto& entry : directional_lights_) {
-    if (IsExplicitPrimary(entry)) {
-      assign_explicit(0U, entry);
-      continue;
-    }
-    if (IsExplicitSecondary(entry)) {
-      assign_explicit(1U, entry);
-    }
-  }
-
-  if (!result.slots[0].has_value()) {
-    if (const auto first_sun
-      = FindFirstUnassignedEnvironmentLight(directional_lights_, result,
-        [](const ResolvedDirectionalLightView& entry) {
-          return entry.Light().IsSunLight();
-        });
-      first_sun.has_value()) {
-      result.slots[0] = *first_sun;
-    } else if (const auto first_environment
-      = FindFirstUnassignedEnvironmentLight(directional_lights_, result,
-        [](const ResolvedDirectionalLightView&) { return true; });
-      first_environment.has_value()) {
-      result.slots[0] = *first_environment;
-    }
+    const auto slot = entry.Light().GetAtmosphereLightSlot();
+    if (slot == AtmosphereLightSlot::kNone) continue;
+    const auto index = slot == AtmosphereLightSlot::kPrimary ? 0U : 1U;
+    result.slots[index] = entry;
+    result.explicit_slot_claims[index] = true;
   }
 
   return result;
@@ -343,31 +257,30 @@ auto DirectionalLightResolver::ResolveCanonicalAtmosphereLights() const
 auto DirectionalLightResolver::ValidationErrorMessage() const
   -> std::optional<std::string>
 {
-  auto environment_contribution_count = 0U;
-  auto sun_light_count = 0U;
-
-  for (const auto& entry : directional_lights_) {
-    const auto& light = entry.Light();
-    if (light.IsSunLight() && !light.GetEnvironmentContribution()) {
-      return std::string("directional light '") + entry.Node().GetName().data()
-        + "' has is_sun_light=true but environment_contribution=false";
-    }
-    if (light.GetEnvironmentContribution()) {
-      ++environment_contribution_count;
-      if (light.IsSunLight()) {
-        ++sun_light_count;
+  // Ownership includes stored inactive/hidden lights, independently of rendering.
+  std::array<std::string, 2> owners;
+  std::optional<std::string> error;
+  const auto& scene = std::as_const(*scene_);
+  static_cast<void>(scene.Traverse().Traverse(
+    [&](const ConstVisitedNode& visited, bool) -> VisitResult {
+      if (!visited.node_impl->HasComponent<DirectionalLight>()) return VisitResult::kContinue;
+      const auto slot = visited.node_impl->GetComponent<DirectionalLight>().GetAtmosphereLightSlot();
+      if (slot == AtmosphereLightSlot::kNone) return VisitResult::kContinue;
+      if (slot > AtmosphereLightSlot::kSecondary) {
+        error = "Unknown atmosphere light slot";
+        return VisitResult::kStop;
       }
-    }
-  }
+      const auto index = slot == AtmosphereLightSlot::kPrimary ? 0U : 1U;
+      const auto name = std::string(visited.node_impl->GetName());
+      if (!owners[index].empty()) {
+        error = "Atmosphere slot conflict between '" + owners[index] + "' and '" + name + "'";
+        return VisitResult::kStop;
+      }
+      owners[index] = name.empty() ? "<unnamed>" : name;
+      return VisitResult::kContinue;
+    }));
+  if (error) return error;
 
-  if (environment_contribution_count > 2U) {
-    return "scene has more than two directional "
-           "lights with environment_contribution=true";
-  }
-  if (sun_light_count > 1U) {
-    return "scene has more than one directional "
-           "light with is_sun_light=true and environment_contribution=true";
-  }
   return std::nullopt;
 }
 

@@ -8,6 +8,6 @@ Scene-authored environment coverage:
 - `environment.fog` enables height fog plus volumetric fog parameters with kilometer-scale start/end distances.
 - `environment.sky_light` enables captured-scene sky lighting with diffuse/specular and volumetric-scattering controls.
 - `local_fog_volumes` adds three authored local fog volumes at near, mid, and far city distances.
-- The directional sun is a scene light marked as both `environment_contribution` and `is_sun_light`, with four meter-scale shadow cascades.
+- The directional sun is a scene light explicitly assigned to the Primary atmosphere slot, with four meter-scale shadow cascades.
 
 The city uses one procedural cube geometry with scene-authored `renderables[].material_ref` overrides, so material variety validates the runtime scene material-override path directly.

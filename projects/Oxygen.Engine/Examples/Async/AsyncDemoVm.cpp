@@ -97,12 +97,9 @@ auto AsyncDemoVm::GetSpotlightIntensity() -> float
 
 auto AsyncDemoVm::SetSpotlightIntensity(float intensity) -> void
 {
+  if (IsSpotlightAvailable() && !spotlight_node_->EditLight<scene::SpotLight>(
+        [intensity](auto& light) { light.SetLuminousFluxLm(intensity); })) return;
   settings_->SetSpotlightIntensity(intensity);
-  if (IsSpotlightAvailable()) {
-    auto light = spotlight_node_->GetLightAs<scene::SpotLight>();
-    if (light)
-      light->get().SetLuminousFluxLm(intensity);
-  }
 }
 
 auto AsyncDemoVm::GetSpotlightRange() -> float
@@ -117,12 +114,9 @@ auto AsyncDemoVm::GetSpotlightRange() -> float
 
 auto AsyncDemoVm::SetSpotlightRange(float range) -> void
 {
+  if (IsSpotlightAvailable() && !spotlight_node_->EditLight<scene::SpotLight>(
+        [range](auto& light) { light.SetRange(range); })) return;
   settings_->SetSpotlightRange(range);
-  if (IsSpotlightAvailable()) {
-    auto light = spotlight_node_->GetLightAs<scene::SpotLight>();
-    if (light)
-      light->get().SetRange(range);
-  }
 }
 
 auto AsyncDemoVm::GetSpotlightInnerCone() -> float
@@ -137,19 +131,11 @@ auto AsyncDemoVm::GetSpotlightInnerCone() -> float
 
 auto AsyncDemoVm::SetSpotlightInnerCone(float angle_rad) -> void
 {
+  const auto outer = std::max(GetSpotlightOuterCone(), angle_rad);
+  if (IsSpotlightAvailable() && !spotlight_node_->EditLight<scene::SpotLight>(
+        [angle_rad, outer](auto& light) { light.SetConeAnglesRadians(angle_rad, outer); })) return;
   settings_->SetSpotlightInnerCone(angle_rad);
-  if (IsSpotlightAvailable()) {
-    auto light = spotlight_node_->GetLightAs<scene::SpotLight>();
-    // Need both angles to set one, technically.
-    // We should probably read the other one.
-    if (light) {
-      float outer = light->get().GetOuterConeAngleRadians();
-      if (outer < angle_rad)
-        outer = angle_rad; // Maintain valid state
-      light->get().SetInnerConeAngleRadians(angle_rad);
-      light->get().SetOuterConeAngleRadians(outer);
-    }
-  }
+  settings_->SetSpotlightOuterCone(outer);
 }
 
 auto AsyncDemoVm::GetSpotlightOuterCone() -> float
@@ -164,17 +150,11 @@ auto AsyncDemoVm::GetSpotlightOuterCone() -> float
 
 auto AsyncDemoVm::SetSpotlightOuterCone(float angle_rad) -> void
 {
+  const auto inner = std::min(GetSpotlightInnerCone(), angle_rad);
+  if (IsSpotlightAvailable() && !spotlight_node_->EditLight<scene::SpotLight>(
+        [inner, angle_rad](auto& light) { light.SetConeAnglesRadians(inner, angle_rad); })) return;
+  settings_->SetSpotlightInnerCone(inner);
   settings_->SetSpotlightOuterCone(angle_rad);
-  if (IsSpotlightAvailable()) {
-    auto light = spotlight_node_->GetLightAs<scene::SpotLight>();
-    if (light) {
-      float inner = light->get().GetInnerConeAngleRadians();
-      if (inner > angle_rad)
-        inner = angle_rad;
-      light->get().SetInnerConeAngleRadians(inner);
-      light->get().SetOuterConeAngleRadians(angle_rad);
-    }
-  }
 }
 
 auto AsyncDemoVm::GetSpotlightEnabled() -> bool
@@ -189,12 +169,9 @@ auto AsyncDemoVm::GetSpotlightEnabled() -> bool
 
 auto AsyncDemoVm::SetSpotlightEnabled(bool enabled) -> void
 {
+  if (IsSpotlightAvailable() && !spotlight_node_->EditLight<scene::SpotLight>(
+        [enabled](auto& light) { light.Common().affects_world = enabled; })) return;
   settings_->SetSpotlightEnabled(enabled);
-  if (IsSpotlightAvailable()) {
-    auto light = spotlight_node_->GetLightAs<scene::SpotLight>();
-    if (light)
-      light->get().Common().affects_world = enabled;
-  }
 }
 
 auto AsyncDemoVm::GetSpotlightCastsShadows() -> bool
@@ -209,12 +186,9 @@ auto AsyncDemoVm::GetSpotlightCastsShadows() -> bool
 
 auto AsyncDemoVm::SetSpotlightCastsShadows(bool casts_shadows) -> void
 {
+  if (IsSpotlightAvailable() && !spotlight_node_->EditLight<scene::SpotLight>(
+        [casts_shadows](auto& light) { light.Common().casts_shadows = casts_shadows; })) return;
   settings_->SetSpotlightCastsShadows(casts_shadows);
-  if (IsSpotlightAvailable()) {
-    auto light = spotlight_node_->GetLightAs<scene::SpotLight>();
-    if (light)
-      light->get().Common().casts_shadows = casts_shadows;
-  }
 }
 
 void AsyncDemoVm::SetEnsureSpotlightCallback(EnsureSpotlightCallback cb)

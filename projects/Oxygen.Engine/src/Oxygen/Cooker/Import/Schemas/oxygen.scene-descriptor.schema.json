@@ -9,7 +9,7 @@
     },
     "version": {
       "type": "integer",
-      "const": 6
+      "const": 7
     },
     "name": {
       "$ref": "#/definitions/identifier"
@@ -321,10 +321,14 @@
       "additionalProperties": false,
       "properties": {
         "bias": {
-          "type": "number"
+          "type": "number",
+          "minimum": 0,
+          "maximum": 3.4028234663852886e+38
         },
         "normal_bias": {
-          "type": "number"
+          "type": "number",
+          "minimum": 0,
+          "maximum": 3.4028234663852886e+38
         },
         "contact_shadows": {
           "type": "boolean"
@@ -332,7 +336,7 @@
         "resolution_hint": {
           "type": "integer",
           "minimum": 0,
-          "maximum": 255
+          "maximum": 3
         }
       }
     },
@@ -344,18 +348,21 @@
           "type": "boolean"
         },
         "color_rgb": {
-          "$ref": "#/definitions/vec3"
-        },
-        "mobility": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 255
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "type": "number",
+            "minimum": -3.4028234663852886e+38,
+            "maximum": 3.4028234663852886e+38
+          }
         },
         "casts_shadows": {
           "type": "boolean"
         },
         "exposure_compensation_ev": {
-          "type": "number"
+          "type": "number",
+          "maximum": 3.4028234663852886e+38
         },
         "shadow": {
           "$ref": "#/definitions/light_shadow"
@@ -365,7 +372,9 @@
     "directional_light": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["node"],
+      "required": [
+        "node"
+      ],
       "properties": {
         "node": {
           "type": "integer",
@@ -376,17 +385,12 @@
         },
         "angular_size_radians": {
           "type": "number",
-          "minimum": 0.0
-        },
-        "environment_contribution": {
-          "type": "boolean"
-        },
-        "is_sun_light": {
-          "type": "boolean"
+          "minimum": 0.0,
+          "maximum": 3.1415927410125732
         },
         "cascade_count": {
           "type": "integer",
-          "minimum": 0,
+          "minimum": 1,
           "maximum": 4
         },
         "split_mode": {
@@ -396,19 +400,23 @@
         },
         "max_shadow_distance": {
           "type": "number",
-          "exclusiveMinimum": 0.0
+          "exclusiveMinimum": 0.0,
+          "maximum": 3.4028234663852886e+38
         },
         "cascade_distances": {
           "type": "array",
           "items": {
-            "type": "number"
+            "type": "number",
+            "minimum": -3.4028234663852886e+38,
+            "maximum": 3.4028234663852886e+38
           },
           "minItems": 4,
           "maxItems": 4
         },
         "distribution_exponent": {
           "type": "number",
-          "minimum": 0.0
+          "minimum": 1,
+          "maximum": 3.4028234663852886e+38
         },
         "transition_fraction": {
           "type": "number",
@@ -422,14 +430,38 @@
         },
         "intensity_lux": {
           "type": "number",
-          "minimum": 0.0
+          "minimum": 0.0,
+          "maximum": 3.4028234663852886e+38
+        },
+        "atmosphere_light_slot": {
+          "type": "integer",
+          "enum": [
+            0,
+            1,
+            2
+          ]
+        },
+        "use_per_pixel_atmosphere_transmittance": {
+          "type": "boolean"
+        },
+        "atmosphere_disk_luminance_scale_rgb": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "type": "number",
+            "minimum": -3.4028234663852886e+38,
+            "maximum": 3.4028234663852886e+38
+          }
         }
       }
     },
     "point_light": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["node"],
+      "required": [
+        "node"
+      ],
       "properties": {
         "node": {
           "type": "integer",
@@ -440,31 +472,27 @@
         },
         "range": {
           "type": "number",
-          "minimum": 0.0
-        },
-        "attenuation_model": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 255
-        },
-        "decay_exponent": {
-          "type": "number",
-          "minimum": 0.0
+          "minimum": 0.0,
+          "maximum": 3.4028234663852886e+38
         },
         "source_radius": {
           "type": "number",
-          "minimum": 0.0
+          "minimum": 0.0,
+          "maximum": 3.4028234663852886e+38
         },
         "luminous_flux_lm": {
           "type": "number",
-          "minimum": 0.0
+          "minimum": 0.0,
+          "maximum": 3.4028234663852886e+38
         }
       }
     },
     "spot_light": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["node"],
+      "required": [
+        "node"
+      ],
       "properties": {
         "node": {
           "type": "integer",
@@ -475,32 +503,28 @@
         },
         "range": {
           "type": "number",
-          "minimum": 0.0
-        },
-        "attenuation_model": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 255
-        },
-        "decay_exponent": {
-          "type": "number",
-          "minimum": 0.0
+          "minimum": 0.0,
+          "maximum": 3.4028234663852886e+38
         },
         "inner_cone_angle_radians": {
           "type": "number",
-          "minimum": 0.0
+          "minimum": 0.0,
+          "maximum": 1.5707963705062866
         },
         "outer_cone_angle_radians": {
           "type": "number",
-          "minimum": 0.0
+          "minimum": 0.0,
+          "maximum": 1.5707963705062866
         },
         "source_radius": {
           "type": "number",
-          "minimum": 0.0
+          "minimum": 0.0,
+          "maximum": 3.4028234663852886e+38
         },
         "luminous_flux_lm": {
           "type": "number",
-          "minimum": 0.0
+          "minimum": 0.0,
+          "maximum": 3.4028234663852886e+38
         }
       }
     },

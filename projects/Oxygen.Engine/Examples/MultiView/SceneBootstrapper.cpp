@@ -156,8 +156,6 @@ auto SceneBootstrapper::EnsureProofAtmosphere(const float sun_lux,
     proof_sun_node_ = scene_->CreateNode("AtmosphereProofSun");
     auto sun = std::make_unique<scene::DirectionalLight>();
     sun->SetIntensityLux(sun_lux);
-    sun->SetEnvironmentContribution(true);
-    sun->SetIsSunLight(true);
     sun->SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kPrimary);
     sun->Common().casts_shadows = false;
     CHECK_F(proof_sun_node_.AttachLight(std::move(sun)));
@@ -186,22 +184,18 @@ auto SceneBootstrapper::ApplyDirectionalArrayProof() -> void
   constexpr auto kSecondaryTint = glm::vec3 { 0.3F, 0.6F, 1.0F };
   constexpr auto kSecondaryRays = glm::vec3 { 0.8F, -0.4F, -1.0F };
   EnsureProofAtmosphere(kPrimaryLux, 1.0F, false);
-  auto primary = proof_sun_node_.GetLightAs<scene::DirectionalLight>();
-  CHECK_F(primary.has_value());
-  primary->get().SetIntensityLux(kPrimaryLux);
-  primary->get().Common().casts_shadows = true;
-  primary->get().CascadedShadows().cascade_count = 2U;
-  primary->get().Common().shadow.resolution_hint
-    = scene::ShadowResolutionHint::kMedium;
+  CHECK_F(proof_sun_node_.EditLight<scene::DirectionalLight>([kPrimaryLux](auto& primary) {
+    primary.SetIntensityLux(kPrimaryLux);
+    primary.Common().casts_shadows = true;
+    primary.CascadedShadows().cascade_count = 2U;
+    primary.Common().shadow.resolution_hint = scene::ShadowResolutionHint::kMedium;
+  }));
   const auto add
     = [this](const char* name, const scene::AtmosphereLightSlot slot,
         const glm::vec3 color, const float lux, const glm::vec3 rays) -> void {
     auto node = scene_->CreateNode(name);
     auto light = std::make_unique<scene::DirectionalLight>();
     light->SetIntensityLux(lux);
-    light->SetIsSunLight(false);
-    light->SetEnvironmentContribution(
-      slot != scene::AtmosphereLightSlot::kNone);
     light->SetAtmosphereLightSlot(slot);
     light->Common().color_rgb = color;
     light->Common().casts_shadows = slot != scene::AtmosphereLightSlot::kNone;
@@ -251,8 +245,7 @@ auto SceneBootstrapper::ApplyConsumerVisualProof(const VisualFogMode fog_mode)
   // The existing atmosphere LUT supplies volumetric ambient independently of
   // captured-scene surface IBL, which this renderer does not yet provide.
   ground_plane_node_.GetTransform().SetLocalScale({ 2000.0F, 2000.0F, 0.1F });
-  if (auto sun = proof_sun_node_.GetLightAs<scene::DirectionalLight>(); sun)
-    sun->get().Common().casts_shadows = true;
+  proof_sun_node_.EditLight<scene::DirectionalLight>([](auto& sun) { sun.Common().casts_shadows = true; });
   auto* fog = environment.TryGetSystem<scene::environment::Fog>().get();
   if (!fog)
     fog = &environment.AddSystem<scene::environment::Fog>();

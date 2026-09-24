@@ -307,7 +307,7 @@ NOLINT_TEST_F(
   post.SetBloomIntensity(0.0F);
   auto sun = scene->CreateNode("Sun");
   auto light = std::make_unique<scene::DirectionalLight>();
-  light->SetEnvironmentContribution(true);
+  light->SetAtmosphereLightSlot(oxygen::scene::AtmosphereLightSlot::kPrimary);
   light->SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kPrimary);
   light->SetIntensityLux(1000.0F);
   ASSERT_TRUE(sun.AttachLight(std::move(light)));

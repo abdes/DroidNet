@@ -237,9 +237,10 @@ public:
         const auto& rec = lights[i];
 
         std::cout << "      [" << i << "] node=" << rec.node_index << "\n";
-        PrintUtils::Field("IsSunLight", rec.is_sun_light != 0U, 10);
-        PrintUtils::Field(
-          "Environment Contrib", rec.environment_contribution != 0U, 10);
+        PrintUtils::Field("Atmosphere Slot", static_cast<int>(rec.atmosphere_light_slot), 10);
+        PrintUtils::Field("Per-pixel Transmittance", rec.use_per_pixel_atmosphere_transmittance != 0U, 10);
+        PrintUtils::Field("Disk Luminance Scale",
+          asset_dump_helpers::FormatVec3(rec.atmosphere_disk_luminance_scale_rgb), 10);
         PrintUtils::Field("Cascade Count", rec.cascade_count, 10);
         PrintUtils::Field(
           "Split Mode", static_cast<uint32_t>(rec.split_mode), 10);
@@ -273,9 +274,6 @@ public:
 
         std::cout << "      [" << i << "] node=" << rec.node_index << "\n";
         PrintUtils::Field("Range", rec.range, 10);
-        PrintUtils::Field(
-          "Attenuation Model", static_cast<int>(rec.attenuation_model), 10);
-        PrintUtils::Field("Decay Exponent", rec.decay_exponent, 10);
         PrintUtils::Field("Source Radius", rec.source_radius, 10);
       }
 
@@ -297,9 +295,6 @@ public:
 
         std::cout << "      [" << i << "] node=" << rec.node_index << "\n";
         PrintUtils::Field("Range", rec.range, 10);
-        PrintUtils::Field(
-          "Attenuation Model", static_cast<int>(rec.attenuation_model), 10);
-        PrintUtils::Field("Decay Exponent", rec.decay_exponent, 10);
         PrintUtils::Field("Inner Cone (rad)", rec.inner_cone_angle_radians, 10);
         PrintUtils::Field("Outer Cone (rad)", rec.outer_cone_angle_radians, 10);
         PrintUtils::Field("Source Radius", rec.source_radius, 10);

@@ -467,8 +467,8 @@ public:
     -> bool;
   virtual auto SetSunUsePerPixelAtmosphereTransmittance(bool enabled) -> void;
   [[nodiscard]] virtual auto GetSunAtmosphereDiskLuminanceScale() const
-    -> glm::vec4;
-  virtual auto SetSunAtmosphereDiskLuminanceScale(const glm::vec4& value)
+    -> glm::vec3;
+  virtual auto SetSunAtmosphereDiskLuminanceScale(const glm::vec3& value)
     -> void;
 
   [[nodiscard]] virtual auto GetSunShadowBias() const -> float;
@@ -775,7 +775,7 @@ private:
   int sun_atmosphere_light_slot_ { static_cast<int>(
     scene::AtmosphereLightSlot::kPrimary) };
   bool sun_use_per_pixel_atmosphere_transmittance_ { false };
-  glm::vec4 sun_atmosphere_disk_luminance_scale_ { 1.0F, 1.0F, 1.0F, 1.0F };
+  glm::vec3 sun_atmosphere_disk_luminance_scale_ { 1.0F, 1.0F, 1.0F };
   float sun_shadow_bias_ { scene::kDefaultShadowBias };
   float sun_shadow_normal_bias_ { scene::kDefaultShadowNormalBias };
   int sun_shadow_resolution_hint_ { static_cast<int>(

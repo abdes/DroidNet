@@ -33,10 +33,9 @@ struct AtmosphereLightModel {
   glm::vec3 direction_to_light_ws { 0.0F, 0.0F, 1.0F };
   float angular_size_radians { 0.0F };
   glm::vec3 illuminance_rgb_lux { 0.0F, 0.0F, 0.0F };
-  float illuminance_lux { 0.0F };
   glm::vec3 transmittance_toward_sun_rgb { 1.0F, 1.0F, 1.0F };
   std::uint32_t direct_light_authority_flags { 0U };
-  glm::vec4 disk_luminance_scale_rgba { 1.0F, 1.0F, 1.0F, 1.0F };
+  glm::vec3 disk_luminance_scale_rgb { 1.0F, 1.0F, 1.0F };
 };
 
 using AtmosphereLightSlots

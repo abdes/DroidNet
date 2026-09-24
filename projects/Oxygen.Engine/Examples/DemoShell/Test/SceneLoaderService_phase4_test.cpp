@@ -227,8 +227,7 @@ namespace {
     directional.common.shadow.bias = 0.0007F;
     directional.common.shadow.normal_bias = 0.03F;
     directional.angular_size_radians = 0.00951F;
-    directional.environment_contribution = 1U;
-    directional.is_sun_light = 1U;
+    directional.atmosphere_light_slot = 1U;
     directional.cascade_count = 4U;
     directional.cascade_distances[0] = 250.0F;
     directional.cascade_distances[1] = 900.0F;
@@ -1075,8 +1074,8 @@ NOLINT_TEST(SceneLoaderServicePhase4Test,
   EXPECT_TRUE(light->get().Common().casts_shadows);
   EXPECT_FLOAT_EQ(light->get().Common().shadow.bias, 0.0007F);
   EXPECT_FLOAT_EQ(light->get().Common().shadow.normal_bias, 0.03F);
-  EXPECT_TRUE(light->get().GetEnvironmentContribution());
-  EXPECT_TRUE(light->get().IsSunLight());
+
+  EXPECT_TRUE(light->get().GetAtmosphereLightSlot() == scene::AtmosphereLightSlot::kPrimary);
   EXPECT_FLOAT_EQ(light->get().GetIntensityLux(), 95000.0F);
 
   const auto& csm = light->get().CascadedShadows();

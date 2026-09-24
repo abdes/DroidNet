@@ -68,10 +68,12 @@ namespace {
       auto light = node.GetLightAs<scene::DirectionalLight>();
       EXPECT_TRUE(light.has_value());
       if (light.has_value()) {
-        light->get().SetIsSunLight(is_sun_light);
-        light->get().Common().affects_world = true;
-        light->get().Common().casts_shadows = false;
-        light->get().SetEnvironmentContribution(is_sun_light);
+        EXPECT_TRUE(node.EditLight<scene::DirectionalLight>([&](auto& candidate) {
+          candidate.SetAtmosphereLightSlot(is_sun_light ? scene::AtmosphereLightSlot::kPrimary : scene::AtmosphereLightSlot::kNone);
+          candidate.Common().affects_world = true;
+          candidate.Common().casts_shadows = false;
+        }));
+
       }
       return node;
     }
@@ -95,7 +97,7 @@ namespace {
         }
 
         if (auto light = node.GetLightAs<scene::DirectionalLight>();
-          light.has_value() && light->get().IsSunLight()) {
+          light.has_value() && light->get().GetAtmosphereLightSlot() == scene::AtmosphereLightSlot::kPrimary) {
           result.push_back(node);
         }
 
@@ -225,8 +227,8 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   EXPECT_TRUE(sun_lights.empty());
   auto original_light = fill.GetLightAs<scene::DirectionalLight>();
   ASSERT_TRUE(original_light.has_value());
-  EXPECT_FALSE(original_light->get().IsSunLight());
-  EXPECT_FALSE(original_light->get().GetEnvironmentContribution());
+  EXPECT_FALSE(original_light->get().GetAtmosphereLightSlot() == scene::AtmosphereLightSlot::kPrimary);
+
   EXPECT_FALSE(service_.GetSunLightAvailable());
 }
 
@@ -246,12 +248,12 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
 
   auto fill_light = fill.GetLightAs<scene::DirectionalLight>();
   ASSERT_TRUE(fill_light.has_value());
-  EXPECT_FALSE(fill_light->get().IsSunLight());
+  EXPECT_FALSE(fill_light->get().GetAtmosphereLightSlot() == scene::AtmosphereLightSlot::kPrimary);
 
   auto sun_light = named_sun.GetLightAs<scene::DirectionalLight>();
   ASSERT_TRUE(sun_light.has_value());
-  EXPECT_FALSE(sun_light->get().IsSunLight());
-  EXPECT_FALSE(sun_light->get().GetEnvironmentContribution());
+  EXPECT_FALSE(sun_light->get().GetAtmosphereLightSlot() == scene::AtmosphereLightSlot::kPrimary);
+
 }
 
 NOLINT_TEST_F(EnvironmentSettingsServiceTest,
@@ -267,12 +269,14 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
     ASSERT_TRUE(authored_sun.IsAlive());
     auto light = authored_sun.GetLightAs<scene::DirectionalLight>();
     ASSERT_TRUE(light.has_value());
-    light->get().Common().affects_world = enabled;
-    light->get().Common().color_rgb = { 0.25F, 0.5F, 0.75F };
-    light->get().SetIntensityLux(4321.0F);
-    light->get().SetAngularSizeRadians(0.02F);
-    light->get().SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kPrimary);
-    light->get().SetUsePerPixelAtmosphereTransmittance(true);
+    ASSERT_TRUE(authored_sun.EditLight<scene::DirectionalLight>([&](auto& candidate) {
+      candidate.Common().affects_world = enabled;
+      candidate.Common().color_rgb = { 0.25F, 0.5F, 0.75F };
+      candidate.SetIntensityLux(4321.0F);
+      candidate.SetAngularSizeRadians(0.02F);
+      candidate.SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kPrimary);
+      candidate.SetUsePerPixelAtmosphereTransmittance(true);
+    }));
     auto flags = authored_sun.GetFlags();
     ASSERT_TRUE(flags.has_value());
     flags->get().SetLocalValue(scene::SceneNodeFlags::kCastsShadows, false);
@@ -294,8 +298,8 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
     EXPECT_FALSE(light->get().Common().casts_shadows);
     EXPECT_FALSE(
       flags->get().GetEffectiveValue(scene::SceneNodeFlags::kCastsShadows));
-    EXPECT_TRUE(light->get().IsSunLight());
-    EXPECT_TRUE(light->get().GetEnvironmentContribution());
+    EXPECT_TRUE(light->get().GetAtmosphereLightSlot() == scene::AtmosphereLightSlot::kPrimary);
+
     EXPECT_EQ(light->get().GetAtmosphereLightSlot(),
       scene::AtmosphereLightSlot::kPrimary);
     EXPECT_TRUE(light->get().GetUsePerPixelAtmosphereTransmittance());
@@ -306,21 +310,23 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
 }
 
 NOLINT_TEST_F(EnvironmentSettingsServiceTest,
-  OnSceneActivatedDoesNotRetagExplicitAtmospherePrimaryAsSun)
+  OnSceneActivatedPreservesExplicitAtmospherePrimary)
 {
   auto scene = MakeScene("DemoShell.ExplicitAtmospherePrimary");
   auto primary = CreateDirectionalLightNode(*scene, "Primary", false);
   auto light = primary.GetLightAs<scene::DirectionalLight>();
   ASSERT_TRUE(light.has_value());
-  light->get().SetEnvironmentContribution(true);
-  light->get().SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kPrimary);
+
+  ASSERT_TRUE(primary.EditLight<scene::DirectionalLight>([&](auto& candidate) {
+    candidate.SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kPrimary);
+  }));
 
   service_.OnSceneActivated(*scene);
 
   EXPECT_TRUE(service_.GetSunLightAvailable());
   EXPECT_TRUE(service_.GetSunEnabled());
-  EXPECT_FALSE(light->get().IsSunLight());
-  EXPECT_TRUE(light->get().GetEnvironmentContribution());
+  EXPECT_EQ(light->get().GetAtmosphereLightSlot(), scene::AtmosphereLightSlot::kPrimary);
+
   EXPECT_FALSE(light->get().Common().casts_shadows);
   EXPECT_EQ(light->get().GetAtmosphereLightSlot(),
     scene::AtmosphereLightSlot::kPrimary);
@@ -334,7 +340,9 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   auto first_sun = CreateDirectionalLightNode(*first_scene, "FirstSun", true);
   auto first_light = first_sun.GetLightAs<scene::DirectionalLight>();
   ASSERT_TRUE(first_light.has_value());
-  first_light->get().SetIntensityLux(4321.0F);
+  ASSERT_TRUE(first_sun.EditLight<scene::DirectionalLight>([&](auto& candidate) {
+    candidate.SetIntensityLux(4321.0F);
+  }));
   service_.OnSceneActivated(*first_scene);
   service_.SetRuntimeConfig(EnvironmentRuntimeConfig {
     .scene = observer_ptr { first_scene.get() },
@@ -353,11 +361,15 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
     second_sun->AttachLight(std::make_unique<scene::DirectionalLight>()));
   auto second_light = second_sun->GetLightAs<scene::DirectionalLight>();
   ASSERT_TRUE(second_light.has_value());
-  second_light->get().SetIsSunLight(true);
-  second_light->get().SetEnvironmentContribution(true);
-  second_light->get().Common().affects_world = false;
-  second_light->get().Common().casts_shadows = false;
-  second_light->get().SetIntensityLux(8765.0F);
+  ASSERT_TRUE(second_sun->EditLight<scene::DirectionalLight>([&](auto& candidate) {
+    candidate.SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kPrimary);
+  }));
+
+  ASSERT_TRUE(second_sun->EditLight<scene::DirectionalLight>([&](auto& candidate) {
+    candidate.Common().affects_world = false;
+    candidate.Common().casts_shadows = false;
+    candidate.SetIntensityLux(8765.0F);
+  }));
 
   // No transform update or environment block precedes this activation.
   service_.OnSceneActivated(*second_scene);
@@ -420,8 +432,10 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   auto first_sun = CreateDirectionalLightNode(*first_scene, "FirstSun", true);
   auto first_light = first_sun.GetLightAs<scene::DirectionalLight>();
   ASSERT_TRUE(first_light.has_value());
-  first_light->get().Common().affects_world = false;
-  first_light->get().SetIntensityLux(4321.0F);
+  ASSERT_TRUE(first_sun.EditLight<scene::DirectionalLight>([&](auto& candidate) {
+    candidate.Common().affects_world = false;
+    candidate.SetIntensityLux(4321.0F);
+  }));
   service_.OnSceneActivated(*first_scene);
   EXPECT_FALSE(first_light->get().Common().affects_world);
   EXPECT_FALSE(first_light->get().Common().casts_shadows);
@@ -450,14 +464,16 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
     = CreateDirectionalLightNode(*second_scene, "SecondSun", true);
   auto second_light = second_sun.GetLightAs<scene::DirectionalLight>();
   ASSERT_TRUE(second_light.has_value());
-  second_light->get().Common().affects_world = false;
-  second_light->get().SetIntensityLux(8765.0F);
+  ASSERT_TRUE(second_sun.EditLight<scene::DirectionalLight>([&](auto& candidate) {
+    candidate.Common().affects_world = false;
+    candidate.SetIntensityLux(8765.0F);
+  }));
 
   service_.OnSceneActivated(*second_scene);
   EXPECT_FALSE(second_light->get().Common().affects_world);
   EXPECT_FALSE(second_light->get().Common().casts_shadows);
-  EXPECT_TRUE(second_light->get().IsSunLight());
-  EXPECT_TRUE(second_light->get().GetEnvironmentContribution());
+  EXPECT_TRUE(second_light->get().GetAtmosphereLightSlot() == scene::AtmosphereLightSlot::kPrimary);
+
   EXPECT_FLOAT_EQ(second_light->get().GetIntensityLux(), 8765.0F);
   EXPECT_TRUE(service_.GetSunEnabled());
   EXPECT_FLOAT_EQ(service_.GetSunIlluminanceLx(), 23000.0F);
@@ -486,14 +502,18 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   auto sun = CreateDirectionalLightNode(*scene, "Sun", true);
   auto light = sun.GetLightAs<scene::DirectionalLight>();
   ASSERT_TRUE(light.has_value());
-  light->get().SetIntensityLux(4321.0F);
+  ASSERT_TRUE(sun.EditLight<scene::DirectionalLight>([&](auto& candidate) {
+    candidate.SetIntensityLux(4321.0F);
+  }));
   service_.OnSceneActivated(*scene);
   service_.SetRuntimeConfig(EnvironmentRuntimeConfig {
     .scene = observer_ptr { scene.get() },
     .force_environment_override = false,
   });
   const auto previous_epoch = service_.GetEpoch();
-  light->get().SetIntensityLux(8765.0F);
+  ASSERT_TRUE(sun.EditLight<scene::DirectionalLight>([&](auto& candidate) {
+    candidate.SetIntensityLux(8765.0F);
+  }));
 
   service_.RequestResync();
   service_.SyncFromSceneIfNeeded();
@@ -539,18 +559,20 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
 }
 
 NOLINT_TEST_F(EnvironmentSettingsServiceTest,
-  OnSceneActivatedRejectsSceneWithMultipleTaggedSuns)
+  DuplicatePrimaryAssignmentIsRejectedBeforeSceneActivation)
 {
   auto scene = MakeScene("DemoShell.InvalidMultiSun");
-  ASSERT_TRUE(CreateDirectionalLightNode(*scene, "SunA", true).IsAlive());
-  ASSERT_TRUE(CreateDirectionalLightNode(*scene, "SunB", true).IsAlive());
-
-  oxygen::testing::ScopedLogCapture capture(
-    "EnvironmentSettingsService.MultiSun", loguru::Verbosity_ERROR);
-
-  EXPECT_THROW(
-    service_.OnSceneActivated(*scene), scene::DirectionalLightContractError);
-  EXPECT_TRUE(capture.Contains("more than one directional light"));
+  auto first = CreateDirectionalLightNode(*scene, "SunA", true);
+  auto second = CreateDirectionalLightNode(*scene, "SunB", false);
+  scene::LightValidationError error;
+  EXPECT_FALSE(second.EditLight<scene::DirectionalLight>([](auto& light) {
+    light.SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kPrimary);
+  }, &error));
+  EXPECT_EQ(error.conflicting_node, first.GetHandle());
+  EXPECT_NE(error.message.find("SunA"), std::string::npos);
+  EXPECT_NO_THROW(service_.OnSceneActivated(*scene));
+  EXPECT_EQ(second.GetLightAs<scene::DirectionalLight>()->get().GetAtmosphereLightSlot(),
+    scene::AtmosphereLightSlot::kNone);
 }
 
 NOLINT_TEST_F(EnvironmentSettingsServiceTest,
@@ -565,10 +587,10 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
 
   auto authored_light = authored_sun.GetLightAs<scene::DirectionalLight>();
   ASSERT_TRUE(authored_light.has_value());
-  EXPECT_TRUE(authored_light->get().IsSunLight());
+  EXPECT_TRUE(authored_light->get().GetAtmosphereLightSlot() == scene::AtmosphereLightSlot::kPrimary);
   EXPECT_TRUE(authored_light->get().Common().affects_world);
   EXPECT_FALSE(authored_light->get().Common().casts_shadows);
-  EXPECT_TRUE(authored_light->get().GetEnvironmentContribution());
+
 
   auto sun_lights = CollectSunLights(*scene);
   ASSERT_EQ(sun_lights.size(), 1U);
@@ -587,13 +609,13 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
 
   auto light = authored_sun.GetLightAs<scene::DirectionalLight>();
   ASSERT_TRUE(light.has_value());
-  EXPECT_TRUE(light->get().IsSunLight());
+  EXPECT_TRUE(light->get().GetAtmosphereLightSlot() == scene::AtmosphereLightSlot::kPrimary);
   EXPECT_TRUE(light->get().Common().affects_world);
 
   service_.SetSunEnabled(false);
   service_.ApplyPendingChanges();
 
-  EXPECT_TRUE(light->get().IsSunLight());
+  EXPECT_TRUE(light->get().GetAtmosphereLightSlot() == scene::AtmosphereLightSlot::kPrimary);
   EXPECT_FALSE(light->get().Common().affects_world);
   EXPECT_FALSE(light->get().Common().casts_shadows);
   EXPECT_TRUE(service_.GetSunLightAvailable());
@@ -606,7 +628,7 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   service_.SetSunEnabled(true);
   service_.ApplyPendingChanges();
 
-  EXPECT_TRUE(light->get().IsSunLight());
+  EXPECT_TRUE(light->get().GetAtmosphereLightSlot() == scene::AtmosphereLightSlot::kPrimary);
   EXPECT_TRUE(light->get().Common().affects_world);
   EXPECT_TRUE(light->get().Common().casts_shadows);
   EXPECT_TRUE(service_.GetSunLightAvailable());
@@ -749,7 +771,7 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   service_.SetSunAtmosphereLightSlot(
     static_cast<int>(oxygen::scene::AtmosphereLightSlot::kSecondary));
   service_.SetSunUsePerPixelAtmosphereTransmittance(true);
-  service_.SetSunAtmosphereDiskLuminanceScale({ 1.2F, 0.9F, 0.8F, 0.5F });
+  service_.SetSunAtmosphereDiskLuminanceScale({ 1.2F, 0.9F, 0.8F });
   service_.ApplyPendingChanges();
 
   auto light = authored_sun.GetLightAs<scene::DirectionalLight>();
@@ -758,7 +780,7 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
     oxygen::scene::AtmosphereLightSlot::kSecondary);
   EXPECT_TRUE(light->get().GetUsePerPixelAtmosphereTransmittance());
   EXPECT_EQ(light->get().GetAtmosphereDiskLuminanceScale(),
-    glm::vec4(1.2F, 0.9F, 0.8F, 0.5F));
+    glm::vec3(1.2F, 0.9F, 0.8F));
 }
 
 NOLINT_TEST_F(EnvironmentSettingsServiceTest,
@@ -830,7 +852,6 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   settings->SetFloat("env.sun.atmosphere_disk_luminance_scale.x", 1.4F);
   settings->SetFloat("env.sun.atmosphere_disk_luminance_scale.y", 1.1F);
   settings->SetFloat("env.sun.atmosphere_disk_luminance_scale.z", 0.7F);
-  settings->SetFloat("env.sun.atmosphere_disk_luminance_scale.w", 0.25F);
 
   auto scene = MakeScene("DemoShell.LoadSunAtmosphereLightMetadata");
   service_.SetRuntimeConfig(EnvironmentRuntimeConfig {
@@ -841,7 +862,7 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
     static_cast<int>(oxygen::scene::AtmosphereLightSlot::kSecondary));
   EXPECT_TRUE(service_.GetSunUsePerPixelAtmosphereTransmittance());
   EXPECT_EQ(service_.GetSunAtmosphereDiskLuminanceScale(),
-    glm::vec4(1.4F, 1.1F, 0.7F, 0.25F));
+    glm::vec3(1.4F, 1.1F, 0.7F));
 }
 
 NOLINT_TEST_F(
@@ -1592,8 +1613,7 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   settings->SetBool("env.sky_sphere.enabled", true);
   auto scene = MakeScene("Preview.SceneOnly");
   auto candidate = CreateDirectionalLightNode(*scene, "Candidate", false);
-  candidate.GetLightAs<scene::DirectionalLight>()->get().SetIntensityLux(
-    1234.0F);
+  ASSERT_TRUE(candidate.EditLight<scene::DirectionalLight>([](auto& light) { light.SetIntensityLux(1234.0F); }));
   service_.OnSceneActivated(*scene);
   service_.SetRuntimeConfig(EnvironmentRuntimeConfig {
     .scene = observer_ptr { scene.get() },
@@ -1606,7 +1626,7 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   EXPECT_FALSE(service_.IsPreviewSunActive());
   EXPECT_FALSE(scene->GetEnvironment());
   EXPECT_FALSE(
-    candidate.GetLightAs<scene::DirectionalLight>()->get().IsSunLight());
+    candidate.GetLightAs<scene::DirectionalLight>()->get().GetAtmosphereLightSlot() == scene::AtmosphereLightSlot::kPrimary);
 
   service_.SetPreviewSunEnabled(true);
   service_.ApplyPendingChanges();
@@ -1620,14 +1640,14 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
     candidate.GetLightAs<scene::DirectionalLight>()->get().GetIntensityLux(),
     1234.0F);
   EXPECT_TRUE(
-    candidate.GetLightAs<scene::DirectionalLight>()->get().IsSunLight());
+    candidate.GetLightAs<scene::DirectionalLight>()->get().GetAtmosphereLightSlot() == scene::AtmosphereLightSlot::kPrimary);
 
   service_.SetPreviewSunEnabled(false);
   service_.ApplyPendingChanges();
   EXPECT_EQ(service_.GetPresetIndex(), -2);
   EXPECT_FALSE(service_.IsPreviewSunActive());
   EXPECT_FALSE(
-    candidate.GetLightAs<scene::DirectionalLight>()->get().IsSunLight());
+    candidate.GetLightAs<scene::DirectionalLight>()->get().GetAtmosphereLightSlot() == scene::AtmosphereLightSlot::kPrimary);
   EXPECT_FLOAT_EQ(
     candidate.GetLightAs<scene::DirectionalLight>()->get().GetIntensityLux(),
     1234.0F);
@@ -1647,8 +1667,7 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   settings->SetFloat("env.sun.shadow.bias", 0.03F);
   auto scene = MakeScene("Preview.Custom");
   auto candidate = CreateDirectionalLightNode(*scene, "Candidate", false);
-  candidate.GetLightAs<scene::DirectionalLight>()->get().SetIntensityLux(
-    1234.0F);
+  ASSERT_TRUE(candidate.EditLight<scene::DirectionalLight>([](auto& light) { light.SetIntensityLux(1234.0F); }));
   service_.OnSceneActivated(*scene);
   service_.SetRuntimeConfig(EnvironmentRuntimeConfig {
     .scene = observer_ptr { scene.get() },
@@ -1820,7 +1839,7 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
     EXPECT_TRUE(service_.IsPreviewSunActive());
     const auto light = candidate.GetLightAs<scene::DirectionalLight>();
     ASSERT_TRUE(light.has_value());
-    EXPECT_TRUE(light->get().IsSunLight());
+    EXPECT_TRUE(light->get().GetAtmosphereLightSlot() == scene::AtmosphereLightSlot::kPrimary);
     EXPECT_EQ(light->get().GetAtmosphereLightSlot(),
       scene::AtmosphereLightSlot::kPrimary);
     EXPECT_EQ(service_.GetSunAtmosphereLightSlot(),
@@ -1838,7 +1857,7 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   EXPECT_EQ(scene->GetRootNodes().size(), 1U);
   EXPECT_EQ(candidate.GetHandle(), original_handle);
   EXPECT_FALSE(
-    candidate.GetLightAs<scene::DirectionalLight>()->get().IsSunLight());
+    candidate.GetLightAs<scene::DirectionalLight>()->get().GetAtmosphereLightSlot() == scene::AtmosphereLightSlot::kPrimary);
   EXPECT_EQ(candidate.GetLightAs<scene::DirectionalLight>()
               ->get()
               .GetAtmosphereLightSlot(),
@@ -1868,8 +1887,7 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   auto loaded = MakeScene("Loaded");
   auto candidate
     = CreateDirectionalLightNode(*loaded, "OnlyDirectional", false);
-  candidate.GetLightAs<scene::DirectionalLight>()->get().SetIntensityLux(
-    1234.0F);
+  ASSERT_TRUE(candidate.EditLight<scene::DirectionalLight>([](auto& light) { light.SetIntensityLux(1234.0F); }));
   service_.OnSceneActivated(*loaded);
   // The real shell runs domain frame-start before refreshing runtime config.
   engine::FrameContext frame;
@@ -1877,7 +1895,7 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   service_.SyncFromSceneIfNeeded();
   EXPECT_FALSE(service_.IsPreviewSunActive());
   EXPECT_FALSE(
-    candidate.GetLightAs<scene::DirectionalLight>()->get().IsSunLight());
+    candidate.GetLightAs<scene::DirectionalLight>()->get().GetAtmosphereLightSlot() == scene::AtmosphereLightSlot::kPrimary);
   EXPECT_TRUE(service_.GetSkyAtmosphereEnabled());
   EXPECT_FLOAT_EQ(service_.GetSunIlluminanceLx(), 3456.0F);
   const EnvironmentRuntimeConfig config {
@@ -1911,7 +1929,7 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
     candidate.GetLightAs<scene::DirectionalLight>()->get().GetIntensityLux(),
     1234.0F);
   EXPECT_FALSE(
-    candidate.GetLightAs<scene::DirectionalLight>()->get().IsSunLight());
+    candidate.GetLightAs<scene::DirectionalLight>()->get().GetAtmosphereLightSlot() == scene::AtmosphereLightSlot::kPrimary);
 }
 
 NOLINT_TEST_F(EnvironmentSettingsServiceTest,
@@ -1945,10 +1963,12 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
         = FindNodeByName(*scene, reuse ? "Candidate" : "Preview Sun");
       ASSERT_TRUE(preview);
       auto authored
-        = CreateDirectionalLightNode(*scene, "Late Authored Sun", true);
-      authored.GetLightAs<scene::DirectionalLight>()
-        ->get()
-        .SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kPrimary);
+        = CreateDirectionalLightNode(*scene, "Late Authored Sun", false);
+      // Primary is occupied until preview yields; a stored Secondary source
+      // still asks the preview controller to restore authored lighting.
+      ASSERT_TRUE(authored.EditLight<scene::DirectionalLight>([](auto& light) {
+        light.SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kSecondary);
+      }));
       const auto sync_count = scene->GetMutationDispatchCounters().sync_calls;
       scene->SyncObservers();
 
@@ -1958,6 +1978,10 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
       EXPECT_FALSE(service.IsPreviewSunActive());
       EXPECT_FALSE(service.CanEnablePreviewSun());
       EXPECT_TRUE(preview->IsAlive()); // Topology is unchanged during dispatch.
+      ASSERT_TRUE(authored.EditLight<scene::DirectionalLight>([](auto& light) {
+        light.SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kPrimary);
+      }));
+      scene->SyncObservers();
       const auto primary
         = scene->GetDirectionalLightResolver().ResolvePrimarySun();
       ASSERT_TRUE(primary);

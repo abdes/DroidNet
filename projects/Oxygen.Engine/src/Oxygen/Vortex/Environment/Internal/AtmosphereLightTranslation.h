@@ -8,6 +8,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <stdexcept>
+
+#include <Oxygen/Core/Lighting/LightPhotometry.h>
 
 #include <glm/common.hpp>
 #include <glm/exponential.hpp>
@@ -171,10 +174,13 @@ inline auto BuildAtmosphereLightModel(
   model.direction_to_light_ws = detail::SafeNormalizeOrFallback(
     resolved.DirectionToLightWs(), engine::atmos::kDefaultSunDirection);
   model.angular_size_radians = resolved.Light().GetAngularSizeRadians();
-  model.illuminance_rgb_lux
-    = resolved.Light().Common().color_rgb * resolved.Light().GetIntensityLux();
-  model.illuminance_lux = resolved.Light().GetIntensityLux();
-  model.disk_luminance_scale_rgba
+  const auto illuminance = oxygen::lighting::ResolveDirectionalIlluminanceRgb(
+    resolved.Light().GetIntensityLux(), {
+      .color_rgb = resolved.Light().Common().color_rgb,
+      .exposure_compensation_ev = resolved.Light().Common().exposure_compensation_ev });
+  if (!illuminance) throw std::invalid_argument("Invalid atmosphere light photometry");
+  model.illuminance_rgb_lux = *illuminance;
+  model.disk_luminance_scale_rgb
     = resolved.Light().GetAtmosphereDiskLuminanceScale();
   model.transmittance_toward_sun_rgb = atmosphere != nullptr
     ? ComputeGroundTransmittanceTowardLight(

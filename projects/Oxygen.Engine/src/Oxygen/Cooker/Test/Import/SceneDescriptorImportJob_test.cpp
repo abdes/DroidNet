@@ -7,9 +7,11 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <latch>
+#include <limits>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -163,11 +165,12 @@ namespace {
     MeteringMaskUsesCurrentSourceLocalTextureReference)
   {
     auto service = AsyncImportService {};
+    const auto stop_service = oxygen::Finally([&service] { service.Stop(); });
     [[maybe_unused]] const auto stop
       = oxygen::Finally([&service] { service.Stop(); });
     const auto root = MakeTempCookedRoot("mask_reference");
     constexpr auto kDescriptor
-      = R"({"version":6,"name":"MaskScene","nodes":[{}],
+      = R"({"version":7,"name":"MaskScene","nodes":[{}],
       "environment":{"post_process_volume":{"auto_exposure_metering_mask":"/.cooked/Textures/Meter.otex"}}})";
     WriteMeteringMaskSidecar(root, Format::kRGBA8UNorm, 4U);
     const auto success = SubmitAndWait(service, MakeRequest(root, kDescriptor));
@@ -205,10 +208,11 @@ namespace {
     namespace world = data::pak::world;
     const auto root = MakeTempCookedRoot("physical_cameras");
     auto service = AsyncImportService {};
+    const auto stop_service = oxygen::Finally([&service] { service.Stop(); });
     [[maybe_unused]] const auto stop
       = oxygen::Finally([&service] { service.Stop(); });
     const auto report = SubmitAndWait(service, MakeRequest(root, R"({
-      "version": 6, "name": "Physical", "nodes": [{}, {}, {}, {}],
+      "version": 7, "name": "Physical", "nodes": [{}, {}, {}, {}],
       "cameras": {
         "perspective": [
           {"node":0,"aperture_f":2.8,"shutter_rate":250,"iso":400},
@@ -245,6 +249,7 @@ namespace {
     SceneDescriptorImportJobTest, RejectsCoupledExposureAndCurveErrors)
   {
     auto service = AsyncImportService {};
+    const auto stop_service = oxygen::Finally([&service] { service.Stop(); });
     [[maybe_unused]] const auto stop
       = oxygen::Finally([&service] { service.Stop(); });
     const auto root = MakeTempCookedRoot("invalid_exposure");
@@ -259,7 +264,7 @@ namespace {
                { { "metered_ev", 0 }, { "compensation_ev", 2 } } } } },
            { { "exposure_compensation_ev", 10000 } } }) {
       auto document = nlohmann::json::parse(
-        R"({"version":6,"name":"Invalid","nodes":[{}]})");
+        R"({"version":7,"name":"Invalid","nodes":[{}]})");
       document["environment"]["post_process_volume"] = invalid;
       SCOPED_TRACE(document.dump());
       const auto report
@@ -277,10 +282,11 @@ namespace {
     namespace world = data::pak::world;
     const auto root = MakeTempCookedRoot("node_flag_source_modes");
     auto service = AsyncImportService {};
+    const auto stop_service = oxygen::Finally([&service] { service.Stop(); });
     [[maybe_unused]] const auto stop
       = oxygen::Finally([&service] { service.Stop(); });
     const auto report = SubmitAndWait(service, MakeRequest(root, R"({
-      "version": 6,
+      "version": 7,
       "name": "Flags",
       "nodes": [
         {"name":"HiddenRoot", "flags":{
@@ -336,8 +342,9 @@ namespace {
     WriteIndexedReference(output, own_key, data::AssetType::kGeometry);
     WriteIndexedReference(library, library_key, data::AssetType::kGeometry);
     auto service = AsyncImportService {};
+    const auto stop_service = oxygen::Finally([&service] { service.Stop(); });
     const auto descriptor
-      = R"({"version":6,"name":"Scene","nodes":[{"name":"Mesh"}],
+      = R"({"version":7,"name":"Scene","nodes":[{"name":"Mesh"}],
       "renderables":[{"node":0,"geometry_ref":"/Art/Geometry/Mesh.ogeo"}]})";
     for (const auto own_wins : { false, true }) {
       auto request = MakeRequest(output, descriptor);
@@ -370,8 +377,9 @@ namespace {
     WriteTextFile(output / "Geometry/Mesh.ogeo", "new descriptor");
     WriteIndexedReference(library, library_key, data::AssetType::kGeometry);
     auto service = AsyncImportService {};
+    const auto stop_service = oxygen::Finally([&service] { service.Stop(); });
     const auto descriptor
-      = R"({"version":6,"name":"Scene","nodes":[{"name":"Mesh"}],
+      = R"({"version":7,"name":"Scene","nodes":[{"name":"Mesh"}],
       "renderables":[{"node":0,"geometry_ref":"/Art/Geometry/Mesh.ogeo"}]})";
     for (const auto own_wins : { true, false }) {
       auto request = MakeRequest(output, descriptor);
@@ -405,8 +413,9 @@ namespace {
       data::AssetKey::FromVirtualPath("/Library/Wrong.omat"),
       data::AssetType::kMaterial);
     auto service = AsyncImportService {};
+    const auto stop_service = oxygen::Finally([&service] { service.Stop(); });
     auto request = MakeRequest(
-      output, R"({"version":6,"name":"Scene","nodes":[{"name":"Mesh"}],
+      output, R"({"version":7,"name":"Scene","nodes":[{"name":"Mesh"}],
       "renderables":[{"node":0,"geometry_ref":"/Art/Geometry/Mesh.ogeo"}]})");
     request.cooked_context_roots = { library };
     const auto report = SubmitAndWait(service, std::move(request));
@@ -432,7 +441,7 @@ namespace {
     });
 
     const auto report = SubmitAndWait(service, MakeRequest(cooked_root, R"({
-      "version": 6,
+      "version": 7,
       "name": "DemoScene",
       "nodes": [
         { "name": "Root" },
@@ -488,7 +497,7 @@ namespace {
     });
 
     const auto report = SubmitAndWait(service, MakeRequest(cooked_root, R"({
-      "version": 6,
+      "version": 7,
       "name": "DemoScene",
       "nodes": [
         { "name": "Root" },
@@ -518,7 +527,7 @@ namespace {
     });
 
     const auto report = SubmitAndWait(service, MakeRequest(cooked_root, R"({
-      "version": 6,
+      "version": 7,
       "name": "DirectionalTuning",
       "nodes": [
         { "name": "Root" },
@@ -528,7 +537,16 @@ namespace {
         "directional": [
           {
             "node": 1,
-            "common": { "casts_shadows": true },
+            "common": {
+              "affects_world": false, "color_rgb": [0.25, 0.5, 0.75],
+              "casts_shadows": true, "exposure_compensation_ev": -2,
+              "shadow": { "bias": 0.125, "normal_bias": 0.25,
+                "contact_shadows": true, "resolution_hint": 3 }
+            },
+            "atmosphere_light_slot": 2,
+            "use_per_pixel_atmosphere_transmittance": true,
+            "atmosphere_disk_luminance_scale_rgb": [0.5, 1.0, 2.0],
+            "angular_size_radians": 0.02,
             "cascade_count": 4,
             "cascade_distances": [10.0, 30.0, 80.0, 200.0],
             "distribution_exponent": 1.0,
@@ -555,6 +573,23 @@ namespace {
     const auto directional
       = scene.GetComponents<oxygen::data::pak::world::DirectionalLightRecord>();
     ASSERT_EQ(directional.size(), 1U);
+    EXPECT_EQ(directional[0].common.affects_world, 0U);
+    EXPECT_FLOAT_EQ(directional[0].common.color_rgb[0], 0.25F);
+    EXPECT_FLOAT_EQ(directional[0].common.color_rgb[1], 0.5F);
+    EXPECT_FLOAT_EQ(directional[0].common.color_rgb[2], 0.75F);
+    EXPECT_EQ(directional[0].common.casts_shadows, 1U);
+    EXPECT_FLOAT_EQ(directional[0].common.exposure_compensation_ev, -2.0F);
+    EXPECT_FLOAT_EQ(directional[0].common.shadow.bias, 0.125F);
+    EXPECT_FLOAT_EQ(directional[0].common.shadow.normal_bias, 0.25F);
+    EXPECT_EQ(directional[0].common.shadow.contact_shadows, 1U);
+    EXPECT_EQ(directional[0].common.shadow.resolution_hint, 3U);
+    EXPECT_EQ(directional[0].atmosphere_light_slot, 2U);
+    EXPECT_EQ(directional[0].use_per_pixel_atmosphere_transmittance, 1U);
+    EXPECT_FLOAT_EQ(directional[0].atmosphere_disk_luminance_scale_rgb[0], 0.5F);
+    EXPECT_FLOAT_EQ(directional[0].atmosphere_disk_luminance_scale_rgb[1], 1.0F);
+    EXPECT_FLOAT_EQ(directional[0].atmosphere_disk_luminance_scale_rgb[2], 2.0F);
+    EXPECT_FLOAT_EQ(directional[0].angular_size_radians, 0.02F);
+    EXPECT_FLOAT_EQ(directional[0].intensity_lux, 10000.0F);
     EXPECT_EQ(directional[0].split_mode, 1U);
     EXPECT_FLOAT_EQ(directional[0].max_shadow_distance, 200.0F);
     EXPECT_FLOAT_EQ(directional[0].cascade_distances[0], 10.0F);
@@ -563,6 +598,33 @@ namespace {
     EXPECT_FLOAT_EQ(directional[0].cascade_distances[3], 200.0F);
     EXPECT_FLOAT_EQ(directional[0].transition_fraction, 0.1F);
     EXPECT_FLOAT_EQ(directional[0].distance_fadeout_fraction, 0.1F);
+
+    // Exercise strict binary ingress with otherwise valid cooked content.
+    using namespace oxygen::data::pak::world;
+    SceneAssetDesc descriptor {};
+    std::memcpy(&descriptor, scene_bytes.data(), sizeof(descriptor));
+    ASSERT_EQ(descriptor.component_table_count, 1U);
+    SceneComponentTableDesc table {};
+    std::memcpy(&table,
+      scene_bytes.data() + descriptor.component_table_directory_offset, sizeof(table));
+    for (unsigned malformed = 0U; malformed < 8U; ++malformed) {
+      SCOPED_TRACE(malformed);
+      auto record = directional[0];
+      switch (malformed) {
+      case 0: record.common.affects_world = 2U; break;
+      case 1: record.common.shadow.contact_shadows = 2U; break;
+      case 2: record.common.shadow.resolution_hint = 4U; break;
+      case 3: record.atmosphere_light_slot = 3U; break;
+      case 4: record.use_per_pixel_atmosphere_transmittance = 2U; break;
+      case 5: record.intensity_lux = std::numeric_limits<float>::infinity(); break;
+      case 6: record.cascade_distances[1] = record.cascade_distances[0]; break;
+      default: record.atmosphere_disk_luminance_scale_rgb[1] = -1.0F; break;
+      }
+      auto malformed_bytes = scene_bytes;
+      std::memcpy(malformed_bytes.data() + table.table.offset, &record, sizeof(record));
+      EXPECT_THROW(static_cast<void>(oxygen::data::SceneAsset(
+        oxygen::data::AssetKey {}, std::span<const std::byte>(malformed_bytes))), std::exception);
+    }
 
     service.Stop();
   }
@@ -600,7 +662,7 @@ namespace {
     });
 
     const auto report = SubmitAndWait(service, MakeRequest(cooked_root, R"({
-      "version": 6,
+      "version": 7,
       "name": "EnvironmentScene",
       "nodes": [
         { "name": "Root" },
@@ -733,7 +795,7 @@ namespace {
     auto document = nlohmann::json::parse(
       R"JSON(
 {
-  "version": 6,
+  "version": 7,
   "name": "Environment",
   "nodes": [
     {

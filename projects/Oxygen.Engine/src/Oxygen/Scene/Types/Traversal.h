@@ -172,7 +172,7 @@ struct VisibleFilter {
     const auto& flags = visited_node.node_impl->GetFlags();
     return flags.GetEffectiveValue(SceneNodeFlags::kVisible)
       ? FilterResult::kAccept
-      : FilterResult::kRejectSubTree;
+      : FilterResult::kReject;
   }
 };
 static_assert(NonMutatingSceneFilter<VisibleFilter>);

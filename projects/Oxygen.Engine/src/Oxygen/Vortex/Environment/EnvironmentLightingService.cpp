@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <numbers>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -228,16 +229,11 @@ namespace {
   auto ComputeSunDiskLuminanceRgb(
     const environment::AtmosphereLightModel& light) -> glm::vec3
   {
-    const auto angular_radius_radians
-      = 0.5F * std::max(0.0F, light.angular_size_radians);
-    const auto solid_angle
-      = 2.0F * kPi * (1.0F - std::cos(angular_radius_radians));
-    const auto safe_solid_angle = std::max(solid_angle, 1.0e-6F);
-    return glm::vec3(
-             light.disk_luminance_scale_rgba.x * light.illuminance_rgb_lux.x,
-             light.disk_luminance_scale_rgba.y * light.illuminance_rgb_lux.y,
-             light.disk_luminance_scale_rgba.z * light.illuminance_rgb_lux.z)
-      / safe_solid_angle;
+    if (light.angular_size_radians == 0.0F) return glm::vec3 { 0.0F };
+    const double sine = std::sin(0.5 * light.angular_size_radians);
+    const double projected_solid_angle = std::numbers::pi * sine * sine;
+    return glm::vec3(glm::dvec3(light.disk_luminance_scale_rgb)
+      * glm::dvec3(light.illuminance_rgb_lux) / projected_solid_angle);
   }
 
   auto ProbeBindingsHaveUsableResources(const EnvironmentProbeBindings& probes)
@@ -856,7 +852,7 @@ auto EnvironmentLightingService::BuildEnvironmentStaticData(
       * std::max(0.0F, view_products.atmosphere_lights[0].angular_size_radians)
     : 0.0F;
   const auto primary_sun_disk_luminance_scale_rgb = primary_sun_disk_enabled
-    ? glm::vec3 { view_products.atmosphere_lights[0].disk_luminance_scale_rgba }
+    ? glm::vec3 { view_products.atmosphere_lights[0].disk_luminance_scale_rgb }
     : glm::vec3 { 1.0F, 1.0F, 1.0F };
   data.atmosphere.planet_radius_km
     = engine::atmos::MetersToSkyUnit(atmo.planet_radius_m);

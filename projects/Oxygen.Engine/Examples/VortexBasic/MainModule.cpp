@@ -1050,9 +1050,7 @@ auto MainModule::BuildSidednessScene() -> void
   light->Common().shadow.bias = kDefaultDemoSunShadowBias;
   light->Common().color_rgb = { 1.0F, 1.0F, 1.0F };
   light->SetIntensityLux(100000.0F);
-  light->SetEnvironmentContribution(true);
-  light->SetIsSunLight(true);
-  light->SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kPrimary);
+    light->SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kPrimary);
   light->SetUsePerPixelAtmosphereTransmittance(false);
   CHECK_F(directional_light_node_.AttachLight(std::move(light)));
   directional_light_node_.GetTransform().SetLocalRotation(
@@ -1135,11 +1133,9 @@ auto MainModule::EnsureLighting() -> void
     light->Common().color_rgb = { 1.0F, 0.97F, 0.92F };
     light->SetAngularSizeRadians(glm::radians(0.53F));
     light->SetIntensityLux(100000.0F);
-    light->SetEnvironmentContribution(true);
-    light->SetIsSunLight(true);
     light->SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kPrimary);
     light->SetUsePerPixelAtmosphereTransmittance(true);
-    light->SetAtmosphereDiskLuminanceScale({ 1.0F, 0.95F, 0.9F, 1.0F });
+    light->SetAtmosphereDiskLuminanceScale({ 1.0F, 0.95F, 0.9F });
     CHECK_F(directional_light_node_.AttachLight(std::move(light)),
       "Failed to attach DirectionalLight to SunLight");
   }

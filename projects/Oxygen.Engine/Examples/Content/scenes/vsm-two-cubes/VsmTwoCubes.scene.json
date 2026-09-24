@@ -1,5 +1,5 @@
 {
-  "version": 6,
+  "version": 7,
   "name": "VsmTwoCubes",
   "nodes": [
     {
@@ -125,7 +125,6 @@
         "common": {
           "affects_world": true,
           "color_rgb": [1.0, 0.9300000071525574, 0.8199999928474426],
-          "mobility": 0,
           "casts_shadows": true,
           "shadow": {
             "bias": 0.001,
@@ -134,8 +133,7 @@
           }
         },
         "angular_size_radians": 0.009510723,
-        "environment_contribution": true,
-        "is_sun_light": true,
+        "atmosphere_light_slot": 1,
         "intensity_lux": 95000.0,
         "cascade_count": 4,
         "cascade_distances": [8.0, 24.0, 64.0, 160.0],

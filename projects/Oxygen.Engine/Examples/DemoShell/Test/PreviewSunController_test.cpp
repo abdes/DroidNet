@@ -43,8 +43,8 @@ NOLINT_TEST(
   EXPECT_FALSE(controller.GetSun().IsAlive());
   EXPECT_EQ(controller.GetStatus(), PreviewSunStatus::kDisabled);
   const auto& unchanged = visible.GetLightAs<scene::DirectionalLight>()->get();
-  EXPECT_FALSE(unchanged.IsSunLight());
-  EXPECT_FALSE(unchanged.GetEnvironmentContribution());
+  EXPECT_FALSE(unchanged.GetAtmosphereLightSlot() == scene::AtmosphereLightSlot::kPrimary);
+
   EXPECT_FLOAT_EQ(unchanged.GetIntensityLux(), 1000.0F);
 
   controller.Update(*scene, true);
@@ -74,7 +74,6 @@ NOLINT_TEST(
   EXPECT_FALSE(controller.CanEnable(*scene));
   const auto& unchanged = node.GetLightAs<scene::DirectionalLight>()->get();
   EXPECT_FALSE(unchanged.Common().affects_world);
-  EXPECT_FALSE(unchanged.IsSunLight());
   EXPECT_EQ(
     unchanged.GetAtmosphereLightSlot(), scene::AtmosphereLightSlot::kPrimary);
   EXPECT_FALSE(
@@ -112,7 +111,7 @@ NOLINT_TEST(PreviewSunController, DisabledDoesNotInjectOrPromote)
   ASSERT_TRUE(node.AttachLight(std::make_unique<scene::DirectionalLight>()));
   controller.Update(*scene, false);
   EXPECT_FALSE(controller.GetSun().IsAlive());
-  EXPECT_FALSE(node.GetLightAs<scene::DirectionalLight>()->get().IsSunLight());
+  EXPECT_FALSE(node.GetLightAs<scene::DirectionalLight>()->get().GetAtmosphereLightSlot() == scene::AtmosphereLightSlot::kPrimary);
 }
 
 NOLINT_TEST(PreviewSunController, InjectionIsIdempotentAndUsesOxygenBasis)
@@ -163,8 +162,8 @@ NOLINT_TEST(PreviewSunController, AuthoredSunBlocksEvenWhenInactiveOrHidden)
     ASSERT_TRUE(child.has_value());
     auto node = *child;
     auto light = std::make_unique<scene::DirectionalLight>();
-    light->SetIsSunLight(true);
-    light->SetEnvironmentContribution(true);
+    light->SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kPrimary);
+
     light->SetIntensityLux(0.0F);
     light->Common().affects_world = state != 1;
     ASSERT_TRUE(node.AttachLight(std::move(light)));
@@ -181,8 +180,8 @@ NOLINT_TEST(PreviewSunController, AuthoredSunBlocksEvenWhenInactiveOrHidden)
     const auto& authored = node.GetLightAs<scene::DirectionalLight>()->get();
     EXPECT_EQ(authored.Common().affects_world, state != 1);
     EXPECT_FLOAT_EQ(authored.GetIntensityLux(), 0.0F);
-    EXPECT_TRUE(authored.IsSunLight());
-    EXPECT_TRUE(authored.GetEnvironmentContribution());
+    EXPECT_TRUE(authored.GetAtmosphereLightSlot() == scene::AtmosphereLightSlot::kPrimary);
+
   }
 }
 
@@ -195,7 +194,7 @@ NOLINT_TEST(PreviewSunController, ReusesAndRestoresAnUntaggedDirectionalExactly)
   light->Common().casts_shadows = false;
   light->Common().shadow.bias = 0.08F;
   light->Common().color_rgb = { 0.2F, 0.4F, 0.6F };
-  light->SetEnvironmentContribution(true);
+
   light->SetIntensityLux(1000.0F);
   ASSERT_TRUE(node.AttachLight(std::move(light)));
   node.GetTransform().SetLocalPosition({ 3.0F, 7.0F, 11.0F });
@@ -221,8 +220,8 @@ NOLINT_TEST(PreviewSunController, ReusesAndRestoresAnUntaggedDirectionalExactly)
   ASSERT_TRUE(primary.has_value());
   EXPECT_EQ(primary->NodeHandle(), node.GetHandle());
   EXPECT_TRUE(primary->Light().Common().affects_world);
-  EXPECT_TRUE(primary->Light().IsSunLight());
-  EXPECT_TRUE(primary->Light().GetEnvironmentContribution());
+  EXPECT_TRUE(primary->Light().GetAtmosphereLightSlot() == scene::AtmosphereLightSlot::kPrimary);
+
   EXPECT_EQ(primary->Light().GetAtmosphereLightSlot(),
     scene::AtmosphereLightSlot::kPrimary);
   EXPECT_FLOAT_EQ(primary->Light().GetIntensityLux(), 1000.0F);
@@ -232,8 +231,8 @@ NOLINT_TEST(PreviewSunController, ReusesAndRestoresAnUntaggedDirectionalExactly)
   EXPECT_TRUE(node.IsAlive());
   const auto& restored = node.GetLightAs<scene::DirectionalLight>()->get();
   EXPECT_FALSE(restored.Common().affects_world);
-  EXPECT_TRUE(restored.GetEnvironmentContribution());
-  EXPECT_FALSE(restored.IsSunLight());
+
+  EXPECT_FALSE(restored.GetAtmosphereLightSlot() == scene::AtmosphereLightSlot::kPrimary);
   EXPECT_EQ(
     restored.GetAtmosphereLightSlot(), scene::AtmosphereLightSlot::kNone);
   EXPECT_FLOAT_EQ(restored.GetIntensityLux(), 1000.0F);
@@ -267,8 +266,7 @@ NOLINT_TEST(PreviewSunController, ExplicitAtmosphereRolesBlockEvenWhenInactive)
                 ->get()
                 .GetAtmosphereLightSlot(),
       slot);
-    EXPECT_FALSE(
-      node.GetLightAs<scene::DirectionalLight>()->get().IsSunLight());
+
   }
 }
 
@@ -291,7 +289,7 @@ NOLINT_TEST(
     visible.GetLightAs<scene::DirectionalLight>()->get().GetIntensityLux(),
     0.0F);
   EXPECT_FALSE(
-    hidden.GetLightAs<scene::DirectionalLight>()->get().IsSunLight());
+    hidden.GetLightAs<scene::DirectionalLight>()->get().GetAtmosphereLightSlot() == scene::AtmosphereLightSlot::kPrimary);
   controller.Update(*scene, true, "Hidden");
   EXPECT_EQ(controller.GetSun().GetHandle(), hidden.GetHandle());
   EXPECT_FALSE(hidden.GetFlags()->get().GetEffectiveValue(
@@ -316,17 +314,17 @@ NOLINT_TEST(
   EXPECT_TRUE(
     second.GetLightAs<scene::DirectionalLight>()->get().Common().affects_world);
   EXPECT_FALSE(
-    second.GetLightAs<scene::DirectionalLight>()->get().IsSunLight());
+    second.GetLightAs<scene::DirectionalLight>()->get().GetAtmosphereLightSlot() == scene::AtmosphereLightSlot::kPrimary);
   controller.Update(*scene, true, "Second");
   EXPECT_EQ(controller.GetSun().GetHandle(), second.GetHandle());
-  EXPECT_FALSE(first.GetLightAs<scene::DirectionalLight>()->get().IsSunLight());
+  EXPECT_FALSE(first.GetLightAs<scene::DirectionalLight>()->get().GetAtmosphereLightSlot() == scene::AtmosphereLightSlot::kPrimary);
   EXPECT_TRUE(
     first.GetLightAs<scene::DirectionalLight>()->get().Common().affects_world);
   controller.Update(*scene, true, "Missing");
   EXPECT_EQ(controller.GetStatus(), PreviewSunStatus::kSourceUnavailable);
   EXPECT_FALSE(controller.GetSun().IsAlive());
   EXPECT_FALSE(
-    second.GetLightAs<scene::DirectionalLight>()->get().IsSunLight());
+    second.GetLightAs<scene::DirectionalLight>()->get().GetAtmosphereLightSlot() == scene::AtmosphereLightSlot::kPrimary);
   EXPECT_EQ(scene->GetRootNodes().size(), 2U);
   auto duplicate = scene->CreateNode("First");
   ASSERT_TRUE(
@@ -362,20 +360,20 @@ NOLINT_TEST(PreviewSunController, ProfileChangesDoNotReplaceTheAuthoredSnapshot)
   auto controller = PreviewSunController {};
   controller.Update(*scene, true);
   auto& light = node.GetLightAs<scene::DirectionalLight>()->get();
-  light.Common().affects_world = false;
-  light.SetEnvironmentContribution(false);
-  light.SetIsSunLight(false);
-  light.SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kSecondary);
+  ASSERT_TRUE(node.EditLight<scene::DirectionalLight>([](auto& candidate) {
+    candidate.Common().affects_world = false;
+    candidate.SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kSecondary);
+  }));
   controller.Update(*scene, true);
   EXPECT_TRUE(light.Common().affects_world);
-  EXPECT_TRUE(light.GetEnvironmentContribution());
-  EXPECT_TRUE(light.IsSunLight());
+
+  EXPECT_TRUE(light.GetAtmosphereLightSlot() == scene::AtmosphereLightSlot::kPrimary);
   EXPECT_EQ(
     light.GetAtmosphereLightSlot(), scene::AtmosphereLightSlot::kPrimary);
   controller.Update(*scene, false);
   EXPECT_TRUE(light.Common().affects_world);
-  EXPECT_FALSE(light.GetEnvironmentContribution());
-  EXPECT_FALSE(light.IsSunLight());
+
+  EXPECT_FALSE(light.GetAtmosphereLightSlot() == scene::AtmosphereLightSlot::kPrimary);
   EXPECT_EQ(light.GetAtmosphereLightSlot(), scene::AtmosphereLightSlot::kNone);
 }
 
@@ -394,8 +392,8 @@ NOLINT_TEST(PreviewSunController, NewAuthoredSunDisablesTheTemporarySun)
     const auto preview = controller.GetSun();
     auto authored = scene->CreateNode("Authored Sun");
     auto light = std::make_unique<scene::DirectionalLight>();
-    light->SetIsSunLight(true);
-    light->SetEnvironmentContribution(true);
+    light->SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kSecondary);
+
     ASSERT_TRUE(authored.AttachLight(std::move(light)));
     controller.Update(*scene, true);
     EXPECT_EQ(controller.GetStatus(), PreviewSunStatus::kBlockedByAuthoredSun);
@@ -403,7 +401,7 @@ NOLINT_TEST(PreviewSunController, NewAuthoredSunDisablesTheTemporarySun)
     EXPECT_EQ(preview.IsAlive(), reuse);
     if (reuse) {
       EXPECT_FALSE(
-        untagged.GetLightAs<scene::DirectionalLight>()->get().IsSunLight());
+        untagged.GetLightAs<scene::DirectionalLight>()->get().GetAtmosphereLightSlot() == scene::AtmosphereLightSlot::kPrimary);
     }
   }
 }
@@ -417,9 +415,8 @@ NOLINT_TEST(
   auto preview = controller.GetSun();
   auto authored = scene->CreateNode("Late Authored Sun");
   auto light = std::make_unique<scene::DirectionalLight>();
-  light->SetEnvironmentContribution(true);
-  light->SetIsSunLight(true);
-  light->SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kPrimary);
+
+  light->SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kSecondary);
   ASSERT_TRUE(authored.AttachLight(std::move(light)));
   scene->SyncObservers();
   const auto sync_count = scene->GetMutationDispatchCounters().sync_calls;
@@ -433,13 +430,12 @@ NOLINT_TEST(
   EXPECT_EQ(controller.GetStatus(), PreviewSunStatus::kBlockedByAuthoredSun);
   const auto& disabled = preview.GetLightAs<scene::DirectionalLight>()->get();
   EXPECT_FALSE(disabled.Common().affects_world);
-  EXPECT_FALSE(disabled.GetEnvironmentContribution());
-  EXPECT_FALSE(disabled.IsSunLight());
+
+  EXPECT_FALSE(disabled.GetAtmosphereLightSlot() == scene::AtmosphereLightSlot::kPrimary);
   EXPECT_EQ(
     disabled.GetAtmosphereLightSlot(), scene::AtmosphereLightSlot::kNone);
-  const auto primary = scene->GetDirectionalLightResolver().ResolvePrimarySun();
-  ASSERT_TRUE(primary);
-  EXPECT_EQ(primary->NodeHandle(), authored.GetHandle());
+  EXPECT_FALSE(scene->GetDirectionalLightResolver().ResolvePrimarySun());
+  EXPECT_EQ(authored.GetLightAs<scene::DirectionalLight>()->get().GetAtmosphereLightSlot(), scene::AtmosphereLightSlot::kSecondary);
 
   controller.Update(*scene, true);
   EXPECT_FALSE(preview.IsAlive());
@@ -454,8 +450,8 @@ NOLINT_TEST(PreviewSunController, YieldedInjectionRecoversIfBlockerDisappears)
   auto preview = controller.GetSun();
   auto authored = scene->CreateNode("Short-Lived Authored Sun");
   auto light = std::make_unique<scene::DirectionalLight>();
-  light->SetEnvironmentContribution(true);
-  light->SetIsSunLight(true);
+
+  light->SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kSecondary);
   ASSERT_TRUE(authored.AttachLight(std::move(light)));
   controller.YieldToAuthoredSun(*scene);
   ASSERT_FALSE(controller.GetSun().IsAlive());
@@ -465,7 +461,7 @@ NOLINT_TEST(PreviewSunController, YieldedInjectionRecoversIfBlockerDisappears)
   EXPECT_EQ(controller.GetStatus(), PreviewSunStatus::kInjected);
   EXPECT_EQ(scene->GetRootNodes().size(), 1U);
   EXPECT_TRUE(
-    preview.GetLightAs<scene::DirectionalLight>()->get().IsSunLight());
+    preview.GetLightAs<scene::DirectionalLight>()->get().GetAtmosphereLightSlot() == scene::AtmosphereLightSlot::kPrimary);
 }
 
 NOLINT_TEST(PreviewSunController, YieldRestoresBorrowedFlagsWithoutObserverSync)
@@ -474,15 +470,14 @@ NOLINT_TEST(PreviewSunController, YieldRestoresBorrowedFlagsWithoutObserverSync)
   auto candidate = scene->CreateNode("Borrowed Directional");
   auto original = std::make_unique<scene::DirectionalLight>();
   original->Common().affects_world = false;
-  original->SetEnvironmentContribution(false);
-  original->SetIsSunLight(false);
+
   original->SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kNone);
   ASSERT_TRUE(candidate.AttachLight(std::move(original)));
   PreviewSunController controller;
   controller.Update(*scene, true);
   auto authored = scene->CreateNode("Late Secondary");
   auto light = std::make_unique<scene::DirectionalLight>();
-  light->SetEnvironmentContribution(true);
+
   light->SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kSecondary);
   ASSERT_TRUE(authored.AttachLight(std::move(light)));
   const auto sync_count = scene->GetMutationDispatchCounters().sync_calls;
@@ -492,8 +487,8 @@ NOLINT_TEST(PreviewSunController, YieldRestoresBorrowedFlagsWithoutObserverSync)
   EXPECT_TRUE(candidate.IsAlive());
   const auto& restored = candidate.GetLightAs<scene::DirectionalLight>()->get();
   EXPECT_FALSE(restored.Common().affects_world);
-  EXPECT_FALSE(restored.GetEnvironmentContribution());
-  EXPECT_FALSE(restored.IsSunLight());
+
+  EXPECT_FALSE(restored.GetAtmosphereLightSlot() == scene::AtmosphereLightSlot::kPrimary);
   EXPECT_EQ(
     restored.GetAtmosphereLightSlot(), scene::AtmosphereLightSlot::kNone);
 }

@@ -706,7 +706,7 @@ void EnvironmentDebugPanel::DrawSunSection()
   constexpr auto kSunDiskColorScaleFlags = ImGuiColorEditFlags_DisplayRGB
     | ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_Float
     | ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_NoOptions;
-  if (ImGui::ColorEdit4("Atmosphere Sun Disk Color Scale",
+  if (ImGui::ColorEdit3("Atmosphere Sun Disk Color Scale",
         &disk_luminance_scale.x, kSunDiskColorScaleFlags)) {
     environment_vm_->SetSunAtmosphereDiskLuminanceScale(disk_luminance_scale);
   }

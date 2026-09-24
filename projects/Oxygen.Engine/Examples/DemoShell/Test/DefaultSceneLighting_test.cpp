@@ -42,8 +42,8 @@ NOLINT_TEST(DefaultSceneLighting, AuthorsSunAndEnvironment)
   const auto primary = scene->GetDirectionalLightResolver().ResolvePrimarySun();
   ASSERT_TRUE(primary.has_value());
   EXPECT_EQ(primary->Node().GetName(), "TestSun");
-  EXPECT_TRUE(primary->Light().IsSunLight());
-  EXPECT_TRUE(primary->Light().GetEnvironmentContribution());
+  EXPECT_TRUE(primary->Light().GetAtmosphereLightSlot() == scene::AtmosphereLightSlot::kPrimary);
+
   EXPECT_TRUE(primary->Light().Common().casts_shadows);
   EXPECT_FLOAT_EQ(primary->Light().Common().shadow.bias, 0.03F);
 
@@ -148,8 +148,8 @@ NOLINT_TEST(DefaultSceneLighting, PreviewPreservesUntaggedDirectionalLight)
   EXPECT_EQ(scene->GetRootNodes().size(), 1U);
   const auto preserved = node.GetLightAs<scene::DirectionalLight>();
   ASSERT_TRUE(preserved.has_value());
-  EXPECT_FALSE(preserved->get().IsSunLight());
-  EXPECT_FALSE(preserved->get().GetEnvironmentContribution());
+  EXPECT_FALSE(preserved->get().GetAtmosphereLightSlot() == scene::AtmosphereLightSlot::kPrimary);
+
   EXPECT_FALSE(preserved->get().Common().casts_shadows);
   EXPECT_FLOAT_EQ(preserved->get().GetIntensityLux(), 42.0F);
 }
@@ -204,7 +204,7 @@ NOLINT_TEST(DefaultSceneLighting, PreviewBelongsToEachScene)
   auto second = std::make_shared<scene::Scene>("SecondImport", 16);
   auto first_sun = AddPreviewSunIfMissing(*first);
   ASSERT_TRUE(first_sun.IsAlive());
-  first_sun.GetLightAs<scene::DirectionalLight>()->get().SetIntensityLux(17.0F);
+  ASSERT_TRUE(first_sun.EditLight<scene::DirectionalLight>([](auto& light) { light.SetIntensityLux(17.0F); }));
   ASSERT_TRUE(AddPreviewSunIfMissing(*second).IsAlive());
   EXPECT_FLOAT_EQ(second->GetDirectionalLightResolver()
                     .ResolvePrimarySun()

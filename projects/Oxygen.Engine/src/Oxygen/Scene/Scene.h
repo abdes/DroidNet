@@ -761,6 +761,7 @@ private:
 
   [[nodiscard]] auto AsMutationCollector() const noexcept
     -> observer_ptr<internal::IMutationCollector>;
+  OXGN_SCN_API void NotifyLightFlagsChanged(const NodeHandle& node_handle);
   auto NotifyObservers(SceneMutationMask mutation_type,
     const NodeHandle& node_handle, ScriptSlotIndex slot_index,
     const ScriptingComponent::Slot* slot, uint64_t sequence) const -> void;
@@ -779,6 +780,7 @@ private:
   std::unique_ptr<DirectionalLightResolver> directional_light_resolver_;
 
   friend class SceneNode;
+  template <typename> friend class SceneTraversal;
 
   //=== Validation Helpers ===------------------------------------------------//
 

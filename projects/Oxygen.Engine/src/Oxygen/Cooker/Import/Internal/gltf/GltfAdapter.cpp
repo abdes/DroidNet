@@ -2748,10 +2748,10 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
         DirectionalLightRecord rec_light {};
         rec_light.node_index = light_node_index;
         rec_light.common = imported_common;
-        rec_light.common.color_rgb[0] = (std::max)(0.0F, light.color[0]);
-        rec_light.common.color_rgb[1] = (std::max)(0.0F, light.color[1]);
-        rec_light.common.color_rgb[2] = (std::max)(0.0F, light.color[2]);
-        rec_light.intensity_lux = (std::max)(0.0F, light.intensity);
+        rec_light.common.color_rgb[0] = light.color[0];
+        rec_light.common.color_rgb[1] = light.color[1];
+        rec_light.common.color_rgb[2] = light.color[2];
+        rec_light.intensity_lux = light.intensity;
         build.directional_lights.push_back(rec_light);
         break;
       }
@@ -2760,9 +2760,9 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
         rec_light.range = local_range;
         rec_light.node_index = i;
         rec_light.common = imported_common;
-        rec_light.common.color_rgb[0] = (std::max)(0.0F, light.color[0]);
-        rec_light.common.color_rgb[1] = (std::max)(0.0F, light.color[1]);
-        rec_light.common.color_rgb[2] = (std::max)(0.0F, light.color[2]);
+        rec_light.common.color_rgb[0] = light.color[0];
+        rec_light.common.color_rgb[1] = light.color[1];
+        rec_light.common.color_rgb[2] = light.color[2];
         const auto flux
           = CandelaToLumens(light.intensity, 4.0 * std::numbers::pi);
         if (!flux) {
@@ -2782,9 +2782,9 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
         rec_light.range = local_range;
         rec_light.node_index = light_node_index;
         rec_light.common = imported_common;
-        rec_light.common.color_rgb[0] = (std::max)(0.0F, light.color[0]);
-        rec_light.common.color_rgb[1] = (std::max)(0.0F, light.color[1]);
-        rec_light.common.color_rgb[2] = (std::max)(0.0F, light.color[2]);
+        rec_light.common.color_rgb[0] = light.color[0];
+        rec_light.common.color_rgb[1] = light.color[1];
+        rec_light.common.color_rgb[2] = light.color[2];
         const auto flux = CandelaToSpotLumens(light);
         if (!flux) {
           diagnostics.push_back(

@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstddef>
 #include <filesystem>
@@ -14,12 +15,14 @@
 #include <string_view>
 #include <utility>
 #include <vector>
+#include <unordered_set>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScenePipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/StringUtils.h>
+#include <Oxygen/Data/LightValidation.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -191,6 +194,26 @@ namespace {
     desc.nodes.count = static_cast<uint32_t>(build.nodes.size());
     desc.nodes.entry_size = sizeof(NodeRecord);
 
+    std::unordered_set<std::uint32_t> light_nodes;
+    std::array<bool, 3> atmosphere_slots {};
+    const auto valid_lights = [&](const auto& lights) {
+      for (const auto& light : lights) {
+        if (!data::IsValidLightRecord(light) || light.node_index >= build.nodes.size()
+          || !light_nodes.insert(light.node_index).second) return false;
+        if constexpr (requires { light.atmosphere_light_slot; }) {
+          const auto slot = light.atmosphere_light_slot;
+          if (slot != 0U && std::exchange(atmosphere_slots[slot], true)) return false;
+        }
+      }
+      return true;
+    };
+    if (!valid_lights(build.directional_lights) || !valid_lights(build.point_lights)
+      || !valid_lights(build.spot_lights)) {
+      diagnostics.push_back(MakeErrorDiagnostic("scene.light.invalid_parameters",
+        "Light values, per-node ownership or atmosphere assignments are invalid",
+        source_id, "lights"));
+      return outcome;
+    }
     const auto nodes_bytes = std::as_bytes(std::span(build.nodes));
 
     desc.scene_strings.offset
