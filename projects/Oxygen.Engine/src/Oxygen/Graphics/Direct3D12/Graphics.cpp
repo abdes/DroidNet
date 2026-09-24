@@ -837,9 +837,13 @@ auto Graphics::AllocateResource(const AllocationBudgetTag& tag,
     }
   };
   auto request = requested_allocation;
-  request.Flags = static_cast<D3D12MA::ALLOCATION_FLAGS>(
-    static_cast<unsigned>(request.Flags)
-    | static_cast<unsigned>(D3D12MA::ALLOCATION_FLAG_WITHIN_BUDGET));
+  if (tag.owner) {
+    // Scoped admission must not turn the driver's residency budget into a
+    // hard allocation limit for unrelated material textures or buffers.
+    request.Flags = static_cast<D3D12MA::ALLOCATION_FLAGS>(
+      static_cast<unsigned>(request.Flags)
+      | static_cast<unsigned>(D3D12MA::ALLOCATION_FLAG_WITHIN_BUDGET));
+  }
   HRESULT result = E_OUTOFMEMORY;
   if (tag.owner
     && (static_cast<unsigned>(request.Flags)
