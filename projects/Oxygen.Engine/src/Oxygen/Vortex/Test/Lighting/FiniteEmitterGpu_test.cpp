@@ -28,7 +28,7 @@
 
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Testing/GTest.h>
-#include <Oxygen/Vortex/Lighting/Internal/LightPhotometry.h>
+#include <Oxygen/Core/Lighting/LightPhotometry.h>
 #include <Oxygen/Vortex/Lighting/Types/ForwardLocalLightRecord.h>
 #include <Oxygen/Vortex/Test/Lighting/LightingGpuAbiFixture.h>
 #include <Oxygen/Vortex/Test/Lighting/Reference/FiniteEmitter.h>
@@ -247,7 +247,7 @@ namespace {
 
     for (const auto kind : { 0U, 1U }) {
       for (const auto& geometry : geometries) {
-        const auto profile = lighting::internal::ResolveSpotConeProfile(
+        const auto profile = oxygen::lighting::ResolveSpotConeProfile(
           geometry.inner, geometry.outer);
         ASSERT_TRUE(profile.has_value());
         for (const auto roughness : { 0.045F, 0.25F, 1.0F }) {

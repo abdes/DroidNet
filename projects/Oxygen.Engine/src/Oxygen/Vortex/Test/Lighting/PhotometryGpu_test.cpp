@@ -22,13 +22,13 @@
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Testing/GTest.h>
-#include <Oxygen/Vortex/Lighting/Internal/LightPhotometry.h>
+#include <Oxygen/Core/Lighting/LightPhotometry.h>
 #include <Oxygen/Vortex/Test/Lighting/LightingGpuAbiFixture.h>
 #include <Oxygen/Vortex/Test/Lighting/Reference/Photometry.h>
 
 namespace oxygen::vortex::testing {
 namespace {
-  namespace production = lighting::internal;
+  namespace production = oxygen::lighting;
 
   struct PhotometryProbeInput {
     glm::vec3 light_vector { 0.0F };

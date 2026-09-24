@@ -7,11 +7,13 @@
 #pragma once
 
 #include <cstdint>
-#include <expected>
+
+#include <Oxygen/Core/api_export.h>
+#include <Oxygen/Base/Result.h>
 
 #include <glm/ext/vector_float3.hpp>
 
-namespace oxygen::vortex::lighting::internal {
+namespace oxygen::lighting {
 
 enum class LightPhotometryError : std::uint8_t {
   kInvalidInput,
@@ -31,20 +33,20 @@ struct SpotConeProfile {
   double solid_angle_sr { 0.0 };
 };
 
-[[nodiscard]] auto ResolveSpotConeProfile(
+OXGN_CORE_NDAPI auto ResolveSpotConeProfile(
   float inner_half_angle_radians, float outer_half_angle_radians)
-  -> std::expected<SpotConeProfile, LightPhotometryError>;
+  -> Result<SpotConeProfile, LightPhotometryError>;
 
-[[nodiscard]] auto ResolveDirectionalIlluminanceRgb(
+OXGN_CORE_NDAPI auto ResolveDirectionalIlluminanceRgb(
   float illuminance_lux, const LightPhotometryModifiers& modifiers)
-  -> std::expected<glm::vec3, LightPhotometryError>;
+  -> Result<glm::vec3, LightPhotometryError>;
 
-[[nodiscard]] auto ResolvePointIntensityRgb(
+OXGN_CORE_NDAPI auto ResolvePointIntensityRgb(
   float luminous_flux_lm, const LightPhotometryModifiers& modifiers)
-  -> std::expected<glm::vec3, LightPhotometryError>;
+  -> Result<glm::vec3, LightPhotometryError>;
 
-[[nodiscard]] auto ResolveSpotIntensityRgb(float luminous_flux_lm,
+OXGN_CORE_NDAPI auto ResolveSpotIntensityRgb(float luminous_flux_lm,
   const SpotConeProfile& cone, const LightPhotometryModifiers& modifiers)
-  -> std::expected<glm::vec3, LightPhotometryError>;
+  -> Result<glm::vec3, LightPhotometryError>;
 
-} // namespace oxygen::vortex::lighting::internal
+} // namespace oxygen::lighting

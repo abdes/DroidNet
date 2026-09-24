@@ -12,9 +12,9 @@
 #include <glm/ext/vector_float3.hpp>
 
 #include <Oxygen/Testing/GTest.h>
-#include <Oxygen/Vortex/Lighting/Internal/LightPhotometry.h>
+#include <Oxygen/Core/Lighting/LightPhotometry.h>
 
-namespace oxygen::vortex::lighting::internal {
+namespace oxygen::lighting {
 namespace {
 
   NOLINT_TEST(LightPhotometryTest, DirectionalTintAndCompensationResolveOnce)
@@ -198,4 +198,4 @@ namespace {
   }
 
 } // namespace
-} // namespace oxygen::vortex::lighting::internal
+} // namespace oxygen::lighting

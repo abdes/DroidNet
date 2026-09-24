@@ -105,7 +105,6 @@ target_sources(
   PRIVATE
     "../Lighting/Internal/LightGridBuilder.cpp"
     "../Lighting/Internal/LightEvaluationRecords.cpp"
-    "../Lighting/Internal/LightPhotometry.cpp"
 )
 
 m_gtest_program(PostProcessService SOURCES "PostProcessService_test.cpp")
