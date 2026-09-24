@@ -95,6 +95,7 @@ set(
   "Constants.h"
   "Devices/DeviceManager.h"
   "GraphicResource.h"
+  "NativeLifetime.h"
   "Graphics.h"
   "MemoryStatistics.h"
   "PixFrameCaptureController.h"

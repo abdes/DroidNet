@@ -6,6 +6,10 @@
 
 #pragma once
 
+#include <memory>
+
+#include <wrl/client.h>
+
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
 #include <Oxygen/Graphics/Direct3D12/api_export.h>
@@ -36,17 +40,12 @@ public:
   OXGN_D3D12_NDAPI auto GetCompletedValue() const -> uint64_t override;
   OXGN_D3D12_NDAPI auto GetCurrentValue() const -> uint64_t override
   {
+    std::lock_guard lock(timeline_mutex_);
     return current_value_;
   }
 
   OXGN_D3D12_API auto TryGetTimestampFrequency(uint64_t& out_hz) const
     -> bool override;
-
-  OXGN_D3D12_API auto Submit(
-    std::shared_ptr<graphics::CommandList> command_list) -> void override;
-  OXGN_D3D12_API auto Submit(
-    std::span<std::shared_ptr<graphics::CommandList>> command_lists)
-    -> void override;
 
   OXGN_D3D12_API auto BeginProfilingFrame() const -> void override;
   OXGN_D3D12_API auto Flush() const -> void override;
@@ -65,6 +64,17 @@ public:
   }
 
 private:
+  struct PreparedSubmission;
+  auto PrepareNativeSubmission(
+    const graphics::internal::NativeSubmissionRequest& request,
+    std::unique_ptr<graphics::internal::NativeSubmission> reusable)
+    -> std::unique_ptr<graphics::internal::NativeSubmission> override;
+  auto QueryPrivateCompletion() const noexcept -> uint64_t override;
+  auto WaitPrivateCompletion(uint64_t value) const -> void override;
+  auto TearDownUncertainDevice() noexcept -> void override;
+  Microsoft::WRL::ComPtr<ID3D12Fence> private_fence_;
+  HANDLE private_event_ { nullptr };
+  mutable std::mutex timeline_mutex_;
   auto SignalImmediate(uint64_t value) const -> void override;
   auto QueueWaitImmediate(uint64_t value) const -> void;
   auto CurrentDevice() const -> dx::IDevice*;
@@ -74,9 +84,8 @@ private:
   auto ReleaseFence() noexcept -> void;
 
   QueueRole queue_role_; //<! The cached role of the command queue.
-  const Graphics* gfx_ {
-    nullptr
-  }; //<! The graphics context this command queue belongs to.
+  std::shared_ptr<void> native_lifetime_;
+  Microsoft::WRL::ComPtr<dx::IDevice> device_;
   dx::ICommandQueue* command_queue_ { nullptr };
 
   dx::IFence* fence_ { nullptr };

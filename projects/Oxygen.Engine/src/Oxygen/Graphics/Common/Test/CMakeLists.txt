@@ -75,6 +75,7 @@ m_gtest_program(
     "Bindless/BaseDescriptorAllocator_Basic_test.cpp"
     "Bindless/BaseDescriptorAllocator_Concurrency_test.cpp"
     "Bindless/BaseDescriptorAllocator_Domain_test.cpp"
+    "Bindless/DescriptorReturnFailure_test.cpp"
     "Bindless/BaseDescriptorAllocator_Error_test.cpp"
     "Bindless/BaseDescriptorAllocator_Growth_test.cpp"
     "Bindless/BaseDescriptorAllocator_Init_test.cpp"
@@ -85,6 +86,7 @@ m_gtest_program(
   SOURCES
     "Fakes/FakeResource.h"
     "ResourceRegistry_basic_test.cpp"
+    "ResourceRegistryManaged_test.cpp"
     "ResourceRegistry_replace_test.cpp"
     "ResourceRegistry_update_test.cpp"
 )
@@ -100,6 +102,7 @@ m_gtest_program(
     "GraphicsCaptureConsole_test.cpp"
 )
 m_gtest_program(GraphicsLifecycle SOURCES "GraphicsLifecycle_test.cpp")
+m_gtest_program(BackendObject SOURCES "BackendObject_test.cpp")
 m_gtest_program(DeferredReclaimer SOURCES "DeferredReclaimer_test.cpp")
 m_gtest_program(CommandListPool SOURCES "CommandListPool_test.cpp")
 m_gtest_program(Queues SOURCES "QueuesStrategy_test.cpp")
@@ -110,3 +113,5 @@ m_gtest_program(
     "SubmissionCallback_test.cpp"
 )
 m_gtest_program(ProfileScopeDrain SOURCES "ProfilingScopeDrain_test.cpp")
+
+m_gtest_program(Submission SOURCES "Submission_test.cpp")

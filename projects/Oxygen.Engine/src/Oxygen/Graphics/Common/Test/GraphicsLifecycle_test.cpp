@@ -10,8 +10,6 @@
 #include <memory>
 #include <vector>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
@@ -20,6 +18,7 @@
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Test/Mocks/MockGraphics.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 
@@ -170,6 +169,28 @@ NOLINT_TEST(GraphicsLifecycleTest, Stop_AllowsMissingReadbackManager)
     .WillByDefault(::testing::Return(observer_ptr<ReadbackManager> {}));
 
   EXPECT_NO_THROW(gfx.Stop());
+}
+
+NOLINT_TEST(GraphicsLifecycleTest,
+  CloseWithoutNurseryDrainsOnceAndRejectsRecordingAcquisition)
+{
+  TestGraphics gfx("Close without nursery");
+  CountingReadbackManager readback_manager;
+  ON_CALL(gfx, GetReadbackManager())
+    .WillByDefault(
+      ::testing::Return(observer_ptr<ReadbackManager> { &readback_manager }));
+  int reclaimed = 0;
+  gfx.GetDeferredReclaimer().RegisterDeferredAction([&] { ++reclaimed; });
+  EXPECT_FALSE(gfx.IsRunning());
+  gfx.Close();
+  gfx.Close();
+  EXPECT_EQ(readback_manager.shutdown_calls, 1);
+  EXPECT_EQ(reclaimed, 1);
+  EXPECT_EQ(gfx.GetBackendLifetime()->State(),
+    oxygen::graphics::BackendLifecycle::kRetiring);
+  EXPECT_THROW((void)gfx.AcquireCommandRecorder(
+                 oxygen::graphics::QueueKey { "closed" }, "closed"),
+    std::logic_error);
 }
 
 NOLINT_TEST(GraphicsLifecycleTest,

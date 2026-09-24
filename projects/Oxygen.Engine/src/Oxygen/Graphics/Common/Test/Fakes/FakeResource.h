@@ -26,13 +26,15 @@ struct TestViewDesc {
   ResourceViewType view_type { ResourceViewType::kConstantBuffer };
   DescriptorVisibility visibility { DescriptorVisibility::kShaderVisible };
   uint64_t id { 0 };
+  bool force_hash_collision { false };
 
   // Required for hash and equality comparison
   // NOLINTNEXTLINE(*-unneeded-member-function)
   auto operator==(const TestViewDesc& other) const -> bool
   {
     return id == other.id && view_type == other.view_type
-      && visibility == other.visibility;
+      && visibility == other.visibility
+      && force_hash_collision == other.force_hash_collision;
   }
 };
 } // namespace oxygen::graphics::testing
@@ -42,6 +44,9 @@ template <> struct std::hash<oxygen::graphics::testing::TestViewDesc> {
     const oxygen::graphics::testing::TestViewDesc& v) const noexcept
     -> std::size_t
   {
+    if (v.force_hash_collision) {
+      return 7U;
+    }
     std::size_t h = std::hash<int> {}(static_cast<int>(v.view_type));
     oxygen::HashCombine(h, static_cast<int>(v.visibility));
     oxygen::HashCombine(h, v.id);
@@ -63,6 +68,13 @@ public:
     : instance_id_(s_next_instance_id_.fetch_add(1u, std::memory_order_relaxed))
   {
   }
+
+  auto WithNativeResource(NativeResource native) -> FakeResource&
+  {
+    native_ = native;
+    return *this;
+  }
+  auto GetNativeResource() const noexcept -> NativeResource { return native_; }
 
   // Use a custom behavior lambda. If set, this will be invoked for each
   // GetNativeView call.
@@ -131,6 +143,7 @@ public:
   auto LastDesc() const { return last_desc_; }
 
 private:
+  NativeResource native_;
   GetNativeViewFn behavior_ {};
   std::optional<uint64_t> throw_on_id_ {};
   int call_count_ { 0 };

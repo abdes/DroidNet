@@ -11,9 +11,16 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Graphics/Common/Submission.h>
 #include <Oxygen/Graphics/Common/api_export.h>
 
+namespace oxygen {
+class Graphics;
+}
 namespace oxygen::graphics {
+
+class BackendLifetime;
+enum class SubmissionOutcome : uint8_t;
 
 class CommandList;
 class CommandRecorder;
@@ -35,8 +42,9 @@ enum class SubmissionPolicy : uint8_t {
  Automatic recordings submit on normal scope exit. Explicit recordings and
  recordings destroyed during exception unwinding discard unfinished work.
  Submit() and Discard() resolve the owner exactly once. Borrowed recorder
- references must not outlive this owner; graphics and its reclaimer must outlive
- the recording. Submission does not imply GPU completion.
+ references are valid only while the recording is unresolved. Backend-acquired
+ recordings retain the canonical backend until resolution; a resolved shell can
+ outlive it. Submission does not imply GPU completion.
 */
 class CommandRecording final {
 public:
@@ -56,22 +64,36 @@ public:
 
   //! Closes and submits once, reporting actual submission success.
   [[nodiscard]] OXGN_GFX_API auto Submit() noexcept -> bool;
+  [[nodiscard]] OXGN_GFX_API auto SubmitWithReceipt() noexcept
+    -> SubmissionResult;
+  [[nodiscard]] auto Result() const noexcept -> SubmissionResult
+  {
+    return result_;
+  }
   //! Discards unfinished work and resolves pending publication as discarded.
   OXGN_GFX_API void Discard() noexcept;
 
 private:
   friend class internal::Commander;
   CommandRecording(std::unique_ptr<CommandRecorder> recorder,
-    observer_ptr<detail::DeferredReclaimer> reclaimer, SubmissionPolicy policy);
+    observer_ptr<detail::DeferredReclaimer> reclaimer, SubmissionPolicy policy,
+    std::shared_ptr<Graphics> backend_owner,
+    std::shared_ptr<BackendLifetime> lifetime);
+  auto Finalize(bool receipt) noexcept -> SubmissionResult;
   void FinishScope() noexcept;
+  void ResolveAndRelease(SubmissionOutcome outcome) noexcept;
 
   enum class State : uint8_t {
     kEmpty,
     kRecording,
     kSubmitted,
+    kExecutionUncertain,
     kDiscarded,
   };
 
+  // Recorder and list references must die before the canonical owner token.
+  std::shared_ptr<Graphics> backend_owner_;
+  std::shared_ptr<BackendLifetime> lifetime_;
   std::unique_ptr<CommandRecorder> recorder_;
   std::shared_ptr<CommandList> command_list_;
   observer_ptr<detail::DeferredReclaimer> reclaimer_;
@@ -79,6 +101,7 @@ private:
   State state_ { State::kEmpty };
   int uncaught_exceptions_ {};
   bool ended_ { false };
+  SubmissionResult result_;
 };
 
 } // namespace oxygen::graphics

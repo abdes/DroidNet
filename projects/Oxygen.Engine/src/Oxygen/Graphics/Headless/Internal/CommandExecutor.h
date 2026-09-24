@@ -26,7 +26,6 @@ namespace oxygen::graphics::headless::internal {
 
 struct SubmissionChunk {
   std::vector<graphics::CommandList::SubmitQueueAction> submit_actions;
-  std::vector<graphics::CommandQueue::KnownResourceState> known_states;
   std::deque<std::shared_ptr<Command>> commands;
 };
 
@@ -35,32 +34,15 @@ public:
   CommandExecutor();
   ~CommandExecutor();
 
-  // Enqueue a full submission described by the queue and the stolen command
-  // lists. The executor will schedule execution, populate a CommandContext,
-  // and call Signal() on the queue when finished. Returns the assigned
-  // submission id (caller may provide one).
-  // Enqueue a full submission described by the queue and the stolen command
-  // lists. The executor will schedule execution, populate a CommandContext,
-  // and call Signal() on the queue when finished. The executor will assign
-  // and return a submission id.
-  // Enqueue a full submission described by the queue and the stolen command
-  // deque. The executor will schedule execution, populate a CommandContext,
-  // and call Signal() on the queue when finished. The executor will assign
-  // and return a submission id.
-  OXGN_HDLS_NDAPI auto ExecuteAsync(CommandQueue* queue,
-    std::vector<SubmissionChunk> submission_chunks) -> uint64_t;
+  using Task = SerialExecutor::Task;
+  auto Prepare(CommandQueue* queue, std::vector<SubmissionChunk> chunks,
+    std::function<void()> before, std::function<void()> completed,
+    std::function<void()> failed) -> Task;
+  auto Stop() -> void { executor_.Stop(); }
+  auto Commit(Task& task) noexcept -> bool { return executor_.Commit(task); }
 
 private:
   SerialExecutor executor_;
-
-  // Track outstanding task futures so the executor can wait for them when
-  // shutting down. Access protected by futures_mutex_.
-  std::mutex futures_mutex_;
-  std::vector<std::shared_future<void>> outstanding_futures_;
-  // Monotonic submission id generator local to this executor. Initialized on
-  // first submission using the queue's current value so ids map to future
-  // fence values and remain unique across concurrent submits.
-  std::atomic<uint64_t> next_submission_id_ { 0 };
 };
 
 } // namespace oxygen::graphics::headless::internal

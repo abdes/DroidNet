@@ -10,6 +10,7 @@
 #include <vector>
 
 #include <Oxygen/Graphics/Common/Internal/CommandListPool.h>
+#include <Oxygen/Graphics/Common/Test/HeapAllocationFailure.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -433,3 +434,63 @@ TEST_F(
 }
 
 } // namespace
+
+NOLINT_TEST(CommandListPoolLifetime,
+  LateReturnOutlivesFacadeAndWeakObserverDoesNotPinNativeLifetime)
+{
+  auto native = std::make_shared<int>(42);
+  const std::weak_ptr<void> weak_native = native;
+  auto pool = std::make_unique<CommandListPool>(
+    [](QueueRole role, std::string_view name) {
+      return std::make_unique<MockCommandList>(name, role);
+    },
+    native);
+  auto list = pool->AcquireCommandList(QueueRole::kGraphics, "retained");
+  const std::weak_ptr<CommandList> weak_list = list;
+  native.reset();
+  pool.reset();
+  EXPECT_FALSE(weak_native.expired());
+  list.reset();
+  EXPECT_TRUE(weak_list.expired());
+  EXPECT_TRUE(weak_native.expired());
+}
+
+NOLINT_TEST_F(CommandListPoolBasicTest,
+  ClosedPoolRejectsAcquisitionAndInvalidListsAreDestroyed)
+{
+  auto list = pool_->AcquireCommandList(QueueRole::kGraphics, "invalid");
+  list->Invalidate();
+  list->OnFailed();
+  EXPECT_EQ(list->GetState(), CommandList::State::kInvalid);
+  list.reset();
+  auto replacement
+    = pool_->AcquireCommandList(QueueRole::kGraphics, "replacement");
+  EXPECT_EQ(total_created_count_, 2);
+  pool_->Close();
+  EXPECT_THROW((void)pool_->AcquireCommandList(QueueRole::kGraphics, "closed"),
+    std::logic_error);
+  replacement.reset();
+}
+
+#if defined(_MSC_VER) && defined(_DEBUG)
+NOLINT_TEST_F(
+  CommandListPoolBasicTest, ReturningAllOutstandingListsDoesNotAllocate)
+{
+  std::array<std::shared_ptr<CommandList>, 8> lists;
+  for (auto& list : lists) {
+    list = pool_->AcquireCommandList(QueueRole::kGraphics, "short");
+  }
+  using oxygen::graphics::testing::HeapAllocationFailure;
+  const auto before = HeapAllocationFailure::RejectedCount();
+  {
+    HeapAllocationFailure reject;
+    for (auto& list : lists) {
+      list.reset();
+    }
+  }
+  EXPECT_EQ(HeapAllocationFailure::RejectedCount(), before);
+  EXPECT_EQ(total_created_count_, 8);
+  EXPECT_TRUE(pool_->AcquireCommandList(QueueRole::kGraphics, "reused"));
+  EXPECT_EQ(total_created_count_, 8);
+}
+#endif

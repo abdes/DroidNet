@@ -23,7 +23,8 @@ namespace oxygen::graphics {
 class CommandRecorder;
 class Texture;
 
-class OXGN_GFX_API GpuBufferReadback {
+class GpuBufferReadback
+  : public std::enable_shared_from_this<GpuBufferReadback> {
 public:
   GpuBufferReadback() = default;
   virtual ~GpuBufferReadback() = default;
@@ -63,7 +64,8 @@ public:
   virtual auto ResetForReuse() -> std::expected<void, ReadbackError> = 0;
 };
 
-class OXGN_GFX_API GpuTextureReadback {
+class GpuTextureReadback
+  : public std::enable_shared_from_this<GpuTextureReadback> {
 public:
   GpuTextureReadback() = default;
   virtual ~GpuTextureReadback() = default;

@@ -9,8 +9,6 @@
 #include <memory>
 #include <thread>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Composition/Object.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
@@ -30,6 +28,7 @@
 #include <Oxygen/Graphics/Common/Test/Fakes/FakeResource.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ClearFlags.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/ScopedLogCapture.h>
 
 //=== External Dependencies ===-----------------------------------------------//
@@ -555,7 +554,31 @@ NOLINT_TEST_F(CommanderTestBase, CloseFailureDiscardsWithoutRetry)
   // Assert
   EXPECT_FALSE(submitted);
   EXPECT_EQ(publication, SubmissionOutcome::kDiscarded);
-  EXPECT_TRUE(list->IsFree());
+  EXPECT_EQ(list->GetState(), CommandList::State::kInvalid);
+}
+
+NOLINT_TEST_F(CommanderTestBase, NativeCloseExceptionDiscardsAndInvalidatesList)
+{
+  class ThrowingList final : public CommandList {
+  public:
+    ThrowingList()
+      : CommandList("native close failure", Role::kGraphics)
+    {
+    }
+    auto OnEndRecording() -> void override { throw 42; }
+  };
+  auto list = std::make_shared<ThrowingList>();
+  auto recorder = CreateMockCommandRecorder(list, secondary_q);
+  EXPECT_CALL(*secondary_q, Submit(testing::A<CommandListPtr>())).Times(0);
+  std::optional<SubmissionOutcome> publication;
+  {
+    auto recording = commander->PrepareCommandRecorder(
+      std::move(recorder), SubmissionPolicy::kExplicit);
+    recording->OnSubmission([&](auto outcome) { publication = outcome; });
+    EXPECT_NO_THROW(recording.Discard());
+  }
+  EXPECT_EQ(publication, SubmissionOutcome::kDiscarded);
+  EXPECT_EQ(list->GetState(), CommandList::State::kInvalid);
 }
 
 //! Queue failure never acknowledges a recording as submitted.

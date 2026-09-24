@@ -33,8 +33,9 @@ public:
 
   //! Begins a recording whose caller owns submission or scope-exit policy.
   OXGN_GFX_NDAPI auto PrepareCommandRecorder(
-    std::unique_ptr<CommandRecorder> recorder, SubmissionPolicy policy)
-    -> CommandRecording;
+    std::unique_ptr<CommandRecorder> recorder, SubmissionPolicy policy,
+    std::shared_ptr<Graphics> backend_owner = {},
+    std::shared_ptr<BackendLifetime> lifetime = {}) -> CommandRecording;
 
 private:
   observer_ptr<detail::DeferredReclaimer> reclaimer_;

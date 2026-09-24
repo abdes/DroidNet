@@ -165,37 +165,8 @@ public:
   auto AllocateBindless(const bindless::DomainToken domain,
     const ResourceViewType view_type) -> BindlessHandle override
   {
-    return AbortOnFailed(__func__, [&]() {
-      std::lock_guard lock(mutex_);
-      const auto* const desc = bindless::generated::TryGetDomainDesc(domain);
-      if (desc == nullptr) {
-        throw std::runtime_error("Unknown bindless domain token");
-      }
-
-      auto& state = bindless_domains_[domain.get()];
-      if (!state.initialized) {
-        state.domain = domain;
-        state.capacity = bindless::Capacity { desc->capacity };
-        state.initialized = true;
-      }
-
-      uint32_t local_slot = 0U;
-      if (!state.free_list.empty()) {
-        local_slot = state.free_list.back();
-        state.free_list.pop_back();
-      } else {
-        if (state.next_slot >= state.capacity.get()) {
-          throw std::runtime_error(
-            "Failed to allocate bindless descriptor: domain is out of space");
-        }
-        local_slot = state.next_slot++;
-      }
-
-      state.active_view_types.emplace(local_slot, view_type);
-      return CreateBindlessHandle(
-        DescriptorAllocationHandle::PackBindlessSlot(domain, local_slot),
-        domain, view_type);
-    });
+    return AbortOnFailed(
+      __func__, [&]() { return AllocateBindlessOrThrow(domain, view_type); });
   }
 
   //! Releases a previously allocated descriptor.
@@ -536,6 +507,46 @@ protected:
   }
 
 private:
+  auto AllocateBindlessOrThrow(const bindless::DomainToken domain,
+    const ResourceViewType view_type) -> BindlessHandle
+  {
+    std::lock_guard lock(mutex_);
+    const auto* desc = bindless::generated::TryGetDomainDesc(domain);
+    if (!desc) {
+      throw std::runtime_error("Unknown bindless domain token");
+    }
+    auto& state = bindless_domains_[domain.get()];
+    if (!state.initialized) {
+      state.domain = domain;
+      state.capacity = bindless::Capacity { desc->capacity };
+      state.initialized = true;
+    }
+    const bool recycled = !state.free_list.empty();
+    const auto slot = recycled ? state.free_list.back() : state.next_slot;
+    if (!recycled) {
+      if (slot >= state.capacity.get()) {
+        throw std::runtime_error(
+          "Failed to allocate bindless descriptor: domain is out of space");
+      }
+      if (state.free_list.capacity() <= slot) {
+        state.free_list.reserve(
+          (std::min)(static_cast<std::size_t>(state.capacity.get()),
+            (std::max)({ std::size_t { 64 }, state.free_list.capacity() * 2U,
+              static_cast<std::size_t>(slot) + 1U })));
+      }
+    }
+    // Allocate metadata before consuming either a recycled or a fresh slot.
+    state.active_view_types.emplace(slot, view_type);
+    if (recycled) {
+      state.free_list.pop_back();
+    } else {
+      ++state.next_slot;
+    }
+    return CreateBindlessHandle(
+      DescriptorAllocationHandle::PackBindlessSlot(domain, slot), domain,
+      view_type);
+  }
+
   [[nodiscard]] auto GetSegmentForHandleNoLock(
     const DescriptorAllocationHandle& handle) const
     -> std::optional<const DescriptorSegment*>

@@ -6,12 +6,12 @@
 
 #include <chrono>
 #include <future>
-
-#include <Oxygen/Testing/GTest.h>
+#include <limits>
 
 #include <Oxygen/Core/Types/ByteUnits.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/ReadbackTracker.h>
+#include <Oxygen/Testing/GTest.h>
 
 using oxygen::SizeBytes;
 using oxygen::graphics::FenceValue;
@@ -256,4 +256,49 @@ NOLINT_TEST_F(
   EXPECT_EQ(tracker.LastRegisteredFence().get(), second.fence.get());
 }
 
+NOLINT_TEST_F(
+  ReadbackTrackerTest, UnsubmittedCopyCannotCompleteFromAnotherSubmissionFence)
+{
+  const auto ticket = tracker.RegisterPendingSubmission(
+    FenceValue { 3 }, SizeBytes { 4 }, "unsubmitted");
+  tracker.MarkFenceCompleted(FenceValue { 9 });
+  EXPECT_FALSE(tracker.IsComplete(ticket.id).value());
+  EXPECT_FALSE(tracker.TryGetResult(ticket.id));
+  EXPECT_TRUE(tracker.IsSubmissionPending(ticket.id));
+  EXPECT_TRUE(tracker.Cancel(ticket.id).value());
+  EXPECT_EQ(tracker.TryGetResult(ticket.id)->error, ReadbackError::kCancelled);
+}
+NOLINT_TEST_F(
+  ReadbackTrackerTest, SubmittedWitnessCompletesAlreadyObservedFence)
+{
+  const auto ticket = tracker.RegisterPendingSubmission(
+    FenceValue { 3 }, SizeBytes { 4 }, "submitted");
+  tracker.MarkFenceCompleted(FenceValue { 3 });
+  tracker.MarkSubmitted(ticket.id);
+  EXPECT_TRUE(tracker.IsComplete(ticket.id).value());
+  EXPECT_EQ(tracker.TryGetResult(ticket.id)->bytes_copied, SizeBytes { 4 });
+}
+NOLINT_TEST_F(
+  ReadbackTrackerTest, ShutdownCancelsUnsubmittedAndWaitsOnlyForIssuedCopies)
+{
+  const auto pending = tracker.RegisterPendingSubmission(
+    FenceValue { 9 }, SizeBytes { 4 }, "never issued");
+  const auto issued = tracker.RegisterPendingSubmission(
+    FenceValue { 3 }, SizeBytes { 4 }, "issued");
+  tracker.MarkSubmitted(issued.id);
+  tracker.CancelPendingSubmissions();
+  EXPECT_EQ(tracker.LastPendingSubmittedFence(), FenceValue { 3 });
+  EXPECT_EQ(tracker.TryGetResult(pending.id)->error, ReadbackError::kCancelled);
+}
+NOLINT_TEST_F(ReadbackTrackerTest, DeviceLossDoesNotPublishCopiedBytes)
+{
+  const auto ticket
+    = tracker.Register(FenceValue { 3 }, SizeBytes { 4 }, "device lost");
+  tracker.MarkFenceCompleted(
+    FenceValue { (std::numeric_limits<uint64_t>::max)() });
+  ASSERT_TRUE(tracker.TryGetResult(ticket.id));
+  EXPECT_EQ(
+    tracker.TryGetResult(ticket.id)->error, ReadbackError::kBackendFailure);
+  EXPECT_EQ(tracker.TryGetResult(ticket.id)->bytes_copied, SizeBytes { 0 });
+}
 } // namespace

@@ -14,11 +14,15 @@
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/Named.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
+#include <Oxygen/Graphics/Common/RecordingUseBatch.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/api_export.h>
 
 namespace oxygen::graphics {
+namespace internal {
+  struct SubmittedWork;
+}
 
 class CommandList : public Composition, public Named {
 public:
@@ -75,6 +79,26 @@ public:
   OXGN_GFX_API virtual auto OnSubmitted() -> void;
   OXGN_GFX_API virtual auto OnExecuted() -> void;
   OXGN_GFX_API virtual auto OnFailed() noexcept -> void;
+  //! Native recording failure makes this list unsuitable for pool reuse.
+  OXGN_GFX_API auto Invalidate() noexcept -> void;
+  [[nodiscard]] auto Uses() noexcept -> RecordingUseBatch& { return uses_; }
+  [[nodiscard]] auto Uses() const noexcept -> const RecordingUseBatch&
+  {
+    return uses_;
+  }
+  OXGN_GFX_API auto BindBackend(
+    std::shared_ptr<BackendLifetime> lifetime, QueueIdentity queue) -> void;
+  [[nodiscard]] OXGN_GFX_API auto RecordingIsCurrent() const noexcept -> bool;
+  [[nodiscard]] auto SubmitActions() const noexcept
+    -> std::span<const SubmitQueueAction>
+  {
+    return submit_queue_actions_;
+  }
+  [[nodiscard]] auto RecordedStates() const noexcept
+    -> std::span<const RecordedResourceState>
+  {
+    return recorded_resource_states_;
+  }
   OXGN_GFX_API auto QueueSubmitSignal(uint64_t value) -> void;
   OXGN_GFX_API auto QueueSubmitWait(uint64_t value) -> void;
   [[nodiscard]] OXGN_GFX_API auto HasSubmitQueueActions() const noexcept
@@ -91,11 +115,21 @@ public:
     kFree = 0, //<! Free command list.
     kRecording = 1, //<! The command list is being recorded.
     kClosed = 2, //<! The command list is recorded and ready to be submitted.
+    kExecutionUncertain = 4, //<! Native issue has no completion proof.
     kSubmitted = 3, //<! The command list is being executed.
   };
   [[nodiscard]] auto GetState() const { return state_; }
 
 private:
+  friend class CommandQueue;
+  auto TakeRetirementStorage() -> std::unique_ptr<internal::SubmittedWork>;
+  auto RestoreRetirementStorage(
+    std::unique_ptr<internal::SubmittedWork> storage) noexcept -> void;
+  std::weak_ptr<BackendLifetime> backend_lifetime_;
+  bool backend_bound_ { false };
+  uint64_t recording_epoch_ { 0 };
+  RecordingUseBatch uses_;
+  std::unique_ptr<internal::SubmittedWork> retirement_storage_;
   QueueRole type_;
   State state_ { State::kInvalid };
   std::vector<SubmitQueueAction> submit_queue_actions_ {};

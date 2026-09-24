@@ -8,6 +8,7 @@
 
 #include <any>
 #include <concepts>
+#include <expected>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -24,6 +25,7 @@
 #include <Oxygen/Graphics/Common/Concepts.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
+#include <Oxygen/Graphics/Common/Registration.h>
 #include <Oxygen/Graphics/Common/api_export.h>
 
 namespace oxygen::graphics {
@@ -136,13 +138,85 @@ namespace detail {
  @see DescriptorAllocationHandle, NativeResource, NativeView
 */
 class ResourceRegistry {
+  struct ViewQuery {
+    const void* description;
+    bool (*matches)(const std::any&, const void*);
+  };
+  template <typename Description>
+  static auto QueryView(const Description& description) -> ViewQuery
+  {
+    return { &description, [](const std::any& stored, const void* expected) {
+              const auto* value = std::any_cast<Description>(&stored);
+              return value
+                && *value == *static_cast<const Description*>(expected);
+            } };
+  }
+
 public:
   OXGN_GFX_API explicit ResourceRegistry(std::string_view debug_name);
 
   OXGN_GFX_API virtual ~ResourceRegistry() noexcept;
 
   OXYGEN_MAKE_NON_COPYABLE(ResourceRegistry)
-  OXYGEN_DEFAULT_MOVABLE(ResourceRegistry)
+  OXYGEN_MAKE_NON_MOVABLE(ResourceRegistry)
+
+  template <SupportedResource Resource>
+  auto RegisterManaged(const std::shared_ptr<Resource>& resource)
+    -> std::expected<RegistrationLease, RegistrationError>
+  {
+    if (!resource) {
+      return std::unexpected(RegistrationError::kStaleRegistration);
+    }
+    return RegisterManaged(std::static_pointer_cast<void>(resource),
+      Resource::ClassTypeId(), GetBackendResource(*resource));
+  }
+  template <SupportedResource Resource>
+  auto InspectManagedIdentity(const Resource& resource) const
+    -> std::optional<RegistrationIdentity>
+  {
+    return InspectManagedIdentity(NativeResource {
+      const_cast<Resource*>(&resource), Resource::ClassTypeId() });
+  }
+  OXGN_GFX_API auto InspectManagedIdentity(const NativeResource& resource) const
+    -> std::optional<RegistrationIdentity>;
+  OXGN_GFX_API auto AcquireManaged(RegistrationIdentity identity)
+    -> std::expected<RegistrationLease, RegistrationError>;
+  OXGN_GFX_API auto RetainUse(const RegistrationOwner& owner)
+    -> std::expected<RegistrationUse, RegistrationError>;
+  auto RetainUse(const RegistrationLease& lease)
+    -> std::expected<RegistrationUse, RegistrationError>
+  {
+    return RetainUse(lease.AllocationOwner());
+  }
+
+  template <ResourceWithViews Resource>
+  auto AcquireManagedView(
+    const RegistrationLease& lease, const Resource::ViewDescriptionT& desc)
+    -> std::expected<ManagedView, RegistrationError>
+  {
+    using Description = typename Resource::ViewDescriptionT;
+    return AcquireManagedView(
+      lease.AllocationOwner(), Resource::ClassTypeId(),
+      std::hash<Description> {}(desc), desc.view_type, desc.visibility,
+      QueryView(desc),
+      [](void* resource, const DescriptorAllocationHandle& handle,
+        const void* description) {
+        return static_cast<Resource*>(resource)->GetNativeView(
+          handle, *static_cast<const Description*>(description));
+      },
+      [](const void* description) {
+        return std::any(*static_cast<const Description*>(description));
+      });
+  }
+
+  //! Owner-thread cleanup of eligible managed entries, independent of frame
+  //! slots.
+  OXGN_GFX_API auto PollManagedRetirements() noexcept -> void;
+  [[nodiscard]] OXGN_GFX_API auto HasManagedRegistrations() const noexcept
+    -> bool;
+  //! Recovery closes affected backing identities; existing native pins survive.
+  OXGN_GFX_API auto InvalidateManagedRegistrations(
+    std::span<const RegistrationIdentity> identities) noexcept -> void;
 
   //! Register a graphics resource for lifecycle management and view operations.
   /*!
@@ -313,11 +387,15 @@ public:
   auto RegisterView(Resource& resource, DescriptorAllocationHandle view_handle,
     const Resource::ViewDescriptionT& desc) -> NativeView
   {
+    std::scoped_lock lock(registry_mutex_);
+    RequireManualNoLock(NativeResource { &resource, Resource::ClassTypeId() },
+      GetBackendResource(resource));
     auto view = resource.GetNativeView(view_handle, desc);
     auto key = std::hash<std::remove_cvref_t<decltype(desc)>> {}(desc);
-    return RegisterView(NativeResource { &resource, Resource::ClassTypeId() },
-      std::move(view), std::move(view_handle), std::any(desc), key,
-      desc.view_type, desc.visibility);
+    return RegisterViewNoLock(
+      NativeResource { &resource, Resource::ClassTypeId() }, std::move(view),
+      std::move(view_handle), std::any(desc), key, desc.view_type,
+      desc.visibility, QueryView(desc));
   }
 
   //! Atomically acquire a registered view for a resource, creating it if
@@ -333,52 +411,24 @@ public:
     const Resource::ViewDescriptionT& desc) -> std::pair<NativeView, bool>
   {
     CHECK_F(view_handle.IsValid(), "View handle must be valid");
-
-    auto resource_key = NativeResource { &resource, Resource::ClassTypeId() };
-    auto key_hash = std::hash<std::remove_cvref_t<decltype(desc)>> {}(desc);
-    auto cache_key
-      = CacheKey { .resource = resource_key, .view_desc_hash = key_hash };
-
-    {
-      std::scoped_lock lock(registry_mutex_);
-      const auto resource_it = resources_.find(resource_key);
-      if (resource_it == resources_.end()) {
-        LOG_F(ERROR, "-failed- resource not found");
-        view_handle.Release();
-        return { {}, false };
-      }
-      if (const auto cache_it = view_cache_.find(cache_key);
-        cache_it != view_cache_.end()) {
-        view_handle.Release();
-        return { cache_it->second.view_object, false };
-      }
+    std::scoped_lock lock(registry_mutex_);
+    const auto key = NativeResource { &resource, Resource::ClassTypeId() };
+    RequireManualNoLock(key, GetBackendResource(resource));
+    if (!resources_.contains(key)) {
+      return { {}, false };
     }
-
+    const auto hash = std::hash<typename Resource::ViewDescriptionT> {}(desc);
+    if (const auto* cached = FindViewNoLock(key, hash, QueryView(desc))) {
+      return { cached->view_object, false };
+    }
     auto view = resource.GetNativeView(view_handle, desc);
     if (!view->IsValid()) {
-      LOG_F(ERROR, "-failed- invalid view used for view registration");
-      view_handle.Release();
       return { {}, false };
     }
-
-    std::scoped_lock lock(registry_mutex_);
-    const auto resource_it = resources_.find(resource_key);
-    if (resource_it == resources_.end()) {
-      LOG_F(ERROR, "-failed- resource not found");
-      view_handle.Release();
-      return { {}, false };
-    }
-    if (const auto cache_it = view_cache_.find(cache_key);
-      cache_it != view_cache_.end()) {
-      view_handle.Release();
-      return { cache_it->second.view_object, false };
-    }
-
-    AttachDescriptorWithView(resource_key, view_handle.GetBindlessHandle(),
-      std::move(view_handle), view, std::any(desc), key_hash);
+    AttachDescriptorWithView(key, view_handle.GetBindlessHandle(),
+      std::move(view_handle), view, std::any(desc), hash, QueryView(desc));
     return { view, true };
   }
-
   //! Register a pre-created view for advanced control over view lifecycle.
   /*!
    Registers an already-created native view object for a graphics resource,
@@ -471,10 +521,14 @@ public:
     DescriptorAllocationHandle view_handle,
     const Resource::ViewDescriptionT& desc) -> bool
   {
+    std::scoped_lock lock(registry_mutex_);
+    RequireManualNoLock(NativeResource { &resource, Resource::ClassTypeId() },
+      GetBackendResource(resource));
     auto key = std::hash<std::remove_cvref_t<decltype(desc)>> {}(desc);
-    return RegisterView(NativeResource { &resource, Resource::ClassTypeId() },
-      std::move(view), std::move(view_handle), std::any(desc), key,
-      desc.view_type, desc.visibility)
+    return RegisterViewNoLock(
+      NativeResource { &resource, Resource::ClassTypeId() }, std::move(view),
+      std::move(view_handle), std::any(desc), key, desc.view_type,
+      desc.visibility, QueryView(desc))
       ->IsValid();
   }
 
@@ -571,6 +625,11 @@ public:
 
     // Ensure destination resource is registered
     const NativeResource new_res_obj { &resource, Resource::ClassTypeId() };
+    RequireManualNoLock(new_res_obj);
+    if (const auto source = descriptor_to_resource_.find(index);
+      source != descriptor_to_resource_.end()) {
+      RequireManualNoLock(source->second);
+    }
     const auto new_res_it = resources_.find(new_res_obj);
     if (new_res_it == resources_.end()) {
       return false;
@@ -580,8 +639,6 @@ public:
     DescriptorAllocationHandle owned_descriptor;
     NativeView old_view_obj; // for cache purge
     NativeResource old_res_obj; // original owner
-    // Track prior cache key (by hash) if available to perform precise purge
-    std::optional<std::size_t> prior_desc_hash;
     if (const auto owner_it = descriptor_to_resource_.find(index);
       owner_it != descriptor_to_resource_.end()) {
       old_res_obj = owner_it->second;
@@ -596,16 +653,6 @@ public:
           // Clear mapping while we attempt update; will be re-added on success
           descriptor_to_resource_.erase(index);
 
-          // Attempt to find the prior cache entry's key hash for precise erase
-          if (old_view_obj->IsValid()) {
-            for (const auto& [cache_key, entry] : view_cache_) {
-              if (cache_key.resource == old_res_obj
-                && entry.view_object == old_view_obj) {
-                prior_desc_hash = cache_key.view_desc_hash;
-                break;
-              }
-            }
-          }
         } else {
           // Inconsistent state: owner resource has no view entry for index.
           // Programming error; self-heal by erasing stale mapping and fail.
@@ -640,16 +687,10 @@ public:
       }
       // Remove any cache entry for the old view using the prior key when known
       if (old_view_obj->IsValid()) {
-        if (prior_desc_hash.has_value()) {
-          const CacheKey prior_key { .resource = old_res_obj,
-            .view_desc_hash = *prior_desc_hash };
-          view_cache_.erase(prior_key);
-        } else {
-          std::erase_if(view_cache_, [&](const auto& it) -> auto {
-            return it.first.resource == old_res_obj
-              && it.second.view_object == old_view_obj;
-          });
-        }
+        std::erase_if(view_cache_, [&](const auto& it) -> auto {
+          return it.first.resource == old_res_obj
+            && it.second.view_object == old_view_obj;
+        });
       }
       throw; // Propagate
     }
@@ -661,16 +702,10 @@ public:
       }
       // Remove any cache entry for the old view object if present.
       if (old_view_obj->IsValid()) {
-        if (prior_desc_hash.has_value()) {
-          const CacheKey prior_key { .resource = old_res_obj,
-            .view_desc_hash = *prior_desc_hash };
-          view_cache_.erase(prior_key);
-        } else {
-          std::erase_if(view_cache_, [&](const auto& it) -> auto {
-            return it.first.resource == old_res_obj
-              && it.second.view_object == old_view_obj;
-          });
-        }
+        std::erase_if(view_cache_, [&](const auto& it) -> auto {
+          return it.first.resource == old_res_obj
+            && it.second.view_object == old_view_obj;
+        });
       }
       return false;
     }
@@ -685,28 +720,23 @@ public:
 
     // Update cache entry: erase prior by key first, then insert the new entry
     if (old_view_obj->IsValid()) {
-      if (prior_desc_hash.has_value()) {
-        const CacheKey prior_key { .resource = old_res_obj,
-          .view_desc_hash = *prior_desc_hash };
-        view_cache_.erase(prior_key);
-      } else {
-        std::erase_if(view_cache_, [&](const auto& it) -> auto {
-          return it.first.resource == old_res_obj
-            && it.second.view_object == old_view_obj;
-        });
-      }
+      std::erase_if(view_cache_, [&](const auto& it) -> auto {
+        return it.first.resource == old_res_obj
+          && it.second.view_object == old_view_obj;
+      });
     }
 
     // Insert/overwrite new cache entry
     ViewCacheEntry cache_entry {
       .view_object = new_view,
       .view_description = std::any(desc),
+      .descriptor_index = index,
     };
     const CacheKey new_cache_key {
       .resource = new_res_obj,
       .view_desc_hash = key_hash,
     };
-    view_cache_[new_cache_key] = std::move(cache_entry);
+    StoreViewNoLock(new_cache_key, std::move(cache_entry), QueryView(desc));
     // Diagnostic: log repointing for runtime validation of descriptor updates
     DLOG_F(2, "ResourceRegistry::UpdateView: repointed index {} to {}", index,
       new_res_obj);
@@ -825,6 +855,9 @@ public:
 
     const NativeResource old_obj { const_cast<Resource*>(&old_resource),
       Resource::ClassTypeId() };
+    RequireManualNoLock(old_obj);
+    RequireManualNoLock(
+      NativeResource { new_resource.get(), Resource::ClassTypeId() });
     const auto old_it = resources_.find(old_obj);
     if (old_it == resources_.end()) {
       throw std::runtime_error(
@@ -840,11 +873,8 @@ public:
     auto new_it = resources_.find(new_obj);
     if (new_it == resources_.end()) {
       // Inline registration to avoid re-entrant lock in Register().
-      ResourceEntry new_entry { .resource
-        = std::static_pointer_cast<void>(new_resource),
-        .native_resource = GetBackendResource(*new_resource),
-        .descriptors = {} };
-      resources_.emplace(new_obj, std::move(new_entry));
+      InsertManualNoLock(std::static_pointer_cast<void>(new_resource),
+        Resource::ClassTypeId(), GetBackendResource(*new_resource));
       new_it = resources_.find(new_obj);
     }
     DLOG_F(2, "replaced resource {} with {}", old_obj, new_obj);
@@ -854,7 +884,10 @@ public:
       // Release all descriptors and associated cache entries for old_resource.
       UnRegisterResourceViewsNoLock(old_obj);
       // Remove the old resource entry and purge any remaining cached views.
-      NotifyResourceForgottenNoLock(old_entry.native_resource);
+      if (CanForgetNativeNoLock(old_entry)) {
+        NotifyResourceForgottenNoLock(old_entry.native_resource);
+      }
+      RemoveNativeOwnershipNoLock(old_entry);
       resources_.erase(old_obj);
       PurgeCachedViewsForResource(old_obj);
       return;
@@ -912,7 +945,7 @@ public:
                 *next_desc);
               AttachDescriptorWithView(new_obj, index,
                 std::move(owned_descriptor), new_view, std::any(*next_desc),
-                key_hash);
+                key_hash, QueryView(*next_desc));
               recreated = true;
             } else {
               LOG_F(WARNING,
@@ -943,7 +976,10 @@ public:
     }
 
     // Remove the old resource entry and purge its cached views.
-    NotifyResourceForgottenNoLock(old_entry.native_resource);
+    if (CanForgetNativeNoLock(old_entry)) {
+      NotifyResourceForgottenNoLock(old_entry.native_resource);
+    }
+    RemoveNativeOwnershipNoLock(old_entry);
     resources_.erase(old_obj);
     PurgeCachedViewsForResource(old_obj);
   }
@@ -964,7 +1000,7 @@ public:
         const_cast<Resource*>(&resource),
         Resource::ClassTypeId(),
       },
-      key);
+      key, QueryView(desc));
   }
 
   template <ResourceWithViews Resource>
@@ -977,7 +1013,7 @@ public:
         const_cast<Resource*>(&resource),
         Resource::ClassTypeId(),
       },
-      key);
+      key, QueryView(desc));
   }
 
   // Returns the shader-visible index for an existing view description if one
@@ -992,7 +1028,7 @@ public:
     return FindShaderVisibleIndex(
       NativeResource {
         const_cast<Resource*>(&resource), Resource::ClassTypeId() },
-      key);
+      key, QueryView(desc));
   }
 
   //! Unregister a specific view while preserving the resource and other views.
@@ -1273,6 +1309,10 @@ public:
   }
 
   OXGN_GFX_NDAPI auto GetRegisteredResourceCount() const noexcept -> size_t;
+  //! Close registration admission and release views while their allocator
+  //! lives. The caller must first drain submitted work and reject unresolved
+  //! recordings.
+  OXGN_GFX_API auto Close() -> void;
   //! Notify backend-state owners before a registered GPU resource is released.
   //!
   //! The callback receives GetNativeResource(), not the registry's wrapper key.
@@ -1283,6 +1323,33 @@ public:
     std::function<void(const NativeResource&)> callback) -> void;
 
 private:
+  friend class oxygen::Graphics;
+  friend struct ResourceRegistryTestAccess;
+  friend struct detail::ResourceRegistryState;
+  friend struct detail::RegistrationCore;
+  OXGN_GFX_API auto InstallManagedContext(std::weak_ptr<Graphics> owner,
+    std::shared_ptr<BackendLifetime> lifetime,
+    std::shared_ptr<void> native_lifetime) -> void;
+  OXGN_GFX_API auto RegisterManaged(
+    std::shared_ptr<void> resource, TypeId type, NativeResource native_resource)
+    -> std::expected<RegistrationLease, RegistrationError>;
+  using CreateManagedView
+    = NativeView (*)(void*, const DescriptorAllocationHandle&, const void*);
+  using CopyViewDescription = std::any (*)(const void*);
+  OXGN_GFX_API auto AcquireManagedView(const RegistrationOwner& owner,
+    TypeId type, std::size_t hash, ResourceViewType view_type,
+    DescriptorVisibility visibility, ViewQuery query, CreateManagedView create,
+    CopyViewDescription copy) -> std::expected<ManagedView, RegistrationError>;
+  auto MakeManagedLeaseNoLock(
+    const std::shared_ptr<detail::RegistrationCore>& core,
+    std::shared_ptr<Graphics> backend) -> RegistrationLease;
+  auto GetManagedCoreNoLock(const RegistrationOwner& owner) const
+    -> std::expected<std::shared_ptr<detail::RegistrationCore>,
+      RegistrationError>;
+  OXGN_GFX_API auto RequireManualNoLock(const NativeResource& key,
+    NativeResource native_resource = {}) const -> void;
+  OXGN_GFX_API auto InsertManualNoLock(std::shared_ptr<void> resource,
+    TypeId type, NativeResource native_resource) -> void;
   template <SupportedResource Resource>
   static auto GetBackendResource(const Resource& resource) -> NativeResource
   {
@@ -1302,10 +1369,10 @@ private:
   OXGN_GFX_API auto AcquireRegistration(std::shared_ptr<void> resource,
     TypeId type_id, NativeResource native_resource) -> bool;
 
-  OXGN_GFX_API auto RegisterView(NativeResource resource, NativeView view,
+  OXGN_GFX_API auto RegisterViewNoLock(NativeResource resource, NativeView view,
     DescriptorAllocationHandle view_handle, std::any view_description_for_cache,
-    size_t key, ResourceViewType view_type, DescriptorVisibility visibility)
-    -> NativeView;
+    size_t key, ResourceViewType view_type, DescriptorVisibility visibility,
+    ViewQuery query) -> NativeView;
 
   OXGN_GFX_API auto UnRegisterView(
     const NativeResource& resource, const NativeView& view) -> void;
@@ -1332,25 +1399,24 @@ private:
   //! registry_mutex_ held.
   OXGN_GFX_API auto AttachDescriptorWithView(const NativeResource& dst_resource,
     bindless::HeapIndex index, DescriptorAllocationHandle descriptor_handle,
-    const NativeView& view, std::any description, std::size_t key_hash) -> void;
+    const NativeView& view, std::any description, std::size_t key_hash,
+    ViewQuery query) -> void;
   //! Collect all descriptor indices owned by a resource. Assumes
   //! registry_mutex_ held.
   OXGN_GFX_NDAPI auto CollectDescriptorIndicesForResource(
     const NativeResource& resource) const -> std::vector<bindless::HeapIndex>;
 
   OXGN_GFX_NDAPI auto Contains(const NativeResource& resource) const -> bool;
-  OXGN_GFX_NDAPI auto Contains(
-    const NativeResource& resource, size_t key_hash) const -> bool;
+  OXGN_GFX_NDAPI auto Contains(const NativeResource& resource, size_t key_hash,
+    ViewQuery query) const -> bool;
 
-  OXGN_GFX_NDAPI auto Find(
-    const NativeResource& resource, size_t key_hash) const -> NativeView;
+  OXGN_GFX_NDAPI auto Find(const NativeResource& resource, size_t key_hash,
+    ViewQuery query) const -> NativeView;
   // Find the shader-visible index (if any) for a registered view description
   // associated with `resource` and `key_hash`.
-  OXGN_GFX_NDAPI auto FindShaderVisibleIndex(const NativeResource& resource,
-    size_t key_hash) const -> std::optional<bindless::ShaderVisibleIndex>;
-
-  // Thread safety
-  mutable std::mutex registry_mutex_;
+  OXGN_GFX_NDAPI auto FindShaderVisibleIndex(
+    const NativeResource& resource, size_t key_hash, ViewQuery query) const
+    -> std::optional<bindless::ShaderVisibleIndex>;
 
   // Resource tracking
   // The implicit move constructor inherits unordered_map's throwing move on
@@ -1371,14 +1437,12 @@ private:
 
     // Map from descriptor index to view entry
     std::unordered_map<bindless::HeapIndex, ViewEntry> descriptors;
+    std::shared_ptr<detail::RegistrationCore> managed;
   };
-
-  // Primary storage
-  std::unordered_map<NativeResource, ResourceEntry> resources_;
-
-  // Map from descriptor index to owning resource
-  std::unordered_map<bindless::HeapIndex, NativeResource>
-    descriptor_to_resource_;
+  OXGN_GFX_API auto RemoveNativeOwnershipNoLock(
+    const ResourceEntry& entry) noexcept -> void;
+  OXGN_GFX_API auto CanForgetNativeNoLock(
+    const ResourceEntry& entry) const noexcept -> bool;
 
   // Unified view cache
   struct CacheKey {
@@ -1406,13 +1470,89 @@ private:
   struct ViewCacheEntry {
     NativeView view_object; //!< The native object holding the view.
     std::any view_description; //!< The original view description.
+    bindless::HeapIndex descriptor_index { kInvalidBindlessHeapIndex };
   };
 
-  //! A unified view cache for all resources and view types.
-  std::unordered_map<CacheKey, ViewCacheEntry, CacheKeyHasher> view_cache_;
+  OXGN_GFX_NDAPI auto FindViewNoLock(const NativeResource& resource,
+    std::size_t key_hash, ViewQuery query) const -> const ViewCacheEntry*;
+  OXGN_GFX_API auto StoreViewNoLock(
+    const CacheKey& key, ViewCacheEntry entry, ViewQuery query) -> void;
 
-  std::function<void(const NativeResource&)> on_resource_unregistered_;
+  std::shared_ptr<detail::ResourceRegistryState> state_;
+  // References retain the existing registry implementation over stable state.
+  std::mutex& registry_mutex_;
+  bool& closed_;
+  std::unordered_map<NativeResource, ResourceEntry>& resources_;
+  std::unordered_map<bindless::HeapIndex, NativeResource>&
+    descriptor_to_resource_;
+  std::unordered_multimap<CacheKey, ViewCacheEntry, CacheKeyHasher>&
+    view_cache_;
+  std::function<void(const NativeResource&)>& on_resource_unregistered_;
   std::string debug_name_; //!< Debug name for the registry.
 };
+
+namespace detail {
+  struct ResourceRegistryState {
+    std::mutex mutex;
+    bool closed { false };
+    std::unordered_map<NativeResource, ResourceRegistry::ResourceEntry>
+      resources;
+    std::unordered_map<bindless::HeapIndex, NativeResource>
+      descriptor_to_resource;
+    std::unordered_multimap<ResourceRegistry::CacheKey,
+      ResourceRegistry::ViewCacheEntry, ResourceRegistry::CacheKeyHasher>
+      view_cache;
+    std::function<void(const NativeResource&)> on_resource_unregistered;
+    std::weak_ptr<Graphics> backend_owner;
+    std::shared_ptr<BackendLifetime> lifetime;
+    std::shared_ptr<void> native_lifetime;
+    uint64_t next_registration { 1 };
+    std::unordered_map<uint64_t, std::weak_ptr<RegistrationCore>> managed_by_id;
+    struct NativeOwnership {
+      uint64_t manual_entries { 0 };
+      RegistrationId managed_id { 0 };
+    };
+    std::unordered_map<NativeResource, NativeOwnership> native_ownership;
+    RegistrationCore* ready_head { nullptr };
+    RegistrationCore* ready_tail { nullptr };
+  };
+
+  struct RegistrationCore {
+    std::weak_ptr<ResourceRegistryState> state;
+    std::shared_ptr<void> native_lifetime;
+    std::shared_ptr<void> resource;
+    RegistrationIdentity identity;
+    NativeResource key;
+    NativeResource native_resource;
+    std::unordered_map<bindless::HeapIndex,
+      ResourceRegistry::ResourceEntry::ViewEntry>
+      descriptors;
+    uint64_t allocation_owners { 0 };
+    uint64_t uses { 0 };
+    bool open { true };
+    bool published { false };
+    bool poisoned { false };
+    bool queued { false };
+    RegistrationCore* ready_next { nullptr };
+    auto ReleaseOwner() noexcept -> void;
+    auto ReleaseUse() noexcept -> void;
+    auto QueueIfReadyNoLock(ResourceRegistryState& registry) noexcept -> void;
+  };
+  struct RegistrationAllocationOwner {
+    explicit RegistrationAllocationOwner(
+      std::shared_ptr<RegistrationCore> value)
+      : core(std::move(value))
+    {
+    }
+    ~RegistrationAllocationOwner()
+    {
+      if (armed) {
+        core->ReleaseOwner();
+      }
+    }
+    std::shared_ptr<RegistrationCore> core;
+    bool armed { false };
+  };
+} // namespace detail
 
 } // namespace oxygen::graphics

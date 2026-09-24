@@ -19,6 +19,9 @@ FixedDescriptorSegment::FixedDescriptorSegment(
   , next_index_ { bindless::HeapIndex { 0 } }
   , released_flags_(capacity.get(), false)
 {
+  // Reserve before exposing any slot: DescriptorAllocationHandle cleanup is
+  // noexcept and must remain usable while heap allocation is failing.
+  free_list_.reserve(capacity.get());
   // Log heap segment creation
   DLOG_F(1, "type       : {}", view_type);
   DLOG_F(1, "visibility : {}", visibility);
@@ -150,14 +153,7 @@ auto FixedDescriptorSegment::Release(const bindless::HeapIndex index) noexcept
     return false;
   }
 
-  // Add to the free list
-  try {
-    free_list_.emplace_back(local_index);
-  } catch (const std::exception& ex) {
-    // The only reason this would fail is due to memory allocation failure.
-    LOG_F(ERROR, "-failed- {}", ex.what());
-    return false;
-  }
+  free_list_.emplace_back(local_index);
 
   // Mark as released
   released_flags_[local_index.get()] = true;

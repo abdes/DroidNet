@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -12,9 +13,6 @@
 #include <string_view>
 #include <thread>
 #include <vector>
-
-#include <Oxygen/Testing/GTest.h>
-#include <Oxygen/Testing/ScopedLogCapture.h>
 
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
@@ -32,6 +30,8 @@
 #include <Oxygen/Graphics/Headless/Texture.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
+#include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedLogCapture.h>
 
 namespace {
 
@@ -132,6 +132,9 @@ protected:
 
     graphics_ = static_cast<Graphics*>(backend_);
     ASSERT_NE(graphics_, nullptr);
+    static std::atomic<uint64_t> incarnation { 1 };
+    graphics_->InstallBackendOwner(graphics_->shared_from_this(),
+      oxygen::graphics::BackendIncarnationId { incarnation.fetch_add(1) }, {});
     graphics_->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy {});
     readback_manager_ = graphics_->GetReadbackManager();
     ASSERT_NE(readback_manager_, nullptr);
@@ -231,6 +234,7 @@ protected:
       = graphics_->GetCommandQueue(oxygen::graphics::QueueRole::kGraphics);
     CHECK_NOTNULL_F(queue);
     queue->Flush();
+    graphics_->PollCompletedUses();
   }
 
   auto EnqueueBufferReadback(std::shared_ptr<GpuBufferReadback> readback,
@@ -491,6 +495,7 @@ NOLINT_TEST_F(BufferReadbackLifecycleTest,
   readback->Reset();
 
   EXPECT_EQ(readback->GetState(), ReadbackState::kIdle);
+  WaitForQueueIdle();
   EXPECT_EQ(registry.GetRegisteredResourceCount(), baseline_count);
 }
 
@@ -517,6 +522,7 @@ NOLINT_TEST_F(BufferReadbackLifecycleTest,
   ASSERT_TRUE(readback->ResetForReuse().has_value());
   EXPECT_EQ(readback->GetState(), ReadbackState::kIdle);
   EXPECT_FALSE(readback->Ticket().has_value());
+  WaitForQueueIdle();
   EXPECT_EQ(Registry().GetRegisteredResourceCount(), baseline_count + 1U);
   const auto forgotten = GetReadbackManager()->Await(first_ticket);
   ASSERT_FALSE(forgotten.has_value());
@@ -543,9 +549,11 @@ NOLINT_TEST_F(BufferReadbackLifecycleTest,
     ASSERT_TRUE(mapped.has_value());
     EXPECT_EQ(CopyMappedBytes(*mapped), SliceBytes(larger_bytes, 11, 80));
   }
+  WaitForQueueIdle();
   EXPECT_EQ(Registry().GetRegisteredResourceCount(), baseline_count + 1U);
   readback->Reset();
   EXPECT_EQ(readback->GetState(), ReadbackState::kIdle);
+  WaitForQueueIdle();
   EXPECT_EQ(Registry().GetRegisteredResourceCount(), baseline_count);
 }
 
@@ -712,6 +720,7 @@ NOLINT_TEST_F(TextureReadbackMappingTest,
   EXPECT_GT(during_readback_count, baseline_count);
 
   readback->Reset();
+  WaitForQueueIdle();
   EXPECT_EQ(registry.GetRegisteredResourceCount(), baseline_count);
 }
 
@@ -939,8 +948,8 @@ NOLINT_TEST_F(
   EXPECT_EQ(mapping.error(), ReadbackError::kUnsupportedResource);
 }
 
-NOLINT_TEST_F(ReadbackShutdownTest,
-  ShutdownReturnsBackendFailureWhileDeferredSubmissionNeverSignals)
+NOLINT_TEST_F(
+  ReadbackShutdownTest, ShutdownCancelsUnsubmittedCopiesWithoutWaiting)
 {
   GetReadbackManager()->OnFrameStart(oxygen::frame::Slot { 0 });
 
@@ -954,13 +963,12 @@ NOLINT_TEST_F(ReadbackShutdownTest,
 
   const auto shutdown_result
     = GetReadbackManager()->Shutdown(std::chrono::milliseconds { 0 });
-  ASSERT_FALSE(shutdown_result.has_value());
-  EXPECT_EQ(shutdown_result.error(), ReadbackError::kBackendFailure);
-  EXPECT_EQ(readback->GetState(), ReadbackState::kPending);
+  ASSERT_TRUE(shutdown_result.has_value());
+  EXPECT_EQ(readback->GetState(), ReadbackState::kCancelled);
 
   const auto cancelled = GetReadbackManager()->Cancel(ticket);
   ASSERT_TRUE(cancelled.has_value());
-  EXPECT_TRUE(*cancelled);
+  EXPECT_FALSE(*cancelled); // Shutdown already resolved cancellation.
 }
 
 NOLINT_TEST_F(ReadbackAwaitGuardTest,
@@ -990,7 +998,7 @@ NOLINT_TEST_F(ReadbackAwaitGuardTest,
 }
 
 NOLINT_TEST_F(ReadbackAwaitGuardTest,
-  AwaitWarnsAndReturnsShutdownWhenManagerWasAlreadyShutDown)
+  AwaitReportsCancelledAfterShutdownDiscardsUnsubmittedCopy)
 {
   GetReadbackManager()->OnFrameStart(oxygen::frame::Slot { 0 });
 
@@ -1004,20 +1012,18 @@ NOLINT_TEST_F(ReadbackAwaitGuardTest,
 
   const auto shutdown_result
     = GetReadbackManager()->Shutdown(std::chrono::milliseconds { 0 });
-  ASSERT_FALSE(shutdown_result.has_value());
-  EXPECT_EQ(shutdown_result.error(), ReadbackError::kBackendFailure);
+  ASSERT_TRUE(shutdown_result.has_value());
 
   ScopedLogCapture capture { "HeadlessReadbackAwaitShutdown",
     loguru::Verbosity_WARNING };
   const auto awaited = GetReadbackManager()->Await(ticket);
 
-  ASSERT_FALSE(awaited.has_value());
-  EXPECT_EQ(awaited.error(), ReadbackError::kShutdown);
-  EXPECT_TRUE(capture.Contains("shutting down"));
+  ASSERT_TRUE(awaited.has_value());
+  EXPECT_EQ(awaited->error, ReadbackError::kCancelled);
 
   const auto cancelled = GetReadbackManager()->Cancel(ticket);
   ASSERT_TRUE(cancelled.has_value());
-  EXPECT_TRUE(*cancelled);
+  EXPECT_FALSE(*cancelled); // Shutdown already resolved cancellation.
 }
 
 } // namespace

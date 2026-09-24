@@ -7,6 +7,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Composition/ObjectMetadata.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
+#include <Oxygen/Graphics/Common/Internal/QueueSubmission.h>
 
 using oxygen::graphics::CommandList;
 
@@ -82,6 +83,39 @@ void CommandList::OnBeginRecording()
   state_ = State::kRecording;
 }
 
+auto CommandList::BindBackend(
+  std::shared_ptr<BackendLifetime> lifetime, QueueIdentity queue) -> void
+{
+  if (!IsFree()) {
+    throw std::logic_error("Cannot rebind an active command list");
+  }
+  backend_lifetime_ = lifetime;
+  backend_bound_ = lifetime != nullptr;
+  recording_epoch_ = lifetime ? lifetime->RecordingEpoch() : 0;
+  uses_.Bind(lifetime ? lifetime->Id() : BackendIncarnationId { 0 }, queue);
+}
+auto CommandList::RecordingIsCurrent() const noexcept -> bool
+{
+  const auto lifetime = backend_lifetime_.lock();
+  return !backend_bound_
+    || (lifetime && lifetime->State() == BackendLifecycle::kActive
+      && !lifetime->IsFaulted()
+      && lifetime->RecordingEpoch() == recording_epoch_);
+}
+auto CommandList::TakeRetirementStorage()
+  -> std::unique_ptr<internal::SubmittedWork>
+{
+  if (!retirement_storage_) {
+    retirement_storage_ = std::make_unique<internal::SubmittedWork>();
+  }
+  return std::move(retirement_storage_);
+}
+auto CommandList::RestoreRetirementStorage(
+  std::unique_ptr<internal::SubmittedWork> storage) noexcept -> void
+{
+  retirement_storage_ = std::move(storage);
+}
+
 void CommandList::OnEndRecording()
 {
   if (state_ != State::kRecording) {
@@ -111,7 +145,14 @@ void CommandList::OnFailed() noexcept
 {
   submit_queue_actions_.clear();
   recorded_resource_states_.clear();
-  state_ = State::kFree;
-  DLOG_F(WARNING, "'{}' errored, and its state will be force reset to 'Free'",
-    GetName());
+  if (state_ != State::kInvalid && state_ != State::kExecutionUncertain) {
+    state_ = State::kFree;
+  }
+}
+
+auto CommandList::Invalidate() noexcept -> void
+{
+  submit_queue_actions_.clear();
+  recorded_resource_states_.clear();
+  state_ = State::kInvalid;
 }

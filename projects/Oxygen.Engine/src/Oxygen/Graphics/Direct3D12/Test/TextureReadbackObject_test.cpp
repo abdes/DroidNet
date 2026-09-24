@@ -16,8 +16,6 @@
 #include <utility>
 #include <vector>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
@@ -29,6 +27,7 @@
 #include <Oxygen/Graphics/Direct3D12/Test/Fixtures/ReadbackTestFixture.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 
@@ -791,6 +790,7 @@ NOLINT_TEST_F(TextureReadbackLifecycleTest,
   EXPECT_GT(during_readback_count, baseline_count);
 
   readback->Reset();
+  WaitForQueueIdle();
   EXPECT_EQ(registry.GetRegisteredResourceCount(), baseline_count);
 }
 
@@ -1037,8 +1037,8 @@ NOLINT_TEST_F(TextureReadbackCoroutineTest,
   EXPECT_TRUE(resumed);
 }
 
-NOLINT_TEST_F(TextureReadbackShutdownTest,
-  ShutdownReturnsBackendFailureWhileDeferredSubmissionNeverSignals)
+NOLINT_TEST_F(
+  TextureReadbackShutdownTest, ShutdownCancelsUnsubmittedCopiesWithoutWaiting)
 {
   GetReadbackManager()->OnFrameStart(oxygen::frame::Slot { 0 });
 
@@ -1064,9 +1064,8 @@ NOLINT_TEST_F(TextureReadbackShutdownTest,
 
   const auto shutdown_result
     = GetReadbackManager()->Shutdown(std::chrono::milliseconds { 0 });
-  ASSERT_FALSE(shutdown_result.has_value());
-  EXPECT_EQ(shutdown_result.error(), ReadbackError::kBackendFailure);
-  EXPECT_EQ(readback->GetState(), ReadbackState::kPending);
+  ASSERT_TRUE(shutdown_result.has_value());
+  EXPECT_EQ(readback->GetState(), ReadbackState::kCancelled);
 }
 
 NOLINT_TEST_F(

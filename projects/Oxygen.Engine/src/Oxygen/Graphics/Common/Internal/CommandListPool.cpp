@@ -4,119 +4,116 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
+#include <cassert>
 #include <stdexcept>
+#include <utility>
 
 #include <Oxygen/Graphics/Common/Internal/CommandListPool.h>
 
 namespace oxygen::graphics::internal {
+struct CommandPoolState {
+  // Native/module retention outlasts both the factory and all idle lists.
+  std::shared_ptr<void> native_lifetime;
+  CommandListPool::CommandListFactory factory;
+  std::mutex mutex;
+  struct Bucket {
+    std::vector<std::unique_ptr<CommandList>> idle;
+    size_t total_created { 0 };
+  };
+  std::unordered_map<QueueRole, Bucket> buckets;
+  bool closed { false };
+};
 
-/*!
- Initializes the pool with a factory function that will be used to create new
- command list instances when the pool is empty or when additional capacity is
- needed.
-
- @param factory Function that creates command lists for specific queue roles and
- with given names. Must not be null.
-
- @note The factory function should be thread-safe as it may be called
- concurrently from multiple threads.
- @see CommandListFactory
-*/
-CommandListPool::CommandListPool(CommandListFactory factory)
-  : factory_(std::move(factory))
+CommandListPool::CommandListPool(
+  CommandListFactory factory, std::shared_ptr<void> native_lifetime)
+  : state_(std::make_shared<CommandPoolState>())
 {
-  if (!factory_) {
+  if (!factory) {
     throw std::invalid_argument("CommandListPool requires a valid factory");
   }
+  state_->factory = std::move(factory);
+  state_->native_lifetime = std::move(native_lifetime);
 }
 
-CommandListPool::~CommandListPool() { Clear(); }
+CommandListPool::~CommandListPool() { Close(); }
 
-/*!
- Removes and destroys all command lists currently stored in the pool across all
- queue roles. This operation is thread-safe and will block until all concurrent
- operations complete.
-
- @note This method should typically be called during shutdown or when a complete
- reset of the pool is required. Command lists currently in use (held by
- shared_ptr) are not affected.
-*/
 auto CommandListPool::Clear() noexcept -> void
 {
-  std::lock_guard lock(command_list_pool_mutex_);
-  command_list_pool_.clear();
+  std::lock_guard lock(state_->mutex);
+  for (auto& [role, bucket] : state_->buckets) {
+    bucket.total_created -= bucket.idle.size();
+    bucket.idle.clear();
+  }
 }
 
-/*!
- Retrieves a command list from the pool, reusing an existing one if available or
- creating a new one using the factory function. The returned command list is
- wrapped in a shared_ptr with a custom deleter that automatically returns it to
- the pool when the reference count reaches zero.
-
- @param queue_role The graphics queue role for which the command list is needed
- @param command_list_name A descriptive name for debugging and profiling
- purposes
-
- @return A shared_ptr to a command list ready for use. The command list will be
- automatically returned to the pool when all references are released.
-
- ### Performance Characteristics
-
- - Time Complexity: O(1) amortized for pool hits, O(factory) for creation
- - Memory: Reuses existing allocations when possible
- - Optimization: Separate pools per queue role minimize contention
-
- ### Usage Examples
-
- ```cpp
- {
-   auto cmd_list = pool.AcquireCommandList(
-     QueueRole::Graphics, "MainRenderPass");
-   // Record commands...
- }
- // Command list automatically returned to pool when cmd_list goes out of scope
- ```
-
- @note This method is thread-safe and can be called concurrently from multiple
- threads.
-*/
-auto CommandListPool::AcquireCommandList(graphics::QueueRole queue_role,
-  std::string_view command_list_name) -> std::shared_ptr<graphics::CommandList>
+auto CommandListPool::Close() noexcept -> void
 {
-  // Acquire or create a command list
-  std::unique_ptr<graphics::CommandList> cmd_list;
-  {
-    std::lock_guard lock(command_list_pool_mutex_);
+  std::lock_guard lock(state_->mutex);
+  state_->closed = true;
+  state_->factory = {};
+  for (auto& [role, bucket] : state_->buckets) {
+    bucket.total_created -= bucket.idle.size();
+    bucket.idle.clear();
+  }
+}
 
-    if (auto& pool = command_list_pool_[queue_role]; pool.empty()) {
-      // Create a new command list if pool is empty
-      cmd_list = factory_(queue_role, command_list_name);
+auto CommandListPool::SetNativeLifetime(std::shared_ptr<void> lifetime) -> void
+{
+  std::lock_guard lock(state_->mutex);
+  if (state_->closed
+    || std::ranges::any_of(state_->buckets,
+      [](const auto& entry) { return entry.second.total_created != 0; })) {
+    throw std::logic_error(
+      "Cannot replace native lifetime of a used command pool");
+  }
+  state_->native_lifetime = std::move(lifetime);
+}
+
+auto CommandListPool::AcquireCommandList(QueueRole role, std::string_view name)
+  -> std::shared_ptr<CommandList>
+{
+  std::unique_ptr<CommandList> list;
+  {
+    std::lock_guard lock(state_->mutex);
+    if (state_->closed) {
+      throw std::logic_error("Command list pool is closed");
+    }
+    auto& bucket = state_->buckets[role];
+    if (bucket.idle.empty()) {
+      if (bucket.idle.capacity() <= bucket.total_created) {
+        bucket.idle.reserve(
+          (std::max)(bucket.total_created + 1, bucket.idle.capacity() * 2));
+      }
+      list = state_->factory(role, name);
+      if (!list) {
+        return {};
+      }
+      ++bucket.total_created;
     } else {
-      // Take one from the pool
-      cmd_list = std::move(pool.back());
-      pool.pop_back();
-      cmd_list->SetName(command_list_name);
+      list = std::move(bucket.idle.back());
+      bucket.idle.pop_back();
+      list->SetName(name);
     }
   }
-
-  // Create a shared_ptr with custom deleter that returns the command list to
-  // the pool
-  return { cmd_list.get(),
-    [this, queue_role, cmd_list_raw = cmd_list.release()](
-      graphics::CommandList*) mutable {
-      cmd_list_raw->SetName("Recycled Command List");
-      // Create a new unique_ptr that owns the command list
-      auto recycled_cmd_list
-        = std::unique_ptr<graphics::CommandList>(cmd_list_raw);
-
-      // Return to pool
-      std::lock_guard<std::mutex> lock(command_list_pool_mutex_);
-      command_list_pool_[queue_role].push_back(std::move(recycled_cmd_list));
-    } };
-
-  // The Original shared_ptr will be destroyed, but the command list is now
-  // managed by the custom deleter and will be returned to the pool when the
-  // returned shared_ptr is destroyed
+  auto* raw = list.release();
+  return { raw, [state = state_, role](CommandList* returned) mutable noexcept {
+            // Empty the stored deleter, including when weak list observers
+            // survive.
+            auto owner = std::move(state);
+            std::unique_ptr<CommandList> value(returned);
+            {
+              std::lock_guard lock(owner->mutex);
+              auto& bucket = owner->buckets.at(role);
+              if (!owner->closed && returned->IsFree()) {
+                assert(bucket.idle.size() < bucket.idle.capacity());
+                bucket.idle.push_back(std::move(value));
+              } else {
+                --bucket.total_created;
+              }
+            }
+            // A closed/invalid list is destroyed before its native lifetime
+            // owner.
+          } };
 }
-
 } // namespace oxygen::graphics::internal

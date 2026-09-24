@@ -25,31 +25,18 @@ namespace internal {
 
 class CommandQueue final : public graphics::CommandQueue {
 public:
-  CommandQueue(std::string_view name, QueueRole role)
-    : graphics::CommandQueue(name)
-    , queue_role_(role)
-  {
-  }
+  CommandQueue(std::string_view name, QueueRole role);
   ~CommandQueue() override;
 
   // CommandQueue interface
   auto Signal(uint64_t value) const -> void override;
   [[nodiscard]] auto Signal() const -> uint64_t override;
-  [[nodiscard]] auto SignalSubmittedWork() -> uint64_t override;
   auto Wait(uint64_t value, std::chrono::milliseconds timeout) const
     -> void override;
   auto Wait(uint64_t value) const -> void override;
 
   [[nodiscard]] auto GetCompletedValue() const -> uint64_t override;
   [[nodiscard]] auto GetCurrentValue() const -> uint64_t override;
-
-  auto Submit(std::shared_ptr<graphics::CommandList> command_list)
-    -> void override;
-  auto Submit(std::span<std::shared_ptr<graphics::CommandList>> command_lists)
-    -> void override;
-
-  // Override the base Flush to provide headless-specific flush behavior.
-  auto Flush() const -> void override;
 
   [[nodiscard]] auto GetQueueRole() const -> QueueRole override
   {
@@ -59,10 +46,21 @@ public:
 private:
   friend class internal::CommandExecutor;
   auto CompleteSubmission() const -> void;
-  auto NoteSubmittedSignal(uint64_t value) const -> void;
   auto SignalImmediate(uint64_t value) const -> void override;
+  auto EnqueueLegacyMarker(uint64_t value) -> void override;
   auto QueueWaitImmediate(uint64_t value) const -> void;
 
+  struct Timeline;
+  struct PreparedSubmission;
+  auto PrepareNativeSubmission(
+    const graphics::internal::NativeSubmissionRequest& request,
+    std::unique_ptr<graphics::internal::NativeSubmission> reusable)
+    -> std::unique_ptr<graphics::internal::NativeSubmission> override;
+  auto QueryPrivateCompletion() const noexcept -> uint64_t override;
+  auto WaitPrivateCompletion(uint64_t value) const -> void override;
+  auto TearDownUncertainDevice() noexcept -> void override;
+  auto WaitForNativeStop() noexcept -> void override;
+  std::shared_ptr<Timeline> private_timeline_;
   mutable std::mutex mutex_;
   mutable std::condition_variable cv_;
   mutable uint64_t current_value_ { 0 };

@@ -6,12 +6,14 @@
 
 #include <algorithm>
 #include <cstring>
-#include <fmt/format.h>
 #include <memory>
 #include <string>
 
+#include <fmt/format.h>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Detail/FormatUtils.h>
+#include <Oxygen/Graphics/Common/BackendObject.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/ReadbackValidation.h>
@@ -253,34 +255,16 @@ namespace {
   }
 
   template <typename ResourceT>
-  auto TryUnregisterOwnedResource(Graphics& graphics,
-    std::shared_ptr<ResourceT>& resource, const std::string_view debug_name)
-    -> void
+  auto RetireReadbackResource(std::shared_ptr<ResourceT>& resource,
+    RegistrationOwner& registration) noexcept -> void
   {
-    if (resource == nullptr) {
-      return;
-    }
-
-    try {
-      auto& registry = graphics.GetResourceRegistry();
-      if (registry.Contains(*resource)) {
-        registry.UnRegisterResource(*resource);
-      }
-    } catch (const std::exception& ex) {
-      LOG_F(WARNING,
-        "Failed to unregister headless readback-owned resource `{}` for "
-        "`{}`: {}",
-        resource->GetName(), debug_name, ex.what());
-    }
-
+    registration = {};
     resource.reset();
   }
 
 } // namespace
 
-class HeadlessBufferReadback final
-  : public GpuBufferReadback,
-    public std::enable_shared_from_this<HeadlessBufferReadback> {
+class HeadlessBufferReadback final : public GpuBufferReadback {
 public:
   HeadlessBufferReadback(
     HeadlessReadbackManager& manager, std::string_view debug_name)
@@ -325,6 +309,16 @@ public:
   }
 
 private:
+  auto shared_from_this() -> std::shared_ptr<HeadlessBufferReadback>
+  {
+    return std::static_pointer_cast<HeadlessBufferReadback>(
+      GpuBufferReadback::shared_from_this());
+  }
+  auto weak_from_this() -> std::weak_ptr<HeadlessBufferReadback>
+  {
+    return shared_from_this();
+  }
+
   auto EnsureReadbackBuffer(uint64_t size_bytes) -> bool;
   auto RefreshStateFromTracker() const -> std::expected<void, ReadbackError>;
   auto ReleaseMapping() -> void;
@@ -332,15 +326,14 @@ private:
   HeadlessReadbackManager& manager_;
   std::string debug_name_;
   std::shared_ptr<Buffer> readback_buffer_ {};
+  RegistrationOwner staging_registration_;
   mutable std::optional<ReadbackTicket> ticket_ {};
   mutable std::optional<ReadbackError> last_error_ {};
   mutable ReadbackState state_ { ReadbackState::kIdle };
   BufferRange resolved_range_ {};
 };
 
-class HeadlessTextureReadback final
-  : public GpuTextureReadback,
-    public std::enable_shared_from_this<HeadlessTextureReadback> {
+class HeadlessTextureReadback final : public GpuTextureReadback {
 public:
   HeadlessTextureReadback(
     HeadlessReadbackManager& manager, std::string_view debug_name)
@@ -385,6 +378,16 @@ public:
   }
 
 private:
+  auto shared_from_this() -> std::shared_ptr<HeadlessTextureReadback>
+  {
+    return std::static_pointer_cast<HeadlessTextureReadback>(
+      GpuTextureReadback::shared_from_this());
+  }
+  auto weak_from_this() -> std::weak_ptr<HeadlessTextureReadback>
+  {
+    return shared_from_this();
+  }
+
   auto EnsureReadbackBuffer(uint64_t size_bytes) -> bool;
   auto RefreshStateFromTracker() const -> std::expected<void, ReadbackError>;
   auto ReleaseMapping() -> void;
@@ -392,6 +395,7 @@ private:
   HeadlessReadbackManager& manager_;
   std::string debug_name_;
   std::shared_ptr<Buffer> readback_buffer_ {};
+  RegistrationOwner staging_registration_;
   mutable std::optional<ReadbackTicket> ticket_ {};
   mutable std::optional<ReadbackError> last_error_ {};
   mutable ReadbackState state_ { ReadbackState::kIdle };
@@ -408,7 +412,7 @@ auto HeadlessBufferReadback::EnsureReadbackBuffer(const uint64_t size_bytes)
   }
 
   ReleaseMapping();
-  TryUnregisterOwnedResource(manager_.graphics_, readback_buffer_, debug_name_);
+  RetireReadbackResource(readback_buffer_, staging_registration_);
 
   readback_buffer_ = std::static_pointer_cast<Buffer>(
     manager_.graphics_.CreateBuffer(BufferDesc {
@@ -424,9 +428,11 @@ auto HeadlessBufferReadback::EnsureReadbackBuffer(const uint64_t size_bytes)
   }
 
   auto& registry = manager_.graphics_.GetResourceRegistry();
-  if (!registry.Contains(*readback_buffer_)) {
-    registry.Register(readback_buffer_);
+  auto lease = registry.RegisterManaged(readback_buffer_);
+  if (!lease) {
+    return false;
   }
+  staging_registration_ = lease->AllocationOwner();
   return true;
 }
 
@@ -484,6 +490,10 @@ auto HeadlessBufferReadback::EnqueueCopy(
   if (!EnsureReadbackBuffer(resolved.size_bytes)) {
     return std::unexpected(ReadbackError::kBackendFailure);
   }
+  if (!recorder.RetainRegistration(
+        manager_.graphics_.GetResourceRegistry(), staging_registration_)) {
+    return std::unexpected(ReadbackError::kBackendFailure);
+  }
   CHECK_NOTNULL_F(readback_buffer_.get(),
     "Headless readback buffer must exist after successful allocation");
   if (!recorder.IsResourceTracked(source)) {
@@ -508,11 +518,19 @@ auto HeadlessBufferReadback::EnqueueCopy(
   recorder.RecordQueueSignal(fence->get());
 
   resolved_range_ = resolved;
-  ticket_ = manager_.tracker_.Register(
+  ticket_ = manager_.tracker_.RegisterPendingSubmission(
     *fence, SizeBytes { resolved.size_bytes }, debug_name_);
   manager_.TrackCancellationHandler(ticket_->id, [weak = weak_from_this()]() {
     if (const auto locked = weak.lock()) {
       locked->OnManagerCancelled();
+    }
+  });
+  recorder.OnSubmission([manager = &manager_, ticket = *ticket_](
+                          graphics::SubmissionOutcome outcome) {
+    if (outcome == graphics::SubmissionOutcome::kSubmitted) {
+      manager->tracker_.MarkSubmitted(ticket.id);
+    } else {
+      static_cast<void>(manager->Cancel(ticket));
     }
   });
   state_ = ReadbackState::kPending;
@@ -581,8 +599,13 @@ auto HeadlessBufferReadback::TryMap()
     readback_buffer_->Map(0, resolved_range_.size_bytes));
   CHECK_NOTNULL_F(mapped, "Headless readback buffer map returned null");
   state_ = ReadbackState::kMapped;
-  auto guard = std::shared_ptr<void>(nullptr,
-    [self = shared_from_this()](void*) mutable { self->ReleaseMapping(); });
+  auto self = shared_from_this();
+  auto guard = AdoptBackendObject(
+    static_cast<void*>(this),
+    [](void* pointer) noexcept {
+      static_cast<HeadlessBufferReadback*>(pointer)->ReleaseMapping();
+    },
+    std::move(self));
   return MappedBufferReadback {
     std::move(guard),
     std::span<const std::byte>(
@@ -658,19 +681,9 @@ auto HeadlessBufferReadback::Reset() -> void
   ReleaseMapping();
   if (ticket_.has_value()) {
     manager_.UntrackCancellationHandler(ticket_->id);
-    if (state_ != ReadbackState::kPending) {
-      manager_.ForgetTicket(ticket_->id);
-    }
+    manager_.ForgetTicket(ticket_->id);
   }
-  if (state_ == ReadbackState::kPending) {
-    LOG_F(WARNING,
-      "Resetting headless buffer readback `{}` while a copy is still "
-      "pending; retaining staging buffer registration until completion",
-      debug_name_);
-  } else {
-    TryUnregisterOwnedResource(
-      manager_.graphics_, readback_buffer_, debug_name_);
-  }
+  RetireReadbackResource(readback_buffer_, staging_registration_);
   ticket_.reset();
   last_error_.reset();
   resolved_range_ = {};
@@ -688,7 +701,7 @@ auto HeadlessTextureReadback::EnsureReadbackBuffer(const uint64_t size_bytes)
   }
 
   ReleaseMapping();
-  TryUnregisterOwnedResource(manager_.graphics_, readback_buffer_, debug_name_);
+  RetireReadbackResource(readback_buffer_, staging_registration_);
 
   readback_buffer_ = std::static_pointer_cast<Buffer>(
     manager_.graphics_.CreateBuffer(BufferDesc {
@@ -705,9 +718,11 @@ auto HeadlessTextureReadback::EnsureReadbackBuffer(const uint64_t size_bytes)
   }
 
   auto& registry = manager_.graphics_.GetResourceRegistry();
-  if (!registry.Contains(*readback_buffer_)) {
-    registry.Register(readback_buffer_);
+  auto lease = registry.RegisterManaged(readback_buffer_);
+  if (!lease) {
+    return false;
   }
+  staging_registration_ = lease->AllocationOwner();
   return true;
 }
 
@@ -780,6 +795,10 @@ auto HeadlessTextureReadback::EnqueueCopy(
   if (!EnsureReadbackBuffer(mapped_size.get())) {
     return std::unexpected(ReadbackError::kBackendFailure);
   }
+  if (!recorder.RetainRegistration(
+        manager_.graphics_.GetResourceRegistry(), staging_registration_)) {
+    return std::unexpected(ReadbackError::kBackendFailure);
+  }
   CHECK_NOTNULL_F(readback_buffer_.get(),
     "Headless texture readback buffer must exist after successful allocation");
   if (!recorder.IsResourceTracked(*readback_buffer_)) {
@@ -801,10 +820,19 @@ auto HeadlessTextureReadback::EnqueueCopy(
   layout_ = BuildTextureReadbackLayout(
     source_desc, resolved_slice, copy_region, request.aspects);
   mapped_size_ = mapped_size;
-  ticket_ = manager_.tracker_.Register(*fence, mapped_size_, debug_name_);
+  ticket_ = manager_.tracker_.RegisterPendingSubmission(
+    *fence, mapped_size_, debug_name_);
   manager_.TrackCancellationHandler(ticket_->id, [weak = weak_from_this()]() {
     if (const auto locked = weak.lock()) {
       locked->OnManagerCancelled();
+    }
+  });
+  recorder.OnSubmission([manager = &manager_, ticket = *ticket_](
+                          graphics::SubmissionOutcome outcome) {
+    if (outcome == graphics::SubmissionOutcome::kSubmitted) {
+      manager->tracker_.MarkSubmitted(ticket.id);
+    } else {
+      static_cast<void>(manager->Cancel(ticket));
     }
   });
   state_ = ReadbackState::kPending;
@@ -873,8 +901,13 @@ auto HeadlessTextureReadback::TryMap()
     readback_buffer_->Map(0, mapped_size_.get()));
   CHECK_NOTNULL_F(mapped, "Headless texture readback buffer map returned null");
   state_ = ReadbackState::kMapped;
-  auto guard = std::shared_ptr<void>(nullptr,
-    [self = shared_from_this()](void*) mutable { self->ReleaseMapping(); });
+  auto self = shared_from_this();
+  auto guard = AdoptBackendObject(
+    static_cast<void*>(this),
+    [](void* pointer) noexcept {
+      static_cast<HeadlessTextureReadback*>(pointer)->ReleaseMapping();
+    },
+    std::move(self));
   return MappedTextureReadback { std::move(guard), mapped, layout_ };
 }
 
@@ -923,19 +956,9 @@ auto HeadlessTextureReadback::Reset() -> void
   ReleaseMapping();
   if (ticket_.has_value()) {
     manager_.UntrackCancellationHandler(ticket_->id);
-    if (state_ != ReadbackState::kPending) {
-      manager_.ForgetTicket(ticket_->id);
-    }
+    manager_.ForgetTicket(ticket_->id);
   }
-  if (state_ == ReadbackState::kPending) {
-    LOG_F(WARNING,
-      "Resetting headless texture readback `{}` while a copy is still "
-      "pending; retaining staging buffer registration until completion",
-      debug_name_);
-  } else {
-    TryUnregisterOwnedResource(
-      manager_.graphics_, readback_buffer_, debug_name_);
-  }
+  RetireReadbackResource(readback_buffer_, staging_registration_);
   ticket_.reset();
   last_error_.reset();
   layout_ = {};
@@ -955,13 +978,37 @@ HeadlessReadbackManager::~HeadlessReadbackManager() = default;
 auto HeadlessReadbackManager::CreateBufferReadback(
   const std::string_view debug_name) -> std::shared_ptr<GpuBufferReadback>
 {
-  return std::make_shared<HeadlessBufferReadback>(*this, debug_name);
+  const auto admission = graphics_.GetBackendLifetime()->AcquireOperation();
+  auto owner = graphics_.RetainBackendOwner();
+  if (!owner) {
+    throw std::logic_error("Readback requires a canonical backend owner");
+  }
+  return AdoptBackendObject(
+    static_cast<GpuBufferReadback*>(
+      new HeadlessBufferReadback(*this, debug_name)),
+    [](void* pointer) noexcept {
+      delete static_cast<HeadlessBufferReadback*>(
+        static_cast<GpuBufferReadback*>(pointer));
+    },
+    std::move(owner));
 }
 
 auto HeadlessReadbackManager::CreateTextureReadback(
   const std::string_view debug_name) -> std::shared_ptr<GpuTextureReadback>
 {
-  return std::make_shared<HeadlessTextureReadback>(*this, debug_name);
+  const auto admission = graphics_.GetBackendLifetime()->AcquireOperation();
+  auto owner = graphics_.RetainBackendOwner();
+  if (!owner) {
+    throw std::logic_error("Readback requires a canonical backend owner");
+  }
+  return AdoptBackendObject(
+    static_cast<GpuTextureReadback*>(
+      new HeadlessTextureReadback(*this, debug_name)),
+    [](void* pointer) noexcept {
+      delete static_cast<HeadlessTextureReadback*>(
+        static_cast<GpuTextureReadback*>(pointer));
+    },
+    std::move(owner));
 }
 
 auto HeadlessReadbackManager::EnsureTrackedQueue(
@@ -1057,6 +1104,17 @@ auto HeadlessReadbackManager::Await(const ReadbackTicket ticket)
     return *ready;
   }
 
+  if (tracker_.IsSubmissionPending(ticket.id)) {
+    LOG_F(ERROR,
+      "Readback await would deadlock: its copy has not been submitted. Submit "
+      "the command recorder before awaiting the ticket.");
+    return std::unexpected(ReadbackError::kWouldDeadlock);
+  }
+
+  if (const auto status = tracker_.IsComplete(ticket.id); !status) {
+    return std::unexpected(status.error());
+  }
+
   observer_ptr<graphics::CommandQueue> queue;
   bool shutdown = false;
   {
@@ -1116,6 +1174,13 @@ auto HeadlessReadbackManager::AwaitAsync(const ReadbackTicket ticket)
   -> co::Co<void>
 {
   PumpCompletions();
+  if (tracker_.IsSubmissionPending(ticket.id)) {
+    throw std::logic_error(
+      "Cannot await a readback whose recording has not submitted");
+  }
+  if (!tracker_.IsComplete(ticket.id)) {
+    throw std::logic_error("Readback ticket was released");
+  }
   co_await Until(tracker_.CompletedFenceValue() >= ticket.fence);
   co_return;
 }
@@ -1362,8 +1427,34 @@ auto HeadlessReadbackManager::Shutdown(const std::chrono::milliseconds timeout)
     std::lock_guard lock(mutex_);
     shutdown_ = true;
     queue = tracked_queue_;
-    last_fence = tracker_.LastRegisteredFence();
   }
+
+  // Resolve unissued copies without waiting on values that were never emitted.
+  // Move callbacks out before invoking them: late owner release can re-enter
+  // us.
+  for (;;) {
+    std::function<void()> cancel;
+    ReadbackTicketId id { 0 };
+    {
+      std::lock_guard lock(mutex_);
+      const auto pending
+        = std::ranges::find_if(cancellation_handlers_, [&](const auto& item) {
+            return tracker_.IsSubmissionPending(item.first);
+          });
+      if (pending == cancellation_handlers_.end()) {
+        break;
+      }
+      id = pending->first;
+      cancel = std::move(pending->second);
+      cancellation_handlers_.erase(pending);
+    }
+    static_cast<void>(tracker_.Cancel(id));
+    if (cancel) {
+      cancel();
+    }
+  }
+  tracker_.CancelPendingSubmissions();
+  last_fence = tracker_.LastPendingSubmittedFence();
 
   if (queue != nullptr && last_fence.get() > 0 && tracker_.HasPending()) {
     try {
@@ -1374,7 +1465,7 @@ auto HeadlessReadbackManager::Shutdown(const std::chrono::milliseconds timeout)
         last_fence.get(), timeout.count());
       return std::unexpected(ReadbackError::kBackendFailure);
     }
-    tracker_.MarkFenceCompleted(last_fence);
+    tracker_.MarkFenceCompleted(FenceValue { queue->GetCompletedValue() });
   }
   return {};
 }

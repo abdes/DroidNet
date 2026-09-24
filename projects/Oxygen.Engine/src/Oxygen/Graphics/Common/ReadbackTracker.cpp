@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <limits>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/ReadbackTracker.h>
@@ -18,6 +19,16 @@ ReadbackTracker::~ReadbackTracker() = default;
 auto ReadbackTracker::Register(const FenceValue fence, const SizeBytes bytes,
   const std::string_view debug_name) -> ReadbackTicket
 {
+  return RegisterImpl(fence, bytes, debug_name, false);
+}
+auto ReadbackTracker::RegisterPendingSubmission(FenceValue fence,
+  SizeBytes bytes, std::string_view debug_name) -> ReadbackTicket
+{
+  return RegisterImpl(fence, bytes, debug_name, true);
+}
+auto ReadbackTracker::RegisterImpl(FenceValue fence, SizeBytes bytes,
+  std::string_view debug_name, bool pending) -> ReadbackTicket
+{
   std::lock_guard<std::mutex> lk(mu_);
   const auto id = next_ticket_;
   next_ticket_ = ReadbackTicketId { id.get() + 1 };
@@ -27,6 +38,7 @@ auto ReadbackTracker::Register(const FenceValue fence, const SizeBytes bytes,
   e.bytes = bytes;
   e.name.assign(debug_name);
   e.completed = false;
+  e.submission_pending = pending;
   e.result.ticket = e.ticket;
   e.result.bytes_copied = SizeBytes { 0 };
   e.result.error = std::nullopt;
@@ -55,16 +67,75 @@ auto ReadbackTracker::RegisterFailedImmediate(const std::string_view debug_name,
   return e.ticket;
 }
 
+auto ReadbackTracker::MarkSubmitted(ReadbackTicketId id) noexcept -> void
+{
+  std::lock_guard lock(mu_);
+  if (const auto found = entries_.find(id);
+    found != entries_.end() && !found->second.completed) {
+    auto& entry = found->second;
+    entry.submission_pending = false;
+    if (entry.ticket.fence <= completed_fence_.Get()) {
+      MarkEntryCompleted(entry);
+    }
+  }
+  cv_.notify_all();
+}
+auto ReadbackTracker::IsSubmissionPending(ReadbackTicketId id) const -> bool
+{
+  std::lock_guard lock(mu_);
+  const auto found = entries_.find(id);
+  return found != entries_.end() && !found->second.completed
+    && found->second.submission_pending;
+}
+auto ReadbackTracker::CancelPendingSubmissions() noexcept -> void
+{
+  std::lock_guard lock(mu_);
+  for (auto& [id, entry] : entries_) {
+    if (!entry.completed && entry.submission_pending) {
+      entry.completed = true;
+      entry.result.error = ReadbackError::kCancelled;
+      entry.result.bytes_copied = SizeBytes { 0 };
+    }
+  }
+  cv_.notify_all();
+}
+auto ReadbackTracker::LastPendingSubmittedFence() const -> FenceValue
+{
+  std::lock_guard lock(mu_);
+  FenceValue latest { 0 };
+  for (const auto& [id, entry] : entries_) {
+    if (!entry.completed && !entry.submission_pending
+      && latest < entry.ticket.fence) {
+      latest = entry.ticket.fence;
+    }
+  }
+  return latest;
+}
+
 auto ReadbackTracker::MarkFenceCompleted(const FenceValue completed) -> void
 {
   {
     std::lock_guard<std::mutex> lk(mu_);
+    if (completed.get() == (std::numeric_limits<uint64_t>::max)()) {
+      for (auto& [id, entry] : entries_) {
+        if (!entry.completed) {
+          entry.completed = true;
+          entry.result.error = ReadbackError::kBackendFailure;
+          entry.result.bytes_copied = SizeBytes { 0 };
+        }
+      }
+      completed_fence_.Set(completed); // Wake async waiters; ticket results
+                                       // carry failure, never copied bytes.
+      cv_.notify_all();
+      return;
+    }
     if (completed_fence_.Get() < completed) {
       completed_fence_.Set(completed);
     }
     for (auto& [id, e] : entries_) {
       (void)id;
-      if (!e.completed && e.ticket.fence <= completed) {
+      if (!e.completed && !e.submission_pending
+        && e.ticket.fence <= completed) {
         MarkEntryCompleted(e);
       }
     }

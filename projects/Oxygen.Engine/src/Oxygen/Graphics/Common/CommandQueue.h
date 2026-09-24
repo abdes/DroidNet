@@ -18,13 +18,24 @@
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/Named.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
+#include <Oxygen/Graphics/Common/Submission.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/api_export.h>
 
+namespace oxygen {
+class Graphics;
+}
 namespace oxygen::graphics {
 
 class CommandList;
+class ResourceRegistry;
+namespace internal {
+  struct NativeSubmissionRequest;
+  class NativeSubmission;
+  struct SubmittedWork;
+  class SubmissionFaultTestAccess;
+}
 
 class CommandQueue : public Composition, public Named {
 public:
@@ -56,9 +67,10 @@ public:
   //! \return The reserved value, to be used for submit-ordered signaling.
   [[nodiscard]] virtual auto Signal() const -> uint64_t = 0;
 
-  //! Enqueue a completion marker after all work already submitted to this queue.
-  //! The frame owner serializes this call with submission. Unlike Flush(), this
-  //! does not wait on the CPU; the returned value protects subsequent reuse.
+  //! Enqueue a completion marker after all work already submitted to this
+  //! queue. The frame owner serializes this call with submission. Unlike
+  //! Flush(), this does not wait on the CPU; the returned value protects
+  //! subsequent reuse.
   [[nodiscard]] OXGN_GFX_API virtual auto SignalSubmittedWork() -> uint64_t;
 
   //! Wait up to a certain number of milliseconds, for the counter to reach or
@@ -89,9 +101,34 @@ public:
   OXGN_GFX_API virtual auto TryGetTimestampFrequency(uint64_t& out_hz) const
     -> bool;
 
-  virtual auto Submit(std::shared_ptr<CommandList> command_list) -> void = 0;
-  virtual auto Submit(std::span<std::shared_ptr<CommandList>> command_lists)
-    -> void = 0;
+  OXGN_GFX_API virtual auto Submit(std::shared_ptr<CommandList> command_list)
+    -> void;
+  OXGN_GFX_API virtual auto Submit(
+    std::span<std::shared_ptr<CommandList>> command_lists) -> void;
+  [[nodiscard]] OXGN_GFX_API auto SubmitWithReceipt(
+    std::shared_ptr<CommandList> command_list) noexcept -> SubmissionResult;
+  [[nodiscard]] OXGN_GFX_API auto Identity() const noexcept -> QueueIdentity;
+  struct SubmissionCounters {
+    std::uint64_t accepted_batches { 0 };
+    std::uint64_t command_lists { 0 };
+    std::uint64_t completion_signals { 0 };
+    std::uint64_t dependency_waits { 0 };
+  };
+  //! Cumulative successfully accepted work. Uncertain issue is not counted as
+  //! successful work. Inspection takes the submission lock, outside timed
+  //! loops.
+  [[nodiscard]] OXGN_GFX_API auto InspectSubmissionCounters() const
+    -> SubmissionCounters;
+  [[nodiscard]] OXGN_GFX_API auto BackendLifetimeState() const noexcept
+    -> std::shared_ptr<BackendLifetime>;
+  OXGN_GFX_API auto BindBackend(std::shared_ptr<BackendLifetime> lifetime,
+    std::shared_ptr<void> native_lifetime) -> void;
+  [[nodiscard]] OXGN_GFX_API auto QueryCompletion(
+    CompletionReceipt receipt) const noexcept -> CompletionStatus;
+  OXGN_GFX_API auto PollCompletedUses() -> void;
+  [[nodiscard]] OXGN_GFX_API auto HasStateConflictWith(
+    const CommandQueue& other) const -> bool;
+  OXGN_GFX_API auto ReleaseUsesAfterDeviceLoss() noexcept -> void;
 
   //! Advance backend-owned profiling frame state before a new engine frame.
   /*!
@@ -115,6 +152,16 @@ public:
   OXGN_GFX_API auto SetName(std::string_view name) noexcept -> void override;
 
 protected:
+  //! All CPU/native storage is prepared before the backend can issue work.
+  [[nodiscard]] OXGN_GFX_API virtual auto PrepareNativeSubmission(
+    const internal::NativeSubmissionRequest& request,
+    std::unique_ptr<internal::NativeSubmission> reusable)
+    -> std::unique_ptr<internal::NativeSubmission>;
+  [[nodiscard]] OXGN_GFX_API virtual auto
+  QueryPrivateCompletion() const noexcept -> uint64_t;
+  OXGN_GFX_API virtual auto WaitPrivateCompletion(uint64_t value) const -> void;
+  OXGN_GFX_API virtual auto TearDownUncertainDevice() noexcept -> void;
+  OXGN_GFX_API virtual auto WaitForNativeStop() noexcept -> void;
   //! Emit an immediate queue-side signal for backend-owned synchronization.
   /*!
     This is intentionally a backend-only primitive. Application code
@@ -125,8 +172,25 @@ protected:
    * recorded work.
   */
   virtual auto SignalImmediate(uint64_t value) const -> void = 0;
+  OXGN_GFX_API virtual auto EnqueueLegacyMarker(uint64_t value) -> void;
 
 private:
+  friend class internal::SubmissionFaultTestAccess;
+  friend class oxygen::Graphics;
+  [[nodiscard]] OXGN_GFX_API auto ReconcileQuarantinedStates() -> bool;
+  [[nodiscard]] OXGN_GFX_API auto RecoverQuarantinedWork(
+    ResourceRegistry& registry) -> bool;
+  OXGN_GFX_API auto StopAfterSubmissionFailure() noexcept -> void;
+  struct SubmissionState;
+  std::unique_ptr<SubmissionState> submission_;
+  auto EmitCompletionMarker() -> uint64_t;
+  auto SubmitPrepared(std::span<const std::shared_ptr<CommandList>> lists,
+    bool request_receipt) noexcept -> SubmissionResult;
+  auto RecycleWork(std::unique_ptr<internal::SubmittedWork> work,
+    std::optional<UseReleaseReason> completion) noexcept -> void;
+  auto PrepareStateAdoption(const internal::SubmittedWork& work) -> void;
+  auto CommitStateAdoption(
+    const internal::SubmittedWork& work, size_t issued_lists) noexcept -> void;
   mutable std::mutex known_resource_states_mutex_ {};
   std::unordered_map<NativeResource, ResourceStates> known_resource_states_ {};
 };

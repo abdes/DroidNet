@@ -14,9 +14,6 @@
 #include <thread>
 #include <vector>
 
-#include <Oxygen/Testing/GTest.h>
-#include <Oxygen/Testing/ScopedLogCapture.h>
-
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/ReadbackErrors.h>
@@ -27,6 +24,8 @@
 #include <Oxygen/Graphics/Direct3D12/Test/Fixtures/ReadbackTestFixture.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
+#include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedLogCapture.h>
 
 namespace {
 
@@ -602,6 +601,7 @@ NOLINT_TEST_F(BufferReadbackLifecycleTest,
   readback->Reset();
 
   EXPECT_EQ(readback->GetState(), ReadbackState::kIdle);
+  WaitForQueueIdle();
   EXPECT_EQ(registry.GetRegisteredResourceCount(), baseline_count);
 }
 
@@ -634,6 +634,7 @@ NOLINT_TEST_F(BufferReadbackReuseTest,
   EXPECT_EQ(readback->GetState(), ReadbackState::kIdle);
   EXPECT_FALSE(readback->Ticket().has_value());
   EXPECT_FALSE(original.expired());
+  WaitForQueueIdle();
   EXPECT_EQ(registry.GetRegisteredResourceCount(), baseline_count + 1U);
   const auto forgotten = AwaitReadback(first_ticket);
   ASSERT_FALSE(forgotten.has_value());
@@ -662,13 +663,17 @@ NOLINT_TEST_F(BufferReadbackReuseTest,
     EXPECT_EQ(CopyMappedBytes(*mapped), SliceBytes(larger_bytes, 11, 80));
   }
   ASSERT_EQ(StagingAllocations().size(), 2U);
+  WaitForQueueIdle();
   EXPECT_TRUE(original.expired());
   const auto grown = StagingAllocations().back();
   ASSERT_FALSE(grown.expired());
   EXPECT_GE(grown.lock()->GetSize(), 80U);
+  WaitForQueueIdle();
   EXPECT_EQ(registry.GetRegisteredResourceCount(), baseline_count + 1U);
   readback->Reset();
+  WaitForQueueIdle();
   EXPECT_TRUE(grown.expired());
+  WaitForQueueIdle();
   EXPECT_EQ(registry.GetRegisteredResourceCount(), baseline_count);
 }
 
@@ -792,7 +797,7 @@ NOLINT_TEST_F(BufferReadbackManagerTest,
 }
 
 NOLINT_TEST_F(BufferReadbackManagerTest,
-  ManagerAwaitWarnsAndReturnsShutdownWhenManagerWasAlreadyShutDown)
+  ManagerAwaitReportsCancelledAfterShutdownDiscardsUnsubmittedCopy)
 {
   GetReadbackManager()->OnFrameStart(oxygen::frame::Slot { 0 });
 
@@ -807,20 +812,18 @@ NOLINT_TEST_F(BufferReadbackManagerTest,
 
   const auto shutdown_result
     = GetReadbackManager()->Shutdown(std::chrono::milliseconds { 0 });
-  ASSERT_FALSE(shutdown_result.has_value());
-  EXPECT_EQ(shutdown_result.error(), ReadbackError::kBackendFailure);
+  ASSERT_TRUE(shutdown_result.has_value());
 
   ScopedLogCapture capture { "D3D12ReadbackAwaitShutdown",
     loguru::Verbosity_WARNING };
   const auto awaited = AwaitReadback(ticket);
 
-  ASSERT_FALSE(awaited.has_value());
-  EXPECT_EQ(awaited.error(), ReadbackError::kShutdown);
-  EXPECT_TRUE(capture.Contains("shutting down"));
+  ASSERT_TRUE(awaited.has_value());
+  EXPECT_EQ(awaited->error, ReadbackError::kCancelled);
 
   const auto cancelled = CancelReadback(ticket);
   ASSERT_TRUE(cancelled.has_value());
-  EXPECT_TRUE(*cancelled);
+  EXPECT_FALSE(*cancelled); // Shutdown already resolved cancellation.
 }
 
 NOLINT_TEST_F(BufferReadbackFrameLifecycleTest,
@@ -912,8 +915,8 @@ NOLINT_TEST_F(BufferReadbackCoroutineTest,
   EXPECT_TRUE(resumed);
 }
 
-NOLINT_TEST_F(BufferReadbackShutdownTest,
-  ShutdownReturnsBackendFailureWhileDeferredSubmissionNeverSignals)
+NOLINT_TEST_F(
+  BufferReadbackShutdownTest, ShutdownCancelsUnsubmittedCopiesWithoutWaiting)
 {
   GetReadbackManager()->OnFrameStart(oxygen::frame::Slot { 0 });
 
@@ -928,9 +931,8 @@ NOLINT_TEST_F(BufferReadbackShutdownTest,
 
   const auto shutdown_result
     = GetReadbackManager()->Shutdown(std::chrono::milliseconds { 0 });
-  ASSERT_FALSE(shutdown_result.has_value());
-  EXPECT_EQ(shutdown_result.error(), ReadbackError::kBackendFailure);
-  EXPECT_EQ(readback->GetState(), ReadbackState::kPending);
+  ASSERT_TRUE(shutdown_result.has_value());
+  EXPECT_EQ(readback->GetState(), ReadbackState::kCancelled);
 }
 
 NOLINT_TEST_F(

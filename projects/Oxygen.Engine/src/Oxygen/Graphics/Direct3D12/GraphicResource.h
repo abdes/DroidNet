@@ -18,6 +18,7 @@
 #include <Oxygen/Graphics/Direct3D12/Allocator/D3D12MemAlloc.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/dx12_utils.h>
 #include <Oxygen/Graphics/Direct3D12/Devices/DebugLayer.h>
+#include <Oxygen/Graphics/Direct3D12/NativeLifetime.h>
 
 // ReSharper disable once CppInconsistentNaming
 namespace D3D12MA {
@@ -32,8 +33,10 @@ class GraphicResource final : public Component {
 public:
   explicit GraphicResource(const std::string_view debug_name,
     ID3D12Resource* resource, D3D12MA::Allocation* allocation = nullptr,
-    AllocationReservation reservation = {})
-    : resource_(resource)
+    AllocationReservation reservation = {},
+    std::shared_ptr<NativeLifetime> lifetime = {})
+    : lifetime_(std::move(lifetime))
+    , resource_(resource)
     , allocation_(allocation)
     , reservation_(std::move(reservation))
   {
@@ -54,6 +57,7 @@ public:
   // NOLINTBEGIN(bugprone-use-after-move)
   GraphicResource(GraphicResource&& other) noexcept
     : Component(std::move(other))
+    , lifetime_(std::move(other.lifetime_))
     , resource_(std::exchange(other.resource_, nullptr))
     , allocation_(std::exchange(other.allocation_, nullptr))
     , reservation_(std::move(other.reservation_))
@@ -71,6 +75,7 @@ public:
   // NOLINTEND(bugprone-use-after-move)
 
   [[nodiscard]] auto GetResource() const { return resource_; }
+  [[nodiscard]] auto GetLifetime() const -> const auto& { return lifetime_; }
 
   // ReSharper disable once CppMemberFunctionMayBeConst
   auto SetName(const std::string_view name) noexcept -> void
@@ -84,6 +89,7 @@ private:
   {
     using std::swap;
     swap(static_cast<Component&>(*this), other);
+    swap(lifetime_, other.lifetime_);
     swap(resource_, other.resource_);
     swap(allocation_, other.allocation_);
     swap(reservation_, other.reservation_);
@@ -91,6 +97,7 @@ private:
 
   friend auto swap(GraphicResource& lhs, GraphicResource& rhs) noexcept -> void;
 
+  std::shared_ptr<NativeLifetime> lifetime_;
   ID3D12Resource* resource_;
   D3D12MA::Allocation* allocation_;
   AllocationReservation reservation_;

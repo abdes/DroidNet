@@ -16,6 +16,7 @@
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/ObjectMetadata.h>
 #include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Graphics/Common/BackendLifetime.h>
 #include <Oxygen/Graphics/Common/CommandRecording.h>
 #include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
@@ -128,6 +129,29 @@ public:
 
   OXGN_GFX_API auto Stop() -> void override;
   OXGN_GFX_API auto Flush() -> void;
+  //! Owner-thread collection, also supported outside the frame loop.
+  OXGN_GFX_API auto PollCompletedUses() -> void;
+  //! Drain and reconcile a submission fault; closes the backend on failed
+  //! proof.
+  [[nodiscard]] OXGN_GFX_API auto RecoverSubmissionFault() -> bool;
+
+  //! Stop admission and drain on the owner thread, even without an async
+  //! nursery.
+  OXGN_GFX_API auto Close() noexcept -> void;
+  OXGN_GFX_API auto InstallBackendOwner(std::weak_ptr<Graphics> owner,
+    graphics::BackendIncarnationId id, std::shared_ptr<void> module) -> void;
+  [[nodiscard]] OXGN_GFX_API auto RetainBackendOwner()
+    -> std::shared_ptr<Graphics>;
+  [[nodiscard]] auto GetBackendLifetime() const noexcept
+    -> const std::shared_ptr<graphics::BackendLifetime>&
+  {
+    return backend_lifetime_;
+  }
+  [[nodiscard]] auto GetNativeLifetimeToken() const noexcept
+    -> std::shared_ptr<void>
+  {
+    return native_lifetime_ ? native_lifetime_ : backend_lifetime_;
+  }
 
   //=== Engine frame loop interface ===---------------------------------------//
 
@@ -271,6 +295,8 @@ public:
     -> std::shared_ptr<graphics::Buffer> = 0;
 
 protected:
+  OXGN_GFX_API auto SetNativeLifetimeToken(std::shared_ptr<void> lifetime)
+    -> void;
   //! Create a command queue for the given role and allocation preference.
   /*!
    Backend hook to construct an API-specific command queue mapped from the
@@ -313,6 +339,10 @@ protected:
   }
 
 private:
+  // Declared first so native/module ownership outlasts other base members.
+  std::shared_ptr<graphics::BackendLifetime> backend_lifetime_;
+  std::shared_ptr<void> native_lifetime_;
+  std::weak_ptr<Graphics> canonical_owner_;
   //! The platform abstraction layer. Provided by the upper layers (e.g., the
   //! application layer).
   std::shared_ptr<Platform> platform_;

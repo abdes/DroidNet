@@ -26,6 +26,7 @@
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Internal/Commander.h>
+#include <Oxygen/Graphics/Common/Internal/QueueSubmission.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Surface.h>
@@ -254,6 +255,7 @@ public:
 class FakeCommandQueue final : public CommandQueue {
 public:
   std::vector<CommandList::SubmitQueueAction> submitted_actions;
+  std::vector<graphics::CompletionReceipt> waited_dependencies;
   explicit FakeCommandQueue(const std::string_view name, const QueueRole role,
     const observer_ptr<const bool> submission_failure = {})
     : CommandQueue(name)
@@ -296,29 +298,16 @@ public:
     out_hz = timestamp_frequency_hz_;
     return true;
   }
-  auto Submit(std::shared_ptr<CommandList> command_list) -> void override
+  std::uint64_t submitted_batches { 0 };
+  auto CompletePrivateThrough(uint64_t value) -> void
   {
-    if (submission_failure_ && *submission_failure_) {
-      throw std::runtime_error("Injected queue submission failure");
-    }
-    const auto actions = command_list->TakeSubmitQueueActions();
-    submitted_actions.insert(
-      submitted_actions.end(), actions.begin(), actions.end());
-    auto known_states = std::vector<KnownResourceState> {};
-    for (const auto& state : command_list->TakeRecordedResourceStates()) {
-      known_states.push_back({
-        .resource = state.resource,
-        .state = state.state,
-      });
-    }
-    AdoptKnownResourceStates(known_states);
+    private_completed_ = value;
   }
-  auto Submit(std::span<std::shared_ptr<CommandList>> command_lists)
-    -> void override
+  auto Flush() const -> void override
   {
-    for (const auto& command_list : command_lists) {
-      Submit(command_list);
-    }
+    completed_ = current_.load();
+    private_completed_ = private_issued_;
+    const_cast<FakeCommandQueue*>(this)->PollCompletedUses();
   }
   [[nodiscard]] auto GetQueueRole() const -> QueueRole override
   {
@@ -326,6 +315,68 @@ public:
   }
 
 private:
+  struct PreparedSubmission final : graphics::internal::NativeSubmission {
+    FakeCommandQueue* queue;
+    size_t count;
+    std::vector<CommandList::SubmitQueueAction> actions;
+    std::optional<uint64_t> marker;
+    std::vector<graphics::CompletionReceipt> dependencies;
+    auto Execute(graphics::internal::NativeSubmissionProgress& progress)
+      -> void override
+    {
+      ++queue->submitted_batches;
+      for (const auto receipt : dependencies) {
+        queue->waited_dependencies.push_back(receipt);
+      }
+      progress.issued_lists = count;
+      for (const auto& action : actions) {
+        queue->submitted_actions.push_back(action);
+        if (action.kind == CommandList::SubmitQueueActionKind::kSignal) {
+          queue->SignalImmediate(action.value);
+          progress.last_legacy_signal = action.value;
+        }
+      }
+      if (marker) {
+        queue->private_issued_ = *marker;
+        if (queue->auto_complete_) {
+          queue->private_completed_ = *marker;
+        }
+        progress.private_marker_emitted = true;
+      }
+    }
+  };
+  auto PrepareNativeSubmission(
+    const graphics::internal::NativeSubmissionRequest& request,
+    std::unique_ptr<graphics::internal::NativeSubmission>)
+    -> std::unique_ptr<graphics::internal::NativeSubmission> override
+  {
+    if (submission_failure_ && *submission_failure_) {
+      throw std::runtime_error("Injected queue submission failure");
+    }
+    auto native = std::make_unique<PreparedSubmission>();
+    native->queue = this;
+    native->count = request.lists.size();
+    native->marker = request.private_marker;
+    for (const auto& dependency : request.dependencies) {
+      native->dependencies.push_back(dependency.receipt);
+    }
+    waited_dependencies.reserve(
+      waited_dependencies.size() + native->dependencies.size());
+    for (const auto& list : request.lists) {
+      const auto actions = list->SubmitActions();
+      native->actions.insert(
+        native->actions.end(), actions.begin(), actions.end());
+    }
+    submitted_actions.reserve(
+      submitted_actions.size() + native->actions.size());
+    return native;
+  }
+  auto QueryPrivateCompletion() const noexcept -> uint64_t override
+  {
+    return private_completed_;
+  }
+  mutable uint64_t private_completed_ { 0 };
+  uint64_t private_issued_ { 0 };
   auto SignalImmediate(const uint64_t value) const -> void override
   {
     current_ = value;
@@ -732,7 +783,8 @@ public:
   {
     const auto key = Key(view_type, visibility);
     auto& state = domains_[key];
-    const auto index = state.next_index++;
+    ++state.next_index;
+    const auto index = next_raw_index_++;
     return CreateRawDescriptorHandle(
       bindless::HeapIndex {
         index,
@@ -802,7 +854,8 @@ public:
     }
     const auto key = Key(view_type, visibility);
     auto& state = domains_[key];
-    const auto base = state.next_index;
+    const auto base = next_raw_index_;
+    next_raw_index_ += count.get();
     state.next_index += count.get();
     return bindless::HeapIndex {
       base,
@@ -859,11 +912,14 @@ public:
           + bindless::generated::kTexturesCapacity
           + (static_cast<uint32_t>(handle.GetViewType()) * kRawHeapStride));
     return bindless::ShaderVisibleIndex {
-      raw_base + handle.GetBindlessHandle().get(),
+      raw_base + (handle.GetBindlessHandle().get() - kRawHandleBase),
     };
   }
 
 private:
+  // Match production heap strategies: raw handle ranges must never overlap.
+  static constexpr uint32_t kRawHandleBase = 0x80000000U;
+  uint32_t next_raw_index_ { kRawHandleBase };
   struct DomainState {
     uint32_t next_index {
       0,
@@ -888,8 +944,8 @@ namespace detail {
   // alive until Graphics has released its registry-owned descriptor handles.
   class FakeGraphicsAllocatorOwner {
   protected:
-    mutable std::unique_ptr<MiniDescriptorAllocator> descriptor_allocator_ {
-      std::make_unique<MiniDescriptorAllocator>(),
+    mutable std::shared_ptr<MiniDescriptorAllocator> descriptor_allocator_ {
+      std::make_shared<MiniDescriptorAllocator>(),
     };
   };
 } // namespace detail
@@ -900,14 +956,12 @@ public:
   FakeGraphics()
     : Graphics("FakeGraphics")
   {
+    SetNativeLifetimeToken(descriptor_allocator_);
   }
   OXYGEN_MAKE_NON_COPYABLE(FakeGraphics)
   OXYGEN_MAKE_NON_MOVABLE(FakeGraphics)
 
-  ~FakeGraphics() override
-  {
-    GetDeferredReclaimer().ProcessAllDeferredReleases();
-  }
+  ~FakeGraphics() override { Close(); }
   // Test-only failure injection hooks
   void SetFailMap(const bool v) { fail_map_ = v; }
   void SetFailConstantBufferViews(const bool value)
@@ -1237,6 +1291,13 @@ public:
   auto CreateCommandQueues(const graphics::QueuesStrategy& queue_strategy)
     -> void override
   {
+    if (GetBackendLifetime()->Id().get() == 0) {
+      if (auto owner = weak_from_this().lock()) {
+        static std::atomic<uint64_t> identity { 1 };
+        InstallBackendOwner(
+          owner, graphics::BackendIncarnationId { identity.fetch_add(1) }, {});
+      }
+    }
     queue_strategy_ = queue_strategy.Clone();
     queues_.clear();
 
@@ -1280,7 +1341,7 @@ public:
     }
     return {};
   }
-  auto FlushCommandQueues() -> void override { }
+  auto FlushCommandQueues() -> void override { Graphics::FlushCommandQueues(); }
   auto AcquireCommandRecorder(const QueueKey& queue_key,
     std::string_view command_list_name,
     graphics::SubmissionPolicy policy
@@ -1296,7 +1357,7 @@ public:
       &dispatch_log_, &clear_framebuffer_log_, &indirect_log_);
     recorder->SetRecordingFailureFlag(make_observer(&fail_recording_));
     return GetComponent<graphics::internal::Commander>().PrepareCommandRecorder(
-      std::move(recorder), policy);
+      std::move(recorder), policy, RetainBackendOwner(), GetBackendLifetime());
   }
 
   BufferCommandLog buffer_log_ {};

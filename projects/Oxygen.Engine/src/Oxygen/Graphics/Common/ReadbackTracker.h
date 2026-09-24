@@ -37,6 +37,15 @@ public:
 
   OXGN_GFX_API auto Register(FenceValue fence, SizeBytes bytes,
     std::string_view debug_name) -> ReadbackTicket;
+  //! A recorded copy cannot complete until its owning submission is accepted.
+  OXGN_GFX_API auto RegisterPendingSubmission(FenceValue fence, SizeBytes bytes,
+    std::string_view debug_name) -> ReadbackTicket;
+  OXGN_GFX_API auto MarkSubmitted(ReadbackTicketId id) noexcept -> void;
+  [[nodiscard]] OXGN_GFX_API auto IsSubmissionPending(ReadbackTicketId id) const
+    -> bool;
+  OXGN_GFX_API auto CancelPendingSubmissions() noexcept -> void;
+  [[nodiscard]] OXGN_GFX_API auto LastPendingSubmittedFence() const
+    -> FenceValue;
   OXGN_GFX_API auto RegisterFailedImmediate(
     std::string_view debug_name, ReadbackError error) -> ReadbackTicket;
 
@@ -71,10 +80,13 @@ private:
     SizeBytes bytes {};
     std::string name;
     bool completed { false };
+    bool submission_pending { false };
     ReadbackResult result {};
     frame::Slot creation_slot { frame::kInvalidSlot };
   };
 
+  auto RegisterImpl(FenceValue fence, SizeBytes bytes, std::string_view name,
+    bool pending) -> ReadbackTicket;
   auto MarkEntryCompleted(Entry& e) -> void;
 
   mutable std::mutex mu_;

@@ -33,6 +33,7 @@
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
+#include <Oxygen/Graphics/Common/RecordingUseBatch.h>
 #include <Oxygen/Graphics/Common/SubmissionCallback.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ClearFlags.h>
@@ -183,6 +184,18 @@ public:
    must give away ownership of the command list.
   */
   OXGN_GFX_API virtual auto End() noexcept -> std::shared_ptr<CommandList>;
+  OXGN_GFX_API auto RetainRegistration(ResourceRegistry& registry,
+    const RegistrationOwner& owner) -> std::expected<void, RegistrationError>;
+  auto RetainRegistration(ResourceRegistry& registry,
+    const RegistrationLease& lease) -> std::expected<void, RegistrationError>
+  {
+    return RetainRegistration(registry, lease.AllocationOwner());
+  }
+  OXGN_GFX_API auto RetainOpaqueUse(std::shared_ptr<const void> owner,
+    uint64_t kind, void* context = nullptr, OpaqueUseHooks hooks = {}) -> void;
+  OXGN_GFX_API auto RecordDependency(CompletionReceipt receipt) -> void;
+  [[nodiscard]] OXGN_GFX_API auto RetainsRegistration(
+    RegistrationIdentity identity) const noexcept -> bool;
 
   //=== GPU Debug Markers ===---------------------------------------------//
 

@@ -7,7 +7,6 @@
 #include <stdexcept>
 #include <string>
 
-#include <Oxygen/Testing/GTest.h>
 #include <gmock/gmock.h>
 
 #include <Oxygen/Base/Macros.h>
@@ -22,6 +21,7 @@
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Loader/Detail/PlatformServices.h>
 #include <Oxygen/Loader/GraphicsBackendLoader.h>
+#include <Oxygen/Testing/GTest.h>
 
 using oxygen::SerializedBackendConfig;
 using oxygen::SerializedPathFinderConfig;
@@ -217,8 +217,8 @@ protected:
 
   auto TearDown() -> void override
   {
+    oxygen::GraphicsBackendLoader::GetInstance().UnloadBackend();
     platform.reset();
-    MockBackend::GetInstance().~MockBackend();
   }
 
   // NOLINTBEGIN(*-non-private-member-variables-in-classes)
@@ -299,6 +299,84 @@ NOLINT_TEST_F(GraphicsBackendLoaderTest, GetBackendAfterLoading)
 
   // Both should point to the same underlying object
   EXPECT_EQ(loaded_backend.lock().get(), retrieved_backend.lock().get());
+}
+
+NOLINT_TEST_F(
+  GraphicsBackendLoaderTest, RetainedOwnerBlocksReloadUntilFinalDestruction)
+{
+  auto& loader = oxygen::GraphicsBackendLoader::GetInstance(platform);
+  const oxygen::GraphicsConfig config;
+  auto owner
+    = loader.LoadBackend(oxygen::graphics::BackendType::kDirect3D12, config, {})
+        .lock();
+  ASSERT_TRUE(owner);
+  const auto first_id = owner->GetBackendLifetime()->Id();
+  const std::weak_ptr<oxygen::Graphics> weak = owner;
+  EXPECT_CALL(*platform, CloseModule(testing::_)).Times(0);
+  loader.UnloadBackend();
+  EXPECT_EQ(owner->GetBackendLifetime()->State(),
+    oxygen::graphics::BackendLifecycle::kRetiring);
+  EXPECT_THROW((void)loader.LoadBackend(
+                 oxygen::graphics::BackendType::kDirect3D12, config, {}),
+    oxygen::loader::InvalidOperationError);
+  testing::Mock::VerifyAndClearExpectations(platform.get());
+  EXPECT_CALL(*platform, CloseModule(testing::_)).Times(1);
+  owner.reset();
+  EXPECT_TRUE(weak.expired());
+  testing::Mock::VerifyAndClearExpectations(platform.get());
+  auto next
+    = loader.LoadBackend(oxygen::graphics::BackendType::kDirect3D12, config, {})
+        .lock();
+  ASSERT_TRUE(next);
+  EXPECT_NE(next->GetBackendLifetime()->Id(), first_id);
+}
+
+NOLINT_TEST_F(GraphicsBackendLoaderTest,
+  NativeLifetimeAndDeadWeakObserversHaveDistinctEffects)
+{
+  auto& loader = oxygen::GraphicsBackendLoader::GetInstance(platform);
+  const oxygen::GraphicsConfig config;
+  auto owner
+    = loader.LoadBackend(oxygen::graphics::BackendType::kDirect3D12, config, {})
+        .lock();
+  auto native = owner->GetNativeLifetimeToken();
+  const std::weak_ptr<oxygen::Graphics> weak_owner = owner;
+  const std::weak_ptr<void> weak_native = native;
+  loader.UnloadBackend();
+  EXPECT_CALL(*platform, CloseModule(testing::_)).Times(0);
+  owner.reset();
+  EXPECT_TRUE(weak_owner.expired());
+  EXPECT_FALSE(weak_native.expired());
+  EXPECT_THROW((void)loader.LoadBackend(
+                 oxygen::graphics::BackendType::kDirect3D12, config, {}),
+    oxygen::loader::InvalidOperationError);
+  testing::Mock::VerifyAndClearExpectations(platform.get());
+  EXPECT_CALL(*platform, CloseModule(testing::_)).Times(1);
+  native.reset();
+  EXPECT_TRUE(weak_native.expired());
+  testing::Mock::VerifyAndClearExpectations(platform.get());
+  EXPECT_FALSE(
+    loader.LoadBackend(oxygen::graphics::BackendType::kDirect3D12, config, {})
+      .expired());
+}
+
+NOLINT_TEST_F(
+  GraphicsBackendLoaderTest, FacadeReplacementCannotAdoptRetiringSingleton)
+{
+  auto& first_loader = oxygen::GraphicsBackendLoader::GetInstance(platform);
+  const oxygen::GraphicsConfig config;
+  auto owner
+    = first_loader
+        .LoadBackend(oxygen::graphics::BackendType::kDirect3D12, config, {})
+        .lock();
+  auto& next_loader = oxygen::GraphicsBackendLoader::GetInstance(platform);
+  EXPECT_THROW((void)next_loader.LoadBackend(
+                 oxygen::graphics::BackendType::kDirect3D12, config, {}),
+    oxygen::loader::InvalidOperationError);
+  owner.reset();
+  EXPECT_FALSE(next_loader
+      .LoadBackend(oxygen::graphics::BackendType::kDirect3D12, config, {})
+      .expired());
 }
 
 // Test that LoadBackend returns the same instance when called twice
