@@ -230,7 +230,7 @@ private:
     bool is_critical { false };
     bool evicted { false };
     std::uint32_t handle_generation { 0U };
-    std::uint64_t generation { 0U };
+    std::uint64_t content_revision { 0U };
 
     std::shared_ptr<graphics::Buffer> vertex_buffer;
     std::shared_ptr<graphics::Buffer> index_buffer;
@@ -528,6 +528,8 @@ auto GeometryUploader::Impl::GetOrAllocate(
           return h;
         }
 
+        frame_resources_ensured_ = false;
+        ++entry->content_revision;
         entry->mesh = geometry.mesh;
         entry->is_dirty = true;
 
@@ -590,6 +592,8 @@ auto GeometryUploader::Impl::GetOrAllocate(
   auto& entry = geometry_entries_[u_handle];
   entry.asset_key = geometry.asset_key;
   entry.lod_index = geometry.lod_index;
+  frame_resources_ensured_ = false;
+  ++entry.content_revision;
   entry.mesh = geometry.mesh;
   entry.is_dirty = true;
   entry.handle_generation = handle.GenerationValue().get();
@@ -666,6 +670,8 @@ auto GeometryUploader::Impl::Update(vortex::sceneprep::GeometryHandle handle,
 
   entry->asset_key = geometry.asset_key;
   entry->lod_index = geometry.lod_index;
+  frame_resources_ensured_ = false;
+  ++entry->content_revision;
   entry->mesh = geometry.mesh;
   entry->handle_generation = handle.GenerationValue().get();
   entry->is_dirty = true;
@@ -798,7 +804,7 @@ auto GeometryUploader::Impl::ProcessEvictions() -> void
 
       entry.evicted = true;
       entry.handle_generation = 0U;
-      ++entry.generation;
+      ++entry.content_revision;
 
       entry.pending_vertex_ticket.reset();
       entry.pending_index_ticket.reset();
@@ -897,7 +903,7 @@ auto GeometryUploader::Impl::UploadBuffers() -> void
         auto ticket_exp = uploader_->Submit(req.value(), *staging_provider_);
         if (ticket_exp.has_value()) {
           entry.pending_vertex_ticket = ticket_exp.value();
-          entry.pending_vertex_generation = entry.generation;
+          entry.pending_vertex_generation = entry.content_revision;
         } else {
           const std::error_code ec = ticket_exp.error();
           LOG_F(ERROR,
@@ -917,7 +923,7 @@ auto GeometryUploader::Impl::UploadBuffers() -> void
         auto ticket_exp = uploader_->Submit(req.value(), *staging_provider_);
         if (ticket_exp.has_value()) {
           entry.pending_index_ticket = ticket_exp.value();
-          entry.pending_index_generation = entry.generation;
+          entry.pending_index_generation = entry.content_revision;
         } else {
           const std::error_code ec = ticket_exp.error();
           LOG_F(ERROR,
@@ -1077,6 +1083,10 @@ auto GeometryUploader::Impl::GetShaderVisibleIndices(
   return {
     .vertex_srv_index = entry->vertex_srv_index,
     .index_srv_index = entry->index_srv_index,
+    .content_revision = entry->vertex_srv_index.IsValid()
+        && (!entry->mesh->IsIndexed() || entry->index_srv_index.IsValid())
+      ? entry->content_revision
+      : 0U,
   };
 }
 
@@ -1097,7 +1107,7 @@ auto GeometryUploader::Impl::RetireCompletedUploads() -> void
       return;
     }
 
-    if (entry.evicted || pending_generation != entry.generation) {
+    if (entry.evicted || pending_generation != entry.content_revision) {
       ticket_opt.reset();
       pending = kInvalidShaderVisibleIndex;
       pending_generation = 0U;

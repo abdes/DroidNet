@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <span>
 
@@ -114,6 +115,9 @@ public:
   struct MeshShaderVisibleIndices {
     ShaderVisibleIndex vertex_srv_index { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex index_srv_index { kInvalidShaderVisibleIndex };
+    //! Resident content version, independent of handle/descriptor lifetime.
+    //! Zero means complete resident content is not available.
+    std::uint64_t content_revision { 0U };
   };
 
   /*!

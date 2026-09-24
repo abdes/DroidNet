@@ -4,9 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <vector>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/EvictionEvents.h>
 #include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/ScenePrep/GeometryRef.h>
 #include <Oxygen/Vortex/Test/Fixtures/GeometryUploaderTest.h>
@@ -64,6 +67,60 @@ NOLINT_TEST_F(GeometryUploaderUpdateTest,
   // Contract: interning map updates so new mesh instance yields same handle.
   const auto handle_v2 = uploader.GetOrAllocate(geometry_v2);
   EXPECT_EQ(handle_v2, handle);
+}
+
+//! Same-size content replacement keeps handles/SRVs but changes resident
+//! content.
+NOLINT_TEST_F(
+  GeometryUploaderUpdateTest, ContentRevisionChangesOnUpdateAndHotReload)
+{
+  auto& uploader = GeoUploader();
+  BeginFrame(Slot { 0 });
+  auto geometry = oxygen::vortex::sceneprep::GeometryRef {
+    .asset_key = MakeGeometryAssetKey("content_revision"),
+    .mesh = MakeValidTriangleMesh("Original", true),
+  };
+  const auto handle = uploader.GetOrAllocate(geometry);
+  EXPECT_EQ(uploader.GetShaderVisibleIndices(handle).content_revision, 0U);
+  BeginFrame(Slot { 1 });
+  const auto original = uploader.GetShaderVisibleIndices(handle);
+  ASSERT_NE(original.content_revision, 0U);
+  ASSERT_TRUE(original.vertex_srv_index.IsValid());
+  ASSERT_TRUE(original.index_srv_index.IsValid());
+  for (const bool explicit_update : { true, false }) {
+    SCOPED_TRACE(explicit_update);
+    const auto before = uploader.GetShaderVisibleIndices(handle);
+    // Immutable meshes have equal topology/counts but represent new contents.
+    const auto vertices = geometry.mesh->Vertices();
+    auto moved
+      = std::vector<oxygen::data::Vertex>(vertices.begin(), vertices.end());
+    moved[0].position.x += 0.25F;
+    geometry.mesh
+      = oxygen::data::MeshBuilder(0, "Reloaded")
+          .WithVertices(moved)
+          .WithIndices(std::vector<std::uint32_t> { 0U, 1U, 2U })
+          .BeginSubMesh("default", oxygen::data::MaterialAsset::CreateDefault())
+          .WithMeshView({ .first_index = 0U,
+            .index_count = 3U,
+            .first_vertex = 0U,
+            .vertex_count = 3U })
+          .EndSubMesh()
+          .Build();
+    if (explicit_update) {
+      uploader.Update(handle, geometry);
+    } else {
+      EXPECT_EQ(uploader.GetOrAllocate(geometry), handle);
+    }
+    EXPECT_EQ(uploader.GetShaderVisibleIndices(handle).content_revision, 0U);
+    BeginFrame(Slot { explicit_update ? 0U : 1U });
+    const auto after = uploader.GetShaderVisibleIndices(handle);
+    EXPECT_EQ(uploader.GetOrAllocate(geometry), handle);
+    EXPECT_EQ(after.vertex_srv_index, original.vertex_srv_index);
+    EXPECT_EQ(after.index_srv_index, original.index_srv_index);
+    EXPECT_GT(after.content_revision, before.content_revision);
+    EXPECT_EQ(uploader.GetShaderVisibleIndices(handle).content_revision,
+      after.content_revision);
+  }
 }
 
 //! Update must not be used to rebind a handle to unrelated geometry.
