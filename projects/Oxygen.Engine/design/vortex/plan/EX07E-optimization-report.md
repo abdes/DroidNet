@@ -1,13 +1,16 @@
 # EX07E — Implementation and comparison record
 
-**Execution paused before E06 at the user's request (2026-09-24). Resume only on
-an explicit user signal.** Other optimization code and automated qualification are
-at the pre-E06 checkpoint. E06's independent review/implementation and dependent
-final integrated measurements, memory accounting, visual approval and commits
-remain open. The records below distinguish accepted earlier work from current
-candidates awaiting baseline acceptance.
+**E06 implementation and S9 automated qualification are complete.**
+S1–S8 implementation and native integration tests are complete. S9 captures and
+comparisons are in the [shadow-sharing results report](EX07E-shadow-sharing-results.md);
+manual visual and numeric acceptance were approved on 2026-09-25. The final
+evidence is committed in `b8f1376e1`. The current checkpoint
+is in the [E ledger](../IMPLEMENTATION_STATUS.md#ex07e--work-items-and-resume-checkpoint).
+The records below remain the accepted controls or explicitly provisional candidates;
+new baseline acceptance still requires manual visual validation.
 
-**EX07E remains in progress. The matrix-access improvement is accepted.**
+**EX07E is closed. The following sections preserve the earlier checkpoint history;
+the [final report](EX07E-shadow-sharing-results.md) owns current acceptance.**
 The user manually approved Sponza and Instancing on 2026-09-24 before committing
 these application comparison records. Later changed baselines still require
 manual visual validation. The [E01–E08 ledger](../IMPLEMENTATION_STATUS.md#ex07e--work-items-and-resume-checkpoint)
@@ -611,11 +614,13 @@ bytes with zero local block slack; non-local allocation is 33,816,576 bytes in
 whole-allocator figures, not lighting-only savings. Lighting/shared staging is
 604,519/19,333 bytes per frame, retaining the existing upload contract.
 
-The current resource inventory exposes native placement and registration state,
-not an authoritative split of GPU-queued, logically retired and cache-owned
-bytes. **That split remains unproven**, rather than being reported as zero or
-inferred from process memory. Its completion is tied to the reviewed E06 use/
-retirement ownership and final E08 lifecycle qualification. No E06 infrastructure
+At the pre-E06 checkpoint, the inventory exposed native placement and registration
+state without an authoritative ownership split. E06 now measures local-shadow
+unique/spare/closing bytes, aliases/versions, retained CPU payloads and actual
+submission costs. The [final report](EX07E-shadow-sharing-results.md) records the
+40 MiB shared allocation, 6 MiB diagnostic-retention charge and 128 -> 64 MiB
+forced copy-on-write/release case. These are explicit local-shadow ownership
+measurements, not an invented whole-engine queued-memory split. At the pre-E06 checkpoint, no E06 infrastructure
 change has been pulled forward under E05. Final integrated scene captures occur
 after E06, as agreed; they are not a prerequisite that moves E06 earlier.
 

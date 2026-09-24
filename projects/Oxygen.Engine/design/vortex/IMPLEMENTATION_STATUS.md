@@ -84,7 +84,7 @@ and [CPU decision](lld/post-process-service.md#approved-ex051-13ab-joint-cpu-cor
 | 5.1 — Exposure performance         | validated   | Closed 2026-09-21: format/policy, independent SceneColor ownership, CPU corrections, correctness and final GPU acceptance complete. User accepts measured CPU cost; further CPU optimization is deferred to a later milestone. | [Current work](#31-current-work), [final CPU decision](lld/post-process-service.md#approved-ex051-13ab-joint-cpu-correction)                                                                                                                                                                                                                                    |
 | 5.2 — Focused exposure quality     | validated   | Approved residual owner fixes and Release include repair committed; 65 Debug and 65 Release cases pass, scoped changed code is tidy-clean, and one matched I02 preservation run passes.                                        | [Bounded scope and result](#322-slice-52-code-quality-and-test-structure)                                                                                                                                                                                                                                                                                       |
 | 6 — Authoring and persistence      | validated   | Strict source/cook/load/script/editor migration, C++20 editor boundary, PAK repacking, rendered UI acceptance and configuration isolation closed.                                                                              | [Detailed items](#33-slice-6-work-items), [acceptance evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice6/slice6-progress.json)                                                                                                                                                                                                          |
-| 7 — Physical and scalable lighting | in_progress | EX07A/B validated; EX07D closed. EX07E active with explicit E01–E08 work items. Remaining C validation and E/F gates keep EX07 open.                                                                                           | [A checkpoint](plan/EX07A-contract-review.md), [EX07 items](#34-slice-7-work-items), [workloads and gates](plan/EX07-lighting-correctness-and-scalability.md)                                                                                                                                                                                                   |
+| 7 — Physical and scalable lighting | in_progress | EX07A/B validated; EX07D/E closed. Remaining C caller-target validation and F acceptance keep EX07 open.                                                                                                                       | [A checkpoint](plan/EX07A-contract-review.md), [EX07 items](#34-slice-7-work-items), [workloads and gates](plan/EX07-lighting-correctness-and-scalability.md)                                                                                                                                                                                                   |
 | 8 — Measured Neutral Reference     | planned     | Qualified instruments plus the first usable interactive/batch experiment.                                                                                                                                                      | [EX08 and automation follow-ups](#35-slice-8-work-items)                                                                                                                                                                                                                                                                                                        |
 | 8.1 — Console controls             | planned     | Existing console drives validated post-process settings and transitions.                                                                                                                                                       | [EX08.1](#351-slice-81-post-processing-console-controls)                                                                                                                                                                                                                                                                                                        |
 | 8.2 — ImGui UI automation          | planned     | Actual widget workflows and EX06 regressions run in an opt-in native test configuration.                                                                                                                                       | [EX08.2](#352-slice-82-imgui-interaction-automation)                                                                                                                                                                                                                                                                                                            |
@@ -99,7 +99,7 @@ complete. The TexturedCube panel-refresh regression is covered by automated
 tests and the user's successful rebuilt-app test. See the
 [EX06 result and evidence](#33-slice-6-work-items).
 
-**Current: EX07A/B and EX07D are closed. EX07E is paused before E06 at the user's request.** The [E01–E08 ledger and resume checkpoint](#ex07e--work-items-and-resume-checkpoint) own the next work. Remaining EX07C caller-target validation and F acceptance stay open.
+**Current: EX07A/B and EX07D are closed. EX07E is closed (2026-09-25): implementation, qualification, user visual approval and requested numeric review are complete.** The [E01–E08 ledger and resume checkpoint](#ex07e--work-items-and-resume-checkpoint) record the completed E work. Remaining EX07C caller-target validation and F acceptance stay open.
 
 [Section 3.4](#34-slice-7-work-items) is the single authoritative EX07 progress
 tracker. It shows the execution stages, numbered deliverables, completed portions
@@ -687,7 +687,7 @@ No EX06 delivery item remains open.
 
 ### 3.4 Slice 7 work items
 
-**EX07 overall: in progress. A/B and D are closed. E is paused before E06 at the user's request.** C retains its separately recorded caller-target validation gap; F remains open.
+**EX07 overall: in progress. A/B and D are closed. E06 implementation is active after independent review.** C retains its separately recorded caller-target validation gap; F remains open.
 
 **Production model 2 is implemented and test-validated; the user accepted the
 measured MultiView quality/performance result.** It uses analytic finite sources,
@@ -715,41 +715,62 @@ production repair, performance work and final qualification have later owners.
 | **B — References and instruments**    | Independent physical/material/image references, native probes, frozen workloads and bounded instruments.          | **Complete** — [audit](plan/EX07B-completion-audit.md)                                                                                                                                                                                                                                                                                | Reference/oracle portions of 01–06; workload portion of 07; instrument portion of 13.                  |
 | **C — Correctness repair**            | Validated light ingress/transport, explicit atmosphere roles, receiver/contact shadows and isolated view failure. | **In progress — remaining caller fixes await target build validation**                                                                                                                                                                                                                                                                | Remaining correctness in 01–04, 06, 08, 10–12.                                                         |
 | **D — Many-light scene and baseline** | Reproducible benchmark and application-scene records for E/F.                                                     | **Closed (2026-09-24)** — 54 timed/image-qualified benchmark rows, four current application runs, versioned traces/settings/images and historical controls. CPU preflight coverage is 24/54 benchmark rows plus all application runs; remaining limits and noisy B05-D are explicit in the [register](plan/EX07D-baseline-report.md). | 07; many-light baseline/shadow-cost portions of 11/13.                                                 |
-| **E — Scalable optimization**         | Fix measured deferred submission/resource costs while preserving lighting and shadows.                            | **Paused before E06 — remaining implementation and final acceptance gates open** — earlier measured repairs remain credited in the [baseline register](plan/EX07D-baseline-report.md); current priorities and comparison rules are in the [E handoff](plan/EX07-lighting-correctness-and-scalability.md#ex07e-handoff--active).       | Optimization portions of 08–11; culling/performance diagnostics in 13.                                 |
+| **E — Scalable optimization**         | Fix measured deferred submission/resource costs while preserving lighting and shadows.                            | **Closed (2026-09-25)** — S1–S9 complete, 22 final benchmark rows and four final scene captures, lifetime/memory qualification and user visual approval; [results and commit sequence](plan/EX07E-shadow-sharing-results.md).                                                                                                         | Optimization portions of 08–11; culling/performance diagnostics in 13.                                 |
 | **F — Final delivery**                | Final-code numerical, native/editor, visual and performance gates; operating documentation and supported limits.  | **Not started**                                                                                                                                                                                                                                                                                                                       | 14 and EX07-GATE, rechecking the final implementation of all IDs.                                      |
 
 #### EX07E — Work items and resume checkpoint
 
-**Resume only on the user's explicit signal.** The other optimization code and
-its automated qualification are at the completed pre-E06 checkpoint: both Ninja
-Release builds, 23/23 native image tests and 34/34 service tests per tree, and
-12 interaction rows / 20 matching images. The qualified source recipe and frozen
-binary identities still match the worktree. E06 is the remaining implementation
-item and its independent review is pending. Its dependent memory/lifecycle
-accounting, final integrated Sponza/Instancing comparisons, manual visual baseline
-approval, closeout and commits remain open after E06. This pause does not mark
-those gates complete. The user authorized committing the validated implementation
-and automated test evidence at this checkpoint. New baseline artifacts remain
-excluded pending manual visual validation; the three reviewer documents remain
-excluded by explicit instruction. E06 stays paused.
+**E06 closed — S1–S9 complete. User visual acceptance and numeric review approved
+(2026-09-25); implementation and evidence committed in dependency order.** The final non-Tracy Release qualification passes **494/494 tests**.
+Both existing Ninja Release trees pass **50/50 shadow-service tests and 26/26
+native image tests**. Debug additionally qualifies the failure/retirement paths,
+retained native captures and tight-budget fallback. The final diagnostics delta passes 81 tests in each Release tree and 82 in Debug;
+two retained-memory cases additionally pass in all three configurations.
+Accepted evidence is committed in `b8f1376e1`; the [report](plan/EX07E-shadow-sharing-results.md#commit-sequence) records the implementation sequence.
 
-**Paused at the pre-E06 checkpoint by the user on 2026-09-24.** This is the authoritative E
-work ledger. The eight items below preserve the scope presented to the user;
+| Step                                                     | Completed so far                                                                                                                                                                                                                                                                                                | What remains                                                                                  |
+| -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| **S1/S2 — Safe slot reuse and deferred cleanup**         | Implemented generation-safe slot retirement, allocation-free cleanup, and migrated existing callers. **201/201 tests pass in both Debug and Release.**                                                                                                                                                          | None for S1/S2. Subsequent integrated lifecycle tests pass.                                   |
+| **S3 — Backend and native-resource lifetime**            | Implemented ownership that keeps the backend, device and descriptors alive through outstanding references; blocks premature reload. **27/27 ordinary lifetime tests pass in each configuration.**                                                                                                               | None for S3. S5 also closes submission-failure/device-loss integration.                       |
+| **S4 — Shared resource ownership and immutable views**   | Implemented managed registrations, independent owner/use lifetimes, mutation guards and transactional descriptor creation. Registry tests: **73/73 Release, 76/76 Debug**; descriptor, queue and native lifetime suites also pass.                                                                              | None for S4. Worker-thread release and final integrated registry/lifetime regressions pass.   |
+| **S5 — GPU submission and actual-completion retirement** | **Complete: 93/93 Debug and 90/90 Release owning tests pass.** Both backends use prepared submission, private completion receipts, cross-queue dependencies, quarantine/recovery and fault-aware cleanup. Includes 26 native cases per configuration and Debug allocation denial after issue/during retirement. | None for S5. Shared writer/reader integration and delayed capture tests pass.                 |
+| **S6 — Canonical shadow preparation**                    | **Complete.** SceneRenderer supplies the full preparation family while rendering only the current view. CPU identity/invalidation and native same-frame sharing tests pass.                                                                                                                                     | None for S6. Performance reporting belongs to S9.                                             |
+| **S7/S8 — Cross-view maps and every consumer**           | **Complete: 50/50 service and 26/26 native image tests in each Release tree.** Includes deferred/forward/translucent readers, typed retained leases, cross-queue ordering, expired frame rejection, five-frame delayed capture, six-layer budget fallback and actual retained-byte accounting.                  | None for S7/S8. S9 measurements and user visual approval are complete.                        |
+| **S9 / E08 — Measure and qualify**                       | **Automated work complete:** 13 native + 9 Tracy final benchmark rows and four final application captures; ownership, CPU/GPU, memory, image and noise results are in the [report](plan/EX07E-shadow-sharing-results.md). Initial captures and the bounded endpoint repeat are retained.                        | None for E. Visual acceptance and numeric review approved; evidence committed in `b8f1376e1`. |
+
+**Next:** await user direction for F; no further E implementation or qualification remains. The three reviewer documents are intentionally excluded from commits. Detailed suite
+results are in the [E06 implementation plan](plan/EX07E-cross-view-shadow-sharing.md).
+
+The two approved design amendments are recorded: allocation-free descriptor
+cleanup, and trustworthy recovery of **all** affected resource states, including
+manual registrations, after uncertain submission. The accepted Debug test limit
+excludes MSVC iterator-proxy-sized allocations only during registration-construction
+fault injection; view rollback and retirement tests still reject every allocation.
+
+The pre-E06 implementation is committed as `e824c97a7`: both Ninja Release
+builds, 23/23 native image tests and 34/34 service tests per tree, and 12 interaction
+rows / 20 matching images. E06 remains the last implementation item. Its dependent
+memory/lifecycle accounting and final integrated Sponza/Instancing comparisons
+remain open. New baseline commits still require manual visual validation. The
+three reviewer documents and unapproved baseline artifacts remain excluded from
+commits unless the user changes that instruction.
+
+This is the authoritative E work ledger. The eight items below preserve the scope presented to the user;
 they refine the existing EX07 deliverable IDs rather than replace them.
 `Open` means the investigation or implementation and its acceptance remain
 unfinished. A suspected cause is not a confirmed defect, and a prototype is not
 an accepted improvement. Earlier repairs and D baselines remain credited.
 
-| E item                                                   | State                                                          | Required investigation / delivery                                                                                                                                                                                                                                                                                                | Closure evidence                                                                                                                                                                                                                                | Existing EX07 IDs |
-| -------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
-| **E01 — Deferred local-light GPU cost**                  | Implemented candidates; final qualification open               | Isolate shadow filtering, GBuffer/bindless fetches, BRDF work, register pressure/spills, divergence and overdraw. Evaluate feature specialization and uniform-data reuse before larger architecture changes. Current traced point totals: Sponza 45.288 ms / 23 draws; Instancing 26.433 ms / 39 draws.                          | Attributed bottleneck and compiled-shader evidence; measured candidate improvement beyond noise on matched synthetic and application controls; preserved image/physical response.                                                               | 02–04, 06, 09, 13 |
-| **E02 — Translucent lighting GPU cost**                  | Shared matrix fix credited; final qualification open           | Explain Sponza's 7.726 ms traced translucency cost: light overlap, forward evaluation, shadow sampling and material work. Repair demonstrated redundant work in the shared consumers.                                                                                                                                            | Matched stage and whole-frame improvement; transparent-material, forward/deferred and shadow reference checks.                                                                                                                                  | 02–04, 06, 09, 13 |
-| **E03 — Grid/list scaling**                              | Accepted optimization; final integration in F                  | Explain B09 grid means of 10.959 ms deferred / 10.800 ms forward without Tracy. Inspect candidate tests, assignment/list construction, memory traffic and synchronization; improve measured scaling.                                                                                                                             | Count/boundary, sparse/dense, irrelevant-light, moving, 4K and multi-view comparisons; complete lists/fallback, capacity diagnostics and conservative contributor coverage preserved.                                                           | 08–10, 13         |
-| **E04 — Shadow depth, bias and filtering**               | Implemented and tested; visual baseline gate open              | Audit producer/consumer depth encoding, units, nonzero authored bias, receiver offsets and filter quality against the corresponding UE5.7 source path. Investigate comparison sampling if filtering is a demonstrated cost. The receiver-footprint repair is already delivered; complete quantitative parity is not established. | Coherent documented depth/bias/filter contract; contact, grazing/self-shadow, cube-seam, point/spot, short/long-range and quality-tier checks in both families; measured quality/time tradeoffs.                                                | 02–04, 06, 09, 11 |
-| **E05 — CPU, upload, memory and resource scaling**       | CPU changes tested; memory accounting/final qualification open | Find remaining redundant gather/transform, upload, binding and allocation work under scaled/mutating workloads. Measure live, queued, retired and cached bytes, slack and peaks. Retain existing CBV/state/lifetime repairs and zero steady benchmark allocation churn.                                                          | Attributed active CPU costs separated from GPU waits; matched upload/allocation and whole-frame results; fence-safe reuse/invalidation and bounded growth. Application device-wide samples alone cannot prove renderer allocation savings.      | 09–10, 13         |
-| **E06 — Shadow updates and compatible cross-view reuse** | Last implementation item; independent review pending           | Share identical local-map content across compatible views using existing ownership/cache mechanisms. Identify unnecessary updates during camera/light/caster changes; reject sharing for incompatible content or generations.                                                                                                    | Matching local-map content rendered/allocated once where compatible; incompatible views remain isolated; mutation and queued-reader checks; memory/time benefit. Directional cascades remain view-dependent.                                    | 10–11, 13         |
-| **E07 — Correctness defects discovered during E**        | Non-sharing repairs tested; E06 lifetime findings pending      | Fix discovered missing/duplicate contributions, stale light-shadow mapping, invalid caches, overflow/recovery, view contamination and lifetime failures. Preserve off-screen contributing lights and casters, authored ranges and requested shadows.                                                                             | Every discovered defect gets a linked reproduction, owning E item, repair and regression evidence. No unresolved discovered defect is silently waived or moved out of scope. Final integrated acceptance remains F.                             | 06, 08, 10–12     |
-| **E08 — Candidate qualification and operating limits**   | In progress; integrated qualification follows E06              | Select matched baseline IDs and freeze improvement/regression/noise criteria before timing. Address missing CPU preflight or noisy B05-D only when needed for a comparison. Keep Tracy attribution separate from native throughput and obtain actual allocation snapshots for memory claims.                                     | Durable Markdown results with identities, percentiles, stage/whole-frame costs, memory, image/physical checks, accepted/rejected decisions and supported limits. Unaffected D evidence is reused; F receives explicit residual acceptance work. | 07, 13–14/GATE    |
+| E item                                                   | State                                                                   | Required investigation / delivery                                                                                                                                                                                                                                                                                                | Closure evidence                                                                                                                                                                                                                                | Existing EX07 IDs |
+| -------------------------------------------------------- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
+| **E01 — Deferred local-light GPU cost**                  | Complete; visually accepted 2026-09-25                                  | Isolate shadow filtering, GBuffer/bindless fetches, BRDF work, register pressure/spills, divergence and overdraw. Evaluate feature specialization and uniform-data reuse before larger architecture changes. Current traced point totals: Sponza 45.288 ms / 23 draws; Instancing 26.433 ms / 39 draws.                          | Attributed bottleneck and compiled-shader evidence; measured candidate improvement beyond noise on matched synthetic and application controls; preserved image/physical response.                                                               | 02–04, 06, 09, 13 |
+| **E02 — Translucent lighting GPU cost**                  | Complete; visually accepted 2026-09-25                                  | Explain Sponza's 7.726 ms traced translucency cost: light overlap, forward evaluation, shadow sampling and material work. Repair demonstrated redundant work in the shared consumers.                                                                                                                                            | Matched stage and whole-frame improvement; transparent-material, forward/deferred and shadow reference checks.                                                                                                                                  | 02–04, 06, 09, 13 |
+| **E03 — Grid/list scaling**                              | Accepted optimization; final integration in F                           | Explain B09 grid means of 10.959 ms deferred / 10.800 ms forward without Tracy. Inspect candidate tests, assignment/list construction, memory traffic and synchronization; improve measured scaling.                                                                                                                             | Count/boundary, sparse/dense, irrelevant-light, moving, 4K and multi-view comparisons; complete lists/fallback, capacity diagnostics and conservative contributor coverage preserved.                                                           | 08–10, 13         |
+| **E04 — Shadow depth, bias and filtering**               | Complete; visually accepted 2026-09-25                                  | Audit producer/consumer depth encoding, units, nonzero authored bias, receiver offsets and filter quality against the corresponding UE5.7 source path. Investigate comparison sampling if filtering is a demonstrated cost. The receiver-footprint repair is already delivered; complete quantitative parity is not established. | Coherent documented depth/bias/filter contract; contact, grazing/self-shadow, cube-seam, point/spot, short/long-range and quality-tier checks in both families; measured quality/time tradeoffs.                                                | 02–04, 06, 09, 11 |
+| **E05 — CPU, upload, memory and resource scaling**       | Complete; visually accepted 2026-09-25                                  | Find remaining redundant gather/transform, upload, binding and allocation work under scaled/mutating workloads. Measure live, queued, retired and cached bytes, slack and peaks. Retain existing CBV/state/lifetime repairs and zero steady benchmark allocation churn.                                                          | Attributed active CPU costs separated from GPU waits; matched upload/allocation and whole-frame results; fence-safe reuse/invalidation and bounded growth. Application device-wide samples alone cannot prove renderer allocation savings.      | 09–10, 13         |
+| **E06 — Shadow updates and compatible cross-view reuse** | Complete; visually accepted 2026-09-25                                  | Share identical local-map content across compatible views using existing ownership/cache mechanisms. Identify unnecessary updates during camera/light/caster changes; reject sharing for incompatible content or generations.                                                                                                    | Matching local-map content rendered/allocated once where compatible; incompatible views remain isolated; mutation and queued-reader checks; memory/time benefit. Directional cascades remain view-dependent.                                    | 10–11, 13         |
+| **E07 — Correctness defects discovered during E**        | Discovered defects repaired and regression-tested; F acceptance remains | Fix discovered missing/duplicate contributions, stale light-shadow mapping, invalid caches, overflow/recovery, view contamination and lifetime failures. Preserve off-screen contributing lights and casters, authored ranges and requested shadows.                                                                             | Every discovered defect gets a linked reproduction, owning E item, repair and regression evidence. No unresolved discovered defect is silently waived or moved out of scope. Final integrated acceptance remains F.                             | 06, 08, 10–12     |
+| **E08 — Candidate qualification and operating limits**   | Complete; visually accepted 2026-09-25                                  | Select matched baseline IDs and freeze improvement/regression/noise criteria before timing. Address missing CPU preflight or noisy B05-D only when needed for a comparison. Keep Tracy attribution separate from native throughput and obtain actual allocation snapshots for memory claims.                                     | Durable Markdown results with identities, percentiles, stage/whole-frame costs, memory, image/physical checks, accepted/rejected decisions and supported limits. Unaffected D evidence is reused; F receives explicit residual acceptance work. | 07, 13–14/GATE    |
 
 **User acceptance instructions (2026-09-24):** complete E implementation and
 compare against the initial D baseline. Retain improvements unless the user
@@ -758,7 +779,10 @@ direction rather than iterating indefinitely. Every newly established baseline
 requires the user's manual visual validation before it is committed; candidate
 measurements are provisional until that validation is recorded.
 
-**Resume checkpoint:** the E01 matrix-access improvement is committed in
+The historical checkpoints below retain their original capture-time decisions;
+the closed E06/S9 checkpoint above supersedes their pending measurement gates.
+
+**Historical matrix-access checkpoint:** the E01 matrix-access improvement is committed in
 `8b65c42f3`, accepted with
 manual Sponza and Instancing visual approval (2026-09-24), one rebuilt GPU ABI
 probe test, 17 native image tests and 10 selected synthetic comparison rows.
@@ -832,27 +856,20 @@ The report retains the numerical results. Local candidate evidence at
 `plan/baselines/ex07e-20260924/point-hardware-pcf/register.json` includes CPU-load
 proof and remains uncommitted pending baseline approval. E06 remains last.
 
-**E06 review and execution gate:** the user approved the proposed direction and
-requested independent review before implementation, including changes to resource
-management or Nexus. The [design proposal](plan/EX07E-cross-view-shadow-sharing.md) recommends
-Graphics registration/use leases and actual completion receipts, focused Nexus
-state-machine/lifetime hardening, and Vortex per-light content/storage sharing.
-Current view-exclusive allocation is not claimed to be a live sharing bug.
-The source audit identifies concrete lifetime and submission hazards that must
-be reproduced and addressed under the approved design. No E06 code, build or
-benchmark has been performed for this proposal. E06 is the **last EX07E
-implementation item**: finish the other optimizations and non-sharing correctness
-repairs first, resolve the independent review, then implement E06. Do not begin its
-infrastructure changes under another item. Final integrated E08 qualification
-follows E06; validation continues throughout. Material design changes require the
-user's decision, and new baselines still require manual visual approval.
+**E06 review and execution gate:** independent review is complete and implementation
+is authorized. The [current checkpoint](#ex07e--work-items-and-resume-checkpoint)
+records Nexus/Graphics qualification and the combined sharing/reader migration.
+The implementation uses allocation/use ownership, actual completion receipts and
+per-light content identities. E06 remains the last E implementation item; final
+E08 comparison and manual baseline acceptance follow it. The three reviewer
+documents remain excluded from commits under the user's instruction.
 
 **E07.2 repaired:** `Core/Version.cpp::Patch()` now returns
 `cVersionPatch`. Both Release targets rebuild. Current major and patch both
 happen to be zero; this fixes the latent API defect without claiming it explains
 any measured rendering cost. The repair was made after the PCF capture pair.
 
-**E05 active implementation:** cache the four owning per-light GPU profile
+**E05 CPU implementation record:** cache the four owning per-light GPU profile
 descriptors (the old label constructor allocated even with Tracy disabled), reuse
 CPU constant/index-order scratch, borrow already-owned publication indices instead
 of copying a vector, and use stable counting-sort buckets to reduce local-light
@@ -890,29 +907,19 @@ retain the passing test results separately from unapproved baseline artifacts.
 
 **Pre-E06 evidence check (2026-09-24):** all 30 files indexed by the two candidate
 evidence registers match their recorded hashes. The tracked source patch and
-captured untracked shader match the replay recipe, and the current non-Tracy
-benchmark executable/DLL/archive identities match its frozen checkpoint. Saved
+captured untracked shader match the replay recipe, and, at that checkpoint, the non-Tracy
+benchmark executable/DLL/archive identities matched its frozen checkpoint. Saved
 results confirm 23/23 image and 34/34 service tests in each Release tree. This is
 a verified candidate checkpoint, not milestone closure or visual acceptance.
-The user confirmed the independent E06 review is still underway and will share
-its findings. Wait for those findings before E06 implementation; final integrated
-captures remain after E06, not another pre-review campaign.
-
-E05 still needs the remaining CPU/upload/resource-cost assessment; E06 still
-needs compatible cross-view sharing using existing allocation/content ownership.
-The [E06 design proposal](plan/EX07E-cross-view-shadow-sharing.md)
-records the required ownership change: share allocation/SRV ownership and canonical
-physical slots per compatible light, including partially overlapping view lists.
-A texture pointer alone cannot prevent the current owner from unregistering its
-descriptors. Do not restrict sharing to identical whole buckets or hash a bucket
-using only its first light's caster volume. Implementation and native proof remain
-open; no product/runtime change or new capture was made during this audit.
+That was the pre-E06 checkpoint. The later independent review and implementation
+approval supersede its pause; see the current checkpoint above. E06 now implements
+the reviewed per-light ownership model, including overlapping view lists. Final
+CPU/upload/memory assessment and application comparisons remain in E08/S9.
 Point/punctual specialization is now test-validated source with an
 exact-zero-radius PSO variant and mixed-source native coverage. It lowers measured
 point-draw GPU time, but the Sponza capture pair does not establish a whole-frame
 gain; retain that limitation in the report and stop further PCF-side iterations.
-E02/E04–E06 remain open; E07/E08 apply throughout. The separately recorded C caller-target
-validation gap remains open. All later changed baselines require manual approval.
+**Final E06/S9 checkpoint (2026-09-25):** the [durable report](plan/EX07E-shadow-sharing-results.md) supersedes the pre-E06 measurement gaps above. Final native Sponza is **29.451 ms / 33.95 FPS** versus D **62.229 ms / 16.07 FPS**; Instancing is **14.606 ms / 68.46 FPS** versus D **27.416 ms / 36.48 FPS**. Four final scene runs close normally. Compatible views share **40 MiB**, with **12 moving writers for 24 map uses**; retained-reader copy-on-write is measured at **128 -> 64 MiB** after release. The user approved visual acceptance and the numeric comparison on 2026-09-25; accepted evidence is committed in `b8f1376e1`. E implementation and qualification are complete; C caller-target validation and F acceptance retain their separate scope.
 
 **Continuation discipline:** update the owning row and this checkpoint after
 each substantive investigation or accepted change, before switching work items.
