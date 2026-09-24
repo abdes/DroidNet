@@ -1,0 +1,16 @@
+{
+  "peak_cpu_percent": 17.0,
+  "high_samples": 0,
+  "sample_count": 23,
+  "window_seconds": [
+    20,
+    50
+  ],
+  "mean_cpu_percent": 4.391304347826087,
+  "accepted": true,
+  "thresholds": {
+    "mean_cpu_percent": 15,
+    "peak_samples_required": 2,
+    "peak_cpu_percent": 25
+  }
+}

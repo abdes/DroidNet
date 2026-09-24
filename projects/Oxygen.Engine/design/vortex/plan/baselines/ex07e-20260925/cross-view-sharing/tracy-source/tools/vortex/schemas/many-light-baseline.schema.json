@@ -1,0 +1,187 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EX07D native many-light benchmark request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "case",
+    "family",
+    "reference",
+    "measure",
+    "lights",
+    "width",
+    "height",
+    "moving",
+    "secondary_view",
+    "point_shadows",
+    "spot_shadows",
+    "source_radius_m",
+    "spot_outer_half_angle_radians",
+    "distribution",
+    "projection",
+    "warmup_frames",
+    "sample_frames",
+    "output"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "case": {
+      "type": "string",
+      "pattern": "^[a-z0-9-]+$"
+    },
+    "family": {
+      "enum": [
+        "forward",
+        "deferred"
+      ]
+    },
+    "reference": {
+      "type": "boolean"
+    },
+    "measure": {
+      "type": "boolean"
+    },
+    "lights": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4096
+    },
+    "width": {
+      "type": "integer",
+      "minimum": 64,
+      "maximum": 3840
+    },
+    "height": {
+      "type": "integer",
+      "minimum": 36,
+      "maximum": 2160
+    },
+    "moving": {
+      "type": "boolean"
+    },
+    "secondary_view": {
+      "type": "boolean"
+    },
+    "point_shadows": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 5
+    },
+    "spot_shadows": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9
+    },
+    "source_radius_m": {
+      "type": "number",
+      "minimum": 0,
+      "exclusiveMaximum": 1.5
+    },
+    "spot_outer_half_angle_radians": {
+      "type": "number",
+      "minimum": 0.2,
+      "maximum": 1.5707963267948966
+    },
+    "distribution": {
+      "enum": [
+        "sparse",
+        "dense",
+        "irrelevant"
+      ]
+    },
+    "projection": {
+      "enum": [
+        "perspective",
+        "orthographic"
+      ]
+    },
+    "warmup_frames": {
+      "type": "integer",
+      "minimum": 12,
+      "maximum": 960
+    },
+    "sample_frames": {
+      "type": "integer",
+      "minimum": 120,
+      "maximum": 1920,
+      "multipleOf": 120
+    },
+    "output": {
+      "type": "string",
+      "minLength": 1
+    },
+    "capture_warmup_frames": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 960
+    },
+    "secondary_view_layout": {
+      "enum": [
+        "offset-half",
+        "matched",
+        "offset-full",
+        "partial-overlap"
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "reference": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "measure": {
+            "const": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "moving": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "sample_frames": {
+            "multipleOf": 240
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "secondary_view_layout"
+        ],
+        "properties": {
+          "secondary_view_layout": {
+            "enum": [
+              "matched",
+              "offset-full",
+              "partial-overlap"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "secondary_view": {
+            "const": true
+          }
+        }
+      }
+    }
+  ]
+}

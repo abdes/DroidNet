@@ -1,0 +1,117 @@
+# ===-----------------------------------------------------------------------===#
+# Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
+# copy at https://opensource.org/licenses/BSD-3-Clause.
+# SPDX-License-Identifier: BSD-3-Clause
+# ===-----------------------------------------------------------------------===#
+
+# ------------------------------------------------------------------------------
+# Dependencies
+# ------------------------------------------------------------------------------
+
+find_package(GTest REQUIRED CONFIG)
+
+# ==============================================================================
+# Build instructions
+# ==============================================================================
+
+# -- Library Link Test ---------------------------------------------------------
+
+add_executable("Oxygen.Graphics.Common.LinkTest" "Link_test.cpp")
+set_target_properties(
+  "Oxygen.Graphics.Common.LinkTest"
+  PROPERTIES
+    FOLDER
+      "Testing"
+)
+target_compile_options(
+  "Oxygen.Graphics.Common.LinkTest"
+  PRIVATE
+    ${OXYGEN_COMMON_CXX_FLAGS}
+)
+target_link_libraries(
+  "Oxygen.Graphics.Common.LinkTest"
+  PRIVATE
+    oxygen::graphics-common
+)
+add_test(
+  NAME "Oxygen.Graphics.Common Link Test"
+  COMMAND
+    "Oxygen.Graphics.Common.LinkTest"
+)
+
+# -- GTest Test Programs -------------------------------------------------------
+
+include(GTestHelpers)
+
+m_gtest_program(
+  Fakes
+  SOURCES
+    "Fakes/FakeResource.h"
+    "Fakes/FakeResource_test.cpp"
+)
+
+m_gtest_program(AllocationBudget SOURCES "AllocationBudget_test.cpp")
+
+m_gtest_program(ShaderRequest SOURCES "ShaderRequest_test.cpp")
+m_gtest_program(ShaderByteCode SOURCES "ShaderByteCode_test.cpp")
+m_gtest_program(ShaderManager SOURCES "ShaderManager_test.cpp")
+m_gtest_program(ReadbackContract SOURCES "ReadbackContract_test.cpp")
+m_gtest_program(ReadbackTypes SOURCES "ReadbackTypes_test.cpp")
+m_gtest_program(TextureCopyFootprint SOURCES "TextureCopyFootprint_test.cpp")
+m_gtest_program(ReadbackTracker SOURCES "ReadbackTracker_test.cpp")
+m_gtest_program(ObjectRelease SOURCES "ObjectRelease_test.cpp")
+m_gtest_program(NativeObject SOURCES "NativeObject_test.cpp")
+m_gtest_program(BufferStateTracking SOURCES "BufferStateTracking_test.cpp")
+m_gtest_program(DescriptorHandle SOURCES "Bindless/DescriptorHandle_test.cpp")
+m_gtest_program(IndexRange SOURCES "Bindless/IndexRange_test.cpp")
+m_gtest_program(
+  DescriptorSegment
+  SOURCES
+    "Bindless/FixedDescriptorSegment_test.cpp"
+)
+m_gtest_program(
+  BaseDescriptorAllocator
+  SOURCES
+    "Bindless/BaseDescriptorAllocator_Basic_test.cpp"
+    "Bindless/BaseDescriptorAllocator_Concurrency_test.cpp"
+    "Bindless/BaseDescriptorAllocator_Domain_test.cpp"
+    "Bindless/DescriptorReturnFailure_test.cpp"
+    "Bindless/BaseDescriptorAllocator_Error_test.cpp"
+    "Bindless/BaseDescriptorAllocator_Growth_test.cpp"
+    "Bindless/BaseDescriptorAllocator_Init_test.cpp"
+    "Bindless/BaseDescriptorAllocatorTest.h"
+)
+m_gtest_program(
+  ResourceRegistry
+  SOURCES
+    "Fakes/FakeResource.h"
+    "ResourceRegistry_basic_test.cpp"
+    "ResourceRegistryManaged_test.cpp"
+    "ResourceRegistry_replace_test.cpp"
+    "ResourceRegistry_update_test.cpp"
+)
+m_gtest_program(PipelineState SOURCES "PipelineState_test.cpp")
+m_gtest_program(
+  FrameCaptureController
+  SOURCES
+    "FrameCaptureController_test.cpp"
+)
+m_gtest_program(
+  GraphicsCaptureConsole
+  SOURCES
+    "GraphicsCaptureConsole_test.cpp"
+)
+m_gtest_program(GraphicsLifecycle SOURCES "GraphicsLifecycle_test.cpp")
+m_gtest_program(BackendObject SOURCES "BackendObject_test.cpp")
+m_gtest_program(DeferredReclaimer SOURCES "DeferredReclaimer_test.cpp")
+m_gtest_program(CommandListPool SOURCES "CommandListPool_test.cpp")
+m_gtest_program(Queues SOURCES "QueuesStrategy_test.cpp")
+m_gtest_program(
+  Commander
+  SOURCES
+    "Commander_test.cpp"
+    "SubmissionCallback_test.cpp"
+)
+m_gtest_program(ProfileScopeDrain SOURCES "ProfilingScopeDrain_test.cpp")
+
+m_gtest_program(Submission SOURCES "Submission_test.cpp")

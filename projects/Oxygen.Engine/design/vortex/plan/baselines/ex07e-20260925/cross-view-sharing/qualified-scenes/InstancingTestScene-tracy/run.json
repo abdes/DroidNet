@@ -1,0 +1,26 @@
+{
+  "pid": 21152,
+  "arguments": [
+    "-v=-1",
+    "--frames",
+    "0",
+    "--fps",
+    "0",
+    "--vsync",
+    "false",
+    "--resolution",
+    "2560x1400",
+    "--scene",
+    "InstancingTestScene",
+    "--directional-shadows",
+    "conventional",
+    "--debug-layer",
+    "false"
+  ],
+  "executable": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-tracy-ninja\\bin\\Release\\Oxygen.Examples.RenderScene.exe",
+  "measured_window_seconds": [
+    20,
+    50
+  ],
+  "started": "2026-09-25T00:39:57.0538925+04:00"
+}

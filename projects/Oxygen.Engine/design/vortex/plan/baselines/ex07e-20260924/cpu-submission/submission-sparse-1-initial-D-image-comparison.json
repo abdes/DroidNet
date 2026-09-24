@@ -1,0 +1,15 @@
+{
+  "complete": true,
+  "reference": "out\\analysis\\ex07d\\closure-137b681b2\\benchmarks-headroom\\sparse-1-deferred\\baseline",
+  "candidate": "out\\analysis\\ex07e\\e05-draw-submission\\benchmarks\\sparse-1-deferred\\baseline",
+  "passed": true,
+  "budget": "0.5% relative + 2e-5 absolute",
+  "images": [
+    {
+      "image": "phase-0-view-0.rgba32f",
+      "failed_channels": 0,
+      "max_budget_fraction": 2.362168197578285e-05,
+      "channels": 6220800
+    }
+  ]
+}

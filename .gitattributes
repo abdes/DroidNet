@@ -14,6 +14,11 @@
 # in Unix via a file share from Windows, the scripts will work.
 *.sh text eol=lf
 
+# Preserve the exact bytes of immutable EX07E capture fixtures and source copies.
+projects/Oxygen.Engine/design/vortex/plan/baselines/ex07e-20260924/cpu-submission/** -text -diff
+projects/Oxygen.Engine/design/vortex/plan/baselines/ex07e-20260924/point-hardware-pcf/** -text -diff
+projects/Oxygen.Engine/design/vortex/plan/baselines/ex07e-20260925/cross-view-sharing/** -text -diff
+
 ###############################
 # Git Large File System (LFS) #
 ###############################

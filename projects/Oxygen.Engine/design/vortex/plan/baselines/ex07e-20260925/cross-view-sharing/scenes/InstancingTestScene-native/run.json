@@ -1,0 +1,26 @@
+{
+  "arguments": [
+    "-v=0",
+    "--frames",
+    "0",
+    "--fps",
+    "0",
+    "--vsync",
+    "false",
+    "--resolution",
+    "2560x1400",
+    "--scene",
+    "InstancingTestScene",
+    "--directional-shadows",
+    "conventional",
+    "--debug-layer",
+    "false"
+  ],
+  "started": "2026-09-25T00:13:54.6189049+04:00",
+  "pid": 38428,
+  "executable": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Examples.RenderScene.exe",
+  "measured_window_seconds": [
+    20,
+    50
+  ]
+}

@@ -1,0 +1,5 @@
+{
+  "available": true,
+  "unix_time": 1790281913.2675548,
+  "csv": "name, driver_version, pstate, temperature.gpu, power.draw [W], clocks.current.graphics [MHz], clocks.current.memory [MHz], utilization.gpu [%], memory.used [MiB]\nNVIDIA GeForce RTX 3080, 610.62, P0, 53, 211.28 W, 1980 MHz, 9501 MHz, 76 %, 4283 MiB"
+}

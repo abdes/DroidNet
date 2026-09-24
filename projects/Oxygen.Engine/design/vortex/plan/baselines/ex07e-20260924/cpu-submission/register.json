@@ -1,0 +1,23 @@
+{
+  "status": "candidate evidence; new baseline acceptance and manual visual validation pending",
+  "scope": "E05 CPU submission and gathering, plus current EX07E shader candidate. Native non-Tracy Ninja Release timings; no isolated FPS attribution.",
+  "files": {
+    "checkpoint.json": "3e442845662b5ee40a175eff91773ae2df2f23423ce172d009294bfe35eb13d0",
+    "gather-endpoint.json": "7af266f00e342af89a59e817187d9e9bb0d176e54cf4facf6894f845fbbc377d",
+    "gather-initial-D-image-comparison.json": "f39da25c0dac2c041783f16600f74013441d77fe1e18fcfa2cbe94298cbb3e05",
+    "gather-load-preflight.json": "eb03b08778c92d812b99c890863a0c2cae4961323dd3ab7469763ef4d062a549",
+    "gather-manifest.json": "64b2b9351b50e210da2df4ff16e3fef9cf5ef10460a438485e45443d28bcd6aa",
+    "images-build-ninja.json": "cd59d67930c7e1437b50cc6d6740636dfb9a37b218c150877468d5c834ef133b",
+    "images-build-tracy-ninja.json": "aacbaa1889c203b183819d3e11d13d20959a7bb04c6bf26c53efaf757b8ff9a2",
+    "interaction-qualification.json": "675921c5440419d7a533814f10ddf7d6f3d190b8fd19cf6129087265cf4e0682",
+    "prior-post-grid-endpoints.json": "d67454c3e029fa5ac6693486beb981f1c20e5e96f5dbf7c28ce043482c79d671",
+    "service-build-ninja.json": "70c98d9a0a76fa5df5bcb929661e14dd6be69ed7ccc8b5268fc0fcea41736f2b",
+    "service-build-tracy-ninja.json": "88108d0e8c6fae421b72686a0b73a798fe4df73eb4599194a8b3796913e05ad5",
+    "source-recipe.json": "50694c4a55494bca102b84136e613070c0add79bba079185c195f9a70f5c91e3",
+    "submission-endpoints.json": "fc788159c20b3f5a016d1b8de245d1ceab95e4237959270005681753c64dd439",
+    "submission-sparse-1-initial-D-image-comparison.json": "4fb732e6ce69cf80ac317a18018fd2f4f546ee6cac8dc644907e746dbcf77be4",
+    "submission-sparse-1-load-preflight.json": "abee070d87e864905d2700d7aba2bd90204c200a7ab9cbdd1507f3dcffa56428",
+    "submission-sparse-4096-initial-D-image-comparison.json": "d628346e1e2005118c6c8d24af73f0399b53503bc36f854260f60b6ebe6bbb99",
+    "submission-sparse-4096-load-preflight.json": "4f2f6892aedd856af1dec0a1a2c7e45a3972cb25ced9f7767b52984a52799680"
+  }
+}

@@ -1,0 +1,181 @@
+//===----------------------------------------------------------------------===//
+// Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
+// copy at https://opensource.org/licenses/BSD-3-Clause.
+// SPDX-License-Identifier: BSD-3-Clause
+//===----------------------------------------------------------------------===//
+
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Graphics/Common/BackendObject.h>
+#include <Oxygen/Graphics/Common/CommandList.h>
+#include <Oxygen/Graphics/Common/ImGui/ImGuiGraphicsBackend.h>
+#include <Oxygen/Graphics/Common/Shaders.h>
+#include <Oxygen/Graphics/Headless/Bindless/AllocationStrategy.h>
+#include <Oxygen/Graphics/Headless/Bindless/DescriptorAllocator.h>
+#include <Oxygen/Graphics/Headless/Buffer.h>
+#include <Oxygen/Graphics/Headless/CommandList.h>
+#include <Oxygen/Graphics/Headless/CommandQueue.h>
+#include <Oxygen/Graphics/Headless/CommandRecorder.h>
+#include <Oxygen/Graphics/Headless/Graphics.h>
+#include <Oxygen/Graphics/Headless/Internal/EngineShaders.h>
+#include <Oxygen/Graphics/Headless/ReadbackManager.h>
+#include <Oxygen/Graphics/Headless/Surface.h>
+#include <Oxygen/Graphics/Headless/Texture.h>
+
+//===----------------------------------------------------------------------===//
+// DescriptorAllocator Component
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+namespace hb = oxygen::graphics::headless::bindless;
+
+class DescriptorAllocatorComponent : public oxygen::Component {
+  OXYGEN_COMPONENT(DescriptorAllocatorComponent)
+
+public:
+  explicit DescriptorAllocatorComponent(std::shared_ptr<void> lifetime)
+    : allocator_(std::static_pointer_cast<hb::DescriptorAllocator>(
+        oxygen::graphics::AdoptBackendObject(
+          new hb::DescriptorAllocator(
+            std::make_shared<hb::AllocationStrategy>()),
+          [](void* object) noexcept {
+            delete static_cast<hb::DescriptorAllocator*>(object);
+          },
+          std::move(lifetime))))
+  {
+  }
+
+  OXYGEN_MAKE_NON_COPYABLE(DescriptorAllocatorComponent)
+  OXYGEN_DEFAULT_MOVABLE(DescriptorAllocatorComponent)
+
+  ~DescriptorAllocatorComponent() override = default;
+
+  [[nodiscard]] auto GetAllocator() const -> const auto& { return *allocator_; }
+  [[nodiscard]] auto ShareAllocator() const -> const auto&
+  {
+    return allocator_;
+  }
+
+private:
+  std::shared_ptr<hb::DescriptorAllocator> allocator_;
+};
+
+} // namespace
+
+//===----------------------------------------------------------------------===//
+// Graphics implementation
+//===----------------------------------------------------------------------===//
+
+namespace oxygen::graphics::headless {
+
+Graphics::Graphics(const SerializedBackendConfig& /*config*/,
+  const SerializedPathFinderConfig& /*path_finder_config*/)
+  : oxygen::Graphics("HeadlessGraphics")
+{
+  AddComponent<internal::EngineShaders>();
+  AddComponent<DescriptorAllocatorComponent>(GetBackendLifetime());
+  SetNativeLifetimeToken(
+    GetComponent<DescriptorAllocatorComponent>().ShareAllocator());
+  readback_manager_ = std::make_unique<HeadlessReadbackManager>(*this);
+
+  LOG_F(INFO, "Headless Graphics instance created");
+}
+
+Graphics::~Graphics() { Close(); }
+
+auto Graphics::GetDescriptorAllocator() const -> const DescriptorAllocator&
+{
+  return GetComponent<DescriptorAllocatorComponent>().GetAllocator();
+}
+
+auto Graphics::GetReadbackManager() const
+  -> observer_ptr<graphics::ReadbackManager>
+{
+  return observer_ptr<graphics::ReadbackManager>(readback_manager_.get());
+}
+
+auto Graphics::CreateImGuiGraphicsBackend() const
+  -> std::unique_ptr<graphics::imgui::ImGuiGraphicsBackend>
+{
+  return {};
+}
+
+auto Graphics::CreateTexture(const TextureDesc& desc) const
+  -> std::shared_ptr<graphics::Texture>
+{
+  const auto admission = GetBackendLifetime()->AcquireOperation();
+  return AdoptBackendObject(
+    static_cast<graphics::Texture*>(new Texture(desc)),
+    [](void* object) noexcept {
+      delete static_cast<graphics::Texture*>(object);
+    },
+    GetNativeLifetimeToken());
+}
+
+auto Graphics::CreateTextureFromNativeObject(const TextureDesc& desc,
+  const NativeResource& /*native*/) const -> std::shared_ptr<graphics::Texture>
+{
+  return CreateTexture(desc);
+}
+
+auto Graphics::CreateBuffer(const BufferDesc& desc) const
+  -> std::shared_ptr<graphics::Buffer>
+{
+  const auto admission = GetBackendLifetime()->AcquireOperation();
+  return AdoptBackendObject(
+    static_cast<graphics::Buffer*>(new Buffer(desc)),
+    [](
+      void* object) noexcept { delete static_cast<graphics::Buffer*>(object); },
+    GetNativeLifetimeToken());
+}
+
+auto Graphics::CreateCommandQueue(const QueueKey& queue_key, QueueRole role)
+  -> std::shared_ptr<graphics::CommandQueue>
+{
+  return std::make_shared<CommandQueue>(queue_key.get(), role);
+}
+
+auto Graphics::CreateSurface(std::weak_ptr<platform::Window> /*window_weak*/,
+  observer_ptr<graphics::CommandQueue> /*command_queue*/) const
+  -> std::unique_ptr<Surface>
+{
+  const auto admission = GetBackendLifetime()->AcquireOperation();
+  return std::make_unique<HeadlessSurface>("headless-surface");
+}
+
+auto Graphics::CreateSurfaceFromNative(void* /*native_handle*/,
+  observer_ptr<graphics::CommandQueue> /*command_queue*/) const
+  -> std::shared_ptr<Surface>
+{
+  const auto admission = GetBackendLifetime()->AcquireOperation();
+  return std::make_shared<HeadlessSurface>("headless-surface-from-native");
+}
+
+auto Graphics::GetShader(const ShaderRequest& request) const
+  -> std::shared_ptr<IShaderByteCode>
+{
+  auto& shaders = GetComponent<internal::EngineShaders>();
+  return shaders.GetShader(request);
+}
+
+auto Graphics::CreateCommandListImpl(QueueRole role,
+  std::string_view command_list_name) -> std::unique_ptr<graphics::CommandList>
+{
+  LOG_F(INFO, "Headless CreateCommandList requested: role={} name={}",
+    nostd::to_string(role), command_list_name);
+  const auto name = command_list_name.empty()
+    ? std::string_view("headless-cmd-list")
+    : command_list_name;
+  return std::make_unique<CommandList>(name, role);
+}
+
+auto Graphics::CreateCommandRecorder(
+  std::shared_ptr<graphics::CommandList> command_list,
+  observer_ptr<graphics::CommandQueue> target_queue)
+  -> std::unique_ptr<graphics::CommandRecorder>
+{
+  return std::make_unique<CommandRecorder>(
+    std::move(command_list), target_queue);
+}
+
+} // namespace oxygen::graphics::headless

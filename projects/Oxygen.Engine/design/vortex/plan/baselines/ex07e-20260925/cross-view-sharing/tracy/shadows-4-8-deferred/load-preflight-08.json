@@ -1,0 +1,156 @@
+{
+  "observed": {
+    "mean_cpu_percent": 40.8,
+    "peak_cpu_percent": 50.0,
+    "mean_gpu_percent": 30.4,
+    "peak_gpu_percent": 32.0
+  },
+  "started_utc": "2026-09-24T20:06:59.2666836Z",
+  "gpu_engine_owners": [
+    {
+      "Name": "pid_67040_luid_0x00000000_0x000183AF_phys_0_eng_1_engtype_Copy",
+      "UtilizationPercentage": 22
+    },
+    {
+      "Name": "pid_67040_luid_0x00000000_0x00016AEE_phys_0_eng_0_engtype_3D",
+      "UtilizationPercentage": 21
+    },
+    {
+      "Name": "pid_67040_luid_0x00000000_0x000183AF_phys_0_eng_0_engtype_3D",
+      "UtilizationPercentage": 12
+    },
+    {
+      "Name": "pid_4_luid_0x00000000_0x000183AF_phys_0_eng_1_engtype_Copy",
+      "UtilizationPercentage": 5
+    }
+  ],
+  "cpu_process_counters": [
+    {
+      "Name": "pwsh#7",
+      "IDProcess": 38824,
+      "PercentProcessorTime": 100
+    },
+    {
+      "Name": "System",
+      "IDProcess": 4,
+      "PercentProcessorTime": 66
+    },
+    {
+      "Name": "cortex-apiserver",
+      "IDProcess": 4048,
+      "PercentProcessorTime": 47
+    },
+    {
+      "Name": "ChatGPT#5",
+      "IDProcess": 84764,
+      "PercentProcessorTime": 38
+    },
+    {
+      "Name": "dwm",
+      "IDProcess": 2724,
+      "PercentProcessorTime": 33
+    },
+    {
+      "Name": "ChatGPT#2",
+      "IDProcess": 67040,
+      "PercentProcessorTime": 28
+    },
+    {
+      "Name": "WmiPrvSE#1",
+      "IDProcess": 3720,
+      "PercentProcessorTime": 23
+    },
+    {
+      "Name": "Docker Desktop#4",
+      "IDProcess": 25940,
+      "PercentProcessorTime": 23
+    }
+  ],
+  "thresholds": {
+    "peak_samples_required": 2,
+    "mean_cpu_percent": 25.0,
+    "peak_cpu_percent": 50.0,
+    "mean_gpu_percent": 50.0,
+    "peak_gpu_percent": 70.0
+  },
+  "scope": "Pre-launch headroom check, allowing ordinary desktop activity rather than requiring idle hardware. GPU values cover NVIDIA adapters. Process CPU counters may sum above 100 across cores. This does not prove absence of interference later in the run.",
+  "finished_utc": "2026-09-24T20:07:07.0648966Z",
+  "samples": [
+    {
+      "gpus": [
+        {
+          "index": "0",
+          "name": "NVIDIA GeForce RTX 3080",
+          "utilization": "31",
+          "memory_utilization": "4",
+          "clock_mhz": "1110",
+          "temperature_c": "49",
+          "memory_used_mib": "3998"
+        }
+      ],
+      "utc": "2026-09-24T20:07:00.7088214Z",
+      "cpu_percent": 39.0
+    },
+    {
+      "gpus": [
+        {
+          "index": "0",
+          "name": "NVIDIA GeForce RTX 3080",
+          "utilization": "28",
+          "memory_utilization": "2",
+          "clock_mhz": "1995",
+          "temperature_c": "51",
+          "memory_used_mib": "3994"
+        }
+      ],
+      "utc": "2026-09-24T20:07:02.0583016Z",
+      "cpu_percent": 50.0
+    },
+    {
+      "gpus": [
+        {
+          "index": "0",
+          "name": "NVIDIA GeForce RTX 3080",
+          "utilization": "30",
+          "memory_utilization": "4",
+          "clock_mhz": "1395",
+          "temperature_c": "50",
+          "memory_used_mib": "3994"
+        }
+      ],
+      "utc": "2026-09-24T20:07:03.4052871Z",
+      "cpu_percent": 36.0
+    },
+    {
+      "gpus": [
+        {
+          "index": "0",
+          "name": "NVIDIA GeForce RTX 3080",
+          "utilization": "31",
+          "memory_utilization": "4",
+          "clock_mhz": "1260",
+          "temperature_c": "49",
+          "memory_used_mib": "3994"
+        }
+      ],
+      "utc": "2026-09-24T20:07:04.7532293Z",
+      "cpu_percent": 46.0
+    },
+    {
+      "gpus": [
+        {
+          "index": "0",
+          "name": "NVIDIA GeForce RTX 3080",
+          "utilization": "32",
+          "memory_utilization": "3",
+          "clock_mhz": "1995",
+          "temperature_c": "51",
+          "memory_used_mib": "3980"
+        }
+      ],
+      "utc": "2026-09-24T20:07:06.1047827Z",
+      "cpu_percent": 33.0
+    }
+  ],
+  "accepted": false
+}

@@ -1,0 +1,369 @@
+{
+  "tests": 23,
+  "failures": 0,
+  "disabled": 0,
+  "errors": 0,
+  "timestamp": "2026-09-24T16:48:05Z",
+  "time": "22.51s",
+  "name": "AllTests",
+  "testsuites": [
+    {
+      "name": "LightingImageReferenceTest",
+      "tests": 2,
+      "failures": 0,
+      "disabled": 0,
+      "errors": 0,
+      "timestamp": "2026-09-24T16:48:05Z",
+      "time": "2.528s",
+      "testsuite": [
+        {
+          "name": "OrthographicHighlightsStayUniformAcrossTheImage",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Lighting\\LightingImageReference_test.cpp",
+          "line": 90,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T16:48:05Z",
+          "time": "0.992s",
+          "classname": "LightingImageReferenceTest",
+          "projection_images": "24"
+        },
+        {
+          "name": "MixedLocalLightsMatchSerialImages",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Lighting\\LightingImageReference_test.cpp",
+          "line": 476,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T16:48:06Z",
+          "time": "1.536s",
+          "classname": "LightingImageReferenceTest",
+          "compared_channels": "331776",
+          "permutation_channels": "110592",
+          "maximum_fraction_of_image_budget": "0.00010968840039661796",
+          "minimum_single_light_peak": "0.0061525581404566765",
+          "unculled_channels": "331776",
+          "maximum_unculled_fraction_of_image_budget": "0.0064427937155416785"
+        }
+      ]
+    },
+    {
+      "name": "FiniteEmitterImageTest",
+      "tests": 3,
+      "failures": 0,
+      "disabled": 0,
+      "errors": 0,
+      "timestamp": "2026-09-24T16:48:08Z",
+      "time": "2.509s",
+      "testsuite": [
+        {
+          "name": "LightGatherUsesUpdatedHierarchyAndPreservesUnscaledSpotDirection",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Lighting\\LightingImageReference_test.cpp",
+          "line": 187,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T16:48:08Z",
+          "time": "0.766s",
+          "classname": "FiniteEmitterImageTest"
+        },
+        {
+          "name": "MixedPunctualAndFinitePointPipelinesPreserveForwardReference",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Lighting\\LightingImageReference_test.cpp",
+          "line": 253,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T16:48:08Z",
+          "time": "0.745s",
+          "classname": "FiniteEmitterImageTest"
+        },
+        {
+          "name": "CenterSupportAndAnalyticHorizonAgreeAcrossProductionPaths",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Lighting\\LightingImageReference_test.cpp",
+          "line": 307,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T16:48:09Z",
+          "time": "0.996s",
+          "classname": "FiniteEmitterImageTest",
+          "finite_support_images": "36"
+        }
+      ]
+    },
+    {
+      "name": "FiniteEmitterShadowImageTest",
+      "tests": 1,
+      "failures": 0,
+      "disabled": 0,
+      "errors": 0,
+      "timestamp": "2026-09-24T16:48:10Z",
+      "time": "1.141s",
+      "testsuite": [
+        {
+          "name": "ProjectedAndCubeVisibilityReachForwardAndDeferredReceivers",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Lighting\\LightingImageReference_test.cpp",
+          "line": 400,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T16:48:10Z",
+          "time": "1.141s",
+          "classname": "FiniteEmitterShadowImageTest",
+          "finite_shadow_images": "36"
+        }
+      ]
+    },
+    {
+      "name": "ShadowAdmissionGpuTest",
+      "tests": 7,
+      "failures": 0,
+      "disabled": 0,
+      "errors": 0,
+      "timestamp": "2026-09-24T16:48:11Z",
+      "time": "5.639s",
+      "testsuite": [
+        {
+          "name": "CubeComparisonFiltersVisibilityAndAppliesReversedDepthBias",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Lighting\\ShadowAdmissionGpu_test.cpp",
+          "line": 64,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T16:48:11Z",
+          "time": "0.597s",
+          "classname": "ShadowAdmissionGpuTest",
+          "bilinear_comparison_cases": "108"
+        },
+        {
+          "name": "CubeHardwarePcfUsesProjectedDepthAcrossFacesSeamsAndDescriptors",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Lighting\\ShadowAdmissionGpu_test.cpp",
+          "line": 158,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T16:48:12Z",
+          "time": "0.781s",
+          "classname": "ShadowAdmissionGpuTest",
+          "cube_hardware_pcf_samples": "594"
+        },
+        {
+          "name": "NonuniformCasterTransformMatchesBakedGeometryWithSlopeBias",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Lighting\\ShadowAdmissionGpu_test.cpp",
+          "line": 316,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T16:48:13Z",
+          "time": "0.801s",
+          "classname": "ShadowAdmissionGpuTest"
+        },
+        {
+          "name": "FifthCubeAndNinthProjectedShadowRenderTogether",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Lighting\\ShadowAdmissionGpu_test.cpp",
+          "line": 417,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T16:48:14Z",
+          "time": "0.967s",
+          "classname": "ShadowAdmissionGpuTest",
+          "lighting_allocation_bytes": "262742016"
+        },
+        {
+          "name": "ContactDepthIsConditionalAndSelfDoesNotOcclude",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Lighting\\ShadowAdmissionGpu_test.cpp",
+          "line": 472,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T16:48:14Z",
+          "time": "0.771s",
+          "classname": "ShadowAdmissionGpuTest"
+        },
+        {
+          "name": "ContactOccluderUsesCasterMaskAndReceiverGateInBothPaths",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Lighting\\ShadowAdmissionGpu_test.cpp",
+          "line": 520,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T16:48:15Z",
+          "time": "0.813s",
+          "classname": "ShadowAdmissionGpuTest"
+        },
+        {
+          "name": "OffscreenLightAndCasterStillShadowVisibleReceiverInBothPaths",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Lighting\\ShadowAdmissionGpu_test.cpp",
+          "line": 602,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T16:48:16Z",
+          "time": "0.906s",
+          "classname": "ShadowAdmissionGpuTest"
+        }
+      ]
+    },
+    {
+      "name": "BoundedShadowAdmissionGpuTest",
+      "tests": 1,
+      "failures": 0,
+      "disabled": 0,
+      "errors": 0,
+      "timestamp": "2026-09-24T16:48:17Z",
+      "time": "0.828s",
+      "testsuite": [
+        {
+          "name": "FailedGrowthRejectsWholeViewAndSmallerRequestRecovers",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Lighting\\ShadowAdmissionGpu_test.cpp",
+          "line": 709,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T16:48:17Z",
+          "time": "0.828s",
+          "classname": "BoundedShadowAdmissionGpuTest",
+          "rejected_required_bytes": "6291456",
+          "rejected_available_bytes": "2678784"
+        }
+      ]
+    },
+    {
+      "name": "MaterialRasterReferenceTest",
+      "tests": 3,
+      "failures": 0,
+      "disabled": 0,
+      "errors": 0,
+      "timestamp": "2026-09-24T16:48:18Z",
+      "time": "5.436s",
+      "testsuite": [
+        {
+          "name": "SampledSurfaceMatchesIndependentMaterialOracle",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Lighting\\MaterialRasterReference_test.cpp",
+          "line": 209,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T16:48:18Z",
+          "time": "2.042s",
+          "classname": "MaterialRasterReferenceTest",
+          "stored_material_cases": "96",
+          "rejected_surface_cases": "48",
+          "maximum_stored_code_error": "0.50194552529183056"
+        },
+        {
+          "name": "FilteredFormatsMatchIndependentTexels",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Lighting\\MaterialRasterReference_test.cpp",
+          "line": 444,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T16:48:20Z",
+          "time": "2.337s",
+          "classname": "MaterialRasterReferenceTest",
+          "filtered_material_cases": "240",
+          "masked_discards": "32",
+          "decode_after_filter_rejections": "168",
+          "maximum_emission_absolute_error": "0.0042488993337657099"
+        },
+        {
+          "name": "MipFilteringMatchesIndependentLevelBlend",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Lighting\\MaterialRasterReference_test.cpp",
+          "line": 645,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T16:48:22Z",
+          "time": "1.055s",
+          "classname": "MaterialRasterReferenceTest",
+          "mip_material_cases": "56",
+          "maximum_mip_absolute_error": "0.001879845989494755"
+        }
+      ]
+    },
+    {
+      "name": "SpatialLightGridGpuTest",
+      "tests": 4,
+      "failures": 0,
+      "disabled": 0,
+      "errors": 0,
+      "timestamp": "2026-09-24T16:48:23Z",
+      "time": "2.914s",
+      "testsuite": [
+        {
+          "name": "ProductionGridRejectsDistantLight",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Lighting\\LightingWorkloadGpu_test.cpp",
+          "line": 140,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T16:48:23Z",
+          "time": "0.682s",
+          "classname": "SpatialLightGridGpuTest"
+        },
+        {
+          "name": "BoundaryPointAndSpotContributeToEveryAdjacentTile",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Lighting\\LightingWorkloadGpu_test.cpp",
+          "line": 146,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T16:48:24Z",
+          "time": "0.73s",
+          "classname": "SpatialLightGridGpuTest"
+        },
+        {
+          "name": "CompletedCountsGrowEveryFrameSlot",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Lighting\\LightingWorkloadGpu_test.cpp",
+          "line": 203,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T16:48:25Z",
+          "time": "0.714s",
+          "classname": "SpatialLightGridGpuTest"
+        },
+        {
+          "name": "LightBatchTailPreservesCompleteOrderedListsAfterMove",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Lighting\\LightingWorkloadGpu_test.cpp",
+          "line": 230,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T16:48:25Z",
+          "time": "0.786s",
+          "classname": "SpatialLightGridGpuTest"
+        }
+      ]
+    },
+    {
+      "name": "SpatialLightGridFallbackGpuTest",
+      "tests": 1,
+      "failures": 0,
+      "disabled": 0,
+      "errors": 0,
+      "timestamp": "2026-09-24T16:48:26Z",
+      "time": "0.726s",
+      "testsuite": [
+        {
+          "name": "ExhaustedIndexBudgetPreservesCompleteCells",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Lighting\\LightingWorkloadGpu_test.cpp",
+          "line": 308,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T16:48:26Z",
+          "time": "0.726s",
+          "classname": "SpatialLightGridFallbackGpuTest"
+        }
+      ]
+    },
+    {
+      "name": "LightingWorkloadGpuTest",
+      "tests": 1,
+      "failures": 0,
+      "disabled": 0,
+      "errors": 0,
+      "timestamp": "2026-09-24T16:48:27Z",
+      "time": "0.784s",
+      "testsuite": [
+        {
+          "name": "PrimaryRecipePublishesAndRendersBothFamilies",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Lighting\\LightingWorkloadGpu_test.cpp",
+          "line": 323,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T16:48:27Z",
+          "time": "0.784s",
+          "classname": "LightingWorkloadGpuTest",
+          "deferred_pipeline_binds": "2",
+          "deferred_local_draws": "704",
+          "deferred_lit_preview_pixels": "2232",
+          "forward_lit_preview_pixels": "2232",
+          "source_lights": "1024",
+          "guaranteed_visible_contributors": "576"
+        }
+      ]
+    }
+  ]
+}

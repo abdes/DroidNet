@@ -1,0 +1,112 @@
+//===----------------------------------------------------------------------===//
+// Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
+// copy at https://opensource.org/licenses/BSD-3-Clause.
+// SPDX-License-Identifier: BSD-3-Clause
+//===----------------------------------------------------------------------===//
+
+#pragma once
+
+#include <cassert>
+#include <functional>
+#include <memory>
+
+#include <d3d12.h>
+
+#include <Oxygen/Composition/Component.h>
+#include <Oxygen/Graphics/Common/AllocationBudget.h>
+#include <Oxygen/Graphics/Common/ObjectRelease.h>
+#include <Oxygen/Graphics/Direct3D12/Allocator/D3D12MemAlloc.h>
+#include <Oxygen/Graphics/Direct3D12/Detail/dx12_utils.h>
+#include <Oxygen/Graphics/Direct3D12/Devices/DebugLayer.h>
+#include <Oxygen/Graphics/Direct3D12/NativeLifetime.h>
+
+// ReSharper disable once CppInconsistentNaming
+namespace D3D12MA {
+class Allocation; // NOLINT(*-virtual-class-destructor)
+} // namespace D3D12MA
+
+namespace oxygen::graphics::d3d12 {
+
+class GraphicResource final : public Component {
+  OXYGEN_COMPONENT(GraphicResource)
+
+public:
+  explicit GraphicResource(const std::string_view debug_name,
+    ID3D12Resource* resource, D3D12MA::Allocation* allocation = nullptr,
+    AllocationReservation reservation = {},
+    std::shared_ptr<NativeLifetime> lifetime = {})
+    : lifetime_(std::move(lifetime))
+    , resource_(resource)
+    , allocation_(allocation)
+    , reservation_(std::move(reservation))
+  {
+    assert(resource_);
+    SetName(debug_name);
+    DebugLayer::RegisterAftermathResource(resource_);
+  }
+
+  ~GraphicResource() noexcept override
+  {
+    DebugLayer::UnregisterAftermathResource(resource_);
+    ObjectRelease(resource_);
+    ObjectRelease(allocation_);
+  }
+
+  OXYGEN_MAKE_NON_COPYABLE(GraphicResource)
+
+  // NOLINTBEGIN(bugprone-use-after-move)
+  GraphicResource(GraphicResource&& other) noexcept
+    : Component(std::move(other))
+    , lifetime_(std::move(other.lifetime_))
+    , resource_(std::exchange(other.resource_, nullptr))
+    , allocation_(std::exchange(other.allocation_, nullptr))
+    , reservation_(std::move(other.reservation_))
+  {
+  }
+
+  auto operator=(GraphicResource&& other) noexcept -> GraphicResource&
+  {
+    if (this != &other) {
+      GraphicResource temp(std::move(other));
+      swap(temp);
+    }
+    return *this;
+  }
+  // NOLINTEND(bugprone-use-after-move)
+
+  [[nodiscard]] auto GetResource() const { return resource_; }
+  [[nodiscard]] auto GetLifetime() const -> const auto& { return lifetime_; }
+
+  // ReSharper disable once CppMemberFunctionMayBeConst
+  auto SetName(const std::string_view name) noexcept -> void
+  {
+    NameObject(resource_, name);
+  }
+
+private:
+  // Member swap function to support the move-and-swap idiom
+  auto swap(GraphicResource& other) noexcept -> void
+  {
+    using std::swap;
+    swap(static_cast<Component&>(*this), other);
+    swap(lifetime_, other.lifetime_);
+    swap(resource_, other.resource_);
+    swap(allocation_, other.allocation_);
+    swap(reservation_, other.reservation_);
+  }
+
+  friend auto swap(GraphicResource& lhs, GraphicResource& rhs) noexcept -> void;
+
+  std::shared_ptr<NativeLifetime> lifetime_;
+  ID3D12Resource* resource_;
+  D3D12MA::Allocation* allocation_;
+  AllocationReservation reservation_;
+};
+
+// Non-member swap function for ADL
+inline auto swap(GraphicResource& lhs, GraphicResource& rhs) noexcept -> void
+{
+  lhs.swap(rhs);
+}
+
+}

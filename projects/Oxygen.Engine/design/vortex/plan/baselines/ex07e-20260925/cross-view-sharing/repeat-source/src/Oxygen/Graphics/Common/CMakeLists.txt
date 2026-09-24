@@ -1,0 +1,217 @@
+# ===-----------------------------------------------------------------------===#
+# Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
+# copy at https://opensource.org/licenses/BSD-3-Clause.
+# SPDX-License-Identifier: BSD-3-Clause
+# ===-----------------------------------------------------------------------===#
+
+# ------------------------------------------------------------------------------
+# Meta information about the this module
+# ------------------------------------------------------------------------------
+
+asap_module_declare(
+  MODULE_NAME "Oxygen.Graphics.Common"
+  DESCRIPTION "Oxygen graphics layer abstractions"
+  WITHOUT_VERSION_H
+)
+asap_push_module("${META_MODULE_NAME}")
+
+# ------------------------------------------------------------------------------
+# Dependencies
+# ------------------------------------------------------------------------------
+
+find_package(fmt CONFIG REQUIRED)
+find_package(glm CONFIG REQUIRED)
+
+# ==============================================================================
+# Build instructions
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Main module target
+# ------------------------------------------------------------------------------
+
+add_library(${META_MODULE_TARGET})
+add_library(${META_MODULE_TARGET_ALIAS} ALIAS ${META_MODULE_TARGET})
+set_target_properties(
+  ${META_MODULE_TARGET}
+  PROPERTIES
+    DEFINE_SYMBOL
+      "OXGN_GFX_EXPORTS"
+    OUTPUT_NAME
+      $<IF:$<BOOL:${BUILD_SHARED_LIBS}>,${META_MODULE_NAME},${META_MODULE_NAME}-static>
+    VERSION
+      ${META_VERSION}
+    SOVERSION
+      ${META_VERSION_MAJOR}
+    PROJECT_LABEL
+      ${META_MODULE_NAME}
+)
+
+set(
+  OXYGEN_GFX_COMMON_HEADERS
+  "api_export.h"
+  "BackendModule.h"
+  "BackendLifetime.h"
+  "BackendObject.h"
+  "AllocationBudget.h"
+  "AllocationBudgetTag.h"
+  "Buffer.h"
+  "CommandList.h"
+  "CommandQueue.h"
+  "CommandRecorder.h"
+  "SubmissionCallback.h"
+  "Submission.h"
+  "RecordingUseBatch.h"
+  "CommandRecording.h"
+  "Concepts.h"
+  "Constants.h"
+  "DeferredObjectRelease.h"
+  "DescriptorAllocationHandle.h"
+  "DescriptorAllocator.h"
+  "DescriptorHandle.h"
+  "Detail/Barriers.h"
+  "Detail/BaseDescriptorAllocator.h"
+  "Detail/DescriptorSegment.h"
+  "Detail/FixedDescriptorSegment.h"
+  "Detail/DeferredReclaimer.h"
+  "Detail/ResourceStateTracker.h"
+  "ImGui/ImGuiGraphicsBackend.h"
+  "Errors.h"
+  "FrameCaptureController.h"
+  "Forward.h"
+  "FrameCaptureController.h"
+  "Framebuffer.h"
+  "Graphics.h"
+  "MemoryBlock.h"
+  "NativeObject.h"
+  "ObjectRelease.h"
+  "PipelineState.h"
+  "Queues.h"
+  "ReadbackErrors.h"
+  "ReadbackManager.h"
+  "ReadbackTracker.h"
+  "ReadbackTypes.h"
+  "ReadbackValidation.h"
+  "ResourceRegistry.h"
+  "Registration.h"
+  "Sampler.h"
+  "ShaderByteCode.h"
+  "ShaderLibraryIO.h"
+  "ShaderManager.h"
+  "Shaders.h"
+  "Surface.h"
+  "TimestampQueryProvider.h"
+  "Texture.h"
+  "Types/ClearFlags.h"
+  "Types/Color.h"
+  "Types/DescriptorVisibility.h"
+  "Types/FenceValue.h"
+  "Types/IndexRange.h"
+  "Types/QueueRole.h"
+  "Types/RenderTask.h"
+  "Types/ResourceAccessMode.h"
+  "Types/ResourceStates.h"
+  "Types/ResourceViewType.h"
+  "Types/TrackableResource.h"
+)
+set(
+  OXYGEN_GFX_COMMON_PRIVATE_SOURCES
+  "BackendLifetime.cpp"
+  "BackendObject.cpp"
+  "AllocationBudget.cpp"
+  "Buffer.cpp"
+  "CommandList.cpp"
+  "CommandQueue.cpp"
+  "CommandQueueSubmission.cpp"
+  "CommandRecorder.cpp"
+  "CommandRecording.cpp"
+  "DescriptorHandle.cpp"
+  "Detail/Barriers.cpp"
+  "Detail/FixedDescriptorSegment.cpp"
+  "Detail/DeferredReclaimer.cpp"
+  "Detail/ResourceStateTracker.cpp"
+  "Framebuffer.cpp"
+  "Graphics.cpp"
+  "Internal/Commander.cpp"
+  "Internal/Commander.h"
+  "Internal/CommandListPool.cpp"
+  "Internal/CommandListPool.h"
+  "Internal/DeferredReclaimerComponent.h"
+  "Internal/FramebufferImpl.cpp"
+  "Internal/FramebufferImpl.h"
+  "Internal/QueueManager.cpp"
+  "Internal/QueueManager.h"
+  "Internal/QueueSubmission.h"
+  "Internal/SubmissionFaultTestAccess.h"
+  "Internal/ToStringConverters.cpp"
+  "PipelineState.cpp"
+  "ReadbackManager.cpp"
+  "ReadbackTracker.cpp"
+  "ReadbackValidation.cpp"
+  "ResourceRegistry.cpp"
+  "ResourceRegistryManaged.cpp"
+  "Registration.cpp"
+  "RecordingUseBatch.cpp"
+  "ShaderManager.cpp"
+  "Shaders.cpp"
+  "Surface.cpp"
+  "Texture.cpp"
+  "TimestampQueryProvider.cpp"
+)
+
+target_sources(
+  ${META_MODULE_TARGET}
+  PRIVATE
+    ${OXYGEN_GFX_COMMON_PRIVATE_SOURCES}
+    ${OXYGEN_GFX_COMMON_HEADERS}
+  PUBLIC
+    FILE_SET HEADERS
+    BASE_DIRS "${OXYGEN_SOURCE_DIR}"
+    FILES ${OXYGEN_GFX_COMMON_HEADERS}
+)
+
+arrange_target_files_for_ide(${META_MODULE_TARGET})
+
+target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
+target_compile_definitions(
+  ${META_MODULE_TARGET}
+  PRIVATE
+    $<$<PLATFORM_ID:Windows>:WIN32_LEAN_AND_MEAN>
+    $<$<PLATFORM_ID:Windows>:NOMINMAX>
+    $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXGN_GFX_STATIC>
+)
+
+target_link_libraries(
+  ${META_MODULE_TARGET}
+  PUBLIC
+    glm::glm
+    oxygen::base
+    oxygen::console
+    oxygen::config
+    oxygen::core
+    oxygen::data
+    oxygen::profiling-cpu
+    oxygen::platform
+)
+
+target_link_libraries(oxygen-profiling-gpu INTERFACE ${META_MODULE_TARGET})
+
+# ------------------------------------------------------------------------------
+# Tests
+# ------------------------------------------------------------------------------
+
+if(OXYGEN_BUILD_TESTS)
+  add_subdirectory("Test")
+endif()
+
+# ==============================================================================
+# Deployment instructions
+# ==============================================================================
+
+oxygen_module_install(
+  EXPORT ${META_MODULE_NAMESPACE}
+  TARGETS
+    ${META_MODULE_TARGET}
+)
+
+asap_pop_module("${META_MODULE_NAME}")

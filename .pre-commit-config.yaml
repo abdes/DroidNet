@@ -2,6 +2,10 @@ default_install_hook_types:
   - pre-commit
   - commit-msg
 
+# Immutable EX07E capture fixtures contain byte-addressed source and manifests.
+# Formatting these records would invalidate their provenance checksums.
+exclude: '^projects/Oxygen\.Engine/design/vortex/plan/baselines/(ex07e-20260924/(cpu-submission|point-hardware-pcf)|ex07e-20260925/cross-view-sharing)/'
+
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0

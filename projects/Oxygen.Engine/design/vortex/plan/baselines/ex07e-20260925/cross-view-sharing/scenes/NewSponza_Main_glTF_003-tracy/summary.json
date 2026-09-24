@@ -1,0 +1,874 @@
+{
+  "complete": true,
+  "method": "Complete GPU intervals between consecutive depth-prepass starts, 20-50 s of a 55 s Tracy run; scopes inclusive and not additive; CPU statistics per call",
+  "frame_ms": {
+    "count": 1008,
+    "mean": 29.752604317460314,
+    "p50": 29.68187549999857,
+    "p95": 30.319502300000387,
+    "p99": 30.516760419998317,
+    "max": 30.85254800000257
+  },
+  "fps": 33.61050311192927,
+  "load_preflight": {
+    "thresholds": {
+      "mean_gpu_percent": 50.0,
+      "peak_cpu_percent": 50.0,
+      "mean_cpu_percent": 25.0,
+      "peak_samples_required": 2,
+      "peak_gpu_percent": 70.0
+    },
+    "samples": [
+      {
+        "gpus": [
+          {
+            "index": "0",
+            "name": "NVIDIA GeForce RTX 3080",
+            "utilization": "27",
+            "memory_utilization": "2",
+            "clock_mhz": "1980",
+            "temperature_c": "51",
+            "memory_used_mib": "4335"
+          }
+        ],
+        "utc": "2026-09-24T20:17:51.1309273Z",
+        "cpu_percent": 7.0
+      },
+      {
+        "gpus": [
+          {
+            "index": "0",
+            "name": "NVIDIA GeForce RTX 3080",
+            "utilization": "29",
+            "memory_utilization": "3",
+            "clock_mhz": "1350",
+            "temperature_c": "49",
+            "memory_used_mib": "4335"
+          }
+        ],
+        "utc": "2026-09-24T20:17:52.4716289Z",
+        "cpu_percent": 0.0
+      },
+      {
+        "gpus": [
+          {
+            "index": "0",
+            "name": "NVIDIA GeForce RTX 3080",
+            "utilization": "31",
+            "memory_utilization": "3",
+            "clock_mhz": "1200",
+            "temperature_c": "48",
+            "memory_used_mib": "4335"
+          }
+        ],
+        "utc": "2026-09-24T20:17:53.7971695Z",
+        "cpu_percent": 6.0
+      },
+      {
+        "gpus": [
+          {
+            "index": "0",
+            "name": "NVIDIA GeForce RTX 3080",
+            "utilization": "27",
+            "memory_utilization": "1",
+            "clock_mhz": "1980",
+            "temperature_c": "50",
+            "memory_used_mib": "4335"
+          }
+        ],
+        "utc": "2026-09-24T20:17:55.1360729Z",
+        "cpu_percent": 9.0
+      },
+      {
+        "gpus": [
+          {
+            "index": "0",
+            "name": "NVIDIA GeForce RTX 3080",
+            "utilization": "29",
+            "memory_utilization": "3",
+            "clock_mhz": "1440",
+            "temperature_c": "48",
+            "memory_used_mib": "4335"
+          }
+        ],
+        "utc": "2026-09-24T20:17:56.4809286Z",
+        "cpu_percent": 3.0
+      }
+    ],
+    "started_utc": "2026-09-24T20:17:49.7404792Z",
+    "gpu_engine_owners": [
+      {
+        "Name": "pid_67040_luid_0x00000000_0x000183AF_phys_0_eng_1_engtype_Copy",
+        "UtilizationPercentage": 22
+      },
+      {
+        "Name": "pid_67040_luid_0x00000000_0x00016AEE_phys_0_eng_0_engtype_3D",
+        "UtilizationPercentage": 21
+      },
+      {
+        "Name": "pid_67040_luid_0x00000000_0x000183AF_phys_0_eng_0_engtype_3D",
+        "UtilizationPercentage": 11
+      }
+    ],
+    "cpu_process_counters": [
+      {
+        "Name": "pwsh#8",
+        "IDProcess": 59368,
+        "PercentProcessorTime": 84
+      },
+      {
+        "Name": "cortex-apiserver",
+        "IDProcess": 4048,
+        "PercentProcessorTime": 39
+      },
+      {
+        "Name": "ChatGPT#2",
+        "IDProcess": 67040,
+        "PercentProcessorTime": 14
+      },
+      {
+        "Name": "System",
+        "IDProcess": 4,
+        "PercentProcessorTime": 14
+      },
+      {
+        "Name": "WmiPrvSE#1",
+        "IDProcess": 3720,
+        "PercentProcessorTime": 14
+      },
+      {
+        "Name": "Docker Desktop#4",
+        "IDProcess": 25940,
+        "PercentProcessorTime": 9
+      },
+      {
+        "Name": "dwm",
+        "IDProcess": 2724,
+        "PercentProcessorTime": 9
+      },
+      {
+        "Name": "vmmemWSL",
+        "IDProcess": 75224,
+        "PercentProcessorTime": 9
+      }
+    ],
+    "accepted": true,
+    "finished_utc": "2026-09-24T20:17:57.3901204Z",
+    "scope": "Pre-launch headroom check, allowing ordinary desktop activity rather than requiring idle hardware. GPU values cover NVIDIA adapters. Process CPU counters may sum above 100 across cores. This does not prove absence of interference later in the run.",
+    "observed": {
+      "mean_gpu_percent": 28.6,
+      "peak_cpu_percent": 9.0,
+      "mean_cpu_percent": 5.0,
+      "peak_gpu_percent": 31.0
+    }
+  },
+  "window_seconds": [
+    20.007064899,
+    49.997690051
+  ],
+  "gpu_scopes_ms": {
+    "Vortex.CompositingTask": {
+      "count": 1008,
+      "mean": 0.07903408333333334,
+      "p50": 0.078849,
+      "p95": 0.079874,
+      "p99": 0.080898,
+      "max": 0.49869600000000003
+    },
+    "Vortex.ImGuiOverlay": {
+      "count": 1008,
+      "mean": 0.019245982142857145,
+      "p50": 0.019456,
+      "p95": 0.020481,
+      "p99": 0.021505,
+      "max": 0.021511
+    },
+    "Vortex.PostProcess.Exposure.FrameResolve": {
+      "count": 1008,
+      "mean": 0.02677168055555556,
+      "p50": 0.026622,
+      "p95": 0.028673,
+      "p99": 0.03167238999999995,
+      "max": 0.442374
+    },
+    "Vortex.PostProcess.Exposure.Histogram": {
+      "count": 1008,
+      "mean": 0.047583140873015864,
+      "p50": 0.047105,
+      "p95": 0.049153,
+      "p99": 0.050177,
+      "max": 0.051201
+    },
+    "Vortex.PostProcess.Exposure.MeterAndAdapt": {
+      "count": 1008,
+      "mean": 0.10074658432539682,
+      "p50": 0.100353,
+      "p95": 0.1014023,
+      "p99": 0.102402,
+      "max": 0.736268
+    },
+    "Vortex.PostProcess.Exposure.SceneRange": {
+      "count": 1008,
+      "mean": 0.18624669444444444,
+      "p50": 0.18637,
+      "p95": 0.188418,
+      "p99": 0.18842,
+      "max": 0.19149
+    },
+    "Vortex.PostProcess.Exposure.Solve": {
+      "count": 1008,
+      "mean": 0.044919502976190476,
+      "p50": 0.044033,
+      "p95": 0.045057,
+      "p99": 0.045062,
+      "max": 0.671754
+    },
+    "Vortex.PostProcess.Tonemap": {
+      "count": 1008,
+      "mean": 0.12504864087301587,
+      "p50": 0.12493,
+      "p95": 0.125954,
+      "p99": 0.126977,
+      "max": 0.126992
+    },
+    "Vortex.PostRenderCleanup": {
+      "count": 1008,
+      "mean": 0.04133847916666668,
+      "p50": 0.040961,
+      "p95": 0.041985,
+      "p99": 0.041991930000000004,
+      "max": 0.043009
+    },
+    "Vortex.RenderPass.Execute": {
+      "count": 1008,
+      "mean": 0.02646184722222222,
+      "p50": 0.026624,
+      "p95": 0.027648,
+      "p99": 0.027649,
+      "max": 0.028673
+    },
+    "Vortex.RenderPass.PrepareResources": {
+      "count": 1008,
+      "mean": 7.111111111111111e-06,
+      "p50": 0.0,
+      "p95": 0.0,
+      "p99": 0.0,
+      "max": 0.001024
+    },
+    "Vortex.ResolveSceneColor": {
+      "count": 1008,
+      "mean": 0.22433636706349205,
+      "p50": 0.22426049999999997,
+      "p95": 0.227332,
+      "p99": 0.228356,
+      "max": 0.231428
+    },
+    "Vortex.Stage12.DeferredLighting": {
+      "count": 1008,
+      "mean": 17.501072025793654,
+      "p50": 17.395978,
+      "p95": 18.029809399999998,
+      "p99": 18.21690546,
+      "max": 18.464985
+    },
+    "Vortex.Stage12.DirectionalLight": {
+      "count": 1008,
+      "mean": 0.8518500277777777,
+      "p50": 0.850956,
+      "p95": 0.858124,
+      "p99": 0.86016579,
+      "max": 0.872469
+    },
+    "Vortex.Stage12.PointLight": {
+      "count": 1008,
+      "mean": 16.487259314484128,
+      "p50": 16.453916999999997,
+      "p95": 16.601380849999998,
+      "p99": 16.630114810000002,
+      "max": 16.670029
+    },
+    "Vortex.Stage18.Translucency": {
+      "count": 1008,
+      "mean": 3.3999404196428573,
+      "p50": 3.3966775,
+      "p95": 3.4294406,
+      "p99": 3.44672549,
+      "max": 3.709995
+    },
+    "Vortex.Stage3.DepthPrepass": {
+      "count": 1008,
+      "mean": 0.8780029811507936,
+      "p50": 0.873485,
+      "p95": 0.88372265,
+      "p99": 1.1260529899999985,
+      "max": 1.509398
+    },
+    "Vortex.Stage5.ScreenHzbBuild": {
+      "count": 1008,
+      "mean": 0.20059506249999998,
+      "p50": 0.197636,
+      "p95": 0.20582665,
+      "p99": 0.208898,
+      "max": 0.590856
+    },
+    "Vortex.Stage6.SpatialLightGrid": {
+      "count": 1008,
+      "mean": 0.1437280992063492,
+      "p50": 0.143362,
+      "p95": 0.147459,
+      "p99": 0.14950593,
+      "max": 0.153603
+    },
+    "Vortex.Stage8.ShadowDepths": {
+      "count": 1008,
+      "mean": 3.8442097529761905,
+      "p50": 3.8369685000000002,
+      "p95": 3.87762585,
+      "p99": 4.05509386,
+      "max": 4.134979
+    },
+    "Vortex.Stage9.BasePass": {
+      "count": 1008,
+      "mean": 2.782776559523809,
+      "p50": 2.7638045,
+      "p95": 2.9057465,
+      "p99": 3.2021037899999993,
+      "max": 3.419175
+    },
+    "Vortex.Stage9.BasePass.MainPass": {
+      "count": 1008,
+      "mean": 2.7663578839285714,
+      "p50": 2.7586925,
+      "p95": 2.81808995,
+      "p99": 2.9590396999999995,
+      "max": 3.010605
+    },
+    "VortexCompositingPass": {
+      "count": 1008,
+      "mean": 0.03358061111111111,
+      "p50": 0.032769,
+      "p95": 0.033793000000000004,
+      "p99": 0.034817,
+      "max": 0.45261599999999996
+    }
+  },
+  "gpu_calls_per_frame": {
+    "Vortex.CompositingTask": [
+      2
+    ],
+    "Vortex.ImGuiOverlay": [
+      1
+    ],
+    "Vortex.PostProcess.Exposure.FrameResolve": [
+      1
+    ],
+    "Vortex.PostProcess.Exposure.Histogram": [
+      1
+    ],
+    "Vortex.PostProcess.Exposure.MeterAndAdapt": [
+      1
+    ],
+    "Vortex.PostProcess.Exposure.SceneRange": [
+      2
+    ],
+    "Vortex.PostProcess.Exposure.Solve": [
+      1
+    ],
+    "Vortex.PostProcess.Tonemap": [
+      1
+    ],
+    "Vortex.PostRenderCleanup": [
+      1
+    ],
+    "Vortex.RenderPass.Execute": [
+      1
+    ],
+    "Vortex.RenderPass.PrepareResources": [
+      0,
+      1
+    ],
+    "Vortex.ResolveSceneColor": [
+      1
+    ],
+    "Vortex.Stage12.DeferredLighting": [
+      1
+    ],
+    "Vortex.Stage12.DirectionalLight": [
+      1
+    ],
+    "Vortex.Stage12.PointLight": [
+      23
+    ],
+    "Vortex.Stage18.Translucency": [
+      1
+    ],
+    "Vortex.Stage3.DepthPrepass": [
+      1
+    ],
+    "Vortex.Stage5.ScreenHzbBuild": [
+      1
+    ],
+    "Vortex.Stage6.SpatialLightGrid": [
+      1
+    ],
+    "Vortex.Stage8.ShadowDepths": [
+      1
+    ],
+    "Vortex.Stage9.BasePass": [
+      1
+    ],
+    "Vortex.Stage9.BasePass.MainPass": [
+      1
+    ],
+    "VortexCompositingPass": [
+      2
+    ]
+  },
+  "cpu_scopes_per_call_ms": {
+    "Vortex.PostProcess.PrepareFrameExposure": {
+      "count": 1008,
+      "mean": 0.05551317261904762,
+      "p50": 0.049013,
+      "p95": 0.0903215,
+      "p99": 0.10399693,
+      "max": 0.233311
+    },
+    "Vortex.PostProcess.Exposure.FrameResolve": {
+      "count": 1008,
+      "mean": 0.05346204861111112,
+      "p50": 0.0471745,
+      "p95": 0.08734199999999999,
+      "p99": 0.10089603,
+      "max": 0.229404
+    },
+    "Graphics.Queue.Submission.CriticalSection": {
+      "count": 6048,
+      "mean": 0.032901962301587304,
+      "p50": 0.028624,
+      "p95": 0.07157899999999995,
+      "p99": 0.09670599999999997,
+      "max": 0.419592
+    },
+    "Vortex.DispatchSceneRendererRender": {
+      "count": 1008,
+      "mean": 2.9347170714285715,
+      "p50": 2.8633284999999997,
+      "p95": 3.5182814500000004,
+      "p99": 3.8191075099999985,
+      "max": 5.07713
+    },
+    "Vortex.Lighting.GatherSelection": {
+      "count": 1008,
+      "mean": 0.022971489087301587,
+      "p50": 0.021691,
+      "p95": 0.029069999999999995,
+      "p99": 0.04506182999999997,
+      "max": 0.114046
+    },
+    "Vortex.Lighting.PublishShadowReferences": {
+      "count": 1008,
+      "mean": 0.001897348214285714,
+      "p50": 0.001743,
+      "p95": 0.00243465,
+      "p99": 0.0061889699999999985,
+      "max": 0.011923
+    },
+    "Vortex.Lighting.PublishFrame": {
+      "count": 1008,
+      "mean": 0.18882230357142857,
+      "p50": 0.17719000000000001,
+      "p95": 0.26767165,
+      "p99": 0.31274268999999993,
+      "max": 0.430444
+    },
+    "Vortex.SceneRenderer.PrepareExposureDomain": {
+      "count": 1008,
+      "mean": 0.09290317956349207,
+      "p50": 0.0839635,
+      "p95": 0.14237815,
+      "p99": 0.18246715999999996,
+      "max": 0.302963
+    },
+    "Vortex.DispatchSceneRendererCompositing": {
+      "count": 1008,
+      "mean": 0.002183457341269841,
+      "p50": 0.0019085,
+      "p95": 0.0031589999999999995,
+      "p99": 0.0073662299999999944,
+      "max": 0.011361
+    },
+    "Vortex.PostProcess.ResolveViewExposureSettings": {
+      "count": 1008,
+      "mean": 0.0042659126984126985,
+      "p50": 0.004078,
+      "p95": 0.005463499999999999,
+      "p99": 0.008609929999999995,
+      "max": 0.018275
+    },
+    "Vortex.PostProcess.PrepareSceneExposure": {
+      "count": 1008,
+      "mean": 0.044353976190476194,
+      "p50": 0.0422545,
+      "p95": 0.05375464999999999,
+      "p99": 0.09527043,
+      "max": 0.219986
+    },
+    "tracy::D3D12QueueCtx::Collect": {
+      "count": 3024,
+      "mean": 0.006060121362433863,
+      "p50": 0.003702,
+      "p95": 0.018551999999999996,
+      "p99": 0.024679269999999996,
+      "max": 0.069011
+    },
+    "Vortex.Lighting.ResolveEvaluation": {
+      "count": 1008,
+      "mean": 0.00252987996031746,
+      "p50": 0.0023645000000000003,
+      "p95": 0.0033314999999999985,
+      "p99": 0.006399199999999998,
+      "max": 0.025398
+    },
+    "Vortex.PostProcess.Execute": {
+      "count": 1008,
+      "mean": 0.030736208333333334,
+      "p50": 0.029356,
+      "p95": 0.036746,
+      "p99": 0.06220716999999976,
+      "max": 0.310196
+    },
+    "Graphics.FinalizeCommandRecorder": {
+      "count": 6048,
+      "mean": 0.041679609623015874,
+      "p50": 0.037591,
+      "p95": 0.08821249999999997,
+      "p99": 0.11716439999999999,
+      "max": 0.453014
+    },
+    "Graphics.Queue.Submission.LockWait": {
+      "count": 6031,
+      "mean": 4.198789587133146e-05,
+      "p50": 4e-05,
+      "p95": 9e-05,
+      "p99": 0.00015729999999999838,
+      "max": 0.000361
+    },
+    "Vortex.PostProcess.PollExposureStatus": {
+      "count": 1008,
+      "mean": 0.0004019742063492064,
+      "p50": 0.00038,
+      "p95": 0.000691,
+      "p99": 0.0008975699999999976,
+      "max": 0.002014
+    },
+    "D3D12.BindComputePipeline": {
+      "count": 8064,
+      "mean": 0.003653292534722222,
+      "p50": 0.002214,
+      "p95": 0.012658649999999985,
+      "p99": 0.02025837,
+      "max": 0.141628
+    },
+    "Vortex.Lighting.BuildDeferredPackets": {
+      "count": 1008,
+      "mean": 0.000838047619047619,
+      "p50": 0.000791,
+      "p95": 0.001092,
+      "p99": 0.0013022299999999993,
+      "max": 0.004418
+    },
+    "Vortex.Lighting.RecordDeferred": {
+      "count": 1008,
+      "mean": 0.0996903263888889,
+      "p50": 0.096197,
+      "p95": 0.12071065,
+      "p99": 0.1772801,
+      "max": 0.272094
+    },
+    "Graphics.AcquireCommandRecorder": {
+      "count": 6048,
+      "mean": 0.016437701884920636,
+      "p50": 0.013635,
+      "p95": 0.03786464999999999,
+      "p99": 0.05936253,
+      "max": 0.234743
+    },
+    "Vortex.PostProcess.Exposure.MeterAndAdapt": {
+      "count": 1008,
+      "mean": 0.03866234920634921,
+      "p50": 0.036709,
+      "p95": 0.046162499999999995,
+      "p99": 0.08991678999999991,
+      "max": 0.211099
+    },
+    "Vortex.OnFrameStart": {
+      "count": 1008,
+      "mean": 0.3249808640873016,
+      "p50": 0.305683,
+      "p95": 0.4944528499999999,
+      "p99": 0.6584639399999999,
+      "max": 0.906814
+    },
+    "Graphics.Registry.UsePin.LockWait": {
+      "count": 12673,
+      "mean": 1.9731002919592836e-05,
+      "p50": 1e-05,
+      "p95": 6e-05,
+      "p99": 8e-05,
+      "max": 0.004579
+    },
+    "Vortex.PostProcess.Exposure.SceneRange": {
+      "count": 1008,
+      "mean": 0.014495375,
+      "p50": 0.013315,
+      "p95": 0.0193565,
+      "p99": 0.02854472999999997,
+      "max": 0.116971
+    },
+    "Vortex.Shadows.RecordDepths": {
+      "count": 1008,
+      "mean": 0.565546136904762,
+      "p50": 0.547275,
+      "p95": 0.68640565,
+      "p99": 0.8041163499999998,
+      "max": 0.971507
+    },
+    "Vortex.Lighting.BuildGrid": {
+      "count": 1008,
+      "mean": 0.006602314484126984,
+      "p50": 0.006312,
+      "p95": 0.009533999999999999,
+      "p99": 0.01210499999999998,
+      "max": 0.043101
+    },
+    "D3D12.FenceWait": {
+      "count": 2016,
+      "mean": 11.40462307142857,
+      "p50": 9.8853665,
+      "p95": 23.89879025,
+      "p99": 24.3769217,
+      "max": 25.026744
+    },
+    "Graphics.Registry.UsePin.CriticalSection": {
+      "count": 13101,
+      "mean": 7.22365468284864e-05,
+      "p50": 2e-05,
+      "p95": 0.000391,
+      "p99": 0.000601,
+      "max": 0.004649
+    },
+    "D3D12.Present.Tearing": {
+      "count": 1008,
+      "mean": 0.20573659722222223,
+      "p50": 0.197739,
+      "p95": 0.26577779999999995,
+      "p99": 0.3279591599999999,
+      "max": 1.44357
+    },
+    "Vortex.PostProcess.Exposure.HistogramConstants": {
+      "count": 1008,
+      "mean": 0.002147931547619048,
+      "p50": 0.001983,
+      "p95": 0.002670999999999999,
+      "p99": 0.0062112999999999995,
+      "max": 0.010329
+    }
+  },
+  "noise": {
+    "block_means_ms": [
+      29.652115692307692,
+      29.76872379701493,
+      29.83787336119402
+    ],
+    "block_range_percent": 0.6243408708168663,
+    "scope": "Within-capture three 10-second blocks; no between-run confidence claim"
+  },
+  "process": {
+    "working_set_bytes": 3711926272,
+    "private_bytes": 8782147584,
+    "cpu_time_seconds": 16.296875,
+    "scope": "Process CPU memory at capture end; not renderer GPU allocation"
+  },
+  "identity": {
+    "inputs": [
+      {
+        "sha256": "c7f604d74dde1b1f75c15f5161d92f6320540a97a2d7ae549ab9b7605e2fec20",
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-tracy-ninja\\bin\\Release\\Oxygen.Examples.RenderScene.exe"
+      },
+      {
+        "sha256": "5a8fc43d67a87136139194c9dd110a6bcd2375cfa9d8fa791dfd470e33baf031",
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine/bin/Oxygen/Release/production/shaders.bin"
+      },
+      {
+        "sha256": "00db64fab4715a369070fa98d32745b6bb8266fae1b118de0cfdd9e1c3150327",
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine/Examples/RenderScene/.cooked/container.index.bin"
+      },
+      {
+        "sha256": "3665446b42e4e8b7c8cf770c70bc05283a2726dc82c29c462edb15353eb04397",
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine/Examples/RenderScene/.cooked/Scenes/NewSponza_Main_glTF_003.oscene"
+      },
+      {
+        "sha256": "30199a59af3cc1b3e0f687550285b50abfc8d27e542bcfb9a1f74c1bf94fc6fa",
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine/Examples/RenderScene/demo_settings.json"
+      },
+      {
+        "sha256": "b6fbb153af2f551ab1ece85b9e1de0e9aceeb352ad5845a7d8271fd9afb2503c",
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine/imgui.ini"
+      },
+      {
+        "sha256": "140838349c56b08e185a0d620ea68801791dd67c28fa66652e61d164303d0011",
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-tracy-ninja\\bin\\Release\\Oxygen.Base.dll"
+      },
+      {
+        "sha256": "af89ed39601a4d5952820cdf592a8a9d162e0c7aefb4d241fe2ea848677e8661",
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-tracy-ninja\\bin\\Release\\Oxygen.Clap.dll"
+      },
+      {
+        "sha256": "3febf5c3576e3507f4dab03c967e05f50193c8032c6be74bab4fc911ef359404",
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-tracy-ninja\\bin\\Release\\Oxygen.Composition.dll"
+      },
+      {
+        "sha256": "17c4a588f332a86271515969a51eeb9c4d0d8a047a4cc7b3c5717af2c306f950",
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-tracy-ninja\\bin\\Release\\Oxygen.Console.dll"
+      },
+      {
+        "sha256": "2c03da0655e0ad4c7986b624b0981cfb24d4d7781b6eaffa4577db2448bfabc2",
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-tracy-ninja\\bin\\Release\\Oxygen.Content.dll"
+      },
+      {
+        "sha256": "b73a57e6485e4406a587fd095a18065c95c36ec875ce10f1b30de0b4fafba43c",
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-tracy-ninja\\bin\\Release\\Oxygen.Cooker.dll"
+      },
+      {
+        "sha256": "53942dc1f7ad19047beda740c461a2d7f44feba95a0ce1b26235c2c400c6cec2",
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-tracy-ninja\\bin\\Release\\Oxygen.Core.dll"
+      },
+      {
+        "sha256": "f747bec024dd666d95e8cf9259bc1549ee4ff7f407a098c7e5918ffe86a2a7a6",
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-tracy-ninja\\bin\\Release\\Oxygen.Data.dll"
+      },
+      {
+        "sha256": "5a510325af2c7b64d6bffe9259f1e2a523c91b251349dc6c72ca23237d03c6d4",
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-tracy-ninja\\bin\\Release\\Oxygen.Engine.dll"
+      },
+      {
+        "sha256": "15eb1aba34f51943946184fe577413be79815e2b1cd0a3f5ecd5e0a8ef032c16",
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-tracy-ninja\\bin\\Release\\Oxygen.Engine.EditorInterface.dll"
+      },
+      {
+        "sha256": "c892ab724643bb7ddfea8ef63ecb605d8217f9f9e0d7a8cc26ed735c9df63c92",
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-tracy-ninja\\bin\\Release\\Oxygen.Graphics.Common.dll"
+      },
+      {
+        "sha256": "4737da09411de9dd9c7f12f82bb3f4f090a98806ca10a245802f1416a34534d6",
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-tracy-ninja\\bin\\Release\\Oxygen.Graphics.Direct3D12.dll"
+      },
+      {
+        "sha256": "f73a8b4b0a15c302f8960172d016b9f39a37d72d5d993aacee9685f5c6c9a194",
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-tracy-ninja\\bin\\Release\\Oxygen.Graphics.Headless.dll"
+      },
+      {
+        "sha256": "acdbd0981d6e602de7016e5fc002f1610512abcf7181e23b9221133491cae454",
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-tracy-ninja\\bin\\Release\\Oxygen.ImGui.dll"
+      },
+      {
+        "sha256": "d1130c0ac5982e932912114b5395015aba47b6d0a395e67edcbdac123810589e",
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-tracy-ninja\\bin\\Release\\Oxygen.Input.dll"
+      },
+      {
+        "sha256": "c64ae0c3aefd4897c2986974aae15427fa5dc34cdb19e5ee9788e8fb886b665c",
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-tracy-ninja\\bin\\Release\\Oxygen.Nexus.dll"
+      },
+      {
+        "sha256": "6bef9a2cf2771f5e607e9b56895fdc51751c34823318fbd60883964745dee3f6",
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-tracy-ninja\\bin\\Release\\Oxygen.Physics.dll"
+      },
+      {
+        "sha256": "a04d436dfe48532beaa7a001cd3773c161423ac97c9d7a84a7dd5884dbf2c833",
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-tracy-ninja\\bin\\Release\\Oxygen.PhysicsModule.dll"
+      },
+      {
+        "sha256": "a0920a28b6af9028a8dbf016b6b256f169b3e26ba69ea4e67cf1747aa7156181",
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-tracy-ninja\\bin\\Release\\Oxygen.Platform.dll"
+      },
+      {
+        "sha256": "04833362666749dd2848282c41a5b8a8841c31469792294bd103cc42b7420d30",
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-tracy-ninja\\bin\\Release\\Oxygen.Profiling.Cpu.dll"
+      },
+      {
+        "sha256": "b6526f6ddd623f449db1517857086e93e4bc17b8920f711f3f5a005d4708b869",
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-tracy-ninja\\bin\\Release\\Oxygen.Scene.dll"
+      },
+      {
+        "sha256": "7cd749fd03dbf5e57e270be3d387dd58c641cfb5d07ffe1af1bc5ee4042a74e5",
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-tracy-ninja\\bin\\Release\\Oxygen.SceneSync.dll"
+      },
+      {
+        "sha256": "7fed87628c67d6b2d45f5c5872e9d4b2d8831f6bee4ce426b4275d18e3bdd3db",
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-tracy-ninja\\bin\\Release\\Oxygen.Scripting.dll"
+      },
+      {
+        "sha256": "36d0104e447c5d569faf3af463981e870ecd8a009c04c50c4a27303239374c08",
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-tracy-ninja\\bin\\Release\\Oxygen.Serio.dll"
+      },
+      {
+        "sha256": "8a967051a05d6213edd8d58c776d155332aa66a3485d5cc92b77e9a2d3662dc8",
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-tracy-ninja\\bin\\Release\\Oxygen.TextWrap.dll"
+      },
+      {
+        "sha256": "0409a5bbeb744e33b0c419c64761f31e43bd7dcce0ef0993116d3b902e0e216f",
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-tracy-ninja\\bin\\Release\\Oxygen.Tracy.dll"
+      },
+      {
+        "sha256": "dc41ef8cdcb0a99c7ef51bb9654b29182a66a4ce154e3ad16243960729560da7",
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-tracy-ninja\\bin\\Release\\Oxygen.Vortex.dll"
+      }
+    ],
+    "build": "oxygen-tracy-ninja-release",
+    "tracy": true,
+    "git_head": "e824c97a7916aa0de324965fbec299602191a8bd",
+    "runtime_environment": {
+      "PATH": "C:\\Users\\abdes\\.conan2\\p\\b\\sdlb9ad705c7d7b3\\p\\bin;C:\\Program Files\\PowerShell\\7;C:\\Users\\abdes\\.codex\\tmp\\arg0\\codex-arg07PdUIH;C:\\Users\\abdes\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\native\\libheif\\libheif\\bin;C:\\Users\\abdes\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\native\\jxrlib\\jxrlib\\bin;C:\\Users\\abdes\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\native\\poppler\\Library\\bin;C:\\Users\\abdes\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\bin\\override;C:\\Program Files (x86)\\oh-my-posh\\bin\\;C:\\WINDOWS\\system32;C:\\WINDOWS;C:\\WINDOWS\\System32\\Wbem;C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\;C:\\WINDOWS\\System32\\OpenSSH\\;C:\\Program Files\\NVIDIA Corporation\\NVIDIA App\\NvDLISR;C:\\Program Files (x86)\\NVIDIA Corporation\\PhysX\\Common;C:\\Program Files\\doxygen\\bin;C:\\Program Files\\dotnet\\;C:\\Program Files (x86)\\Windows Kits\\10\\Windows Performance Toolkit\\;C:\\Program Files\\Kubernetes\\Minikube;C:\\Program Files\\MATLAB\\R2026a\\bin;C:\\Program Files\\CMake\\bin;C:\\Program Files\\Git\\cmd;C:\\Program Files\\Go\\bin;C:\\Program Files\\Pandoc\\;C:\\Program Files\\nodejs\\;C:\\Program Files\\PowerShell\\7\\;C:\\Program Files\\Neovim\\bin;C:\\Program Files\\Docker\\Docker\\resources\\bin;C:\\Program Files\\GitHub CLI\\;C:\\Users\\abdes\\.cortex-tools\\bin;C:\\Users\\abdes\\.cortex-tools\\go\\1.27.1\\go\\bin;C:\\Users\\abdes\\AppData\\Local\\Programs\\oh-my-posh\\bin\\;C:\\Users\\abdes\\AppData\\Local\\agy\\bin;C:\\Users\\abdes\\AppData\\Local\\pnpm\\bin;C:\\Program Files (x86)\\Windows Kits\\10\\Debuggers\\x64;C:\\Users\\abdes\\.cargo\\bin;C:\\Program Files\\FontForgeBuilds\\bin;C:\\Users\\abdes\\AppData\\Local\\UniGetUI\\Chocolatey\\bin;C:\\Program Files\\Graphviz\\bin;D:\\dev\\ccache;D:\\dev\\ninja;C:\\Program Files\\Conan\\conan;C:\\Users\\abdes\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\native\\powershell;C:\\Users\\abdes\\AppData\\Local\\Microsoft\\WindowsApps;C:\\Users\\abdes\\AppData\\Local\\Microsoft\\WinGet\\Packages\\junegunn.fzf_Microsoft.Winget.Source_8wekyb3d8bbwe;C:\\Program Files\\LLVM\\bin;C:\\Users\\abdes\\AppData\\Local\\Programs\\Microsoft VS Code\\bin;C:\\Users\\abdes\\.dotnet\\tools;G:\\Antigravity\\bin;D:\\dev\\Zed\\bin;C:\\Program Files\\JetBrains\\CLion 2025.3\\bin;C:\\Users\\abdes\\.lmstudio\\bin;C:\\Users\\abdes\\AppData\\Local\\Microsoft\\WinGet\\Links;C:\\Users\\abdes\\.dotnet\\tools;C:\\Users\\abdes\\.dotnet\\tools;C:\\Users\\abdes\\AppData\\Local\\Python\\bin;H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\install\\RelWithDebInfo\\bin;C:\\Users\\abdes\\.dotnet\\tools;C:\\Program Files (x86)\\Dr. Memory\\bin\\;C:\\Users\\abdes\\AppData\\Local\\Programs\\Antigravity IDE\\bin;C:\\Users\\abdes\\go\\bin;C:\\Users\\abdes\\AppData\\Roaming\\npm;C:\\Users\\abdes\\AppData\\Local\\PowerToys\\DSCModules\\;C:\\Users\\abdes\\AppData\\Local\\Microsoft\\WinGet\\Packages\\sourcegit-scm.SourceGit_Microsoft.Winget.Source_8wekyb3d8bbwe\\SourceGit;C:\\Users\\abdes\\.dotnet\\tools;C:\\Users\\abdes\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\bin\\fallback;C:\\Users\\abdes\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\node\\bin;C:\\Users\\abdes\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\native\\git\\cmd;C:\\Users\\abdes\\AppData\\Local\\OpenAI\\Codex\\bin\\d5b459afd5dcd195;C:\\Users\\abdes\\AppData\\Local\\OpenAI\\Codex\\bin\\80f78947ad880e6e"
+    }
+  },
+  "run": {
+    "executable": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-tracy-ninja\\bin\\Release\\Oxygen.Examples.RenderScene.exe",
+    "measured_window_seconds": [
+      20,
+      50
+    ],
+    "arguments": [
+      "-v=-1",
+      "--frames",
+      "0",
+      "--fps",
+      "0",
+      "--vsync",
+      "false",
+      "--resolution",
+      "2560x1400",
+      "--scene",
+      "NewSponza_Main_glTF_003",
+      "--directional-shadows",
+      "conventional",
+      "--debug-layer",
+      "false"
+    ],
+    "pid": 60656,
+    "started": "2026-09-25T00:17:57.5014399+04:00"
+  },
+  "artifact_sha256": {
+    "run.json": "c6990b3f6c2858406730694ce4a9ca0a5519f0d02a5bf4c1ab986c9b0083aba5",
+    "identity.json": "fb977ba8bc07de4908e21469ca532173f61a7986a5bc5ca7b275c9c31e918247",
+    "demo_settings.json": "30199a59af3cc1b3e0f687550285b50abfc8d27e542bcfb9a1f74c1bf94fc6fa",
+    "demo_settings.final.json": "f66c18cf1cae34b77651c8586ee4f081f65f0899443cfd5383598858713ef896",
+    "scene.png": "14904e671fc8a8a3cb12415e02b663b3aded02597ce9d2ee80b63ace34fed8b4",
+    "process.json": "1923422f656c1a896712e362cf971b1e1facb40d3d13b3266a414567febefba1",
+    "hardware-end.csv": "459cf9eac89519ad36e1adb7d59ad34c1e342b6f58b9d4186be0a4eb3d32630c",
+    "exit-code.txt": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354",
+    "load-preflight.json": "0c8de4502a59f4a8e46f176db2d6087114dcb5a03bce5a01532ce5b493af526b",
+    "native.tracy": "334fc8c43238be3164a7da57e17a6edd143809a88a710d423d1abb21c7d36ff6",
+    "gpu.csv": "f687446955a2be43fe2afce0e9af9b1b12aded2307f80c4a465923d640d827c8",
+    "cpu.csv": "fa9419b05bfdaac20b1ed58ae4187771e85787e33bed5de029c201759ea9c360"
+  }
+}

@@ -1,0 +1,183 @@
+{
+  "tests": 15,
+  "failures": 0,
+  "disabled": 0,
+  "errors": 0,
+  "timestamp": "2026-09-24T23:55:00Z",
+  "time": "0.063s",
+  "name": "AllTests",
+  "testsuites": [
+    {
+      "name": "DrawMetadataEmitterTest",
+      "tests": 14,
+      "failures": 0,
+      "disabled": 0,
+      "errors": 0,
+      "timestamp": "2026-09-24T23:55:00Z",
+      "time": "0.063s",
+      "testsuite": [
+        {
+          "name": "GetDrawMetadataSrvIndexLazilyEnsuresFrameResources",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Resources\\DrawMetadataEmitter_test.cpp",
+          "line": 399,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T23:55:00Z",
+          "time": "0.003s",
+          "classname": "DrawMetadataEmitterTest"
+        },
+        {
+          "name": "ResetViewData_ClearsPreviousViewEmissionBeforeNextView",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Resources\\DrawMetadataEmitter_test.cpp",
+          "line": 449,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T23:55:00Z",
+          "time": "0.003s",
+          "classname": "DrawMetadataEmitterTest"
+        },
+        {
+          "name": "SortAndPartition_EqualSortingKeysRemainDeterministicByEmitOrder",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Resources\\DrawMetadataEmitter_test.cpp",
+          "line": 543,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T23:55:00Z",
+          "time": "0.005s",
+          "classname": "DrawMetadataEmitterTest"
+        },
+        {
+          "name": "EmitDrawMetadata_ShadowCasterRoutingFollowsRenderItemShadowFlag",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Resources\\DrawMetadataEmitter_test.cpp",
+          "line": 598,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T23:55:00Z",
+          "time": "0.003s",
+          "classname": "DrawMetadataEmitterTest"
+        },
+        {
+          "name": "EmitDrawMetadata_ShadowOnlyDrawsStayOutOfMainViewPartitions",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Resources\\DrawMetadataEmitter_test.cpp",
+          "line": 670,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T23:55:00Z",
+          "time": "0.004s",
+          "classname": "DrawMetadataEmitterTest"
+        },
+        {
+          "name": "EmitDrawMetadata_ShadowOnlyDrawsRetainShadowCasterPassForStage8Consumers",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Resources\\DrawMetadataEmitter_test.cpp",
+          "line": 746,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T23:55:00Z",
+          "time": "0.005s",
+          "classname": "DrawMetadataEmitterTest"
+        },
+        {
+          "name": "EmitDrawMetadata_AlphaTestFlagRoutesOpaqueDomainMaterialThroughMaskedShadowPath",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Resources\\DrawMetadataEmitter_test.cpp",
+          "line": 804,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T23:55:00Z",
+          "time": "0.004s",
+          "classname": "DrawMetadataEmitterTest"
+        },
+        {
+          "name": "EmitDrawMetadata_DoubleSidedMaterialSetsDoubleSidedShadowRoutingBit",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Resources\\DrawMetadataEmitter_test.cpp",
+          "line": 908,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T23:55:00Z",
+          "time": "0.004s",
+          "classname": "DrawMetadataEmitterTest"
+        },
+        {
+          "name": "EmitDrawMetadata_OpaqueMaterialStaysOutOfTransparentPartitions",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Resources\\DrawMetadataEmitter_test.cpp",
+          "line": 1015,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T23:55:00Z",
+          "time": "0.003s",
+          "classname": "DrawMetadataEmitterTest"
+        },
+        {
+          "name": "EmitDrawMetadata_AlphaBlendedMaterialRoutesOnlyThroughTransparentPartition",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Resources\\DrawMetadataEmitter_test.cpp",
+          "line": 1122,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T23:55:00Z",
+          "time": "0.005s",
+          "classname": "DrawMetadataEmitterTest"
+        },
+        {
+          "name": "SortAndPartition_ReordersBoundingSpheresWithShadowCasterDrawOrder",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Resources\\DrawMetadataEmitter_test.cpp",
+          "line": 1232,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T23:55:00Z",
+          "time": "0.004s",
+          "classname": "DrawMetadataEmitterTest"
+        },
+        {
+          "name": "ApplyInstancingBatches_MergesBoundingSpheresConservatively",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Resources\\DrawMetadataEmitter_test.cpp",
+          "line": 1304,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T23:55:00Z",
+          "time": "0.008s",
+          "classname": "DrawMetadataEmitterTest"
+        },
+        {
+          "name": "InstancingSeparatesMirroredInstancesOfTheSameGeometry",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Resources\\DrawMetadataEmitter_test.cpp",
+          "line": 1390,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T23:55:00Z",
+          "time": "0.003s",
+          "classname": "DrawMetadataEmitterTest"
+        },
+        {
+          "name": "InstancingPreservesReceiverEligibilityWithoutChangingCasting",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Resources\\DrawMetadataEmitter_test.cpp",
+          "line": 1446,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T23:55:00Z",
+          "time": "0.004s",
+          "classname": "DrawMetadataEmitterTest"
+        }
+      ]
+    },
+    {
+      "name": "DrawMetadataEmitterStandaloneTest",
+      "tests": 1,
+      "failures": 0,
+      "disabled": 0,
+      "errors": 0,
+      "timestamp": "2026-09-24T23:55:00Z",
+      "time": "0s",
+      "testsuite": [
+        {
+          "name": "ShadowRasterCulling_ConservativelyKeepsTouchingCasterBounds",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Resources\\DrawMetadataEmitter_test.cpp",
+          "line": 1499,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T23:55:00Z",
+          "time": "0s",
+          "classname": "DrawMetadataEmitterStandaloneTest"
+        }
+      ]
+    }
+  ]
+}

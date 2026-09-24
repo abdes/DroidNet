@@ -1,0 +1,33 @@
+{
+  "tests": 1,
+  "failures": 0,
+  "disabled": 1,
+  "errors": 0,
+  "timestamp": "2026-09-24T23:59:17Z",
+  "time": "2.225s",
+  "name": "AllTests",
+  "testsuites": [
+    {
+      "name": "ManyLightBaseline",
+      "tests": 1,
+      "failures": 0,
+      "disabled": 1,
+      "errors": 0,
+      "timestamp": "2026-09-24T23:59:17Z",
+      "time": "2.225s",
+      "testsuite": [
+        {
+          "name": "DISABLED_RenderAndMeasure",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Benchmarks\\ManyLightBaseline_bench.cpp",
+          "line": 348,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T23:59:17Z",
+          "time": "2.225s",
+          "classname": "ManyLightBaseline",
+          "baseline_manifest": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\analysis\\ex07e\\e06-final\\native-benchmarks\\shadow-share-small-deferred\\baseline\\manifest.json"
+        }
+      ]
+    }
+  ]
+}

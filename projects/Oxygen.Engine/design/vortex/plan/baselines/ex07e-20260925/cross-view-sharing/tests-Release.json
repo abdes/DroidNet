@@ -1,0 +1,102 @@
+[
+  {
+    "tests": 5,
+    "suite": "Oxygen.Graphics.Common.Submission.Tests",
+    "failures": 0
+  },
+  {
+    "tests": 20,
+    "suite": "Oxygen.Graphics.Common.Commander.Tests",
+    "failures": 0
+  },
+  {
+    "tests": 15,
+    "suite": "Oxygen.Graphics.Common.CommandListPool.Tests",
+    "failures": 0
+  },
+  {
+    "tests": 73,
+    "suite": "Oxygen.Graphics.Common.ResourceRegistry.Tests",
+    "failures": 0
+  },
+  {
+    "tests": 17,
+    "suite": "Oxygen.Graphics.Common.ReadbackTracker.Tests",
+    "failures": 0
+  },
+  {
+    "tests": 18,
+    "suite": "Oxygen.Graphics.Common.DeferredReclaimer.Tests",
+    "failures": 0
+  },
+  {
+    "tests": 3,
+    "suite": "Oxygen.Graphics.Headless.Execution.Tests",
+    "failures": 0
+  },
+  {
+    "tests": 17,
+    "suite": "Oxygen.Loader.GraphicsBackendLoader.Tests",
+    "failures": 0
+  },
+  {
+    "tests": 36,
+    "suite": "Oxygen.Loader.BackendLifetimeIntegration.Tests",
+    "failures": 0
+  },
+  {
+    "tests": 18,
+    "suite": "Oxygen.Vortex.TransformUploader.Tests",
+    "failures": 0
+  },
+  {
+    "tests": 15,
+    "suite": "Oxygen.Vortex.DrawMetadataEmitter.Tests",
+    "failures": 0
+  },
+  {
+    "tests": 30,
+    "suite": "Oxygen.Vortex.GeometryUploader.Tests",
+    "failures": 0
+  },
+  {
+    "tests": 34,
+    "suite": "Oxygen.Vortex.MaterialBinder.Tests",
+    "failures": 0
+  },
+  {
+    "tests": 10,
+    "suite": "Oxygen.Vortex.AtlasBuffer.Tests",
+    "failures": 0
+  },
+  {
+    "tests": 27,
+    "suite": "Oxygen.Vortex.TextureBinder.Tests",
+    "failures": 0
+  },
+  {
+    "tests": 34,
+    "suite": "Oxygen.Vortex.LightingService.Tests",
+    "failures": 0
+  },
+  {
+    "tests": 27,
+    "suite": "Oxygen.Vortex.PostProcessService.Tests",
+    "failures": 0
+  },
+  {
+    "tests": 50,
+    "suite": "Oxygen.Vortex.ShadowService.Tests",
+    "failures": 0
+  },
+  {
+    "tests": 19,
+    "suite": "Oxygen.Vortex.LightingInstrumentation.Tests",
+    "failures": 0
+  },
+  {
+    "tests": 26,
+    "suite": "Oxygen.Vortex.LightingImageReference.Tests",
+    "failures": 0
+  }
+]
