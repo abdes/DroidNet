@@ -64,9 +64,7 @@ its implementation evidence, validation evidence, and remaining work.
 
 The [implementation plan](plan/exposure-and-lightbench-correction.md) owns scope
 and measurable delivery gates. Slices 1-6, including 5.1 and 5.2, are validated;
-EX07 is validated and closed, including user-confirmed editor interaction. Subsequent work is the usable seven-experiment
-LightBench, console/UI automation and final MultiView/package integration. EX09 is divided
-into EX09A-E; stable work-item IDs below retain requirement coverage.
+EX07 is validated and closed, including user-confirmed editor interaction. The user approved a smaller EX08–EX10 scope: calibrated LightBench, focused native tests, existing console controls and remaining MultiView acceptance. EX08.2 is deferred. Stable IDs explicitly record removed infrastructure; renderer correctness requirements remain.
 
 **Resume entry point:** [Current work](#31-current-work). Historical manifests do
 not reopen completed items. The accepted EX051 CPU cost and FP32/P=1 production
@@ -74,22 +72,22 @@ policy remain closed; qualified half storage is explicit diagnostic coverage.
 Keep the [allocation contract](lld/scene-textures.md#per-view-fp16-suitability)
 and [CPU decision](lld/post-process-service.md#approved-ex051-13ab-joint-cpu-correction).
 
-| Slice                              | Status    | Current boundary / remaining gate                                                                                                                                                                                              | Evidence                                                                                                                                                                                                                                                                                                                                                        |
-| ---------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1 — Contracts                      | validated | Numeric domain, error budgets, layouts and HDR inventory have designated owners.                                                                                                                                               | [Contract checkpoint](plan/exposure-contract-checkpoint.md)                                                                                                                                                                                                                                                                                                     |
-| 2 — Settings and fixed exposure    | validated | Canonical authored input, immutable pass snapshots, fixed/camera gain, per-view settings and public mask acceptance are qualified.                                                                                             | [Fixed gain](../../out/build-ninja/analysis/vortex/exposure-lightbench/fixed-gain/evidence-manifest.json), [frame bindings](../../out/build-ninja/analysis/vortex/exposure-lightbench/frame-binding/evidence-manifest.json), [configuration and mask acceptance](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/review-r028-manifest.json) |
-| 3 — Metering and adaptation        | validated | Controlled-input histogram, curve, masks and hybrid adaptation; scene acceptance remains slice 5.                                                                                                                              | [Metering](../../out/build-ninja/analysis/vortex/exposure-lightbench/metering/evidence-manifest.json)                                                                                                                                                                                                                                                           |
-| 4 — GPU lifecycle and sharing      | validated | Controlled-input/public-event gate, including offscreen routing. Real-scene resource lifetime is tracked in slice 5.                                                                                                           | [Lifecycle](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/discontinuity-manifest.json), [offscreen sharing](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/offscreen-sharing-manifest.json)                                                                                                                          |
-| 5 — HDR migration and recovery     | validated | Numerical, lifecycle and native layout/interaction correctness qualified in Debug and Release. Performance disposition is closed in Slice 5.1.                                                                                 | [Detailed items](#32-slice-5-work-items)                                                                                                                                                                                                                                                                                                                        |
-| 5.1 — Exposure performance         | validated | Closed 2026-09-21: format/policy, independent SceneColor ownership, CPU corrections, correctness and final GPU acceptance complete. User accepts measured CPU cost; further CPU optimization is deferred to a later milestone. | [Current work](#31-current-work), [final CPU decision](lld/post-process-service.md#approved-ex051-13ab-joint-cpu-correction)                                                                                                                                                                                                                                    |
-| 5.2 — Focused exposure quality     | validated | Approved residual owner fixes and Release include repair committed; 65 Debug and 65 Release cases pass, scoped changed code is tidy-clean, and one matched I02 preservation run passes.                                        | [Bounded scope and result](#322-slice-52-code-quality-and-test-structure)                                                                                                                                                                                                                                                                                       |
-| 6 — Authoring and persistence      | validated | Strict source/cook/load/script/editor migration, C++20 editor boundary, PAK repacking, rendered UI acceptance and configuration isolation closed.                                                                              | [Detailed items](#33-slice-6-work-items), [acceptance evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice6/slice6-progress.json)                                                                                                                                                                                                          |
-| 7 — Physical and scalable lighting | validated | EX07A–F closed (2026-09-25), including final user editor approval; EX08 not started.                                                                                                                                           | [A checkpoint](plan/EX07A-contract-review.md), [EX07 items](#34-slice-7-work-items), [workloads and gates](plan/EX07-lighting-correctness-and-scalability.md)                                                                                                                                                                                                   |
-| 8 — Measured Neutral Reference     | planned   | Qualified instruments plus the first usable interactive/batch experiment.                                                                                                                                                      | [EX08 and automation follow-ups](#35-slice-8-work-items)                                                                                                                                                                                                                                                                                                        |
-| 8.1 — Console controls             | planned   | Existing console drives validated post-process settings and transitions.                                                                                                                                                       | [EX08.1](#351-slice-81-post-processing-console-controls)                                                                                                                                                                                                                                                                                                        |
-| 8.2 — ImGui UI automation          | planned   | Actual widget workflows and EX06 regressions run in an opt-in native test configuration.                                                                                                                                       | [EX08.2](#352-slice-82-imgui-interaction-automation)                                                                                                                                                                                                                                                                                                            |
-| 9A-E — Experiments and MultiView   | planned   | Point/spot -> fixed gain -> adaptation/lifecycle -> HDR -> MultiView integration; reuse delivered foundations.                                                                                                                 | [Delivery ownership](#36-slice-9-work-items)                                                                                                                                                                                                                                                                                                                    |
-| 10 — Integrated acceptance         | planned   | Complete final-build report and operating docs using cases delivered with each step.                                                                                                                                           | [EX10](#37-slice-10-work-items)                                                                                                                                                                                                                                                                                                                                 |
+| Slice                                    | Status    | Current boundary / remaining gate                                                                                                                                                                                              | Evidence                                                                                                                                                                                                                                                                                                                                                        |
+| ---------------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1 — Contracts                            | validated | Numeric domain, error budgets, layouts and HDR inventory have designated owners.                                                                                                                                               | [Contract checkpoint](plan/exposure-contract-checkpoint.md)                                                                                                                                                                                                                                                                                                     |
+| 2 — Settings and fixed exposure          | validated | Canonical authored input, immutable pass snapshots, fixed/camera gain, per-view settings and public mask acceptance are qualified.                                                                                             | [Fixed gain](../../out/build-ninja/analysis/vortex/exposure-lightbench/fixed-gain/evidence-manifest.json), [frame bindings](../../out/build-ninja/analysis/vortex/exposure-lightbench/frame-binding/evidence-manifest.json), [configuration and mask acceptance](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/review-r028-manifest.json) |
+| 3 — Metering and adaptation              | validated | Controlled-input histogram, curve, masks and hybrid adaptation; scene acceptance remains slice 5.                                                                                                                              | [Metering](../../out/build-ninja/analysis/vortex/exposure-lightbench/metering/evidence-manifest.json)                                                                                                                                                                                                                                                           |
+| 4 — GPU lifecycle and sharing            | validated | Controlled-input/public-event gate, including offscreen routing. Real-scene resource lifetime is tracked in slice 5.                                                                                                           | [Lifecycle](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/discontinuity-manifest.json), [offscreen sharing](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/offscreen-sharing-manifest.json)                                                                                                                          |
+| 5 — HDR migration and recovery           | validated | Numerical, lifecycle and native layout/interaction correctness qualified in Debug and Release. Performance disposition is closed in Slice 5.1.                                                                                 | [Detailed items](#32-slice-5-work-items)                                                                                                                                                                                                                                                                                                                        |
+| 5.1 — Exposure performance               | validated | Closed 2026-09-21: format/policy, independent SceneColor ownership, CPU corrections, correctness and final GPU acceptance complete. User accepts measured CPU cost; further CPU optimization is deferred to a later milestone. | [Current work](#31-current-work), [final CPU decision](lld/post-process-service.md#approved-ex051-13ab-joint-cpu-correction)                                                                                                                                                                                                                                    |
+| 5.2 — Focused exposure quality           | validated | Approved residual owner fixes and Release include repair committed; 65 Debug and 65 Release cases pass, scoped changed code is tidy-clean, and one matched I02 preservation run passes.                                        | [Bounded scope and result](#322-slice-52-code-quality-and-test-structure)                                                                                                                                                                                                                                                                                       |
+| 6 — Authoring and persistence            | validated | Strict source/cook/load/script/editor migration, C++20 editor boundary, PAK repacking, rendered UI acceptance and configuration isolation closed.                                                                              | [Detailed items](#33-slice-6-work-items), [acceptance evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice6/slice6-progress.json)                                                                                                                                                                                                          |
+| 7 — Physical and scalable lighting       | validated | EX07A–F closed (2026-09-25), including final user editor approval; EX08 not started.                                                                                                                                           | [A checkpoint](plan/EX07A-contract-review.md), [EX07 items](#34-slice-7-work-items), [workloads and gates](plan/EX07-lighting-correctness-and-scalability.md)                                                                                                                                                                                                   |
+| 8 — Calibrated Neutral Reference         | planned   | Revised scope approved; complete reset/save/load, focused native reference check and user UI acceptance.                                                                                                                       | [Approved scope](plan/EX08-execution.md), [items](#35-slice-8-work-items)                                                                                                                                                                                                                                                                                       |
+| 8.1 — Console controls                   | planned   | Existing console drives validated post-process settings and transitions.                                                                                                                                                       | [EX08.1](#351-slice-81-post-processing-console-controls)                                                                                                                                                                                                                                                                                                        |
+| 8.2 — ImGui UI automation                | future    | Explicitly deferred; not a package dependency or gate. User owns UI acceptance.                                                                                                                                                | [Disposition](#352-slice-82-imgui-interaction-automation)                                                                                                                                                                                                                                                                                                       |
+| 9A-E — Useful controls and renderer gaps | planned   | Point/spot presets, fixed/adaptation controls, HDR evidence and existing MultiView acceptance.                                                                                                                                 | [Delivery ownership](#36-slice-9-work-items)                                                                                                                                                                                                                                                                                                                    |
+| 10 — Package closeout                    | planned   | Applicable evidence, affected final checks, user acceptance and operating docs; no new validation platform.                                                                                                                    | [EX10](#37-slice-10-work-items)                                                                                                                                                                                                                                                                                                                                 |
 
 ### 3.1 Current work
 
@@ -99,7 +97,7 @@ complete. The TexturedCube panel-refresh regression is covered by automated
 tests and the user's successful rebuilt-app test. See the
 [EX06 result and evidence](#33-slice-6-work-items).
 
-**Current: EX07F and overall EX07 are validated and closed (2026-09-25).** RecordingUseBatch/CommandRecorder now expose Oxygen Result. Native Debug/Release builds and eight retention checks pass; the actual C++20 Debug Interop build passes, and both installed SDKs are refreshed. [SDK qualification](plan/validation/ex07f-20260925/editor-sdk/summary.json). Fresh E performance/correctness evidence is reused; RenderScene interaction checks are user-confirmed. The user confirmed project/scene creation, lights/procedural meshes, live light edits, undo/redo and save/reopen persistence. See the [F acceptance report](plan/EX07F-acceptance-report.md). The missed E06 allocation-test caller and reported warnings are fixed in `4fd55cd8d`: all three affected targets build and five focused cases pass in each of Debug/Release. No captures were repeated. EX08 has not started.
+**Current: EX08–EX10 scope revision is approved (2026-09-25); code implementation has not resumed.** The initial four instrumentation drafts were discarded. Next is the calibrated Neutral Reference and focused native qualification, then EX08.1. The agent owns automated tests; the user owns UI acceptance. See [approved scope and execution](plan/EX08-execution.md). EX07 remains closed; reuse applicable evidence without repeating its captures or benchmarks.
 
 [Section 3.4](#34-slice-7-work-items) is the single authoritative EX07 progress
 tracker. It shows the execution stages, numbered deliverables, completed portions
@@ -117,9 +115,7 @@ from normal whole-engine memory consumption.
 
 The
 [revised delivery sequence](plan/exposure-and-lightbench-correction.md#remaining-delivery-at-a-glance)
-is EX07 -> EX08 -> EX08.1 -> EX08.2 -> EX09A-E -> EX10. EX08 delivers the first
-complete measured benchmark; the EX06 console/ImGui deferrals now have explicit
-slices. EX09 adds one experiment family per step; EX10 closes integration.
+is EX08 -> EX08.1 -> EX09A-E -> EX10 after closed EX07. EX08 delivers a calibrated demo and focused native check; EX09 adds useful presets/controls and closes concrete renderer gaps. EX08.2 is deferred; EX10 records concise closeout evidence.
 
 ### 3.2 Slice 5 work items
 
@@ -737,7 +733,7 @@ Accepted evidence is committed in `b8f1376e1`; the [report](plan/EX07E-shadow-sh
 | **S7/S8 — Cross-view maps and every consumer**           | **Complete: 50/50 service and 26/26 native image tests in each Release tree.** Includes deferred/forward/translucent readers, typed retained leases, cross-queue ordering, expired frame rejection, five-frame delayed capture, six-layer budget fallback and actual retained-byte accounting.                  | None for S7/S8. S9 measurements and user visual approval are complete.                        |
 | **S9 / E08 — Measure and qualify**                       | **Automated work complete:** 13 native + 9 Tracy final benchmark rows and four final application captures; ownership, CPU/GPU, memory, image and noise results are in the [report](plan/EX07E-shadow-sharing-results.md). Initial captures and the bounded endpoint repeat are retained.                        | None for E. Visual acceptance and numeric review approved; evidence committed in `b8f1376e1`. |
 
-**Next:** EX07 is closed; await user direction before starting EX08. No E/F implementation or qualification remains. The three reviewer documents are intentionally excluded from commits. Detailed suite
+**Next:** EX07 is closed; EX08 reduced scope is approved; implementation has not resumed, and EX08.1 follows. No E/F implementation or qualification remains. The three reviewer documents are intentionally excluded from commits. Detailed suite
 results are in the [E06 implementation plan](plan/EX07E-cross-view-shadow-sharing.md).
 
 The two approved design amendments are recorded: allocation-free descriptor
@@ -1452,97 +1448,99 @@ Evidence in `out/build-tracy-ninja/analysis/vortex/exposure-lightbench/ex07c`:
 `multiview-1440p-model2-final.tracy`, and `model2-settled-report.{txt,png}`.
 The user accepted this measured quality/performance result. It is credited to D
 within its measured MultiView scope; no new capture is required to transfer that
-credit. The existing stage table records closed C–E work and the remaining F obligations.
+credit. The existing stage table records closed C–E work and closed F acceptance.
 
 ### 3.5 Slice 8 work items
 
-**Planned. Outcome:** a measured Neutral Reference with reset/save/load and an
-interactive/batch report. Qualify instruments before enabling lighting verdicts.
-Existing status readbacks are prerequisites, not the delivered measurement API.
-EX08 also owns EX09-01–03/10–11/14 and EX10-01–02/06 below for the initial case.
+**Planned; revised scope approved 2026-09-25.** Code drafts were discarded.
+Deliver a calibrated Neutral Reference and focused native verification, not a
+runtime measurement platform. `removed` below means user-approved scope removal,
+not implementation or successful validation. New IDs preserve historical meaning.
 
-| ID        | Required result                                                                                                | Status  |
-| --------- | -------------------------------------------------------------------------------------------------------------- | ------- |
-| EX08-01   | Region statistics carry frame, view lifetime, product/domain, region and sample validity.                      | planned |
-| EX08-02   | Same-frame consumed-gain probe and correct stored-P recovery; derived values labelled.                         | planned |
-| EX08-03   | True black distinguished from zero/late/occluded/edge/nonfinite/insufficient samples.                          | planned |
-| EX08-04   | Bounded fence-safe readbacks; stale view/experiment revisions rejected.                                        | planned |
-| EX08-05   | Zero added dispatches/readback allocations when disabled; bounded enabled resources.                           | planned |
-| EX08-06   | Known GPU inputs qualify the instrument independently of lighting.                                             | planned |
-| EX08-GATE | Qualified instrument plus three-card Neutral Reference, full reset/load/save and matching batch recipe/report. | planned |
+| ID        | Required result / disposition                                                                                              | Status  |
+| --------- | -------------------------------------------------------------------------------------------------------------------------- | ------- |
+| EX08-01   | Reusable runtime region-statistics API removed; reference-region validity remains a native fixture requirement.            | removed |
+| EX08-02   | Runtime same-frame consumed-gain probe/instrumented shader removed. Existing production gain correctness remains required. | removed |
+| EX08-03   | General runtime sample-validity system removed; native reference tests still reject invalid/missing samples.               | removed |
+| EX08-04   | Runtime measurement readback scheduler/stale-result service removed. Reuse test fixture lifetime handling.                 | removed |
+| EX08-05   | New instrument enable/disable and resource-budget subsystem removed; no new runtime measurement work.                      | removed |
+| EX08-06   | General GPU instrument qualification project removed; focused fixture/reference correctness remains required.              | removed |
+| EX08-07   | Canonical three-card/1000-lux scene, independent reference exposure and shared app/test scene definition.                  | planned |
+| EX08-08   | Complete reset and explicit atomic local save/load; personal UI preferences preserved.                                     | planned |
+| EX08-09   | Readable controls/units/reference values and Reference/Modified configuration status; no live numerical verdict.           | planned |
+| EX08-10   | Focused native Debug/Release reference checks against independent oracle, valid regions and frozen budgets.                | planned |
+| EX08-11   | Launch demo; user checklist/OK-NOK acceptance for edits/reset/save/load/layouts; working README.                           | planned |
+| EX08-GATE | Calibrated demo, complete reset/save/load, focused native proof and user UI acceptance.                                    | planned |
 
 ### 3.5.1 Slice 8.1 post-processing console controls
 
-**Planned; follows EX08.** Explicit owner of the console work deferred in EX06.
+**Planned; follows EX08.** Ordinary controls remain available in normal Release
+under existing console policies; no new measurement commands or framework.
 
-| ID         | Required result                                                                                          | Status  |
-| ---------- | -------------------------------------------------------------------------------------------------------- | ------- |
-| EX081-01   | Existing console namespace/help/completion and explicit view/owner targeting.                            | planned |
-| EX081-02   | Settings, camera/mask/curve/output edits and seed/remeter use existing validated owners.                 | planned |
-| EX081-03   | Experiment select/reset adapter and truthful async revision/token/error reporting.                       | planned |
-| EX081-04   | Valid/invalid/stale-target tests, automation execution, lifecycle unregistration and operating commands. | planned |
-| EX081-GATE | Console and UI requests converge on the same accepted settings/output with atomic rejection.             | planned |
+| ID         | Required result                                                                                                 | Status  |
+| ---------- | --------------------------------------------------------------------------------------------------------------- | ------- |
+| EX081-01   | Existing namespace/help/completion/access policy and explicit view/owner targeting.                             | planned |
+| EX081-02   | Settings, camera/mask/curve/output edits and seed/remeter use existing validated owners.                        | planned |
+| EX081-03   | Local LightBench preset/reset calls and truthful async revision/token/error reporting.                          | planned |
+| EX081-04   | Valid/invalid/stale-target tests, automation execution, unregistration and operating commands.                  | planned |
+| EX081-GATE | UI/console converge on accepted settings/transitions with atomic rejection; user accepts integrated console UI. | planned |
 
 ### 3.5.2 Slice 8.2 ImGui interaction automation
 
-**Planned; follows EX08.1.** Explicit owner of the UI automation deferred in EX06.
-Check compatible dependency revision, license and build configuration at entry.
+**Deferred by the user (2026-09-25), outside package closure.** Not complete,
+not a dependency. User UI acceptance replaces the package's automated-widget gate.
 
-| ID         | Required result                                                                                                      | Status  |
-| ---------- | -------------------------------------------------------------------------------------------------------------------- | ------- |
-| EX082-01   | Opt-in Test Engine dependency/configuration and correct ImGui context/frame/shutdown integration.                    | planned |
-| EX082-02   | Actual numeric/focus/drag/mode/curve/mask/reset/load/save/panel workflows.                                           | planned |
-| EX082-03   | TexturedCube assignment/panel-return regression with isolated fixtures/preferences.                                  | planned |
-| EX082-04   | Bounded readiness, native reports/failure captures/exit status, normal-build isolation and instructions.             | planned |
-| EX082-GATE | Named UI workflows pass at required layouts; intentional failure proves reporting; visual judgment remains separate. | planned |
+| ID         | Deferred work                                                             | Status |
+| ---------- | ------------------------------------------------------------------------- | ------ |
+| EX082-01   | Test Engine dependency/configuration/context integration.                 | future |
+| EX082-02   | Automated numeric/focus/drag/mode/curve/mask/reset/load/save workflows.   | future |
+| EX082-03   | Automated TexturedCube assignment/panel-return workflows.                 | future |
+| EX082-04   | Native UI runner, reports/failure artifacts and build isolation.          | future |
+| EX082-GATE | Automated widget suite qualification; not required for EX08–EX10 closure. | future |
 
 ### 3.6 Slice 9 work items
 
-**Remaining delivery is planned.** EX09A point/spot, EX09B fixed exposure,
-EX09C adaptation/lifecycle, EX09D HDR, EX09E MultiView. Each includes its UI tests,
-batch cases, native inspection and instructions. Earlier IDs for shared groundwork
-are retained but scheduled in EX08; no duplicate implementation is intended.
+**Planned.** Useful demo controls plus retained renderer guarantees. Applicable
+EX01–EX07 evidence counts; only changed or uncovered behavior needs new checks.
+Original IDs remain, with narrowed delivery obligations stated explicitly.
 
-| ID        | Required result                                                                                    | Delivery step               | Status      |
-| --------- | -------------------------------------------------------------------------------------------------- | --------------------------- | ----------- |
-| EX09-01   | One current experiment schema/controller for UI and batch.                                         | EX08                        | planned     |
-| EX09-02   | Complete frame-boundary recipe application and temporal reset.                                     | EX08                        | planned     |
-| EX09-03   | Calibrated, readable three-card Neutral Reference default.                                         | EX08                        | planned     |
-| EX09-04   | Fixed Exposure: EV/camera/key/compensation/disabled reference outputs.                             | EX09B                       | planned     |
-| EX09-05   | Adaptation: both directions, controlled schedules, masks/profiles/curves.                          | EX09C                       | planned     |
-| EX09-06   | Lifecycle: startup/seed/cut/mode/pause/zero/sharing/stateless/recovery.                            | EX09C                       | planned     |
-| EX09-07   | Point Falloff: visible distance relationship and independent expectations.                         | EX09A                       | planned     |
-| EX09-08   | Spot Distribution: aimed receiver, cone response and integrated flux.                              | EX09A                       | planned     |
-| EX09-09   | HDR Domain: required endpoints and mixed production paths under diagnostic P changes.              | EX09D                       | planned     |
-| EX09-10   | Relevant controls/overlays and truthful pending/Pass/Fail/Modified/Invalid state.                  | EX08; extend per experiment | planned     |
-| EX09-11   | Explicit saved-experiment loading; current indoor recipe; personal preferences preserved.          | EX08                        | planned     |
-| EX09-12   | Seven-experiment native visual coverage at 1080p/1440p/resized; retain valid captures.             | EX08, EX09A-D               | planned     |
-| EX09-13   | Existing MultiView proofs integrated with measurements, controls and all layout/interaction gates. | EX09E                       | in_progress |
-| EX09-14   | Actual LightBench run/reset/load/save/batch instructions.                                          | EX08; extend per experiment | planned     |
-| EX09-15   | Existing MultiView README reconciled with measurements, sharing latency and final commands.        | EX09E                       | in_progress |
-| EX09-GATE | Seven complete experiments and MultiView operation with per-step numerical/visual evidence.        | After EX09E                 | planned     |
+| ID        | Required result / disposition                                                                                 | Delivery step | Status      |
+| --------- | ------------------------------------------------------------------------------------------------------------- | ------------- | ----------- |
+| EX09-01   | Universal UI/batch experiment schema/controller removed.                                                      | —             | removed     |
+| EX09-02   | Local complete frame-boundary settings application/reset, including temporal state.                           | EX08          | planned     |
+| EX09-03   | Calibrated readable three-card Neutral Reference.                                                             | EX08          | planned     |
+| EX09-04   | EV/camera/key/compensation/disabled controls and existing/focused numerical proof; no separate UI experiment. | EX09B         | planned     |
+| EX09-05   | Simple bright/dark transition; native schedule/mask/profile/curve evidence.                                   | EX09C         | planned     |
+| EX09-06   | Native startup/seed/cut/mode/pause/zero/sharing/stateless/recovery coverage; no lifecycle UI framework.       | EX09C         | planned     |
+| EX09-07   | Useful point preset, distance relationship and applicable independent reference proof.                        | EX09A         | planned     |
+| EX09-08   | Useful spot preset, aimed receiver/cone controls and applicable flux proof.                                   | EX09A         | planned     |
+| EX09-09   | Applicable HDR endpoint/mixed-path/history evidence and focused gap repair; no HDR demo experiment.           | EX09D         | planned     |
+| EX09-10   | Relevant controls/units and truthful Reference/Modified/settings status; live numerical verdict removed.      | EX08–EX09C    | planned     |
+| EX09-11   | Explicit local save/load, supported indoor settings, personal preferences preserved.                          | EX08          | planned     |
+| EX09-12   | User visual acceptance for retained presets/transitions and layouts; seven-experiment capture gate removed.   | EX08–EX09C    | planned     |
+| EX09-13   | Existing MultiView controls/proofs and remaining operational checks; no new measurement integration.          | EX09E         | in_progress |
+| EX09-14   | Actual LightBench launch/reset/load/save and focused native test instructions.                                | EX08–EX09C    | planned     |
+| EX09-15   | Existing MultiView README: actual controls, sharing delay and supported commands.                             | EX09E         | in_progress |
+| EX09-GATE | Retained renderer requirements covered; useful workflows accepted; discovered bugs fixed.                     | After EX09E   | planned     |
 
-EX09-13/15 retain their EX05 prerequisites; remaining integration has not started.
-Use the [current MultiView README](../../Examples/MultiView/README.md) and existing
-assertion scripts, not a new proof framework.
+EX09-13/15 retain existing EX05 prerequisites; remaining acceptance has not
+started. Reuse the existing MultiView demo, README and assertion scripts.
 
 ### 3.7 Slice 10 work items
 
-**Planned. Outcome:** final integrated acceptance, not a deferred feature batch.
-Automation/provenance is delivered alongside EX08/09; EX10 aggregates and verifies
-the final build. Valid unchanged detailed evidence is reused.
+**Planned.** Concise integration closeout, no new features or validation platform.
 
-| ID        | Required result                                                                                       | Delivery step                | Status      |
-| --------- | ----------------------------------------------------------------------------------------------------- | ---------------------------- | ----------- |
-| EX10-01   | Deterministic batch uses the interactive recipe/controller.                                           | EX08; extend per experiment  | planned     |
-| EX10-02   | LightBench runner and versioned result schema.                                                        | EX08; complete suite in EX10 | planned     |
-| EX10-03   | Native non-DemoShell lifecycle/sharing/recovery proof integrated with reports.                        | EX09C                        | planned     |
-| EX10-04   | Existing MultiView runner/schema retains structural checks and adds measured acceptance.              | EX09E                        | planned     |
-| EX10-05   | Existing isolated/shared/reorder/resize/lifetime/mode/diagnostic proofs integrated.                   | EX09E                        | in_progress |
-| EX10-06   | Recipe/build/shader/device/time/frame/view/tolerance/measurement/capture provenance.                  | EX08; extend per experiment  | planned     |
-| EX10-07   | Final Debug/Release integration covers all required rows; affected detailed checks rerun.             | EX10                         | planned     |
-| EX10-08   | Owner contracts, both operating READMEs, plan and tracker reconciled.                                 | EX10                         | planned     |
-| EX10-GATE | Every required result accounted for; no failed/unsupported/missing case or unexplained warning/error. | EX10                         | planned     |
+| ID        | Required result / disposition                                                                                            | Delivery step | Status      |
+| --------- | ------------------------------------------------------------------------------------------------------------------------ | ------------- | ----------- |
+| EX10-01   | Shared interactive/batch recipe engine removed; shared canonical app/test scene definition retained in EX08-07.          | —             | removed     |
+| EX10-02   | New LightBench runner/versioned result schema removed; existing test output suffices.                                    | —             | removed     |
+| EX10-03   | Applicable native non-DemoShell lifecycle/sharing/recovery evidence and focused gap repair.                              | EX09C         | planned     |
+| EX10-04   | Existing MultiView scripts retain structural/numerical checks; no new measurement/schema integration.                    | EX09E         | planned     |
+| EX10-05   | Existing isolation/sharing/reorder/resize/lifetime/mode proofs credited or affected checks rerun.                        | EX09E         | in_progress |
+| EX10-06   | Durable Markdown with relevant build/shader/scene identities, tolerances, test results and prior-evidence applicability. | Each step     | planned     |
+| EX10-07   | Affected final Debug/Release checks and user UI acceptance; no repeat capture/benchmark campaign.                        | EX10          | planned     |
+| EX10-08   | Owner docs, both operating READMEs, plan and tracker reconciled.                                                         | EX10          | planned     |
+| EX10-GATE | No unresolved retained product requirement/defect; evidence, user acceptance and instructions recorded.                  | EX10          | planned     |
 
 ### 3.8 Requirement coverage and update discipline
 
@@ -1561,11 +1559,11 @@ reading tool logs or reconstructing Git history.
 | Slice 5.2: residual fix agreement; bounded fixes; affected validation; closure; reused decomposition                                             | EX052-02; EX052-04; EX052-10/12/GATE; EX052-05/06 already validated; other original IDs superseded |
 | Slice 6: camera persistence; authoring surfaces; full round-trip; mask runtime; DemoShell; activation policy; gate                               | EX06-01; EX06-02–05; EX06-06; EX06-07; EX06-08; EX06-09; EX06-GATE                                 |
 | Slice 7: physical/dual-directional calibration; baseline; culling; shaders/resources/shadows; native/editor correctness; performance and closure | EX07-01–06; EX07-07; EX07-08; EX07-09–11; EX07-12; EX07-13–14/GATE                                 |
-| Slice 8: qualified instruments; Neutral Reference/controller/reset/save/load/report                                                              | EX08-01–06/GATE; EX09-01–03/10–11/14; EX10-01–02/06                                                |
+| Slice 8: calibrated reference, local reset/save/load, native check, user acceptance                                                              | EX08-07–11/GATE; EX09-02–03/10–11/14; EX10-06; EX08-01–06 and EX09-01 removed                      |
 | Slice 8.1: console commands and async outcomes                                                                                                   | EX081-01–04/GATE                                                                                   |
-| Slice 8.2: actual ImGui workflows and isolated native runner                                                                                     | EX082-01–04/GATE                                                                                   |
-| Slice 9A-E: point/spot; fixed; adaptation/lifecycle; HDR; MultiView; UI/visual coverage                                                          | EX09-07–08; EX09-04; EX09-05–06; EX09-09; EX09-13/15; EX09-10/12/14/GATE; EX10-03–05               |
-| Slice 10: integrate delivered batch/proof/report paths; final acceptance/docs                                                                    | EX10-01–06 aggregation; EX10-07–08/GATE                                                            |
+| Slice 8.2: deferred automated widget suite, outside closure                                                                                      | EX082-01–04/GATE future; user owns current UI acceptance                                           |
+| Slice 9A-E: point/spot controls; fixed/adaptation; native lifecycle/HDR; existing MultiView                                                      | EX09-04–15/GATE; EX10-03–05                                                                        |
+| Slice 10: concise final checks, evidence, user acceptance and docs                                                                               | EX10-03–08/GATE; EX10-01–02 removed                                                                |
 
 ### Related editor package
 
