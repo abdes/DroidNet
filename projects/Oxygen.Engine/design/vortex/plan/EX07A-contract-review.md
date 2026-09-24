@@ -903,7 +903,10 @@ physical/failure contract.
 **EX07A gate: passed.** The [completion audit](EX07A-completion-audit.md) records
 canonical CPU/HLSL layouts and every-member assertions, migrated interfaces,
 native GPU decoding and catalog checks, applicable runtime captures, approved
-capacity/failure contracts and current reproducible evidence. The spatial culler
-has not been connected. EX07B reference qualification, EX07C repairs and EX07D–F
-correctness/performance delivery remain required. A's closure does not close
-EX07-04/08/10/11/12 or EX07-GATE.
+capacity/failure contracts and reproducible evidence at A closure. At that
+checkpoint the spatial culler had not been connected and EX07B–F remained ahead.
+For current progress, use the [tracker](../IMPLEMENTATION_STATUS.md#34-slice-7-work-items):
+EX07B and EX07D are now closed; the
+[D baseline register](EX07D-baseline-report.md) is committed in `894a25e57`, and
+EX07E is prepared, awaiting the user's explicit start signal. A's closure alone
+does not close EX07-04/08/10/11/12 or EX07-GATE.

@@ -2,6 +2,11 @@
 
 Status: **EX07A validated on 2026-09-23. Overall EX07 remains in_progress.**
 
+Current progression is recorded in the [tracker](../IMPLEMENTATION_STATUS.md#34-slice-7-work-items):
+EX07D is closed with the [baseline register](EX07D-baseline-report.md); EX07E is
+prepared and awaits the user's explicit start signal. The audit below preserves
+A's evidence and stage ownership at its closure.
+
 The [six-step EX07 plan](EX07-lighting-correctness-and-scalability.md#six-ordered-implementation-steps)
 and its contract/property deliverables define the scope. This audit does not
 replace them or move unresolved implementation into a new exclusion. A requires

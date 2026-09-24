@@ -5,6 +5,10 @@ performance remains open.** Correctness fixes and this analysis were committed
 in `137b681b2`. The [EX07D baseline register](EX07D-baseline-report.md) now records
 the current benchmark and application comparison points. Timings below retain
 their original diagnostic scope; they are not substituted for that register.
+EX07D is closed with evidence committed in `894a25e57`. The
+[EX07E handoff](EX07-lighting-correctness-and-scalability.md#ex07e-handoff--awaiting-user-signal)
+uses the current registered measurements and awaits the user's explicit start
+signal; the performance and broader shadow-parity recommendations below remain open.
 
 This follows the user's application regression report and request for analysis
 before further performance changes. The many-light benchmark did not cover

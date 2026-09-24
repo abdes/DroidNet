@@ -1,6 +1,8 @@
 # EX07B completion audit
 
-Status: **validated; pause before EX07C as instructed.**
+Status: **EX07B validated.** The pause before C was the instruction at B closure.
+Current progression is recorded in the [tracker](../IMPLEMENTATION_STATUS.md#34-slice-7-work-items):
+EX07D is now closed and EX07E awaits the user's explicit start signal.
 
 This closes the reference/instrument gate only. EX07 as a whole remains
 `in_progress`. Production physical repairs and their admission tests belong to C;

@@ -6,6 +6,16 @@ Renderer implementation: **137b681b2**. Collection tooling: **250917c9e**, with
 the desktop-load refinement in **d90e15823**. All runs use existing Ninja Release
 trees; no other build tree was used or created for this closeout.
 
+**EX07D: closed (2026-09-24).** Implementation and correctness repairs are
+committed in `137b681b2`; the durable baseline register and evidence are committed
+in `894a25e57`. The delivered scene/presets, 54 benchmark records, four application
+runs and credited historical controls satisfy D's baseline-delivery gate.
+The recorded preflight gaps, noisy B05-D and application memory scope constrain
+later comparisons; they do not require another blanket baseline campaign.
+EX07E is prepared and awaits the user's explicit start signal. Performance-budget
+acceptance and final integrated validation remain E/F work; overall EX07 is open.
+See the [E handoff](EX07-lighting-correctness-and-scalability.md#ex07e-handoff--awaiting-user-signal).
+
 ## Results summary
 
 **Current application performance without Tracy is 36.48 FPS for Instancing
