@@ -172,12 +172,12 @@ NOLINT_TEST(EnvironmentComponentsTest,
   auto light = DirectionalLight {};
   light.SetAtmosphereLightSlot(AtmosphereLightSlot::kSecondary);
   light.SetUsePerPixelAtmosphereTransmittance(true);
-  light.SetAtmosphereDiskLuminanceScale({ 1.2F, 0.9F, 0.8F, 0.5F });
+  light.SetAtmosphereDiskLuminanceScale({ 1.2F, 0.9F, 0.8F });
 
   EXPECT_EQ(light.GetAtmosphereLightSlot(), AtmosphereLightSlot::kSecondary);
   EXPECT_TRUE(light.GetUsePerPixelAtmosphereTransmittance());
   EXPECT_EQ(
-    light.GetAtmosphereDiskLuminanceScale(), Vec4(1.2F, 0.9F, 0.8F, 0.5F));
+    light.GetAtmosphereDiskLuminanceScale(), Vec3(1.2F, 0.9F, 0.8F));
 }
 
 } // namespace oxygen::scene::testing
