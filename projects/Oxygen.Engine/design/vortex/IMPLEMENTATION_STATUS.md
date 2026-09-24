@@ -713,12 +713,12 @@ production repair, performance work and final qualification have later owners.
 | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | **A — Contracts**                  | Reviewed model, property inventory, canonical CPU/HLSL interface, capacities and failure contracts.              | **Complete** — [audit](plan/EX07A-completion-audit.md)               | Contract/interface groundwork, especially 04 and 12; grid, lifetime and shadow contracts for 08/10/11. |
 | **B — References and instruments** | Independent physical/material/image references, native probes, frozen workloads and bounded instruments.         | **Complete** — [audit](plan/EX07B-completion-audit.md)               | Reference/oracle portions of 01–06; workload portion of 07; instrument portion of 13.                  |
-| **C — Correctness repair**         | Production integration remaining after the conventional-shadow prerequisite; see the bounded list below.         | **In progress; conventional-shadow prerequisite complete**           | Remaining correctness in 01–04, 06, 08, 10–12.                                                         |
+| **C — Correctness repair**         | Validated light ingress/transport, explicit atmosphere roles, receiver/contact shadows and isolated view failure. | **Complete — implementation and focused native/editor validation**           | Remaining correctness in 01–04, 06, 08, 10–12.                                                         |
 | **D — Baselines and budgets**      | Time only correctness-qualified workloads; measure quality, CPU/GPU cost, memory and noise.                      | **Not started**                                                      | 07; baseline/shadow-cost portions of 11/13.                                                            |
 | **E — Scalable optimization**      | Reuse the shadow/grid implementation; assess residual scaling against the required workloads.                    | **Conventional-shadow prerequisite complete; wider scaling remains** | Optimization portions of 08–11; culling/performance diagnostics in 13.                                 |
 | **F — Final delivery**             | Final-code numerical, native/editor, visual and performance gates; operating documentation and supported limits. | **Not started**                                                      | 14 and EX07-GATE, rechecking the final implementation of all IDs.                                      |
 
-#### Completed conventional-shadow prerequisite and remaining C work
+#### Completed conventional-shadow prerequisite and C integration
 
 The conventional-shadow prerequisite consists of the following five
 steps below, including the related selection, publication, lifetime, diagnostics,
@@ -771,28 +771,32 @@ depths. Captures followed implementation and focused tests. User visual approval
 received on 2026-09-24, closing the remaining acceptance item. These results close the
 bounded static conventional-shadow repair, not the wider EX07 qualification.
 
-After that delivery, C has these remaining production tasks:
+The remaining C integration is implemented and validated:
 
-| Remaining task                                          | Concrete scope                                                                                                                                                                                                                                                                                                                                |
-| ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Light-data migration (12)                               | Remove attenuation/decay and legacy sun/environment controls; carry retained atmosphere, shadow and CSM fields through native/script/editor/source/cook/load; migrate scene v7 and fixtures. Fix glTF point/spot range import, define the omitted-range conversion policy, and recook affected content separately from the original baseline. |
-| Atomic validation and edits (02, 03, 12)                | Validate whole light candidates and cone pairs, reject invalid values without partial changes, preserve undo/save behavior and notify the scene on accepted edits. Reuse the shared change tracking rather than adding a second mechanism.                                                                                                    |
-| Directional/atmosphere integration (01, 12)             | Explicit None/Primary/Secondary assignment without sun inference, duplicate-slot rejection including inactive lights, independently visible children, visibility/hierarchy invalidation and consistent per-light EV compensation in direct/atmosphere consumers. Retain any selection repairs already supplied by step 1 above.               |
-| Receive Shadows (11, 12)                                | Carry per-instance receiver eligibility into forward/deferred shading so Receive Off suppresses map/contact visibility without suppressing illumination, AO/IBL or the object's own casting. Per-light resolution and caster selection are supplied by steps 1/2 above.                                                                       |
-| Contact Shadows (11, 12)                                | Connect the conditional per-view caster-depth product and the existing 0.25 m/16-sample contract to both shading families. Reuse the delivered eligibility/coverage infrastructure; disabled contact shadows allocate and execute no contact pass.                                                                                            |
-| Caller-visible failure and integration (04, 06, 10, 14) | Propagate rendering failure into normal composition/status while valid panes continue; prevent failed capture/history publication. Integrate new property/contact paths with the delivered admission, cache and publication lifecycle. Check only the affected initialization/submission, mutation, resize/removal and recovery paths.        |
+| Area | Current behavior |
+| --- | --- |
+| Light data (12) | Scene v7 carries every retained shadow/CSM/atmosphere field through native, script, editor, live Interop and source/cook/load. Removed attenuation/decay and duplicate sun controls are rejected. Explicit glTF ranges survive import; omitted ranges use the configurable 4,096 m fallback. |
+| Atomic edits (12) | Whole candidates are validated before mutation. Native value edits preserve component identity without heap replacement; failed editor edits preserve source, dirty state and history. Hydration rejects conflicting stored assignments before replacing a scene. |
+| Directional/atmosphere (01, 12) | Explicit None/Primary/Secondary ownership includes hidden/inactive lights. Shown children survive hidden parents. Visibility/hierarchy edits invalidate resolution, and direct/atmosphere paths share Core photometry and EV conversion. |
+| Receive Shadows (11, 12) | Per-instance metadata and forward/GBuffer consumers gate conventional and contact visibility without changing illumination or caster eligibility. |
+| Contact Shadows (11, 12) | Conditional, budgeted camera-space D32 caster depth uses a retained bindless texture SRV and the shared 0.25 m/16-sample trace. Rendered tests verify occlusion, caster exclusion and receiver bypass in both shading paths. |
+| View failure (04, 06, 10, 14) | Owned per-view/frame outcomes isolate failed panes, present an error tile and expose diagnostics. GPU lighting failures hold exposure and invalidate radiance history. Capture acceptance requires completed, matching lighting status, including required auxiliary inputs; recovery and last-light removal are covered. |
 
-Reconcile the delivered diff and named test results against this list once; remove
-any additional item the prerequisite implementation also resolves. Reuse passing
-allocation/retirement, fifth-cube/ninth-projected, rejection/recovery, model-2 and
-image evidence. Add focused coverage only for newly implemented behavior, then
-validate the integrated changes together. No new BRDF/reference framework or
-repeat shadow/grid implementation is required. The user owns interactive visual
-confirmation. Use shadow-enabled Instancing for incremental Tracy checks; defer
-New Sponza until all five steps and their unit tests pass. Use uncapped/VSync-off
-settings for comparisons; do not automate an exhaustive visual matrix.
-The broader 1,024-light/count-scaling measurements retain D/E ownership and reuse
-the delivered implementation and applicable measurements.
+Validation: **542 native cases in Debug**, with the affected Release suites and
+final contact/receiver/failure/ABI cases passing as well; **123 PakGen cases**;
+**88 managed/editor/native-bridge cases** across authoring, source generation,
+commands/undo, Interop and a running native engine's property observation. Release
+and Debug engine SDKs are installed; the WorldEditor UI test project compiles.
+The user owns interactive visual acceptance; broader workload timing/scaling and
+final combined acceptance remain D/E/F responsibilities. No new reference
+framework or repeat BRDF campaign was introduced.
+
+All 16 maintained example scenes and their sidecars were recooked and packaged
+as 124 assets / 29 resources, with no packaging warnings or errors. Original
+example generations are preserved in `out/analysis/ex07c-completion/content-before-v7`.
+Corrected Sponza is a separate cooked source: `HDRI_SKY` remains a 200 cd point
+light with a 4,096 m range. Its original renderer/performance baseline is retained.
+Details and named proof artifacts: [C completion report](../../out/analysis/ex07c-completion/REPORT.md).
 
 #### Numbered deliverables — what is complete and what remains
 
@@ -802,18 +806,18 @@ qualified delivery is claimed. These are item states, distinct from stage states
 
 | ID / deliverable                             | Item state       | Completed portion                                                                                                                                                                    | Remaining work / owning stage                                                                                                                                                                                                    |
 | -------------------------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **01 — Directional lighting**                | Partial          | A: directional authority/array interface. B: independent lux/EV reference and probes.                                                                                                | **C:** explicit assignment, visibility/mutation and atmosphere compensation integration from the remaining-work list.                                                                                                            |
-| **02 — Point lighting**                      | Partial          | B: independent references. C: shared punctual/analytic source evaluation, center-range support and native lobe/image comparisons.                                                    | **C:** property migration and atomic edits; reuse the prerequisite shadow/resource checks. **D/E:** remaining workload scaling.                                                                                                  |
-| **03 — Spot lighting**                       | Partial          | B: independent references. C: corrected cone photometry, analytic source response, projected ordinary spots and cube hemispheres.                                                    | **C:** property/content migration and atomic edits; reuse the prerequisite shadow/resource checks. **D/E:** remaining workload scaling.                                                                                          |
-| **04 — Shared interface and BRDF semantics** | Partial          | A: canonical ABI. B: independent oracle. C: model-2 direct/indirect response, orthographic directions, compact LUT and native energy/approximation probes.                           | **C:** affected required-data/caller-failure integration only; reuse existing lifetime proof. **F:** final integrated-view coverage.                                                                                             |
+| **01 — Directional lighting** | Partial | Explicit slots, stored-owner validation, visibility/hierarchy invalidation and shared direct/atmosphere photometry; independent reference and native/editor checks. | **F:** final integrated visual acceptance. |
+| **02 — Point lighting** | Partial | Shared analytic evaluation, retained-property migration/atomic edits, finite import-range policy and native receiver/contact/resource checks. | **D/E:** remaining workload scaling; **F:** final combined acceptance. |
+| **03 — Spot lighting** | Partial | Corrected cone photometry, analytic sources, projected ordinary spots/cube hemispheres, complete property transport and atomic edits. | **D/E:** remaining workload scaling; **F:** final combined acceptance. |
+| **04 — Shared interface and BRDF semantics** | Partial | Canonical ABI, independent oracle, accepted model-2 response and lifetime; caller-visible failure, capture gating and recovery. | **F:** final integrated-view acceptance. |
 | **05 — Material/color oracle**               | **Complete (B)** | Independent packed-material/working-space reference; native format, UV, filtering, mip and producer checks.                                                                          | **None for the oracle.** Remaining production property transport belongs to 12.                                                                                                                                                  |
-| **06 — References and calibration**          | Partial          | B: independent physical/image references, full-list and serial comparisons, negative controls.                                                                                       | **C:** reuse existing references for the changed ingress, atmosphere, receiver/contact and content paths; no new reference campaign.                                                                                             |
+| **06 — References and calibration** | Partial | Independent references and negative controls reused for repaired ingress, atmosphere, receiver/contact and content paths. | **D:** qualified operating-point calibration. **F:** final combined acceptance; no additional reference framework. |
 | **07 — Workloads and baselines**             | Partial          | B: frozen 1,024-light primary and count/distribution/view/shadow/mutation recipe parameters; native preview.                                                                         | **D:** correctness-qualified timing baselines and quality/time/memory comparisons and measured noise.                                                                                                                            |
-| **08 — Complete lists and spatial culling**  | Partial          | A: canonical grid/list contract and complete-list publication. B: independent reference/probes.                                                                                      | **User report 1/4:** eligibility, coverage, spatial lists, fallback and failure/lifetime checks. **C:** consume the delivered products. **D/E:** remaining workload scaling.                                                     |
+| **08 — Complete lists and spatial culling** | Partial | Delivered eligibility, conservative coverage, spatial lists, fallback, publication and per-view failure/lifetime integration. | **D/E:** remaining workload scaling. |
 | **09 — Shader/draw performance**             | Partial          | C regression repair: analytic sources, compact energy LUT, shared BRDF preparation, directional batching and frame-slot retirement; native tests and MultiView Tracy evidence below. | **User report 4:** spatial-list optimization. **D/E:** profile residual costs after delivery; no repeat of accepted model-2 work.                                                                                                |
-| **10 — Resources, uploads and lifetime**     | Partial          | A: immutable publication and descriptor-lifetime repairs. B: bounded memory/retirement/churn instruments.                                                                            | **User report 2/3/4:** allocation, cache and list-resource lifecycle. **C:** new property/contact paths and caller-visible failure only.                                                                                         |
-| **11 — Shadows**                             | Partial          | A: shadow-owned identities/interfaces. B: demand recipes. C: dynamic indexed families, projected ordinary spots, cube hemispheres and native forward/deferred occlusion.             | **User report 1/2/3/5:** caster selection, allocation, reuse and quality policy. **C:** receiver/contact integration and transport. Reuse delivered tests and user visual confirmation.                                          |
-| **12 — Retained properties and content**     | Partial          | A: LP01–LP32 inventory and strict migration contracts. B: sampled-material qualification and UV/alpha identity fix.                                                                  | **C:** complete retained-property transport, mutation, scene-v7/editor/script migration and round-trip/lifecycle checks; repair glTF point/spot range import (explicit ranges are ignored; omitted ranges silently become 10 m). |
+| **10 — Resources, uploads and lifetime** | Partial | Immutable publication, descriptor lifetime, allocation/cache/list resources, conditional contact products and failed-view recovery. | **D/E/F:** qualify the complete scaled workload envelope. |
+| **11 — Shadows** | Partial | Delivered caster selection, allocation/reuse/quality policy, receiver/contact integration and native forward/deferred occlusion. | **D/E:** shadowed workload envelope. **F:** final visual acceptance; reuse the accepted prerequisite proof. |
+| **12 — Retained properties and content** | **Complete (C)** | LP01–LP32 transport/validation, scene v7, canonical assignment, source/cook/load and editor undo/live application; maintained content recooked. | **None for the C migration.** Final combined workflow acceptance remains in F. |
 | **13 — Measurement and diagnostics**         | Partial          | B: CPU/GPU/memory/churn instruments, native validity checks and user-accepted collection overhead.                                                                                   | **User report 1–5:** static-scene Tracy/culling/cache evidence. **D/E:** remaining workload measurements using those instruments.                                                                                                |
 | **14 — Final validation/docs**               | Not started      | A/B audits preserve prerequisite evidence.                                                                                                                                           | **F:** final-code correctness/performance/visual/native/editor checks and complete operating docs.                                                                                                                               |
 | **EX07-GATE — Whole slice**                  | **Open**         | A and B gates passed.                                                                                                                                                                | **F:** all production correctness/performance gates pass together, with measured improvements and supported limits.                                                                                                              |
@@ -829,19 +833,11 @@ No production performance baseline is claimed from the B instrument-overhead
 runs. The 1,024-light preview is fixture correctness evidence; official workload
 qualification and timing remain C/D responsibilities.
 
-C's glTF photometry repair uses both cone angles to preserve imported peak
-candela under the squared angular profile. Double-precision conversion preserves
-narrow cones and the exact float32 90-degree endpoint; invalid cone pairs,
-negative intensity and unrepresentable flux fail scene import. Six independently
-integrated cone profiles pass source/cook/load comparison, and nine invalid
-cases fail explicitly. `Oxygen.Cooker.AsyncImportGltf.Tests` passes all 31 cases
-in Debug and Release; the three affected cases also pass after lint fixes.
-Oxytidy covers both changed C++ files with zero changed-line findings and no new
-suppressions (367 findings remain on unchanged code). Evidence:
-`out/build-ninja/analysis/vortex/exposure-lightbench/ex07c/gltf-{debug,release}.json`,
-`gltf-final-{debug,release}.json` and `gltf-tidy-changed-lines.json` in that directory.
-This closes that conversion defect within 03/12; it does not close either item,
-scene-v7 migration or native/editor transport.
+The glTF adapter preserves peak candela under Oxygen's squared cone profile,
+retains explicit range and resolves omission through the approved finite fallback.
+Invalid source values, collapsed GPU cone profiles and unrepresentable photometry
+are rejected. The current 32-case import suite passes Debug and Release. Scene-v7
+transport and the corrected-content result are included in the C validation above.
 
 C's cone precision repair closes the 23 punctual-photometry residuals: the
 2,160-input probe now reports zero failures, with maximum budget fraction
