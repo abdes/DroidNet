@@ -102,6 +102,22 @@ project(
     CXX
 )
 
+# Publish a complete File API reply even when configured outside an IDE.
+# CMake Tools loads an existing index before configuring; a codemodel-only
+# index prevents it from starting because its required cache object is absent.
+cmake_file_api(
+  QUERY
+  API_VERSION 1
+  CODEMODEL
+    2
+  CACHE
+    2
+  CMAKEFILES
+    1
+  TOOLCHAINS
+    1
+)
+
 # Oxygen uses textual headers, not C++ modules. Keep ordinary compiler header
 # dependencies without introducing an unused module-scanning/dyndep graph.
 set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
