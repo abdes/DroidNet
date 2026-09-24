@@ -131,4 +131,18 @@ static CubeLocalShadowRecord LoadCubeLocalShadow(VortexShadowFrameBindings bindi
     return value;
 }
 
+static float4x4 LoadCubeLocalShadowFaceMatrix(
+    VortexShadowFrameBindings bindings, uint index, uint face_index)
+{
+    if (index >= bindings.cube_local_record_count || face_index >= 6u
+        || !BX_IN_GLOBAL_SRV(bindings.cube_local_records_srv)) return (float4x4)0;
+    StructuredBuffer<CubeLocalShadowRecord> records = ResourceDescriptorHeap[bindings.cube_local_records_srv];
+    uint count, stride;
+    records.GetDimensions(count, stride);
+    if (index >= count) return (float4x4)0;
+    // Index the buffer member directly. Indexing a copied six-matrix record
+    // materializes all 96 floats in thread-local storage before face selection.
+    return records[index].face_light_view_projection[face_index];
+}
+
 #endif

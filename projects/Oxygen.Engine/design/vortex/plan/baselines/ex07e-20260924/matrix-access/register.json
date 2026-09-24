@@ -1,0 +1,61 @@
+{
+  "status": "Accepted matrix-access implementation and visually approved application comparison records; overall EX07E remains in progress.",
+  "initial_baseline": "../../ex07d-20260924/register.json",
+  "settings_replay": "../../ex07d-20260924/replay-inputs.json",
+  "source_parent": "8638e144d9977752a20ed5331da6967760070e60",
+  "source_sha256": {
+    "src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Contracts/Shadows/ShadowFrameBindings.hlsli": "3e2d4e24e3f28daadec4b7a7bcd232086fde406680fda8e655e53215ea38fe14",
+    "src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Shadows/DirectionalShadowCommon.hlsli": "47e93ad7bbf8e2997b96cbcdb4a17e9eb015683ad0d724cf65ce9298c7d7122d",
+    "src/Oxygen/Vortex/Test/Shaders/LightingGpuAbiProbe.hlsl": "127f4935e539a7417ede11fc1ea74925457a5416f52eb5571f4fc56554879454"
+  },
+  "application_records": [
+    "sponza-native",
+    "sponza-tracy",
+    "instancing-native",
+    "instancing-tracy",
+    "sponza-original-shader-control"
+  ],
+  "user_visual_approval": {
+    "date": "2026-09-24",
+    "sponza": "visual confirmation is good.",
+    "instancing": "visual confirmation for instancing scene is also good",
+    "scope": "Matrix-access candidate only. Later changed baselines require new manual validation."
+  },
+  "qualification": {
+    "release_image_tests_passed": 17,
+    "rebuilt_gpu_abi_tests_passed": 1,
+    "synthetic_rows": 10,
+    "timed_images_exact_against_initial": 12,
+    "steady_buffer_texture_creations": 0
+  },
+  "limits": [
+    "Native desktop timing variability and all slow frames retained.",
+    "Tracy and native collection modes are separate.",
+    "Initial D runtime DLLs differ; the Sponza original-shader control differs from its candidate only by shaders.bin.",
+    "Synthetic rows are regression comparisons; initial D remains their baseline.",
+    "Interrupted Instancing capture excluded for changed DLL; replacement passed identity checks."
+  ],
+  "compiler_inspection": {
+    "profile": "ps_6_6 -E DeferredLightPointPS -Ges -enable-16bit-types -HV 2021 -O3",
+    "sdk": "10.0.26100.0",
+    "before": {
+      "dxil_bytes": 27676,
+      "thread_local_matrix_floats": 96,
+      "raw_buffer_load_instructions": 126,
+      "local_float_stores": 192
+    },
+    "after": {
+      "dxil_bytes": 24440,
+      "thread_local_matrix_floats": 0,
+      "raw_buffer_load_instructions": 106,
+      "local_float_stores": 0
+    }
+  },
+  "raw_roots": [
+    "out/analysis/ex07e/e01-shader-inspection",
+    "out/analysis/ex07e/e01-face-load",
+    "out/analysis/ex07e/e01-face-load-stable",
+    "out/analysis/ex07e/e01-face-control",
+    "out/analysis/ex07e/e01-benchmarks"
+  ]
+}
