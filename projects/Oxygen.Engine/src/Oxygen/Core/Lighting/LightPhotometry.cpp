@@ -7,15 +7,15 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
-#include <expected>
+#include <Oxygen/Base/Result.h>
 #include <limits>
 #include <numbers>
 
 #include <glm/ext/vector_float3.hpp>
 
-#include <Oxygen/Vortex/Lighting/Internal/LightPhotometry.h>
+#include <Oxygen/Core/Lighting/LightPhotometry.h>
 
-namespace oxygen::vortex::lighting::internal {
+namespace oxygen::lighting {
 namespace {
 
   constexpr double kSphereSolidAngle = 4.0 * std::numbers::pi;
@@ -30,7 +30,7 @@ namespace {
 
   auto ResolveRgb(const float authored_strength, const double solid_angle_sr,
     const LightPhotometryModifiers& modifiers)
-    -> std::expected<glm::vec3, LightPhotometryError>
+    -> Result<glm::vec3, LightPhotometryError>
   {
     if (!IsNonnegativeFinite(authored_strength)
       || !std::isfinite(solid_angle_sr) || solid_angle_sr <= 0.0
@@ -38,7 +38,7 @@ namespace {
       || !IsNonnegativeFinite(modifiers.color_rgb.r)
       || !IsNonnegativeFinite(modifiers.color_rgb.g)
       || !IsNonnegativeFinite(modifiers.color_rgb.b)) {
-      return std::unexpected(LightPhotometryError::kInvalidInput);
+      return Err(LightPhotometryError::kInvalidInput);
     }
 
     const auto colors = std::array {
@@ -61,7 +61,7 @@ namespace {
         + static_cast<double>(modifiers.exposure_compensation_ev);
       if (!std::isfinite(log_value) || log_value < std::log2(kMinimumNormal)
         || log_value > std::log2(kMaximumFinite)) {
-        return std::unexpected(LightPhotometryError::kUnrepresentable);
+        return Err(LightPhotometryError::kUnrepresentable);
       }
       const auto exponent
         = std::floor(static_cast<double>(modifiers.exposure_compensation_ev));
@@ -69,11 +69,11 @@ namespace {
         * std::exp2(modifiers.exposure_compensation_ev - exponent);
       if (!std::isfinite(scaled) || scaled < kMinimumNormal
         || scaled > kMaximumFinite) {
-        return std::unexpected(LightPhotometryError::kUnrepresentable);
+        return Err(LightPhotometryError::kUnrepresentable);
       }
       result.at(channel) = static_cast<float>(scaled);
     }
-    return glm::vec3 { result.at(0), result.at(1), result.at(2) };
+    return Ok(glm::vec3 { result.at(0), result.at(1), result.at(2) });
   }
 
   auto SquaredHalfAngleSine(const float angle) -> double
@@ -90,7 +90,7 @@ namespace {
 
 auto ResolveSpotConeProfile(
   const float inner_half_angle_radians, const float outer_half_angle_radians)
-  -> std::expected<SpotConeProfile, LightPhotometryError>
+  -> Result<SpotConeProfile, LightPhotometryError>
 {
   if (!IsNonnegativeFinite(inner_half_angle_radians)
     || !std::isfinite(outer_half_angle_radians)
@@ -99,7 +99,7 @@ auto ResolveSpotConeProfile(
     || outer_half_angle_radians > kHemisphereHalfAngle
     || (inner_half_angle_radians == outer_half_angle_radians
       && outer_half_angle_radians == kHemisphereHalfAngle)) {
-    return std::unexpected(LightPhotometryError::kInvalidInput);
+    return Err(LightPhotometryError::kInvalidInput);
   }
   const auto inner = SquaredHalfAngleSine(inner_half_angle_radians);
   const auto outer = SquaredHalfAngleSine(outer_half_angle_radians);
@@ -107,37 +107,37 @@ auto ResolveSpotConeProfile(
   const auto outer_gpu = static_cast<float>(1.0 - 2.0 * outer);
   const auto hard = inner_half_angle_radians == outer_half_angle_radians;
   if (outer_gpu >= 1.0F || (!hard && inner_gpu <= outer_gpu)) {
-    return std::unexpected(LightPhotometryError::kUnrepresentable);
+    return Err(LightPhotometryError::kUnrepresentable);
   }
   const auto inverse_width = hard ? 0.0F : 1.0F / (inner_gpu - outer_gpu);
   constexpr double kSquaredRampIntegral = 1.0 / 3.0;
-  return SpotConeProfile {
+  return Ok(SpotConeProfile {
     .outer_cosine = outer_gpu,
     .inverse_cosine_width = inverse_width,
     .solid_angle_sr
     = kSphereSolidAngle * (inner + ((outer - inner) * kSquaredRampIntegral)),
-  };
+  });
 }
 
 auto ResolveDirectionalIlluminanceRgb(
   const float illuminance_lux, const LightPhotometryModifiers& modifiers)
-  -> std::expected<glm::vec3, LightPhotometryError>
+  -> Result<glm::vec3, LightPhotometryError>
 {
   return ResolveRgb(illuminance_lux, 1.0, modifiers);
 }
 
 auto ResolvePointIntensityRgb(
   const float luminous_flux_lm, const LightPhotometryModifiers& modifiers)
-  -> std::expected<glm::vec3, LightPhotometryError>
+  -> Result<glm::vec3, LightPhotometryError>
 {
   return ResolveRgb(luminous_flux_lm, kSphereSolidAngle, modifiers);
 }
 
 auto ResolveSpotIntensityRgb(const float luminous_flux_lm,
   const SpotConeProfile& cone, const LightPhotometryModifiers& modifiers)
-  -> std::expected<glm::vec3, LightPhotometryError>
+  -> Result<glm::vec3, LightPhotometryError>
 {
   return ResolveRgb(luminous_flux_lm, cone.solid_angle_sr, modifiers);
 }
 
-} // namespace oxygen::vortex::lighting::internal
+} // namespace oxygen::lighting

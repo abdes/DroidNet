@@ -357,7 +357,7 @@ record migration, same-submission failure presentation, physical BRDF parity and
 full orthographic rendering remain open.
 
 The next evaluation-record prerequisite adds
-`Lighting/Internal/LightPhotometry.{h,cpp}`: checked per-component tint/EV
+`Core/Lighting/LightPhotometry.{h,cpp}`: checked per-component tint/EV
 resolution into directional lux and point/spot candela, double-precision
 normalization, and stable squared-half-angle cone parameters. Zero flux/tint
 avoids exponent evaluation; nonzero overflow or positive underflow outside the

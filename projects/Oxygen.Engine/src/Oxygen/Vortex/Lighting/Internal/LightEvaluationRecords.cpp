@@ -19,7 +19,7 @@
 #include <Oxygen/Profiling/CpuProfileScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Vortex/Lighting/Internal/LightEvaluationRecords.h>
-#include <Oxygen/Vortex/Lighting/Internal/LightPhotometry.h>
+#include <Oxygen/Core/Lighting/LightPhotometry.h>
 #include <Oxygen/Vortex/Lighting/Types/DirectionalLightForwardData.h>
 #include <Oxygen/Vortex/Lighting/Types/ForwardLocalLightRecord.h>
 #include <Oxygen/Vortex/Lighting/Types/LightingPreparationFailure.h>
@@ -27,6 +27,13 @@
 #include <Oxygen/Vortex/Types/LightingIndices.h>
 
 namespace oxygen::vortex::lighting::internal {
+using oxygen::lighting::LightPhotometryError;
+using oxygen::lighting::LightPhotometryModifiers;
+using oxygen::lighting::SpotConeProfile;
+using oxygen::lighting::ResolveDirectionalIlluminanceRgb;
+using oxygen::lighting::ResolvePointIntensityRgb;
+using oxygen::lighting::ResolveSpotIntensityRgb;
+using oxygen::lighting::ResolveSpotConeProfile;
 namespace {
 
   auto IsFinite(const glm::vec3 value) -> bool
