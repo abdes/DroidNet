@@ -1,15 +1,14 @@
 # New Sponza regression analysis and UE5.7 comparison
 
-2026-09-24. **Shutdown repair verified; shadow correction validated;
-performance remains open.** Correctness fixes and this analysis were committed
-in `137b681b2`. The [EX07D baseline register](EX07D-baseline-report.md) now records
-the current benchmark and application comparison points. Timings below retain
-their original diagnostic scope; they are not substituted for that register.
-EX07D is closed with evidence committed in `894a25e57`. The
-[EX07E handoff](EX07-lighting-correctness-and-scalability.md#ex07e-handoff--active)
-uses the current registered measurements and is active following the user's
-2026-09-24 start signal; the performance and broader shadow-parity recommendations
-below remain open.
+Historical analysis, 2026-09-24. Shutdown/shadow repairs and this analysis were
+committed in `137b681b2`; performance work was still open at that checkpoint.
+The [D register](EX07D-baseline-report.md) preserves the initial comparison
+points, and the [accepted E report](EX07E-shadow-sharing-results.md) records the
+subsequent optimization and approved PCF quality/cost decisions. Timings below
+retain their original diagnostic scope. [F engine acceptance](EX07F-acceptance-report.md)
+is complete; only the user-owned editor interaction sign-off remains. The
+recommendations below explain the investigation that led to E, rather than a
+second list of outstanding EX07 tasks.
 
 This follows the user's application regression report and request for analysis
 before further performance changes. The many-light benchmark did not cover

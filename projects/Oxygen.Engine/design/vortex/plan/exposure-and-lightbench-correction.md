@@ -7,7 +7,7 @@ Status: `in_progress` — current slice state and evidence are maintained in the
 are updated there; this plan owns the requirements and gates.
 
 Date: 2026-09-16
-Updated: 2026-09-24 — EX06, EX07A/B and EX07D are closed; EX07E is active, authorized by the user on 2026-09-24. Remaining C validation and E/F gates keep overall EX07 open.
+Updated: 2026-09-25 — EX06 and EX07A–E are closed. EX07F engine acceptance, build repairs and documentation are complete; only the user-owned editor interaction sign-off remains. See the [F report](EX07F-acceptance-report.md).
 
 Paths are relative to `projects/Oxygen.Engine` unless identified as
 repository-root paths.
@@ -27,17 +27,19 @@ author, inspect and reproduce. The finished package has three observable results
    to cameras, layouts and view lifetimes.
 
 The exposure engine, HDR/lifecycle contracts, performance disposition and authoring
-are already validated in Slices 1-6, including 5.1 and 5.2. Remaining work completes
-physical calibration and the maintained applications/instruments that demonstrate
-those contracts. EX07 now also owns many-light correctness/performance and targeted
-lighting improvements. It does not reopen the completed exposure optimization cycle.
+are already validated in Slices 1-6, including 5.1 and 5.2. EX07 has qualified
+physical calibration, many-light correctness/performance and targeted lighting
+improvements; its final editor interaction sign-off is user-owned. EX08 onward
+delivers the maintained applications/instruments and final package integration.
+The completed exposure optimization cycle remains closed.
 
 ### Remaining delivery at a glance
 
 Execute **EX07 -> EX08 -> EX08.1 -> EX08.2 -> EX09A -> EX09B -> EX09C -> EX09D -> EX09E -> EX10**.
 EX09A-E divide the original large Slice 9; existing requirement IDs remain stable.
-All are planned. Each step ships its focused tests, usable controls, batch case
-and documentation together; EX10 integrates already working delivery.
+EX07 awaits only editor sign-off; EX08 onward remains planned. Each subsequent
+step ships its focused tests, usable controls, batch case and documentation
+together; EX10 integrates already working delivery.
 
 | Step                                               | What the user can do when it closes                                                                                                       | Concrete completion evidence                                                                                                                                                |
 | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1717,8 +1719,9 @@ serve the specified behavior without adopting UE's legacy compatibility paths.
 
 ## 11. Completion criteria
 
-Checked foundations are validated by EX02-06 in the tracker. Remaining unchecked
-items are delivered by the steps above; they do not reopen those foundations.
+Checked foundations are validated by EX02-07 in the tracker. EX07's engine gates
+are complete; its final interactive editor sign-off remains user-owned. Remaining
+unchecked items belong to the later steps and do not reopen those foundations.
 Package closure remains dependent on final integrated evidence.
 
 - [x] Fixed/manual-camera/Auto/disabled exposure use one consistent state contract.
@@ -1727,8 +1730,9 @@ Package closure remains dependent on final integrated evidence.
 - [x] Every active HDR path uses frame-pinned P and final S/P consistently.
 - [x] Bootstrap and numerical recovery preserve valid bright/dark metering signals.
 - [x] Authored fields round-trip through all active persistence surfaces (EX06).
-- [ ] Directional, point and spot reference units and material expectations pass.
-- [ ] EX07 many-light correctness, supported capacities and measured performance/improvement gates pass.
+- [x] Directional, point and spot reference units and material expectations pass.
+- [x] EX07 many-light correctness, supported capacities and measured performance/improvement gates pass.
+- [ ] EX07 final editor interaction sign-off (user-owned); engine acceptance and build repairs are complete.
 - [ ] LightBench is a properly repaired, visually useful exposure benchmark;
       all seven experiments pass numerical, interactive and visual acceptance.
 - [ ] MultiView succeeds visually in ordinary and proof layouts; multiple views

@@ -187,10 +187,10 @@ EX07C repairs required view ownership, shadow identity, eligibility and per-ligh
 quality first. EX07D is closed (2026-09-24); its
 [baseline register](EX07D-baseline-report.md) records timing, memory scope,
 quality and confidence limits in commit `894a25e57`. The
-[EX07E handoff](EX07-lighting-correctness-and-scalability.md#ex07e-handoff--active)
-is active following the user's start signal on 2026-09-24. E introduces remaining changes
-individually, freezing matched regression/noise criteria before candidate timing
-and reporting before/after attribution; EX07F confirms the integrated result.
+[EX07E handoff](EX07-lighting-correctness-and-scalability.md#ex07e-handoff--closed)
+subsequently closed with matched comparisons and explicit confidence limits.
+[F engine acceptance](EX07F-acceptance-report.md) credits that qualification;
+only the user-owned editor interaction sign-off remains.
 Existing source correctness failures cannot serve as baselines. Delivered D32,
 allocation ownership and local-map cache work remains credited by the tracker.
 

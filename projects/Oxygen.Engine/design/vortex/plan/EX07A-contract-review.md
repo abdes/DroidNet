@@ -906,7 +906,7 @@ native GPU decoding and catalog checks, applicable runtime captures, approved
 capacity/failure contracts and reproducible evidence at A closure. At that
 checkpoint the spatial culler had not been connected and EX07B–F remained ahead.
 For current progress, use the [tracker](../IMPLEMENTATION_STATUS.md#34-slice-7-work-items):
-EX07B and EX07D are now closed; the
-[D baseline register](EX07D-baseline-report.md) is committed in `894a25e57`, and
-EX07E is active, authorized on 2026-09-24. A's closure alone
-does not close EX07-04/08/10/11/12 or EX07-GATE.
+A–E are closed; the [D baseline register](EX07D-baseline-report.md) and
+[accepted E comparisons](EX07E-shadow-sharing-results.md) remain credited.
+[F engine acceptance](EX07F-acceptance-report.md) is complete, with only the
+user-owned editor interaction sign-off pending for EX07-GATE.

@@ -64,8 +64,9 @@ its implementation evidence, validation evidence, and remaining work.
 
 The [implementation plan](plan/exposure-and-lightbench-correction.md) owns scope
 and measurable delivery gates. Slices 1-6, including 5.1 and 5.2, are validated;
-remaining work is physical calibration, the usable seven-experiment LightBench,
-console/UI automation and final MultiView/package integration. EX09 is divided
+EX07 physical calibration and engine qualification are complete, with only
+user-owned editor sign-off pending. Subsequent work is the usable seven-experiment
+LightBench, console/UI automation and final MultiView/package integration. EX09 is divided
 into EX09A-E; stable work-item IDs below retain requirement coverage.
 
 **Resume entry point:** [Current work](#31-current-work). Historical manifests do
