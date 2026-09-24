@@ -1,0 +1,156 @@
+{
+  "gpu_engine_owners": [
+    {
+      "Name": "pid_67040_luid_0x00000000_0x00016AEE_phys_0_eng_0_engtype_3D",
+      "UtilizationPercentage": 20
+    },
+    {
+      "Name": "pid_67040_luid_0x00000000_0x000183AF_phys_0_eng_1_engtype_Copy",
+      "UtilizationPercentage": 17
+    },
+    {
+      "Name": "pid_67040_luid_0x00000000_0x000183AF_phys_0_eng_0_engtype_3D",
+      "UtilizationPercentage": 11
+    },
+    {
+      "Name": "pid_4_luid_0x00000000_0x000183AF_phys_0_eng_1_engtype_Copy",
+      "UtilizationPercentage": 2
+    }
+  ],
+  "started_utc": "2026-09-24T20:30:15.0285813Z",
+  "scope": "Pre-launch headroom check, allowing ordinary desktop activity rather than requiring idle hardware. GPU values cover NVIDIA adapters. Process CPU counters may sum above 100 across cores. This does not prove absence of interference later in the run.",
+  "samples": [
+    {
+      "cpu_percent": 7.0,
+      "utc": "2026-09-24T20:30:18.0397019Z",
+      "gpus": [
+        {
+          "index": "0",
+          "name": "NVIDIA GeForce RTX 3080",
+          "utilization": "29",
+          "memory_utilization": "3",
+          "clock_mhz": "1290",
+          "temperature_c": "48",
+          "memory_used_mib": "4191"
+        }
+      ]
+    },
+    {
+      "cpu_percent": 17.0,
+      "utc": "2026-09-24T20:30:19.3848526Z",
+      "gpus": [
+        {
+          "index": "0",
+          "name": "NVIDIA GeForce RTX 3080",
+          "utilization": "33",
+          "memory_utilization": "4",
+          "clock_mhz": "1155",
+          "temperature_c": "48",
+          "memory_used_mib": "4191"
+        }
+      ]
+    },
+    {
+      "cpu_percent": 11.0,
+      "utc": "2026-09-24T20:30:20.7090090Z",
+      "gpus": [
+        {
+          "index": "0",
+          "name": "NVIDIA GeForce RTX 3080",
+          "utilization": "27",
+          "memory_utilization": "2",
+          "clock_mhz": "1980",
+          "temperature_c": "50",
+          "memory_used_mib": "4191"
+        }
+      ]
+    },
+    {
+      "cpu_percent": 1.0,
+      "utc": "2026-09-24T20:30:22.0337658Z",
+      "gpus": [
+        {
+          "index": "0",
+          "name": "NVIDIA GeForce RTX 3080",
+          "utilization": "28",
+          "memory_utilization": "3",
+          "clock_mhz": "1425",
+          "temperature_c": "48",
+          "memory_used_mib": "4191"
+        }
+      ]
+    },
+    {
+      "cpu_percent": 0.0,
+      "utc": "2026-09-24T20:30:23.3905704Z",
+      "gpus": [
+        {
+          "index": "0",
+          "name": "NVIDIA GeForce RTX 3080",
+          "utilization": "30",
+          "memory_utilization": "3",
+          "clock_mhz": "1260",
+          "temperature_c": "48",
+          "memory_used_mib": "4191"
+        }
+      ]
+    }
+  ],
+  "cpu_process_counters": [
+    {
+      "Name": "pwsh#7",
+      "IDProcess": 64672,
+      "PercentProcessorTime": 97
+    },
+    {
+      "Name": "System",
+      "IDProcess": 4,
+      "PercentProcessorTime": 29
+    },
+    {
+      "Name": "ChatGPT#2",
+      "IDProcess": 67040,
+      "PercentProcessorTime": 24
+    },
+    {
+      "Name": "Taskmgr",
+      "IDProcess": 30584,
+      "PercentProcessorTime": 24
+    },
+    {
+      "Name": "WmiPrvSE#2",
+      "IDProcess": 63688,
+      "PercentProcessorTime": 24
+    },
+    {
+      "Name": "cortex-apiserver",
+      "IDProcess": 4048,
+      "PercentProcessorTime": 24
+    },
+    {
+      "Name": "EpicGamesLauncher",
+      "IDProcess": 44536,
+      "PercentProcessorTime": 9
+    },
+    {
+      "Name": "dwm",
+      "IDProcess": 2724,
+      "PercentProcessorTime": 4
+    }
+  ],
+  "accepted": true,
+  "thresholds": {
+    "peak_samples_required": 2,
+    "peak_gpu_percent": 70.0,
+    "mean_gpu_percent": 50.0,
+    "peak_cpu_percent": 50.0,
+    "mean_cpu_percent": 25.0
+  },
+  "finished_utc": "2026-09-24T20:30:24.3189977Z",
+  "observed": {
+    "peak_gpu_percent": 33.0,
+    "mean_gpu_percent": 29.4,
+    "peak_cpu_percent": 17.0,
+    "mean_cpu_percent": 7.2
+  }
+}

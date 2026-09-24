@@ -1,0 +1,26 @@
+{
+  "measured_window_seconds": [
+    20,
+    50
+  ],
+  "executable": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-tracy-ninja\\bin\\Release\\Oxygen.Examples.RenderScene.exe",
+  "started": "2026-09-25T00:41:06.1677461+04:00",
+  "arguments": [
+    "-v=-1",
+    "--frames",
+    "0",
+    "--fps",
+    "0",
+    "--vsync",
+    "false",
+    "--resolution",
+    "2560x1400",
+    "--scene",
+    "NewSponza_Main_glTF_003",
+    "--directional-shadows",
+    "conventional",
+    "--debug-layer",
+    "false"
+  ],
+  "pid": 61820
+}

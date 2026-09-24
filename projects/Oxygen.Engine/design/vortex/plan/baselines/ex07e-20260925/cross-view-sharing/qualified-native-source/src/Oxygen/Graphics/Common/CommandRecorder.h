@@ -1,0 +1,686 @@
+//===----------------------------------------------------------------------===//
+// Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
+// copy at https://opensource.org/licenses/BSD-3-Clause.
+// SPDX-License-Identifier: BSD-3-Clause
+//===----------------------------------------------------------------------===//
+
+#pragma once
+
+#include <array>
+#include <concepts>
+#include <cstddef>
+#include <cstdint>
+#include <functional>
+#include <memory>
+#include <optional>
+#include <source_location>
+#include <span>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+
+#include <Oxygen/Base/AlwaysFalse.h>
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/NamedType.h>
+#include <Oxygen/Base/ObserverPtr.h>
+// ReSharper disable once CppUnusedIncludeDirective - For always_false_v
+#include <Oxygen/Base/VariantHelpers.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/Scissors.h>
+#include <Oxygen/Core/Types/ViewPort.h>
+#include <Oxygen/Graphics/Common/Buffer.h>
+#include <Oxygen/Graphics/Common/CommandQueue.h>
+#include <Oxygen/Graphics/Common/NativeObject.h>
+#include <Oxygen/Graphics/Common/PipelineState.h>
+#include <Oxygen/Graphics/Common/RecordingUseBatch.h>
+#include <Oxygen/Graphics/Common/SubmissionCallback.h>
+#include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/ClearFlags.h>
+#include <Oxygen/Graphics/Common/Types/Color.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Graphics/Common/Types/TrackableResource.h>
+#include <Oxygen/Graphics/Common/api_export.h>
+#include <Oxygen/Profiling/ProfileScope.h>
+
+namespace oxygen::graphics {
+
+namespace detail {
+  class ResourceStateTracker;
+  class Barrier;
+} // namespace detail
+
+class CommandRecorder;
+class CommandList;
+class CommandQueue;
+class IShaderByteCode;
+class Buffer;
+class Texture;
+class Framebuffer;
+class NativeView;
+
+struct GpuProfileScopeToken {
+  uint32_t scope_id { 0 };
+  uint16_t stream_id { 0 };
+  uint8_t flags { 0 };
+};
+
+inline constexpr uint32_t kInvalidGpuProfileScopeId = 0xFFFFFFFFU;
+inline constexpr uint8_t kGpuScopeTokenFlagActive = 1U << 0U;
+
+struct GpuProfileCollectorState {
+  alignas(std::max_align_t) std::array<std::byte, 64> storage {};
+  uint8_t flags { 0 };
+};
+
+struct GpuProfileScopeInfo {
+  const profiling::GpuProfileScopeDesc& desc;
+  std::string_view base_label {};
+  std::string_view formatted_name {};
+  std::source_location callsite {};
+};
+
+class IGpuProfileCollector {
+public:
+  virtual ~IGpuProfileCollector() = default;
+
+  virtual auto BeginScope(CommandRecorder& recorder,
+    const GpuProfileScopeInfo& info, GpuProfileCollectorState& state) -> void
+    = 0;
+
+  virtual auto EndScope(
+    CommandRecorder& recorder, GpuProfileCollectorState& state) -> void = 0;
+
+  virtual auto AbortScope(
+    CommandRecorder& recorder, GpuProfileCollectorState& state) -> void
+  {
+    EndScope(recorder, state);
+  }
+};
+
+class CommandRecorder {
+public:
+  enum class IndirectCommandKind : uint8_t {
+    kDraw,
+    kDispatch,
+  };
+
+  using IndirectCommandCount
+    = NamedType<uint32_t, struct IndirectCommandCountTag,
+      // clang-format off
+    DefaultInitialized,
+    Comparable,
+    Printable,
+    Hashable>; // clang-format on
+
+  struct IndirectPushConstantsDesc {
+    BindingSlotDesc binding_slot_desc {};
+    uint32_t dest_offset_in_32bit_values { 0U };
+    uint32_t value_count { 0U };
+
+    auto operator==(const IndirectPushConstantsDesc&) const -> bool = default;
+  };
+
+  struct IndirectCommandDesc {
+    IndirectCommandKind kind { IndirectCommandKind::kDraw };
+    std::optional<IndirectPushConstantsDesc> push_constants {};
+
+    auto operator==(const IndirectCommandDesc&) const -> bool = default;
+  };
+
+  struct IndirectExecutionDesc {
+    BufferRange argument_buffer_range {};
+    IndirectCommandCount command_count { 1U };
+    observer_ptr<const Buffer> count_buffer { nullptr };
+    BufferRange count_buffer_range {};
+
+    auto operator==(const IndirectExecutionDesc&) const -> bool = default;
+  };
+
+  //=== Lifecycle ===-------------------------------------------------------//
+
+  OXGN_GFX_API CommandRecorder(std::shared_ptr<CommandList> command_list,
+    observer_ptr<CommandQueue> target_queue);
+  OXGN_GFX_API virtual ~CommandRecorder(); // Definition moved to .cpp
+
+  OXYGEN_MAKE_NON_COPYABLE(CommandRecorder)
+  OXYGEN_MAKE_NON_MOVABLE(CommandRecorder)
+
+  [[nodiscard]] auto GetTargetQueue() const { return target_queue_; }
+
+  //! Registers CPU publication to resolve once submission succeeds or discards.
+  template <typename Callable>
+    requires std::constructible_from<SubmissionCallback, Callable&&>
+  void OnSubmission(Callable&& callback)
+  {
+    RegisterSubmission(SubmissionCallback(std::forward<Callable>(callback)));
+  }
+
+  //! Retain this recording's command list for immediate submission inspection.
+  /*!
+   Capture before End(), then inspect IsSubmitted() after releasing an immediate
+   recorder. This does not wait for GPU completion. Command-list state is
+   recycled at frame retirement; this is not a durable completion receipt.
+  */
+  [[nodiscard]] auto GetCommandListForInspection() const noexcept
+    -> std::shared_ptr<const CommandList>
+  {
+    return command_list_;
+  }
+
+  //=== Command List Control ===--------------------------------------------//
+
+  OXGN_GFX_API virtual auto Begin() -> void;
+
+  //! Ends the recording session and returns the recorded command list.
+  /*!
+   Upon return from this method, the CommandRecorder should give away ownership
+   of the command list (i.e. should not continue to hold a reference to it). It
+   does not matter if the rrecording failed or succeeded.
+
+   @return The command list, with which this CommandRecorder was constructed,
+   when the recording was successful. An empty shared pointer (null) indicating
+   that the recording did not produce a valid command list, and the recorder
+   must give away ownership of the command list.
+  */
+  OXGN_GFX_API virtual auto End() noexcept -> std::shared_ptr<CommandList>;
+  OXGN_GFX_API auto RetainRegistration(ResourceRegistry& registry,
+    const RegistrationOwner& owner) -> std::expected<void, RegistrationError>;
+  auto RetainRegistration(ResourceRegistry& registry,
+    const RegistrationLease& lease) -> std::expected<void, RegistrationError>
+  {
+    return RetainRegistration(registry, lease.AllocationOwner());
+  }
+  OXGN_GFX_API auto RetainOpaqueUse(std::shared_ptr<const void> owner,
+    uint64_t kind, void* context = nullptr, OpaqueUseHooks hooks = {}) -> void;
+  OXGN_GFX_API auto RecordDependency(CompletionReceipt receipt) -> void;
+  [[nodiscard]] OXGN_GFX_API auto RetainsRegistration(
+    RegistrationIdentity identity) const noexcept -> bool;
+
+  //=== GPU Debug Markers ===---------------------------------------------//
+
+  //! Begins a GPU debug event scope on the underlying command stream.
+  OXGN_GFX_API virtual auto BeginEvent(std::string_view name) -> void;
+
+  //! Ends the most recently begun GPU debug event scope.
+  OXGN_GFX_API virtual auto EndEvent() -> void;
+
+  //! Emits an instantaneous GPU debug marker into the command stream.
+  OXGN_GFX_API virtual auto SetMarker(std::string_view name) -> void;
+
+  //=== Unified Profile Scopes ===-----------------------------------------//
+
+  OXGN_GFX_API virtual auto BeginProfileScope(
+    const profiling::GpuProfileScopeDesc& desc,
+    std::source_location callsite = std::source_location::current())
+    -> GpuProfileScopeToken;
+
+  OXGN_GFX_API virtual auto EndProfileScope(const GpuProfileScopeToken& token)
+    -> void;
+
+  auto SetTelemetryCollector(observer_ptr<IGpuProfileCollector> collector)
+    -> void
+  {
+    telemetry_collector_ = collector;
+  }
+
+  auto SetTraceCollector(observer_ptr<IGpuProfileCollector> collector) -> void
+  {
+    trace_collector_ = collector;
+  }
+
+  //=== Pipeline State and Bindless Setup ===-------------------------------//
+
+  //! Sets the graphics pipeline state for subsequent draw calls.
+  /*!
+   Call this before issuing any draw commands to ensure the correct shaders,
+   input layout, and fixed-function state are bound. The provided pipeline
+   description must match the resources and framebuffer formats in use.
+
+   Will create and set a root signature for bindless rendering, set the
+   shader visible descriptor heaps accordingly, get a cached pipeline state or
+   create a new one and set it.
+
+   Best Practices:
+    - Always set the pipeline state after binding the framebuffer and before
+      drawing.
+    - Ensure the descriptor layout and shader expectations match the pipeline
+      description.
+    - Avoid redundant state changes for performance.
+
+   \param desc The graphics pipeline state description to bind.
+  */
+  virtual auto SetPipelineState(GraphicsPipelineDesc desc) -> void = 0;
+
+  //! Sets the compute pipeline state for subsequent dispatch calls.
+  /*!
+   Call this before issuing any compute dispatch commands to ensure the
+   correct compute shader and state are bound. The pipeline description must
+   match the resources expected by the compute shader.
+
+   \param desc The compute pipeline state description to bind.
+  */
+  virtual auto SetPipelineState(ComputePipelineDesc desc) -> void = 0;
+
+  //=== Direct Binding ===--------------------------------------------------//
+
+  virtual auto SetGraphicsRootConstantBufferView(
+    uint32_t root_parameter_index, uint64_t buffer_gpu_address) -> void = 0;
+
+  virtual auto SetComputeRootConstantBufferView(
+    uint32_t root_parameter_index, uint64_t buffer_gpu_address) -> void = 0;
+
+  virtual auto SetGraphicsRoot32BitConstant(uint32_t root_parameter_index,
+    uint32_t src_data, uint32_t dest_offset_in_32bit_values) -> void = 0;
+
+  virtual auto SetComputeRoot32BitConstant(uint32_t root_parameter_index,
+    uint32_t src_data, uint32_t dest_offset_in_32bit_values) -> void = 0;
+
+  //=== Render State ===----------------------------------------------------//
+
+  virtual auto SetRenderTargets(
+    std::span<NativeView> rtvs, std::optional<NativeView> dsv) -> void = 0;
+
+  virtual auto SetViewport(const ViewPort& viewport) -> void = 0;
+  virtual auto SetScissors(const Scissors& scissors) -> void = 0;
+
+  //=== Draw and Resource Binding Commands ===------------------------------//
+
+  // Pure bindless - Only Draw should be used, no DrawIndexed
+  virtual auto Draw(uint32_t vertex_num, uint32_t instances_num,
+    uint32_t vertex_offset, uint32_t instance_offset) -> void = 0;
+
+  virtual auto Dispatch(uint32_t thread_group_count_x,
+    uint32_t thread_group_count_y, uint32_t thread_group_count_z) -> void = 0;
+
+  //! Issues one indirect draw command using the default draw layout.
+  /*!
+   \param argument_buffer The buffer containing the indirect draw arguments.
+   \param argument_buffer_range Byte range within the argument buffer.
+  */
+  auto ExecuteIndirect(const Buffer& argument_buffer,
+    BufferRange argument_buffer_range = {}) -> void
+  {
+    ExecuteIndirect(argument_buffer, IndirectCommandDesc {},
+      IndirectExecutionDesc { .argument_buffer_range = argument_buffer_range });
+  }
+
+  auto ExecuteIndirect(const Buffer& argument_buffer,
+    const IndirectCommandDesc& command_desc,
+    BufferRange argument_buffer_range = {}) -> void
+  {
+    ExecuteIndirect(argument_buffer, command_desc,
+      IndirectExecutionDesc { .argument_buffer_range = argument_buffer_range });
+  }
+
+  //! Issues one or more indirect draw or dispatch commands.
+  /*!
+   In D3D12, this maps to ID3D12GraphicsCommandList::ExecuteIndirect.
+   \p command_desc describes the terminal indirect operation and any inline
+   push-constant payload that should be written before executing each command.
+
+   When \p execution_desc.count_buffer is null, \p command_count is the fixed
+   number of commands to execute. When a count buffer is provided,
+   \p command_count is the maximum number of commands to execute and the GPU-
+   written counter value in that buffer is used as the actual count.
+
+   \param argument_buffer The buffer containing the draw or dispatch arguments.
+   \param command_desc Backend-agnostic description of the indirect command.
+   \param execution_desc Execution options, argument range, and optional GPU-
+          written count source.
+  */
+  virtual auto ExecuteIndirect(const Buffer& argument_buffer,
+    const IndirectCommandDesc& command_desc,
+    const IndirectExecutionDesc& execution_desc) -> void = 0;
+
+  virtual auto SetVertexBuffers(uint32_t num,
+    const std::shared_ptr<Buffer>* vertex_buffers,
+    const uint32_t* strides) const -> void = 0;
+  virtual auto BindIndexBuffer(const Buffer& buffer, Format format) -> void = 0;
+
+  //=== Framebuffer and Resource Operations ===-----------------------------//
+
+  // TODO: Legacy API to be removed when render passes are implemented.
+  virtual auto BindFrameBuffer(const Framebuffer& framebuffer) -> void = 0;
+
+  //! Clears a depth-stencil view.
+  /*!
+   \param texture The texture that the depth-stencil view is associated with.
+          This must be a valid texture with a depth-stencil attachment, which
+          format may be used to resolve the depth and stencil values if the
+          texture descriptor specifies so with the `use_clear_value` flag.
+   \param dsv A native view wrapper for the depth-stencil view to clear. Must
+          be convertible to an integer holding the CPU address of the view
+          descriptor.
+   \param clear_flags The flags indicating what to clear (depth, stencil, or
+          both).
+   \param depth The depth value to clear to. Ignored if \p clear_flags does
+          not include `ClearFlags::kDepth`.
+   \param stencil The stencil value to clear to. Ignored if \p clear_flags
+          does not include `ClearFlags::kStencil`.
+   */
+  virtual auto ClearDepthStencilView(const Texture& texture,
+    const NativeView& dsv, ClearFlags clear_flags, float depth, uint8_t stencil)
+    -> void = 0;
+
+  //! Clears one or more rectangles within a depth-stencil view.
+  /*!
+   Default implementation ignores \p rects and falls back to clearing the
+   * full
+   view. Backends that support partial clears should override this.
+
+
+   * \param rects Rectangles, in texture space, to clear. Empty means full
+   * view.
+   */
+  OXGN_GFX_API virtual auto ClearDepthStencilView(const Texture& texture,
+    const NativeView& dsv, ClearFlags clear_flags, float depth, uint8_t stencil,
+    std::span<const oxygen::Scissors> rects) -> void;
+
+  //! Clears color and depth/stencil (DSV) attachments of the specified
+  //! framebuffer.
+  /*!
+   For each color attachment, if a clear value is provided in \p
+   color_clear_values, it is used. Otherwise, if the attached texture's
+   descriptor has \c use_clear_value set to true, the texture's \c clear_value
+   is used. If neither is specified, a default value (typically black or zero)
+   is used.
+
+   For depth and stencil, if \p depth_clear_value or \p stencil_clear_value
+   are provided, they are used. Otherwise, if the depth texture's descriptor
+   has \c use_clear_value set to true, its \c clear_value is used for depth.
+
+   \param framebuffer The framebuffer whose attachments will be cleared.
+   \param color_clear_values Optional vector of per-attachment clear colors.
+   Each entry corresponds to a color attachment. If not set or if an entry is
+   std::nullopt, the texture's clear value is used if available.
+   \param depth_clear_value Optional clear value for the depth buffer. If not
+   set, the texture's clear value is used if available.
+   \param stencil_clear_value Optional clear value for the stencil buffer. If
+   not set, the texture's clear value is used if available.
+  */
+  virtual auto ClearFramebuffer(const Framebuffer& framebuffer,
+    std::optional<std::vector<std::optional<Color>>> color_clear_values
+    = std::nullopt,
+    std::optional<float> depth_clear_value = std::nullopt,
+    std::optional<uint8_t> stencil_clear_value = std::nullopt) -> void = 0;
+
+  virtual auto CopyBuffer(Buffer& dst, size_t dst_offset, const Buffer& src,
+    size_t src_offset, size_t size) -> void = 0;
+
+  // Copies from a (staging) buffer into a texture region. The region(s) are
+  // described by TextureUploadRegion which references a buffer offset, pitches
+  // and a destination TextureSlice / TextureSubResourceSet.
+  virtual auto CopyBufferToTexture(const Buffer& src,
+    const TextureUploadRegion& region, Texture& dst) -> void = 0;
+
+  virtual auto CopyBufferToTexture(const Buffer& src,
+    std::span<const TextureUploadRegion> regions, Texture& dst) -> void = 0;
+
+  // Copies from a texture region into a linear buffer. The region describes a
+  // source texture slice and the destination buffer offset / pitches.
+  virtual auto CopyTextureToBuffer(Buffer& dst, const Texture& src,
+    const TextureBufferCopyRegion& region) -> void = 0;
+
+  //! Copies a region from one texture to another.
+  /*!
+   Copies texture data between two textures with optional region specifications.
+   Useful for compositing, render target copies, mip generation, etc.
+
+   \param src Source texture (must be in kCopySource state).
+   \param src_slice Source region to copy from.
+   \param src_subresources Source mip/array slice specification.
+   \param dst Destination texture (must be in kCopyDest state).
+   \param dst_slice Destination region to copy to.
+   \param dst_subresources Destination mip/array slice specification.
+
+   \note The source and destination regions should have matching dimensions
+         unless the backend supports scaling during copy (check capabilities).
+   \note Ensure proper resource state transitions before calling this method.
+   */
+  virtual auto CopyTexture(const Texture& src, const TextureSlice& src_slice,
+    const TextureSubResourceSet& src_subresources, Texture& dst,
+    const TextureSlice& dst_slice,
+    const TextureSubResourceSet& dst_subresources) -> void = 0;
+
+  //=== Resource State Management and Barriers (Templates) ===--------------//
+
+  //! @{
+  //! Resource state management and barriers.
+  /*!
+   These template methods provide a generic and convenient API for managing
+   resource states and barriers for any resource type. If the resource type is
+   not supported, a compile-time error will be generated.
+  */
+
+  template <Trackable T>
+  [[nodiscard]] auto IsResourceTracked(const T& resource) const -> bool
+  {
+    if constexpr (IsBuffer<T>) {
+      return DoIsResourceTracked(static_cast<const Buffer&>(resource));
+    } else if constexpr (IsTexture<T>) {
+      return DoIsResourceTracked(static_cast<const Texture&>(resource));
+    } else {
+      static_assert(
+        always_false_v<T>, "Unsupported resource type for IsResourceTracked");
+    }
+  }
+
+  template <Trackable T>
+  auto BeginTrackingResourceState(const T& resource,
+    const ResourceStates initial_state, const bool keep_initial_state = false)
+    -> void
+  {
+    if constexpr (IsBuffer<T>) {
+      DoBeginTrackingResourceState(static_cast<const Buffer&>(resource),
+        initial_state, keep_initial_state);
+    } else if constexpr (IsTexture<T>) {
+      DoBeginTrackingResourceState(static_cast<const Texture&>(resource),
+        initial_state, keep_initial_state);
+    } else {
+      static_assert(always_false_v<T>,
+        "Unsupported resource type for BeginTrackingResourceState");
+    }
+  }
+
+  template <Trackable T>
+  [[nodiscard]] auto AdoptKnownResourceState(
+    const T& resource, const bool keep_initial_state = false) -> bool
+  {
+    if (target_queue_ == nullptr) {
+      return false;
+    }
+    const auto known_state
+      = target_queue_->TryGetKnownResourceState(resource.GetNativeResource());
+    if (!known_state.has_value()) {
+      return false;
+    }
+
+    if constexpr (IsBuffer<T>) {
+      DoAdoptKnownResourceState(
+        static_cast<const Buffer&>(resource), *known_state, keep_initial_state);
+    } else if constexpr (IsTexture<T>) {
+      DoAdoptKnownResourceState(static_cast<const Texture&>(resource),
+        *known_state, keep_initial_state);
+    } else {
+      static_assert(always_false_v<T>,
+        "Unsupported resource type for AdoptKnownResourceState");
+    }
+    return true;
+  }
+
+  template <Trackable T>
+  auto EnableAutoMemoryBarriers(const T& resource) -> void
+  {
+    if constexpr (IsBuffer<T>) {
+      DoEnableAutoMemoryBarriers(static_cast<const Buffer&>(resource));
+    } else if constexpr (IsTexture<T>) {
+      DoEnableAutoMemoryBarriers(static_cast<const Texture&>(resource));
+    } else {
+      static_assert(always_false_v<T>,
+        "Unsupported resource type for EnableAutoMemoryBarriers");
+    }
+  }
+
+  template <Trackable T>
+  auto DisableAutoMemoryBarriers(const T& resource) -> void
+  {
+    if constexpr (IsBuffer<T>) {
+      DoDisableAutoMemoryBarriers(static_cast<const Buffer&>(resource));
+    } else if constexpr (IsTexture<T>) {
+      DoDisableAutoMemoryBarriers(static_cast<const Texture&>(resource));
+    } else {
+      static_assert(always_false_v<T>,
+        "Unsupported resource type for DisableAutoMemoryBarriers");
+    }
+  }
+
+  template <Trackable T>
+  auto RequireResourceState(const T& resource, const ResourceStates state)
+    -> void
+  {
+    if constexpr (IsBuffer<T>) {
+      DoRequireResourceState(static_cast<const Buffer&>(resource), state);
+    } else if constexpr (IsTexture<T>) {
+      DoRequireResourceState(static_cast<const Texture&>(resource), state);
+    } else {
+      static_assert(always_false_v<T>,
+        "Unsupported resource type for RequireResourceState");
+    }
+  }
+
+  template <Trackable T>
+  auto RequireResourceStateFinal(const T& resource, const ResourceStates state)
+    -> void
+  {
+    if constexpr (IsBuffer<T>) {
+      DoRequireResourceStateFinal(static_cast<const Buffer&>(resource), state);
+    } else if constexpr (IsTexture<T>) {
+      DoRequireResourceStateFinal(static_cast<const Texture&>(resource), state);
+    } else {
+      static_assert(always_false_v<T>,
+        "Unsupported resource type for RequireResourceStateFinal");
+    }
+  }
+
+  // Process all pending barriers and execute them
+  OXGN_GFX_API auto FlushBarriers() -> void;
+
+  //! @}
+
+  //=== Synchronization ===---------------------------------------------------//
+
+  //! Record a submit-ordered queue signal into the recorded command stream.
+  /*!
+   The signal is attached to the recorded command list and executes at
+   * submit
+   time after the recorded work for that list has been queued.
+
+
+   * @param value The fence/timeline value to signal when the recorded stream
+
+   * reaches this command during submission.
+  */
+  OXGN_GFX_API virtual auto RecordQueueSignal(uint64_t value) -> void;
+
+  /*! Record a submit-ordered queue wait into the recorded command stream.
+ The
+   * wait is attached to the recorded command list and executes at submit
+ time
+   * before the recorded work for that list is queued.
+
+   @param value The
+   * fence/timeline value the GPU should wait for when the
+   recorded stream
+   * reaches this command during submission.
+  */
+  OXGN_GFX_API virtual auto RecordQueueWait(uint64_t value) -> void;
+
+protected:
+  [[nodiscard]] auto GetCommandList() const -> CommandList&
+  {
+    return *command_list_;
+  }
+
+  //! Executes the given collection of barriers.
+  /*!
+   This is a backend-specific implementation that takes a collection of
+   barriers and issues the appropriate commands to the GPU to execute them.
+  */
+  virtual auto ExecuteBarriers(std::span<const detail::Barrier> barriers)
+    -> void = 0;
+
+private:
+  friend class CommandRecording;
+  OXGN_GFX_API void RegisterSubmission(SubmissionCallback callback);
+  void ResolveSubmission(SubmissionOutcome outcome) noexcept;
+
+  enum class ScopeCloseKind : uint8_t {
+    kEnd,
+    kAbort,
+  };
+
+  struct ScopeRecord {
+    std::string base_label {};
+    std::string formatted_name {};
+    GpuProfileCollectorState native_label_state {};
+    GpuProfileCollectorState telemetry_state {};
+    GpuProfileCollectorState trace_state {};
+    observer_ptr<IGpuProfileCollector> telemetry_collector { nullptr };
+    observer_ptr<IGpuProfileCollector> trace_collector { nullptr };
+    bool active { false };
+  };
+
+  //! @{
+  //! Private non-template dispatch methods for resource state tracking and
+  //! barrier management.
+
+  OXGN_GFX_API auto DoIsResourceTracked(const Buffer& resource) const -> bool;
+  OXGN_GFX_API auto DoIsResourceTracked(const Texture& resource) const -> bool;
+
+  OXGN_GFX_API auto DoBeginTrackingResourceState(const Buffer& resource,
+    ResourceStates initial_state, bool keep_initial_state) -> void;
+  OXGN_GFX_API auto DoBeginTrackingResourceState(const Texture& resource,
+    ResourceStates initial_state, bool keep_initial_state) -> void;
+  OXGN_GFX_API auto DoAdoptKnownResourceState(const Buffer& resource,
+    ResourceStates current_state, bool keep_initial_state) -> void;
+  OXGN_GFX_API auto DoAdoptKnownResourceState(const Texture& resource,
+    ResourceStates current_state, bool keep_initial_state) -> void;
+
+  OXGN_GFX_API auto DoEnableAutoMemoryBarriers(const Buffer& resource) -> void;
+  OXGN_GFX_API auto DoEnableAutoMemoryBarriers(const Texture& resource) -> void;
+
+  OXGN_GFX_API auto DoDisableAutoMemoryBarriers(const Buffer& resource) -> void;
+  OXGN_GFX_API auto DoDisableAutoMemoryBarriers(const Texture& resource)
+    -> void;
+
+  OXGN_GFX_API auto DoRequireResourceState(
+    const Buffer& resource, ResourceStates state) -> void;
+  OXGN_GFX_API auto DoRequireResourceState(
+    const Texture& resource, ResourceStates state) -> void;
+
+  OXGN_GFX_API auto DoRequireResourceStateFinal(
+    const Buffer& resource, ResourceStates state) -> void;
+  OXGN_GFX_API auto DoRequireResourceStateFinal(
+    const Texture& resource, ResourceStates state) -> void;
+
+  OXGN_GFX_API auto CloseScopeRecord(
+    ScopeRecord& record, ScopeCloseKind close_kind) -> void;
+  OXGN_GFX_API auto DrainActiveProfileScopes(ScopeCloseKind close_kind) noexcept
+    -> void;
+
+  //! @}
+
+  std::shared_ptr<CommandList> command_list_;
+  observer_ptr<CommandQueue> target_queue_;
+  observer_ptr<IGpuProfileCollector> telemetry_collector_ { nullptr };
+  observer_ptr<IGpuProfileCollector> trace_collector_ { nullptr };
+
+  std::unique_ptr<detail::ResourceStateTracker> resource_state_tracker_;
+  std::vector<ScopeRecord> scope_records_ {};
+  std::vector<uint32_t> scope_stack_ {};
+  std::vector<SubmissionCallback> submission_callbacks_ {};
+  std::optional<SubmissionOutcome> submission_outcome_;
+};
+
+} // namespace oxygen::graphics

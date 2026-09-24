@@ -1,0 +1,21 @@
+{
+  "status": "unaccepted candidate; confirmed GPU regression; no visual baseline approval",
+  "reference": "Prior accepted nine-load profile, same scene/container/settings hashes; different producer/consumer encoding and filtering quality. Not a shader-only matched pair.",
+  "excluded_attempt": "out/analysis/ex07e/e04-hardware-pcf/scenes/NewSponza_Main_glTF_003-tracy",
+  "candidate_capture": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\analysis\\ex07e\\e04-hardware-pcf-retry-2\\scenes\\NewSponza_Main_glTF_003-tracy",
+  "evidence": {
+    "candidate-point.hlsl": "5920d210363bd292936a5bd380e3fa19768f37953c3a9fe42fa10534a051a16e",
+    "control-point.hlsl": "8fd08367860953bbd4753dd905c4ab7868f5293883c6f2d44deba59595644dc5",
+    "cpu-during-capture.json": "098f7801656d2bf267d3df3fbf339477e3cac78d6c45b2551cffbcaf35b8567e",
+    "cpu-load-disposition.json": "961e45f65df656dbd23bfa35df10b24e412b75d7b53a4e52a5045381344a7b11",
+    "images-build-ninja.json": "b6b2cd19245489fa1c3591a6aebf60b1d40aac49c5cfa888d3bba1a311797c6b",
+    "images-build-tracy-ninja.json": "c67c39d5ff6fd6d84d7a0bb1312db426e0b15e5978db6b4d061f5b07043e64c0",
+    "specialization-candidate-cpu-load-disposition.json": "158b50924810702abdc20b4b76e4ed976f5acb5f5bc4ec7cb11c8b984de56eae",
+    "specialization-candidate-summary.json": "cec552650a999eefc78b38848aeb15c594aad781e596a06beda6f3a3aaa78d23",
+    "specialization-control-cpu-load-disposition.json": "3e1b5aa82140884e9fee5caef22e00b148287e7ea231e690e412e3c22ada660a",
+    "specialization-control-summary.json": "326b6f549000683ea2a420ce74c84c2d7c705f6955091bb0d292ff1a953423e9",
+    "sponza-candidate.png": "63d6978dcec506d29833b98f380ed5295dd430d0ec6959e288e776fbb7d1cd3c",
+    "sponza-tracy-candidate.json": "386497f1c32beafbfeb2210f82f7000865a4d1852c4cce5129fc6619a15616ca",
+    "sponza-tracy-prior-nine-load.json": "e034aea43fd1c60869964afe483fd0e8aae23bc2e8bd8d1346aba017a4f928b2"
+  }
+}

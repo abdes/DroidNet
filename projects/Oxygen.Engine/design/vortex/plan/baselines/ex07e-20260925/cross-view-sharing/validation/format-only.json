@@ -1,0 +1,16 @@
+[
+  {
+    "file": "src/Oxygen/Graphics/Common/CommandRecording.cpp",
+    "before_sha256": "bc76b684fc4cee28248dc98c4643abdc4b15286651585f190c6c6e3fc0252d76",
+    "after_sha256": "c9a9b7a4160dff40250bd400eb85071a5a98a93f2fcb8bde57f897381611c62d",
+    "whitespace_only": true,
+    "diff": "--- src/Oxygen/Graphics/Common/CommandRecording.cpp.captured\n+++ src/Oxygen/Graphics/Common/CommandRecording.cpp.formatted\n@@ -141,10 +141,11 @@\n   try {\n     // Preserve view-owner attribution without allocating the static label on\n     // every submit. Observer/Tracy consumers read the description at entry.\n-    thread_local profiling::CpuProfileScopeDesc finalize_profile {\n-      .label = \"Graphics.FinalizeCommandRecorder\",\n-      .variables = profiling::Vars(profiling::Var(\"recording\", std::string_view {})),\n-      .category = profiling::ProfileCategory::kGeneral};\n+    thread_local profiling::CpuProfileScopeDesc finalize_profile { .label\n+      = \"Graphics.FinalizeCommandRecorder\",\n+      .variables\n+      = profiling::Vars(profiling::Var(\"recording\", std::string_view {})),\n+      .category = profiling::ProfileCategory::kGeneral };\n     finalize_profile.variables[0].value.assign(command_list_->GetName());\n     const profiling::CpuProfileScope cpu_scope(finalize_profile);\n \n"
+  },
+  {
+    "file": "src/Oxygen/Vortex/Benchmarks/ManyLightBaseline_bench.cpp",
+    "before_sha256": "41578c8b3d0733b09bdaeccaff111eadbf43715f1f39993c356fdf72f2bfca39",
+    "after_sha256": "5e914be183830246c109863952d9291933e2e6428a323fbdf186c9a90b089e41",
+    "whitespace_only": true,
+    "diff": "--- src/Oxygen/Vortex/Benchmarks/ManyLightBaseline_bench.cpp.captured\n+++ src/Oxygen/Vortex/Benchmarks/ManyLightBaseline_bench.cpp.formatted\n@@ -318,8 +318,10 @@\n     samples_.reserve(sample_frames_);\n     cpu_ = std::make_unique<CpuTimingCapture>(CpuTimingOptions {\n       .record_capacity = CpuTimingRecordCapacity { sample_frames_\n-        * (256U + 32U * (options_.point_shadow_requests + options_.spot_shadow_requests)\n-          * static_cast<unsigned>(workload_.views.size())) },\n+        * (256U\n+          + 32U\n+            * (options_.point_shadow_requests + options_.spot_shadow_requests)\n+            * static_cast<unsigned>(workload_.views.size())) },\n       .detailed = true });\n     recording_ = true;\n     FailureBackend().count_resource_creations = true;\n"
+  }
+]

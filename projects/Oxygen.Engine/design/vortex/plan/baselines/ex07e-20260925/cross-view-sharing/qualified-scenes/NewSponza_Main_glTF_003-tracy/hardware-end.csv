@@ -1,0 +1,2 @@
+name, driver_version, pstate, temperature.gpu, power.draw [W], clocks.current.graphics [MHz], clocks.current.memory [MHz], utilization.gpu [%], memory.used [MiB]
+NVIDIA GeForce RTX 3080, 610.62, P0, 71, 347.68 W, 1860 MHz, 9501 MHz, 100 %, 8665 MiB

@@ -1,0 +1,103 @@
+//===----------------------------------------------------------------------===//
+// Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
+// copy at https://opensource.org/licenses/BSD-3-Clause.
+// SPDX-License-Identifier: BSD-3-Clause
+//===----------------------------------------------------------------------===//
+
+#pragma once
+
+#include <memory>
+#include <stdexcept>
+
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Config/PathFinderConfig.h>
+#include <Oxygen/Graphics/Common/BackendModule.h>
+
+namespace oxygen {
+
+class Graphics;
+struct GraphicsConfig;
+
+namespace loader {
+  //! Exception thrown when the loader is used from a module other than the
+  //! main executable module, before it has been first initialized from the
+  //! main executable module.
+  class InvalidOperationError final : public std::logic_error {
+    using std::logic_error::logic_error;
+  };
+
+  namespace detail {
+    class PlatformServices;
+  } // namespace detail
+} // namespace loader
+
+//! A singleton class that dynamically loads and unloads a graphics backend.
+/*!
+ This loader imposes the restriction (to ensure a single instance across the
+ process) that it should be first initialized from the main executable module.
+ Any attempt to access the single instance of the loader from another module
+ before it has been initialized will result in a `InvalidOperationError`
+ exception.
+
+ For testability purposes, the loader can be constructed with a custom
+ `PlatformServices` implementation. This allows to inject a mock implementation
+ during testing. If no custom implementation is provided, the default platform
+ services implementation will be used.
+*/
+class GraphicsBackendLoader {
+public:
+  //! Gets the singleton instance of the graphics backend loader.
+  /*!\n   \n   Mutually exclusive with `GetInstanceRelaxed()`. Once one of the
+   * two\n   retrieval methods initializes the singleton, the other cannot be
+   * used and\n   will throw `loader::InvalidOperationError`. Use this strict
+   * variant when the\n   first initialization is guaranteed to occur from the
+   * main executable module.\n  */
+  static auto GetInstance(
+    std::shared_ptr<loader::detail::PlatformServices> platform_services
+    = nullptr) -> GraphicsBackendLoader&;
+
+  //! Gets a singleton instance with relaxed initialization rules.
+  /*!\n\n   Mutually exclusive with `GetInstance()`. This relaxed variant allows
+   * the\n   first call to originate from any module (recording that module as
+   * the\n   owner). All subsequent calls (including resets) must originate from
+   * the same\n   module or an `loader::InvalidOperationError` is thrown. Choose
+   * this when\n   initialization might legitimately occur inside a dynamically
+   * loaded module.\n  */
+  static auto GetInstanceRelaxed(
+    std::shared_ptr<loader::detail::PlatformServices> platform_services
+    = nullptr) -> GraphicsBackendLoader&;
+
+  //! Requests close and relinquishes this facade's active backend owner.
+  ~GraphicsBackendLoader();
+
+  OXYGEN_MAKE_NON_COPYABLE(GraphicsBackendLoader)
+  OXYGEN_MAKE_NON_MOVABLE(GraphicsBackendLoader)
+
+  //! Loads the specified graphics backend from a dynamically loadable module.
+  [[nodiscard]] auto LoadBackend(graphics::BackendType backend,
+    const GraphicsConfig& config,
+    const PathFinderConfig& path_finder_config) const
+    -> std::weak_ptr<Graphics>;
+
+  //! Closes admission and drains the backend on its owner thread. External
+  //! owners and native inspection references may retain the closed incarnation;
+  //! reload reports BackendRetiring until their actual destruction and module
+  //! release.
+  void UnloadBackend() const noexcept;
+
+  //! Gets the backend instance if one is currently loaded.
+  [[nodiscard]] auto GetBackend() const noexcept -> std::weak_ptr<Graphics>;
+
+private:
+  // Internal constructor capturing the originating module handle. The
+  // originating module's directory is used as the primary base path for
+  // resolving backend dynamic modules (falling back to the executable
+  // directory if it cannot be determined).
+  explicit GraphicsBackendLoader(void* origin_module,
+    std::shared_ptr<loader::detail::PlatformServices> platform_services);
+
+  class Impl;
+  std::unique_ptr<Impl> pimpl_;
+};
+
+} // namespace oxygen

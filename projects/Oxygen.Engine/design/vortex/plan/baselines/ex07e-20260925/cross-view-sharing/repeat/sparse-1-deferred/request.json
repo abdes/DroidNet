@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "case": "sparse-1",
+  "family": "deferred",
+  "reference": false,
+  "measure": true,
+  "lights": 1,
+  "width": 1920,
+  "height": 1080,
+  "moving": false,
+  "secondary_view": false,
+  "point_shadows": 0,
+  "spot_shadows": 0,
+  "source_radius_m": 0.0,
+  "spot_outer_half_angle_radians": 0.6,
+  "distribution": "sparse",
+  "projection": "perspective",
+  "warmup_frames": 120,
+  "sample_frames": 240,
+  "output": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\analysis\\ex07e\\e06-final\\native-endpoint-repeat\\sparse-1-deferred\\baseline"
+}

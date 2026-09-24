@@ -1,0 +1,421 @@
+{
+  "tests": 30,
+  "failures": 0,
+  "disabled": 0,
+  "errors": 0,
+  "timestamp": "2026-09-24T23:55:00Z",
+  "time": "0.096s",
+  "name": "AllTests",
+  "testsuites": [
+    {
+      "name": "GeometryUploaderBasicTest",
+      "tests": 8,
+      "failures": 0,
+      "disabled": 0,
+      "errors": 0,
+      "timestamp": "2026-09-24T23:55:00Z",
+      "time": "0.005s",
+      "testsuite": [
+        {
+          "name": "MeshShaderVisibleIndicesDefaultsToInvalidShaderVisibleIndex",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Resources\\GeometryUploader_basic_test.cpp",
+          "line": 27,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T23:55:00Z",
+          "time": "0s",
+          "classname": "GeometryUploaderBasicTest"
+        },
+        {
+          "name": "GetOrAllocateValidMeshReturnsValidHandle",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Resources\\GeometryUploader_basic_test.cpp",
+          "line": 39,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T23:55:00Z",
+          "time": "0s",
+          "classname": "GeometryUploaderBasicTest"
+        },
+        {
+          "name": "GetOrAllocateSameIdentityReturnsSameHandle",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Resources\\GeometryUploader_basic_test.cpp",
+          "line": 64,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T23:55:00Z",
+          "time": "0s",
+          "classname": "GeometryUploaderBasicTest"
+        },
+        {
+          "name": "GetOrAllocateDifferentIdentityReturnsDifferentHandle",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Resources\\GeometryUploader_basic_test.cpp",
+          "line": 91,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T23:55:00Z",
+          "time": "0s",
+          "classname": "GeometryUploaderBasicTest"
+        },
+        {
+          "name": "GetOrAllocateCriticalityUpgradeIsSticky",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Resources\\GeometryUploader_basic_test.cpp",
+          "line": 124,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T23:55:00Z",
+          "time": "0.003s",
+          "classname": "GeometryUploaderBasicTest"
+        },
+        {
+          "name": "GetOrAllocateInvalidMeshReturnsInvalidGeometryHandleOrAsserts",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Resources\\GeometryUploader_basic_test.cpp",
+          "line": 169,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T23:55:00Z",
+          "time": "0s",
+          "classname": "GeometryUploaderBasicTest"
+        },
+        {
+          "name": "IsHandleValidInvalidHandleIsFalse",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Resources\\GeometryUploader_basic_test.cpp",
+          "line": 195,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T23:55:00Z",
+          "time": "0s",
+          "classname": "GeometryUploaderBasicTest"
+        },
+        {
+          "name": "GetShaderVisibleIndicesInvalidHandleReturnsInvalidIndices",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Resources\\GeometryUploader_basic_test.cpp",
+          "line": 206,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T23:55:00Z",
+          "time": "0s",
+          "classname": "GeometryUploaderBasicTest"
+        }
+      ]
+    },
+    {
+      "name": "GeometryUploaderLifecycleTest",
+      "tests": 3,
+      "failures": 0,
+      "disabled": 0,
+      "errors": 0,
+      "timestamp": "2026-09-24T23:55:00Z",
+      "time": "0.017s",
+      "testsuite": [
+        {
+          "name": "EnsureFrameResourcesIsIdempotentWithinFrame",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Resources\\GeometryUploader_lifecycle_test.cpp",
+          "line": 22,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T23:55:00Z",
+          "time": "0.004s",
+          "classname": "GeometryUploaderLifecycleTest"
+        },
+        {
+          "name": "GetShaderVisibleIndicesAutoEnsuresOncePerFrame",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Resources\\GeometryUploader_lifecycle_test.cpp",
+          "line": 49,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T23:55:00Z",
+          "time": "0.006s",
+          "classname": "GeometryUploaderLifecycleTest"
+        },
+        {
+          "name": "StableMeshDoesNotReuploadEveryFrame",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Resources\\GeometryUploader_lifecycle_test.cpp",
+          "line": 77,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T23:55:00Z",
+          "time": "0.005s",
+          "classname": "GeometryUploaderLifecycleTest"
+        }
+      ]
+    },
+    {
+      "name": "GeometryUploaderResidencyTest",
+      "tests": 1,
+      "failures": 0,
+      "disabled": 0,
+      "errors": 0,
+      "timestamp": "2026-09-24T23:55:00Z",
+      "time": "0.003s",
+      "testsuite": [
+        {
+          "name": "IndicesAreInvalidUntilUploadCompletesThenPublish",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Resources\\GeometryUploader_residency_test.cpp",
+          "line": 25,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T23:55:00Z",
+          "time": "0.003s",
+          "classname": "GeometryUploaderResidencyTest"
+        }
+      ]
+    },
+    {
+      "name": "GeometryUploaderUploadTest",
+      "tests": 2,
+      "failures": 0,
+      "disabled": 0,
+      "errors": 0,
+      "timestamp": "2026-09-24T23:55:00Z",
+      "time": "0.009s",
+      "testsuite": [
+        {
+          "name": "FirstUseSchedulesUploadAndReturnsPendingTickets",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Resources\\GeometryUploader_upload_test.cpp",
+          "line": 22,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T23:55:00Z",
+          "time": "0.005s",
+          "classname": "GeometryUploaderUploadTest"
+        },
+        {
+          "name": "DirtyEntrySubmitsVertexAndIndexUploadsWhenPresent",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Resources\\GeometryUploader_upload_test.cpp",
+          "line": 47,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T23:55:00Z",
+          "time": "0.004s",
+          "classname": "GeometryUploaderUploadTest"
+        }
+      ]
+    },
+    {
+      "name": "GeometryUploaderRetireTest",
+      "tests": 3,
+      "failures": 0,
+      "disabled": 0,
+      "errors": 0,
+      "timestamp": "2026-09-24T23:55:00Z",
+      "time": "0.013s",
+      "testsuite": [
+        {
+          "name": "RetireKeepsTicketsWhileIncomplete",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Resources\\GeometryUploader_retire_test.cpp",
+          "line": 23,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T23:55:00Z",
+          "time": "0.004s",
+          "classname": "GeometryUploaderRetireTest"
+        },
+        {
+          "name": "RetireRemovesTicketsWhenComplete",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Resources\\GeometryUploader_retire_test.cpp",
+          "line": 54,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T23:55:00Z",
+          "time": "0.003s",
+          "classname": "GeometryUploaderRetireTest"
+        },
+        {
+          "name": "RetireDropsTicketsOnTicketNotFound",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Resources\\GeometryUploader_retire_test.cpp",
+          "line": 86,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T23:55:00Z",
+          "time": "0.005s",
+          "classname": "GeometryUploaderRetireTest"
+        }
+      ]
+    },
+    {
+      "name": "GeometryUploaderUpdateTest",
+      "tests": 4,
+      "failures": 0,
+      "disabled": 0,
+      "errors": 0,
+      "timestamp": "2026-09-24T23:55:00Z",
+      "time": "0.014s",
+      "testsuite": [
+        {
+          "name": "UpdateSameEpochMarksDirtyAndSchedulesUploadNextEnsure",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Resources\\GeometryUploader_update_test.cpp",
+          "line": 27,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T23:55:00Z",
+          "time": "0.004s",
+          "classname": "GeometryUploaderUpdateTest"
+        },
+        {
+          "name": "ContentRevisionChangesOnUpdateAndHotReload",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Resources\\GeometryUploader_update_test.cpp",
+          "line": 75,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T23:55:00Z",
+          "time": "0.004s",
+          "classname": "GeometryUploaderUpdateTest"
+        },
+        {
+          "name": "UpdateDifferentMeshTriggersDebugAssert",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Resources\\GeometryUploader_update_test.cpp",
+          "line": 128,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T23:55:00Z",
+          "time": "0s",
+          "classname": "GeometryUploaderUpdateTest"
+        },
+        {
+          "name": "UpdateStaleHandleIsRejected",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Resources\\GeometryUploader_update_test.cpp",
+          "line": 160,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T23:55:00Z",
+          "time": "0.005s",
+          "classname": "GeometryUploaderUpdateTest"
+        }
+      ]
+    },
+    {
+      "name": "GeometryUploaderEvictionTest",
+      "tests": 4,
+      "failures": 0,
+      "disabled": 0,
+      "errors": 0,
+      "timestamp": "2026-09-24T23:55:00Z",
+      "time": "0.018s",
+      "testsuite": [
+        {
+          "name": "AssetEvictionInvalidatesHandles",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Resources\\GeometryUploader_eviction_test.cpp",
+          "line": 26,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T23:55:00Z",
+          "time": "0.004s",
+          "classname": "GeometryUploaderEvictionTest"
+        },
+        {
+          "name": "EvictionSuppressesLateCompletion",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Resources\\GeometryUploader_eviction_test.cpp",
+          "line": 59,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T23:55:00Z",
+          "time": "0.004s",
+          "classname": "GeometryUploaderEvictionTest"
+        },
+        {
+          "name": "AssetEvictionInvalidatesAllLods",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Resources\\GeometryUploader_eviction_test.cpp",
+          "line": 95,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T23:55:00Z",
+          "time": "0.004s",
+          "classname": "GeometryUploaderEvictionTest"
+        },
+        {
+          "name": "EvictionThenReloadPublishes",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Resources\\GeometryUploader_eviction_test.cpp",
+          "line": 139,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T23:55:00Z",
+          "time": "0.004s",
+          "classname": "GeometryUploaderEvictionTest"
+        }
+      ]
+    },
+    {
+      "name": "GeometryUploaderTest",
+      "tests": 2,
+      "failures": 0,
+      "disabled": 0,
+      "errors": 0,
+      "timestamp": "2026-09-24T23:55:00Z",
+      "time": "0.008s",
+      "testsuite": [
+        {
+          "name": "NotResidentGetShaderVisibleIndicesReturnsInvalidIndices",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Resources\\GeometryUploader_failures_test.cpp",
+          "line": 112,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T23:55:00Z",
+          "time": "0.003s",
+          "classname": "GeometryUploaderTest"
+        },
+        {
+          "name": "UploadCompletionFailureIndicesRemainInvalidAndNoCrash",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Resources\\GeometryUploader_failures_test.cpp",
+          "line": 229,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T23:55:00Z",
+          "time": "0.004s",
+          "classname": "GeometryUploaderTest"
+        }
+      ]
+    },
+    {
+      "name": "GeometryUploaderFailuresStandaloneTest",
+      "tests": 1,
+      "failures": 0,
+      "disabled": 0,
+      "errors": 0,
+      "timestamp": "2026-09-24T23:55:00Z",
+      "time": "0s",
+      "testsuite": [
+        {
+          "name": "UploadSubmissionFailureIndicesRemainInvalidAndNoCrash",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Resources\\GeometryUploader_failures_test.cpp",
+          "line": 162,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T23:55:00Z",
+          "time": "0s",
+          "classname": "GeometryUploaderFailuresStandaloneTest"
+        }
+      ]
+    },
+    {
+      "name": "GeometryUploaderEdgeTest",
+      "tests": 2,
+      "failures": 0,
+      "disabled": 0,
+      "errors": 0,
+      "timestamp": "2026-09-24T23:55:00Z",
+      "time": "0.004s",
+      "testsuite": [
+        {
+          "name": "ManyGeometriesGrowsInternalTablesHandlesRemainValid",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Resources\\GeometryUploader_edge_test.cpp",
+          "line": 31,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T23:55:00Z",
+          "time": "0s",
+          "classname": "GeometryUploaderEdgeTest"
+        },
+        {
+          "name": "RepeatedEnsureNoUnboundedTicketGrowth",
+          "file": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\src\\Oxygen\\Vortex\\Test\\Resources\\GeometryUploader_edge_test.cpp",
+          "line": 78,
+          "status": "RUN",
+          "result": "COMPLETED",
+          "timestamp": "2026-09-24T23:55:00Z",
+          "time": "0.004s",
+          "classname": "GeometryUploaderEdgeTest"
+        }
+      ]
+    }
+  ]
+}

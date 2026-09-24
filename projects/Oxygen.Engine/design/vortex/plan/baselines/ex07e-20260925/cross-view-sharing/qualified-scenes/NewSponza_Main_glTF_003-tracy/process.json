@@ -1,0 +1,6 @@
+{
+  "scope": "Process CPU memory at capture end; not renderer GPU allocation",
+  "private_bytes": 8783986688,
+  "working_set_bytes": 3725594624,
+  "cpu_time_seconds": 17.046875
+}

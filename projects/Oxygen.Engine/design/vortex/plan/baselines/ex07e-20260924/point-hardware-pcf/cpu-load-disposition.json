@@ -1,0 +1,17 @@
+{
+  "accepted": true,
+  "sample_count": 23,
+  "mean_cpu_percent": 3.4347826086956523,
+  "peak_cpu_percent": 12.0,
+  "high_samples": 0,
+  "window_seconds": [
+    20,
+    50
+  ],
+  "thresholds": {
+    "mean_cpu_percent": 15,
+    "peak_cpu_percent": 25,
+    "peak_samples_required": 2
+  },
+  "parser_correction": "Parse ISO8601 timestamps with their UTC offsets. PowerShell auto-converted UTC JSON timestamps then reparsed culture strings as local time, falsely reporting incomplete coverage. Raw samples cover the measured interval."
+}

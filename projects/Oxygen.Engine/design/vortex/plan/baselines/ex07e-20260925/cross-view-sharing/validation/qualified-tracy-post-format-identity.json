@@ -1,0 +1,15 @@
+{
+  "scope": "After whitespace-only formatting and supplemental test assertions; exact captured identities preserved in checkpoint.json",
+  "changes": [
+    {
+      "path": "out\\build-tracy-ninja\\bin\\Release\\Oxygen.Vortex.Lighting.Benchmarks.exe",
+      "captured": "5e5af3e76d613f544a8186da148b4b8b97d8494b04c4d6d71f1bb7ddd2cf0cf2",
+      "current": "33112ea938062c3daa7b0c8d62018a9d76bbd800d112a77e9b2f23176c871de1"
+    },
+    {
+      "path": "out\\build-tracy-ninja\\bin\\Release\\Oxygen.Graphics.Common.dll",
+      "captured": "0ca72013e0940fbbdf26ca82dd564c254450392ba10ee99dc85dab6412523d9b",
+      "current": "316d23d344d5306662f26868d30b85f1155f1f7236e11b7ccbd66d552b48273f"
+    }
+  ]
+}

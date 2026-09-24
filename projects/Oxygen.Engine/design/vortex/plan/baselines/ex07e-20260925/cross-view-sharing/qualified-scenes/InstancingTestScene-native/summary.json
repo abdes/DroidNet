@@ -1,0 +1,367 @@
+{
+  "complete": true,
+  "method": "Complete CPU scene-completion log intervals 20-50 s after first startup log, Tracy OFF, informational logging ON, timestamps quantized to 1 ms; not GPU timing",
+  "frame_ms": {
+    "count": 2053,
+    "mean": 14.606429615197273,
+    "p50": 15.0,
+    "p95": 16.0,
+    "p99": 17.0,
+    "max": 18.0
+  },
+  "fps": 68.46300063360789,
+  "load_preflight": {
+    "thresholds": {
+      "mean_cpu_percent": 25.0,
+      "peak_gpu_percent": 70.0,
+      "peak_samples_required": 2,
+      "peak_cpu_percent": 50.0,
+      "mean_gpu_percent": 50.0
+    },
+    "gpu_engine_owners": [
+      {
+        "Name": "pid_67040_luid_0x00000000_0x00016AEE_phys_0_eng_0_engtype_3D",
+        "UtilizationPercentage": 18
+      },
+      {
+        "Name": "pid_67040_luid_0x00000000_0x000183AF_phys_0_eng_1_engtype_Copy",
+        "UtilizationPercentage": 17
+      },
+      {
+        "Name": "pid_67040_luid_0x00000000_0x000183AF_phys_0_eng_0_engtype_3D",
+        "UtilizationPercentage": 12
+      }
+    ],
+    "finished_utc": "2026-09-24T20:37:43.6595984Z",
+    "scope": "Pre-launch headroom check, allowing ordinary desktop activity rather than requiring idle hardware. GPU values cover NVIDIA adapters. Process CPU counters may sum above 100 across cores. This does not prove absence of interference later in the run.",
+    "accepted": true,
+    "observed": {
+      "mean_cpu_percent": 5.6,
+      "peak_gpu_percent": 30.0,
+      "peak_cpu_percent": 20.0,
+      "mean_gpu_percent": 28.8
+    },
+    "cpu_process_counters": [
+      {
+        "Name": "pwsh#8",
+        "IDProcess": 67540,
+        "PercentProcessorTime": 83
+      },
+      {
+        "Name": "cortex-apiserver",
+        "IDProcess": 4048,
+        "PercentProcessorTime": 63
+      },
+      {
+        "Name": "ChatGPT#2",
+        "IDProcess": 67040,
+        "PercentProcessorTime": 14
+      },
+      {
+        "Name": "ChatGPT#5",
+        "IDProcess": 84764,
+        "PercentProcessorTime": 14
+      },
+      {
+        "Name": "WmiPrvSE#2",
+        "IDProcess": 63688,
+        "PercentProcessorTime": 14
+      },
+      {
+        "Name": "AdskIdentityManager",
+        "IDProcess": 38256,
+        "PercentProcessorTime": 9
+      },
+      {
+        "Name": "dwm",
+        "IDProcess": 2724,
+        "PercentProcessorTime": 9
+      },
+      {
+        "Name": "logioptionsplus_agent",
+        "IDProcess": 12696,
+        "PercentProcessorTime": 4
+      }
+    ],
+    "samples": [
+      {
+        "gpus": [
+          {
+            "index": "0",
+            "name": "NVIDIA GeForce RTX 3080",
+            "utilization": "30",
+            "memory_utilization": "3",
+            "clock_mhz": "1410",
+            "temperature_c": "48",
+            "memory_used_mib": "4283"
+          }
+        ],
+        "utc": "2026-09-24T20:37:37.4496526Z",
+        "cpu_percent": 1.0
+      },
+      {
+        "gpus": [
+          {
+            "index": "0",
+            "name": "NVIDIA GeForce RTX 3080",
+            "utilization": "30",
+            "memory_utilization": "3",
+            "clock_mhz": "1170",
+            "temperature_c": "47",
+            "memory_used_mib": "4283"
+          }
+        ],
+        "utc": "2026-09-24T20:37:38.7857706Z",
+        "cpu_percent": 5.0
+      },
+      {
+        "gpus": [
+          {
+            "index": "0",
+            "name": "NVIDIA GeForce RTX 3080",
+            "utilization": "26",
+            "memory_utilization": "1",
+            "clock_mhz": "1965",
+            "temperature_c": "49",
+            "memory_used_mib": "4283"
+          }
+        ],
+        "utc": "2026-09-24T20:37:40.1080310Z",
+        "cpu_percent": 20.0
+      },
+      {
+        "gpus": [
+          {
+            "index": "0",
+            "name": "NVIDIA GeForce RTX 3080",
+            "utilization": "28",
+            "memory_utilization": "3",
+            "clock_mhz": "1485",
+            "temperature_c": "50",
+            "memory_used_mib": "4283"
+          }
+        ],
+        "utc": "2026-09-24T20:37:41.4436086Z",
+        "cpu_percent": 0.0
+      },
+      {
+        "gpus": [
+          {
+            "index": "0",
+            "name": "NVIDIA GeForce RTX 3080",
+            "utilization": "30",
+            "memory_utilization": "3",
+            "clock_mhz": "1230",
+            "temperature_c": "48",
+            "memory_used_mib": "4283"
+          }
+        ],
+        "utc": "2026-09-24T20:37:42.7847194Z",
+        "cpu_percent": 2.0
+      }
+    ],
+    "started_utc": "2026-09-24T20:37:36.0329391Z"
+  },
+  "window_seconds": [
+    20.004,
+    49.991
+  ],
+  "gpu_scopes_ms": {},
+  "gpu_calls_per_frame": {},
+  "cpu_scopes_per_call_ms": {},
+  "noise": {
+    "block_means_ms": [
+      14.587463556851311,
+      14.601459854014598,
+      14.63049853372434
+    ],
+    "block_range_percent": 0.29463036489254957,
+    "scope": "Within-capture three 10-second blocks; no between-run confidence claim"
+  },
+  "process": {
+    "working_set_bytes": 332980224,
+    "private_bytes": 2662359040,
+    "cpu_time_seconds": 32.703125,
+    "scope": "Process CPU memory at capture end; not renderer GPU allocation"
+  },
+  "identity": {
+    "build": "oxygen-ninja-release",
+    "git_head": "e824c97a7916aa0de324965fbec299602191a8bd",
+    "tracy": false,
+    "inputs": [
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Examples.RenderScene.exe",
+        "sha256": "0b057181dbe8e99bfd7bc05dd1f9445b4cbe945e4a018f08c0dacad17a246204"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine/bin/Oxygen/Release/production/shaders.bin",
+        "sha256": "5a8fc43d67a87136139194c9dd110a6bcd2375cfa9d8fa791dfd470e33baf031"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine/Examples/Content/.cooked/container.index.bin",
+        "sha256": "9d5bf46b7dab8a31b2bda6ce624656da0b70ea8650ce21e9e187ffc455bd5c7c"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine/Examples/Content/.cooked/Scenes/InstancingTestScene.oscene",
+        "sha256": "140e1e40074f5f6de76e43d8caefc42af88279401d535107c3e35f3b5ffa0b03"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine/Examples/RenderScene/demo_settings.json",
+        "sha256": "30199a59af3cc1b3e0f687550285b50abfc8d27e542bcfb9a1f74c1bf94fc6fa"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine/imgui.ini",
+        "sha256": "b6fbb153af2f551ab1ece85b9e1de0e9aceeb352ad5845a7d8271fd9afb2503c"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Base.dll",
+        "sha256": "ea11ac231a17e2a6b1dfde5651ee6f9fe220c0b45796ba85bfa8b5e8aeb3ea37"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Clap.dll",
+        "sha256": "f79c7f997eb25e57d26cf473a14af14a3b2d975c5da63a45059eeb6a1d0e6573"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Composition.dll",
+        "sha256": "ae25b44de02f195b5e07a3a97b8111c0ed35bb38289117c8ae7a27cb46ae0c5c"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Console.dll",
+        "sha256": "7d1c98cabca878f23aed53f5dbb2d32a660937868528cfca87d00e7d85c1d24b"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Content.dll",
+        "sha256": "9e468c6a9f44354740cfb64e367abde5409ff99a7317eb9337c0330074fcb6cc"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Cooker.dll",
+        "sha256": "880768d30d978b5e6f070695d046587738fff480e9f7e24ac2b0d838f8cf2883"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Core.dll",
+        "sha256": "2ba5a68503bca9c992f45f6afec6f308f67db23df2afd7338147cbc4d84896e2"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Data.dll",
+        "sha256": "27ef29d47bb8d13aadbf6fb606d22f31e4c4b7cacbd5df337a64a1572468f9a8"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Engine.dll",
+        "sha256": "7824ce4ab364954e01f9f8bd11da85c5565294982ce40f47d983fb7d0425b712"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Engine.EditorInterface.dll",
+        "sha256": "f87b3982db7ffdb5164aeefbba8ae4b92d31dfca01a07f5149b49595afe4e0a1"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Graphics.Common.dll",
+        "sha256": "10157358a006181e1479ee65a48ab4a59675235ded004c2895b717176629dc06"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Graphics.Direct3D12.dll",
+        "sha256": "db66f5f1489415712857897535da841bd36bbe3b4f609633968c76823d4bd549"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Graphics.Headless.dll",
+        "sha256": "e71224c1a5740d9eed14aab561c47af0209f5ac00c762a75ed37d3d9021c76f8"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.ImGui.dll",
+        "sha256": "24ba59dda97435b671ec3c06d04ee965c9dad01e8b0655a6b6074c476627857c"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Input.dll",
+        "sha256": "bbf9e61915e005158ad22c03ee80cad3fda9a36077d4490cd5c41be0eb302b3f"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Nexus.dll",
+        "sha256": "c3cee83d57a192df6c2cb1a7a4399d908aa396611ab94be6d08fe08e419ac544"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Physics.dll",
+        "sha256": "29ddee02d52e25c67b81622d86b212a51a2dba2bab749143655f3fcac390c409"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.PhysicsModule.dll",
+        "sha256": "d74f988f524e2de732d86091dfab2d42b745b28d5688679e52277cab0724af05"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Platform.dll",
+        "sha256": "82f3e985b681b6615b692187347437d7d91d317c79ce2cf50114af5e459adcd3"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Profiling.Cpu.dll",
+        "sha256": "1e5a4323e9da279591a819a5deb7156b0003ceb3d284cfb34109b6fd4e976f28"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Scene.dll",
+        "sha256": "2cacef44653a7170de92af00cfcdb3e561afa2e04e90de7e940dd24050e2fac8"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.SceneSync.dll",
+        "sha256": "d51cb29872005f8e55f61eee1c2ac2ecfa081814d6e30300467c54aee9877fdc"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Scripting.dll",
+        "sha256": "c807a1843fb8302f94f0dd009971904b63cfe7d0c7d56b85f74d15e2e863136e"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Serio.dll",
+        "sha256": "4d0155f4009d9c6ebecfcbed46e5e6e11966f3af094db303ea3d6a439363abed"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.TextWrap.dll",
+        "sha256": "a3ad64b5f229cb41cc6b9f7fc58137dab7dbd5ff89868efcdf147b76c289dbd3"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Tracy.dll",
+        "sha256": "56427563d9425fdacdc02162ab43ad0546f0a11b13e0f7f069ec37e515ce8a95"
+      },
+      {
+        "path": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Vortex.dll",
+        "sha256": "2c7bda279f2c076b6357cb10d022c75e1f3c4717d237c3ccad8653e1077e03a6"
+      }
+    ],
+    "runtime_environment": {
+      "PATH": "C:\\Users\\abdes\\.conan2\\p\\b\\sdlb9ad705c7d7b3\\p\\bin;C:\\Program Files\\PowerShell\\7;C:\\Users\\abdes\\.codex\\tmp\\arg0\\codex-arg07PdUIH;C:\\Users\\abdes\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\native\\libheif\\libheif\\bin;C:\\Users\\abdes\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\native\\jxrlib\\jxrlib\\bin;C:\\Users\\abdes\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\native\\poppler\\Library\\bin;C:\\Users\\abdes\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\bin\\override;C:\\Program Files (x86)\\oh-my-posh\\bin\\;C:\\WINDOWS\\system32;C:\\WINDOWS;C:\\WINDOWS\\System32\\Wbem;C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\;C:\\WINDOWS\\System32\\OpenSSH\\;C:\\Program Files\\NVIDIA Corporation\\NVIDIA App\\NvDLISR;C:\\Program Files (x86)\\NVIDIA Corporation\\PhysX\\Common;C:\\Program Files\\doxygen\\bin;C:\\Program Files\\dotnet\\;C:\\Program Files (x86)\\Windows Kits\\10\\Windows Performance Toolkit\\;C:\\Program Files\\Kubernetes\\Minikube;C:\\Program Files\\MATLAB\\R2026a\\bin;C:\\Program Files\\CMake\\bin;C:\\Program Files\\Git\\cmd;C:\\Program Files\\Go\\bin;C:\\Program Files\\Pandoc\\;C:\\Program Files\\nodejs\\;C:\\Program Files\\PowerShell\\7\\;C:\\Program Files\\Neovim\\bin;C:\\Program Files\\Docker\\Docker\\resources\\bin;C:\\Program Files\\GitHub CLI\\;C:\\Users\\abdes\\.cortex-tools\\bin;C:\\Users\\abdes\\.cortex-tools\\go\\1.27.1\\go\\bin;C:\\Users\\abdes\\AppData\\Local\\Programs\\oh-my-posh\\bin\\;C:\\Users\\abdes\\AppData\\Local\\agy\\bin;C:\\Users\\abdes\\AppData\\Local\\pnpm\\bin;C:\\Program Files (x86)\\Windows Kits\\10\\Debuggers\\x64;C:\\Users\\abdes\\.cargo\\bin;C:\\Program Files\\FontForgeBuilds\\bin;C:\\Users\\abdes\\AppData\\Local\\UniGetUI\\Chocolatey\\bin;C:\\Program Files\\Graphviz\\bin;D:\\dev\\ccache;D:\\dev\\ninja;C:\\Program Files\\Conan\\conan;C:\\Users\\abdes\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\native\\powershell;C:\\Users\\abdes\\AppData\\Local\\Microsoft\\WindowsApps;C:\\Users\\abdes\\AppData\\Local\\Microsoft\\WinGet\\Packages\\junegunn.fzf_Microsoft.Winget.Source_8wekyb3d8bbwe;C:\\Program Files\\LLVM\\bin;C:\\Users\\abdes\\AppData\\Local\\Programs\\Microsoft VS Code\\bin;C:\\Users\\abdes\\.dotnet\\tools;G:\\Antigravity\\bin;D:\\dev\\Zed\\bin;C:\\Program Files\\JetBrains\\CLion 2025.3\\bin;C:\\Users\\abdes\\.lmstudio\\bin;C:\\Users\\abdes\\AppData\\Local\\Microsoft\\WinGet\\Links;C:\\Users\\abdes\\.dotnet\\tools;C:\\Users\\abdes\\.dotnet\\tools;C:\\Users\\abdes\\AppData\\Local\\Python\\bin;H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\install\\RelWithDebInfo\\bin;C:\\Users\\abdes\\.dotnet\\tools;C:\\Program Files (x86)\\Dr. Memory\\bin\\;C:\\Users\\abdes\\AppData\\Local\\Programs\\Antigravity IDE\\bin;C:\\Users\\abdes\\go\\bin;C:\\Users\\abdes\\AppData\\Roaming\\npm;C:\\Users\\abdes\\AppData\\Local\\PowerToys\\DSCModules\\;C:\\Users\\abdes\\AppData\\Local\\Microsoft\\WinGet\\Packages\\sourcegit-scm.SourceGit_Microsoft.Winget.Source_8wekyb3d8bbwe\\SourceGit;C:\\Users\\abdes\\.dotnet\\tools;C:\\Users\\abdes\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\bin\\fallback;C:\\Users\\abdes\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\node\\bin;C:\\Users\\abdes\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\native\\git\\cmd;C:\\Users\\abdes\\AppData\\Local\\OpenAI\\Codex\\bin\\d5b459afd5dcd195;C:\\Users\\abdes\\AppData\\Local\\OpenAI\\Codex\\bin\\80f78947ad880e6e"
+    }
+  },
+  "run": {
+    "executable": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-ninja\\bin\\Release\\Oxygen.Examples.RenderScene.exe",
+    "arguments": [
+      "-v=0",
+      "--frames",
+      "0",
+      "--fps",
+      "0",
+      "--vsync",
+      "false",
+      "--resolution",
+      "2560x1400",
+      "--scene",
+      "InstancingTestScene",
+      "--directional-shadows",
+      "conventional",
+      "--debug-layer",
+      "false"
+    ],
+    "started": "2026-09-25T00:37:43.7609636+04:00",
+    "measured_window_seconds": [
+      20,
+      50
+    ],
+    "pid": 76044
+  },
+  "artifact_sha256": {
+    "run.json": "ecaa678e6ae58cfe26cf725aa822d025bfa8749c8d5eab23881a052167ce531d",
+    "identity.json": "e44ca3b4ea196c368264234b389aa4802e0b395a12c1257e43212365fcaee13e",
+    "demo_settings.json": "30199a59af3cc1b3e0f687550285b50abfc8d27e542bcfb9a1f74c1bf94fc6fa",
+    "demo_settings.final.json": "6725345ae03b934babdf9c202963017c1900850384333f6db56c96d1ea5da9f0",
+    "scene.png": "c81ea1e3e68d860b5a512e3e0d330e733192b83908fd9fe87970df2dcfbad084",
+    "process.json": "65aaa6e85bf87c55229a50ef4916dec0e7068c53c51f41039386628262b88a2f",
+    "hardware-end.csv": "efaa21a658897dd4ae5ae3a4e4586c4d6fb582947ce6e1085b0e346db9819a95",
+    "exit-code.txt": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354",
+    "load-preflight.json": "7419e68b606e86b22b42cf32b16bb23a59920b2062f655cdfc93000fb2e0e555",
+    "stderr.log": "d31ed8d04589a453beb9ab8656390cc11148762d11fcada6618d94c97ef11f32"
+  }
+}
