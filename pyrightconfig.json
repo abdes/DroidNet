@@ -1,0 +1,26 @@
+{
+  "exclude": [
+    "**/node_modules",
+    "**/__pycache__",
+    "**/out",
+    "**/build",
+    "**/cmake-build-*",
+    "**/dist",
+    "**/bin",
+    "**/obj",
+    "**/artifacts",
+    "**/TestResults",
+    "**/*.egg-info",
+    "**/site-packages",
+    "**/.venv",
+    "**/venv",
+    "**/.tox",
+    "**/.nox",
+    "**/.pytest_cache",
+    "**/.mypy_cache",
+    "**/.ruff_cache",
+    "**/.cache",
+    "**/.vs",
+    "**/.cooked"
+  ]
+}
