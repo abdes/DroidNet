@@ -99,7 +99,7 @@ complete. The TexturedCube panel-refresh regression is covered by automated
 tests and the user's successful rebuilt-app test. See the
 [EX06 result and evidence](#33-slice-6-work-items).
 
-**Current: EX07F engine-side acceptance and documentation are complete (2026-09-25).** Fresh E performance/correctness evidence is reused; RenderScene interaction checks are user-confirmed. The user retains only the interactive editor check. See the [F acceptance report](plan/EX07F-acceptance-report.md). The missed E06 allocation-test caller and reported warnings are fixed in `4fd55cd8d`: all three affected targets build and five focused cases pass in each of Debug/Release. No captures were repeated. EX08 has not started.
+**Current: EX07F engine-side acceptance and documentation are complete (2026-09-25), including the subsequent editor SDK build repair.** RecordingUseBatch/CommandRecorder now expose Oxygen Result. Native Debug/Release builds and eight retention checks pass; the actual C++20 Debug Interop build passes, and both installed SDKs are refreshed. [SDK qualification](plan/validation/ex07f-20260925/editor-sdk/summary.json). Fresh E performance/correctness evidence is reused; RenderScene interaction checks are user-confirmed. The user retains only the interactive editor check. See the [F acceptance report](plan/EX07F-acceptance-report.md). The missed E06 allocation-test caller and reported warnings are fixed in `4fd55cd8d`: all three affected targets build and five focused cases pass in each of Debug/Release. No captures were repeated. EX08 has not started.
 
 [Section 3.4](#34-slice-7-work-items) is the single authoritative EX07 progress
 tracker. It shows the execution stages, numbered deliverables, completed portions

@@ -21,16 +21,21 @@ translation units are compiled without managed support; the facade and
 marshalling code use C++/CLI. Engine headers and libraries come from
 `projects/Oxygen.Engine/out/install/{Configuration}`.
 
-| Area | Responsibility |
-| --- | --- |
-| [EngineRunner](src/EngineRunner.h) | Engine creation, lifetime task, logging, surface and view operations. |
-| [EngineContext](src/EngineContext.h) | Managed ownership of a native shared engine context. |
-| [World/OxygenWorld](src/World/OxygenWorld.h) | Scene/node operations, components, properties, materials, environment, and cooked-root requests. |
-| [Input/OxygenInput](src/Input/OxygenInput.h) | Managed input events forwarded to the native editor input path. |
-| [EditorModule](src/EditorModule/EditorModule.h) | Engine-phase integration, command dispatch, viewport navigation, and Vortex integration. |
-| [Commands](src/Commands) | Native scene and view commands and component property appliers. |
-| [SurfaceRegistry](src/EditorModule/SurfaceRegistry.h) / [ViewManager](src/EditorModule/ViewManager.h) | Separate surface registration and engine-view ownership. |
-| [UiThreadDispatcher](src/UiThreadDispatcher.h) / [RenderThreadContext](src/RenderThreadContext.h) | UI-context dispatch and the dedicated engine thread. |
+Engine headers reachable from this boundary must remain C++20-compatible. Use
+Oxygen `Result<T, E>` for exposed fallible APIs; keep C++23-only implementation
+headers behind forward declarations where their definitions are unnecessary.
+For example, recording-use retention returns `Result<void, RegistrationError>`.
+
+| Area                                                                                                  | Responsibility                                                                                   |
+| ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| [EngineRunner](src/EngineRunner.h)                                                                    | Engine creation, lifetime task, logging, surface and view operations.                            |
+| [EngineContext](src/EngineContext.h)                                                                  | Managed ownership of a native shared engine context.                                             |
+| [World/OxygenWorld](src/World/OxygenWorld.h)                                                          | Scene/node operations, components, properties, materials, environment, and cooked-root requests. |
+| [Input/OxygenInput](src/Input/OxygenInput.h)                                                          | Managed input events forwarded to the native editor input path.                                  |
+| [EditorModule](src/EditorModule/EditorModule.h)                                                       | Engine-phase integration, command dispatch, viewport navigation, and Vortex integration.         |
+| [Commands](src/Commands)                                                                              | Native scene and view commands and component property appliers.                                  |
+| [SurfaceRegistry](src/EditorModule/SurfaceRegistry.h) / [ViewManager](src/EditorModule/ViewManager.h) | Separate surface registration and engine-view ownership.                                         |
+| [UiThreadDispatcher](src/UiThreadDispatcher.h) / [RenderThreadContext](src/RenderThreadContext.h)     | UI-context dispatch and the dedicated engine thread.                                             |
 
 ## Managed API
 

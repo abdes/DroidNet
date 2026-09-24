@@ -1,6 +1,7 @@
 # EX07F — Final acceptance
 
-**Engine-side acceptance and documentation complete, 2026-09-25.** The user
+**Engine-side acceptance and documentation complete, 2026-09-25, including the
+subsequent C++20 editor SDK build repair.** The user
 confirmed RenderScene camera movement, resizing, scene switching and shutdown.
 The user explicitly retained the remaining interactive editor check. EX07F and
 the overall EX07 gate therefore await only that user-owned sign-off. The
@@ -9,14 +10,15 @@ no engine implementation, benchmark capture or automated validation task remains
 
 ## Evidence reuse and final-code applicability
 
-No benchmarks or captures were repeated for F. The final E
-implementation and its performance inputs are unchanged. A Git comparison from
+No benchmarks or captures were repeated for F. E's rendering algorithms,
+shaders and scene inputs are unchanged. The initial Git comparison from
 E closure `0c6f60e34` to `cf1a103cc` finds only the import event-loop repair and
 its regression test in production/test source. That change affects asynchronous
 import, not rendering of the frozen cooked scenes; C already qualified it in
 Debug and Release. Editor World, WorldEditor and Interop source is unchanged
-since the C authoring implementation `2b61d102c`. The later F repair below changes
-only three test files and does not invalidate rendering performance evidence.
+since the C authoring implementation `2b61d102c`. F subsequently repaired three
+test files and the exposed C++20 result API, as qualified below. Existing E timing
+remains credited; no new timing claim is made for the API repair.
 
 The [reuse audit](validation/ex07f-20260925/reuse-audit.json) checks 85 retained
 record hashes against E's accepted register, including 22 final benchmark rows,
@@ -61,6 +63,36 @@ campaign. Build logs, six passing JSON results, the rejected attempt and source/
 executable hashes are preserved beside the [reuse audit](validation/ex07f-20260925/reuse-audit.json).
 This qualifies the affected targets, not a claim that the user's entire `all`
 build was rerun. Repair commit: `4fd55cd8d`.
+
+## C++20 editor SDK compatibility repair
+
+The editor's actual PCH build exposed a second integration gap: public
+`RecordingUseBatch::Retain` and `CommandRecorder::RetainRegistration` returned
+C++23 `std::expected`, although Interop compiles as C++20. `CommandList` stores
+the batch by value, and the recorder exposes the retention API, so hiding the
+header through a forward declaration alone would not correct this boundary.
+
+Both APIs now return Oxygen `Result<void, RegistrationError>`. Success, error
+values, deduplication and registration lifetime behavior are preserved; no
+language-standard upgrade, compatibility wrapper or allocation redesign is
+introduced. Implementation-only registry APIs keep their existing types. Native
+consumers are rebuilt and the installed SDK refreshed before compiling Interop,
+so callers do not retain the old return-type ABI. The Interop operating README
+now records this public-header requirement.
+
+Native Vortex, EditorInterface and the owning integration-test target build in
+Debug and Release in the existing Ninja tree. The two selected retention cases
+pass on Headless and D3D12 in each configuration: **eight passing checks**. Both
+SDK configurations are installed, and the exposed headers match source bytes.
+The **actual Debug Interop project builds and links with C++20 unchanged**, with
+project-reference builds disabled so other native trees are untouched. This is
+compile/link validation, not the user-owned interactive editor check. No separate
+Release Interop build is claimed. [Commands, identities and logs](validation/ex07f-20260925/editor-sdk/summary.json)
+are preserved alongside the other F evidence.
+
+This repair does not alter shaders, scene inputs, filtering or light admission.
+Existing E performance/image evidence remains credited under the user's explicit
+instruction not to repeat captures; no new timing claim is made for this API fix.
 
 ## Accepted operating points
 
