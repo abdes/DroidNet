@@ -17753,7 +17753,7 @@
         "common": {
           "color_rgb": [1.0, 0.3, 0.3],
           "mobility": 0,
-          "casts_shadows": false,
+          "casts_shadows": true,
           "shadow": {
             "bias": 0.03
           }
@@ -17766,7 +17766,7 @@
         "common": {
           "color_rgb": [0.3, 1.0, 0.3],
           "mobility": 0,
-          "casts_shadows": false,
+          "casts_shadows": true,
           "shadow": {
             "bias": 0.03
           }
@@ -17779,7 +17779,7 @@
         "common": {
           "color_rgb": [0.3, 0.3, 1.0],
           "mobility": 0,
-          "casts_shadows": false,
+          "casts_shadows": true,
           "shadow": {
             "bias": 0.03
           }
@@ -17792,7 +17792,7 @@
         "common": {
           "color_rgb": [1.0, 1.0, 0.3],
           "mobility": 0,
-          "casts_shadows": false,
+          "casts_shadows": true,
           "shadow": {
             "bias": 0.03
           }
@@ -17805,7 +17805,7 @@
         "common": {
           "color_rgb": [1.0, 0.3, 1.0],
           "mobility": 0,
-          "casts_shadows": false,
+          "casts_shadows": true,
           "shadow": {
             "bias": 0.03
           }
@@ -17818,7 +17818,7 @@
         "common": {
           "color_rgb": [0.3, 1.0, 1.0],
           "mobility": 0,
-          "casts_shadows": false,
+          "casts_shadows": true,
           "shadow": {
             "bias": 0.03
           }
@@ -17831,7 +17831,7 @@
         "common": {
           "color_rgb": [1.0, 0.6, 0.3],
           "mobility": 0,
-          "casts_shadows": false,
+          "casts_shadows": true,
           "shadow": {
             "bias": 0.03
           }
@@ -17844,7 +17844,7 @@
         "common": {
           "color_rgb": [0.6, 0.3, 1.0],
           "mobility": 0,
-          "casts_shadows": false,
+          "casts_shadows": true,
           "shadow": {
             "bias": 0.03
           }
@@ -17857,7 +17857,7 @@
         "common": {
           "color_rgb": [1.0, 1.0, 1.0],
           "mobility": 0,
-          "casts_shadows": false,
+          "casts_shadows": true,
           "shadow": {
             "bias": 0.03
           }
@@ -17870,7 +17870,7 @@
         "common": {
           "color_rgb": [1.0, 0.8, 0.8],
           "mobility": 0,
-          "casts_shadows": false,
+          "casts_shadows": true,
           "shadow": {
             "bias": 0.03
           }
@@ -17883,7 +17883,7 @@
         "common": {
           "color_rgb": [0.8, 1.0, 0.8],
           "mobility": 0,
-          "casts_shadows": false,
+          "casts_shadows": true,
           "shadow": {
             "bias": 0.03
           }
@@ -17896,7 +17896,7 @@
         "common": {
           "color_rgb": [0.8, 0.8, 1.0],
           "mobility": 0,
-          "casts_shadows": false,
+          "casts_shadows": true,
           "shadow": {
             "bias": 0.03
           }
@@ -17909,7 +17909,7 @@
         "common": {
           "color_rgb": [1.0, 0.5, 0.2],
           "mobility": 0,
-          "casts_shadows": false,
+          "casts_shadows": true,
           "shadow": {
             "bias": 0.03
           }
@@ -17922,7 +17922,7 @@
         "common": {
           "color_rgb": [0.2, 1.0, 0.5],
           "mobility": 0,
-          "casts_shadows": false,
+          "casts_shadows": true,
           "shadow": {
             "bias": 0.03
           }
@@ -17935,7 +17935,7 @@
         "common": {
           "color_rgb": [0.5, 0.2, 1.0],
           "mobility": 0,
-          "casts_shadows": false,
+          "casts_shadows": true,
           "shadow": {
             "bias": 0.03
           }
@@ -17948,7 +17948,7 @@
         "common": {
           "color_rgb": [1.0, 1.0, 0.5],
           "mobility": 0,
-          "casts_shadows": false,
+          "casts_shadows": true,
           "shadow": {
             "bias": 0.03
           }
@@ -17961,7 +17961,7 @@
         "common": {
           "color_rgb": [1.0, 1.0, 1.0],
           "mobility": 0,
-          "casts_shadows": false,
+          "casts_shadows": true,
           "shadow": {
             "bias": 0.03
           }
@@ -17974,7 +17974,7 @@
         "common": {
           "color_rgb": [1.0, 0.8, 0.6],
           "mobility": 0,
-          "casts_shadows": false,
+          "casts_shadows": true,
           "shadow": {
             "bias": 0.03
           }
@@ -17987,7 +17987,7 @@
         "common": {
           "color_rgb": [0.6, 1.0, 0.8],
           "mobility": 0,
-          "casts_shadows": false,
+          "casts_shadows": true,
           "shadow": {
             "bias": 0.03
           }
@@ -18000,7 +18000,7 @@
         "common": {
           "color_rgb": [0.8, 0.6, 1.0],
           "mobility": 0,
-          "casts_shadows": false,
+          "casts_shadows": true,
           "shadow": {
             "bias": 0.03
           }
@@ -18013,7 +18013,7 @@
         "common": {
           "color_rgb": [1.0, 0.5, 0.5],
           "mobility": 0,
-          "casts_shadows": false,
+          "casts_shadows": true,
           "shadow": {
             "bias": 0.03
           }
@@ -18026,7 +18026,7 @@
         "common": {
           "color_rgb": [0.5, 1.0, 0.5],
           "mobility": 0,
-          "casts_shadows": false,
+          "casts_shadows": true,
           "shadow": {
             "bias": 0.03
           }
@@ -18039,7 +18039,7 @@
         "common": {
           "color_rgb": [0.5, 0.5, 1.0],
           "mobility": 0,
-          "casts_shadows": false,
+          "casts_shadows": true,
           "shadow": {
             "bias": 0.03
           }
@@ -18052,7 +18052,7 @@
         "common": {
           "color_rgb": [1.0, 1.0, 0.5],
           "mobility": 0,
-          "casts_shadows": false,
+          "casts_shadows": true,
           "shadow": {
             "bias": 0.03
           }
@@ -18065,7 +18065,7 @@
         "common": {
           "color_rgb": [0.5, 1.0, 1.0],
           "mobility": 0,
-          "casts_shadows": false,
+          "casts_shadows": true,
           "shadow": {
             "bias": 0.03
           }
@@ -18078,7 +18078,7 @@
         "common": {
           "color_rgb": [1.0, 0.5, 1.0],
           "mobility": 0,
-          "casts_shadows": false,
+          "casts_shadows": true,
           "shadow": {
             "bias": 0.03
           }
@@ -18091,7 +18091,7 @@
         "common": {
           "color_rgb": [0.9, 0.9, 0.9],
           "mobility": 0,
-          "casts_shadows": false,
+          "casts_shadows": true,
           "shadow": {
             "bias": 0.03
           }
@@ -18104,7 +18104,7 @@
         "common": {
           "color_rgb": [0.8, 0.8, 0.6],
           "mobility": 0,
-          "casts_shadows": false,
+          "casts_shadows": true,
           "shadow": {
             "bias": 0.03
           }
@@ -18117,7 +18117,7 @@
         "common": {
           "color_rgb": [0.6, 0.8, 0.8],
           "mobility": 0,
-          "casts_shadows": false,
+          "casts_shadows": true,
           "shadow": {
             "bias": 0.03
           }
@@ -18130,7 +18130,7 @@
         "common": {
           "color_rgb": [0.8, 0.6, 0.8],
           "mobility": 0,
-          "casts_shadows": false,
+          "casts_shadows": true,
           "shadow": {
             "bias": 0.03
           }
@@ -18143,7 +18143,7 @@
         "common": {
           "color_rgb": [1.0, 0.7, 0.4],
           "mobility": 0,
-          "casts_shadows": false,
+          "casts_shadows": true,
           "shadow": {
             "bias": 0.03
           }
@@ -18156,7 +18156,7 @@
         "common": {
           "color_rgb": [0.4, 1.0, 0.7],
           "mobility": 0,
-          "casts_shadows": false,
+          "casts_shadows": true,
           "shadow": {
             "bias": 0.03
           }
@@ -18169,7 +18169,7 @@
         "common": {
           "color_rgb": [0.7, 0.4, 1.0],
           "mobility": 0,
-          "casts_shadows": false,
+          "casts_shadows": true,
           "shadow": {
             "bias": 0.03
           }
@@ -18182,7 +18182,7 @@
         "common": {
           "color_rgb": [1.0, 1.0, 1.0],
           "mobility": 0,
-          "casts_shadows": false,
+          "casts_shadows": true,
           "shadow": {
             "bias": 0.03
           }
@@ -18195,7 +18195,7 @@
         "common": {
           "color_rgb": [1.0, 0.9, 0.8],
           "mobility": 0,
-          "casts_shadows": false,
+          "casts_shadows": true,
           "shadow": {
             "bias": 0.03
           }
@@ -18208,7 +18208,7 @@
         "common": {
           "color_rgb": [0.8, 1.0, 0.9],
           "mobility": 0,
-          "casts_shadows": false,
+          "casts_shadows": true,
           "shadow": {
             "bias": 0.03
           }
@@ -18221,7 +18221,7 @@
         "common": {
           "color_rgb": [0.9, 0.8, 1.0],
           "mobility": 0,
-          "casts_shadows": false,
+          "casts_shadows": true,
           "shadow": {
             "bias": 0.03
           }
@@ -18234,7 +18234,7 @@
         "common": {
           "color_rgb": [1.0, 0.7, 0.7],
           "mobility": 0,
-          "casts_shadows": false,
+          "casts_shadows": true,
           "shadow": {
             "bias": 0.03
           }
@@ -18247,7 +18247,7 @@
         "common": {
           "color_rgb": [0.7, 1.0, 0.7],
           "mobility": 0,
-          "casts_shadows": false,
+          "casts_shadows": true,
           "shadow": {
             "bias": 0.03
           }
@@ -18260,7 +18260,7 @@
         "common": {
           "color_rgb": [0.7, 0.7, 1.0],
           "mobility": 0,
-          "casts_shadows": false,
+          "casts_shadows": true,
           "shadow": {
             "bias": 0.03
           }
@@ -18273,7 +18273,7 @@
         "common": {
           "color_rgb": [1.0, 1.0, 0.7],
           "mobility": 0,
-          "casts_shadows": false,
+          "casts_shadows": true,
           "shadow": {
             "bias": 0.03
           }
@@ -18286,7 +18286,7 @@
         "common": {
           "color_rgb": [0.7, 1.0, 1.0],
           "mobility": 0,
-          "casts_shadows": false,
+          "casts_shadows": true,
           "shadow": {
             "bias": 0.03
           }
@@ -18299,7 +18299,7 @@
         "common": {
           "color_rgb": [1.0, 0.7, 1.0],
           "mobility": 0,
-          "casts_shadows": false,
+          "casts_shadows": true,
           "shadow": {
             "bias": 0.03
           }
@@ -18312,7 +18312,7 @@
         "common": {
           "color_rgb": [0.9, 0.9, 0.7],
           "mobility": 0,
-          "casts_shadows": false,
+          "casts_shadows": true,
           "shadow": {
             "bias": 0.03
           }
@@ -18325,7 +18325,7 @@
         "common": {
           "color_rgb": [0.7, 0.9, 0.9],
           "mobility": 0,
-          "casts_shadows": false,
+          "casts_shadows": true,
           "shadow": {
             "bias": 0.03
           }
@@ -18338,7 +18338,7 @@
         "common": {
           "color_rgb": [0.9, 0.7, 0.9],
           "mobility": 0,
-          "casts_shadows": false,
+          "casts_shadows": true,
           "shadow": {
             "bias": 0.03
           }
@@ -18351,7 +18351,7 @@
         "common": {
           "color_rgb": [1.0, 0.6, 0.6],
           "mobility": 0,
-          "casts_shadows": false,
+          "casts_shadows": true,
           "shadow": {
             "bias": 0.03
           }
@@ -18364,7 +18364,7 @@
         "common": {
           "color_rgb": [0.6, 1.0, 0.6],
           "mobility": 0,
-          "casts_shadows": false,
+          "casts_shadows": true,
           "shadow": {
             "bias": 0.03
           }
@@ -18377,7 +18377,7 @@
         "common": {
           "color_rgb": [0.6, 0.6, 1.0],
           "mobility": 0,
-          "casts_shadows": false,
+          "casts_shadows": true,
           "shadow": {
             "bias": 0.03
           }
