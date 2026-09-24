@@ -236,14 +236,16 @@ F reuses unaffected evidence and validates the integrated result. Stage changes
 alone do not require another baseline campaign. The workload envelope and full
 EX07 exit requirements remain unchanged.
 
-### EX07E handoff — awaiting user signal
+### EX07E handoff — active
 
-**Prepared; do not start until the user explicitly signals.** Earlier measured
-submission/resource repairs remain credited; this handoff does not authorize
-new code changes, builds, profiling or benchmark runs. D is closed; overall EX07
-and the separately tracked C caller-target validation and F acceptance stay open.
+**Active: the user authorized EX07E on 2026-09-24.** The authoritative
+[E01–E08 work ledger and resume checkpoint](../IMPLEMENTATION_STATUS.md#ex07e--work-items-and-resume-checkpoint)
+record all eight investigation/delivery obligations, completion evidence and
+next action. Update that ledger as findings and fixes are delivered. Earlier
+measured repairs remain credited. D is closed; overall EX07 and the separately
+tracked C caller-target validation and F acceptance stay open.
 
-On that signal, begin with the committed
+Begin with the committed
 [baseline register](EX07D-baseline-report.md#how-e-and-f-use-this-register) and
 [source/UE5.7 analysis](EX07-NewSponza-regression-analysis.md). Use the current
 A-SPONZA and A-INSTANCING traces to isolate the dominant local-light shader work

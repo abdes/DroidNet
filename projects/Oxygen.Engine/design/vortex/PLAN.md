@@ -114,7 +114,7 @@ The [detailed gates](plan/exposure-and-lightbench-correction.md#8-ordered-implem
 own scope and measurable criteria. The [tracker](IMPLEMENTATION_STATUS.md#34-slice-7-work-items)
 owns current status. **EX07A and EX07B are validated. EX07D is closed (2026-09-24),
 with the [durable baseline register](plan/EX07D-baseline-report.md) committed in
-`894a25e57`. EX07E is prepared and awaits the user's explicit start signal;
+`894a25e57`. EX07E is active, authorized by the user on 2026-09-24;
 F final acceptance remains open.** EX07C's separately tracked caller-target
 validation remains open; D closure does not close that obligation or overall EX07.
 

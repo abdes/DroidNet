@@ -908,5 +908,5 @@ checkpoint the spatial culler had not been connected and EX07B–F remained ahea
 For current progress, use the [tracker](../IMPLEMENTATION_STATUS.md#34-slice-7-work-items):
 EX07B and EX07D are now closed; the
 [D baseline register](EX07D-baseline-report.md) is committed in `894a25e57`, and
-EX07E is prepared, awaiting the user's explicit start signal. A's closure alone
+EX07E is active, authorized on 2026-09-24. A's closure alone
 does not close EX07-04/08/10/11/12 or EX07-GATE.
