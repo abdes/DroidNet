@@ -121,6 +121,12 @@ in `.clangd` retain that explicit input. Formatting has no build-tree dependency
 
 ## Analyze and format
 
+Pylance reads the engine's `pyrightconfig.json`, which inherits generated-output
+and dependency exclusions from the DroidNet root `pyrightconfig.json`. Maintain
+that exclusion list in the root file; it also applies when opening the full
+monorepo. Python source and tests remain discoverable. Excluded directories can
+still supply imports needed by source files, as Pylance normally allows.
+
 ```powershell
 oxytidy src/Oxygen/Base --summary-only
 oxytidy src/Oxygen/Base --list-files
