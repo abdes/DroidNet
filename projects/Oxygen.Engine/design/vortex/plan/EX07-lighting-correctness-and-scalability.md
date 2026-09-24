@@ -146,21 +146,21 @@ owners, view publications, upload allocators and profiling remain authoritative.
 
 ## Six ordered implementation steps
 
-| Step                                      | Required result                                                                                                                                     | Gate before proceeding                                                                                                                |
-| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| EX07A — Review and freeze contracts       | Canonical LLD/ABI, field-to-consumer inventory, directional authority, GPU scheduling, capacities and failure/recovery behavior.                    | One documented contract; no conflicting historical interface; complete review decisions and test obligations before consumer changes. |
-| EX07B — References and instruments        | Independent physical oracle, known-input GPU probes, unculled image reference, deterministic fixtures and bounded CPU/GPU/resource instrumentation. | Reference/instrument validity is established independently of the renderer being tested.                                              |
-| EX07C — Repair correctness                | Physical response, every retained property, directional/local/shadow identities, complete lists, ingress/round-trip behavior and safe lifetime.     | Each workload admitted to timing passes its applicable numerical/image/mutation/capacity checks.                                      |
-| EX07D — Qualified operating points        | Correctness-qualified workload baselines, CPU/GPU costs, memory use, quality and measurement noise.                                                 | Controlled baseline and measured tradeoffs support selection of an acceptable operating point.                                        |
-| EX07E — Scalable culling and optimization | Real spatial rejection and measured shader/submission/upload/shadow/resource improvements.                                                          | Candidates preserve implementation checks and report quality, timing and memory against matched baselines.                            |
-| EX07F — Final validation and delivery     | Final-code Debug/Release correctness, native performance, editor/native operation, inspected images and complete operating docs.                    | All EX07 gates pass together, with supported limits and no unexplained failures or quality reduction.                                 |
+| Step                                      | Required result                                                                                                                                     | Gate before proceeding                                                                                                                      |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| EX07A — Review and freeze contracts       | Canonical LLD/ABI, field-to-consumer inventory, directional authority, GPU scheduling, capacities and failure/recovery behavior.                    | One documented contract; no conflicting historical interface; complete review decisions and test obligations before consumer changes.       |
+| EX07B — References and instruments        | Independent physical oracle, known-input GPU probes, unculled image reference, deterministic fixtures and bounded CPU/GPU/resource instrumentation. | Reference/instrument validity is established independently of the renderer being tested.                                                    |
+| EX07C — Repair correctness                | Physical response, every retained property, directional/local/shadow identities, complete lists, ingress/round-trip behavior and safe lifetime.     | Each workload admitted to timing passes its applicable numerical/image/mutation/capacity checks.                                            |
+| EX07D — Many-light scene and baseline     | Runnable deterministic many-light scene and its correctness-qualified CPU/GPU, memory and image baseline; existing accepted baselines are credited. | The scene and required presets are reproducible, their baseline evidence is recorded, and the user can assess the measured operating point. |
+| EX07E — Scalable culling and optimization | Real spatial rejection and measured shader/submission/upload/shadow/resource improvements.                                                          | Candidates preserve implementation checks and report quality, timing and memory against matched baselines.                                  |
+| EX07F — Final validation and delivery     | Final-code Debug/Release correctness, native performance, editor/native operation, inspected images and complete operating docs.                    | All EX07 gates pass together, with supported limits and no unexplained failures or quality reduction.                                       |
 
 Current stage and item status live only in [tracker section 3.4](../IMPLEMENTATION_STATUS.md#34-slice-7-work-items).
 This plan defines requirements; the audits preserve proof.
 
 EX07-01–14 remain stable tracking IDs. Contracts and property review precede their
 implementation; EX07-06/13 reference and instrument foundations start in EX07B,
-and EX07-07's qualified baseline closes only in EX07D. Round-trip/live editor
+and EX07-07's many-light scene and baseline close in EX07D. Round-trip/live editor
 checks accompany repairs in EX07C; EX07F confirms final integration rather than
 discovering missing transport for the first time.
 
@@ -171,6 +171,89 @@ and requested shadow. If existing culling loses contributions, repair it first.
 Freeze a baseline separately for each correctly rendered workload. A valid
 unculled comparison preserves the measured benefit of introducing spatial culling;
 never time a defective image as the acceptance reference.
+
+### EX07D delivery: many-light scene and baseline
+
+**Execution checkpoint (2026-09-24):** the native scene and initial baseline are
+established. The user has reopened D's evidence closeout: its final document must
+record the benchmark baselines and both Instancing and New Sponza application
+baselines required by E/F, with provenance, measurements and comparison rules.
+The preserved reference has 16 completed count/family rows and the 1,024-light
+primary in both families; broader image qualification alone is not a timed
+baseline. See the
+[baseline and optimization report](EX07D-baseline-report.md). Do not restart
+accepted baseline campaigns or treat slow deferred results as an architecture
+policy change. Deferred draw culling must conservatively retain off-screen
+lights whose influence reaches the view, as UE5.7's light-volume frustum test
+does, and must not prune light/shadow or off-screen caster selection.
+
+Credit the accepted model-2 MultiView operating point, conventional-shadow
+New Sponza/Instancing measurements and B's reference/instrument qualification.
+Their evidence and original coverage are recorded in
+[tracker section 3.4](../IMPLEMENTATION_STATUS.md#ex07d--credited-evidence-and-established-baseline).
+Keep those results as controls for their measured workloads. Reuse existing
+captures for additional statistics where possible. Reopen an accepted case only
+when a specific change invalidates its evidence or diagnosed noise prevents the
+required comparison; record that reason before repeating it.
+
+D's new work is the many-light test scene and its baseline:
+
+**Rendering-family scope:** preserve Vortex's deferred-first desktop contract.
+D measures both deferred and forward rendering on the same many-light recipes.
+Deferred scaling problems remain visible baseline results and EX07E inputs;
+poor performance does not remove a workload from qualification.
+
+1. **Create a runnable, inspectable scene from the existing recipe.** Reuse
+   `Test/Support/LightingWorkload.{h,cpp}` and
+   `Test/Lighting/LightingWorkloads.json` under `src/Oxygen/Vortex`, along with
+   the native preview's scene setup. Supply the receiver geometry, materials,
+   cameras and real scene-owned lights through the production rendering paths.
+   The primary preset is 1,024 lights (512 point / 512 spot) at 1920x1080, with
+   at least 256 visible contributors throughout the deterministic motion cycle.
+   Provide the count, distribution, motion, resolution, view and shadow variants
+   in the workload envelope below as presets of the same scene. Preserve the
+   frozen inputs and add the receiver/caster geometry required by each preset.
+2. **Qualify that scene for measurement.** Reuse the existing references and
+   focused correctness checks to verify contributions, actual output size,
+   spatial lists, shadow identity and applicable mutation/lifetime behavior.
+   Make the rendered scene available for visual inspection. The 64x36 preview
+   and allocation tests remain useful prerequisites; full-resolution rendering
+   is part of this delivery. No new oracle or general validation framework is
+   required.
+3. **Record its baseline.** Use the existing opt-in lighting benchmark target
+   and native profiling/capture tools. Measure the primary scene in both forward
+   and deferred rendering, then the prescribed count sweep and selected stress,
+   motion, 4K, multi-view and shadow presets. Follow the bounded run discipline
+   below; variants do not form an exhaustive Cartesian product. Record CPU/GPU
+   costs, frame percentiles, actual memory, image quality and measurement noise,
+   with exact launch commands, recipe/code/shader identities and capture paths.
+
+D exits with the runnable scene/presets and their reproducible, correctly rendered
+baseline report. The user decides whether its measured operating point is
+acceptable. E uses this same scene and baseline for justified optimizations;
+F reuses unaffected evidence and validates the integrated result. Stage changes
+alone do not require another baseline campaign. The workload envelope and full
+EX07 exit requirements remain unchanged.
+
+### Recorded E priorities after the New Sponza regression analysis
+
+The [source and Tracy analysis](EX07-NewSponza-regression-analysis.md) records
+performance work still required:
+
+| Priority                                 | Evidence / problem                                                                                                                    | Recommendation and acceptance                                                                                                                                                                                               |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GPU local-light evaluation               | Current Sponza: 38.609 ms across 23 point draws within 45.568 ms deferred lighting; CPU recording is 0.109 ms.                        | Isolate filter, material-fetch and BRDF/register costs. Measure specialization and uniform-data reuse first, preserving contributions and matching content, quality and instrumentation.                                    |
+| Translucent lighting                     | Current Sponza: 14.260 ms.                                                                                                            | Profile the shared forward evaluator and overlap before selecting changes; retain physical/material and shadow references in both families.                                                                                 |
+| Shadow bias/filtering                    | Receiver-footprint repair passes point/spot, short/long-range tests; the whole point pipeline is not quantitatively UE5.7-equivalent. | Audit units, depth producer/consumer and nonzero authored bias together. Comparison filtering needs a quality contract and contact/grazing/cube-seam coverage; do not copy constants or hide fewer samples as optimization. |
+| Shared-grid scaling                      | Earlier 4,096-light stage-timing runs cost about 11 ms in either family.                                                              | Compare against count, overlap, irrelevant-light, motion and view baselines; preserve complete-list fallback and every valid contributor.                                                                                   |
+| Application lifetime/final qualification | Premature DemoShell composite-target release caused the close failure; the fixed debug-layer run closes cleanly.                      | F includes application close, resize/view removal, movement and scene replacement alongside offscreen checks.                                                                                                               |
+
+Current Sponza has 4,096 m point ranges; the accepted older capture had 10 m.
+Their timing difference is not an isolated code regression, and shortening ranges
+is not an acceptable manufactured speedup. VSM/clustered shadow routing is not a
+drop-in fix: UE5.7's shadowed clustered eligibility depends on its VSM one-pass
+path. Review a larger architecture change separately after the measured shader
+work, with its ownership, resource and quality implications.
 
 ### Contract and property review deliverables
 

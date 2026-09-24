@@ -17,6 +17,7 @@
 
 #include <glm/ext/quaternion_float.hpp>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/GeometryAsset.h>
@@ -36,8 +37,10 @@
 #include <Oxygen/Vortex/Lighting/Types/ClusterLightRange.h>
 #include <Oxygen/Vortex/Lighting/Types/LightGridBuildStatus.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureLightingFixture.h>
+#include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestTags.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
 #include <Oxygen/Vortex/Test/Support/LightingWorkload.h>
+#include <Oxygen/Vortex/Test/Support/LightingWorkloadScene.h>
 #include <Oxygen/Vortex/Types/LightCullingConfig.h>
 
 namespace oxygen::vortex::testing {
@@ -254,96 +257,13 @@ namespace {
     EXPECT_GE(
       CountGuaranteedVisibleContributors(workload, workload.views.front()),
       256U);
-    for (const auto& source : workload.lights) {
-      auto node = scene->CreateNode(
-        "Workload light " + std::to_string(source.id.get()));
-      node.GetTransform().SetLocalPosition({ source.position_ws.at(0),
-        source.position_ws.at(1), source.position_ws.at(2) });
-      const auto initialize = [&](auto& light) -> void {
-        light.Common().affects_world = source.enabled;
-        light.Common().casts_shadows = source.casts_shadows;
-        light.Common().color_rgb = {
-          source.color_rgb.at(0),
-          source.color_rgb.at(1),
-          source.color_rgb.at(2),
-        };
-        light.SetLuminousFluxLm(source.flux_lm);
-        light.SetRange(source.range_m);
-        light.SetSourceRadius(source.source_radius_m);
-      };
-      if (source.kind == WorkloadLightKind::kPoint) {
-        auto light = std::make_unique<scene::PointLight>();
-        initialize(*light);
-        ASSERT_TRUE(node.AttachLight(std::move(light)));
-      } else {
-        auto light = std::make_unique<scene::SpotLight>();
-        initialize(*light);
-        light->SetInnerConeAngleRadians(source.inner_half_angle_radians);
-        light->SetOuterConeAngleRadians(source.outer_half_angle_radians);
-        ASSERT_TRUE(node.AttachLight(std::move(light)));
-        const auto half = std::sqrt(0.5F);
-        node.GetTransform().SetLocalRotation(
-          glm::quat { half, half, 0.0F, 0.0F });
-      }
-    }
-    const auto extent = workload.floor_half_extent_m;
-    const auto positions = std::array {
-      glm::vec3 { -extent, -extent, 0.0F },
-      glm::vec3 { extent, -extent, 0.0F },
-      glm::vec3 { extent, extent, 0.0F },
-      glm::vec3 { -extent, extent, 0.0F },
-    };
-    auto vertices = std::vector<data::Vertex>(positions.size());
-    for (std::size_t index = 0U; index < vertices.size(); ++index) {
-      vertices.at(index) = {
-        .position = positions.at(index),
-        .normal = { 0, 0, 1 },
-        .texcoord = { 0.5F, 0.5F },
-        .tangent = { 1, 0, 0 },
-        .bitangent = { 0, 1, 0 },
-        .color = { 1, 1, 1, 1 },
-      };
-    }
-    std::shared_ptr<data::Mesh> mesh
-      = data::MeshBuilder()
-          .WithVertices(vertices)
-          .WithIndices(std::vector<std::uint32_t> { 0U, 1U, 2U, 0U, 2U, 3U })
-          .BeginSubMesh("Workload floor", data::MaterialAsset::CreateDefault())
-          .WithMeshView({
-            .first_index = 0U,
-            .index_count = 6U,
-            .first_vertex = 0U,
-            .vertex_count = 4U,
-          })
-          .EndSubMesh()
-          .Build();
-    auto geometry = data::pak::geometry::GeometryAssetDesc {};
-    geometry.lod_count = 1U;
-    geometry.bounding_box_min[0] = geometry.bounding_box_min[1] = -extent;
-    geometry.bounding_box_max[0] = geometry.bounding_box_max[1] = extent;
-    geometry.bounding_box_min[2] = geometry.bounding_box_max[2] = 0.0F;
-    mesh_node.GetRenderable().SetGeometry(std::make_shared<data::GeometryAsset>(
-      data::AssetKey::FromVirtualPath("/Test/Lighting/WorkloadFloor.ogeo"),
-      geometry, std::vector<std::shared_ptr<data::Mesh>> { mesh }));
-    auto material = data::pak::render::MaterialAssetDesc {};
-    material.flags = data::pak::render::kMaterialFlag_DoubleSided
-      | data::pak::render::kMaterialFlag_NoTextureSampling;
-    material.base_color[0] = material.base_color[1] = material.base_color[2]
-      = 0.5F;
-    material.base_color[3] = 1.0F;
-    material.roughness = data::Unorm16 { 0.5F };
-    material.ambient_occlusion = data::Unorm16 { 1.0F };
-    material.normal_scale = 1.0F;
-    mesh_node.GetRenderable().SetMaterialOverride(0U, 0U,
-      std::make_shared<data::MaterialAsset>(
-        data::AssetKey::FromVirtualPath("/Test/Lighting/WorkloadFloor.omat"),
-        material, std::vector<data::ShaderReference> {}));
-    camera.GetTransform().SetLocalPosition({ 0.0F, 0.0F, 24.0F });
+    auto native = CreateLightingWorkloadScene(workload);
+    scene = native.scene;
+    camera = native.cameras.front();
+    mesh_node = native.floor;
+    frame.SetScene(observer_ptr { scene.get() });
     auto lens = camera.GetCameraAs<scene::PerspectiveCamera>();
     ASSERT_TRUE(lens.has_value());
-    lens->get().SetFieldOfView(std::numbers::pi_v<float> / 3.0F);
-    lens->get().SetNearPlane(0.1F);
-    lens->get().SetFarPlane(100.0F);
     // Same aspect/frustum and all 1,024 sources; a small correctness preview
     // keeps this out of the long official performance suite.
     constexpr std::uint32_t width = 64U;
@@ -377,8 +297,12 @@ namespace {
       ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0.0F, 3U));
       EXPECT_EQ(observed_counts.at(0), 1024U);
       if (!forward) {
-        EXPECT_EQ(observed_counts.at(1), 512U);
-        EXPECT_EQ(observed_counts.at(2), 512U);
+        EXPECT_LE(observed_counts.at(1), 512U);
+        EXPECT_LE(observed_counts.at(2), 512U);
+        const auto drawn = observed_counts.at(1) + observed_counts.at(2);
+        EXPECT_GE(drawn,
+          CountGuaranteedVisibleContributors(workload, workload.views.front()));
+        EXPECT_LT(drawn, workload.lights.size());
       }
       const auto image = ReadFloatTexture(*probe->color);
       ASSERT_EQ(image.size(), width * height);

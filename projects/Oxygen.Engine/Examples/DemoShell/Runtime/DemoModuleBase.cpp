@@ -12,12 +12,15 @@
 #include <utility>
 #include <vector>
 
+#include "DemoShell/Runtime/DemoAppContext.h"
+#include "DemoShell/Runtime/DemoModuleBase.h"
 #include <fmt/format.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Engine/AsyncEngine.h>
+#include <Oxygen/Graphics/Common/DeferredObjectRelease.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Surface.h>
@@ -26,9 +29,6 @@
 #include <Oxygen/Platform/Window.h>
 #include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Renderer.h>
-
-#include "DemoShell/Runtime/DemoAppContext.h"
-#include "DemoShell/Runtime/DemoModuleBase.h"
 
 namespace oxygen::examples {
 
@@ -258,7 +258,11 @@ auto DemoModuleBase::ReleaseInactiveRuntimeViews(
     } else {
       renderer->RemovePublishedRuntimeView(view_id);
     }
-    scene_targets_.erase(view_id);
+    if (auto target = scene_targets_.find(view_id);
+      target != scene_targets_.end()) {
+      RetireSceneFramebuffers(target->second);
+      scene_targets_.erase(target);
+    }
   }
 }
 
@@ -325,7 +329,9 @@ auto DemoModuleBase::EnsureSceneFramebuffer(const ViewId view_id,
     "Failed to create Vortex runtime composite framebuffer for view {}",
     view_id.get());
 
-  scene_targets_[view_id] = RuntimeSceneTarget {
+  auto& target = scene_targets_[view_id];
+  RetireSceneFramebuffers(target);
+  target = RuntimeSceneTarget {
     .scene_framebuffer = framebuffer,
     .composite_framebuffer = composite_framebuffer,
     .width = width,
@@ -336,7 +342,25 @@ auto DemoModuleBase::EnsureSceneFramebuffer(const ViewId view_id,
 
 auto DemoModuleBase::ClearSceneFramebuffers() -> void
 {
+  for (auto& [_, target] : scene_targets_) {
+    RetireSceneFramebuffers(target);
+  }
   scene_targets_.clear();
+}
+
+auto DemoModuleBase::RetireSceneFramebuffers(RuntimeSceneTarget& target) -> void
+{
+  // Removing a view or replacing its targets does not wait for earlier frames.
+  // Keep attachments and their descriptors alive until that slot retires.
+  if (auto gfx = app_.gfx_weak.lock()) {
+    graphics::DeferredObjectRelease(
+      target.scene_framebuffer, gfx->GetDeferredReclaimer());
+    graphics::DeferredObjectRelease(
+      target.composite_framebuffer, gfx->GetDeferredReclaimer());
+  } else {
+    target.scene_framebuffer.reset();
+    target.composite_framebuffer.reset();
+  }
 }
 
 auto DemoModuleBase::OnPublishViews(observer_ptr<engine::FrameContext> context)

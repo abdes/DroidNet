@@ -99,12 +99,15 @@ m_gtest_program(
     "LightingService_test.cpp"
     "Lighting/LightPhotometry_test.cpp"
     "Lighting/LightEvaluationRecords_test.cpp"
+    "Lighting/DeferredLightConstantsPublisher_test.cpp"
+    "Fixtures/UploadCoordinatorTest.cpp"
 )
 target_sources(
   Oxygen.Vortex.LightingService.Tests
   PRIVATE
     "../Lighting/Internal/LightGridBuilder.cpp"
     "../Lighting/Internal/LightEvaluationRecords.cpp"
+    "../Lighting/Internal/DeferredLightConstantsPublisher.cpp"
 )
 
 m_gtest_program(PostProcessService SOURCES "PostProcessService_test.cpp")

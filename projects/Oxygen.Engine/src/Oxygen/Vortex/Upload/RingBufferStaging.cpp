@@ -88,13 +88,13 @@ namespace {
     }
 
     auto old_buffer = std::move(buffer);
-    // The buffer object must stay alive until deferred reclamation runs, but
-    // the registry entry does not. Unregister now while Graphics composition
-    // state is unquestionably alive, then defer only the final shared_ptr drop.
-    UnregisterResourceIfPresent(gfx, old_buffer);
+    // Submitted draws still hold indices into this buffer's registered views.
+    // Keep the descriptors as well as the backing alive until its frame slot
+    // retires. Graphics drains the reclaimer before registry teardown.
     auto& reclaimer = gfx->GetDeferredReclaimer();
     reclaimer.RegisterDeferredAction(
-      [old_buffer = std::move(old_buffer)] mutable -> void {
+      [gfx, old_buffer = std::move(old_buffer)] mutable -> void {
+        UnregisterResourceIfPresent(gfx, old_buffer);
         old_buffer.reset();
       });
   }

@@ -87,7 +87,6 @@
 #include <Oxygen/Vortex/SceneRenderer/Stages/Translucency/TranslucencyMeshProcessor.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Translucency/TranslucencyModule.h>
 #include <Oxygen/Vortex/ShaderDebugMode.h>
-#include <Oxygen/Vortex/ViewExtension.h>
 #include <Oxygen/Vortex/Test/Fixtures/MeshRasterStateTest.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
 #include <Oxygen/Vortex/Types/DrawMetadata.h>
@@ -96,6 +95,7 @@
 #include <Oxygen/Vortex/Types/PassMask.h>
 #include <Oxygen/Vortex/Types/VelocityPublications.h>
 #include <Oxygen/Vortex/Types/ViewFrameBindings.h>
+#include <Oxygen/Vortex/ViewExtension.h>
 #include <Oxygen/Vortex/ViewFeatureProfile.h>
 
 namespace {
@@ -429,7 +429,8 @@ protected:
   }
 
   auto AddDirectionalLight(std::string_view name,
-    oxygen::scene::AtmosphereLightSlot slot = oxygen::scene::AtmosphereLightSlot::kPrimary) -> oxygen::scene::SceneNode
+    oxygen::scene::AtmosphereLightSlot slot
+    = oxygen::scene::AtmosphereLightSlot::kPrimary) -> oxygen::scene::SceneNode
   {
     auto node = scene_->CreateNode(std::string(name));
     auto light = std::make_unique<DirectionalLight>();
@@ -766,14 +767,18 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     ViewId failed_view;
     bool fail = true;
     unsigned completed = 0U;
-    void OnPreRenderViewGpu(const oxygen::vortex::ViewRenderGpuContext& hook) override
+    void OnPreRenderViewGpu(
+      const oxygen::vortex::ViewRenderGpuContext& hook) override
     {
       if (fail && hook.render_context.current_view.view_id == failed_view) {
         throw std::runtime_error("Injected per-view recording failure");
       }
     }
-    void OnPostRenderViewGpu(const oxygen::vortex::ViewRenderGpuContext&) override
-    { ++completed; }
+    void OnPostRenderViewGpu(
+      const oxygen::vortex::ViewRenderGpuContext&) override
+    {
+      ++completed;
+    }
   };
   auto fault = std::make_shared<Fault>();
   fault->failed_view = first_view_id_;
@@ -807,10 +812,12 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   fault->fail = false;
   context.frame_sequence = oxygen::frame::SequenceNumber { 2U };
   scene_renderer_->RenderViewFamily(context);
-  const auto recovered = scene_renderer_->InspectViewRenderStatus(first_view_id_);
+  const auto recovered
+    = scene_renderer_->InspectViewRenderStatus(first_view_id_);
   ASSERT_TRUE(recovered);
   EXPECT_TRUE(recovered->IsCaptureEligible(context.frame_sequence));
-  EXPECT_FALSE(recovered->IsCaptureEligible(oxygen::frame::SequenceNumber { 1U }));
+  EXPECT_FALSE(
+    recovered->IsCaptureEligible(oxygen::frame::SequenceNumber { 1U }));
   EXPECT_TRUE(context.frame_views[0].rendered);
   EXPECT_TRUE(context.frame_views[1].rendered);
   EXPECT_EQ(fault->completed, 3U);
@@ -1699,8 +1706,8 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   DeferredConstantsRemainImmutableAcrossQueuedViews)
 {
   using oxygen::vortex::DeferredLightConstants;
-  constexpr float kFirstPosition = 11.0F;
-  constexpr float kSecondPosition = 21.0F;
+  constexpr float kFirstPosition = 1.0F;
+  constexpr float kSecondPosition = 2.0F;
   auto point = AddPointLight("MovingPoint");
   point.GetTransform().SetLocalPosition({ kFirstPosition, 0.0F, 0.0F });
   graphics_->buffer_view_log_.events.clear();
@@ -1772,8 +1779,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   auto source = node.GetLightAs<DirectionalLight>();
   ASSERT_TRUE(source.has_value());
   ASSERT_TRUE(node.EditLight<DirectionalLight>([](auto& light) {
-  light.SetAtmosphereLightSlot(
-    oxygen::scene::AtmosphereLightSlot::kNone);
+    light.SetAtmosphereLightSlot(oxygen::scene::AtmosphereLightSlot::kNone);
   }));
   UpdateSceneTransforms();
   std::ignore = RenderForView(first_view_id_, first_resolved_view_);
@@ -1795,8 +1801,8 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   auto source = node.GetLightAs<DirectionalLight>();
   ASSERT_TRUE(source.has_value());
   ASSERT_TRUE(node.EditLight<DirectionalLight>([](auto& light) {
-  light.SetAtmosphereLightSlot(
-    oxygen::scene::AtmosphereLightSlot::kSecondary);
+    light.SetAtmosphereLightSlot(
+      oxygen::scene::AtmosphereLightSlot::kSecondary);
   }));
   UpdateSceneTransforms();
   std::ignore = RenderForView(first_view_id_, first_resolved_view_);
@@ -1869,14 +1875,14 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   DirectionalLightSelectionRetainsUnassignedFillAndAssignedSun)
 {
-  auto fill = AddDirectionalLight("Fill", oxygen::scene::AtmosphereLightSlot::kNone);
+  auto fill
+    = AddDirectionalLight("Fill", oxygen::scene::AtmosphereLightSlot::kNone);
   auto fill_light = fill.GetLightAs<DirectionalLight>();
   if (!fill_light.has_value()) {
     FAIL() << "Expected fill_light to have a value";
   }
-  ASSERT_TRUE(fill.EditLight<DirectionalLight>([](auto& light) {
-  light.Common().affects_world = true;
-  }));
+  ASSERT_TRUE(fill.EditLight<DirectionalLight>(
+    [](auto& light) { light.Common().affects_world = true; }));
   fill.GetTransform().SetLocalRotation(
     glm::angleAxis(+oxygen::math::HalfPi, oxygen::space::move::Right));
 
@@ -1885,9 +1891,8 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   if (!sun_light.has_value()) {
     FAIL() << "Expected sun_light to have a value";
   }
-  ASSERT_TRUE(sun.EditLight<DirectionalLight>([](auto& light) {
-  light.Common().affects_world = true;
-  }));
+  ASSERT_TRUE(sun.EditLight<DirectionalLight>(
+    [](auto& light) { light.Common().affects_world = true; }));
   sun.GetTransform().SetLocalRotation(
     glm::angleAxis(-oxygen::math::HalfPi, oxygen::space::move::Right));
 
@@ -2226,9 +2231,9 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     FAIL() << "Expected spot_light to have a value";
   }
   ASSERT_TRUE(spot.EditLight<SpotLight>([](auto& light) {
-  light.Common().casts_shadows = true;
-  light.Common().shadow.bias = 0.5F;
-  light.Common().shadow.normal_bias = 0.03F;
+    light.Common().casts_shadows = true;
+    light.Common().shadow.bias = 0.5F;
+    light.Common().shadow.normal_bias = 0.03F;
   }));
 
   std::ignore = RenderForView(first_view_id_, first_resolved_view_);
@@ -2257,9 +2262,9 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     FAIL() << "Expected point_light to have a value";
   }
   ASSERT_TRUE(point.EditLight<PointLight>([](auto& light) {
-  light.Common().casts_shadows = true;
-  light.Common().shadow.bias = 0.5F;
-  light.Common().shadow.normal_bias = 0.03F;
+    light.Common().casts_shadows = true;
+    light.Common().shadow.bias = 0.5F;
+    light.Common().shadow.normal_bias = 0.03F;
   }));
 
   std::ignore = RenderForView(first_view_id_, first_resolved_view_);
@@ -2287,13 +2292,13 @@ NOLINT_TEST_F(
   auto spot = AddSpotLight("SpotRim");
   point.GetTransform().SetLocalPosition({
     0.0F,
-    20.0F,
     0.0F,
+    -20.0F,
   });
   spot.GetTransform().SetLocalPosition({
     0.0F,
-    20.0F,
     0.0F,
+    -20.0F,
   });
   UpdateSceneTransforms();
 
@@ -2365,6 +2370,45 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
                   == "Vortex.DeferredLight.Spot.InsideVolumeLighting";
               }),
     1);
+}
+
+NOLINT_TEST_F(SceneRendererDeferredCoreTest,
+  SpotVolumeClassificationUsesOuterAngleRatherThanPenumbraWidth)
+{
+  const auto view = MakePerspectiveResolvedView(64.0F, 64.0F);
+  auto spot = AddSpotLight("OutsideCone");
+  spot.GetTransform().SetLocalPosition({ 2.0F, 2.0F, 0.0F });
+  UpdateSceneTransforms();
+  for (const auto inner : { 0.35F, 0.65F }) {
+    ASSERT_TRUE(spot.EditLight<SpotLight>(
+      [inner](auto& light) { light.SetInnerConeAngleRadians(inner); }));
+    std::ignore = RenderForView(first_view_id_, view);
+    const auto& state = scene_renderer_->GetLastDeferredLightingState();
+    EXPECT_EQ(state.spot_light_count, 1U);
+    EXPECT_EQ(state.outside_volume_local_light_count, 1U);
+    EXPECT_EQ(state.camera_inside_local_light_count, 0U);
+  }
+}
+
+NOLINT_TEST_F(SceneRendererDeferredCoreTest,
+  FrustumCullingKeepsOverlappingInfluenceAndDoesNotAlterSelection)
+{
+  auto overlapping = AddPointLight("OffscreenOverlapping");
+  auto distant = AddSpotLight("OffscreenDistant");
+  overlapping.GetTransform().SetLocalPosition({ 2.0F, 0.0F, -1.0F });
+  distant.GetTransform().SetLocalPosition({ 100.0F, 0.0F, -1.0F });
+  UpdateSceneTransforms();
+  for (const auto& view : { MakePerspectiveResolvedView(64.0F, 64.0F),
+         MakePerspectiveResolvedView(64.0F, 64.0F, false),
+         MakeOrthographicResolvedView(64.0F, 64.0F) }) {
+    std::ignore = RenderForView(first_view_id_, view);
+    const auto& state = scene_renderer_->GetLastDeferredLightingState();
+    EXPECT_EQ(state.point_light_count, 1U);
+    EXPECT_EQ(state.spot_light_count, 0U);
+    EXPECT_EQ(RendererPublicationProbe::GetFrameLightSelection(*scene_renderer_)
+                .local_lights.size(),
+      2U);
+  }
 }
 
 NOLINT_TEST_F(

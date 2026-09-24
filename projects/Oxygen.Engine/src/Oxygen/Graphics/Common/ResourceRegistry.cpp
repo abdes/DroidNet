@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <ranges>
+#include <unordered_set>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
@@ -340,6 +341,35 @@ auto ResourceRegistry::UnRegisterViewNoLock(
     });
   DCHECK_GE_F(erased_count, 1,
     "Cache entry not found for resource {} and view {}", resource, view);
+}
+
+auto ResourceRegistry::UnRegisterViewBatch(const NativeResource& resource,
+  const std::span<const NativeView> views) -> void
+{
+  if (views.empty()) {
+    return;
+  }
+  const auto selected
+    = std::unordered_set<NativeView>(views.begin(), views.end());
+  std::scoped_lock lock(registry_mutex_);
+  const auto owner = resources_.find(resource);
+  if (owner == resources_.end()) {
+    throw std::runtime_error("resource not found while un-registering views");
+  }
+  auto& descriptors = owner->second.descriptors;
+  for (auto it = descriptors.begin(); it != descriptors.end();) {
+    if (!selected.contains(it->second.view_object)) {
+      ++it;
+      continue;
+    }
+    descriptor_to_resource_.erase(it->first);
+    it->second.descriptor.Release();
+    it = descriptors.erase(it);
+  }
+  std::erase_if(view_cache_, [&](const auto& entry) {
+    return entry.first.resource == resource
+      && selected.contains(entry.second.view_object);
+  });
 }
 
 auto ResourceRegistry::UnRegisterResource(const NativeResource& resource)

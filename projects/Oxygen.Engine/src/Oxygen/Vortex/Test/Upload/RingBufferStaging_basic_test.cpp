@@ -11,6 +11,8 @@
 #include <Oxygen/Core/Types/ByteUnits.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
+#include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
+#include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Test/Fixtures/RingBufferStagingFixture.h>
 #include <Oxygen/Vortex/Upload/Errors.h>
@@ -53,6 +55,42 @@ NOLINT_TEST_F(
   EXPECT_EQ(grown->Buffer().GetDescriptor().usage
       & oxygen::graphics::BufferUsage::kConstant,
     oxygen::graphics::BufferUsage::kConstant);
+}
+
+NOLINT_TEST_F(
+  RingBufferStagingTest, GrowthRetainsPublishedViewsUntilSlotRetires)
+{
+  auto provider = MakeRingBuffer(SlotCount { 3U }, 16U);
+  auto& retirement = Gfx().GetDeferredReclaimer();
+  retirement.OnBeginFrame(Slot { 0U });
+  auto first = provider->Allocate(SizeBytes { 16U }, "published-before-growth");
+  ASSERT_TRUE(first.has_value());
+  auto& registry = Gfx().GetResourceRegistry();
+  auto& allocator = Gfx().GetDescriptorAllocator();
+  auto handle = allocator.AllocateRaw(
+    oxygen::graphics::ResourceViewType::kStructuredBuffer_SRV,
+    oxygen::graphics::DescriptorVisibility::kShaderVisible);
+  ASSERT_TRUE(handle.IsValid());
+  const auto index = allocator.GetShaderVisibleIndex(handle);
+  const auto description = oxygen::graphics::BufferViewDescription { .view_type
+    = oxygen::graphics::ResourceViewType::kStructuredBuffer_SRV,
+    .visibility = oxygen::graphics::DescriptorVisibility::kShaderVisible,
+    .range = { first->Offset().get(), 16U },
+    .stride = 16U };
+  registry.RegisterView(first->Buffer(), std::move(handle), description);
+  auto grown = provider->Allocate(
+    SizeBytes { provider->GetStats().current_buffer_size + 1U }, "growth");
+  ASSERT_TRUE(grown.has_value());
+  ASSERT_NE(&first->Buffer(), &grown->Buffer());
+  EXPECT_TRUE(registry.Contains(first->Buffer()));
+  EXPECT_EQ(
+    registry.FindShaderVisibleIndex(first->Buffer(), description), index);
+  retirement.OnBeginFrame(Slot { 1U });
+  retirement.OnBeginFrame(Slot { 2U });
+  EXPECT_TRUE(registry.Contains(first->Buffer()));
+  retirement.OnBeginFrame(Slot { 0U });
+  EXPECT_FALSE(registry.Contains(first->Buffer()));
+  EXPECT_TRUE(registry.Contains(grown->Buffer()));
 }
 
 /*!

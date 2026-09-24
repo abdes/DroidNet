@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <fstream>
@@ -25,7 +26,7 @@ namespace {
     auto input = std::ifstream(OXYGEN_LIGHTING_WORKLOAD_MANIFEST);
     ASSERT_TRUE(input.good());
     const auto manifest = nlohmann::json::parse(input);
-    ASSERT_EQ(manifest.at("revision"), 1U);
+    ASSERT_EQ(manifest.at("revision"), 2U);
     const auto primary = BuildLightingWorkload({});
     ASSERT_EQ(primary.lights.size(), manifest.at("primary").at("light_count"));
     ASSERT_EQ(primary.lights.size(), 1024U);
@@ -147,6 +148,31 @@ namespace {
     for (std::size_t index = 0U; index < next_cycle.lights.size(); ++index) {
       EXPECT_EQ(next_cycle.lights.at(index).position_ws,
         first_cycle.lights.at(index).position_ws);
+    }
+  }
+
+  NOLINT_TEST(LightingWorkloadTest, ShadowOwnersStayVisibleThroughoutMotion)
+  {
+    auto owners = std::unordered_set<std::uint32_t> {};
+    for (unsigned phase = 0U; phase < 240U; ++phase) {
+      const auto workload = BuildLightingWorkload({ .moving = true,
+        .motion_frame = phase,
+        .point_shadow_requests = 5U,
+        .spot_shadow_requests = 9U });
+      auto current = std::unordered_set<std::uint32_t> {};
+      for (const auto& light : workload.lights) {
+        if (light.casts_shadows) {
+          // The old first-row selection was outside the visible receiver.
+          EXPECT_LT(std::abs(light.position_ws.at(0)), 6.0F);
+          EXPECT_LT(std::abs(light.position_ws.at(1)), 6.0F);
+          current.insert(light.id.get());
+        }
+      }
+      ASSERT_EQ(current.size(), 14U);
+      if (phase == 0U) {
+        owners = current;
+      }
+      EXPECT_EQ(current, owners);
     }
   }
 

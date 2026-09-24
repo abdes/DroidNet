@@ -386,13 +386,15 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest,
   }
 }
 
-NOLINT_TEST_F(AsyncGltfImporterFullTest, LocalRangesPreserveExplicitAndResolveOmittedPolicy)
+NOLINT_TEST_F(
+  AsyncGltfImporterFullTest, LocalRangesPreserveExplicitAndResolveOmittedPolicy)
 {
   for (const float fallback : { 4096.0F, 123.0F }) {
     const auto root = MakeTempDir("gltf_ranges_" + std::to_string(fallback));
     const auto source_path = root / "lights.gltf";
     std::ofstream source(source_path);
-    source << R"({"asset":{"version":"2.0"},"extensionsUsed":["KHR_lights_punctual"],
+    source
+      << R"({"asset":{"version":"2.0"},"extensionsUsed":["KHR_lights_punctual"],
       "extensions":{"KHR_lights_punctual":{"lights":[
         {"type":"point","range":17.5}, {"type":"point"},
         {"type":"spot","range":23.75,"spot":{}}, {"type":"spot","spot":{}}]}},
@@ -414,6 +416,12 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest, LocalRangesPreserveExplicitAndResolveOm
     const auto spots = scene->GetComponents<world::SpotLightRecord>();
     ASSERT_EQ(points.size(), 2U);
     ASSERT_EQ(spots.size(), 2U);
+    for (const auto& light : points) {
+      EXPECT_EQ(light.common.casts_shadows, 1U);
+    }
+    for (const auto& light : spots) {
+      EXPECT_EQ(light.common.casts_shadows, 1U);
+    }
     auto point = points.begin();
     EXPECT_FLOAT_EQ(point->range, 17.5F);
     EXPECT_FLOAT_EQ((++point)->range, fallback);
@@ -585,8 +593,10 @@ NOLINT_TEST_F(
     request.cooked_root = root / "cooked";
     const auto imported = RunImport(std::move(request));
     EXPECT_FALSE(imported.report.success);
-    const auto expected_code = nlohmann::json::parse(invalid_lights.at(index)).contains("range")
-      ? "scene.light.range_invalid" : "scene.light.photometry_invalid";
+    const auto expected_code
+      = nlohmann::json::parse(invalid_lights.at(index)).contains("range")
+      ? "scene.light.range_invalid"
+      : "scene.light.photometry_invalid";
     EXPECT_TRUE(std::ranges::any_of(
       imported.report.diagnostics, [expected_code](const auto& diagnostic) {
         return diagnostic.code == expected_code;

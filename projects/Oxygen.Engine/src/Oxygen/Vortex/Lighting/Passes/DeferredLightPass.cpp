@@ -5,12 +5,14 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -28,6 +30,7 @@
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Core/Types/Frustum.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
@@ -248,8 +251,8 @@ namespace {
     const auto position = light.position_ws;
     const auto direction = light.emitted_direction_ws;
     const auto range = light.range_m;
-    const auto outer_cosine = std::clamp(
-      1.0F - (2.0F * light.inverse_cone_cosine_width), 0.001F, 0.999999F);
+    const auto outer_cosine
+      = std::clamp(light.outer_cone_cosine, 0.001F, 0.999999F);
     const auto outer_sine
       = std::sqrt((std::max)(0.0F, 1.0F - outer_cosine * outer_cosine));
     const auto outer_tangent = outer_sine / (std::max)(outer_cosine, 1.0e-4F);
@@ -686,6 +689,7 @@ auto DeferredLightPass::Record(RenderContext& ctx,
   }
 
   auto draws = std::vector<DeferredLightDraw> {};
+  draws.reserve(packets.local_lights.size() + 2U);
   if (!skip_direct_lighting && !packets.directional.empty()) {
     draws.push_back(DeferredLightDraw {
       .kind = DeferredLightKind::kDirectional,
@@ -696,7 +700,25 @@ auto DeferredLightPass::Record(RenderContext& ctx,
   const auto skip_local_lights = skip_direct_lighting
     || ShouldSkipLocalLightsForDirectionalDebug(ctx.shader_debug_mode);
   if (!skip_local_lights) {
+    const auto* resolved = ctx.current_view.resolved_view.get();
+    const auto frustum = resolved != nullptr
+      ? std::optional { resolved->GetFrustum() }
+      : std::nullopt;
     for (const auto& packet : packets.local_lights) {
+      if (frustum && packet.light != nullptr) {
+        const auto& light = *packet.light;
+        // Model 2 range is center-based for both punctual and finite sources.
+        // A sphere is conservative for spots as well as points and retains
+        // off-screen sources whose influence reaches a visible receiver.
+        const auto magnitude
+          = (std::max)({ 1.0F, light.range_m, std::abs(light.position_ws.x),
+            std::abs(light.position_ws.y), std::abs(light.position_ws.z) });
+        const auto radius = light.range_m + 1.0e-4F * magnitude;
+        if (std::isfinite(radius) && radius > 0.0F
+          && !frustum->IntersectsSphere(light.position_ws, radius)) {
+          continue;
+        }
+      }
       const auto kind = packet.kind == LocalLightKind::kPoint
         ? DeferredLightKind::kPoint
         : DeferredLightKind::kSpot;
@@ -818,14 +840,49 @@ auto DeferredLightPass::Record(RenderContext& ctx,
   const auto view_constants_param
     = static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants);
   const auto reverse_z = IsReverseZ(ctx);
-  const auto bind_common_root_parameters
-    = [&](const ShaderVisibleIndex index) -> void {
+  auto pipeline_descriptions
+    = std::array<std::optional<graphics::GraphicsPipelineDesc>, 7> {};
+  auto bound_pipeline = std::optional<std::size_t> {};
+  const graphics::Framebuffer* bound_framebuffer = nullptr;
+  const auto bind_pipeline = [&](const DeferredLightDraw& draw) {
+    const bool local = draw.kind == DeferredLightKind::kPoint
+      || draw.kind == DeferredLightKind::kSpot;
+    const auto index = local
+      ? 1U + (draw.kind == DeferredLightKind::kSpot ? 3U : 0U)
+        + static_cast<std::size_t>(draw.draw_mode)
+      : 0U;
+    if (bound_pipeline == index) {
+      return;
+    }
+    auto& description = pipeline_descriptions.at(index);
+    if (!description) {
+      description = local ? BuildDeferredLocalPipelineDesc(scene_textures,
+                              draw.kind, reverse_z, draw.draw_mode)
+                          : BuildDeferredDirectionalPipelineDesc(
+                              scene_textures, ctx.shader_debug_mode);
+    }
+    recorder.SetPipelineState(*description);
     recorder.SetGraphicsRootConstantBufferView(
       view_constants_param, ctx.view_constants->GetGPUVirtualAddress());
     recorder.SetGraphicsRoot32BitConstant(root_constants_param, 0U, 0U);
+    bound_pipeline = index;
+  };
+  const auto bind_framebuffer = [&](const graphics::Framebuffer& framebuffer) {
+    if (bound_framebuffer == &framebuffer) {
+      return;
+    }
+    recorder.FlushBarriers();
+    recorder.BindFrameBuffer(framebuffer);
+    SetViewportAndScissor(recorder, ctx, scene_textures);
+    bound_framebuffer = &framebuffer;
+  };
+  const auto bind_draw_constants = [&](const ShaderVisibleIndex index) {
     recorder.SetGraphicsRoot32BitConstant(
       root_constants_param, index.get(), 1U);
   };
+
+  recorder.RequireResourceState(
+    scene_textures.GetSceneColor(), graphics::ResourceStates::kRenderTarget);
 
   for (std::size_t i = 0; i < draws.size(); ++i) {
     const auto& draw = draws[i];
@@ -839,22 +896,9 @@ auto DeferredLightPass::Record(RenderContext& ctx,
           : "Vortex.Stage12.StaticSkyLight",
         profiling::ProfileGranularity::kDiagnostic,
         profiling::ProfileCategory::kPass);
-      if (draw.kind == DeferredLightKind::kDirectional) {
-        for (const auto& surface : directional_shadow_surfaces) {
-          if (surface) {
-            recorder.RequireResourceState(
-              *surface, graphics::ResourceStates::kShaderResource);
-          }
-        }
-      }
-      recorder.RequireResourceState(scene_textures.GetSceneColor(),
-        graphics::ResourceStates::kRenderTarget);
-      recorder.FlushBarriers();
-      recorder.BindFrameBuffer(*directional_framebuffer_);
-      SetViewportAndScissor(recorder, ctx, scene_textures);
-      recorder.SetPipelineState(BuildDeferredDirectionalPipelineDesc(
-        scene_textures, ctx.shader_debug_mode));
-      bind_common_root_parameters(pass_index);
+      bind_framebuffer(*directional_framebuffer_);
+      bind_pipeline(draw);
+      bind_draw_constants(pass_index);
       recorder.Draw(3U, 1U, 0U, 0U);
       state.accumulated_into_scene_color = true;
       continue;
@@ -868,16 +912,13 @@ auto DeferredLightPass::Record(RenderContext& ctx,
     CHECK_NOTNULL_F(local_framebuffer_.get(),
       "DeferredLightPass: local framebuffer must exist before local-light "
       "draws");
-    recorder.RequireResourceState(
-      scene_textures.GetSceneDepth(), graphics::ResourceStates::kDepthRead);
-    recorder.RequireResourceState(
-      scene_textures.GetSceneColor(), graphics::ResourceStates::kRenderTarget);
-    recorder.FlushBarriers();
-    recorder.BindFrameBuffer(*local_framebuffer_);
-    SetViewportAndScissor(recorder, ctx, scene_textures);
-    recorder.SetPipelineState(BuildDeferredLocalPipelineDesc(
-      scene_textures, draw.kind, reverse_z, draw.draw_mode));
-    bind_common_root_parameters(pass_index);
+    if (bound_framebuffer != local_framebuffer_.get()) {
+      recorder.RequireResourceState(
+        scene_textures.GetSceneDepth(), graphics::ResourceStates::kDepthRead);
+    }
+    bind_framebuffer(*local_framebuffer_);
+    bind_pipeline(draw);
+    bind_draw_constants(pass_index);
     recorder.Draw(draw.geometry_vertex_count, 1U, 0U, 0U);
     ++state.local_light_draw_count;
     if (draw.draw_mode == DeferredLocalLightDrawMode::kCameraInsideVolume) {

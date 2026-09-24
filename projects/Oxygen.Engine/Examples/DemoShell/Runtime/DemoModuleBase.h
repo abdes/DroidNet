@@ -10,6 +10,9 @@
 #include <memory>
 #include <vector>
 
+#include "DemoShell/DemoShell.h"
+#include "DemoShell/Runtime/AppWindow.h"
+
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Composition/Composition.h>
@@ -19,9 +22,6 @@
 #include <Oxygen/Platform/Window.h>
 #include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Renderer.h>
-
-#include "DemoShell/DemoShell.h"
-#include "DemoShell/Runtime/AppWindow.h"
 
 namespace oxygen {
 namespace engine {
@@ -139,6 +139,7 @@ private:
   auto EnsureSceneFramebuffer(ViewId view_id, uint32_t width, uint32_t height)
     -> RuntimeSceneTarget*;
   auto ClearSceneFramebuffers() -> void;
+  auto RetireSceneFramebuffers(RuntimeSceneTarget& target) -> void;
   auto ReleaseInactiveRuntimeViews(observer_ptr<engine::FrameContext> context,
     const std::vector<ViewId>& retained_intent_ids) -> void;
 

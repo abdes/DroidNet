@@ -227,8 +227,17 @@ auto CommandRecorder::BeginProfileScope(
   }
 
   ScopeRecord record {};
-  scope_records_.reserve(scope_records_.size() + 1U);
-  scope_stack_.reserve(scope_stack_.size() + 1U);
+  // Allocate before opening collectors so allocation failure cannot leave an
+  // untracked scope. Grow geometrically: exact-size reserve here moved every
+  // earlier light's record for every new diagnostic scope (quadratic cost).
+  if (scope_records_.size() == scope_records_.capacity()) {
+    scope_records_.reserve(scope_records_.size()
+      + (std::max)(scope_records_.size() / 2U, std::size_t { 1U }));
+  }
+  if (scope_stack_.size() == scope_stack_.capacity()) {
+    scope_stack_.reserve(scope_stack_.size()
+      + (std::max)(scope_stack_.size() / 2U, std::size_t { 1U }));
+  }
   record.base_label = desc.label;
   record.formatted_name = oxygen::profiling::FormatScopeName(desc);
   if (telemetry_collector_ != nullptr

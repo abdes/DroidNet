@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <numbers>
 #include <stdexcept>
+#include <tuple>
 
 #include <Oxygen/Vortex/Test/Support/LightingWorkload.h>
 
@@ -80,9 +81,6 @@ auto BuildLightingWorkload(const LightingWorkloadOptions& options)
       .outer_half_angle_radians = options.spot_outer_half_angle_radians,
       .enabled
       = !affected || options.mutation != WorkloadMutation::kDisableQuarter,
-      .casts_shadows
-      = index / 2U < (index % 2U == 0U ? options.point_shadow_requests
-                                       : options.spot_shadow_requests),
     };
     if (options.distribution == WorkloadDistribution::kMostlyIrrelevant
       && index >= kRelevantSubset) {
@@ -100,6 +98,29 @@ auto BuildLightingWorkload(const LightingWorkloadOptions& options)
         += kMotionAmplitudeM * static_cast<float>(std::cos(phase));
     }
     result.lights.push_back(light);
+  }
+  // Select by the static recipe position so requested shadows affect visible
+  // receivers and keep the same owners throughout a motion cycle.
+  auto shadow_order = std::vector<std::size_t>(result.lights.size());
+  for (std::size_t index = 0U; index < shadow_order.size(); ++index) {
+    shadow_order.at(index) = index;
+  }
+  std::ranges::sort(shadow_order, {}, [&](const std::size_t index) {
+    const auto id = result.lights.at(index).id.get();
+    const auto x = (static_cast<float>(id % columns) - center) * spacing;
+    const auto y = (static_cast<float>(id / columns) - center) * spacing;
+    return std::tuple { x * x + y * y, id };
+  });
+  auto remaining_point = options.point_shadow_requests;
+  auto remaining_spot = options.spot_shadow_requests;
+  for (const auto index : shadow_order) {
+    auto& light = result.lights.at(index);
+    auto& remaining = light.kind == WorkloadLightKind::kPoint ? remaining_point
+                                                              : remaining_spot;
+    if (remaining != 0U) {
+      light.casts_shadows = true;
+      --remaining;
+    }
   }
   result.views.push_back({
     .id = ViewId { 1U },

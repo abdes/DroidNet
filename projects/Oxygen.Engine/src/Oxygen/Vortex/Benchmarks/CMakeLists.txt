@@ -12,6 +12,9 @@ if(WIN32)
     "Oxygen.Vortex.Lighting.Benchmarks"
     SOURCES
       "LightingCollection_bench.cpp"
+      "ManyLightBaseline.h"
+      "ManyLightBaseline_bench.cpp"
+      "ManyLightBaselineResults.cpp"
     DEPS
       oxygen-vortex-exposure-test-support
       oxygen::vortex-test-support
