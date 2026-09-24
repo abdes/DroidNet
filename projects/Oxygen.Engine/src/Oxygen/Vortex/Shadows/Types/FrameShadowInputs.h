@@ -22,6 +22,10 @@ struct LightingFrameBindings;
 
 struct PreparedViewShadowInput {
   ViewId view_id { kInvalidViewId };
+  std::uint64_t scene_generation { 0U };
+  std::span<const ShadowCasterDependency> shadow_caster_dependencies;
+  bool shadow_dependencies_available { false };
+  std::uint32_t shadow_caster_draw_count { 0U };
   const LightingFrameBindings* lighting_bindings { nullptr };
   observer_ptr<const PreparedSceneFrame> prepared_scene;
   observer_ptr<const ResolvedView> resolved_view;

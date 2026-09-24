@@ -5,9 +5,11 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <span>
 
+#include <Oxygen/Core/Types/Frustum.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/DepthPrepass/DepthPrepassMeshProcessor.h>
 #include <Oxygen/Vortex/Shadows/Internal/ShadowCasterCulling.h>
@@ -16,9 +18,13 @@
 namespace oxygen::vortex::shadows::internal {
 
 auto ShadowCasterCulling::BuildDrawCommands(
-  const PreparedSceneFrame& prepared_scene) -> void
+  const PreparedSceneFrame& prepared_scene,
+  const glm::mat4& light_view_projection,
+  const glm::vec4& light_position_and_inv_range) -> void
 {
   draw_commands_.clear();
+  candidate_count_ = 0U;
+  const auto frustum = Frustum::FromViewProj(light_view_projection, true);
 
   const auto metadata = prepared_scene.GetDrawMetadata();
   draw_commands_.reserve(metadata.size());
@@ -27,6 +33,30 @@ auto ShadowCasterCulling::BuildDrawCommands(
     const auto& draw = metadata[draw_index];
     if (!draw.flags.IsSet(PassMaskBit::kShadowCaster)) {
       continue;
+    }
+    ++candidate_count_;
+
+    if (draw_index < prepared_scene.draw_bounding_spheres.size()) {
+      const auto bounds = prepared_scene.draw_bounding_spheres[draw_index];
+      // Missing/invalid bounds cannot prove exclusion. Keep those draws until
+      // their producer supplies bounds, including all instances of a batch.
+      if (std::isfinite(bounds.x) && std::isfinite(bounds.y)
+        && std::isfinite(bounds.z) && std::isfinite(bounds.w)
+        && bounds.w > 0.0F) {
+        const auto center = glm::vec3(bounds);
+        const auto radius = bounds.w * 1.01F + 1.0e-4F;
+        if (!frustum.IntersectsSphere(center, radius)) {
+          continue;
+        }
+        if (light_position_and_inv_range.w > 0.0F) {
+          const auto delta = center - glm::vec3(light_position_and_inv_range);
+          const auto combined_radius
+            = radius + 1.0F / light_position_and_inv_range.w;
+          if (glm::dot(delta, delta) > combined_radius * combined_radius) {
+            continue;
+          }
+        }
+      }
     }
 
     draw_commands_.push_back(DrawCommand {

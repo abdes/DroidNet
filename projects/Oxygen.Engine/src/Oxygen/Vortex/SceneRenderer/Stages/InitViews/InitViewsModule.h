@@ -48,6 +48,9 @@ public:
     std::vector<float> normal_matrices;
     std::vector<PreparedSceneFrame::PartitionRange> partitions;
     std::vector<glm::vec4> draw_bounding_spheres;
+    std::vector<ShadowCasterSource> shadow_caster_sources;
+    std::vector<MaterialShadingConstants> shadow_materials;
+    std::vector<std::uint64_t> shadow_texture_revisions;
     std::vector<SkinnedPosePublication> current_skinned_pose_publications;
     std::vector<SkinnedPosePublication> previous_skinned_pose_publications;
     std::vector<MorphPublication> current_morph_publications;

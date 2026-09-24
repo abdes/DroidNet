@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -19,14 +21,17 @@
 #include <glm/ext/vector_float3.hpp>
 #include <glm/ext/vector_float4.hpp>
 
+#include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Core/Types/Frustum.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
@@ -42,15 +47,27 @@
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
+#include <Oxygen/Vortex/Internal/BindlessRootBindings.h>
 #include <Oxygen/Vortex/Internal/MeshRasterState.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/DepthPrepass/DepthPrepassMeshProcessor.h>
+#include <Oxygen/Vortex/Shadows/Internal/ShadowCasterCulling.h>
 #include <Oxygen/Vortex/Shadows/Passes/ShadowDepthPass.h>
 #include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
 #include <Oxygen/Vortex/Shadows/Types/ShadowFrameData.h>
 
 namespace oxygen::vortex::shadows {
+
+struct ShadowDepthPass::CacheEntry {
+  std::weak_ptr<graphics::Texture> surface;
+  std::vector<graphics::NativeView> dsvs;
+  observer_ptr<graphics::CommandQueue> queue;
+  std::uint64_t fingerprint { 0U };
+  std::uint64_t fence { 0U };
+  std::uint64_t generation { 0U };
+  bool valid { false };
+};
 
 namespace {
 
@@ -82,65 +99,62 @@ namespace {
   constexpr std::uint32_t kShadowPassConstantsStride
     = sizeof(ShadowPassConstants);
 
-  auto RangeTypeToViewType(const bindless_d3d12::RangeType type)
-    -> graphics::ResourceViewType
+  auto BuildCacheFingerprint(const PreparedViewShadowInput& view,
+    const std::span<const ShadowDepthPass::DepthSlice> slices)
+    -> std::optional<std::uint64_t>
   {
-    using graphics::ResourceViewType;
-
-    switch (type) {
-    case bindless_d3d12::RangeType::SRV:
-      return ResourceViewType::kRawBuffer_SRV;
-    case bindless_d3d12::RangeType::Sampler:
-      return ResourceViewType::kSampler;
-    case bindless_d3d12::RangeType::UAV:
-      return ResourceViewType::kRawBuffer_UAV;
-    default:
-      return ResourceViewType::kNone;
+    if (view.scene_generation == 0U || !view.shadow_dependencies_available) {
+      return {};
     }
-  }
-
-  auto BuildVortexRootBindings() -> std::vector<graphics::RootBindingItem>
-  {
-    std::vector<graphics::RootBindingItem> bindings;
-    bindings.reserve(bindless_d3d12::kRootParamTableCount);
-
-    for (std::uint32_t index = 0; index < bindless_d3d12::kRootParamTableCount;
-      ++index) {
-      const auto& desc = bindless_d3d12::kRootParamTable.at(index);
-      auto binding = graphics::RootBindingDesc {};
-      binding.binding_slot_desc.register_index = desc.shader_register;
-      binding.binding_slot_desc.register_space = desc.register_space;
-      binding.visibility = graphics::ShaderStageFlags::kAll;
-
-      switch (desc.kind) {
-      case bindless_d3d12::RootParamKind::DescriptorTable: {
-        auto table = graphics::DescriptorTableBinding {};
-        if (desc.ranges_count > 0U && desc.ranges.data() != nullptr) {
-          const auto& range = desc.ranges.front();
-          table.view_type = RangeTypeToViewType(
-            static_cast<bindless_d3d12::RangeType>(range.range_type));
-          table.base_index = range.base_register;
-          table.count = range.num_descriptors
-              == (std::numeric_limits<std::uint32_t>::max)()
-            ? (std::numeric_limits<std::uint32_t>::max)()
-            : range.num_descriptors;
+    auto hash = static_cast<std::size_t>(view.scene_generation);
+    const auto& light = slices.front();
+    const auto volume
+      = Frustum::FromViewProj(light.light_view_projection, true);
+    auto relevant = std::vector<std::uint64_t> {};
+    for (const auto& dependency : view.shadow_caster_dependencies) {
+      const auto bounds = dependency.bounds;
+      if (std::isfinite(bounds.x) && std::isfinite(bounds.y)
+        && std::isfinite(bounds.z) && std::isfinite(bounds.w)
+        && bounds.w > 0.0F) {
+        const auto radius = bounds.w * 1.01F + 1.0e-4F;
+        const auto delta
+          = glm::vec3(bounds) - glm::vec3(light.light_position_and_inv_range);
+        const auto extent
+          = radius + 1.0F / light.light_position_and_inv_range.w;
+        if (glm::dot(delta, delta) > extent * extent
+          || (slices.size() == 1U
+            && !volume.IntersectsSphere(glm::vec3(bounds), radius))) {
+          continue;
         }
-        binding.data = table;
-        break;
       }
-      case bindless_d3d12::RootParamKind::CBV:
-        binding.data = graphics::DirectBufferBinding {};
-        break;
-      case bindless_d3d12::RootParamKind::RootConstants:
-        binding.data
-          = graphics::PushConstantsBinding { .size = desc.constants_count };
-        break;
+      if (!dependency.reusable) {
+        return {};
       }
-
-      bindings.emplace_back(binding);
+      relevant.push_back(dependency.fingerprint);
     }
-
-    return bindings;
+    // Recompute membership from all current casters, including those outside
+    // the previous light volume. Selection/instancing order is not content.
+    std::ranges::sort(relevant);
+    HashCombine(hash,
+      ComputeFNV1a64(relevant.data(), relevant.size() * sizeof(std::uint64_t)));
+    for (const auto& slice : slices) {
+      HashCombine(hash, slice.light_source);
+      HashCombine(hash, slice.slot_generation);
+      HashCombine(hash, slice.target_slice);
+      HashCombine(hash,
+        ComputeFNV1a64(
+          &slice.light_view_projection, sizeof(slice.light_view_projection)));
+      HashCombine(hash,
+        ComputeFNV1a64(
+          &slice.shadow_bias_parameters, sizeof(slice.shadow_bias_parameters)));
+      HashCombine(hash,
+        ComputeFNV1a64(&slice.light_direction_to_source,
+          sizeof(slice.light_direction_to_source)));
+      HashCombine(hash,
+        ComputeFNV1a64(&slice.light_position_and_inv_range,
+          sizeof(slice.light_position_and_inv_range)));
+    }
+    return hash;
   }
 
   auto AddBooleanDefine(const bool enabled, std::string_view name,
@@ -166,10 +180,11 @@ namespace {
   }
 
   auto BuildShadowPipelineDesc(const graphics::Texture& shadow_surface,
-    const internal::MeshRasterState raster_state)
+    const vortex::internal::MeshRasterState raster_state)
     -> graphics::GraphicsPipelineDesc
   {
-    static const auto root_bindings = BuildVortexRootBindings();
+    static const auto root_bindings
+      = vortex::internal::BuildVortexRootBindings();
     auto defines = std::vector<graphics::ShaderDefine> {};
     AddBooleanDefine(raster_state.alpha_test, "ALPHA_TEST", defines);
 
@@ -207,9 +222,9 @@ namespace {
   }
 
   auto ResolveRasterState(const PreparedSceneFrame& prepared_scene,
-    const DrawCommand& draw_command) -> internal::MeshRasterState
+    const DrawCommand& draw_command) -> vortex::internal::MeshRasterState
   {
-    return internal::ResolveMeshRasterState(
+    return vortex::internal::ResolveMeshRasterState(
       prepared_scene.GetDrawMetadata(), draw_command.draw_index);
   }
 
@@ -286,12 +301,14 @@ auto ShadowDepthPass::OnFrameStart(
   current_slot_ = slot;
   last_render_state_ = {};
   pass_constants_buffer_.OnFrameStart(sequence, slot);
+  std::erase_if(
+    cache_, [](const auto& item) { return item.second->surface.expired(); });
 }
 
 auto ShadowDepthPass::Record(const PreparedViewShadowInput& view_input,
   const std::shared_ptr<graphics::Texture>& shadow_surface,
-  const ShadowFrameData& frame_data, const glm::vec3& light_direction,
-  const std::span<const DrawCommand> draw_commands) -> RenderState
+  const ShadowFrameData& frame_data, const glm::vec3& light_direction)
+  -> RenderState
 {
   auto depth_slices = std::vector<DepthSlice> {};
   depth_slices.reserve(frame_data.cascades.size());
@@ -309,41 +326,86 @@ auto ShadowDepthPass::Record(const PreparedViewShadowInput& view_input,
     });
   }
 
-  return RecordSlices(
-    view_input, shadow_surface, std::span(depth_slices), draw_commands);
+  return RecordSlices(view_input, shadow_surface, std::span(depth_slices));
 }
 
 auto ShadowDepthPass::RecordSlices(const PreparedViewShadowInput& view_input,
   const std::shared_ptr<graphics::Texture>& shadow_surface,
-  const std::span<const DepthSlice> depth_slices,
-  const std::span<const DrawCommand> draw_commands) -> RenderState
+  const std::span<const DepthSlice> depth_slices, const bool cache_local_depths)
+  -> RenderState
 {
   last_render_state_ = {};
   if (shadow_surface == nullptr || depth_slices.empty()) {
     return last_render_state_;
   }
-  if (!draw_commands.empty()
-    && (view_input.prepared_scene == nullptr
-      || view_input.view_constants == nullptr)) {
-    return last_render_state_;
-  }
-
   auto gfx = renderer_.GetGraphics();
   if (gfx == nullptr) {
     return last_render_state_;
   }
 
-  if (cascade_dsv_surface_ != shadow_surface.get()) {
-    cascade_dsvs_.clear();
-    cascade_dsv_surface_ = shadow_surface.get();
+  auto& entry
+    = cache_[{ shadow_surface.get(), depth_slices.front().target_slice }];
+  if (!entry || entry->surface.lock() != shadow_surface) {
+    entry = std::make_shared<CacheEntry>();
+    entry->surface = shadow_surface;
+  }
+  const auto fingerprint = cache_local_depths
+    ? BuildCacheFingerprint(view_input, depth_slices)
+    : std::nullopt;
+  const auto queue_key = gfx->QueueKeyFor(graphics::QueueRole::kGraphics);
+  auto recorder
+    = gfx->AcquireCommandRecorder(queue_key, "ShadowService ShadowDepth");
+  if (!recorder) {
+    return last_render_state_;
+  }
+  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(*recorder);
+  if (fingerprint && entry->valid && entry->fingerprint == *fingerprint
+    && entry->queue == recorder->GetTargetQueue()) {
+    {
+      graphics::GpuEventScope scope(*recorder, "Vortex.Stage8.ShadowCacheReuse",
+        profiling::ProfileGranularity::kTelemetry,
+        profiling::ProfileCategory::kPass);
+      recorder->RecordQueueWait(entry->fence);
+      AdoptOrBeginPersistentState(*recorder, *shadow_surface);
+      recorder->RequireResourceStateFinal(
+        *shadow_surface, graphics::ResourceStates::kShaderResource);
+    }
+    last_render_state_.shadow_caster_draw_count
+      = view_input.shadow_caster_draw_count;
+    last_render_state_.recording_succeeded = recorder.Submit();
+    last_render_state_.reused_depths = last_render_state_.recording_succeeded;
+    return last_render_state_;
+  }
+  entry->valid = false;
+  const auto generation = ++entry->generation;
+
+  auto slice_draws = std::vector<std::vector<DrawCommand>>(depth_slices.size());
+  auto has_draws = false;
+  if (view_input.prepared_scene != nullptr) {
+    auto culling = internal::ShadowCasterCulling {};
+    for (std::size_t index = 0U; index < depth_slices.size(); ++index) {
+      const auto& slice = depth_slices[index];
+      culling.BuildDrawCommands(*view_input.prepared_scene,
+        slice.light_view_projection, slice.light_position_and_inv_range);
+      const auto draws = culling.GetDrawCommands();
+      slice_draws[index].assign(draws.begin(), draws.end());
+      has_draws = has_draws || !draws.empty();
+      last_render_state_.shadow_caster_draw_count = culling.GetCandidateCount();
+    }
+  }
+  if (has_draws && view_input.view_constants == nullptr) {
+    return last_render_state_;
   }
 
   auto pass_constants_srvs = std::vector<ShaderVisibleIndex> {};
-  if (!draw_commands.empty()) {
+  if (has_draws) {
     pass_constants_srvs.resize(depth_slices.size(), kInvalidShaderVisibleIndex);
     for (std::uint32_t slice_index = 0U; slice_index < depth_slices.size();
       ++slice_index) {
       const auto& depth_slice = depth_slices[slice_index];
+      if (slice_draws[slice_index].empty()) {
+        continue;
+      }
       const auto constants = ShadowPassConstants {
         .light_view_projection = depth_slice.light_view_projection,
         .shadow_bias_parameters = depth_slice.shadow_bias_parameters,
@@ -370,83 +432,96 @@ auto ShadowDepthPass::RecordSlices(const PreparedViewShadowInput& view_input,
     }
   }
 
-  const auto queue_key = gfx->QueueKeyFor(graphics::QueueRole::kGraphics);
-  auto recorder
-    = gfx->AcquireCommandRecorder(queue_key, "ShadowService ShadowDepth");
-  if (!recorder) {
-    return last_render_state_;
-  }
-  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(*recorder);
+  {
+    graphics::GpuEventScope stage_scope(*recorder, "Vortex.Stage8.ShadowDepths",
+      profiling::ProfileGranularity::kTelemetry,
+      profiling::ProfileCategory::kPass);
+    AdoptOrBeginPersistentState(*recorder, *shadow_surface);
+    recorder->RequireResourceState(
+      *shadow_surface, graphics::ResourceStates::kDepthWrite);
 
-  graphics::GpuEventScope stage_scope(*recorder, "Vortex.Stage8.ShadowDepths",
-    profiling::ProfileGranularity::kTelemetry,
-    profiling::ProfileCategory::kPass);
-  AdoptOrBeginPersistentState(*recorder, *shadow_surface);
-  recorder->RequireResourceState(
-    *shadow_surface, graphics::ResourceStates::kDepthWrite);
+    const auto root_constants_param
+      = static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants);
+    const auto view_constants_param
+      = static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants);
 
-  const auto root_constants_param
-    = static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants);
-  const auto view_constants_param
-    = static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants);
+    auto current_raster_state
+      = std::optional<vortex::internal::MeshRasterState> {};
+    for (std::uint32_t slice_index = 0U; slice_index < depth_slices.size();
+      ++slice_index) {
+      const auto target_slice = depth_slices[slice_index].target_slice;
+      const auto dsv = EnsureDepthStencilViewForCascade(
+        *gfx, entry->dsvs, *shadow_surface, target_slice);
+      const auto& shadow_desc = shadow_surface->GetDescriptor();
+      recorder->FlushBarriers();
+      recorder->SetRenderTargets({}, dsv);
+      recorder->ClearDepthStencilView(
+        *shadow_surface, dsv, graphics::ClearFlags::kDepth, 0.0F, 0U);
+      recorder->SetViewport({
+        .top_left_x = 0.0F,
+        .top_left_y = 0.0F,
+        .width = static_cast<float>(shadow_desc.width),
+        .height = static_cast<float>(shadow_desc.height),
+        .min_depth = 0.0F,
+        .max_depth = 1.0F,
+      });
+      recorder->SetScissors({
+        .left = 0,
+        .top = 0,
+        .right = static_cast<std::int32_t>(shadow_desc.width),
+        .bottom = static_cast<std::int32_t>(shadow_desc.height),
+      });
 
-  auto current_raster_state = std::optional<internal::MeshRasterState> {};
-  for (std::uint32_t slice_index = 0U; slice_index < depth_slices.size();
-    ++slice_index) {
-    const auto target_slice = depth_slices[slice_index].target_slice;
-    const auto dsv = EnsureDepthStencilViewForCascade(
-      *gfx, cascade_dsvs_, *shadow_surface, target_slice);
-    const auto& shadow_desc = shadow_surface->GetDescriptor();
-    recorder->FlushBarriers();
-    recorder->SetRenderTargets({}, dsv);
-    recorder->ClearDepthStencilView(*shadow_surface, dsv,
-      graphics::ClearFlags::kDepth | graphics::ClearFlags::kStencil, 0.0F, 0U);
-    recorder->SetViewport({
-      .top_left_x = 0.0F,
-      .top_left_y = 0.0F,
-      .width = static_cast<float>(shadow_desc.width),
-      .height = static_cast<float>(shadow_desc.height),
-      .min_depth = 0.0F,
-      .max_depth = 1.0F,
-    });
-    recorder->SetScissors({
-      .left = 0,
-      .top = 0,
-      .right = static_cast<std::int32_t>(shadow_desc.width),
-      .bottom = static_cast<std::int32_t>(shadow_desc.height),
-    });
+      auto pass_constants_bound = false;
+      for (const auto& draw_command : slice_draws[slice_index]) {
+        const auto raster_state
+          = ResolveRasterState(*view_input.prepared_scene, draw_command);
+        if (!current_raster_state.has_value()
+          || current_raster_state.value() != raster_state) {
+          recorder->SetPipelineState(
+            BuildShadowPipelineDesc(*shadow_surface, raster_state));
+          recorder->SetGraphicsRootConstantBufferView(view_constants_param,
+            view_input.view_constants->GetGPUVirtualAddress());
+          current_raster_state = raster_state;
+          pass_constants_bound = false;
+        }
+        if (!pass_constants_bound) {
+          recorder->SetGraphicsRoot32BitConstant(
+            root_constants_param, pass_constants_srvs[slice_index].get(), 1U);
+          pass_constants_bound = true;
+        }
 
-    auto pass_constants_bound = false;
-    for (const auto& draw_command : draw_commands) {
-      const auto raster_state
-        = ResolveRasterState(*view_input.prepared_scene, draw_command);
-      if (!current_raster_state.has_value()
-        || current_raster_state.value() != raster_state) {
-        recorder->SetPipelineState(
-          BuildShadowPipelineDesc(*shadow_surface, raster_state));
-        recorder->SetGraphicsRootConstantBufferView(view_constants_param,
-          view_input.view_constants->GetGPUVirtualAddress());
-        current_raster_state = raster_state;
-        pass_constants_bound = false;
-      }
-      if (!pass_constants_bound) {
         recorder->SetGraphicsRoot32BitConstant(
-          root_constants_param, pass_constants_srvs[slice_index].get(), 1U);
-        pass_constants_bound = true;
+          root_constants_param, draw_command.draw_index, 0U);
+        recorder->Draw(draw_command.index_count, draw_command.instance_count,
+          0U, draw_command.start_instance);
+        ++last_render_state_.rendered_draw_count;
       }
 
-      recorder->SetGraphicsRoot32BitConstant(
-        root_constants_param, draw_command.draw_index, 0U);
-      recorder->Draw(draw_command.index_count, draw_command.instance_count, 0U,
-        draw_command.start_instance);
-      ++last_render_state_.rendered_draw_count;
+      ++last_render_state_.rendered_cascade_count;
     }
 
-    ++last_render_state_.rendered_cascade_count;
+    recorder->RequireResourceStateFinal(
+      *shadow_surface, graphics::ResourceStates::kShaderResource);
   }
-
-  recorder->RequireResourceStateFinal(
-    *shadow_surface, graphics::ResourceStates::kShaderResource);
+  if (fingerprint) {
+    const auto queue = recorder->GetTargetQueue();
+    const auto fence = queue->Signal();
+    recorder->RecordQueueSignal(fence);
+    recorder->OnSubmission([entry, generation, value = *fingerprint, queue,
+                             fence](graphics::SubmissionOutcome outcome) {
+      if (entry->generation != generation) {
+        return;
+      }
+      entry->valid = outcome == graphics::SubmissionOutcome::kSubmitted;
+      if (entry->valid) {
+        entry->fingerprint = value;
+        entry->queue = queue;
+        entry->fence = fence;
+      }
+    });
+  }
+  last_render_state_.recording_succeeded = recorder.Submit();
   return last_render_state_;
 }
 

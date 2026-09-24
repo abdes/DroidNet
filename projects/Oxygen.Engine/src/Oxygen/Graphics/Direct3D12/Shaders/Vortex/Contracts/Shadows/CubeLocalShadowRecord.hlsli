@@ -19,7 +19,7 @@ struct CubeLocalShadowRecord {
     uint surface_srv;
     uint first_array_layer;
     uint selection_index;
-    uint reserved0;
+    float shadow_strength;
     float2 inverse_resolution;
     uint2 reserved1;
 };

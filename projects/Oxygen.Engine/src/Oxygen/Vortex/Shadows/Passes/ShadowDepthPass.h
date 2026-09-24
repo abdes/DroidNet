@@ -6,8 +6,10 @@
 
 #pragma once
 
+#include <map>
 #include <memory>
 #include <span>
+#include <unordered_map>
 #include <vector>
 
 #include <glm/mat4x4.hpp>
@@ -17,7 +19,6 @@
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
-#include <Oxygen/Vortex/SceneRenderer/Stages/DepthPrepass/DepthPrepassMeshProcessor.h>
 #include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
 #include <Oxygen/Vortex/Shadows/Types/ShadowFrameData.h>
 #include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
@@ -40,6 +41,9 @@ namespace shadows {
     struct RenderState {
       std::uint32_t rendered_cascade_count { 0U };
       std::uint32_t rendered_draw_count { 0U };
+      std::uint32_t shadow_caster_draw_count { 0U };
+      bool recording_succeeded { false };
+      bool reused_depths { false };
     };
 
     struct DepthSlice {
@@ -48,6 +52,8 @@ namespace shadows {
       glm::vec4 light_direction_to_source { 0.0F, -1.0F, 0.0F, 0.0F };
       glm::vec4 light_position_and_inv_range { 0.0F };
       std::uint32_t target_slice { 0U };
+      scene::NodeHandle light_source;
+      std::uint32_t slot_generation { 0U };
     };
 
     OXGN_VRTX_API explicit ShadowDepthPass(Renderer& renderer);
@@ -63,13 +69,13 @@ namespace shadows {
     [[nodiscard]] OXGN_VRTX_API auto Record(
       const PreparedViewShadowInput& view_input,
       const std::shared_ptr<graphics::Texture>& shadow_surface,
-      const ShadowFrameData& frame_data, const glm::vec3& light_direction,
-      std::span<const DrawCommand> draw_commands) -> RenderState;
+      const ShadowFrameData& frame_data, const glm::vec3& light_direction)
+      -> RenderState;
     [[nodiscard]] OXGN_VRTX_API auto RecordSlices(
       const PreparedViewShadowInput& view_input,
       const std::shared_ptr<graphics::Texture>& shadow_surface,
-      std::span<const DepthSlice> depth_slices,
-      std::span<const DrawCommand> draw_commands) -> RenderState;
+      std::span<const DepthSlice> depth_slices, bool cache_local_depths = false)
+      -> RenderState;
     [[nodiscard]] OXGN_VRTX_NDAPI auto GetLastRenderState() const noexcept
       -> const RenderState&
     {
@@ -77,13 +83,15 @@ namespace shadows {
     }
 
   private:
+    struct CacheEntry;
     Renderer& renderer_;
     frame::SequenceNumber current_sequence_ { 0U };
     frame::Slot current_slot_ { frame::kInvalidSlot };
     RenderState last_render_state_ {};
     upload::TransientStructuredBuffer pass_constants_buffer_;
-    std::vector<graphics::NativeView> cascade_dsvs_;
-    const graphics::Texture* cascade_dsv_surface_ { nullptr };
+    std::map<std::pair<const graphics::Texture*, std::uint32_t>,
+      std::shared_ptr<CacheEntry>>
+      cache_;
   };
 
 } // namespace shadows

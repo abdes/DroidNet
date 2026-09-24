@@ -34,7 +34,7 @@ struct alignas(packing::kShaderDataFieldAlignment) CubeLocalShadowRecord {
   ShaderVisibleIndex surface_srv { kInvalidShaderVisibleIndex };
   ShadowArrayLayer first_array_layer { kInvalidShadowArrayLayer };
   LightSelectionIndex selection_index { kInvalidLightSelectionIndex };
-  std::uint32_t reserved0 { 0U };
+  float shadow_strength { 1.0F };
   glm::vec2 inverse_resolution { 0.0F };
   glm::uvec2 reserved1 { 0U };
 };
@@ -55,7 +55,7 @@ static_assert(offsetof(CubeLocalShadowRecord, world_texel_size) == 412U);
 static_assert(offsetof(CubeLocalShadowRecord, surface_srv) == 416U);
 static_assert(offsetof(CubeLocalShadowRecord, first_array_layer) == 420U);
 static_assert(offsetof(CubeLocalShadowRecord, selection_index) == 424U);
-static_assert(offsetof(CubeLocalShadowRecord, reserved0) == 428U);
+static_assert(offsetof(CubeLocalShadowRecord, shadow_strength) == 428U);
 static_assert(offsetof(CubeLocalShadowRecord, inverse_resolution) == 432U);
 static_assert(offsetof(CubeLocalShadowRecord, reserved1) == 440U);
 // NOLINTEND(*-magic-numbers)

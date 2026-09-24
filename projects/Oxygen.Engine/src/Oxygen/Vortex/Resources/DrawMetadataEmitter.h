@@ -134,6 +134,11 @@ public:
   //! Returns one world-space bounding sphere per draw metadata record.
   OXGN_VRTX_NDAPI auto GetDrawBoundingSpheres() const noexcept
     -> std::span<const glm::vec4>;
+  [[nodiscard]] auto GetShadowCasterSources() const noexcept
+    -> std::span<const ShadowCasterSource>
+  {
+    return shadow_caster_sources_;
+  }
 
   //! Shader-visible SRV index for the per-draw bounding-sphere buffer.
   OXGN_VRTX_NDAPI auto GetDrawBoundingSpheresSrvIndex() -> ShaderVisibleIndex;
@@ -232,6 +237,7 @@ private:
   std::vector<SortingKey> keys_;
   std::vector<oxygen::vortex::PreparedSceneFrame::PartitionRange> partitions_;
   std::vector<glm::vec4> draw_bounding_spheres_;
+  std::vector<ShadowCasterSource> shadow_caster_sources_;
   std::vector<VelocityPublicationSource> velocity_publication_sources_;
   vortex::upload::TransientStructuredBuffer draw_bounds_buffer_;
   ShaderVisibleIndex draw_bounds_srv_index_ { kInvalidShaderVisibleIndex };

@@ -3395,15 +3395,15 @@ auto SceneRenderer::RenderDeferredLighting(RenderContext& ctx,
   const auto directional_shadow_surfaces = shadows_ != nullptr
     ? shadows_->InspectDirectionalShadowSurfaces(ctx.current_view.view_id)
     : std::span<const std::shared_ptr<graphics::Texture>> {};
-  const auto* spot_shadow_surface = shadows_ != nullptr
-    ? shadows_->InspectSpotShadowSurface(ctx.current_view.view_id)
-    : nullptr;
-  const auto* point_shadow_surface = shadows_ != nullptr
-    ? shadows_->InspectPointShadowSurface(ctx.current_view.view_id)
-    : nullptr;
+  const auto spot_shadow_surfaces = shadows_ != nullptr
+    ? shadows_->InspectSpotShadowSurfaces(ctx.current_view.view_id)
+    : std::span<const std::shared_ptr<graphics::Texture>> {};
+  const auto point_shadow_surfaces = shadows_ != nullptr
+    ? shadows_->InspectPointShadowSurfaces(ctx.current_view.view_id)
+    : std::span<const std::shared_ptr<graphics::Texture>> {};
   if (!lighting_->RenderDeferredLighting(ctx, recorder, scene_textures,
         frame_light_selection_, shadow_bindings, directional_shadow_surfaces,
-        spot_shadow_surface, point_shadow_surface,
+        spot_shadow_surfaces, point_shadow_surfaces,
         environment_lighting_state_.ambient_bridge_published)) {
     return false;
   }
@@ -3412,7 +3412,10 @@ auto SceneRenderer::RenderDeferredLighting(RenderContext& ctx,
   deferred_lighting_state_.used_service_owned_local_light_geometry
     = lighting_state.used_service_owned_geometry;
   deferred_lighting_state_.directional_light_count
-    = lighting_state.directional_draw_count;
+    = lighting_state.directional_draw_count != 0U
+    ? static_cast<std::uint32_t>(
+        frame_light_selection_.directional_lights.size())
+    : 0U;
   deferred_lighting_state_.point_light_count = lighting_state.point_light_count;
   deferred_lighting_state_.spot_light_count = lighting_state.spot_light_count;
   deferred_lighting_state_.local_light_count = lighting_state.local_light_count;

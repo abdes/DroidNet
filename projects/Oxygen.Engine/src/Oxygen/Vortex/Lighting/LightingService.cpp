@@ -135,8 +135,8 @@ auto LightingService::RenderDeferredLighting(RenderContext& ctx,
   const ShadowFrameData* shadow_data,
   std::span<const std::shared_ptr<graphics::Texture>>
     directional_shadow_surfaces,
-  const graphics::Texture* spot_shadow_surface,
-  const graphics::Texture* point_shadow_surface,
+  std::span<const std::shared_ptr<graphics::Texture>> spot_shadow_surfaces,
+  std::span<const std::shared_ptr<graphics::Texture>> point_shadow_surfaces,
   const bool static_sky_light_available) -> bool
 {
   if (!prepared_lighting_
@@ -149,8 +149,8 @@ auto LightingService::RenderDeferredLighting(RenderContext& ctx,
   auto pass_state = lighting::DeferredLightPass::ExecutionState {};
   try {
     pass_state = deferred_pass_->Record(ctx, recorder, scene_textures, packets,
-      shadow_data, directional_shadow_surfaces, spot_shadow_surface,
-      point_shadow_surface, static_sky_light_available);
+      shadow_data, directional_shadow_surfaces, spot_shadow_surfaces,
+      point_shadow_surfaces, static_sky_light_available);
   } catch (const std::exception&) {
     last_deferred_lighting_state_ = {};
     return false;

@@ -23,6 +23,7 @@ inline constexpr std::uint32_t kShadowCoverageNoRequest = 0U;
 inline constexpr std::uint32_t kShadowCoverageNoInfluence = 1U;
 inline constexpr std::uint32_t kShadowCoverageComplete = 2U;
 inline constexpr std::uint32_t kShadowCoverageOutsideAuthored = 3U;
+inline constexpr std::uint32_t kShadowCoverageQualityOmitted = 4U;
 
 //! Per-view association from an immutable light selection to its shadow record.
 struct alignas(16) LightShadowReference {

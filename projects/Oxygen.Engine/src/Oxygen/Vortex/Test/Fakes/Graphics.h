@@ -253,6 +253,7 @@ public:
 //! Simple CommandQueue that simulates signalling/completion for tests.
 class FakeCommandQueue final : public CommandQueue {
 public:
+  std::vector<CommandList::SubmitQueueAction> submitted_actions;
   explicit FakeCommandQueue(const std::string_view name, const QueueRole role,
     const observer_ptr<const bool> submission_failure = {})
     : CommandQueue(name)
@@ -300,6 +301,9 @@ public:
     if (submission_failure_ && *submission_failure_) {
       throw std::runtime_error("Injected queue submission failure");
     }
+    const auto actions = command_list->TakeSubmitQueueActions();
+    submitted_actions.insert(
+      submitted_actions.end(), actions.begin(), actions.end());
     auto known_states = std::vector<KnownResourceState> {};
     for (const auto& state : command_list->TakeRecordedResourceStates()) {
       known_states.push_back({

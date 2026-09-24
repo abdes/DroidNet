@@ -197,6 +197,10 @@ public:
 
   [[nodiscard]] OXGN_VRTX_API auto GetPendingUploadCount() const noexcept
     -> std::size_t;
+  //! Changes whenever an existing shader-visible texture descriptor is
+  //! repointed.
+  [[nodiscard]] OXGN_VRTX_API auto GetContentRevision(
+    ShaderVisibleIndex descriptor) const noexcept -> std::uint64_t;
   [[nodiscard]] OXGN_VRTX_API auto GetPendingUploadBytes() const noexcept
     -> std::size_t;
   [[nodiscard]] OXGN_VRTX_API auto GetDeferredRetryCount() const noexcept

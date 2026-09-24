@@ -261,6 +261,7 @@ namespace {
       .surface_srv = ShaderVisibleIndex { 0x80000001U },
       .array_layer = ShadowArrayLayer { 0x01000003U },
       .selection_index = LightSelectionIndex { 0x80000005U },
+      .shadow_strength = 0.25F,
       .inverse_resolution = { 0.0625F, 0.03125F },
     };
     auto cube = CubeLocalShadowRecord {
@@ -273,6 +274,7 @@ namespace {
       .surface_srv = projected.surface_srv,
       .first_array_layer = projected.array_layer,
       .selection_index = projected.selection_index,
+      .shadow_strength = projected.shadow_strength,
       .inverse_resolution = projected.inverse_resolution,
     };
     for (std::size_t face = 0U; face < cube.face_light_view_projection.size();
@@ -324,7 +326,7 @@ namespace {
           second ? 0xFFFFFFFFU : 0x80000001U,
           second ? 0xFFFFFFFFU : 0x01000003U,
           second ? 0xFFFFFFFFU : 0x80000005U,
-          0U,
+          word(0.25F),
           word(0.0625F),
           word(0.03125F),
           0U,

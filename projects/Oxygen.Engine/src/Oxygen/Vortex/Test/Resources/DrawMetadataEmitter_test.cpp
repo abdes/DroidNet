@@ -1364,6 +1364,16 @@ NOLINT_TEST_F(DrawMetadataEmitterTest,
   const auto draw_bounds = Emitter().GetDrawBoundingSpheres();
   ASSERT_EQ(draw_bounds.size(), 1U);
 
+  const auto shadow_sources = Emitter().GetShadowCasterSources();
+  ASSERT_EQ(shadow_sources.size(), 2U);
+  EXPECT_EQ(shadow_sources[0].bounds, item_a.world_bounding_sphere);
+  EXPECT_EQ(shadow_sources[1].bounds, item_b.world_bounding_sphere);
+  EXPECT_EQ(shadow_sources[0].draw.transform_index, 41U);
+  EXPECT_EQ(shadow_sources[1].draw.transform_index, 42U);
+  EXPECT_GT(shadow_sources[0].geometry_content_revision, 0U);
+  EXPECT_EQ(shadow_sources[0].geometry_content_revision,
+    shadow_sources[1].geometry_content_revision);
+
   const auto& merged = draw_bounds.front();
   EXPECT_GT(merged.w, 0.0F);
   for (const auto source : {

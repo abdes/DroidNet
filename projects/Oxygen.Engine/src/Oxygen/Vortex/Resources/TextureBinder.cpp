@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
@@ -562,11 +563,19 @@ public:
   [[nodiscard]] auto GetErrorTextureIndex() const -> ShaderVisibleIndex;
   auto DumpEstimatedTextureMemory(std::size_t top_n) const -> void;
   [[nodiscard]] auto GetPendingUploadCount() const noexcept -> std::size_t;
+  [[nodiscard]] auto GetContentRevision(
+    ShaderVisibleIndex descriptor) const noexcept -> std::uint64_t
+  {
+    const auto found = content_revisions_.find(descriptor);
+    return found != content_revisions_.end() ? found->second : 0U;
+  }
   [[nodiscard]] auto GetPendingUploadBytes() const noexcept -> std::size_t;
   [[nodiscard]] auto GetDeferredRetryCount() const noexcept -> std::size_t;
   [[nodiscard]] auto GetPendingUploadByteBudget() const noexcept -> std::size_t;
 
 private:
+  mutable std::unordered_map<ShaderVisibleIndex, std::uint64_t>
+    content_revisions_;
   enum class FailurePolicy : uint8_t {
     kBindErrorTexture,
     kKeepPlaceholderBound,
@@ -765,6 +774,12 @@ auto TextureBinder::DumpEstimatedTextureMemory(const std::size_t top_n) const
 auto TextureBinder::GetPendingUploadCount() const noexcept -> std::size_t
 {
   return impl_->GetPendingUploadCount();
+}
+
+auto TextureBinder::GetContentRevision(
+  ShaderVisibleIndex descriptor) const noexcept -> std::uint64_t
+{
+  return impl_->GetContentRevision(descriptor);
 }
 
 auto TextureBinder::GetPendingUploadBytes() const noexcept -> std::size_t
@@ -968,6 +983,7 @@ auto TextureBinder::Impl::GetOrAllocate(
 
   registry.Register(entry.texture);
   registry.RegisterView(*entry.texture, std::move(handle), view_desc);
+  ++content_revisions_[entry.srv_index];
 
   // Insert before initiating the load to ensure completion callbacks can
   // always resolve the entry even if the load completes synchronously.
@@ -1248,6 +1264,7 @@ auto TextureBinder::Impl::OnFrameStart() -> void
         continue;
       }
 
+      ++content_revisions_[entry.srv_index];
       LOG_F(INFO,
         "Repointed descriptor {} to final texture for resource {} (ticket={})",
         entry.descriptor_handle.ToBindlessHandle(), resource_key, ticket.id);
@@ -1863,6 +1880,9 @@ auto TextureBinder::Impl::ProcessEvictions() -> void
         = MakeTextureSrvViewDesc(Format::kRGBA8UNorm, {}, {});
       const bool updated = registry.UpdateView(*placeholder_texture_,
         entry.descriptor_handle.ToBindlessHandle(), view_desc);
+      if (updated) {
+        ++content_revisions_[entry.srv_index];
+      }
       if (!updated) {
         LOG_F(ERROR,
           "TextureBinder eviction failed to repoint descriptor {} for {}",
@@ -2117,6 +2137,7 @@ auto TextureBinder::Impl::TryRepointEntryToErrorTexture(
     return false;
   }
 
+  ++content_revisions_[entry.srv_index];
   LOG_F(INFO, "Repointed descriptor {} to error texture for resource {}",
     entry.descriptor_handle.ToBindlessHandle(), resource_key);
   return true;

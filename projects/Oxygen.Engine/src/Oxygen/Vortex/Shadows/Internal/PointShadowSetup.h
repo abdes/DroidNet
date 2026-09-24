@@ -30,6 +30,8 @@ public:
   [[nodiscard]] OXGN_VRTX_API auto BuildPointRecords(
     const PreparedViewShadowInput& view_input,
     std::span<const FrameLocalLightSelection> local_lights,
+    std::span<const ConventionalShadowTargetAllocator::LocalSelection>
+      selections,
     const ConventionalShadowTargetAllocator::PointAllocation& allocation) const
     -> std::vector<CubeLocalShadowRecord>;
 };

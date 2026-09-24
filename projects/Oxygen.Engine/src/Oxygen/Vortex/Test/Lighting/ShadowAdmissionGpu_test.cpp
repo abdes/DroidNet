@@ -78,8 +78,10 @@ namespace {
       EXPECT_EQ(data->cube_local_records.size(), 5U);
       EXPECT_EQ(data->projected_local_records.size(), 9U);
       EXPECT_EQ(data->local_shadow_references.size(), 14U);
-      const auto* surface
-        = shadows->InspectPointShadowSurface(ctx.current_view.view_id);
+      const auto surfaces
+        = shadows->InspectPointShadowSurfaces(ctx.current_view.view_id);
+      ASSERT_FALSE(surfaces.empty());
+      const auto* surface = surfaces.front().get();
       ASSERT_NE(surface, nullptr);
       if (!first_surface) {
         first_surface = surface->shared_from_this();
@@ -120,16 +122,21 @@ namespace {
     SetSurface(data::MaterialDomain::kOpaque);
     ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F, 3U));
     const auto before = renderer_->GetLightingAllocationBudget()->Snapshot();
-    auto extra = AddPoint(4U);
+    auto extras = std::vector<scene::SceneNode> {};
+    for (unsigned index = 4U; index < 11U; ++index) {
+      extras.push_back(AddPoint(index));
+    }
     ASSERT_NO_FATAL_FAILURE(
       RenderSurface(false, 0.0F, 1U, ExpectedViewOutcome::kRejected));
     const auto rejected = renderer_->GetLightingAllocationBudget()->Snapshot();
     EXPECT_GT(rejected.rejected_requests, before.rejected_requests);
     EXPECT_GT(rejected.last_requested, rejected.last_available);
     EXPECT_LE(rejected.allocated, rejected.limits.total);
-    auto disabled = std::make_unique<scene::PointLight>();
-    disabled->Common().affects_world = false;
-    ASSERT_TRUE(extra.ReplaceLight(std::move(disabled)));
+    for (auto& extra : extras) {
+      auto disabled = std::make_unique<scene::PointLight>();
+      disabled->Common().affects_world = false;
+      ASSERT_TRUE(extra.ReplaceLight(std::move(disabled)));
+    }
     ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F, 1U));
     EXPECT_GT(ReadFloatTexture(*probe->color).at(0).at(0), 1.0e-6F);
     EXPECT_EQ(

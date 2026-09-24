@@ -6,20 +6,13 @@
 
 #pragma once
 
-#include <numbers>
+#include <vector>
 
-#include <Oxygen/Vortex/Shadows/Internal/ShadowEligibility.h>
-#include <Oxygen/Vortex/Types/FrameLightSelection.h>
+#include <Oxygen/Vortex/PreparedSceneFrame.h>
 
 namespace oxygen::vortex::shadows::internal {
 
-//! Ordinary spots use a projected shadow; hemispheres require six-face
-//! coverage.
-[[nodiscard]] inline auto UsesCubeLocalShadow(
-  const FrameLocalLightSelection& light) -> bool
-{
-  return light.kind == LocalLightKind::kPoint
-    || light.outer_cone_half_angle_radians == std::numbers::pi_v<float> / 2.0F;
-}
+auto BuildShadowCasterDependencies(const PreparedSceneFrame& scene)
+  -> std::vector<ShadowCasterDependency>;
 
 } // namespace oxygen::vortex::shadows::internal
