@@ -1,0 +1,548 @@
+{
+  "audit_date": "2026-09-25",
+  "source_head": "cf1a103cc916e78df0a515205a0ccab98e48e51a",
+  "scope": "Existing E results inspected without rerunning benchmarks or captures. The later user-reported test build failure received targeted Debug/Release builds and five cases in each configuration; prior evidence retains original identities.",
+  "post_E_source_changes": [
+    "projects/Oxygen.Engine/src/Oxygen/Cooker/Import/Internal/ImportEventLoop.cpp",
+    "projects/Oxygen.Engine/src/Oxygen/Cooker/Import/Internal/ImportEventLoop.h",
+    "projects/Oxygen.Engine/src/Oxygen/Cooker/Test/Import/ImportEventLoop_test.cpp"
+  ],
+  "editor_authoring_changed_since_2b61d102c": false,
+  "benchmark_rows": [
+    {
+      "mode": "qualified-native",
+      "case": "shadow-share-incompatible-deferred",
+      "images": 2,
+      "sample_frames": 240
+    },
+    {
+      "mode": "qualified-native",
+      "case": "shadow-share-moving-deferred",
+      "images": 8,
+      "sample_frames": 480
+    },
+    {
+      "mode": "qualified-native",
+      "case": "shadow-share-moving-forward",
+      "images": 8,
+      "sample_frames": 480
+    },
+    {
+      "mode": "qualified-native",
+      "case": "shadow-share-partial-deferred",
+      "images": 2,
+      "sample_frames": 240
+    },
+    {
+      "mode": "qualified-native",
+      "case": "shadow-share-small-deferred",
+      "images": 2,
+      "sample_frames": 240
+    },
+    {
+      "mode": "qualified-native",
+      "case": "shadow-share-static-deferred",
+      "images": 2,
+      "sample_frames": 240
+    },
+    {
+      "mode": "qualified-native",
+      "case": "shadow-share-static-forward",
+      "images": 2,
+      "sample_frames": 240
+    },
+    {
+      "mode": "qualified-native",
+      "case": "shadows-1-1-deferred",
+      "images": 1,
+      "sample_frames": 240
+    },
+    {
+      "mode": "qualified-native",
+      "case": "shadows-4-8-deferred",
+      "images": 1,
+      "sample_frames": 240
+    },
+    {
+      "mode": "qualified-native",
+      "case": "shadows-moving-deferred",
+      "images": 4,
+      "sample_frames": 480
+    },
+    {
+      "mode": "qualified-native",
+      "case": "sparse-1-deferred",
+      "images": 1,
+      "sample_frames": 240
+    },
+    {
+      "mode": "qualified-native",
+      "case": "sparse-4096-deferred",
+      "images": 1,
+      "sample_frames": 240
+    },
+    {
+      "mode": "qualified-native",
+      "case": "sparse-4096-forward",
+      "images": 1,
+      "sample_frames": 240
+    },
+    {
+      "mode": "qualified-tracy",
+      "case": "shadow-share-incompatible-deferred",
+      "images": 2,
+      "sample_frames": 240
+    },
+    {
+      "mode": "qualified-tracy",
+      "case": "shadow-share-moving-deferred",
+      "images": 8,
+      "sample_frames": 480
+    },
+    {
+      "mode": "qualified-tracy",
+      "case": "shadow-share-partial-deferred",
+      "images": 2,
+      "sample_frames": 240
+    },
+    {
+      "mode": "qualified-tracy",
+      "case": "shadow-share-small-deferred",
+      "images": 2,
+      "sample_frames": 240
+    },
+    {
+      "mode": "qualified-tracy",
+      "case": "shadow-share-static-deferred",
+      "images": 2,
+      "sample_frames": 240
+    },
+    {
+      "mode": "qualified-tracy",
+      "case": "shadows-4-8-deferred",
+      "images": 1,
+      "sample_frames": 240
+    },
+    {
+      "mode": "qualified-tracy",
+      "case": "shadows-moving-deferred",
+      "images": 4,
+      "sample_frames": 480
+    },
+    {
+      "mode": "qualified-tracy",
+      "case": "sparse-1-deferred",
+      "images": 1,
+      "sample_frames": 240
+    },
+    {
+      "mode": "qualified-tracy",
+      "case": "sparse-4096-deferred",
+      "images": 1,
+      "sample_frames": 240
+    }
+  ],
+  "scene_captures": [
+    {
+      "scene_mode": "InstancingTestScene-native",
+      "frame_ms": {
+        "count": 2053,
+        "mean": 14.606429615197273,
+        "p50": 15.0,
+        "p95": 16.0,
+        "p99": 17.0,
+        "max": 18.0
+      },
+      "fps": 68.46300063360789,
+      "exit_code": 0
+    },
+    {
+      "scene_mode": "InstancingTestScene-tracy",
+      "frame_ms": {
+        "count": 1953,
+        "mean": 15.346398653865847,
+        "p50": 15.24555600000167,
+        "p95": 15.894917600002373,
+        "p99": 16.296789520002203,
+        "max": 16.882888999996794
+      },
+      "fps": 65.16186778114839,
+      "exit_code": 0
+    },
+    {
+      "scene_mode": "NewSponza_Main_glTF_003-native",
+      "frame_ms": {
+        "count": 1017,
+        "mean": 29.451327433628318,
+        "p50": 29.0,
+        "p95": 31.0,
+        "p99": 32.0,
+        "max": 33.0
+      },
+      "fps": 33.95432692307693,
+      "exit_code": 0
+    },
+    {
+      "scene_mode": "NewSponza_Main_glTF_003-tracy",
+      "frame_ms": {
+        "count": 999,
+        "mean": 29.974923168168168,
+        "p50": 29.84902499999953,
+        "p95": 30.607008000000132,
+        "p99": 31.168794140001992,
+        "max": 31.99626300000091
+      },
+      "fps": 33.361219789945906,
+      "exit_code": 0
+    }
+  ],
+  "test_records": [
+    {
+      "file": "tests/Oxygen.Graphics.Common.Submission.Tests-Release.json",
+      "tests": 5
+    },
+    {
+      "file": "tests/Oxygen.Graphics.Common.Commander.Tests-Release.json",
+      "tests": 20
+    },
+    {
+      "file": "tests/Oxygen.Graphics.Common.CommandListPool.Tests-Release.json",
+      "tests": 15
+    },
+    {
+      "file": "tests/Oxygen.Graphics.Common.ResourceRegistry.Tests-Release.json",
+      "tests": 73
+    },
+    {
+      "file": "tests/Oxygen.Graphics.Common.ReadbackTracker.Tests-Release.json",
+      "tests": 17
+    },
+    {
+      "file": "tests/Oxygen.Graphics.Common.DeferredReclaimer.Tests-Release.json",
+      "tests": 18
+    },
+    {
+      "file": "tests/Oxygen.Graphics.Headless.Execution.Tests-Release.json",
+      "tests": 3
+    },
+    {
+      "file": "tests/Oxygen.Loader.GraphicsBackendLoader.Tests-Release.json",
+      "tests": 17
+    },
+    {
+      "file": "tests/Oxygen.Loader.BackendLifetimeIntegration.Tests-Release.json",
+      "tests": 36
+    },
+    {
+      "file": "tests/Oxygen.Vortex.TransformUploader.Tests-Release.json",
+      "tests": 18
+    },
+    {
+      "file": "tests/Oxygen.Vortex.DrawMetadataEmitter.Tests-Release.json",
+      "tests": 15
+    },
+    {
+      "file": "tests/Oxygen.Vortex.GeometryUploader.Tests-Release.json",
+      "tests": 30
+    },
+    {
+      "file": "tests/Oxygen.Vortex.MaterialBinder.Tests-Release.json",
+      "tests": 34
+    },
+    {
+      "file": "tests/Oxygen.Vortex.AtlasBuffer.Tests-Release.json",
+      "tests": 10
+    },
+    {
+      "file": "tests/Oxygen.Vortex.TextureBinder.Tests-Release.json",
+      "tests": 27
+    },
+    {
+      "file": "tests/Oxygen.Vortex.LightingService.Tests-Release.json",
+      "tests": 34
+    },
+    {
+      "file": "tests/Oxygen.Vortex.PostProcessService.Tests-Release.json",
+      "tests": 27
+    },
+    {
+      "file": "tests/Oxygen.Vortex.ShadowService.Tests-Release.json",
+      "tests": 50
+    },
+    {
+      "file": "tests/Oxygen.Vortex.LightingInstrumentation.Tests-Release.json",
+      "tests": 19
+    },
+    {
+      "file": "tests/Oxygen.Vortex.LightingImageReference.Tests-Release.json",
+      "tests": 26
+    },
+    {
+      "file": "tests/Oxygen.Graphics.Common.Submission.Tests-diagnostics-Debug.json",
+      "tests": 6
+    },
+    {
+      "file": "tests/Oxygen.Graphics.Common.Submission.Tests-diagnostics-Release.json",
+      "tests": 5
+    },
+    {
+      "file": "tests/Oxygen.Graphics.Common.Submission.Tests-diagnostics-TracyRelease.json",
+      "tests": 5
+    },
+    {
+      "file": "tests/Oxygen.Vortex.LightingImageReference.Tests-diagnostics-Debug.json",
+      "tests": 26
+    },
+    {
+      "file": "tests/Oxygen.Vortex.LightingImageReference.Tests-diagnostics-Release.json",
+      "tests": 26
+    },
+    {
+      "file": "tests/Oxygen.Vortex.LightingImageReference.Tests-diagnostics-TracyRelease.json",
+      "tests": 26
+    },
+    {
+      "file": "tests/Oxygen.Vortex.LightingImageReference.Tests-retention-Debug.json",
+      "tests": 2
+    },
+    {
+      "file": "tests/Oxygen.Vortex.LightingImageReference.Tests-retention-Release.json",
+      "tests": 2
+    },
+    {
+      "file": "tests/Oxygen.Vortex.LightingImageReference.Tests-retention-TracyRelease.json",
+      "tests": 2
+    },
+    {
+      "file": "tests/Oxygen.Vortex.ShadowService.Tests-diagnostics-Debug.json",
+      "tests": 50
+    },
+    {
+      "file": "tests/Oxygen.Vortex.ShadowService.Tests-diagnostics-Release.json",
+      "tests": 50
+    },
+    {
+      "file": "tests/Oxygen.Vortex.ShadowService.Tests-diagnostics-TracyRelease.json",
+      "tests": 50
+    }
+  ],
+  "integrated_release_cases": 494,
+  "verified_record_sha256": {
+    "qualified-native/shadow-share-incompatible-deferred/image-comparison.json": "16b867d245624a00aba059a04412a39440b36ade5e3fa45e14101f3a74e4ff42",
+    "qualified-native/shadow-share-incompatible-deferred/manifest.json": "623854d28212f7779afec650e4c50e67c2bb1cfe75bc115f61799ff750acf981",
+    "qualified-native/shadow-share-moving-deferred/image-comparison.json": "cfb765ea5cf1d16f3c44f435bc9b361aa323a1b573fbb57c48317da54e2ef8ad",
+    "qualified-native/shadow-share-moving-deferred/manifest.json": "1630480e9f75de09e8cc2af1cec286f305ab5e536de62ae5feef56389104524b",
+    "qualified-native/shadow-share-moving-forward/image-comparison.json": "4b15c4ebe81df599167628ce96c384bd2e6feea9e073c9a6ecae61fc8b549ead",
+    "qualified-native/shadow-share-moving-forward/manifest.json": "dd5cbcd8d60a0bfe6af3cb613c7dc55797e5b08b7174800ee974985cbb45915d",
+    "qualified-native/shadow-share-partial-deferred/image-comparison.json": "0e34f1b646ed6521efa388faedb72f63ab450570892eae44ad8bcef6309eb6ef",
+    "qualified-native/shadow-share-partial-deferred/manifest.json": "c5dc3c2d2d1d0e29650b2f7acaa9f880fd981fa5f7a2b9a9b0e53111ea82a490",
+    "qualified-native/shadow-share-small-deferred/image-comparison.json": "a06892b0dddf3da7c58a397f3e37ac275133d55c0235058b142044d1ae4f511e",
+    "qualified-native/shadow-share-small-deferred/manifest.json": "13928b82ff02e32e81fb2d8acc53161f93bf9a28cf5afcbd716df2373390f696",
+    "qualified-native/shadow-share-static-deferred/image-comparison.json": "3532c1a383f2c1a6731c2805d40ed4e58ff868c5b76dd203b272ea0b185c1cd4",
+    "qualified-native/shadow-share-static-deferred/manifest.json": "5f04e062bf19bfb4966b29b7ae33467ef26551ab9afd1dd474d951481c91db84",
+    "qualified-native/shadow-share-static-forward/image-comparison.json": "5d0dac9c16d96c85e062960bf283fe8a9fc6d5ee31c8b7fcef18be041ada7360",
+    "qualified-native/shadow-share-static-forward/manifest.json": "38eb9a080c23ad6d1947ce2cc4057bee62d47523f11839ace6d621dec76b1e21",
+    "qualified-native/shadows-1-1-deferred/image-comparison.json": "e40f95de71525d8649c5e52b81cf857c648106abb9cc741532a3d38d626e385a",
+    "qualified-native/shadows-1-1-deferred/manifest.json": "87cbed2a1b24a221716e645eaf6d2f938055929f8857b359129ce9fc6a7d12b0",
+    "qualified-native/shadows-4-8-deferred/image-comparison.json": "6beb0636f282427c3acd2685968df3f9615367d080ef75f8ef06ba34f12a1e56",
+    "qualified-native/shadows-4-8-deferred/manifest.json": "aaab8738dac6578c5038161c03c358276f61016bfe87cfac956f290a15577b29",
+    "qualified-native/shadows-moving-deferred/image-comparison.json": "39c3025ab049cd64bf21f9f0bc5fedc1fbb8291527e281dd5248f747a4590a7c",
+    "qualified-native/shadows-moving-deferred/manifest.json": "6fac28fb68c5d424c4be15bf72bf9392063d9eccdfd57d2eadb70806569730f4",
+    "qualified-native/sparse-1-deferred/image-comparison.json": "ebb3d2323b3ab499a2a1ec4a5d962c298ce7914c3f276490cf4fc84ade5f4157",
+    "qualified-native/sparse-1-deferred/manifest.json": "32a9c7e0309ae71234282888b648806b414b1c615a81d42fe0336c7a4da9b50c",
+    "qualified-native/sparse-4096-deferred/image-comparison.json": "640059c1cc5f9ee82180c1099b8091a9758fe98728ec29c48a4dc6f5f3c50ad5",
+    "qualified-native/sparse-4096-deferred/manifest.json": "302b22c641fda8edc67d1ee43b98314635a9369f69ca7257ffc25dda28f19f5b",
+    "qualified-native/sparse-4096-forward/image-comparison.json": "33dbc5fdc6ca231cfc1ef930833d1898976ee11c41c3abc95a4efd70c57e1fe0",
+    "qualified-native/sparse-4096-forward/manifest.json": "1e747b9951e67cabc1fe9f6b01750df8aac981904a6114fc9e4b90e897edd2c5",
+    "qualified-tracy/shadow-share-incompatible-deferred/image-comparison.json": "24bb04a568685220c37c1979668419fea3e4e6f142b82f42a30192bb123fcc5a",
+    "qualified-tracy/shadow-share-incompatible-deferred/manifest.json": "3eaa59be753205d84fe5179048aba2b0f78d5a1774e0b268994020afad913a1d",
+    "qualified-tracy/shadow-share-moving-deferred/image-comparison.json": "38130625dadd7a69ad12b44e666d21cd8b2ce1caca8e5cb5b60ce126df74355b",
+    "qualified-tracy/shadow-share-moving-deferred/manifest.json": "9c0f099523d45ea7b47550c9dfbb67d81725d991a22409e8fcedb53f875bf765",
+    "qualified-tracy/shadow-share-partial-deferred/image-comparison.json": "af8cc49fe520170c9be8a4a3d395f98e802a669fbc36040e388b8366ee676b36",
+    "qualified-tracy/shadow-share-partial-deferred/manifest.json": "8e1027d653676733119a96cc2f7e113ce2f866729875f4b5bf06147130595d78",
+    "qualified-tracy/shadow-share-small-deferred/image-comparison.json": "9584e85e1a287226b0e1992eb92afe256a330391155bcea56e3317cf90673a30",
+    "qualified-tracy/shadow-share-small-deferred/manifest.json": "caed97e1341d23ed9b8d4bd775cdc79efa6c272bad354f2e63fa8ffdc0095505",
+    "qualified-tracy/shadow-share-static-deferred/image-comparison.json": "16378be135476e022f2db99a8d52e2fae87d7c4749aed8a28af8ac6a664b9ba8",
+    "qualified-tracy/shadow-share-static-deferred/manifest.json": "1d7f8f34916f53f4743d448b2d06ab36dc8d933e6fded039344869cb1064f8fc",
+    "qualified-tracy/shadows-4-8-deferred/image-comparison.json": "3ae837469c9ee1433fe0b28f332e16f87e3985e620879ed9d094d6e5374fff29",
+    "qualified-tracy/shadows-4-8-deferred/manifest.json": "267114cc3475828ae86c008dd85feee467baae6414385f94ac34c1fce5cf3fd7",
+    "qualified-tracy/shadows-moving-deferred/image-comparison.json": "78cc641aa319a7a5b0fc83ed106c646d4b955861b94c136137714bc58aacb81a",
+    "qualified-tracy/shadows-moving-deferred/manifest.json": "4c6bc2f8de0d390b6dd28f748d5b74014adc424c20cc437584bd2ae7cc1bf055",
+    "qualified-tracy/sparse-1-deferred/image-comparison.json": "7776c9472d738f63bfc101020cd7657a5edb638bae05788b245cfc7a79ccd234",
+    "qualified-tracy/sparse-1-deferred/manifest.json": "ac4a237a4b00784c8d03b7477ca2d80acbc75e01be231c02007afc04644e0854",
+    "qualified-tracy/sparse-4096-deferred/image-comparison.json": "667601df5448f852b92922fe438d0a056134af1e43a27ac3d24edd5a16c70cdf",
+    "qualified-tracy/sparse-4096-deferred/manifest.json": "76a3d5d414b5a7041f885acdebdaba0b9991955d3552631249e4eaa2c53a68fb",
+    "tests-Release.json": "dbf8a24ae8464125068ccea65895eff7fe97bc23fc4d6b52f9890c6b21a55874",
+    "tests/Oxygen.Graphics.Common.Submission.Tests-Release.json": "d4b7eb15f763b037ab8648b1c58f78e8d72c0d94c420b136a0c87f1ac54ab540",
+    "tests/Oxygen.Graphics.Common.Commander.Tests-Release.json": "c02a378be3250ba16619fbb876a39ee4912c9774c3b43c3a2e9c43a5993032a4",
+    "tests/Oxygen.Graphics.Common.CommandListPool.Tests-Release.json": "1c93fcc97398dac8fcf8e3858cc6f0659a295044faf14227ffc5d3ae9ea65bb4",
+    "tests/Oxygen.Graphics.Common.ResourceRegistry.Tests-Release.json": "2017942bbb31f19b4625715277f8a344fa491ce0b0371bc7a8769956a023d0a6",
+    "tests/Oxygen.Graphics.Common.ReadbackTracker.Tests-Release.json": "9131b49ef35bf513ef641fbae6ba2fefb0e89ee29a2f439096fb1fec3f43449b",
+    "tests/Oxygen.Graphics.Common.DeferredReclaimer.Tests-Release.json": "1f9250d99dc6fae337b5582f6ef4f3a366bb3d2ad8e3e4e44c53538b539db2d9",
+    "tests/Oxygen.Graphics.Headless.Execution.Tests-Release.json": "9aac3e6922eff173916417939bca587370d8fda947c2244deb8163c1e9b0e9d9",
+    "tests/Oxygen.Loader.GraphicsBackendLoader.Tests-Release.json": "ed068b8c47f099cca5eacb6cb0cc69071519df06eb67f2579a5cc0a2fa864fc3",
+    "tests/Oxygen.Loader.BackendLifetimeIntegration.Tests-Release.json": "dcc1477129acf94497b6592c649eda15718fbe718c08949c3fa9bc66a4edabb6",
+    "tests/Oxygen.Vortex.TransformUploader.Tests-Release.json": "1a0a9da00ee8a206de055b1a54d719aa3747baa65229bdd8c7336c7978fb28f9",
+    "tests/Oxygen.Vortex.DrawMetadataEmitter.Tests-Release.json": "25178aa766d8bcbca580b5d37565aa1d4355f82bff26c08d040b0fa51943e636",
+    "tests/Oxygen.Vortex.GeometryUploader.Tests-Release.json": "41b8f58c78f2e6c24939597b30986ab0888fe65f26e54dec2504784795b841ae",
+    "tests/Oxygen.Vortex.MaterialBinder.Tests-Release.json": "9412ea6ce0e4ca2609677dcef300efce0c339dc6c1ce32fde49ae4613fa81c40",
+    "tests/Oxygen.Vortex.AtlasBuffer.Tests-Release.json": "f9820ee27304d8a992168d134a37a3043221c4c54ac7481c4a56cb7191fc35d5",
+    "tests/Oxygen.Vortex.TextureBinder.Tests-Release.json": "1b1d91b25bde10113278ec91cab2a63b282c1d62121204c3f237acb3ab65ab21",
+    "tests/Oxygen.Vortex.LightingService.Tests-Release.json": "f9465ea55122bb35e1d28ce7134c4443b107b2621226cae7611fa3ba9aa5e816",
+    "tests/Oxygen.Vortex.PostProcessService.Tests-Release.json": "e50ffbcf3a186d449f8fe627f1c6ea575e7cc1ab0d0a697b3fd2c2ebff30f0a7",
+    "tests/Oxygen.Vortex.ShadowService.Tests-Release.json": "9cacdec589d6a0541021cb032259ef031ed7ed5a9e0998d02c0920a4d4ab5c6f",
+    "tests/Oxygen.Vortex.LightingInstrumentation.Tests-Release.json": "b03a8889641c7b308e9dd1c4929b3edb38a23f55430f75e41adee5975b4ac85a",
+    "tests/Oxygen.Vortex.LightingImageReference.Tests-Release.json": "bc97793f37160ac5476146543bd90c0c5505048273f0a65b56458a752100fe16",
+    "tests/Oxygen.Graphics.Common.Submission.Tests-diagnostics-Debug.json": "60a0cb0895dd5650b30f90bc3be60703dea55d28f39ed4e7ab03c30968401443",
+    "tests/Oxygen.Graphics.Common.Submission.Tests-diagnostics-Release.json": "2ba07f78b1122084e826d25a15d8ec8727eed371aa842e0ec9ba9aa9cde8a61c",
+    "tests/Oxygen.Graphics.Common.Submission.Tests-diagnostics-TracyRelease.json": "88009f0a80c6b7ca8ca786f1b51ba2d5f711c81ab536c17f9c4235ceaf2b3b31",
+    "tests/Oxygen.Vortex.LightingImageReference.Tests-diagnostics-Debug.json": "9cc86adeb6ce8d989a9eaca626f8ecc4cae8ee1b122220719a1549dc6ab53010",
+    "tests/Oxygen.Vortex.LightingImageReference.Tests-diagnostics-Release.json": "0e6893b23480518b31b54a982169676e2ef355c9ce58324b52d171ecb4a13eca",
+    "tests/Oxygen.Vortex.LightingImageReference.Tests-diagnostics-TracyRelease.json": "19125ef1d7591f7bef851fc1b813048ef5c24f5de6cd8de7e45b1200a597d2cf",
+    "tests/Oxygen.Vortex.LightingImageReference.Tests-retention-Debug.json": "d0e6906d9eef99f2305f44c287cc18e648a8a83f77c3531807c75870a3696977",
+    "tests/Oxygen.Vortex.LightingImageReference.Tests-retention-Release.json": "5877d3ee65ca971e0aee6c80025bf7d8095e53b13b8d04c330a8b3b27e5dbf9a",
+    "tests/Oxygen.Vortex.LightingImageReference.Tests-retention-TracyRelease.json": "c592360dbe4c61e1eb8f0a09e64994bc558ddcc914539a7701e3a09a164119da",
+    "tests/Oxygen.Vortex.ShadowService.Tests-diagnostics-Debug.json": "66d29e2159c2ea4cb8975e80177b5e9d0f0e092f376fa6baeec506edb2866020",
+    "tests/Oxygen.Vortex.ShadowService.Tests-diagnostics-Release.json": "432ba407182440cb9c9c6ee99adb65c8858b0e933185bfe865060ddae3930af0",
+    "tests/Oxygen.Vortex.ShadowService.Tests-diagnostics-TracyRelease.json": "fb4e172e8bb4b57753aa61d8ef9730dc991ccd01d5141215f4f4d2e00c5f6521",
+    "qualified-scenes/InstancingTestScene-native/summary.json": "7aa2ff862480d1aaab2e448f7625ace2d85ed2842e523253621f52eec642f1d1",
+    "qualified-scenes/InstancingTestScene-native/exit-code.txt": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354",
+    "qualified-scenes/InstancingTestScene-tracy/summary.json": "060c12a68b4a4ce011c41cb7e9fd65cf901ef026201273e77e4d6716cad8cc42",
+    "qualified-scenes/InstancingTestScene-tracy/exit-code.txt": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354",
+    "qualified-scenes/NewSponza_Main_glTF_003-native/summary.json": "b8a1cfb4335799d966e3697e78a68da0484dde61aeb4b6c793a01146e357c560",
+    "qualified-scenes/NewSponza_Main_glTF_003-native/exit-code.txt": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354",
+    "qualified-scenes/NewSponza_Main_glTF_003-tracy/summary.json": "d4ea8efd822dbc9641c5951188189e12591a0d81e75aa99459924615cdf73fdf",
+    "qualified-scenes/NewSponza_Main_glTF_003-tracy/exit-code.txt": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+  },
+  "manual_RenderScene_interactions": "Confirmed by user: camera movement, resizing, switching scenes and closing RenderScene.",
+  "manual_editor_workflow": "User explicitly retained this check: Leave the editor to me... do the rest for now. Engine-side F acceptance complete; manual editor gate pending.",
+  "test_repair_commit": "4fd55cd8d",
+  "test_repair_scope": "Three test files only: removed allocator API migration, managed-retirement poll, nodiscard/unused-local warnings. All three owning targets built in Debug and Release; five focused cases passed in each. No production code changed, no capture or benchmark rerun.",
+  "fresh_test_records": [
+    {
+      "record": "Oxygen.Cooker.AsyncImportGeometryDescriptor.Tests-Debug.json.gz",
+      "tests": 2
+    },
+    {
+      "record": "Oxygen.Cooker.AsyncImportGeometryDescriptor.Tests-Release.json.gz",
+      "tests": 2
+    },
+    {
+      "record": "Oxygen.Cooker.PakDomainValidation.Tests-Debug.json.gz",
+      "tests": 2
+    },
+    {
+      "record": "Oxygen.Cooker.PakDomainValidation.Tests-Release.json.gz",
+      "tests": 2
+    },
+    {
+      "record": "Oxygen.Vortex.LightingGpuAbi.Tests-Debug.json.gz",
+      "tests": 1
+    },
+    {
+      "record": "Oxygen.Vortex.LightingGpuAbi.Tests-Release.json.gz",
+      "tests": 1
+    }
+  ],
+  "fresh_artifacts": [
+    {
+      "path": "allocation-before-retirement-poll-Debug.json.gz",
+      "sha256": "cf59cd432c2cb6618ab065104d5035cbf6495bee5512b43e5aace2760a106c57",
+      "original_sha256": "ecaeab4b21b5c950a31cb8a0a6744683ecb346cf2bdcb15e4c6344eab16fc3b0"
+    },
+    {
+      "path": "allocation-before-retirement-poll-Debug.log.gz",
+      "sha256": "d3ebedacc0347da1a6f9041e9d1c27c000525842bd7c763adcad90a9d29cc239",
+      "original_sha256": "7577942496750da923f267f94c986f283a04583d85442e095ad448d9ba85e40d"
+    },
+    {
+      "path": "build-Debug-repair.log.gz",
+      "sha256": "513cf10d1a0316b46b29783341b47d73676f261a19a8d3f58d0f5a67010f7dce",
+      "original_sha256": "a321cb7e9cab1ec81f9e1aecc5def59aab567d30252333041a6610a01f6aad4b"
+    },
+    {
+      "path": "build-Debug.log.gz",
+      "sha256": "18f80f931fbf56c7c492fd32e8db79e06aa3ff6909e0b2ae0b2b030c650ab58e",
+      "original_sha256": "f566c982da7303accf717ea73eddf4c8050b97b625641f644c7025dbb1684638"
+    },
+    {
+      "path": "build-Release.log.gz",
+      "sha256": "355b6b022ddac8ca21be0ae35bf787ccdc3231bedb123cc55b8912231a2a8d9e",
+      "original_sha256": "2f35fba735f78250396618d3d0e651fa9344d9aaad99e923197bd3151dd46b73"
+    },
+    {
+      "path": "Oxygen.Cooker.AsyncImportGeometryDescriptor.Tests-Debug.json.gz",
+      "sha256": "a1898a883f68a8f06453c024b627694d763cc3d4b1fc4909914e0021f8f331fc",
+      "original_sha256": "7992b20006eede0592c3573519c9150ae48d527984f54fb6514a3d24977a2b82"
+    },
+    {
+      "path": "Oxygen.Cooker.AsyncImportGeometryDescriptor.Tests-Debug.log.gz",
+      "sha256": "fb3c19612ae37a34dce2e3672381b361779d42e1af0deb4a65a8fcf4b69b3809",
+      "original_sha256": "1946134de5595819fd96541f85cd26639d73cf61435e65d8e32facd55edf5051"
+    },
+    {
+      "path": "Oxygen.Cooker.AsyncImportGeometryDescriptor.Tests-Release.json.gz",
+      "sha256": "297cf0e93420200e771f14014e9cf3ae2c50bd3cf92964f9a7f1b7c96b68550f",
+      "original_sha256": "0f5e352750709a4c83a998ca38468fe723db7de484ff217f6e6ffa9caef14fff"
+    },
+    {
+      "path": "Oxygen.Cooker.AsyncImportGeometryDescriptor.Tests-Release.log.gz",
+      "sha256": "ad6b0a9e059c05b5267348073b3b15bd3c54fe0cc73cc4255806464fcce3c79b",
+      "original_sha256": "a787f3bc4b811b5e949395bceb9b49399d3f191ffab7db48c5938334db853a48"
+    },
+    {
+      "path": "Oxygen.Cooker.PakDomainValidation.Tests-Debug.json.gz",
+      "sha256": "ecd87472540a47cb0920bc7e66acbc7a1ddc05e07b491bc5b2f483e61d1be918",
+      "original_sha256": "7049441140a5ba52d9aa65bf8df4e0e91e3d33eee290079abcf502a5745073f2"
+    },
+    {
+      "path": "Oxygen.Cooker.PakDomainValidation.Tests-Debug.log.gz",
+      "sha256": "7b1c1c30df5ecb309b774bfe7ab35eb27ad3ed937b76050c30e05c96734d77e4",
+      "original_sha256": "65388a267a2850eacbd9ca305606408c0e33ab431e6b1d090e34895a1b6bbb0e"
+    },
+    {
+      "path": "Oxygen.Cooker.PakDomainValidation.Tests-Release.json.gz",
+      "sha256": "fc407bb46b6daac62e5eb7e9073a50dca33564ce77cb6bd391a9c4c458f0204a",
+      "original_sha256": "52568fe715492ba8c08d10fb5b68703bfc9491eedbdcc67127e3a32155111987"
+    },
+    {
+      "path": "Oxygen.Cooker.PakDomainValidation.Tests-Release.log.gz",
+      "sha256": "aedb088694935e7893fe8d978a90d9e23b35aa00b21f5a6b81273833871c01af",
+      "original_sha256": "f487de8d6ac3c6e95c8a0788c8068d985c11b8921f99323a6e35740108417388"
+    },
+    {
+      "path": "Oxygen.Vortex.LightingGpuAbi.Tests-Debug.json.gz",
+      "sha256": "14b72a73a9c77b7cc36221988a021171c0ed27dfb4c75233f62702f2039f265d",
+      "original_sha256": "d4f77345e18ce1362e7f829a40f888013c93aa741effb41ff6e3438dd4e79459"
+    },
+    {
+      "path": "Oxygen.Vortex.LightingGpuAbi.Tests-Debug.log.gz",
+      "sha256": "865a30d92a0e40c7b77d95dad65914268ea9e184076bbb002b8c23ca73925dac",
+      "original_sha256": "c3f66986c16fb1194e89c2b1b078eac17da6051212d865b2956cdc682e4dc84c"
+    },
+    {
+      "path": "Oxygen.Vortex.LightingGpuAbi.Tests-Release.json.gz",
+      "sha256": "e195424c3c2fa6d1cc78c358120bd8b473c77c505afb90a1b3c49509eef4ed29",
+      "original_sha256": "6c04c08c31ce0b1d2e0ff682212cb5564ff2ee4d50ab778f4caa45cd0f7c2001"
+    },
+    {
+      "path": "Oxygen.Vortex.LightingGpuAbi.Tests-Release.log.gz",
+      "sha256": "d699fc581f0607f18e8576274dbe065418d7768abbf417ac0f526252b8da1841",
+      "original_sha256": "592721fa705d8f9fc8a4328c6bda802f17029dbcc295f7f2465fb37d78d1a47d"
+    }
+  ],
+  "final_source_head": "4fd55cd8d205c6112382f126e6b2e1b5eba97620",
+  "repair_source_sha256": {
+    "src\\Oxygen\\Vortex\\Test\\Lighting\\ShadowAllocationRequirements_test.cpp": "bf34db19a0884f313c4ffea5c7edef5034a4f0f3457b8ef72d3897c2b1781964",
+    "src\\Oxygen\\Cooker\\Test\\Import\\BuiltinGeometryCatalog_test.cpp": "bed29d38114c25fee6608aff5ef9be8c66bd8a355f038d6d3e161aa8517e4d1a",
+    "src\\Oxygen\\Cooker\\Test\\Pak\\PakPlanBuilder_test.cpp": "a68f2b17ffe9613a0111ceccc0b86630be43c504b9b962f5358a23a0fbde0630"
+  },
+  "repair_executable_sha256": {
+    "out\\build-ninja\\bin\\Debug\\Oxygen.Vortex.LightingGpuAbi.Tests.exe": "6ec768be010fcbd72421569b5e2c6617c9b1c286fd4c7ce62fb71046d4e1e15b",
+    "out\\build-ninja\\bin\\Debug\\Oxygen.Cooker.AsyncImportGeometryDescriptor.Tests.exe": "62e68d13f5a306b44e4cb333cff75ddaafa064213cb5d860de459c309acc00bc",
+    "out\\build-ninja\\bin\\Debug\\Oxygen.Cooker.PakDomainValidation.Tests.exe": "cf86149084481d6b0a9a36b7f03f5372ced7303f36d808dfd8f3c6645a1c2e4e",
+    "out\\build-ninja\\bin\\Release\\Oxygen.Vortex.LightingGpuAbi.Tests.exe": "bb79c3fb11e6beed3c59e34963326773a75a6a48f91c853df575e99219751a21",
+    "out\\build-ninja\\bin\\Release\\Oxygen.Cooker.AsyncImportGeometryDescriptor.Tests.exe": "273767b1a4fe4fceb5ee90578393db116236deec4627e3e5b9925caa0518edf9",
+    "out\\build-ninja\\bin\\Release\\Oxygen.Cooker.PakDomainValidation.Tests.exe": "6c17b250cf6db165ebe306f8269ddbc79b6275ada139f3dd9024fbee50a57741"
+  }
+}

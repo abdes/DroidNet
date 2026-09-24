@@ -243,8 +243,9 @@ and **16.434 / 15.347 ms** for Instancing; those captures also remain available.
   Background desktop GPU activity is allowed; overloaded CPU windows delay
   timing. Preflight does not prove absence of interference during a capture.
 - No further filter-quality or allocator-policy experiment is part of this
-  closure. F still owns final combined acceptance; the C caller/importer follow-up
-  is subsequently [closed with qualification evidence](EX07C-completion-report.md).
+  closure. [F engine-side acceptance](EX07F-acceptance-report.md) subsequently
+  credits these results; only the user-owned editor sign-off remains. The C
+  caller/importer follow-up is [closed](EX07C-completion-report.md).
 
 ## Acceptance and durable evidence
 
@@ -289,7 +290,8 @@ later build. Both Release application targets are rebuilt for manual validation.
 | `6cbd9e455` | Existing benchmark workload and ownership instrumentation extensions                    |
 | `b8f1376e1` | Accepted capture evidence, original controls, source identities and checksum protection |
 
-The final documentation commit records E closure and leaves F unstarted.
+The E documentation commit records its closure. Subsequent
+[F acceptance](EX07F-acceptance-report.md) reuses this evidence without recapture.
 Pre-commit also reformatted the Loader test CMake file and benchmark JSON schema;
 byte/token-equivalence checks and exact diffs are preserved in
 `validation/commit-hook-format-only.json`. Immutable capture fixtures are excluded

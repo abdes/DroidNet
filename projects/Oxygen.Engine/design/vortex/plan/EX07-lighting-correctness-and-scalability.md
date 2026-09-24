@@ -252,7 +252,9 @@ record all eight investigation/delivery obligations, completion evidence and
 next action. Update that ledger as findings and fixes are delivered. Earlier
 measured repairs remain credited. A–E are closed, including the
 [C caller/importer follow-up](EX07C-completion-report.md). Overall EX07 remains
-open only for F acceptance.
+open only for the user-owned editor interaction sign-off.
+[F engine-side acceptance](EX07F-acceptance-report.md) is complete, reusing E
+measurements and C validation; RenderScene interactions are user-confirmed.
 
 Begin with the committed
 [baseline register](EX07D-baseline-report.md#how-e-and-f-use-this-register) and
@@ -456,7 +458,8 @@ The [2026-09-22 stencil/ownership audit](EX07-shadow-memory-review.md) selects
 three focused changes under EX07-10/11. Source tracing and a native GPU format
 comparison supported the initial design. D32 cutover, retained ownership,
 cross-frame cache reuse and focused/static performance acceptance are complete;
-broader workload qualification and cross-view sharing remain later work.
+broader workload qualification and cross-view sharing subsequently completed in
+E. The [F report](EX07F-acceptance-report.md) records final evidence applicability.
 
 | Work                            | Scope and implementation owner                                                      | Required result                                                                                                                                                                 |
 | ------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -466,8 +469,8 @@ broader workload qualification and cross-view sharing remain later work.
 
 The conventional-shadow sequence completes D32, bounded allocation ownership and
 cross-frame point/spot depth-content reuse with complete light-space coverage.
-Current local contents are retained per view; compatible cross-view sharing is a
-later EX07E optimization using the delivered allocation/content ownership.
+Compatible local contents now share immutable per-light versions across views
+through the completed EX07E allocation/content ownership implementation.
 Cascades remain view-dependent. Do not schedule a
 second allocator, D32 conversion or cache implementation under EX07E. Step 5
 separately selects a user-confirmed resolution/fade policy; memory exhaustion

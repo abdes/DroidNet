@@ -87,8 +87,9 @@ The archived results were inspected, not rerun or silently expanded:
   with the previously recorded 16-scene / 124-asset / 29-resource package and
   user visual acceptance of the conventional-shadow repair.
 
-Interactive editor and final combined acceptance remain F's scope. C has no
-remaining implementation or validation item.
+[F engine-side acceptance](EX07F-acceptance-report.md) subsequently credits these
+results. The interactive editor check remains user-owned. C has no remaining
+implementation or validation item.
 
 ## Durable evidence
 

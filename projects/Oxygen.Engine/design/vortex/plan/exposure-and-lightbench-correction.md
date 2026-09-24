@@ -1254,10 +1254,11 @@ contract in section 6. These checkpoints all belong to EX07 before EX08 begins.
 
 **EX07D is closed (2026-09-24)** with implementation in `137b681b2` and durable
 baseline evidence in `894a25e57`. The
-[EX07E handoff](EX07-lighting-correctness-and-scalability.md#ex07e-handoff--active)
-is active following the user's explicit start signal on 2026-09-24; its
-[E01–E08 ledger](../IMPLEMENTATION_STATUS.md#ex07e--work-items-and-resume-checkpoint)
-records the remaining work and resume point.
+[EX07E handoff](EX07-lighting-correctness-and-scalability.md#ex07e-handoff--closed)
+is closed with accepted measurements and visual approval. The
+[F acceptance report](EX07F-acceptance-report.md) credits that unchanged evidence
+and closes engine-side acceptance/documentation; only the user-owned editor
+interaction sign-off remains.
 
 D credits the accepted MultiView and conventional-shadow baselines and B's
 reference/instrument qualification. Its new delivery is the runnable many-light
