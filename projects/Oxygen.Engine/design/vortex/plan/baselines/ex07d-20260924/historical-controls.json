@@ -1,0 +1,2802 @@
+[
+  {
+    "id": "H-MULTIVIEW",
+    "role": "Accepted model-2 MultiView control; not a current-code performance gate",
+    "evidence": {
+      "path": "out/build-tracy-ninja/analysis/vortex/exposure-lightbench/ex07c/model2-results.json",
+      "sha256": "a01ad09de089e6fae9c69e081007c78bee728e4a417923fa6e10f28a7a80cb94",
+      "bytes": 2800
+    },
+    "measurements": {
+      "implementation_commit": "0e0741619",
+      "resolution": [2560, 1440],
+      "fullscreen": true,
+      "fps_limit": 0,
+      "vsync": false,
+      "frames": 600,
+      "warmup_frames": 64,
+      "steady_intervals": 535,
+      "before_frame": {
+        "mean_ms": 13.09812914953271,
+        "median_ms": 12.992551,
+        "p95_ms": 13.756725599999998
+      },
+      "after_frame": {
+        "mean_ms": 7.803976205607476,
+        "median_ms": 7.380236,
+        "p95_ms": 10.7596058
+      },
+      "before_fps": 76.34678117643054,
+      "after_fps": 128.13980638247705,
+      "gpu": {
+        "SpotLight": {
+          "before_ms": 4.393895801869159,
+          "after_ms": 0.6612113962616822,
+          "reduction_percent": 84.9515913422343
+        },
+        "PointLight": {
+          "before_ms": 2.4749696168224298,
+          "after_ms": 0.8651148280373832,
+          "reduction_percent": 65.0454364305252
+        },
+        "DirectionalLight": {
+          "before_ms": 1.5004889158878505,
+          "after_ms": 1.327207829906542,
+          "reduction_percent": 11.5483082978175
+        },
+        "DeferredLighting": {
+          "before_ms": 8.4271197682243,
+          "after_ms": 2.901243495327103,
+          "reduction_percent": 65.57253753213915
+        }
+      },
+      "lut": {
+        "schema": 1,
+        "model_revision": 2,
+        "view_nodes": 32,
+        "roughness_nodes": 32,
+        "view_mapping": "sqrt",
+        "minimum_roughness": 0.045,
+        "format": "RG32Float",
+        "channels": ["directional_albedo", "schlick_moment"],
+        "payload_bytes": 8192,
+        "payload_sha256": "2f0b4f988af82a69bf650a593d764d09f427ac4241f3ce8bfeecf40628aaae2e",
+        "reference_sha256": "b3224a671f44b196302e83d0421d2cad1a5ae14ba457f776e914c656900c45d6",
+        "generator_sha256": "bdc0dc7bef93b5a7eabbe170ba1b814da7ee8fb5274d2e6652777ec8080736a0",
+        "reference_grid_queries": 525825,
+        "energy_absolute_error": {
+          "maximum": 0.026528603326369193,
+          "p99": 0.0033026143439656153
+        },
+        "bias_absolute_error": {
+          "maximum": 0.0220231017488004,
+          "p99": 0.003216191003048152
+        },
+        "unit_conductor_energy_error": {
+          "maximum": 0.028882137360476512,
+          "p99": 0.0035442744878287913
+        },
+        "scope": "Resampled independent reference; native sampler and image measurements are separate."
+      },
+      "native_memory": {
+        "before_bytes": 4718592,
+        "after_bytes": 65536
+      },
+      "validation": {
+        "release_tests": 94,
+        "debug_tests": 94,
+        "release_native_provenance": "model2-LightingGpuAbi-release-validated.json",
+        "reporter_tests": 8,
+        "finite_source_cases": 96
+      },
+      "visual_capture": {
+        "zero_based_frame": 2000,
+        "maximum_remaining_exposure_ev": 0.0001611502131226619,
+        "image": "model2-settled-report.png",
+        "report": "model2-settled-report.txt"
+      },
+      "tracy_capture": "multiview-1440p-model2-final.tracy",
+      "tracy_sha256": "16bb16edc6473f6210a968941b0edf1b0e8f8b8bbdca416285af7cb0b1f696c1"
+    }
+  },
+  {
+    "id": "H-INSTANCING",
+    "role": "Accepted earlier conventional-shadow scene control; superseded by A-INSTANCING for new performance comparisons",
+    "evidence": {
+      "path": "out/analysis/light-shadow-audit-20260924/instancing-final-analysis.json",
+      "sha256": "b2c1cf40271346785e5d6165c70752a18683d5f80821e52cd1d54b15b3d95b8f",
+      "bytes": 14489
+    },
+    "measurements": {
+      "trace": "instancing-final.tracy",
+      "method": "Complete GPU frames bounded by consecutive Stage3.DepthPrepass starts between 20 and 50 seconds; overlapping parent/child zones are not additive.",
+      "window_start_s": 20.012851605,
+      "window_end_s": 49.985589518,
+      "complete_frames": 1314,
+      "gpu_frame_period": {
+        "count": 1314,
+        "mean_ms": 22.81030282572298,
+        "median_ms": 22.691366,
+        "p95_ms": 25.053604,
+        "min_ms": 20.241303,
+        "max_ms": 28.815748
+      },
+      "fps_from_mean_period": 43.83983885002652,
+      "gpu_ms_per_frame": {
+        "Vortex.CompositingTask": {
+          "count": 1314,
+          "mean_ms": 0.07847672831050229,
+          "median_ms": 0.07270599999999999,
+          "p95_ms": 0.079618,
+          "min_ms": 0.069632,
+          "max_ms": 0.8386709999999999
+        },
+        "Vortex.ImGuiOverlay": {
+          "count": 1314,
+          "mean_ms": 0.018739309741248097,
+          "median_ms": 0.0194545,
+          "p95_ms": 0.020481,
+          "min_ms": 0.013306,
+          "max_ms": 0.023552
+        },
+        "Vortex.PostProcess.Exposure.FrameResolve": {
+          "count": 1314,
+          "mean_ms": 0.02901296803652968,
+          "median_ms": 0.028673,
+          "p95_ms": 0.034816,
+          "min_ms": 0.00512,
+          "max_ms": 0.038913
+        },
+        "Vortex.PostProcess.Exposure.Histogram": {
+          "count": 1314,
+          "mean_ms": 0.04585309208523592,
+          "median_ms": 0.045057,
+          "p95_ms": 0.047105,
+          "min_ms": 0.043008,
+          "max_ms": 0.662538
+        },
+        "Vortex.PostProcess.Exposure.MeterAndAdapt": {
+          "count": 1314,
+          "mean_ms": 0.09784869330289193,
+          "median_ms": 0.095211,
+          "p95_ms": 0.098309,
+          "min_ms": 0.092136,
+          "max_ms": 0.713739
+        },
+        "Vortex.PostProcess.Exposure.SceneRange": {
+          "count": 1314,
+          "mean_ms": 0.1737691925418569,
+          "median_ms": 0.166914,
+          "p95_ms": 0.169985,
+          "min_ms": 0.157693,
+          "max_ms": 1.0393729999999999
+        },
+        "Vortex.PostProcess.Exposure.Solve": {
+          "count": 1314,
+          "mean_ms": 0.04157856164383562,
+          "median_ms": 0.0419695,
+          "p95_ms": 0.043009,
+          "min_ms": 0.039936,
+          "max_ms": 0.047104
+        },
+        "Vortex.PostProcess.Tonemap": {
+          "count": 1314,
+          "mean_ms": 0.09713253500761035,
+          "median_ms": 0.097281,
+          "p95_ms": 0.098306,
+          "min_ms": 0.094209,
+          "max_ms": 0.10547
+        },
+        "Vortex.PostRenderCleanup": {
+          "count": 1314,
+          "mean_ms": 0.03978224353120244,
+          "median_ms": 0.038912,
+          "p95_ms": 0.04096,
+          "min_ms": 0.034816,
+          "max_ms": 0.646153
+        },
+        "Vortex.RenderPass.Execute": {
+          "count": 1314,
+          "mean_ms": 0.025435949771689496,
+          "median_ms": 0.0256,
+          "p95_ms": 0.026624,
+          "min_ms": 0.02457,
+          "max_ms": 0.035841
+        },
+        "Vortex.RenderPass.PrepareResources": {
+          "count": 1314,
+          "mean_ms": 7.939117199391171e-6,
+          "median_ms": 0.0,
+          "p95_ms": 0.0,
+          "min_ms": 0.0,
+          "max_ms": 0.001024
+        },
+        "Vortex.ResolveSceneColor": {
+          "count": 1314,
+          "mean_ms": 0.2216632694063927,
+          "median_ms": 0.205827,
+          "p95_ms": 0.209922,
+          "min_ms": 0.197634,
+          "max_ms": 1.065996
+        },
+        "Vortex.Stage12.DeferredLighting": {
+          "count": 1314,
+          "mean_ms": 19.091088777777777,
+          "median_ms": 18.953440999999998,
+          "p95_ms": 20.771231,
+          "min_ms": 16.780697,
+          "max_ms": 24.308048
+        },
+        "Vortex.Stage12.DirectionalLight": {
+          "count": 1314,
+          "mean_ms": 0.643773095129376,
+          "median_ms": 0.644107,
+          "p95_ms": 0.650245,
+          "min_ms": 0.623621,
+          "max_ms": 0.667657
+        },
+        "Vortex.Stage12.PointLight": {
+          "count": 1314,
+          "mean_ms": 14.56453500304414,
+          "median_ms": 14.598365499999998,
+          "p95_ms": 14.697755,
+          "min_ms": 13.679354,
+          "max_ms": 14.773350999999998
+        },
+        "Vortex.Stage3.DepthPrepass": {
+          "count": 1314,
+          "mean_ms": 0.10144444672754947,
+          "median_ms": 0.09933,
+          "p95_ms": 0.111617,
+          "min_ms": 0.093185,
+          "max_ms": 0.115717
+        },
+        "Vortex.Stage5.ScreenHzbBuild": {
+          "count": 1314,
+          "mean_ms": 0.19570293607305936,
+          "median_ms": 0.18125,
+          "p95_ms": 0.193537,
+          "min_ms": 0.171011,
+          "max_ms": 1.074205
+        },
+        "Vortex.Stage6.SpatialLightGrid": {
+          "count": 1314,
+          "mean_ms": 0.31555274429223745,
+          "median_ms": 0.197632,
+          "p95_ms": 0.728167,
+          "min_ms": 0.189442,
+          "max_ms": 1.139829
+        },
+        "Vortex.Stage8.ShadowCacheReuse": {
+          "count": 1314,
+          "mean_ms": 0.00020722222222222222,
+          "median_ms": 0.0,
+          "p95_ms": 0.001024,
+          "min_ms": 0.0,
+          "max_ms": 0.003072
+        },
+        "Vortex.Stage8.ShadowDepths": {
+          "count": 1314,
+          "mean_ms": 0.23735833409436835,
+          "median_ms": 0.191492,
+          "p95_ms": 0.499718,
+          "min_ms": 0.184323,
+          "max_ms": 1.115148
+        },
+        "Vortex.Stage9.BasePass": {
+          "count": 1314,
+          "mean_ms": 0.30681296499238964,
+          "median_ms": 0.282629,
+          "p95_ms": 0.468999,
+          "min_ms": 0.272387,
+          "max_ms": 1.156107
+        },
+        "Vortex.Stage9.BasePass.MainPass": {
+          "count": 1314,
+          "mean_ms": 0.2875828531202435,
+          "median_ms": 0.279556,
+          "p95_ms": 0.31335,
+          "min_ms": 0.268301,
+          "max_ms": 0.904189
+        },
+        "VortexCompositingPass": {
+          "count": 1314,
+          "mean_ms": 0.035550915525114156,
+          "median_ms": 0.031744999999999995,
+          "p95_ms": 0.034817,
+          "min_ms": 0.029696,
+          "max_ms": 0.795663
+        }
+      },
+      "gpu_event_count_per_frame": {
+        "Vortex.CompositingTask": [2],
+        "Vortex.ImGuiOverlay": [1],
+        "Vortex.PostProcess.Exposure.FrameResolve": [1],
+        "Vortex.PostProcess.Exposure.Histogram": [1],
+        "Vortex.PostProcess.Exposure.MeterAndAdapt": [1],
+        "Vortex.PostProcess.Exposure.SceneRange": [2],
+        "Vortex.PostProcess.Exposure.Solve": [1],
+        "Vortex.PostProcess.Tonemap": [1],
+        "Vortex.PostRenderCleanup": [1],
+        "Vortex.RenderPass.Execute": [1],
+        "Vortex.RenderPass.PrepareResources": [0, 1],
+        "Vortex.ResolveSceneColor": [1],
+        "Vortex.Stage12.DeferredLighting": [1],
+        "Vortex.Stage12.DirectionalLight": [1],
+        "Vortex.Stage12.PointLight": [49],
+        "Vortex.Stage3.DepthPrepass": [1],
+        "Vortex.Stage5.ScreenHzbBuild": [1],
+        "Vortex.Stage6.SpatialLightGrid": [1],
+        "Vortex.Stage8.ShadowCacheReuse": [0, 1, 2, 3],
+        "Vortex.Stage8.ShadowDepths": [1, 2],
+        "Vortex.Stage9.BasePass": [1],
+        "Vortex.Stage9.BasePass.MainPass": [1],
+        "VortexCompositingPass": [2]
+      },
+      "shadow_first_submission": null,
+      "shadow_second_submission": null,
+      "cpu_zone_ms": {
+        "Vortex.PostProcess.PrepareFrameExposure": {
+          "count": 1314,
+          "mean_ms": 0.0616715098934551,
+          "median_ms": 0.0526595,
+          "p95_ms": 0.106341,
+          "min_ms": 0.030888,
+          "max_ms": 0.277214,
+          "total_ms": 81.036364
+        },
+        "Vortex.PostProcess.Exposure.FrameResolve": {
+          "count": 1314,
+          "mean_ms": 0.05919145205479452,
+          "median_ms": 0.050536,
+          "p95_ms": 0.102274,
+          "min_ms": 0.029305,
+          "max_ms": 0.268759,
+          "total_ms": 77.777568
+        },
+        "D3D12.ExecuteCommandLists": {
+          "count": 57830,
+          "mean_ms": 0.01293565440083002,
+          "median_ms": 0.008656,
+          "p95_ms": 0.033233,
+          "min_ms": 0.006793,
+          "max_ms": 0.437823,
+          "total_ms": 748.068894
+        },
+        "Vortex.DispatchSceneRendererRender": {
+          "count": 1313,
+          "mean_ms": 6.097948469916222,
+          "median_ms": 5.89661,
+          "p95_ms": 7.927861,
+          "min_ms": 4.754881,
+          "max_ms": 10.95217,
+          "total_ms": 8006.606341
+        },
+        "Vortex.Lighting.PublishShadowReferences": {
+          "count": 1314,
+          "mean_ms": 0.002067194824961948,
+          "median_ms": 0.001853,
+          "p95_ms": 0.003537,
+          "min_ms": 0.001313,
+          "max_ms": 0.012173,
+          "total_ms": 2.716294
+        },
+        "Vortex.Lighting.PublishFrame": {
+          "count": 1314,
+          "mean_ms": 0.23302676255707763,
+          "median_ms": 0.1922685,
+          "p95_ms": 0.430314,
+          "min_ms": 0.133893,
+          "max_ms": 1.674187,
+          "total_ms": 306.197166
+        },
+        "Vortex.SceneRenderer.PrepareExposureDomain": {
+          "count": 1314,
+          "mean_ms": 0.179874399543379,
+          "median_ms": 0.162332,
+          "p95_ms": 0.275641,
+          "min_ms": 0.128182,
+          "max_ms": 0.652934,
+          "total_ms": 236.354961
+        },
+        "Vortex.PostProcess.ResolveViewExposureSettings": {
+          "count": 1313,
+          "mean_ms": 0.004674316070068545,
+          "median_ms": 0.004238,
+          "p95_ms": 0.009428,
+          "min_ms": 0.001603,
+          "max_ms": 0.034175,
+          "total_ms": 6.137377
+        },
+        "Vortex.PostProcess.PrepareSceneExposure": {
+          "count": 1314,
+          "mean_ms": 0.04796789573820396,
+          "median_ms": 0.045,
+          "p95_ms": 0.072888,
+          "min_ms": 0.032652,
+          "max_ms": 0.166875,
+          "total_ms": 63.029815
+        },
+        "tracy::D3D12QueueCtx::Collect": {
+          "count": 3942,
+          "mean_ms": 0.006469272450532725,
+          "median_ms": 0.003927,
+          "p95_ms": 0.019336,
+          "min_ms": 1e-5,
+          "max_ms": 0.053101,
+          "total_ms": 25.501872
+        },
+        "Vortex.Lighting.ResolveEvaluation": {
+          "count": 1314,
+          "mean_ms": 0.005413571537290715,
+          "median_ms": 0.004839,
+          "p95_ms": 0.008717,
+          "min_ms": 0.003707,
+          "max_ms": 0.09537,
+          "total_ms": 7.113433
+        },
+        "D3D12.Present.Tearing": {
+          "count": 1314,
+          "mean_ms": 0.23199547412480975,
+          "median_ms": 0.1926045,
+          "p95_ms": 0.385689,
+          "min_ms": 0.12672,
+          "max_ms": 14.729143,
+          "total_ms": 304.842053
+        },
+        "Graphics.FinalizeCommandRecorder": {
+          "count": 57830,
+          "mean_ms": 0.020197688051184506,
+          "median_ms": 0.014608,
+          "p95_ms": 0.045847,
+          "min_ms": 0.011602,
+          "max_ms": 0.492772,
+          "total_ms": 1168.0323
+        },
+        "D3D12.SubmitCommandList": {
+          "count": 57830,
+          "mean_ms": 0.01685494259035103,
+          "median_ms": 0.012253,
+          "p95_ms": 0.036449,
+          "min_ms": 0.009688,
+          "max_ms": 0.478314,
+          "total_ms": 974.72133
+        },
+        "Vortex.PostProcess.PollExposureStatus": {
+          "count": 1314,
+          "mean_ms": 0.00047853424657534247,
+          "median_ms": 0.00039,
+          "p95_ms": 0.001062,
+          "min_ms": 9e-5,
+          "max_ms": 0.005841,
+          "total_ms": 0.628794
+        },
+        "D3D12.BindComputePipeline": {
+          "count": 10512,
+          "mean_ms": 0.004108916286149163,
+          "median_ms": 0.002514,
+          "p95_ms": 0.013656,
+          "min_ms": 0.001142,
+          "max_ms": 0.16394,
+          "total_ms": 43.192928
+        },
+        "Vortex.Lighting.BuildDeferredPackets": {
+          "count": 1314,
+          "mean_ms": 0.0018420441400304414,
+          "median_ms": 0.001603,
+          "p95_ms": 0.003246,
+          "min_ms": 0.001092,
+          "max_ms": 0.025749,
+          "total_ms": 2.420446
+        },
+        "Vortex.Lighting.RecordDeferred": {
+          "count": 1314,
+          "mean_ms": 0.4285980190258752,
+          "median_ms": 0.404414,
+          "p95_ms": 0.573895,
+          "min_ms": 0.31741,
+          "max_ms": 1.579798,
+          "total_ms": 563.177797
+        },
+        "Vortex.DispatchSceneRendererCompositing": {
+          "count": 1314,
+          "mean_ms": 0.0029466453576864537,
+          "median_ms": 0.002625,
+          "p95_ms": 0.006262,
+          "min_ms": 0.001363,
+          "max_ms": 0.012935,
+          "total_ms": 3.871892
+        },
+        "Graphics.AcquireCommandRecorder": {
+          "count": 57830,
+          "mean_ms": 0.010462489209752724,
+          "median_ms": 0.008075,
+          "p95_ms": 0.022082,
+          "min_ms": 0.004058,
+          "max_ms": 0.425395,
+          "total_ms": 605.045751
+        },
+        "Vortex.PostProcess.Exposure.MeterAndAdapt": {
+          "count": 1314,
+          "mean_ms": 0.04198701445966514,
+          "median_ms": 0.0394345,
+          "p95_ms": 0.062539,
+          "min_ms": 0.029606,
+          "max_ms": 0.161175,
+          "total_ms": 55.170937
+        },
+        "Vortex.OnFrameStart": {
+          "count": 1314,
+          "mean_ms": 0.5124781560121766,
+          "median_ms": 0.46482900000000005,
+          "p95_ms": 0.806826,
+          "min_ms": 0.332849,
+          "max_ms": 1.83049,
+          "total_ms": 673.396297
+        },
+        "Vortex.PostProcess.Execute": {
+          "count": 1314,
+          "mean_ms": 0.03216005707762557,
+          "median_ms": 0.029576,
+          "p95_ms": 0.048762,
+          "min_ms": 0.023243,
+          "max_ms": 0.174269,
+          "total_ms": 42.258315
+        },
+        "Vortex.Lighting.GatherSelection": {
+          "count": 1314,
+          "mean_ms": 0.14232127625570776,
+          "median_ms": 0.134294,
+          "p95_ms": 0.198706,
+          "min_ms": 0.125087,
+          "max_ms": 0.431265,
+          "total_ms": 187.010157
+        },
+        "Vortex.PostProcess.Exposure.SceneRange": {
+          "count": 1314,
+          "mean_ms": 0.01754695205479452,
+          "median_ms": 0.015509,
+          "p95_ms": 0.026781,
+          "min_ms": 0.011161,
+          "max_ms": 0.287323,
+          "total_ms": 23.056695
+        },
+        "Vortex.Shadows.RecordDepths": {
+          "count": 1314,
+          "mean_ms": 1.8112988242009131,
+          "median_ms": 1.7102439999999999,
+          "p95_ms": 2.391643,
+          "min_ms": 1.453569,
+          "max_ms": 3.425838,
+          "total_ms": 2380.046655
+        },
+        "Vortex.Lighting.BuildGrid": {
+          "count": 1314,
+          "mean_ms": 0.008671753424657534,
+          "median_ms": 0.0078445,
+          "p95_ms": 0.014026,
+          "min_ms": 0.005159,
+          "max_ms": 0.098356,
+          "total_ms": 11.394684
+        },
+        "D3D12.FenceWait": {
+          "count": 2605,
+          "mean_ms": 5.236515194241843,
+          "median_ms": 0.000301,
+          "p95_ms": 13.09384,
+          "min_ms": 6e-5,
+          "max_ms": 16.384682,
+          "total_ms": 13641.122081
+        },
+        "Vortex.PostProcess.Exposure.HistogramConstants": {
+          "count": 1314,
+          "mean_ms": 0.002168564687975647,
+          "median_ms": 0.001984,
+          "p95_ms": 0.003116,
+          "min_ms": 0.001533,
+          "max_ms": 0.012023,
+          "total_ms": 2.849494
+        }
+      }
+    }
+  },
+  {
+    "id": "H-SPONZA-10M",
+    "role": "Accepted earlier 10 m-range Sponza; different content from current 4096 m-range scene",
+    "evidence": {
+      "path": "out/analysis/light-shadow-audit-20260924/new-sponza-final-analysis.json",
+      "sha256": "020ec74642c49aeaf7fc754825ce6a73616a36ba1a61f84bba6c71416f3e05f8",
+      "bytes": 14756
+    },
+    "measurements": {
+      "trace": "new-sponza-final.tracy",
+      "method": "Complete GPU frames bounded by consecutive Stage3.DepthPrepass starts between 20 and 50 seconds; overlapping parent/child zones are not additive.",
+      "window_start_s": 20.003413067,
+      "window_end_s": 49.986506938,
+      "complete_frames": 1284,
+      "gpu_frame_period": {
+        "count": 1284,
+        "mean_ms": 23.351319214174456,
+        "median_ms": 23.296467,
+        "p95_ms": 23.56032,
+        "min_ms": 22.811238,
+        "max_ms": 24.996991
+      },
+      "fps_from_mean_period": 42.82413301056632,
+      "gpu_ms_per_frame": {
+        "Vortex.CompositingTask": {
+          "count": 1284,
+          "mean_ms": 0.07532904439252336,
+          "median_ms": 0.0756805,
+          "p95_ms": 0.07680200000000001,
+          "min_ms": 0.07270399999999999,
+          "max_ms": 0.083938
+        },
+        "Vortex.ImGuiOverlay": {
+          "count": 1284,
+          "mean_ms": 0.007085157320872274,
+          "median_ms": 0.007168,
+          "p95_ms": 0.008192,
+          "min_ms": 0.006143,
+          "max_ms": 0.009217
+        },
+        "Vortex.PostProcess.Exposure.FrameResolve": {
+          "count": 1284,
+          "mean_ms": 0.025753465732087227,
+          "median_ms": 0.0256,
+          "p95_ms": 0.027648,
+          "min_ms": 0.022528,
+          "max_ms": 0.03584
+        },
+        "Vortex.PostProcess.Exposure.Histogram": {
+          "count": 1284,
+          "mean_ms": 0.046194656542056074,
+          "median_ms": 0.046081,
+          "p95_ms": 0.048129,
+          "min_ms": 0.043009,
+          "max_ms": 0.050177
+        },
+        "Vortex.PostProcess.Exposure.MeterAndAdapt": {
+          "count": 1284,
+          "mean_ms": 0.09610335591900311,
+          "median_ms": 0.096257,
+          "p95_ms": 0.098305,
+          "min_ms": 0.093184,
+          "max_ms": 0.10445
+        },
+        "Vortex.PostProcess.Exposure.SceneRange": {
+          "count": 1284,
+          "mean_ms": 0.172314253894081,
+          "median_ms": 0.172035,
+          "p95_ms": 0.17408200000000001,
+          "min_ms": 0.167938,
+          "max_ms": 0.177156
+        },
+        "Vortex.PostProcess.Exposure.Solve": {
+          "count": 1284,
+          "mean_ms": 0.04167351401869159,
+          "median_ms": 0.041984,
+          "p95_ms": 0.041993,
+          "min_ms": 0.039936,
+          "max_ms": 0.045057
+        },
+        "Vortex.PostProcess.Tonemap": {
+          "count": 1284,
+          "mean_ms": 0.1013669953271028,
+          "median_ms": 0.101376,
+          "p95_ms": 0.102402,
+          "min_ms": 0.099313,
+          "max_ms": 0.646157
+        },
+        "Vortex.PostRenderCleanup": {
+          "count": 1284,
+          "mean_ms": 0.04111527414330218,
+          "median_ms": 0.040961,
+          "p95_ms": 0.041985,
+          "min_ms": 0.03993,
+          "max_ms": 0.044033
+        },
+        "Vortex.RenderPass.Execute": {
+          "count": 1284,
+          "mean_ms": 0.02530046573208723,
+          "median_ms": 0.0256,
+          "p95_ms": 0.025605,
+          "min_ms": 0.024568,
+          "max_ms": 0.027648
+        },
+        "Vortex.RenderPass.PrepareResources": {
+          "count": 1284,
+          "mean_ms": 5.260124610591901e-6,
+          "median_ms": 0.0,
+          "p95_ms": 0.0,
+          "min_ms": 0.0,
+          "max_ms": 0.001025
+        },
+        "Vortex.ResolveSceneColor": {
+          "count": 1284,
+          "mean_ms": 0.2176523785046729,
+          "median_ms": 0.218114,
+          "p95_ms": 0.220167,
+          "min_ms": 0.211934,
+          "max_ms": 0.223236
+        },
+        "Vortex.Stage12.DeferredLighting": {
+          "count": 1284,
+          "mean_ms": 9.210393956386293,
+          "median_ms": 9.1331655,
+          "p95_ms": 9.40249,
+          "min_ms": 8.865952,
+          "max_ms": 10.239128
+        },
+        "Vortex.Stage12.DirectionalLight": {
+          "count": 1284,
+          "mean_ms": 0.725349488317757,
+          "median_ms": 0.726026,
+          "p95_ms": 0.728098,
+          "min_ms": 0.717828,
+          "max_ms": 0.740376
+        },
+        "Vortex.Stage12.PointLight": {
+          "count": 1284,
+          "mean_ms": 6.49682183800623,
+          "median_ms": 6.4996435,
+          "p95_ms": 6.5239899999999995,
+          "min_ms": 6.443950999999999,
+          "max_ms": 7.050336
+        },
+        "Vortex.Stage18.Translucency": {
+          "count": 1284,
+          "mean_ms": 3.332025191588785,
+          "median_ms": 3.330092,
+          "p95_ms": 3.364923,
+          "min_ms": 3.281982,
+          "max_ms": 3.739706
+        },
+        "Vortex.Stage3.DepthPrepass": {
+          "count": 1284,
+          "mean_ms": 0.8598828621495327,
+          "median_ms": 0.858127,
+          "p95_ms": 0.868367,
+          "min_ms": 0.845832,
+          "max_ms": 1.479697
+        },
+        "Vortex.Stage5.ScreenHzbBuild": {
+          "count": 1284,
+          "mean_ms": 0.5603476627725856,
+          "median_ms": 0.546823,
+          "p95_ms": 0.595975,
+          "min_ms": 0.19252,
+          "max_ms": 1.070099
+        },
+        "Vortex.Stage6.SpatialLightGrid": {
+          "count": 1284,
+          "mean_ms": 0.15403689641744547,
+          "median_ms": 0.153601,
+          "p95_ms": 0.159043,
+          "min_ms": 0.147458,
+          "max_ms": 0.207875
+        },
+        "Vortex.Stage8.ShadowCacheReuse": {
+          "count": 1284,
+          "mean_ms": 8.919626168224299e-5,
+          "median_ms": 0.0,
+          "p95_ms": 0.00096,
+          "min_ms": 0.0,
+          "max_ms": 0.002784
+        },
+        "Vortex.Stage8.ShadowDepths": {
+          "count": 1284,
+          "mean_ms": 3.8031273933021805,
+          "median_ms": 3.8001065,
+          "p95_ms": 3.829819,
+          "min_ms": 3.754045,
+          "max_ms": 4.656239
+        },
+        "Vortex.Stage9.BasePass": {
+          "count": 1284,
+          "mean_ms": 3.0613035630841123,
+          "median_ms": 3.0566815,
+          "p95_ms": 3.126311,
+          "min_ms": 2.873382,
+          "max_ms": 3.394586
+        },
+        "Vortex.Stage9.BasePass.MainPass": {
+          "count": 1284,
+          "mean_ms": 3.0500027390965734,
+          "median_ms": 3.050523,
+          "p95_ms": 3.114022,
+          "min_ms": 2.642979,
+          "max_ms": 3.195956
+        },
+        "VortexCompositingPass": {
+          "count": 1284,
+          "mean_ms": 0.03167617757009346,
+          "median_ms": 0.031744,
+          "p95_ms": 0.032769,
+          "min_ms": 0.029687,
+          "max_ms": 0.035840000000000004
+        }
+      },
+      "gpu_event_count_per_frame": {
+        "Vortex.CompositingTask": [2],
+        "Vortex.ImGuiOverlay": [1],
+        "Vortex.PostProcess.Exposure.FrameResolve": [1],
+        "Vortex.PostProcess.Exposure.Histogram": [1],
+        "Vortex.PostProcess.Exposure.MeterAndAdapt": [1],
+        "Vortex.PostProcess.Exposure.SceneRange": [2],
+        "Vortex.PostProcess.Exposure.Solve": [1],
+        "Vortex.PostProcess.Tonemap": [1],
+        "Vortex.PostRenderCleanup": [1],
+        "Vortex.RenderPass.Execute": [1],
+        "Vortex.RenderPass.PrepareResources": [0, 1],
+        "Vortex.ResolveSceneColor": [1],
+        "Vortex.Stage12.DeferredLighting": [1],
+        "Vortex.Stage12.DirectionalLight": [1],
+        "Vortex.Stage12.PointLight": [23],
+        "Vortex.Stage18.Translucency": [1],
+        "Vortex.Stage3.DepthPrepass": [1],
+        "Vortex.Stage5.ScreenHzbBuild": [1],
+        "Vortex.Stage6.SpatialLightGrid": [1],
+        "Vortex.Stage8.ShadowCacheReuse": [0, 1, 2, 3],
+        "Vortex.Stage8.ShadowDepths": [1],
+        "Vortex.Stage9.BasePass": [1],
+        "Vortex.Stage9.BasePass.MainPass": [1],
+        "VortexCompositingPass": [2]
+      },
+      "shadow_first_submission": null,
+      "shadow_second_submission": null,
+      "cpu_zone_ms": {
+        "Vortex.PostProcess.PrepareFrameExposure": {
+          "count": 1284,
+          "mean_ms": 0.09814148987538941,
+          "median_ms": 0.0923045,
+          "p95_ms": 0.144513,
+          "min_ms": 0.051848,
+          "max_ms": 0.513781,
+          "total_ms": 126.013673
+        },
+        "Vortex.PostProcess.Exposure.FrameResolve": {
+          "count": 1284,
+          "mean_ms": 0.09510684501557633,
+          "median_ms": 0.08967,
+          "p95_ms": 0.139875,
+          "min_ms": 0.049744,
+          "max_ms": 0.510024,
+          "total_ms": 122.117189
+        },
+        "D3D12.ExecuteCommandLists": {
+          "count": 28251,
+          "mean_ms": 0.02279758858093519,
+          "median_ms": 0.011191,
+          "p95_ms": 0.077827,
+          "min_ms": 0.007675,
+          "max_ms": 0.487873,
+          "total_ms": 644.054675
+        },
+        "Vortex.DispatchSceneRendererRender": {
+          "count": 1283,
+          "mean_ms": 4.708453638347622,
+          "median_ms": 4.580218,
+          "p95_ms": 6.011175,
+          "min_ms": 3.602469,
+          "max_ms": 9.687398,
+          "total_ms": 6040.946018
+        },
+        "Vortex.Lighting.GatherSelection": {
+          "count": 1284,
+          "mean_ms": 0.03270113940809969,
+          "median_ms": 0.030011999999999997,
+          "p95_ms": 0.048161,
+          "min_ms": 0.024877,
+          "max_ms": 0.139695,
+          "total_ms": 41.988263
+        },
+        "Vortex.Lighting.PublishShadowReferences": {
+          "count": 1285,
+          "mean_ms": 0.002617259143968872,
+          "median_ms": 0.002344,
+          "p95_ms": 0.004118,
+          "min_ms": 0.001452,
+          "max_ms": 0.013325,
+          "total_ms": 3.363178
+        },
+        "Vortex.SceneRenderer.PrepareExposureDomain": {
+          "count": 1284,
+          "mean_ms": 0.1433767390965732,
+          "median_ms": 0.1328465,
+          "p95_ms": 0.214375,
+          "min_ms": 0.083027,
+          "max_ms": 0.657874,
+          "total_ms": 184.095733
+        },
+        "Vortex.DispatchSceneRendererCompositing": {
+          "count": 1284,
+          "mean_ms": 0.004213427570093458,
+          "median_ms": 0.003707,
+          "p95_ms": 0.007124,
+          "min_ms": 0.002003,
+          "max_ms": 0.167767,
+          "total_ms": 5.410041
+        },
+        "Vortex.PostProcess.ResolveViewExposureSettings": {
+          "count": 1284,
+          "mean_ms": 0.009541420560747664,
+          "median_ms": 0.0092725,
+          "p95_ms": 0.01568,
+          "min_ms": 0.003797,
+          "max_ms": 0.055484,
+          "total_ms": 12.251184
+        },
+        "Vortex.PostProcess.Exposure.HistogramConstants": {
+          "count": 1284,
+          "mean_ms": 0.002760852803738318,
+          "median_ms": 0.002405,
+          "p95_ms": 0.004468,
+          "min_ms": 0.001733,
+          "max_ms": 0.062067,
+          "total_ms": 3.544935
+        },
+        "Vortex.PostProcess.PrepareSceneExposure": {
+          "count": 1284,
+          "mean_ms": 0.059545718847352026,
+          "median_ms": 0.053406499999999996,
+          "p95_ms": 0.094779,
+          "min_ms": 0.041469,
+          "max_ms": 0.329763,
+          "total_ms": 76.456703
+        },
+        "tracy::D3D12QueueCtx::Collect": {
+          "count": 3852,
+          "mean_ms": 0.009271040758047768,
+          "median_ms": 0.004388,
+          "p95_ms": 0.029526,
+          "min_ms": 1e-5,
+          "max_ms": 0.111711,
+          "total_ms": 35.712049
+        },
+        "Vortex.Lighting.PublishFrame": {
+          "count": 1284,
+          "mean_ms": 0.2720474672897196,
+          "median_ms": 0.244593,
+          "p95_ms": 0.438736,
+          "min_ms": 0.161024,
+          "max_ms": 1.159743,
+          "total_ms": 349.308948
+        },
+        "Vortex.Lighting.RecordDeferred": {
+          "count": 1284,
+          "mean_ms": 0.24948230062305296,
+          "median_ms": 0.227731,
+          "p95_ms": 0.362145,
+          "min_ms": 0.197063,
+          "max_ms": 1.157189,
+          "total_ms": 320.335274
+        },
+        "Vortex.PostProcess.Execute": {
+          "count": 1284,
+          "mean_ms": 0.04716679283489097,
+          "median_ms": 0.0366145,
+          "p95_ms": 0.108546,
+          "min_ms": 0.028945,
+          "max_ms": 0.374128,
+          "total_ms": 60.562162
+        },
+        "Graphics.FinalizeCommandRecorder": {
+          "count": 28250,
+          "mean_ms": 0.035665761097345136,
+          "median_ms": 0.018555,
+          "p95_ms": 0.117773,
+          "min_ms": 0.012463,
+          "max_ms": 0.906174,
+          "total_ms": 1007.557751
+        },
+        "D3D12.SubmitCommandList": {
+          "count": 28250,
+          "mean_ms": 0.02997516736283186,
+          "median_ms": 0.01549,
+          "p95_ms": 0.100811,
+          "min_ms": 0.0107,
+          "max_ms": 0.497311,
+          "total_ms": 846.798478
+        },
+        "Vortex.PostProcess.PollExposureStatus": {
+          "count": 1284,
+          "mean_ms": 0.0012846580996884736,
+          "median_ms": 0.001117,
+          "p95_ms": 0.002445,
+          "min_ms": 0.00029,
+          "max_ms": 0.006472,
+          "total_ms": 1.649501
+        },
+        "D3D12.BindComputePipeline": {
+          "count": 10272,
+          "mean_ms": 0.006291327492211838,
+          "median_ms": 0.002996,
+          "p95_ms": 0.023574,
+          "min_ms": 0.001243,
+          "max_ms": 0.334933,
+          "total_ms": 64.624516
+        },
+        "Graphics.AcquireCommandRecorder": {
+          "count": 28250,
+          "mean_ms": 0.015041105557522125,
+          "median_ms": 0.009838,
+          "p95_ms": 0.045527,
+          "min_ms": 0.006042,
+          "max_ms": 0.440393,
+          "total_ms": 424.911232
+        },
+        "Vortex.OnFrameStart": {
+          "count": 1284,
+          "mean_ms": 0.5520721066978194,
+          "median_ms": 0.525639,
+          "p95_ms": 0.794022,
+          "min_ms": 0.350463,
+          "max_ms": 1.431889,
+          "total_ms": 708.860585
+        },
+        "Vortex.Lighting.BuildGrid": {
+          "count": 1284,
+          "mean_ms": 0.008022735202492212,
+          "median_ms": 0.0072185,
+          "p95_ms": 0.012373,
+          "min_ms": 0.00557,
+          "max_ms": 0.027722,
+          "total_ms": 10.301192
+        },
+        "D3D12.Present.Tearing": {
+          "count": 1284,
+          "mean_ms": 0.2780520015576324,
+          "median_ms": 0.2590245,
+          "p95_ms": 0.407691,
+          "min_ms": 0.183988,
+          "max_ms": 0.982999,
+          "total_ms": 357.01877
+        },
+        "Vortex.Lighting.BuildDeferredPackets": {
+          "count": 1285,
+          "mean_ms": 0.0011823136186770427,
+          "median_ms": 0.001042,
+          "p95_ms": 0.001954,
+          "min_ms": 0.000682,
+          "max_ms": 0.008196,
+          "total_ms": 1.519273
+        },
+        "Vortex.PostProcess.Exposure.SceneRange": {
+          "count": 1284,
+          "mean_ms": 0.023887592679127725,
+          "median_ms": 0.0209095,
+          "p95_ms": 0.042039,
+          "min_ms": 0.012533,
+          "max_ms": 0.156696,
+          "total_ms": 30.671669
+        },
+        "Vortex.Shadows.RecordDepths": {
+          "count": 1284,
+          "mean_ms": 1.162069887071651,
+          "median_ms": 1.1248525,
+          "p95_ms": 1.635603,
+          "min_ms": 0.774414,
+          "max_ms": 3.635376,
+          "total_ms": 1492.097735
+        },
+        "Vortex.Lighting.ResolveEvaluation": {
+          "count": 1284,
+          "mean_ms": 0.004152518691588785,
+          "median_ms": 0.003747,
+          "p95_ms": 0.007093,
+          "min_ms": 0.002936,
+          "max_ms": 0.01577,
+          "total_ms": 5.331834
+        },
+        "D3D12.FenceWait": {
+          "count": 2566,
+          "mean_ms": 6.71507388152767,
+          "median_ms": 0.0087315,
+          "p95_ms": 15.002798,
+          "min_ms": 6e-5,
+          "max_ms": 16.522333,
+          "total_ms": 17230.87958
+        },
+        "Vortex.PostProcess.Exposure.MeterAndAdapt": {
+          "count": 1284,
+          "mean_ms": 0.051314307632398755,
+          "median_ms": 0.045672000000000004,
+          "p95_ms": 0.081254,
+          "min_ms": 0.036388,
+          "max_ms": 0.309715,
+          "total_ms": 65.887571
+        }
+      }
+    }
+  },
+  {
+    "id": "H-BENCH-TRACY",
+    "role": "Established pre-optimization fully traced primary, before receiver-footprint correction",
+    "evidence": {
+      "path": "out/analysis/ex07d/qualified-20260924/primary-summary.json",
+      "sha256": "9a3fa4777cf65d6b4f3cd61ba303837e265037f3c922b90b7a93d132c6a6281c",
+      "bytes": 244056
+    },
+    "measurements": [
+      {
+        "case": "sparse-1024",
+        "family": "deferred",
+        "frame_ms": {
+          "count": 480,
+          "mean": 59.53022270833333,
+          "p50": 58.920649999999995,
+          "p95": 67.179085,
+          "p99": 70.62930399999999,
+          "max": 74.7386
+        },
+        "gpu_frame_ms": {
+          "count": 480,
+          "mean": 59.509084470833336,
+          "p50": 59.2091695,
+          "p95": 67.1481846,
+          "p99": 70.44804428999998,
+          "max": 75.169792
+        },
+        "gpu_scopes_ms": {
+          "Vortex.Frame": {
+            "count": 480,
+            "mean": 59.509084470833336,
+            "p50": 59.2091695,
+            "p95": 67.1481846,
+            "p99": 70.44804428999998,
+            "max": 75.169792
+          },
+          "Vortex.PostProcess.Exposure.FrameResolve": {
+            "count": 480,
+            "mean": 0.013811133333333335,
+            "p50": 0.01536,
+            "p95": 0.017408,
+            "p99": 0.018432,
+            "max": 0.02048
+          },
+          "Vortex.PostProcess.Exposure.MeterAndAdapt": {
+            "count": 480,
+            "mean": 0.023076266666666668,
+            "p50": 0.01536,
+            "p95": 0.019456,
+            "p99": 0.4352511999999999,
+            "max": 0.790528
+          },
+          "Vortex.PostProcess.Exposure.SceneRange": {
+            "count": 480,
+            "mean": 0.19117866666666666,
+            "p50": 0.124928,
+            "p95": 0.6454783999999996,
+            "p99": 0.9128243199999982,
+            "max": 1.016832
+          },
+          "Vortex.PostProcess.Exposure.Solve": {
+            "count": 480,
+            "mean": 0.018414933333333335,
+            "p50": 0.012288,
+            "p95": 0.014336,
+            "p99": 0.10590207999999159,
+            "max": 0.787456
+          },
+          "Vortex.PostProcess.Tonemap": {
+            "count": 480,
+            "mean": 0.18071253333333331,
+            "p50": 0.10752,
+            "p95": 0.5838847999999989,
+            "p99": 0.9639014399999998,
+            "max": 0.99328
+          },
+          "Vortex.PostRenderCleanup": {
+            "count": 480,
+            "mean": 0.05604693333333333,
+            "p50": 0.026624,
+            "p95": 0.4342272,
+            "p99": 0.575436799999998,
+            "max": 0.903168
+          },
+          "Vortex.ResolveSceneColor": {
+            "count": 480,
+            "mean": 0.21276373333333334,
+            "p50": 0.126976,
+            "p95": 0.7506432,
+            "p99": 0.8788582399999999,
+            "max": 1.00864
+          },
+          "Vortex.Stage12.DeferredLighting": {
+            "count": 480,
+            "mean": 18.124727512499998,
+            "p50": 18.482688,
+            "p95": 19.689113550000002,
+            "p99": 20.18958257,
+            "max": 20.533249
+          },
+          "Vortex.Stage3.DepthPrepass": {
+            "count": 480,
+            "mean": 0.05561813333333333,
+            "p50": 0.055296,
+            "p95": 0.060416,
+            "p99": 0.06267903999999998,
+            "max": 0.070656
+          },
+          "Vortex.Stage6.SpatialLightGrid": {
+            "count": 480,
+            "mean": 2.3935773333333334,
+            "p50": 2.031104,
+            "p95": 3.9703039999999996,
+            "p99": 4.247203839999999,
+            "max": 4.958208
+          },
+          "Vortex.Stage9.BasePass": {
+            "count": 480,
+            "mean": 0.1625557333333333,
+            "p50": 0.161792,
+            "p95": 0.165888,
+            "p99": 0.166912,
+            "max": 0.169984
+          },
+          "Vortex.Stage9.BasePass.MainPass": {
+            "count": 480,
+            "mean": 0.15918719999999997,
+            "p50": 0.15872,
+            "p95": 0.161792,
+            "p99": 0.162816,
+            "max": 0.165888
+          }
+        },
+        "cpu_lighting_union_ms": {
+          "count": 480,
+          "mean": 14.277560212276876,
+          "p50": 13.789650022983551,
+          "p95": 18.31340004652738,
+          "p99": 19.64585103005171,
+          "max": 22.196600019931793
+        },
+        "noise": {
+          "block_frames": 60,
+          "block_means_ms": [
+            61.44379666666667, 62.14666833333333, 61.413115, 59.16216166666667,
+            58.80230166666667, 58.613013333333335, 57.31283, 57.347894999999994
+          ],
+          "block_mean_range_percent": 8.119973541870637,
+          "scope": "Within-capture block variability; no between-run confidence claim"
+        },
+        "lighting_staging_bytes_per_frame": 368999.0,
+        "lighting_allocated_bytes": 3612672,
+        "local_gpu_allocated_bytes": 684666880
+      },
+      {
+        "case": "sparse-1024",
+        "family": "forward",
+        "frame_ms": {
+          "count": 480,
+          "mean": 8.311484375,
+          "p50": 8.2573,
+          "p95": 10.42451,
+          "p99": 11.778901999999995,
+          "max": 12.6676
+        },
+        "gpu_frame_ms": {
+          "count": 480,
+          "mean": 8.300775466666668,
+          "p50": 8.231904,
+          "p95": 10.224198399999995,
+          "p99": 11.469301759999999,
+          "max": 13.002752
+        },
+        "gpu_scopes_ms": {
+          "Vortex.Frame": {
+            "count": 480,
+            "mean": 8.300775466666668,
+            "p50": 8.231904,
+            "p95": 10.224198399999995,
+            "p99": 11.469301759999999,
+            "max": 13.002752
+          },
+          "Vortex.PostProcess.Exposure.FrameResolve": {
+            "count": 480,
+            "mean": 0.014683333333333333,
+            "p50": 0.011264,
+            "p95": 0.017408,
+            "p99": 0.01967103999999998,
+            "max": 0.63488
+          },
+          "Vortex.PostProcess.Exposure.MeterAndAdapt": {
+            "count": 480,
+            "mean": 0.015155199999999999,
+            "p50": 0.01536,
+            "p95": 0.017408,
+            "p99": 0.018432,
+            "max": 0.022528
+          },
+          "Vortex.PostProcess.Exposure.SceneRange": {
+            "count": 480,
+            "mean": 0.1289088,
+            "p50": 0.121856,
+            "p95": 0.128,
+            "p99": 0.20515839999999297,
+            "max": 1.020928
+          },
+          "Vortex.PostProcess.Exposure.Solve": {
+            "count": 480,
+            "mean": 0.011901866666666665,
+            "p50": 0.011264,
+            "p95": 0.013363199999999952,
+            "p99": 0.014336,
+            "max": 0.018432
+          },
+          "Vortex.PostProcess.Tonemap": {
+            "count": 480,
+            "mean": 0.11074986666666667,
+            "p50": 0.10752,
+            "p95": 0.113664,
+            "p99": 0.11592703999999998,
+            "max": 0.966656
+          },
+          "Vortex.PostRenderCleanup": {
+            "count": 480,
+            "mean": 0.021410133333333334,
+            "p50": 0.02048,
+            "p95": 0.022528,
+            "p99": 0.023552,
+            "max": 0.434176
+          },
+          "Vortex.ResolveSceneColor": {
+            "count": 480,
+            "mean": 0.1317312,
+            "p50": 0.125952,
+            "p95": 0.13726719999999995,
+            "p99": 0.139264,
+            "max": 0.75264
+          },
+          "Vortex.Stage3.DepthPrepass": {
+            "count": 480,
+            "mean": 0.06756053333333334,
+            "p50": 0.05632,
+            "p95": 0.061491199999999954,
+            "p99": 0.47659007999999997,
+            "max": 0.743424
+          },
+          "Vortex.Stage6.SpatialLightGrid": {
+            "count": 480,
+            "mean": 2.940480866666667,
+            "p50": 2.894848,
+            "p95": 4.1691648,
+            "p99": 4.452249599999998,
+            "max": 5.226496
+          },
+          "Vortex.Stage9.BasePass": {
+            "count": 480,
+            "mean": 2.3604437333333332,
+            "p50": 2.397184,
+            "p95": 2.7499007999999994,
+            "p99": 2.88525312,
+            "max": 2.90304
+          },
+          "Vortex.Stage9.BasePass.Forward": {
+            "count": 480,
+            "mean": 2.357092266666667,
+            "p50": 2.394112,
+            "p95": 2.7468287999999994,
+            "p99": 2.88196608,
+            "max": 2.899968
+          }
+        },
+        "cpu_lighting_union_ms": {
+          "count": 480,
+          "mean": 0.8336762490992745,
+          "p50": 0.7618499994277954,
+          "p95": 1.2940450027585022,
+          "p99": 1.8179119694232937,
+          "max": 2.313500016927719
+        },
+        "noise": {
+          "block_frames": 60,
+          "block_means_ms": [
+            8.259243333333332, 8.462616666666667, 9.162663333333334, 8.32691,
+            8.191973333333333, 8.147770000000001, 7.9094299999999995,
+            8.031268333333335
+          ],
+          "block_mean_range_percent": 15.078333505660174,
+          "scope": "Within-capture block variability; no between-run confidence claim"
+        },
+        "lighting_staging_bytes_per_frame": 106600.0,
+        "lighting_allocated_bytes": 2760704,
+        "local_gpu_allocated_bytes": 645345280
+      }
+    ]
+  },
+  {
+    "id": "H-BENCH-OPT-TRACY",
+    "role": "Intermediate fully traced optimization, before receiver-footprint correction",
+    "evidence": {
+      "path": "out/analysis/ex07d/optimization-submission/summary.json",
+      "sha256": "6b12025feafe6d5b9a8db9075801e50d5bf0e8a36643ee56dd0ed5c8e0906165",
+      "bytes": 249934
+    },
+    "measurements": [
+      {
+        "case": "sparse-1024",
+        "family": "deferred",
+        "frame_ms": {
+          "count": 480,
+          "mean": 24.32723479166667,
+          "p50": 24.4209,
+          "p95": 26.620909999999995,
+          "p99": 27.439753,
+          "max": 28.9589
+        },
+        "gpu_frame_ms": {
+          "count": 480,
+          "mean": 24.314406152083333,
+          "p50": 24.2754555,
+          "p95": 26.89366245,
+          "p99": 27.928002769999996,
+          "max": 29.24544
+        },
+        "gpu_scopes_ms": {
+          "Vortex.Frame": {
+            "count": 480,
+            "mean": 24.314406152083333,
+            "p50": 24.2754555,
+            "p95": 26.89366245,
+            "p99": 27.928002769999996,
+            "max": 29.24544
+          },
+          "Vortex.PostProcess.Exposure.FrameResolve": {
+            "count": 480,
+            "mean": 0.012782266666666669,
+            "p50": 0.012288,
+            "p95": 0.016384,
+            "p99": 0.01762303999999998,
+            "max": 0.018432
+          },
+          "Vortex.PostProcess.Exposure.MeterAndAdapt": {
+            "count": 480,
+            "mean": 0.02933333333333333,
+            "p50": 0.014336,
+            "p95": 0.019456,
+            "p99": 0.5511270399999999,
+            "max": 0.643072
+          },
+          "Vortex.PostProcess.Exposure.SceneRange": {
+            "count": 480,
+            "mean": 0.19968086666666668,
+            "p50": 0.123904,
+            "p95": 0.5622271999999972,
+            "p99": 0.8099737599999954,
+            "max": 1.045504
+          },
+          "Vortex.PostProcess.Exposure.Solve": {
+            "count": 480,
+            "mean": 0.022940733333333335,
+            "p50": 0.011264,
+            "p95": 0.014336,
+            "p99": 0.46451711999999784,
+            "max": 0.637952
+          },
+          "Vortex.PostProcess.Tonemap": {
+            "count": 480,
+            "mean": 0.12852266666666665,
+            "p50": 0.106496,
+            "p95": 0.115712,
+            "p99": 0.7217561599999999,
+            "max": 1.006592
+          },
+          "Vortex.PostRenderCleanup": {
+            "count": 480,
+            "mean": 0.05123626666666666,
+            "p50": 0.026624,
+            "p95": 0.05150719999998482,
+            "p99": 0.56896512,
+            "max": 0.9216
+          },
+          "Vortex.ResolveSceneColor": {
+            "count": 480,
+            "mean": 0.19873280000000001,
+            "p50": 0.126976,
+            "p95": 0.746496,
+            "p99": 0.98244608,
+            "max": 1.005568
+          },
+          "Vortex.Stage12.DeferredLighting": {
+            "count": 480,
+            "mean": 15.41271893125,
+            "p50": 15.31392,
+            "p95": 17.227776,
+            "p99": 17.83477327,
+            "max": 18.756607
+          },
+          "Vortex.Stage3.DepthPrepass": {
+            "count": 480,
+            "mean": 0.053685333333333335,
+            "p50": 0.054272,
+            "p95": 0.059392,
+            "p99": 0.062464,
+            "max": 0.065536
+          },
+          "Vortex.Stage6.SpatialLightGrid": {
+            "count": 480,
+            "mean": 2.5195434666666663,
+            "p50": 2.482176,
+            "p95": 4.044902400000001,
+            "p99": 4.252927999999999,
+            "max": 4.381696
+          },
+          "Vortex.Stage9.BasePass": {
+            "count": 480,
+            "mean": 0.16180053333333333,
+            "p50": 0.161792,
+            "p95": 0.164864,
+            "p99": 0.16815103999999997,
+            "max": 0.169984
+          },
+          "Vortex.Stage9.BasePass.MainPass": {
+            "count": 480,
+            "mean": 0.15854506666666668,
+            "p50": 0.157696,
+            "p95": 0.160768,
+            "p99": 0.164864,
+            "max": 0.166912
+          }
+        },
+        "cpu_lighting_union_ms": {
+          "count": 480,
+          "mean": 4.010417084395885,
+          "p50": 3.974999964237213,
+          "p95": 4.496554982662201,
+          "p99": 4.8586299920082086,
+          "max": 5.389399945735931
+        },
+        "noise": {
+          "block_frames": 60,
+          "block_means_ms": [
+            23.88386666666667, 24.43507833333333, 24.47832333333333,
+            24.15037166666667, 24.733906666666666, 24.662895000000002, 24.17583,
+            24.097606666666664
+          ],
+          "block_mean_range_percent": 3.494190800062401,
+          "scope": "Within-capture block variability; no between-run confidence claim"
+        },
+        "lighting_staging_bytes_per_frame": 287079.0,
+        "lighting_allocated_bytes": 3416064,
+        "local_gpu_allocated_bytes": 684666880
+      },
+      {
+        "case": "sparse-4096",
+        "family": "deferred",
+        "frame_ms": {
+          "count": 240,
+          "mean": 39.16287833333333,
+          "p50": 39.183400000000006,
+          "p95": 42.60153,
+          "p99": 45.792438999999995,
+          "max": 50.4805
+        },
+        "gpu_frame_ms": {
+          "count": 240,
+          "mean": 39.155821875,
+          "p50": 39.079937,
+          "p95": 42.284031999999996,
+          "p99": 44.44850053999999,
+          "max": 50.561024
+        },
+        "gpu_scopes_ms": {
+          "Vortex.Frame": {
+            "count": 240,
+            "mean": 39.155821875,
+            "p50": 39.079937,
+            "p95": 42.284031999999996,
+            "p99": 44.44850053999999,
+            "max": 50.561024
+          },
+          "Vortex.PostProcess.Exposure.FrameResolve": {
+            "count": 240,
+            "mean": 0.011886266666666668,
+            "p50": 0.01024,
+            "p95": 0.017408,
+            "p99": 0.017408,
+            "max": 0.027648
+          },
+          "Vortex.PostProcess.Exposure.MeterAndAdapt": {
+            "count": 240,
+            "mean": 0.0224896,
+            "p50": 0.014336,
+            "p95": 0.017408,
+            "p99": 0.3463167999999921,
+            "max": 0.646144
+          },
+          "Vortex.PostProcess.Exposure.SceneRange": {
+            "count": 240,
+            "mean": 0.13522773333333332,
+            "p50": 0.124928,
+            "p95": 0.128,
+            "p99": 0.5460172799999999,
+            "max": 0.755712
+          },
+          "Vortex.PostProcess.Exposure.Solve": {
+            "count": 240,
+            "mean": 0.016631466666666664,
+            "p50": 0.011264,
+            "p95": 0.013312,
+            "p99": 0.01683455999999994,
+            "max": 0.643072
+          },
+          "Vortex.PostProcess.Tonemap": {
+            "count": 240,
+            "mean": 0.250048,
+            "p50": 0.114176,
+            "p95": 0.7302143999999999,
+            "p99": 0.9617612799999999,
+            "max": 0.991232
+          },
+          "Vortex.PostRenderCleanup": {
+            "count": 240,
+            "mean": 0.02688853333333333,
+            "p50": 0.026624,
+            "p95": 0.027699199999999983,
+            "p99": 0.028672,
+            "max": 0.029696
+          },
+          "Vortex.ResolveSceneColor": {
+            "count": 240,
+            "mean": 0.2472618666666667,
+            "p50": 0.129024,
+            "p95": 0.5509632,
+            "p99": 0.9526681599999985,
+            "max": 1.010688
+          },
+          "Vortex.Stage12.DeferredLighting": {
+            "count": 240,
+            "mean": 18.809442262500003,
+            "p50": 18.587135,
+            "p95": 20.386099249999997,
+            "p99": 21.230601239999995,
+            "max": 21.977089
+          },
+          "Vortex.Stage3.DepthPrepass": {
+            "count": 240,
+            "mean": 0.05530453333333333,
+            "p50": 0.055296,
+            "p95": 0.059392,
+            "p99": 0.06001663999999998,
+            "max": 0.060416
+          },
+          "Vortex.Stage6.SpatialLightGrid": {
+            "count": 240,
+            "mean": 11.351415466666667,
+            "p50": 11.890176,
+            "p95": 12.4370944,
+            "p99": 12.77111296,
+            "max": 13.150208
+          },
+          "Vortex.Stage9.BasePass": {
+            "count": 240,
+            "mean": 0.1649152,
+            "p50": 0.164864,
+            "p95": 0.166912,
+            "p99": 0.16896,
+            "max": 0.169984
+          },
+          "Vortex.Stage9.BasePass.MainPass": {
+            "count": 240,
+            "mean": 0.1616512,
+            "p50": 0.161792,
+            "p95": 0.16384,
+            "p99": 0.164864,
+            "max": 0.165888
+          }
+        },
+        "cpu_lighting_union_ms": {
+          "count": 240,
+          "mean": 6.5962120863298574,
+          "p50": 6.4521500170230865,
+          "p95": 7.629845041036602,
+          "p99": 8.7085860979557,
+          "max": 10.372100114822388
+        },
+        "noise": {
+          "block_frames": 60,
+          "block_means_ms": [
+            38.80104000000001, 39.46612833333333, 39.10912833333334,
+            39.275216666666665
+          ],
+          "block_mean_range_percent": 1.6982621340353201,
+          "scope": "Within-capture block variability; no between-run confidence claim"
+        },
+        "lighting_staging_bytes_per_frame": 604519.0,
+        "lighting_allocated_bytes": 4333568,
+        "local_gpu_allocated_bytes": 684666880
+      }
+    ]
+  },
+  {
+    "id": "H-BENCH-OPT-NATIVE",
+    "role": "Intermediate native-stage-only primary/count runs, before receiver-footprint correction",
+    "evidence": {
+      "path": "out/analysis/ex07d/optimization-production/summary.json",
+      "sha256": "28ade7cff66e428791b47163cf7febfa31bb81ae36fef70d8a853be1e4b00d66",
+      "bytes": 473180
+    },
+    "measurements": [
+      {
+        "case": "sparse-1024",
+        "family": "deferred",
+        "frame_ms": {
+          "count": 480,
+          "mean": 9.998648333333335,
+          "p50": 10.11385,
+          "p95": 11.290634999999998,
+          "p99": 11.829722,
+          "max": 12.1194
+        },
+        "gpu_frame_ms": {
+          "count": 480,
+          "mean": 9.987226200000002,
+          "p50": 10.104368000000001,
+          "p95": 10.8352448,
+          "p99": 11.332812799999997,
+          "max": 11.993088
+        },
+        "gpu_scopes_ms": {
+          "Vortex.Frame": {
+            "count": 480,
+            "mean": 9.987226200000002,
+            "p50": 10.104368000000001,
+            "p95": 10.8352448,
+            "p99": 11.332812799999997,
+            "max": 11.993088
+          },
+          "Vortex.PostProcess.Exposure.FrameResolve": {
+            "count": 480,
+            "mean": 0.005490599999999999,
+            "p50": 0.00512,
+            "p95": 0.006144,
+            "p99": 0.006144,
+            "max": 0.007168
+          },
+          "Vortex.PostProcess.Exposure.MeterAndAdapt": {
+            "count": 480,
+            "mean": 0.007191466666666665,
+            "p50": 0.007168,
+            "p95": 0.009216,
+            "p99": 0.01250303999999998,
+            "max": 0.018432
+          },
+          "Vortex.PostProcess.Exposure.SceneRange": {
+            "count": 480,
+            "mean": 0.279456,
+            "p50": 0.329728,
+            "p95": 0.449536,
+            "p99": 0.7256371199999999,
+            "max": 0.997376
+          },
+          "Vortex.PostProcess.Exposure.Solve": {
+            "count": 480,
+            "mean": 0.007005866666666665,
+            "p50": 0.007168,
+            "p95": 0.009216,
+            "p99": 0.01250303999999998,
+            "max": 0.018432
+          },
+          "Vortex.PostProcess.Tonemap": {
+            "count": 480,
+            "mean": 0.10544,
+            "p50": 0.104448,
+            "p95": 0.105472,
+            "p99": 0.108544,
+            "max": 0.44544
+          },
+          "Vortex.PostRenderCleanup": {
+            "count": 480,
+            "mean": 0.11157333333333334,
+            "p50": 0.022528,
+            "p95": 0.38097919999999996,
+            "p99": 0.4596735999999981,
+            "max": 0.909312
+          },
+          "Vortex.ResolveSceneColor": {
+            "count": 480,
+            "mean": 0.12931413333333333,
+            "p50": 0.125952,
+            "p95": 0.132096,
+            "p99": 0.13312,
+            "max": 0.524288
+          },
+          "Vortex.Stage12.DeferredLighting": {
+            "count": 480,
+            "mean": 3.0573994666666664,
+            "p50": 2.98496,
+            "p95": 3.5670015999999998,
+            "p99": 3.77499648,
+            "max": 3.944448
+          },
+          "Vortex.Stage3.DepthPrepass": {
+            "count": 480,
+            "mean": 0.045126400000000004,
+            "p50": 0.043008,
+            "p95": 0.049152,
+            "p99": 0.04936703999999998,
+            "max": 0.050176
+          },
+          "Vortex.Stage6.SpatialLightGrid": {
+            "count": 480,
+            "mean": 3.3360396000000003,
+            "p50": 3.7106399999999997,
+            "p95": 4.1422336,
+            "p99": 4.24666752,
+            "max": 4.310144
+          },
+          "Vortex.Stage9.BasePass": {
+            "count": 480,
+            "mean": 0.15678293333333335,
+            "p50": 0.156672,
+            "p95": 0.159744,
+            "p99": 0.160768,
+            "max": 0.162816
+          },
+          "Vortex.Stage9.BasePass.MainPass": {
+            "count": 480,
+            "mean": 0.15668479999999999,
+            "p50": 0.155648,
+            "p95": 0.159744,
+            "p99": 0.160768,
+            "max": 0.162816
+          }
+        },
+        "cpu_lighting_union_ms": {
+          "count": 480,
+          "mean": 2.7360756255686285,
+          "p50": 2.693850100040436,
+          "p95": 3.063460001349449,
+          "p99": 3.3241179859638206,
+          "max": 3.406499981880188
+        },
+        "noise": {
+          "block_frames": 60,
+          "block_means_ms": [
+            9.988595000000002, 9.985065000000002, 10.013591666666665,
+            10.012963333333335, 10.161231666666668, 9.998956666666666,
+            9.852241666666668, 9.976541666666664
+          ],
+          "block_mean_range_percent": 3.0903177079435196,
+          "scope": "Within-capture block variability; no between-run confidence claim"
+        },
+        "lighting_staging_bytes_per_frame": 287079.0,
+        "lighting_allocated_bytes": 3416064,
+        "local_gpu_allocated_bytes": 684666880
+      },
+      {
+        "case": "sparse-1024",
+        "family": "forward",
+        "frame_ms": {
+          "count": 480,
+          "mean": 7.230207083333332,
+          "p50": 7.20415,
+          "p95": 8.68646,
+          "p99": 9.349735999999995,
+          "max": 9.9355
+        },
+        "gpu_frame_ms": {
+          "count": 480,
+          "mean": 7.215189933333334,
+          "p50": 7.079904,
+          "p95": 8.44672,
+          "p99": 9.02321152,
+          "max": 9.594752
+        },
+        "gpu_scopes_ms": {
+          "Vortex.Frame": {
+            "count": 480,
+            "mean": 7.215189933333334,
+            "p50": 7.079904,
+            "p95": 8.44672,
+            "p99": 9.02321152,
+            "max": 9.594752
+          },
+          "Vortex.PostProcess.Exposure.FrameResolve": {
+            "count": 480,
+            "mean": 0.006920533333333334,
+            "p50": 0.00512,
+            "p95": 0.007168,
+            "p99": 0.008192,
+            "max": 0.630784
+          },
+          "Vortex.PostProcess.Exposure.MeterAndAdapt": {
+            "count": 480,
+            "mean": 0.007859199999999998,
+            "p50": 0.007168,
+            "p95": 0.01024,
+            "p99": 0.013312,
+            "max": 0.014336
+          },
+          "Vortex.PostProcess.Exposure.SceneRange": {
+            "count": 480,
+            "mean": 0.4237973333333334,
+            "p50": 0.33689600000000003,
+            "p95": 0.9708031999999999,
+            "p99": 0.982016,
+            "max": 1.127424
+          },
+          "Vortex.PostProcess.Exposure.Solve": {
+            "count": 480,
+            "mean": 0.007686399999999999,
+            "p50": 0.007168,
+            "p95": 0.01024,
+            "p99": 0.013312,
+            "max": 0.014336
+          },
+          "Vortex.PostProcess.Tonemap": {
+            "count": 480,
+            "mean": 0.10382293333333334,
+            "p50": 0.103424,
+            "p95": 0.105472,
+            "p99": 0.105472,
+            "max": 0.10752
+          },
+          "Vortex.PostRenderCleanup": {
+            "count": 480,
+            "mean": 0.20948479999999997,
+            "p50": 0.017408,
+            "p95": 0.437248,
+            "p99": 0.6875955199999982,
+            "max": 0.87552
+          },
+          "Vortex.ResolveSceneColor": {
+            "count": 480,
+            "mean": 0.1265152,
+            "p50": 0.128,
+            "p95": 0.131072,
+            "p99": 0.13312,
+            "max": 0.134144
+          },
+          "Vortex.Stage3.DepthPrepass": {
+            "count": 480,
+            "mean": 0.05034453333333333,
+            "p50": 0.043008,
+            "p95": 0.049152,
+            "p99": 0.12286975999999332,
+            "max": 0.664576
+          },
+          "Vortex.Stage6.SpatialLightGrid": {
+            "count": 480,
+            "mean": 2.6299821333333337,
+            "p50": 2.518096,
+            "p95": 4.0110592,
+            "p99": 4.27321664,
+            "max": 4.369408
+          },
+          "Vortex.Stage9.BasePass": {
+            "count": 480,
+            "mean": 2.0587690666666667,
+            "p50": 1.9968,
+            "p95": 2.2569472,
+            "p99": 2.27063808,
+            "max": 2.752512
+          },
+          "Vortex.Stage9.BasePass.Forward": {
+            "count": 480,
+            "mean": 2.058658133333333,
+            "p50": 1.9968,
+            "p95": 2.2569472,
+            "p99": 2.27063808,
+            "max": 2.751488
+          }
+        },
+        "cpu_lighting_union_ms": {
+          "count": 480,
+          "mean": 0.5854289559026559,
+          "p50": 0.557299941778183,
+          "p95": 0.7710849940776823,
+          "p99": 0.9184510391950607,
+          "max": 1.1987000107765198
+        },
+        "noise": {
+          "block_frames": 60,
+          "block_means_ms": [
+            7.254625, 7.237634999999999, 7.213521666666666, 7.201758333333333,
+            7.243446666666667, 7.336978333333334, 7.156735, 7.196956666666666
+          ],
+          "block_mean_range_percent": 2.492920759473406,
+          "scope": "Within-capture block variability; no between-run confidence claim"
+        },
+        "lighting_staging_bytes_per_frame": 106600.0,
+        "lighting_allocated_bytes": 2760704,
+        "local_gpu_allocated_bytes": 645345280
+      },
+      {
+        "case": "sparse-4096",
+        "family": "deferred",
+        "frame_ms": {
+          "count": 240,
+          "mean": 22.00077375,
+          "p50": 22.171300000000002,
+          "p95": 24.947654999999997,
+          "p99": 25.654051999999997,
+          "max": 26.3538
+        },
+        "gpu_frame_ms": {
+          "count": 240,
+          "mean": 21.992919725,
+          "p50": 21.9755525,
+          "p95": 24.78218245,
+          "p99": 25.962721279999997,
+          "max": 26.462208
+        },
+        "gpu_scopes_ms": {
+          "Vortex.Frame": {
+            "count": 240,
+            "mean": 21.992919725,
+            "p50": 21.9755525,
+            "p95": 24.78218245,
+            "p99": 25.962721279999997,
+            "max": 26.462208
+          },
+          "Vortex.PostProcess.Exposure.FrameResolve": {
+            "count": 240,
+            "mean": 0.005563733333333333,
+            "p50": 0.00512,
+            "p95": 0.006144,
+            "p99": 0.007168,
+            "max": 0.008192
+          },
+          "Vortex.PostProcess.Exposure.MeterAndAdapt": {
+            "count": 240,
+            "mean": 0.007411199999999998,
+            "p50": 0.007168,
+            "p95": 0.010342399999999965,
+            "p99": 0.018432,
+            "max": 0.018432
+          },
+          "Vortex.PostProcess.Exposure.SceneRange": {
+            "count": 240,
+            "mean": 0.3147690666666667,
+            "p50": 0.3328,
+            "p95": 0.7312384,
+            "p99": 0.97302528,
+            "max": 1.0803200000000002
+          },
+          "Vortex.PostProcess.Exposure.Solve": {
+            "count": 240,
+            "mean": 0.007227733333333332,
+            "p50": 0.006144,
+            "p95": 0.010291199999999983,
+            "p99": 0.017408,
+            "max": 0.018432
+          },
+          "Vortex.PostProcess.Tonemap": {
+            "count": 240,
+            "mean": 0.1524864,
+            "p50": 0.104448,
+            "p95": 0.4498431999999999,
+            "p99": 0.48600064,
+            "max": 0.520192
+          },
+          "Vortex.PostRenderCleanup": {
+            "count": 240,
+            "mean": 0.21956266666666666,
+            "p50": 0.026624,
+            "p95": 0.8777727999999999,
+            "p99": 0.9151078399999999,
+            "max": 0.925696
+          },
+          "Vortex.ResolveSceneColor": {
+            "count": 240,
+            "mean": 0.14744746666666667,
+            "p50": 0.132096,
+            "p95": 0.145408,
+            "p99": 0.5065830399999999,
+            "max": 0.751616
+          },
+          "Vortex.Stage12.DeferredLighting": {
+            "count": 240,
+            "mean": 3.7958912,
+            "p50": 3.8958079999999997,
+            "p95": 4.065331199999999,
+            "p99": 4.18224128,
+            "max": 4.393984
+          },
+          "Vortex.Stage3.DepthPrepass": {
+            "count": 240,
+            "mean": 0.04401493333333333,
+            "p50": 0.043008,
+            "p95": 0.049152,
+            "p99": 0.049152,
+            "max": 0.0512
+          },
+          "Vortex.Stage6.SpatialLightGrid": {
+            "count": 240,
+            "mean": 10.998406666666666,
+            "p50": 10.755072,
+            "p95": 12.3131408,
+            "p99": 12.47680544,
+            "max": 12.713984
+          },
+          "Vortex.Stage9.BasePass": {
+            "count": 240,
+            "mean": 0.15955626666666667,
+            "p50": 0.159744,
+            "p95": 0.160768,
+            "p99": 0.161792,
+            "max": 0.16384
+          },
+          "Vortex.Stage9.BasePass.MainPass": {
+            "count": 240,
+            "mean": 0.15946666666666667,
+            "p50": 0.159744,
+            "p95": 0.160768,
+            "p99": 0.161792,
+            "max": 0.16384
+          }
+        },
+        "cpu_lighting_union_ms": {
+          "count": 240,
+          "mean": 4.596370000143846,
+          "p50": 4.508899927139282,
+          "p95": 5.199684914946556,
+          "p99": 5.656802938580513,
+          "max": 6.521000027656555
+        },
+        "noise": {
+          "block_frames": 60,
+          "block_means_ms": [
+            21.70341, 21.15401166666667, 23.408063333333335, 21.73761
+          ],
+          "block_mean_range_percent": 10.245329061059344,
+          "scope": "Within-capture block variability; no between-run confidence claim"
+        },
+        "lighting_staging_bytes_per_frame": 604519.0,
+        "lighting_allocated_bytes": 4333568,
+        "local_gpu_allocated_bytes": 684666880
+      },
+      {
+        "case": "sparse-4096",
+        "family": "forward",
+        "frame_ms": {
+          "count": 240,
+          "mean": 20.717679999999998,
+          "p50": 20.84355,
+          "p95": 23.689405,
+          "p99": 24.624775,
+          "max": 30.3622
+        },
+        "gpu_frame_ms": {
+          "count": 240,
+          "mean": 20.6878586625,
+          "p50": 20.416016499999998,
+          "p95": 23.042722599999998,
+          "p99": 25.64173048999999,
+          "max": 31.681536
+        },
+        "gpu_scopes_ms": {
+          "Vortex.Frame": {
+            "count": 240,
+            "mean": 20.6878586625,
+            "p50": 20.416016499999998,
+            "p95": 23.042722599999998,
+            "p99": 25.64173048999999,
+            "max": 31.681536
+          },
+          "Vortex.PostProcess.Exposure.FrameResolve": {
+            "count": 240,
+            "mean": 0.005725866666666666,
+            "p50": 0.006144,
+            "p95": 0.006144,
+            "p99": 0.008192,
+            "max": 0.008192
+          },
+          "Vortex.PostProcess.Exposure.MeterAndAdapt": {
+            "count": 240,
+            "mean": 0.008281599999999998,
+            "p50": 0.008192,
+            "p95": 0.011264,
+            "p99": 0.013312,
+            "max": 0.014336
+          },
+          "Vortex.PostProcess.Exposure.SceneRange": {
+            "count": 240,
+            "mean": 0.4898517333333333,
+            "p50": 0.220672,
+            "p95": 1.0138112,
+            "p99": 1.0339430399999998,
+            "max": 1.055744
+          },
+          "Vortex.PostProcess.Exposure.Solve": {
+            "count": 240,
+            "mean": 0.008110933333333332,
+            "p50": 0.007168,
+            "p95": 0.010291199999999983,
+            "p99": 0.013312,
+            "max": 0.014336
+          },
+          "Vortex.PostProcess.Tonemap": {
+            "count": 240,
+            "mean": 0.10417493333333333,
+            "p50": 0.104448,
+            "p95": 0.105472,
+            "p99": 0.110592,
+            "max": 0.114688
+          },
+          "Vortex.PostRenderCleanup": {
+            "count": 240,
+            "mean": 0.42383360000000003,
+            "p50": 0.41984,
+            "p95": 0.6308352,
+            "p99": 0.77476864,
+            "max": 0.792576
+          },
+          "Vortex.ResolveSceneColor": {
+            "count": 240,
+            "mean": 0.1297152,
+            "p50": 0.130048,
+            "p95": 0.134144,
+            "p99": 0.14073855999999993,
+            "max": 0.144384
+          },
+          "Vortex.Stage3.DepthPrepass": {
+            "count": 240,
+            "mean": 0.0443904,
+            "p50": 0.043008,
+            "p95": 0.049152,
+            "p99": 0.05204991999999995,
+            "max": 0.054272
+          },
+          "Vortex.Stage6.SpatialLightGrid": {
+            "count": 240,
+            "mean": 11.287414799999999,
+            "p50": 11.734016,
+            "p95": 12.625992,
+            "p99": 12.909803519999999,
+            "max": 13.67552
+          },
+          "Vortex.Stage9.BasePass": {
+            "count": 240,
+            "mean": 2.2519125333333334,
+            "p50": 2.316288,
+            "p95": 2.4023552,
+            "p99": 2.41549312,
+            "max": 2.428928
+          },
+          "Vortex.Stage9.BasePass.Forward": {
+            "count": 240,
+            "mean": 2.251831466666667,
+            "p50": 2.316288,
+            "p95": 2.4023552,
+            "p99": 2.41549312,
+            "max": 2.428928
+          }
+        },
+        "cpu_lighting_union_ms": {
+          "count": 240,
+          "mean": 2.234474996725718,
+          "p50": 2.1669000387191772,
+          "p95": 2.796389919519424,
+          "p99": 3.226122940182684,
+          "max": 4.364400029182434
+        },
+        "noise": {
+          "block_frames": 60,
+          "block_means_ms": [
+            20.638113333333333, 20.157116666666663, 21.540925000000005,
+            20.534565000000004
+          ],
+          "block_mean_range_percent": 6.679359529316708,
+          "scope": "Within-capture block variability; no between-run confidence claim"
+        },
+        "lighting_staging_bytes_per_frame": 401512.0,
+        "lighting_allocated_bytes": 3612672,
+        "local_gpu_allocated_bytes": 645345280
+      }
+    ]
+  },
+  {
+    "id": "H-SPONZA-4096M-DIAGNOSTIC",
+    "role": "Post-fix diagnostic capture with no CPU/GPU headroom preflight; superseded by A-SPONZA",
+    "evidence": {
+      "path": "out/analysis/ex07-regressions-20260924/sponza-profile-analysis.json",
+      "sha256": "755c4122510f0bb6b345bbea8082df0dd0b8e5df126291e65082c37c62e68f76",
+      "bytes": 14679
+    },
+    "measurements": {
+      "trace": "sponza-profile.tracy",
+      "method": "Complete GPU frames bounded by consecutive Stage3.DepthPrepass starts between 20 and 50 seconds; overlapping parent/child zones are not additive.",
+      "window_start_s": 20.074076653,
+      "window_end_s": 49.977868789,
+      "complete_frames": 413,
+      "gpu_frame_period": {
+        "count": 413,
+        "mean_ms": 72.40627635835351,
+        "median_ms": 74.497678,
+        "p95_ms": 76.834203,
+        "min_ms": 62.889847,
+        "max_ms": 78.73271
+      },
+      "fps_from_mean_period": 13.810957423784576,
+      "gpu_ms_per_frame": {
+        "Vortex.CompositingTask": {
+          "count": 413,
+          "mean_ms": 0.07745835593220339,
+          "median_ms": 0.07680100000000001,
+          "p95_ms": 0.082721,
+          "min_ms": 0.07372799999999999,
+          "max_ms": 0.08483399999999999
+        },
+        "Vortex.ImGuiOverlay": {
+          "count": 413,
+          "mean_ms": 0.019009966101694916,
+          "median_ms": 0.019456,
+          "p95_ms": 0.02048,
+          "min_ms": 0.013313,
+          "max_ms": 0.023553
+        },
+        "Vortex.PostProcess.Exposure.FrameResolve": {
+          "count": 413,
+          "mean_ms": 0.028176479418886197,
+          "median_ms": 0.026625,
+          "p95_ms": 0.033793,
+          "min_ms": 0.013312,
+          "max_ms": 0.051201
+        },
+        "Vortex.PostProcess.Exposure.Histogram": {
+          "count": 413,
+          "mean_ms": 0.04610294188861985,
+          "median_ms": 0.04608,
+          "p95_ms": 0.048129,
+          "min_ms": 0.044032,
+          "max_ms": 0.050177
+        },
+        "Vortex.PostProcess.Exposure.MeterAndAdapt": {
+          "count": 413,
+          "mean_ms": 0.09719954963680387,
+          "median_ms": 0.097281,
+          "p95_ms": 0.100353,
+          "min_ms": 0.094209,
+          "max_ms": 0.102402
+        },
+        "Vortex.PostProcess.Exposure.SceneRange": {
+          "count": 413,
+          "mean_ms": 0.17578826876513318,
+          "median_ms": 0.174083,
+          "p95_ms": 0.178178,
+          "min_ms": 0.167921,
+          "max_ms": 0.785418
+        },
+        "Vortex.PostProcess.Exposure.Solve": {
+          "count": 413,
+          "mean_ms": 0.04290946731234867,
+          "median_ms": 0.043009,
+          "p95_ms": 0.044033,
+          "min_ms": 0.041981,
+          "max_ms": 0.046081
+        },
+        "Vortex.PostProcess.Tonemap": {
+          "count": 413,
+          "mean_ms": 0.12288157384987894,
+          "median_ms": 0.122881,
+          "p95_ms": 0.125953,
+          "min_ms": 0.11981,
+          "max_ms": 0.13005
+        },
+        "Vortex.PostRenderCleanup": {
+          "count": 413,
+          "mean_ms": 0.0417316803874092,
+          "median_ms": 0.041982,
+          "p95_ms": 0.044032,
+          "min_ms": 0.037889,
+          "max_ms": 0.046081
+        },
+        "Vortex.RenderPass.Execute": {
+          "count": 413,
+          "mean_ms": 0.025578046004842616,
+          "median_ms": 0.0256,
+          "p95_ms": 0.026625,
+          "min_ms": 0.024574,
+          "max_ms": 0.027648
+        },
+        "Vortex.RenderPass.PrepareResources": {
+          "count": 413,
+          "mean_ms": 6.8184019370460044e-6,
+          "median_ms": 0.0,
+          "p95_ms": 0.0,
+          "min_ms": 0.0,
+          "max_ms": 0.001024
+        },
+        "Vortex.ResolveSceneColor": {
+          "count": 413,
+          "mean_ms": 0.27830401937046007,
+          "median_ms": 0.218115,
+          "p95_ms": 0.837643,
+          "min_ms": 0.213987,
+          "max_ms": 1.132563
+        },
+        "Vortex.Stage12.DeferredLighting": {
+          "count": 413,
+          "mean_ms": 45.568070510895886,
+          "median_ms": 47.060729,
+          "p95_ms": 48.693955,
+          "min_ms": 39.316123,
+          "max_ms": 51.358359
+        },
+        "Vortex.Stage12.DirectionalLight": {
+          "count": 413,
+          "mean_ms": 0.8410133099273608,
+          "median_ms": 0.841738,
+          "p95_ms": 0.847883,
+          "min_ms": 0.820231,
+          "max_ms": 0.898059
+        },
+        "Vortex.Stage12.PointLight": {
+          "count": 413,
+          "mean_ms": 38.60930008958838,
+          "median_ms": 38.545942,
+          "p95_ms": 38.676905,
+          "min_ms": 38.36155899999999,
+          "max_ms": 41.148015000000015
+        },
+        "Vortex.Stage18.Translucency": {
+          "count": 413,
+          "mean_ms": 14.259620578692495,
+          "median_ms": 14.150819,
+          "p95_ms": 14.905393,
+          "min_ms": 13.867199,
+          "max_ms": 15.48105
+        },
+        "Vortex.Stage3.DepthPrepass": {
+          "count": 413,
+          "mean_ms": 1.2198615254237288,
+          "median_ms": 1.10901,
+          "p95_ms": 1.817628,
+          "min_ms": 0.851979,
+          "max_ms": 1.88316
+        },
+        "Vortex.Stage5.ScreenHzbBuild": {
+          "count": 413,
+          "mean_ms": 0.2956129297820823,
+          "median_ms": 0.19661,
+          "p95_ms": 0.598023,
+          "min_ms": 0.192514,
+          "max_ms": 0.998415
+        },
+        "Vortex.Stage6.SpatialLightGrid": {
+          "count": 413,
+          "mean_ms": 0.47071914285714284,
+          "median_ms": 0.542806,
+          "p95_ms": 0.909329,
+          "min_ms": 0.15565,
+          "max_ms": 1.013773
+        },
+        "Vortex.Stage8.ShadowCacheReuse": {
+          "count": 413,
+          "mean_ms": 0.00011250605326876513,
+          "median_ms": 0.0,
+          "p95_ms": 0.000928,
+          "min_ms": 0.0,
+          "max_ms": 0.001984
+        },
+        "Vortex.Stage8.ShadowDepths": {
+          "count": 413,
+          "mean_ms": 4.09231296125908,
+          "median_ms": 4.194366,
+          "p95_ms": 4.42271,
+          "min_ms": 3.660841,
+          "max_ms": 4.633658
+        },
+        "Vortex.Stage9.BasePass": {
+          "count": 413,
+          "mean_ms": 3.300832210653753,
+          "median_ms": 3.428398,
+          "p95_ms": 3.700792,
+          "min_ms": 2.719782,
+          "max_ms": 4.04484
+        },
+        "Vortex.Stage9.BasePass.MainPass": {
+          "count": 413,
+          "mean_ms": 3.0127888692493947,
+          "median_ms": 3.033152,
+          "p95_ms": 3.347506,
+          "min_ms": 2.714665,
+          "max_ms": 3.47345
+        },
+        "VortexCompositingPass": {
+          "count": 413,
+          "mean_ms": 0.03238243583535109,
+          "median_ms": 0.031745,
+          "p95_ms": 0.034816,
+          "min_ms": 0.029696,
+          "max_ms": 0.036864
+        }
+      },
+      "gpu_event_count_per_frame": {
+        "Vortex.CompositingTask": [2],
+        "Vortex.ImGuiOverlay": [1],
+        "Vortex.PostProcess.Exposure.FrameResolve": [1],
+        "Vortex.PostProcess.Exposure.Histogram": [1],
+        "Vortex.PostProcess.Exposure.MeterAndAdapt": [1],
+        "Vortex.PostProcess.Exposure.SceneRange": [2],
+        "Vortex.PostProcess.Exposure.Solve": [1],
+        "Vortex.PostProcess.Tonemap": [1],
+        "Vortex.PostRenderCleanup": [1],
+        "Vortex.RenderPass.Execute": [1],
+        "Vortex.RenderPass.PrepareResources": [0, 1],
+        "Vortex.ResolveSceneColor": [1],
+        "Vortex.Stage12.DeferredLighting": [1],
+        "Vortex.Stage12.DirectionalLight": [1],
+        "Vortex.Stage12.PointLight": [23],
+        "Vortex.Stage18.Translucency": [1],
+        "Vortex.Stage3.DepthPrepass": [1],
+        "Vortex.Stage5.ScreenHzbBuild": [1],
+        "Vortex.Stage6.SpatialLightGrid": [1],
+        "Vortex.Stage8.ShadowCacheReuse": [0, 1, 2],
+        "Vortex.Stage8.ShadowDepths": [1],
+        "Vortex.Stage9.BasePass": [1],
+        "Vortex.Stage9.BasePass.MainPass": [1],
+        "VortexCompositingPass": [2]
+      },
+      "shadow_first_submission": null,
+      "shadow_second_submission": null,
+      "cpu_zone_ms": {
+        "Vortex.PostProcess.PrepareFrameExposure": {
+          "count": 413,
+          "mean_ms": 0.0592525205811138,
+          "median_ms": 0.049644,
+          "p95_ms": 0.102474,
+          "min_ms": 0.032792,
+          "max_ms": 0.193446,
+          "total_ms": 24.471291
+        },
+        "Vortex.PostProcess.Exposure.FrameResolve": {
+          "count": 413,
+          "mean_ms": 0.057134789346246974,
+          "median_ms": 0.047841,
+          "p95_ms": 0.099449,
+          "min_ms": 0.031229,
+          "max_ms": 0.187815,
+          "total_ms": 23.596668
+        },
+        "Vortex.PostProcess.Execute": {
+          "count": 412,
+          "mean_ms": 0.03470124514563107,
+          "median_ms": 0.029686,
+          "p95_ms": 0.04737,
+          "min_ms": 0.025108,
+          "max_ms": 0.441565,
+          "total_ms": 14.296913
+        },
+        "D3D12.ExecuteCommandLists": {
+          "count": 11964,
+          "mean_ms": 0.017450777248411903,
+          "median_ms": 0.009458,
+          "p95_ms": 0.050306,
+          "min_ms": 0.007014,
+          "max_ms": 0.637386,
+          "total_ms": 208.781099
+        },
+        "Vortex.DispatchSceneRendererRender": {
+          "count": 412,
+          "mean_ms": 3.9222312912621358,
+          "median_ms": 3.6164505,
+          "p95_ms": 5.94744,
+          "min_ms": 3.070519,
+          "max_ms": 7.224415,
+          "total_ms": 1615.959292
+        },
+        "Vortex.Lighting.GatherSelection": {
+          "count": 413,
+          "mean_ms": 0.02733610411622276,
+          "median_ms": 0.025118,
+          "p95_ms": 0.037461,
+          "min_ms": 0.022052,
+          "max_ms": 0.256776,
+          "total_ms": 11.289811
+        },
+        "Vortex.Shadows.RecordDepths": {
+          "count": 412,
+          "mean_ms": 1.1650827839805826,
+          "median_ms": 1.019774,
+          "p95_ms": 1.97717,
+          "min_ms": 0.917005,
+          "max_ms": 2.719785,
+          "total_ms": 480.014107
+        },
+        "Vortex.SceneRenderer.PrepareExposureDomain": {
+          "count": 413,
+          "mean_ms": 0.0986661573849879,
+          "median_ms": 0.088057,
+          "p95_ms": 0.157197,
+          "min_ms": 0.061847,
+          "max_ms": 0.336757,
+          "total_ms": 40.749123
+        },
+        "Vortex.PostProcess.ResolveViewExposureSettings": {
+          "count": 413,
+          "mean_ms": 0.004821414043583535,
+          "median_ms": 0.004549,
+          "p95_ms": 0.008295,
+          "min_ms": 0.002314,
+          "max_ms": 0.013977,
+          "total_ms": 1.991244
+        },
+        "Vortex.PostProcess.Exposure.HistogramConstants": {
+          "count": 412,
+          "mean_ms": 0.002187985436893204,
+          "median_ms": 0.001943,
+          "p95_ms": 0.003596,
+          "min_ms": 0.001563,
+          "max_ms": 0.007835,
+          "total_ms": 0.90145
+        },
+        "tracy::D3D12QueueCtx::Collect": {
+          "count": 1239,
+          "mean_ms": 0.00796249233252623,
+          "median_ms": 0.004318,
+          "p95_ms": 0.024567,
+          "min_ms": 5e-5,
+          "max_ms": 0.065564,
+          "total_ms": 9.865528
+        },
+        "Vortex.Lighting.PublishFrame": {
+          "count": 413,
+          "mean_ms": 0.19573080145278451,
+          "median_ms": 0.177807,
+          "p95_ms": 0.302712,
+          "min_ms": 0.138902,
+          "max_ms": 0.460131,
+          "total_ms": 80.836821
+        },
+        "Vortex.PostProcess.PrepareSceneExposure": {
+          "count": 412,
+          "mean_ms": 0.048066218446601944,
+          "median_ms": 0.042049,
+          "p95_ms": 0.079741,
+          "min_ms": 0.033083,
+          "max_ms": 0.449991,
+          "total_ms": 19.803282
+        },
+        "Vortex.DispatchSceneRendererCompositing": {
+          "count": 412,
+          "mean_ms": 0.0025768033980582525,
+          "median_ms": 0.0019285,
+          "p95_ms": 0.006282,
+          "min_ms": 0.001363,
+          "max_ms": 0.021641,
+          "total_ms": 1.061643
+        },
+        "Graphics.FinalizeCommandRecorder": {
+          "count": 11964,
+          "mean_ms": 0.026184811099966565,
+          "median_ms": 0.01582,
+          "p95_ms": 0.070483,
+          "min_ms": 0.011872,
+          "max_ms": 0.682501,
+          "total_ms": 313.27508
+        },
+        "D3D12.SubmitCommandList": {
+          "count": 11964,
+          "mean_ms": 0.02238600317619525,
+          "median_ms": 0.013395,
+          "p95_ms": 0.05853,
+          "min_ms": 0.01017,
+          "max_ms": 0.662774,
+          "total_ms": 267.826142
+        },
+        "Vortex.PostProcess.PollExposureStatus": {
+          "count": 413,
+          "mean_ms": 0.0005089951573849879,
+          "median_ms": 0.00046,
+          "p95_ms": 0.000852,
+          "min_ms": 0.00016,
+          "max_ms": 0.003767,
+          "total_ms": 0.210215
+        },
+        "D3D12.BindComputePipeline": {
+          "count": 3299,
+          "mean_ms": 0.0039487990300090935,
+          "median_ms": 0.002444,
+          "p95_ms": 0.013485,
+          "min_ms": 0.001192,
+          "max_ms": 0.066065,
+          "total_ms": 13.027088000000001
+        },
+        "Vortex.Lighting.PublishShadowReferences": {
+          "count": 412,
+          "mean_ms": 0.001801881067961165,
+          "median_ms": 0.001568,
+          "p95_ms": 0.003016,
+          "min_ms": 0.001262,
+          "max_ms": 0.005931,
+          "total_ms": 0.742375
+        },
+        "Vortex.Lighting.BuildDeferredPackets": {
+          "count": 412,
+          "mean_ms": 0.0008656529126213592,
+          "median_ms": 0.0007160000000000001,
+          "p95_ms": 0.001512,
+          "min_ms": 0.000541,
+          "max_ms": 0.00524,
+          "total_ms": 0.356649
+        },
+        "Graphics.AcquireCommandRecorder": {
+          "count": 11965,
+          "mean_ms": 0.01036370706226494,
+          "median_ms": 0.007834,
+          "p95_ms": 0.020609,
+          "min_ms": 0.00538,
+          "max_ms": 0.577943,
+          "total_ms": 124.001755
+        },
+        "Vortex.OnFrameStart": {
+          "count": 413,
+          "mean_ms": 0.3553966707021792,
+          "median_ms": 0.324594,
+          "p95_ms": 0.609262,
+          "min_ms": 0.215889,
+          "max_ms": 0.78239,
+          "total_ms": 146.778825
+        },
+        "Vortex.Lighting.BuildGrid": {
+          "count": 413,
+          "mean_ms": 0.005660670702179176,
+          "median_ms": 0.00518,
+          "p95_ms": 0.008887,
+          "min_ms": 0.003597,
+          "max_ms": 0.015379,
+          "total_ms": 2.337857
+        },
+        "Vortex.Lighting.RecordDeferred": {
+          "count": 412,
+          "mean_ms": 0.10883264077669903,
+          "median_ms": 0.09805549999999999,
+          "p95_ms": 0.16428,
+          "min_ms": 0.085121,
+          "max_ms": 0.479266,
+          "total_ms": 44.839048
+        },
+        "Vortex.PostProcess.Exposure.SceneRange": {
+          "count": 412,
+          "mean_ms": 0.01665993203883495,
+          "median_ms": 0.0141915,
+          "p95_ms": 0.030758,
+          "min_ms": 0.010871,
+          "max_ms": 0.095511,
+          "total_ms": 6.863892
+        },
+        "Vortex.PostProcess.Exposure.MeterAndAdapt": {
+          "count": 412,
+          "mean_ms": 0.04204697572815534,
+          "median_ms": 0.0368495,
+          "p95_ms": 0.066896,
+          "min_ms": 0.029606,
+          "max_ms": 0.444731,
+          "total_ms": 17.323354
+        },
+        "Vortex.Lighting.ResolveEvaluation": {
+          "count": 413,
+          "mean_ms": 0.0025270096852300244,
+          "median_ms": 0.002264,
+          "p95_ms": 0.003828,
+          "min_ms": 0.001853,
+          "max_ms": 0.007073,
+          "total_ms": 1.043655
+        },
+        "D3D12.FenceWait": {
+          "count": 826,
+          "mean_ms": 29.858674882566586,
+          "median_ms": 17.400444999999998,
+          "p95_ms": 65.861115,
+          "min_ms": 7e-5,
+          "max_ms": 68.539581,
+          "total_ms": 24663.265453
+        },
+        "D3D12.Present.Tearing": {
+          "count": 413,
+          "mean_ms": 0.2814080968523002,
+          "median_ms": 0.234073,
+          "p95_ms": 0.511888,
+          "min_ms": 0.137961,
+          "max_ms": 1.138083,
+          "total_ms": 116.221544
+        }
+      }
+    }
+  }
+]
