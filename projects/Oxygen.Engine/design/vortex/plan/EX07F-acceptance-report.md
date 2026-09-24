@@ -145,6 +145,21 @@ Supported limits and retained costs:
 - Noisy historical rows and differences below observed variability remain
   inconclusive. Full per-light Tracy overhead is not non-Tracy Release cost.
 
+## Closeout commits and final documentation reconciliation
+
+| Commit      | Qualified delivery                                                                                                    |
+| ----------- | --------------------------------------------------------------------------------------------------------------------- |
+| `4fd55cd8d` | Missed allocation-test caller migration and reported test warnings; five focused passes in each native configuration. |
+| `c962187ab` | F evidence reuse, operating limits, shadow contracts and engine-side acceptance report.                               |
+| `53dfccec2` | C++20 Result API repair; native builds, eight retention checks, installed SDKs and actual Debug Interop compile/link. |
+
+The package plan now checks off the completed reference-unit and many-light
+engine gates and names editor sign-off separately. The D register explicitly
+labels its old FPS figures as the initial baseline and links the accepted E/F
+results. Historical capture records retain their original identities and limits.
+This final reconciliation is documentation-only; no build, test, capture or
+benchmark was repeated while the user builds and checks the editor.
+
 ## Remaining handoff
 
 Only the user's editor interaction sign-off remains. Record its outcome here and

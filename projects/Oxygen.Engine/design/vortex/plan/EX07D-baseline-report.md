@@ -1,7 +1,8 @@
 # EX07D — Baseline register for EX07E and EX07F
 
-Recorded 2026-09-24. This is the comparison inventory for the remaining work,
-not a claim that lighting performance or final application acceptance is complete.
+Recorded 2026-09-24. This preserves the initial D comparison baseline.
+Current accepted measurements are in the [E comparison report](EX07E-shadow-sharing-results.md);
+[F acceptance](EX07F-acceptance-report.md) awaits only user-owned editor sign-off.
 Renderer implementation: **137b681b2**. Collection tooling: **250917c9e**, with
 the desktop-load refinement in **d90e15823**. All runs use existing Ninja Release
 trees; no other build tree was used or created for this closeout.
@@ -12,14 +13,17 @@ in `894a25e57`. The delivered scene/presets, 54 benchmark records, four applicat
 runs and credited historical controls satisfy D's baseline-delivery gate.
 The recorded preflight gaps, noisy B05-D and application memory scope constrain
 later comparisons; they do not require another blanket baseline campaign.
-EX07E is active, authorized by the user on 2026-09-24. Performance-budget
-acceptance and final integrated validation remain E/F work; overall EX07 is open.
-See the [E handoff](EX07-lighting-correctness-and-scalability.md#ex07e-handoff--active).
+EX07E subsequently closed with accepted performance, memory and visual evidence.
+F credits those results and the qualified build repairs; only the user-owned
+editor interaction sign-off keeps overall EX07 open. The original D numbers and
+collection limits below remain unchanged.
 
 ## Results summary
 
-**Current application performance without Tracy is 36.48 FPS for Instancing
-and 16.07 FPS for New Sponza. Performance work remains open.** The synthetic
+**Initial D application performance without Tracy was 36.48 FPS for Instancing
+and 16.07 FPS for New Sponza.** The accepted final E values are **68.46 FPS and
+33.95 FPS**, respectively; see the linked E/F reports for matched comparisons.
+The initial D synthetic
 1,024-light benchmark measures 10.043 ms deferred and 7.518 ms forward; it is an
 offscreen workload, not a prediction of either demo's FPS.
 
@@ -313,8 +317,10 @@ Application memory capture includes process working-set/private bytes and the
 device-wide NVIDIA memory sample. These are not per-renderer GPU allocation
 inventories. Do not claim scene allocation savings from device-wide usage; obtain
 matched allocation snapshots when that is the proposed E change. The benchmark
-rows supply actual renderer allocation-domain baselines. Lifecycle/soak memory
-and final interactive visual acceptance remain F work.
+rows supply actual renderer allocation-domain baselines. E subsequently recorded
+bounded lifecycle/release memory evidence; F credits that evidence and the user's
+RenderScene interaction approval. Only editor sign-off remains. No indefinite
+application soak is claimed.
 
 ![Instancing frozen view](baselines/ex07d-20260924/instancing.png)
 
@@ -394,4 +400,5 @@ configurations, with 218-module shader archives. The fixes cover fenced staging
 and target lifetime, nonuniform shadow indexing, batched/reused CBVs, conservative
 draw culling, spot volume classification, redundant draw state and GPU scope
 storage growth, plus the receiver-depth shadow footprint. This inventory closes
-the baseline-document delivery; it does not close E performance or F acceptance.
+the baseline-document delivery. Subsequent E performance acceptance and F
+engine-side qualification are recorded in their linked reports above.

@@ -2,8 +2,8 @@
 
 Status: **EX07B validated.** The pause before C was the instruction at B closure.
 Current progression is recorded in the [tracker](../IMPLEMENTATION_STATUS.md#34-slice-7-work-items):
-EX07D is now closed and EX07E is active; its work ledger and resume checkpoint
-are in the linked tracker.
+A–E are closed and [F engine acceptance](EX07F-acceptance-report.md) is complete;
+only the user-owned editor interaction sign-off remains.
 
 This closes the reference/instrument gate only. EX07 as a whole remains
 `in_progress`. Production physical repairs and their admission tests belong to C;
