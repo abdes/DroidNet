@@ -13,8 +13,11 @@
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Vortex/Lighting/Types/LightingPreparationFailure.h>
+#include <Oxygen/Vortex/Shadows/Internal/ShadowCasterDependencies.h>
 #include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
+#include <Oxygen/Vortex/Shadows/Types/ShadowContentLease.h>
 #include <Oxygen/Vortex/Shadows/Types/ShadowFrameData.h>
+#include <Oxygen/Vortex/Shadows/Types/ShadowSharingDiagnostics.h>
 #include <Oxygen/Vortex/api_export.h>
 
 namespace oxygen::vortex {
@@ -49,10 +52,14 @@ public:
     std::uint32_t rendered_draw_count { 0U };
     std::uint32_t shadow_caster_draw_count { 0U };
     std::uint64_t selection_epoch { 0U };
+    std::uint32_t attached_map_uses { 0 };
+    std::uint32_t attached_backing_uses { 0 };
   };
 
   OXGN_VRTX_API explicit ShadowService(Renderer& renderer);
   OXGN_VRTX_API ~ShadowService();
+  [[nodiscard]] OXGN_VRTX_API auto InspectLocalSharing() const
+    -> ShadowSharingDiagnostics;
 
   ShadowService(const ShadowService&) = delete;
   auto operator=(const ShadowService&) -> ShadowService& = delete;
@@ -61,9 +68,19 @@ public:
 
   OXGN_VRTX_API auto OnFrameStart(
     frame::SequenceNumber sequence, frame::Slot slot) -> void;
+  OXGN_VRTX_API auto CloseFramePublications() noexcept -> void;
+  OXGN_VRTX_API auto PrepareLocalRequests(const FrameShadowInputs& inputs)
+    -> void;
   OXGN_VRTX_API auto RenderShadowDepths(const FrameShadowInputs& inputs)
     -> void;
 
+  [[nodiscard]] OXGN_VRTX_API auto InspectReadSet(ViewId view) const
+    -> std::shared_ptr<const ShadowFrameReadSet>;
+  [[nodiscard]] OXGN_VRTX_API auto RetainLocalContent(
+    ViewId view, scene::NodeHandle light) const -> ShadowContentLease;
+  OXGN_VRTX_API auto AttachLocalReads(ViewId view, frame::SequenceNumber frame,
+    std::uint64_t preparation_revision, graphics::CommandRecorder& recorder)
+    -> void;
   [[nodiscard]] OXGN_VRTX_API auto InspectPreparationFailure(
     ViewId view_id) const -> const LightingPreparationFailure*;
   [[nodiscard]] OXGN_VRTX_API auto InspectShadowData(ViewId view_id) const
@@ -77,8 +94,8 @@ public:
   [[nodiscard]] OXGN_VRTX_API auto InspectPointShadowSurfaces(
     ViewId view_id) const
     -> std::span<const std::shared_ptr<graphics::Texture>>;
-  [[nodiscard]] OXGN_VRTX_API auto InspectContactShadowSurface(ViewId view_id) const
-    -> std::shared_ptr<const graphics::Texture>;
+  [[nodiscard]] OXGN_VRTX_API auto InspectContactShadowSurface(
+    ViewId view_id) const -> std::shared_ptr<const graphics::Texture>;
   [[nodiscard]] OXGN_VRTX_API auto ResolveShadowFrameSlot(ViewId view_id) const
     -> ShaderVisibleIndex;
   [[nodiscard]] OXGN_VRTX_NDAPI auto HasVsm() const -> bool { return false; }
@@ -96,12 +113,27 @@ private:
     std::vector<std::shared_ptr<graphics::Texture>> spot_surfaces;
     std::vector<std::shared_ptr<graphics::Texture>> point_surfaces;
     std::shared_ptr<graphics::Texture> contact_surface;
+    std::vector<std::shared_ptr<shadows::internal::ShadowMapOwner>> local_maps;
+    std::shared_ptr<ShadowFrameReadSet> read_set;
+    std::uint64_t scene_generation { 0 };
+    std::uint64_t preparation_revision { 0 };
+    std::uint64_t selection_epoch { 0 };
   };
 
   auto EnsurePublishResources() -> bool;
   auto PublishShadowBindings(ViewId view_id, ShadowFrameData& data)
     -> ShaderVisibleIndex;
 
+  struct PreparedCasters {
+    frame::SequenceNumber last_seen { 0 };
+    std::uint64_t revision { 0 };
+    std::vector<ShadowCasterDependency> dependencies;
+    std::uint32_t draw_count { 0 };
+    bool available { false };
+  };
+  std::vector<PreparedViewShadowInput> family_views_;
+  shadows::internal::ShadowCasterDependencies caster_records_;
+  std::unordered_map<ViewId, PreparedCasters> prepared_casters_;
   Renderer& renderer_;
   frame::SequenceNumber current_sequence_ { 0U };
   frame::Slot current_slot_ { frame::kInvalidSlot };

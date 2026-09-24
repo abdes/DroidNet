@@ -42,6 +42,9 @@ namespace oxygen::vortex {
        fields and helper accessors will be added in subsequent tasks.
  */
 struct PreparedSceneFrame {
+  //! CPU preparation identity; changes even for a same-frame snapshot rebuild.
+  //! Never part of a semantic shadow-content key. Zero means uncached input.
+  std::uint64_t preparation_revision { 0 };
   // Spans over finalized arrays (empty initially until finalization wired)
   // Non-owning view of draw metadata bytes. These spans point into renderer
   // owned backing storage (per-view) which ensures stability for the lifetime

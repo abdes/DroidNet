@@ -6,12 +6,14 @@
 
 #include <algorithm>
 #include <array>
+#include <cstring>
 #include <memory>
 #include <span>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Core/Types/View.h>
@@ -21,17 +23,23 @@
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Run.h>
+#include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Light/LightCommon.h>
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Lighting/LightingService.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/Shadows/ShadowService.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureLightingFixture.h>
+#include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestTags.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
+#include <Oxygen/Vortex/Test/Support/CpuAllocationCounter.h>
 
 namespace oxygen::vortex::testing {
 namespace {
@@ -57,6 +65,16 @@ namespace {
         = scene::ShadowResolutionHint::kLow;
       EXPECT_TRUE(node.AttachLight(std::move(light)));
       return node;
+    }
+  };
+
+  class ShadowBudgetGpuTest : public ShadowAdmissionGpuTest {
+  protected:
+    auto ConfigureRenderer(RendererConfig& config) const -> void override
+    {
+      config.lighting_allocation_limit_bytes = 32ULL * 1024 * 1024;
+      config.lighting_compact_index_limit_bytes = 8ULL * 1024 * 1024;
+      config.lighting_driver_headroom_bytes = 0;
     }
   };
 
@@ -157,8 +175,10 @@ namespace {
   NOLINT_TEST_F(ShadowAdmissionGpuTest,
     CubeHardwarePcfUsesProjectedDepthAcrossFacesSeamsAndDescriptors)
   {
+    std::vector<scene::NodeHandle> light_sources;
     for (unsigned index = 0; index < 3U; ++index) {
       auto light = AddPoint(index);
+      light_sources.push_back(light.GetHandle());
       ASSERT_TRUE(light.EditLight<scene::PointLight>([index](auto& value) {
         value.Common().shadow.bias = static_cast<float>(index) * 0.25F;
         if (index == 1U) {
@@ -222,6 +242,7 @@ namespace {
     mesh_node.GetRenderable().SetMaterialOverride(
       0, 0, data::MaterialAsset::CreateDefault());
     auto records = std::vector<CubeLocalShadowRecord> {};
+    std::vector<ShadowContentLease> retained_maps;
     probe->inspect = [&](const auto& ctx, const auto&, unsigned) {
       auto* owner = RendererPublicationProbe::GetSceneRenderer(*renderer_);
       const auto* data
@@ -229,12 +250,32 @@ namespace {
           ctx.current_view.view_id);
       ASSERT_NE(data, nullptr);
       records = data->cube_local_records;
+      retained_maps.clear();
+      auto* shadows = RendererPublicationProbe::GetShadowService(*owner);
+      for (const auto source : light_sources) {
+        retained_maps.push_back(
+          shadows->RetainLocalContent(ctx.current_view.view_id, source));
+        ASSERT_TRUE(retained_maps.back());
+      }
     };
     ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F, 3U));
     ASSERT_EQ(records.size(), 3U);
-    EXPECT_EQ(records[0].surface_srv, records[1].surface_srv);
-    EXPECT_NE(records[0].first_array_layer, records[1].first_array_layer);
-    EXPECT_NE(records[0].surface_srv, records[2].surface_srv);
+    // Physical grouping follows resolution, independently of selection order.
+    std::vector<const CubeLocalShadowRecord*> low_resolution;
+    const CubeLocalShadowRecord* high_resolution = nullptr;
+    for (const auto& record : records) {
+      if (record.inverse_resolution.x == 1.0F / 512.0F) {
+        low_resolution.push_back(&record);
+      } else {
+        high_resolution = &record;
+      }
+    }
+    ASSERT_EQ(low_resolution.size(), 2U);
+    ASSERT_NE(high_resolution, nullptr);
+    EXPECT_EQ(low_resolution[0]->surface_srv, low_resolution[1]->surface_srv);
+    EXPECT_NE(low_resolution[0]->first_array_layer,
+      low_resolution[1]->first_array_layer);
+    EXPECT_NE(low_resolution[0]->surface_srv, high_resolution->surface_srv);
     auto rays = std::vector<glm::vec3> {};
     for (int x = -1; x <= 1; ++x) {
       for (int y = -1; y <= 1; ++y) {
@@ -284,8 +325,14 @@ namespace {
         }
       }
     }
+    const auto attach = [&](graphics::CommandRecorder& recorder) {
+      for (const auto& lease : retained_maps) {
+        CHECK_F(
+          lease.Attach(recorder, Backend().GetResourceRegistry()).has_value());
+      }
+    };
     const auto result = RunToneProbe(std::as_bytes(std::span { inputs }),
-      static_cast<unsigned>(inputs.size()), 65536U, false);
+      static_cast<unsigned>(inputs.size()), 65536U, false, attach);
     ASSERT_EQ(result.size(), inputs.size());
     for (std::size_t index = 0; index < result.size(); ++index) {
       EXPECT_NEAR(result[index][0], expected[index], 1.0e-6F) << index;
@@ -296,10 +343,18 @@ namespace {
     // The cube permutation must retain alpha discard, and a material change
     // must invalidate the cached depth before either lighting path consumes it.
     for (const bool rejected : { true, false }) {
+      retained_maps.clear();
       SetSurface(data::MaterialDomain::kMasked, 0.0F, rejected);
       ASSERT_NO_FATAL_FAILURE(RenderSurface(!rejected, 0.0F, 2U));
+      for (size_t index = 0; index < inputs.size(); ++index) {
+        const auto& record = records[index % records.size()];
+        inputs[index][0] = record.surface_srv.get();
+        inputs[index][1] = record.first_array_layer.get() / 6U;
+        inputs[index][3]
+          = static_cast<unsigned>(std::lround(1 / record.inverse_resolution.x));
+      }
       const auto masked = RunToneProbe(std::as_bytes(std::span { inputs }),
-        static_cast<unsigned>(inputs.size()), 65536U, false);
+        static_cast<unsigned>(inputs.size()), 65536U, false, attach);
       ASSERT_EQ(masked.size(), inputs.size());
       for (std::size_t index = 0; index < masked.size(); ++index) {
         EXPECT_NEAR(
@@ -328,6 +383,7 @@ namespace {
     ASSERT_TRUE(light.GetTransform().SetLocalRotation(
       glm::quat { 0.70710678F, 0.70710678F, 0, 0 }));
     SetSurface(data::MaterialDomain::kOpaque);
+    ShadowContentLease retained_shadow;
     std::shared_ptr<const graphics::Texture> surface;
     std::uint32_t layer = 0U;
     std::uint32_t surface_srv = kInvalidShaderVisibleIndex.get();
@@ -340,7 +396,10 @@ namespace {
       const auto surfaces
         = shadows->InspectSpotShadowSurfaces(ctx.current_view.view_id);
       ASSERT_EQ(surfaces.size(), 1U);
-      surface = surfaces.front();
+      retained_shadow = shadows->RetainLocalContent(
+        ctx.current_view.view_id, light.GetHandle());
+      ASSERT_TRUE(retained_shadow);
+      surface = retained_shadow.Texture();
       layer = data->projected_local_records.front().array_layer.get();
       surface_srv = data->projected_local_records.front().surface_srv.get();
     };
@@ -402,8 +461,12 @@ namespace {
       const auto sample = std::array { surface_srv, texture.width / 2U,
         texture.height / 2U, layer };
       constexpr auto depth_array_probe = 32768U;
-      const auto readback = RunToneProbe(
-        std::as_bytes(std::span { sample }), 1U, depth_array_probe, false);
+      const auto readback = RunToneProbe(std::as_bytes(std::span { sample }),
+        1U, depth_array_probe, false, [&](graphics::CommandRecorder& recorder) {
+          CHECK_F(
+            retained_shadow.Attach(recorder, Backend().GetResourceRegistry())
+              .has_value());
+        });
       ASSERT_EQ(readback.size(), 1U);
       depths.at(static_cast<unsigned>(baked)) = readback.front().front();
       EXPECT_GT(depths.at(static_cast<unsigned>(baked)), 0.0F);
@@ -451,7 +514,7 @@ namespace {
         first_surface = surface->shared_from_this();
         first_view = ctx.current_view.view_id;
       } else if (ctx.current_view.view_id != first_view) {
-        EXPECT_NE(surface, first_surface.get());
+        EXPECT_EQ(surface, first_surface.get());
       }
       ++inspected;
     };
@@ -749,5 +812,338 @@ namespace {
     RecordProperty("rejected_required_bytes", rejected.last_requested.get());
     RecordProperty("rejected_available_bytes", rejected.last_available.get());
   }
+  NOLINT_TEST_F(ShadowAdmissionGpuTest,
+    CompatibleViewsShareFiveCubeAndNineProjectedMapsInOneFrame)
+  {
+    for (unsigned index = 0; index < 5; ++index) {
+      AddPoint(index);
+    }
+    for (unsigned index = 0; index < 9; ++index) {
+      auto node = scene->CreateNode("Shared spot " + std::to_string(index));
+      auto light = std::make_unique<scene::SpotLight>();
+      light->SetRange(3);
+      light->SetLuminousFluxLm(1);
+      light->Common().casts_shadows = true;
+      light->Common().shadow.resolution_hint
+        = scene::ShadowResolutionHint::kLow;
+      ASSERT_TRUE(node.AttachLight(std::move(light)));
+      ASSERT_TRUE(node.GetTransform().SetLocalRotation(
+        glm::quat { 0.70710678F, 0.70710678F, 0, 0 }));
+    }
+    auto output = CreateRegisteredTexture({ .width = 1,
+      .height = 1,
+      .format = Format::kRGBA32Float,
+      .is_render_target = true,
+      .initial_state = graphics::ResourceStates::kCommon });
+    const std::array targets { framebuffer,
+      Backend().CreateFramebuffer(
+        graphics::FramebufferDesc {}.AddColorAttachment(output)) };
+    const std::array handles { CompositionView::ViewStateHandle { 9101 },
+      CompositionView::ViewStateHandle { 9102 } };
+    const std::array intents { ViewId { 9101 }, ViewId { 9102 } };
+    std::array<std::shared_ptr<const graphics::Texture>, 2> colors;
+    std::array<postprocess::ExposurePass::FrameLease, 2> exposures;
+    std::array<ShadowFrameData, 2> shadow_records;
+    std::array<bool, 2> seen {};
+    uint32_t writers = 0;
+    probe->prepare = [](RenderContext&) { };
+    probe->inspect = [&](const RenderContext& ctx,
+                       const SceneTextureExtractRef& color, unsigned) {
+      const auto index
+        = ctx.current_view.view_state_handle == handles[0] ? 0U : 1U;
+      auto* owner = RendererPublicationProbe::GetSceneRenderer(*renderer_);
+      auto* shadows = RendererPublicationProbe::GetShadowService(*owner);
+      const auto* data = shadows->InspectShadowData(ctx.current_view.view_id);
+      ASSERT_NE(data, nullptr);
+      shadow_records[index] = *data;
+      ASSERT_TRUE(color.valid);
+      colors[index] = color.texture->shared_from_this();
+      exposures[index] = color.exposure;
+      seen[index] = true;
+      EXPECT_EQ(shadows->GetLastRenderState().attached_map_uses, 14U);
+      EXPECT_EQ(shadows->GetLastRenderState().attached_backing_uses, 2U);
+      writers += shadows->GetLastRenderState().rendered_point_shadow_count
+        + shadows->GetLastRenderState().rendered_spot_shadow_count;
+    };
+    const auto verbosity = loguru::g_global_verbosity;
+    const auto restore_verbosity
+      = ScopeGuard([&] noexcept { loguru::g_global_verbosity = verbosity; });
+    loguru::g_global_verbosity = loguru::Verbosity_WARNING;
+    settings.mode = engine::ExposureMode::kManual;
+    settings.manual_ev = 0;
+    for (unsigned mode = 0; mode < 3; ++mode) {
+      const bool forward = mode == 1;
+      SetSurface(mode == 2 ? data::MaterialDomain::kAlphaBlended
+                           : data::MaterialDomain::kOpaque);
+      // Warm the actual two-view family before comparing resident output.
+      for (unsigned repeat = 0; repeat < 6; ++repeat) {
+        SCOPED_TRACE((std::to_string(mode) + ":" + std::to_string(repeat)));
+        writers = 0;
+        seen = {};
+        colors = {};
+        scene->Update();
+        scene->SyncObservers();
+#if defined(_MSC_VER) && defined(_DEBUG)
+        CpuAllocationCounter cpu_allocations;
+#endif
+        const auto slot = frame::Slot { sequence % 3 };
+        Backend().BeginFrame(frame::SequenceNumber { ++sequence }, slot);
+        frame.SetFrameSlot(slot, engine::internal::EngineTagFactory::Get());
+        frame.SetFrameSequenceNumber(frame::SequenceNumber { sequence },
+          engine::internal::EngineTagFactory::Get());
+        renderer_->OnFrameStart(observer_ptr { &frame });
+        for (unsigned publish = 0; publish < 2; ++publish) {
+          const auto index = repeat % 2 ? 1U - publish : publish;
+          auto input = CompositionView::ForScene(intents[index], view, camera);
+          input.view_state_handle = handles[index];
+          input.render_settings.exposure = settings;
+          input.render_settings.exposure->manual_ev
+            = static_cast<float>(index * 2);
+          ASSERT_NE(
+            renderer_->PublishRuntimeCompositionView(frame,
+              { .composition_view = input,
+                .render_target = observer_ptr { targets[index].get() },
+                .composite_source = observer_ptr { targets[index].get() } },
+              forward ? ShadingMode::kForward : ShadingMode::kDeferred),
+            kInvalidViewId);
+        }
+        auto loop = co::testing::TestEventLoop {};
+        co::Run(loop, [&] -> co::Co<void> {
+          co_await renderer_->OnPreRender(observer_ptr { &frame });
+          co_await renderer_->OnRender(observer_ptr { &frame });
+        });
+        renderer_->OnFrameEnd(observer_ptr { &frame });
+        Backend().EndFrame(frame::SequenceNumber { sequence }, slot);
+#if defined(_MSC_VER) && defined(_DEBUG)
+        cpu_allocations.Stop();
+        if (repeat >= 3) {
+          const auto suffix
+            = std::to_string(mode) + "_" + std::to_string(repeat);
+          RecordProperty("render_thread_debug_allocations_" + suffix,
+            cpu_allocations.allocations);
+          RecordProperty("render_thread_debug_requested_bytes_" + suffix,
+            cpu_allocations.requested_bytes);
+        }
+#endif
+        WaitForQueueIdle();
+        ASSERT_TRUE(seen[0] && seen[1]);
+        for (unsigned index = 0; index < 2; ++index) {
+          EXPECT_EQ(shadow_records[index].cube_local_records.size(), 5U);
+          EXPECT_EQ(shadow_records[index].projected_local_records.size(), 9U);
+          EXPECT_EQ(shadow_records[index].local_shadow_references.size(), 14U);
+        }
+        for (size_t index = 0; index < 5; ++index) {
+          EXPECT_EQ(shadow_records[0].cube_local_records[index].surface_srv,
+            shadow_records[1].cube_local_records[index].surface_srv);
+          EXPECT_EQ(
+            shadow_records[0].cube_local_records[index].first_array_layer,
+            shadow_records[1].cube_local_records[index].first_array_layer);
+        }
+        for (size_t index = 0; index < 9; ++index) {
+          EXPECT_EQ(
+            shadow_records[0].projected_local_records[index].surface_srv,
+            shadow_records[1].projected_local_records[index].surface_srv);
+          EXPECT_EQ(
+            shadow_records[0].projected_local_records[index].array_layer,
+            shadow_records[1].projected_local_records[index].array_layer);
+        }
+        EXPECT_LE(writers, 14U);
+        if (repeat < 3) {
+          continue;
+        }
+        EXPECT_EQ(writers, 0U);
+        ASSERT_TRUE(exposures[0] && exposures[1]);
+        const auto first_domain = Read<FrameExposureData>(
+          *exposures[0]->buffer, graphics::ResourceStates::kShaderResource);
+        const auto second_domain = Read<FrameExposureData>(
+          *exposures[1]->buffer, graphics::ResourceStates::kShaderResource);
+        ASSERT_GT(first_domain.pre_exposure, 0.0F);
+        ASSERT_GT(second_domain.pre_exposure, 0.0F);
+        const auto first = ReadFloatTexture(*colors[0], true);
+        const auto second = ReadFloatTexture(*colors[1], true);
+        ASSERT_EQ(first.size(), second.size());
+        ASSERT_FALSE(first.empty());
+        EXPECT_GT(first[0][0], 0.0F);
+        for (size_t pixel = 0; pixel < first.size(); ++pixel) {
+          for (unsigned channel = 0; channel < 3; ++channel) {
+            EXPECT_NEAR(first[pixel][channel] / first_domain.pre_exposure,
+              second[pixel][channel] / second_domain.pre_exposure, 1.0e-5F);
+          }
+          EXPECT_EQ(first[pixel][3], second[pixel][3]);
+        }
+      }
+    }
+  }
+
+  NOLINT_TEST_F(ShadowAdmissionGpuTest,
+    RetainedShadowReadbackSurvivesUnsubmittedFrameSlotRollovers)
+  {
+    auto light = scene->CreateNode("Retained capture spot");
+    auto spot = std::make_unique<scene::SpotLight>();
+    spot->SetRange(3);
+    spot->SetLuminousFluxLm(1);
+    spot->Common().casts_shadows = true;
+    spot->Common().shadow.resolution_hint = scene::ShadowResolutionHint::kLow;
+    ASSERT_TRUE(light.AttachLight(std::move(spot)));
+    ASSERT_TRUE(light.GetTransform().SetLocalRotation(
+      glm::quat { 0.70710678F, 0.70710678F, 0, 0 }));
+    SetSurface(data::MaterialDomain::kOpaque);
+    ShadowContentLease current;
+    probe->inspect = [&](const auto& ctx, const auto&, unsigned) {
+      auto* owner = RendererPublicationProbe::GetSceneRenderer(*renderer_);
+      current
+        = RendererPublicationProbe::GetShadowService(*owner)
+            ->RetainLocalContent(ctx.current_view.view_id, light.GetHandle());
+      ASSERT_TRUE(current);
+    };
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0, 3));
+    auto retained = current;
+    const auto capture = [&](const ShadowContentLease& lease,
+                           const std::function<void()>& delay) -> float {
+      const auto texture = lease.Texture();
+      const auto& desc = texture->GetDescriptor();
+      const auto row_pitch
+        = (uint64_t { desc.width } * sizeof(float) + 255U) & ~uint64_t { 255 };
+      auto readback
+        = CreateRegisteredBuffer({ .size_bytes = row_pitch * desc.height,
+          .memory = graphics::BufferMemory::kReadBack });
+      auto recording = AcquireRecorder("Retained shadow readback",
+        graphics::QueueRole::kGraphics, graphics::SubmissionPolicy::kExplicit);
+      CHECK_F(lease.AttachReadback(*recording, Backend().GetResourceRegistry())
+          .has_value());
+      if (delay) {
+        delay();
+      }
+      recording->BeginTrackingResourceState(
+        *readback, graphics::ResourceStates::kCopyDest);
+      recording->RequireResourceState(
+        *texture, graphics::ResourceStates::kCopySource);
+      recording->FlushBarriers();
+      // The general readback facade intentionally rejects typeless depth.
+      // Use the existing native copy primitive with an owned, aligned buffer.
+      recording->CopyTextureToBuffer(*readback, *texture,
+        { .buffer_row_pitch = SizeBytes { row_pitch },
+          .buffer_slice_pitch = SizeBytes { row_pitch * desc.height },
+          .texture_slice = { .array_slice = lease.FirstLayer() } });
+      recording->RequireResourceStateFinal(
+        *texture, graphics::ResourceStates::kShaderResource);
+      CHECK_F(recording.SubmitWithReceipt().outcome
+        == graphics::SubmissionOutcome::kSubmitted);
+      WaitForQueueIdle();
+      const auto offset
+        = (desc.height / 2U) * row_pitch + (desc.width / 2U) * sizeof(float);
+      const auto* bytes = static_cast<const std::byte*>(readback->Map());
+      float depth = 0;
+      std::memcpy(&depth, bytes + offset, sizeof(depth));
+      readback->UnMap();
+      return depth;
+    };
+    auto* scene_renderer
+      = RendererPublicationProbe::GetSceneRenderer(*renderer_);
+    auto* shadows = RendererPublicationProbe::GetShadowService(*scene_renderer);
+    const auto initial_copies
+      = shadows->InspectLocalSharing().copy_on_write_reader;
+    const auto original = capture(retained, {});
+    EXPECT_GT(original, 0.0F);
+    const auto delayed = capture(retained, [&] {
+      CHECK_F(mesh_node.GetTransform().SetLocalPosition({ 0, 0, -0.3F }));
+      RenderSurface(false, 0, frame::kFramesInFlight.get() + 2U);
+    });
+    EXPECT_FLOAT_EQ(delayed, original);
+    ASSERT_TRUE(current);
+    EXPECT_NE(current.Texture(),
+      retained.Texture()); // unsubmitted exclusive backing interval
+    const auto changed = capture(current, {});
+    EXPECT_GT(std::abs(changed - original), 0.05F);
+    const auto shadow_bytes = [&](const ShadowSharingDiagnostics& diagnostic) {
+      std::uint64_t bytes = 0;
+      for (const auto& backing : diagnostic.backings) {
+        const auto desc = backing.texture->GetNativeResource()
+                            ->AsPointer<ID3D12Resource>()
+                            ->GetDesc();
+        bytes += Backend()
+                   .GetCurrentDevice()
+                   ->GetResourceAllocationInfo(0, 1, &desc)
+                   .SizeInBytes;
+      }
+      return bytes;
+    };
+    std::uint64_t retained_bytes = 0;
+    {
+      const auto diagnostic = shadows->InspectLocalSharing();
+      EXPECT_EQ(diagnostic.backings.size(), 2U);
+      EXPECT_EQ(diagnostic.live_versions, 2U);
+      EXPECT_EQ(diagnostic.copy_on_write_reader - initial_copies, 1U);
+      retained_bytes = shadow_bytes(diagnostic);
+      RecordProperty(
+        "retained_copy_on_write_shadow_native_bytes", retained_bytes);
+    }
+    retained = {};
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0, 5));
+    Backend().Flush();
+    const auto released = shadows->InspectLocalSharing();
+    EXPECT_EQ(released.backings.size(), 1U);
+    EXPECT_EQ(released.live_versions, 1U);
+    const auto resident_bytes = shadow_bytes(released);
+    EXPECT_EQ(retained_bytes, 2U * resident_bytes);
+    RecordProperty("post_release_shadow_native_bytes", resident_bytes);
+  }
+
+  NOLINT_TEST_F(ShadowBudgetGpuTest,
+    TightBudgetUsesExactLayersAndChargesDiagnosticRetention)
+  {
+    auto light = AddPoint(0);
+    SetSurface(data::MaterialDomain::kOpaque);
+    std::shared_ptr<const graphics::Texture> retained;
+    bool enabled = true;
+    probe->inspect = [&](const auto& ctx, const auto&, unsigned) {
+      auto* owner = RendererPublicationProbe::GetSceneRenderer(*renderer_);
+      auto* shadows = RendererPublicationProbe::GetShadowService(*owner);
+      const auto surfaces
+        = shadows->InspectPointShadowSurfaces(ctx.current_view.view_id);
+      if (!enabled) {
+        EXPECT_TRUE(surfaces.empty());
+        return;
+      }
+      ASSERT_EQ(surfaces.size(), 1U);
+      EXPECT_EQ(surfaces.front()->GetDescriptor().array_size, 6U);
+      retained = surfaces.front();
+    };
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0, 3));
+    ASSERT_TRUE(retained);
+    const auto budget = renderer_->GetLightingAllocationBudget();
+    EXPECT_GT(budget->Snapshot().rejected_requests,
+      0U); // spare capacity rejected, one map admitted
+    auto native
+      = retained->GetNativeResource()->AsPointer<ID3D12Resource>()->GetDesc();
+    const auto native_bytes = Backend()
+                                .GetCurrentDevice()
+                                ->GetResourceAllocationInfo(0, 1, &native)
+                                .SizeInBytes;
+    ASSERT_TRUE(light.EditLight<scene::PointLight>(
+      [](auto& value) { value.Common().affects_world = false; }));
+    enabled = false;
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0, 5));
+    Backend().Flush();
+    const auto charged = budget->Snapshot().allocated.get();
+    EXPECT_GE(charged, native_bytes);
+    auto* scene_renderer
+      = RendererPublicationProbe::GetSceneRenderer(*renderer_);
+    auto* shadows = RendererPublicationProbe::GetShadowService(*scene_renderer);
+    {
+      const auto diagnostic = shadows->InspectLocalSharing();
+      EXPECT_EQ(diagnostic.aliases, 0U);
+      EXPECT_EQ(diagnostic.live_versions, 0U);
+      ASSERT_EQ(diagnostic.backings.size(), 1U);
+      EXPECT_TRUE(diagnostic.backings.front().closing);
+      EXPECT_EQ(diagnostic.backings.front().texture, retained);
+      RecordProperty("pending_retirement_shadow_native_bytes", native_bytes);
+    }
+    retained.reset();
+    EXPECT_EQ(charged - budget->Snapshot().allocated.get(), native_bytes);
+    EXPECT_TRUE(shadows->InspectLocalSharing().backings.empty());
+    RecordProperty("retained_shadow_native_bytes", native_bytes);
+  }
+
 } // namespace
 } // namespace oxygen::vortex::testing

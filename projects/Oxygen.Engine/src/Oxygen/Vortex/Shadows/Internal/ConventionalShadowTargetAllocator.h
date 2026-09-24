@@ -19,8 +19,9 @@
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Graphics/Common/Texture.h>
-#include <Oxygen/Nexus/FrameDrivenIndexReuse.h>
 #include <Oxygen/Scene/Light/LightCommon.h>
+#include <Oxygen/Vortex/Shadows/Internal/SharedShadowMap.h>
+#include <Oxygen/Vortex/Shadows/Types/ShadowSharingDiagnostics.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
 #include <Oxygen/Vortex/Types/LightingIndices.h>
 #include <Oxygen/Vortex/api_export.h>
@@ -83,24 +84,35 @@ namespace shadows::internal {
     OXGN_VRTX_API auto RetainLocalSources(ViewId view_id,
       std::uint64_t scene_generation,
       std::span<const FrameLocalLightSelection> lights) -> void;
-    [[nodiscard]] OXGN_VRTX_API auto AcquireLocalSlot(ViewId view_id,
-      scene::NodeHandle source, std::uint32_t resolution, bool cube)
-      -> LocalSlot;
+    struct LocalAcquisition {
+      std::shared_ptr<ShadowMapOwner> owner;
+      std::shared_ptr<ShadowMapOwner> previous;
+      std::shared_ptr<ShadowMapOwner>* alias { nullptr };
+      bool reused { false };
+      bool in_place { false };
+      bool committed { false };
+      LocalAcquisition() = default;
+      LocalAcquisition(const LocalAcquisition&) = delete;
+      auto operator=(const LocalAcquisition&) -> LocalAcquisition& = delete;
+      LocalAcquisition(LocalAcquisition&&) noexcept = default;
+      OXGN_VRTX_API ~LocalAcquisition();
+      OXGN_VRTX_API auto Commit() noexcept -> void;
+    };
+    OXGN_VRTX_API auto PrepareLocalFamily(
+      std::span<const LocalShadowRequest* const> requests) -> void;
+    [[nodiscard]] OXGN_VRTX_API auto AcquireLocalMap(
+      ViewId view, const LocalShadowRequest& request) -> LocalAcquisition;
     OXGN_VRTX_API auto RetainDirectionalSurfaces(
       std::span<const LightSelectionIndex> selections) -> void;
     [[nodiscard]] OXGN_VRTX_API auto AcquireDirectionalSurface(ViewId view_id,
       LightSelectionIndex selection_index, std::uint32_t cascade_count,
       scene::ShadowResolutionHint resolution_hint) -> DirectionalAllocation;
-    [[nodiscard]] OXGN_VRTX_API auto AcquireSpotSurface(ViewId view_id,
-      std::uint32_t shadow_count, std::uint32_t resolution, std::uint32_t chunk)
-      -> SpotAllocation;
-    [[nodiscard]] OXGN_VRTX_API auto AcquirePointSurface(ViewId view_id,
-      std::uint32_t shadow_count, std::uint32_t resolution, std::uint32_t chunk)
-      -> PointAllocation;
     [[nodiscard]] OXGN_VRTX_API auto ResolveLocalResolution(
       scene::ShadowResolutionHint hint) const -> std::uint32_t;
     [[nodiscard]] OXGN_VRTX_API static auto LocalChunkCapacity(
       std::uint32_t resolution, bool cube) -> std::uint32_t;
+    [[nodiscard]] OXGN_VRTX_API auto InspectLocalSharing() const
+      -> ShadowSharingDiagnostics;
 
   private:
     struct SurfaceAllocation {
@@ -112,11 +124,9 @@ namespace shadows::internal {
     };
     struct ViewAllocations {
       std::uint64_t scene_generation { 0U };
-      std::unordered_map<scene::NodeHandle, LocalSlot> local_owners;
+      std::unordered_map<scene::NodeHandle, std::shared_ptr<ShadowMapOwner>>
+        local_owners;
       std::unordered_map<LightSelectionIndex, SurfaceAllocation> directional;
-      std::map<std::pair<std::uint32_t, std::uint32_t>, SurfaceAllocation> spot;
-      std::map<std::pair<std::uint32_t, std::uint32_t>, SurfaceAllocation>
-        point;
       frame::SequenceNumber last_used { 0U };
     };
     auto AcquireSurface(SurfaceAllocation& current, std::uint32_t layers,
@@ -128,17 +138,29 @@ namespace shadows::internal {
     Renderer& renderer_;
     frame::SequenceNumber current_sequence_ { 0U };
     std::unordered_map<ViewId, ViewAllocations> views_;
-    struct SlotLocation {
-      ViewId view_id { kInvalidViewId };
-      std::uint32_t resolution { 0U };
-      std::uint32_t ordinal { 0U };
-      bool cube { false };
-      bool occupied { false };
+    auto CreateLocalBacking(std::uint32_t resolution, bool cube)
+      -> std::shared_ptr<SharedShadowBacking>;
+    auto AcquirePhysicalSlot(std::uint32_t resolution, bool cube)
+      -> std::shared_ptr<ShadowSlotCore>;
+    auto EnsureSlotViews(const ShadowSlotCore& slot) -> void;
+    auto PruneLocalChunks() -> void;
+    auto IsRequested(const LocalShadowContentKey& key) const -> bool;
+    std::shared_ptr<ShadowSlotPool> local_pool_ {
+      std::make_shared<ShadowSlotPool>()
     };
-    std::vector<SlotLocation> slots_;
-    std::vector<ShadowSlotIndex> free_slots_;
-    graphics::detail::DeferredReclaimer slot_reclaimer_;
-    nexus::FrameDrivenIndexReuse<ShadowSlotIndex> slot_reuse_;
+    std::vector<std::shared_ptr<SharedShadowBacking>> local_chunks_;
+    std::unordered_multimap<std::uint64_t, std::weak_ptr<ShadowMapOwner>>
+      local_content_;
+    std::vector<const LocalShadowContentKey*> requested_content_;
+    struct ObservedBacking {
+      std::weak_ptr<SharedShadowBacking> backing;
+      std::weak_ptr<graphics::Texture> texture;
+    };
+    // Weak observation never delays resource or version retirement. Pruned at
+    // frame maintenance, so storage follows live/retiring objects, not history.
+    std::vector<ObservedBacking> observed_backings_;
+    std::vector<std::weak_ptr<ShadowMapVersion>> observed_versions_;
+    ShadowSharingDiagnostics decisions_;
   };
 
 } // namespace shadows::internal

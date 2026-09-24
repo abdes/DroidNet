@@ -27,6 +27,10 @@ public:
   PointShadowSetup(PointShadowSetup&&) = delete;
   auto operator=(PointShadowSetup&&) -> PointShadowSetup& = delete;
 
+  [[nodiscard]] OXGN_VRTX_API static auto PreparePointProjection(
+    const FrameLocalLightSelection& light, std::uint32_t resolution)
+    -> CubeLocalShadowRecord;
+
   [[nodiscard]] OXGN_VRTX_API auto BuildPointRecords(
     const PreparedViewShadowInput& view_input,
     std::span<const FrameLocalLightSelection> local_lights,

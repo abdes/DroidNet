@@ -35,6 +35,9 @@ namespace oxygen::vortex {
 class Renderer;
 
 namespace shadows {
+  namespace internal {
+    struct ShadowMapVersion;
+  }
 
   class ShadowDepthPass {
   public:
@@ -74,7 +77,8 @@ namespace shadows {
     [[nodiscard]] OXGN_VRTX_API auto RecordSlices(
       const PreparedViewShadowInput& view_input,
       const std::shared_ptr<graphics::Texture>& shadow_surface,
-      std::span<const DepthSlice> depth_slices, bool cache_local_depths = false)
+      std::span<const DepthSlice> depth_slices,
+      const std::shared_ptr<internal::ShadowMapVersion>& local_map = {})
       -> RenderState;
     [[nodiscard]] OXGN_VRTX_NDAPI auto GetLastRenderState() const noexcept
       -> const RenderState&
@@ -83,15 +87,15 @@ namespace shadows {
     }
 
   private:
-    struct CacheEntry;
+    struct SurfaceViews;
     Renderer& renderer_;
     frame::SequenceNumber current_sequence_ { 0U };
     frame::Slot current_slot_ { frame::kInvalidSlot };
     RenderState last_render_state_ {};
     upload::TransientStructuredBuffer pass_constants_buffer_;
     std::map<std::pair<const graphics::Texture*, std::uint32_t>,
-      std::shared_ptr<CacheEntry>>
-      cache_;
+      std::shared_ptr<SurfaceViews>>
+      surface_views_;
   };
 
 } // namespace shadows

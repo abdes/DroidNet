@@ -79,6 +79,41 @@ namespace {
 
 } // namespace
 
+auto SpotShadowSetup::PrepareSpotProjection(
+  const FrameLocalLightSelection& light, std::uint32_t resolution)
+  -> ProjectedLocalShadowRecord
+{
+  const auto range = light.range;
+  const auto near_plane = (std::min)(kMinSpotNearPlane, range * 0.01F);
+  const auto outer_cos = ResolveOuterConeCos(light);
+  const auto outer_angle = light.outer_cone_half_angle_radians;
+  const auto direction
+    = NormalizeOrFallback(light.direction, glm::vec3 { 0.0F, -1.0F, 0.0F });
+  const auto view = BuildSpotViewMatrix(light.position, direction);
+  const auto projection = MakeReversedZPerspectiveProjectionRH_ZO(
+    2.0F * outer_angle, 1.0F, near_plane, range);
+  const auto depth_span = range - near_plane;
+  const auto depth_bias = ComputeSpotDepthBias(light, depth_span, resolution);
+  const auto outer_sine
+    = std::sqrt((std::max)(0.0F, 1.0F - outer_cos * outer_cos));
+  const auto outer_tangent = outer_sine / outer_cos;
+  const auto world_texel_size = (2.0F * range * outer_tangent)
+    / static_cast<float>((std::max)(resolution, 1U));
+
+  auto spot = ProjectedLocalShadowRecord {};
+  spot.light_view_projection = projection * view;
+  spot.shadow_origin_ws = light.position;
+  spot.near_plane_m = near_plane;
+  spot.far_plane_m = range;
+  spot.normal_bias_m = (std::max)(light.shadow_normal_bias, 0.0F);
+  spot.depth_bias = depth_bias;
+  spot.world_texel_size = world_texel_size;
+  const auto inverse_resolution
+    = resolution > 0 ? 1.0F / static_cast<float>(resolution) : 0.0F;
+  spot.inverse_resolution = { inverse_resolution, inverse_resolution };
+  return spot;
+}
+
 auto SpotShadowSetup::BuildSpotRecords(
   const PreparedViewShadowInput& view_input,
   const std::span<const FrameLocalLightSelection> local_lights,
@@ -111,32 +146,8 @@ auto SpotShadowSetup::BuildSpotRecords(
       break;
     }
 
-    const auto range = light.range;
-    const auto near_plane = (std::min)(kMinSpotNearPlane, range * 0.01F);
-    const auto outer_cos = ResolveOuterConeCos(light);
-    const auto outer_angle = light.outer_cone_half_angle_radians;
-    const auto direction
-      = NormalizeOrFallback(light.direction, glm::vec3 { 0.0F, -1.0F, 0.0F });
-    const auto view = BuildSpotViewMatrix(light.position, direction);
-    const auto projection = MakeReversedZPerspectiveProjectionRH_ZO(
-      2.0F * outer_angle, 1.0F, near_plane, range);
-    const auto depth_span = range - near_plane;
-    const auto depth_bias
-      = ComputeSpotDepthBias(light, depth_span, allocation.resolution.x);
-    const auto outer_sine
-      = std::sqrt((std::max)(0.0F, 1.0F - outer_cos * outer_cos));
-    const auto outer_tangent = outer_sine / outer_cos;
-    const auto world_texel_size = (2.0F * range * outer_tangent)
-      / static_cast<float>((std::max)(allocation.resolution.x, 1U));
-
-    auto& spot = records.emplace_back();
-    spot.light_view_projection = projection * view;
-    spot.shadow_origin_ws = light.position;
-    spot.near_plane_m = near_plane;
-    spot.far_plane_m = range;
-    spot.normal_bias_m = (std::max)(light.shadow_normal_bias, 0.0F);
-    spot.depth_bias = depth_bias;
-    spot.world_texel_size = world_texel_size;
+    auto& spot = records.emplace_back(
+      PrepareSpotProjection(light, allocation.resolution.x));
     spot.surface_srv = allocation.surface_srv;
     spot.selection_index
       = LightSelectionIndex { static_cast<std::uint32_t>(selection_index) };

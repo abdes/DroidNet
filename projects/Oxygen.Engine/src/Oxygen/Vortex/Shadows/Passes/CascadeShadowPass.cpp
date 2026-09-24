@@ -37,7 +37,7 @@ namespace oxygen::vortex::shadows {
 
 namespace {
 
-  constexpr float kLocalShadowSlopeDepthBiasScale = 3.0F;
+  using internal::kLocalShadowSlopeDepthBiasScale;
 
   auto PointPcfSampleCount(const ShadowQualityTier tier) -> std::uint32_t
   {
@@ -51,42 +51,6 @@ namespace {
       return 29U;
     }
     return 29U;
-  }
-
-  auto BuildLocalBuckets(const PreparedViewShadowInput& view,
-    const std::span<const FrameLocalLightSelection> lights, const bool cube,
-    internal::ConventionalShadowTargetAllocator& allocator,
-    std::unordered_map<scene::NodeHandle, std::uint32_t>& previous,
-    std::vector<LightSelectionIndex>& omissions, std::span<float> strengths)
-    -> std::map<std::pair<std::uint32_t, std::uint32_t>,
-      std::vector<internal::ConventionalShadowTargetAllocator::LocalSelection>>
-  {
-    auto buckets = std::map<std::pair<std::uint32_t, std::uint32_t>,
-      std::vector<
-        internal::ConventionalShadowTargetAllocator::LocalSelection>> {};
-    for (const auto& [index, light] : std::views::enumerate(lights)) {
-      if (internal::UsesCubeLocalShadow(light) == cube
-        && internal::HasLocalShadowInfluence(light, view.resolved_view.get())) {
-        const auto old = previous.find(light.source_node);
-        const auto quality = internal::EvaluateLocalShadowQuality(light,
-          view.resolved_view.get(),
-          allocator.ResolveLocalResolution(light.shadow_resolution_hint),
-          old != previous.end() ? old->second : 0U);
-        if (light.source_node.IsValid()) {
-          previous.insert_or_assign(light.source_node, quality.resolution);
-        }
-        strengths[index] = quality.strength;
-        if (quality.resolution == 0U) {
-          omissions.emplace_back(static_cast<std::uint32_t>(index));
-          continue;
-        }
-        const auto slot = allocator.AcquireLocalSlot(
-          view.view_id, light.source_node, quality.resolution, cube);
-        buckets[{ quality.resolution, slot.chunk }].push_back(
-          { LightSelectionIndex { static_cast<std::uint32_t>(index) }, slot });
-      }
-    }
-    return buckets;
   }
 
 } // namespace
@@ -104,15 +68,108 @@ CascadeShadowPass::CascadeShadowPass(Renderer& renderer)
 
 CascadeShadowPass::~CascadeShadowPass() = default;
 
+auto CascadeShadowPass::InspectLocalSharing() const -> ShadowSharingDiagnostics
+{
+  auto result = allocator_->InspectLocalSharing();
+  for (const auto& [id, prepared] : prepared_locals_) {
+    result.prepared_request_bytes
+      += prepared.requests.capacity() * sizeof(internal::LocalShadowRequest);
+    for (const auto& request : prepared.requests) {
+      result.prepared_request_bytes += request.content.casters.capacity()
+          * sizeof(std::shared_ptr<const ShadowCasterRecord>)
+        + request.caster_hash_scratch.capacity() * sizeof(std::uint64_t);
+    }
+  }
+  return result;
+}
+
 auto CascadeShadowPass::OnFrameStart(
   const frame::SequenceNumber sequence, const frame::Slot slot) -> void
 {
+  std::erase_if(prepared_locals_,
+    [&](const auto& entry) { return entry.second.frame != current_sequence_; });
   allocator_->OnFrameStart(sequence, slot);
   depth_pass_->OnFrameStart(sequence, slot);
   std::erase_if(quality_history_, [this](const auto& entry) {
     return entry.second.last_used != current_sequence_;
   });
   current_sequence_ = sequence;
+}
+
+auto CascadeShadowPass::ReconcileLocalFamily(
+  std::span<const PreparedViewShadowInput> views) -> void
+{
+  family_requests_.clear();
+  for (const auto& view : views) {
+    if (const auto found = prepared_locals_.find(view.view_id);
+      found != prepared_locals_.end()) {
+      for (const auto& request : found->second.requests) {
+        family_requests_.push_back(&request);
+      }
+    }
+  }
+  allocator_->PrepareLocalFamily(family_requests_);
+}
+
+auto CascadeShadowPass::PrepareLocalRequests(
+  std::span<const PreparedViewShadowInput> views,
+  const FrameLightSelection* selection) -> void
+{
+  const auto lights = selection
+    ? std::span<const FrameLocalLightSelection>(selection->local_lights)
+    : std::span<const FrameLocalLightSelection> {};
+  const auto epoch = selection ? selection->selection_epoch : 0;
+  for (const auto& view : views) {
+    auto& prepared = prepared_locals_[view.view_id];
+    const auto revision
+      = view.prepared_scene ? view.prepared_scene->preparation_revision : 0;
+    if (revision != 0 && epoch != 0 && prepared.frame == current_sequence_
+      && prepared.preparation_revision == revision
+      && prepared.selection_epoch == epoch
+      && prepared.scene_generation == view.scene_generation) {
+      continue;
+    }
+    auto& history = PrepareQualityHistory(view, lights);
+    size_t count = 0;
+    for (size_t index = 0; index < lights.size(); ++index) {
+      const auto& light = lights[index];
+      if (!internal::HasLocalShadowInfluence(light, view.resolved_view.get())) {
+        continue;
+      }
+      const auto old = history.resolutions.find(light.source_node);
+      const auto quality
+        = internal::EvaluateLocalShadowQuality(light, view.resolved_view.get(),
+          allocator_->ResolveLocalResolution(light.shadow_resolution_hint),
+          old != history.resolutions.end() ? old->second : 0U);
+      if (light.source_node.IsValid()) {
+        history.resolutions.insert_or_assign(
+          light.source_node, quality.resolution);
+      }
+      if (count == prepared.requests.size()) {
+        prepared.requests.emplace_back();
+      }
+      auto& request = prepared.requests[count++];
+      if (quality.resolution != 0) {
+        internal::PrepareLocalShadowRequest(view, light,
+          LightSelectionIndex { static_cast<uint32_t>(index) },
+          quality.resolution, quality.strength, request);
+      } else {
+        request.selection
+          = LightSelectionIndex { static_cast<uint32_t>(index) };
+        request.content.resolution = 0;
+        request.content.casters.clear();
+        request.content.reusable = false;
+        request.content.contract = internal::UsesCubeLocalShadow(light)
+          ? internal::LocalShadowDepthContract::kCubeRasterReversedV1
+          : internal::LocalShadowDepthContract::kProjectedLinearReversedV1;
+      }
+    }
+    prepared.requests.resize(count);
+    prepared.frame = current_sequence_;
+    prepared.preparation_revision = revision;
+    prepared.selection_epoch = epoch;
+    prepared.scene_generation = view.scene_generation;
+  }
 }
 
 auto CascadeShadowPass::PrepareQualityHistory(
@@ -181,123 +238,102 @@ auto CascadeShadowPass::RenderDirectionalView(
 
 auto CascadeShadowPass::RenderSpotView(
   const PreparedViewShadowInput& view_input,
-  const std::span<const FrameLocalLightSelection> local_lights)
+  std::span<const FrameLocalLightSelection> /*lights*/)
   -> ViewSpotShadowPassState
 {
-  auto state = ViewSpotShadowPassState {};
-  auto strengths = std::vector<float>(local_lights.size(), 1.0F);
-  auto& history = PrepareQualityHistory(view_input, local_lights);
-  for (const auto& [bucket, selected] :
-    BuildLocalBuckets(view_input, local_lights, false, *allocator_,
-      history.resolutions, state.quality_omissions, strengths)) {
-    const auto [resolution, chunk] = bucket;
-    auto required_count = 0U;
-    for (const auto& selection : selected) {
-      required_count = (std::max)(required_count, selection.slot.offset + 1U);
+  ViewSpotShadowPassState state;
+  for (const auto& request : prepared_locals_.at(view_input.view_id).requests) {
+    if (request.IsCube()) {
+      continue;
     }
-    const auto allocation = allocator_->AcquireSpotSurface(
-      view_input.view_id, required_count, resolution, chunk);
-    auto records = spot_setup_->BuildSpotRecords(
-      view_input, local_lights, selected, allocation);
-    for (auto& record : records) {
-      record.shadow_strength = strengths[record.selection_index.get()];
+    if (request.content.resolution == 0) {
+      state.quality_omissions.push_back(request.selection);
+      continue;
     }
-    state.shadow_surfaces.push_back(allocation.surface);
-
-    for (std::size_t light_index = 0U; light_index < records.size();
-      ++light_index) {
-      const auto& spot = records[light_index];
-      auto depth_slices = std::array<ShadowDepthPass::DepthSlice, 1> {};
-      // For the conventional perspective projection, clip W is axial distance.
-      // Its XYZ coefficients give the normalized light-forward vector.
-      const auto direction = glm::vec3(glm::row(spot.light_view_projection, 3));
-      depth_slices[0] = ShadowDepthPass::DepthSlice {
-        .light_view_projection = spot.light_view_projection,
-        .shadow_bias_parameters = glm::vec4(spot.depth_bias,
-          spot.depth_bias * kLocalShadowSlopeDepthBiasScale, 1.0F, 0.0F),
-        .light_direction_to_source = glm::vec4(direction, 0.0F),
-        .light_position_and_inv_range
-        = glm::vec4(spot.shadow_origin_ws, 1.0F / spot.far_plane_m),
-        .target_slice = spot.array_layer.get(),
-        .light_source = local_lights[spot.selection_index.get()].source_node,
-        .slot_generation = selected[light_index].slot.handle.generation.get(),
-      };
-      const auto render_state = allocation.surface != nullptr
-        ? depth_pass_->RecordSlices(
-            view_input, allocation.surface, std::span(depth_slices), true)
-        : ShadowDepthPass::RenderState {};
-      state.shadow_caster_draw_count = render_state.shadow_caster_draw_count;
-      state.rendered_shadow_count += render_state.rendered_cascade_count;
-      if (allocation.surface && !render_state.recording_succeeded) {
+    auto acquired = allocator_->AcquireLocalMap(view_input.view_id, request);
+    const auto& slot = *acquired.owner->version->slot;
+    if (!acquired.reused) {
+      const auto& key = request.content;
+      const std::array slices { ShadowDepthPass::DepthSlice {
+        .light_view_projection = key.matrices[0],
+        .shadow_bias_parameters = key.bias,
+        .light_direction_to_source = key.direction,
+        .light_position_and_inv_range = key.position_and_inverse_range,
+        .target_slice = slot.offset } };
+      const auto rendered = depth_pass_->RecordSlices(
+        view_input, slot.backing->texture, slices, acquired.owner->version);
+      if (!rendered.recording_succeeded) {
         throw std::runtime_error("Spot shadow submission failed");
       }
-      state.rendered_draw_count += render_state.rendered_draw_count;
+      state.rendered_shadow_count += rendered.rendered_cascade_count;
+      state.rendered_draw_count += rendered.rendered_draw_count;
+      state.shadow_caster_draw_count = rendered.shadow_caster_draw_count;
     }
-    state.records.insert(state.records.end(), records.begin(), records.end());
+    acquired.Commit();
+    auto record = std::get<ProjectedLocalShadowRecord>(request.projection);
+    record.surface_srv = slot.backing->srv;
+    record.array_layer = ShadowArrayLayer { slot.offset };
+    record.selection_index = request.selection;
+    record.shadow_strength = request.strength;
+    state.records.push_back(record);
+    state.local_maps.push_back(acquired.owner);
+    if (std::ranges::find(state.shadow_surfaces, slot.backing->texture)
+      == state.shadow_surfaces.end()) {
+      state.shadow_surfaces.push_back(slot.backing->texture);
+    }
   }
   return state;
 }
 
 auto CascadeShadowPass::RenderPointView(
   const PreparedViewShadowInput& view_input,
-  const std::span<const FrameLocalLightSelection> local_lights)
+  std::span<const FrameLocalLightSelection> /*lights*/)
   -> ViewPointShadowPassState
 {
-  auto state = ViewPointShadowPassState {};
-  auto strengths = std::vector<float>(local_lights.size(), 1.0F);
-  auto& history = PrepareQualityHistory(view_input, local_lights);
-  for (const auto& [bucket, selected] :
-    BuildLocalBuckets(view_input, local_lights, true, *allocator_,
-      history.resolutions, state.quality_omissions, strengths)) {
-    const auto [resolution, chunk] = bucket;
-    auto required_count = 0U;
-    for (const auto& selection : selected) {
-      required_count = (std::max)(required_count, selection.slot.offset + 1U);
+  ViewPointShadowPassState state;
+  for (const auto& request : prepared_locals_.at(view_input.view_id).requests) {
+    if (!request.IsCube()) {
+      continue;
     }
-    const auto allocation = allocator_->AcquirePointSurface(
-      view_input.view_id, required_count, resolution, chunk);
-    auto records = point_setup_->BuildPointRecords(
-      view_input, local_lights, selected, allocation);
-    for (auto& record : records) {
-      record.shadow_strength = strengths[record.selection_index.get()];
-      record.pcf_sample_count
-        = PointPcfSampleCount(renderer_.GetShadowQualityTier());
+    if (request.content.resolution == 0) {
+      state.quality_omissions.push_back(request.selection);
+      continue;
     }
-    state.shadow_surfaces.push_back(allocation.surface);
-
-    for (std::size_t light_index = 0U; light_index < records.size();
-      ++light_index) {
-      const auto& point = records[light_index];
-      auto depth_slices = std::array<ShadowDepthPass::DepthSlice, 6> {};
-      for (std::uint32_t face_index = 0U;
-        face_index < CubeLocalShadowRecord::kFaceCount; ++face_index) {
-        depth_slices[face_index] = ShadowDepthPass::DepthSlice {
-          .light_view_projection
-          = point.face_light_view_projection.at(face_index),
-          // Cube maps store unbiased raster depth. Bias belongs to the
-          // receiver comparison, not the depth producer.
-          .shadow_bias_parameters = glm::vec4(0.0F),
-          .light_position_and_inv_range
-          = glm::vec4(point.shadow_origin_ws, 1.0F / point.far_plane_m),
-          .target_slice = point.first_array_layer.get() + face_index,
-          .light_source = local_lights[point.selection_index.get()].source_node,
-          .slot_generation = selected[light_index].slot.handle.generation.get(),
-        };
+    auto acquired = allocator_->AcquireLocalMap(view_input.view_id, request);
+    const auto& slot = *acquired.owner->version->slot;
+    if (!acquired.reused) {
+      std::array<ShadowDepthPass::DepthSlice, 6> slices;
+      for (uint32_t face = 0; face < 6; ++face) {
+        slices[face]
+          = { .light_view_projection = request.content.matrices[face],
+              .light_position_and_inv_range
+              = request.content.position_and_inverse_range,
+              .target_slice = slot.offset * 6U + face };
       }
-      const auto render_state = allocation.surface != nullptr
-        ? depth_pass_->RecordSlices(
-            view_input, allocation.surface, std::span(depth_slices), true)
-        : ShadowDepthPass::RenderState {};
-      state.shadow_caster_draw_count = render_state.shadow_caster_draw_count;
-      state.rendered_shadow_count += render_state.rendered_cascade_count / 6U;
-      if (allocation.surface && !render_state.recording_succeeded) {
+      const auto rendered = depth_pass_->RecordSlices(
+        view_input, slot.backing->texture, slices, acquired.owner->version);
+      if (!rendered.recording_succeeded) {
         throw std::runtime_error("Point shadow submission failed");
       }
-      state.rendered_draw_count += render_state.rendered_draw_count;
+      state.rendered_shadow_count += rendered.rendered_cascade_count / 6U;
+      state.rendered_draw_count += rendered.rendered_draw_count;
+      state.shadow_caster_draw_count = rendered.shadow_caster_draw_count;
     }
-    state.records.insert(state.records.end(), records.begin(), records.end());
+    acquired.Commit();
+    auto record = std::get<CubeLocalShadowRecord>(request.projection);
+    record.surface_srv = slot.backing->srv;
+    record.first_array_layer = ShadowArrayLayer { slot.offset * 6U };
+    record.selection_index = request.selection;
+    record.shadow_strength = request.strength;
+    record.pcf_sample_count
+      = PointPcfSampleCount(renderer_.GetShadowQualityTier());
+    state.records.push_back(record);
+    state.local_maps.push_back(acquired.owner);
+    if (std::ranges::find(state.shadow_surfaces, slot.backing->texture)
+      == state.shadow_surfaces.end()) {
+      state.shadow_surfaces.push_back(slot.backing->texture);
+    }
   }
   return state;
 }
-
 } // namespace oxygen::vortex::shadows

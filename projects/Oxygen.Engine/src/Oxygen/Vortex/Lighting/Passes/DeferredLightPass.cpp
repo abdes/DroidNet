@@ -889,6 +889,12 @@ auto DeferredLightPass::Record(RenderContext& ctx,
   const auto prepare_shadows = [&](const auto surfaces) {
     for (const auto& surface : surfaces) {
       if (surface) {
+        const auto managed
+          = gfx->GetResourceRegistry().InspectManagedIdentity(*surface);
+        if (managed && !recorder.RetainsRegistration(*managed)) {
+          throw std::logic_error(
+            "Deferred lighting requires its local-shadow read set");
+        }
         RequireKnownPersistentState(recorder, *surface);
         recorder.RequireResourceState(
           *surface, graphics::ResourceStates::kShaderResource);

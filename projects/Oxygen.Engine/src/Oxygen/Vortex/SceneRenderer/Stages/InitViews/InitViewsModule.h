@@ -80,6 +80,7 @@ public:
     -> const PreparedSceneFrame*;
 
 private:
+  std::uint64_t next_preparation_revision_ { 1 };
   Renderer& renderer_;
   observer_ptr<PostProcessService> post_process_;
   std::unique_ptr<resources::TextureBinder> texture_binder_;

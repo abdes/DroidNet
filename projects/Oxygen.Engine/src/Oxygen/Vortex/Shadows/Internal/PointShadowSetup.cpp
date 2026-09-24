@@ -69,6 +69,40 @@ namespace {
 
 } // namespace
 
+auto PointShadowSetup::PreparePointProjection(
+  const FrameLocalLightSelection& light, std::uint32_t resolution)
+  -> CubeLocalShadowRecord
+{
+  const auto range = light.range;
+  const auto near_plane = (std::min)(kMinPointNearPlane, range * 0.01F);
+  const auto projection = MakeReversedZPerspectiveProjectionRH_ZO(
+    glm::half_pi<float>(), 1.0F, near_plane, range);
+  const auto depth_bias = ComputePointDepthBias(light, near_plane, resolution);
+  const auto world_texel_size
+    = (2.0F * range) / static_cast<float>((std::max)(resolution, 1U));
+
+  auto point = CubeLocalShadowRecord {};
+  // Native cube sampling uses receiver-to-light, so each physical face
+  // looks along the negative cube axis. These RH bases preserve winding.
+  for (std::size_t face_index = 0U; face_index < kPointFaceDirections.size();
+    ++face_index) {
+    const auto view = glm::lookAtRH(light.position,
+      light.position + kPointFaceDirections[face_index],
+      kPointFaceUps[face_index]);
+    point.face_light_view_projection[face_index] = projection * view;
+  }
+  point.shadow_origin_ws = light.position;
+  point.near_plane_m = near_plane;
+  point.far_plane_m = range;
+  point.normal_bias_m = (std::max)(light.shadow_normal_bias, 0.0F);
+  point.depth_bias = depth_bias;
+  point.world_texel_size = world_texel_size;
+  const auto inverse_resolution
+    = resolution > 0 ? 1.0F / static_cast<float>(resolution) : 0.0F;
+  point.inverse_resolution = { inverse_resolution, inverse_resolution };
+  return point;
+}
+
 auto PointShadowSetup::BuildPointRecords(
   const PreparedViewShadowInput& view_input,
   const std::span<const FrameLocalLightSelection> local_lights,
@@ -98,31 +132,8 @@ auto PointShadowSetup::BuildPointRecords(
       break;
     }
 
-    const auto range = light.range;
-    const auto near_plane = (std::min)(kMinPointNearPlane, range * 0.01F);
-    const auto projection = MakeReversedZPerspectiveProjectionRH_ZO(
-      glm::half_pi<float>(), 1.0F, near_plane, range);
-    const auto depth_bias
-      = ComputePointDepthBias(light, near_plane, allocation.resolution.x);
-    const auto world_texel_size = (2.0F * range)
-      / static_cast<float>((std::max)(allocation.resolution.x, 1U));
-
-    auto& point = records.emplace_back();
-    // Native cube sampling uses receiver-to-light, so each physical face
-    // looks along the negative cube axis. These RH bases preserve winding.
-    for (std::size_t face_index = 0U; face_index < kPointFaceDirections.size();
-      ++face_index) {
-      const auto view = glm::lookAtRH(light.position,
-        light.position + kPointFaceDirections[face_index],
-        kPointFaceUps[face_index]);
-      point.face_light_view_projection[face_index] = projection * view;
-    }
-    point.shadow_origin_ws = light.position;
-    point.near_plane_m = near_plane;
-    point.far_plane_m = range;
-    point.normal_bias_m = (std::max)(light.shadow_normal_bias, 0.0F);
-    point.depth_bias = depth_bias;
-    point.world_texel_size = world_texel_size;
+    auto& point = records.emplace_back(
+      PreparePointProjection(light, allocation.resolution.x));
     point.surface_srv = allocation.surface_srv;
     point.selection_index
       = LightSelectionIndex { static_cast<std::uint32_t>(selection_index) };

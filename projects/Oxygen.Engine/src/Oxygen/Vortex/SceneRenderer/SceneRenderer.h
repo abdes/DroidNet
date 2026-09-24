@@ -25,7 +25,6 @@
 #include <Oxygen/Vortex/Environment/Types/EnvironmentAmbientBridgeBindings.h>
 #include <Oxygen/Vortex/Lighting/Types/FrameLightingInputs.h>
 #include <Oxygen/Vortex/Lighting/Types/LightingPreparationFailure.h>
-#include <Oxygen/Vortex/Types/ViewRenderStatus.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextureLeasePool.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
@@ -37,6 +36,7 @@
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
 #include <Oxygen/Vortex/Types/ScreenHzbFrameBindings.h>
 #include <Oxygen/Vortex/Types/ViewFrameBindings.h>
+#include <Oxygen/Vortex/Types/ViewRenderStatus.h>
 #include <Oxygen/Vortex/api_export.h>
 
 namespace oxygen {
@@ -158,7 +158,8 @@ public:
   OXGN_VRTX_API auto OnRender(RenderContext& ctx) -> bool;
   [[nodiscard]] OXGN_VRTX_API auto InspectViewRenderStatus(ViewId view_id) const
     -> std::optional<ViewRenderStatus>;
-  [[nodiscard]] auto ResolveViewLightingFrameSlot(ViewId view_id) const -> ShaderVisibleIndex;
+  [[nodiscard]] auto ResolveViewLightingFrameSlot(ViewId view_id) const
+    -> ShaderVisibleIndex;
   OXGN_VRTX_API void OnCompositing(RenderContext& ctx);
   OXGN_VRTX_API void OnFrameEnd(const engine::FrameContext& frame);
   OXGN_VRTX_API void RemoveViewState(ViewId view_id,
@@ -207,7 +208,8 @@ public:
 private:
   auto ReportLightingFailure(
     LightingPreparationFailure failure, ViewId fallback_view) -> void;
-  std::unordered_map<ViewId, LightingPreparationFailure> reported_lighting_failures_;
+  std::unordered_map<ViewId, LightingPreparationFailure>
+    reported_lighting_failures_;
   std::unordered_map<ViewId, ViewRenderStatus> view_render_status_;
   friend struct testing::RendererPublicationProbe;
 
@@ -294,6 +296,7 @@ private:
   FrameLightSelection frame_light_selection_ {};
   std::vector<PreparedViewLightingInput> frame_lighting_views_;
   std::vector<PreparedViewShadowInput> frame_shadow_views_;
+  std::vector<PreparedViewShadowInput> frame_shadow_preparation_views_;
   std::optional<frame::SequenceNumber> lighting_grid_built_sequence_;
   std::unique_ptr<InitViewsModule> init_views_;
   std::unique_ptr<DepthPrepassModule> depth_prepass_;
