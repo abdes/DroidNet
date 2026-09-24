@@ -32,7 +32,6 @@
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
-#include <Oxygen/Nexus/Types/Domain.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/RendererTag.h>
 #include <Oxygen/Vortex/Resources/DrawMetadataEmitter.h>
@@ -45,10 +44,6 @@
 #include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
 
 namespace {
-
-constexpr oxygen::nexus::DomainKey kDrawMetadataDomain {
-  .domain = oxygen::bindless::generated::kMaterialsDomain,
-};
 
 constexpr std::uint8_t kOpaqueBucketOrder = 0U;
 constexpr std::uint8_t kMaskedBucketOrder = 1U;
@@ -168,13 +163,6 @@ DrawMetadataEmitter::DrawMetadataEmitter(observer_ptr<Graphics> gfx,
   , material_binder_(materials)
   , staging_provider_(provider)
   , inline_transfers_(inline_transfers)
-  , slot_reuse_(
-      [this](oxygen::nexus::DomainKey /*domain*/) -> bindless::HeapIndex {
-        return bindless::HeapIndex { frame_write_count_ };
-      },
-      [](oxygen::nexus::DomainKey /*domain*/,
-        bindless::HeapIndex /*index*/) -> void { },
-      slot_reclaimer_)
   , draw_metadata_buffer_(gfx_, *staging_provider_,
       static_cast<std::uint32_t>(sizeof(oxygen::vortex::DrawMetadata)),
       inline_transfers_, "DrawMetadataEmitter.Draws",
@@ -196,25 +184,8 @@ DrawMetadataEmitter::DrawMetadataEmitter(observer_ptr<Graphics> gfx,
 
 DrawMetadataEmitter::~DrawMetadataEmitter()
 {
-  const auto telemetry = slot_reuse_.GetTelemetrySnapshot();
-  const auto expected_zero_marker = [](const uint64_t value) -> const char* {
-    return value == 0U ? " \u2713" : " (expected 0) !";
-  };
-
   LOG_SCOPE_F(INFO, "DrawMetadataEmitter Statistics");
   LOG_F(INFO, "frames started    : {}", frames_started_count_);
-  LOG_F(INFO, "nexus.allocate_calls      : {}", telemetry.allocate_calls);
-  LOG_F(INFO, "nexus.release_calls       : {}{}", telemetry.release_calls,
-    expected_zero_marker(telemetry.release_calls));
-  LOG_F(INFO, "nexus.stale_reject_count  : {}{}", telemetry.stale_reject_count,
-    expected_zero_marker(telemetry.stale_reject_count));
-  LOG_F(INFO, "nexus.duplicate_rejects   : {}{}",
-    telemetry.duplicate_reject_count,
-    expected_zero_marker(telemetry.duplicate_reject_count));
-  LOG_F(INFO, "nexus.reclaimed_count     : {}{}", telemetry.reclaimed_count,
-    expected_zero_marker(telemetry.reclaimed_count));
-  LOG_F(INFO, "nexus.pending_count       : {}{}", telemetry.pending_count,
-    expected_zero_marker(telemetry.pending_count));
   LOG_F(INFO, "sort calls        : {}", sort_calls_count_);
   LOG_F(INFO, "peak draws        : {}", peak_draws_);
   LOG_F(INFO, "peak partitions   : {}", peak_partitions_);
@@ -223,7 +194,6 @@ DrawMetadataEmitter::~DrawMetadataEmitter()
 auto DrawMetadataEmitter::OnFrameStart(vortex::RendererTag /*tag*/,
   oxygen::frame::SequenceNumber sequence, oxygen::frame::Slot slot) -> void
 {
-  slot_reuse_.OnBeginFrame(slot);
   frame_write_count_ = 0U;
 
   // Reset per-frame CPU state; keep GPU resources
@@ -334,7 +304,8 @@ auto DrawMetadataEmitter::EmitDrawMetadata(
     dm.instance_metadata_offset = 0;
     dm.transform_generation = item.transform_handle.GenerationValue().get();
     dm.submesh_index = item.submesh_index;
-    dm.primitive_flags = item.receive_shadows ? 0U
+    dm.primitive_flags = item.receive_shadows
+      ? 0U
       : static_cast<uint32_t>(DrawPrimitiveFlagBits::kDisableShadowReception);
     if (item.static_shadow_caster) {
       dm.primitive_flags |= static_cast<uint32_t>(
@@ -359,8 +330,7 @@ auto DrawMetadataEmitter::EmitDrawMetadata(
     DCHECK_F(!dm.flags.IsEmpty(), "flags cannot be empty after assignment");
 
     const std::uint8_t bucket_order = ResolveBucketOrder(dm.flags);
-    const auto index
-      = slot_reuse_.Allocate(kDrawMetadataDomain).ToBindlessHandle().get();
+    const auto index = frame_write_count_;
     if (index >= Cpu().size()) {
       Cpu().resize(static_cast<size_t>(index) + 1U);
       keys_.resize(static_cast<size_t>(index) + 1U);

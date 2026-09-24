@@ -306,7 +306,7 @@ GeometryUploader::Impl::Impl(observer_ptr<Graphics> gfx,
   , free_indices_(std::make_shared<std::vector<bindless::HeapIndex>>())
   , slot_reuse_(slot_reclaimer_,
       [free_indices = free_indices_](
-        bindless::HeapIndex index, std::monostate /*unused*/) -> void {
+        bindless::HeapIndex index, std::monostate /*unused*/) noexcept -> void {
         if (free_indices) {
           free_indices->push_back(index);
         }
@@ -568,12 +568,27 @@ auto GeometryUploader::Impl::GetOrAllocate(
 
   bindless::HeapIndex handle_index {};
   if (free_indices_->empty()) {
+    if (free_indices_->capacity() <= next_handle_index_) {
+      free_indices_->reserve((std::max)(free_indices_->capacity() * 2U,
+        static_cast<std::size_t>(next_handle_index_) + 1U));
+    }
     handle_index = bindless::HeapIndex { next_handle_index_++ };
   } else {
     handle_index = free_indices_->back();
     free_indices_->pop_back();
   }
-  const auto versioned_handle = slot_reuse_.ActivateSlot(handle_index);
+  const auto versioned_handle = [&] {
+    try {
+      if (geometry_entries_.size() <= handle_index.get()) {
+        geometry_entries_.resize(
+          static_cast<std::size_t>(handle_index.get()) + 1U);
+      }
+      return slot_reuse_.ActivateSlot(handle_index);
+    } catch (...) {
+      free_indices_->push_back(handle_index);
+      throw;
+    }
+  }();
   const auto handle = vortex::sceneprep::GeometryHandle {
     vortex::sceneprep::GeometryHandle::Index { versioned_handle.index.get() },
     vortex::sceneprep::GeometryHandle::Generation {
@@ -581,12 +596,6 @@ auto GeometryUploader::Impl::GetOrAllocate(
   };
   DLOG_F(3, "new handle : {}", handle);
   const auto u_handle = handle.get();
-
-  // Resize geometry_entries_ and GPU arrays if needed
-  if (geometry_entries_.size() <= u_handle) {
-    DLOG_F(3, "resize internal storage to : {}", u_handle + 1U);
-    geometry_entries_.resize(u_handle + 1U);
-  }
 
   // Initialize or update per-handle entry
   auto& entry = geometry_entries_[u_handle];

@@ -18,9 +18,7 @@
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Data/AssetKey.h>
-#include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
-#include <Oxygen/Nexus/FrameDrivenSlotReuse.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/RendererTag.h>
@@ -64,13 +62,9 @@ namespace oxygen::vortex::resources {
  - **Stable SRV, per-frame content**: Capacity is ensured with minimal
    slack; content is fully rewritten each frame. UploadPlanner performs
    packing/coalescing; the emitter need not batch adjacent writes.
- - **Frame-driven slot indexing**: Per-frame draw slot indices are assigned by
-
- Nexus Strategy A (`FrameDrivenSlotReuse`) using deterministic emit order.
- This
- emitter intentionally uses allocation-only semantics (no per-draw
-
- release/reclaim) because slots are rewritten densely every frame.
+ - **Dense indexing**: A frame counter assigns draw indices in deterministic
+   emit order. ResetViewData resets this counter for each view. There is no
+   per-draw allocation or retirement lifecycle.
 
  ### When to use ElementRef instead
 
@@ -225,8 +219,6 @@ private:
   observer_ptr<vortex::resources::MaterialBinder> material_binder_;
   observer_ptr<vortex::upload::StagingProvider> staging_provider_;
   observer_ptr<vortex::upload::InlineTransfersCoordinator> inline_transfers_;
-  graphics::detail::DeferredReclaimer slot_reclaimer_;
-  nexus::FrameDrivenSlotReuse slot_reuse_;
   std::uint32_t frame_write_count_ { 0U };
 
   // CPU shadow storage and transient GPU buffer for DrawMetadata

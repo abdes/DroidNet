@@ -226,8 +226,10 @@ public:
     if (u_capacity == size_) {
       return;
     }
-    std::vector<AtomicGeneration> new_table;
-    new_table.resize(u_capacity);
+    // Construct with a size so allocation failure propagates even with MSVC's
+    // checked iterators (its empty vector constructor is noexcept but allocates
+    // a debug proxy). The old table remains intact until construction succeeds.
+    std::vector<AtomicGeneration> new_table(u_capacity);
     // copy existing values (by load/store) and initialize new slots to 0
     const auto old_size = size_;
     for (std::size_t i = 0; i < u_capacity; ++i) {
@@ -243,6 +245,7 @@ public:
   }
 
 private:
+  friend struct IndexReuseTestAccess;
   struct AtomicGeneration {
     mutable std::atomic<uint32_t> value { 0U };
 

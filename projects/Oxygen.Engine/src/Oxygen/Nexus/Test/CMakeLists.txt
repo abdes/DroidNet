@@ -32,10 +32,14 @@ add_test(NAME ${link_test_target} COMMAND ${link_test_target})
 
 include(GTestHelpers)
 
+# Isolate replacement allocation functions from the ordinary test programs.
+m_gtest_program(AllocationFailure SOURCES "AllocationFailure_test.cpp")
+
 m_gtest_program(
   Reuse
   SOURCES
     "GenerationTracker_test.cpp"
+    "IndexReuse_test.cpp"
     "DomainIndexMapper_test.cpp"
     "FrameDrivenSlotReuse_test.cpp"
     "FrameDrivenIndexReuse_test.cpp"
