@@ -1,0 +1,34 @@
+{
+  "kind": "Correctness regression evidence; not a new performance baseline",
+  "defect": "E07.1: world-matrix normal transform produced inconsistent slope-biased depth for identical world geometry under nonuniform scale",
+  "source_parent": "3a7742eb0e7099f07d5215d85adf9d7e7e62873f",
+  "source_sha256": {
+    "src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Shadows/DirectionalShadowDepth.hlsl": "402cb27c2b4a286d23ea095526c922a4df3ecf34086427b70c29bd379e6282c8",
+    "src/Oxygen/Vortex/Shadows/Passes/ShadowDepthPass.cpp": "6a6e00350f887770c823bcf5ce0509fa2666e8b276e5c83b1ab3ec4700d05b94",
+    "src/Oxygen/Vortex/Shadows/Internal/PointShadowSetup.cpp": "c4127aa9901ac665cfe759aecc8ba9779f6896a2e495077dd773df1fbf4831f5",
+    "src/Oxygen/Vortex/Shadows/Internal/SpotShadowSetup.cpp": "675bbce15c137fac7e55eb7bb1b953eaa19afeb7745a6475785b45ae8e46e21f",
+    "src/Oxygen/Vortex/Test/Lighting/ShadowAdmissionGpu_test.cpp": "ba48347d7f3819afb9d5cf917ebfbfcdca046e352b94e9c606e64bbd4012c56c",
+    "src/Oxygen/Vortex/Test/Shaders/ToneBoundsProbe.hlsl": "9d68a81a93d75bb3eba3d67a2584bafeb775f24ce387028b414333600673050d"
+  },
+  "before": {
+    "transformed_depth": 0.26634109020233154,
+    "baked_depth": 0.416341096162796,
+    "difference": 0.15000000596046448,
+    "expected_tolerance": 1e-6,
+    "test_failed": true
+  },
+  "after": {
+    "native_suite_passed": 19,
+    "tracy_suite_passed": 19,
+    "final_native_targeted_passed": 1,
+    "depth_equivalence_tolerance": 1e-6
+  },
+  "builds": ["oxygen-ninja-release", "oxygen-tracy-ninja-release"],
+  "unchanged": [
+    "128-byte pass constant layout size",
+    "Bias calibration and authored defaults",
+    "Depth encoding, 3x3 PCF, shadow resolution and source ranges"
+  ],
+  "test_readback": "R32 shader view of D32 array through existing GPU test probe; generic D32 CPU copy readback is unsupported",
+  "raw_root": "out/analysis/ex07e/e04-caster-normal"
+}

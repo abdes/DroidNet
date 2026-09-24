@@ -760,7 +760,7 @@ The interrupted Instancing timing attempt is excluded and replaced. Full
 RenderScene builds now align with `oxyrun`; use full target builds before freezing
 future capture identities. Later changed baselines still need manual approval.
 
-**E03 result:** cooperative light-bound preparation passes all 18 native tests,
+**E03 result (commit `3a7742eb0`):** cooperative light-bound preparation passes all 18 native tests,
 including a 65-light/partial-group/mutation regression. Four timed endpoints and
 26 interaction rows preserve all 44 initial D images exactly. The matched
 matrix-access-only control differs only in shaders.bin and confirms about
@@ -769,19 +769,28 @@ The recorded one-light overhead is approximately 1/7 microseconds. The user
 visually validated both application scenes and approved these comparison records
 for commit on 2026-09-24; [durable proof](plan/baselines/ex07e-20260924/cooperative-grid/register.json).
 
-**Next:** reproduce and repair E07.1 below using the existing normal-matrix
-publication. Its new native test is in `ShadowAdmissionGpu_test.cpp`; direct D32
-readback is unsupported, so adapt the existing test GPU readback probe rather
-than expanding the product readback API. No normal-transform repair is implemented
-or validated yet. Point-kind specialization remains a separate compiled
-experiment, not production. E02/E04–E06 remain open; E07/E08 apply throughout.
-The separately recorded C caller-target validation gap remains open.
+**Current E04/E07.1:** the nonuniform caster-normal defect is reproduced
+natively (0.15 depth mismatch for identical world geometry) and repaired by
+publishing/using the existing inverse-transpose normal stream. All 19 native
+image tests pass in each existing Ninja Release tree (Tracy OFF/ON), and both
+complete RenderScene targets are rebuilt. The
+[before/after evidence](plan/baselines/ex07e-20260924/caster-normal/register.json)
+is versioned with this correctness repair. Private pass constants remain 128 bytes, with the descriptor
+at offset 124; zero slope bias avoids unnecessary normal work. The retained bias
+calibration is documented, and misleading UE constant names are corrected.
+Commit its before/after proof, then investigate the exact-kernel raw-gather
+PCF candidate described in the optimization report. No PCF change is implemented
+or accepted. Any calibration/filter-policy change needs separate quality evidence
+and user direction. E07.1 is repaired; E07 continues to own newly found defects.
 
-**Open discovered defect E07.1 (owned by E04/E07):** shadow-depth caster
-normals use the world matrix instead of the existing inverse-transpose normal
-publication under nonuniform scale/shear. Source/mathematical evidence and the
-repair direction are in the optimization report. Native reproduction and repair
-remain required; no validation or quality change is yet claimed.
+E05 still needs the remaining CPU/upload/resource-cost assessment; E06 still
+needs compatible cross-view sharing using existing allocation/content ownership.
+For E06, prove complete matching caster content, generation and array-slot layout
+before sharing; preserve incompatible views and fence-safe descriptor retirement.
+Do not hash a whole multi-light bucket using only its first light's caster volume.
+Point-kind specialization remains a compiled experiment, not production. E02/E04–
+E06 remain open; E07/E08 apply throughout. The separately recorded C caller-target
+validation gap remains open. All later changed baselines require manual approval.
 
 **Continuation discipline:** update the owning row and this checkpoint after
 each substantive investigation or accepted change, before switching work items.

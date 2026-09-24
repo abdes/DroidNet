@@ -85,7 +85,7 @@ namespace {
     std::uint32_t draw_metadata_slot { kInvalidShaderVisibleIndex.get() };
     std::uint32_t current_worlds_slot { kInvalidShaderVisibleIndex.get() };
     std::uint32_t instance_data_slot { kInvalidShaderVisibleIndex.get() };
-    std::uint32_t _padding0 { 0U };
+    std::uint32_t normal_matrices_slot { kInvalidShaderVisibleIndex.get() };
   };
 
   static_assert(sizeof(ShadowPassConstants) == 128U);
@@ -96,6 +96,9 @@ namespace {
   static_assert(
     offsetof(ShadowPassConstants, light_position_and_inv_range) == 96U);
   static_assert(offsetof(ShadowPassConstants, draw_metadata_slot) == 112U);
+  static_assert(offsetof(ShadowPassConstants, current_worlds_slot) == 116U);
+  static_assert(offsetof(ShadowPassConstants, instance_data_slot) == 120U);
+  static_assert(offsetof(ShadowPassConstants, normal_matrices_slot) == 124U);
   constexpr std::uint32_t kShadowPassConstantsStride
     = sizeof(ShadowPassConstants);
 
@@ -418,6 +421,8 @@ auto ShadowDepthPass::RecordSlices(const PreparedViewShadowInput& view_input,
         = view_input.prepared_scene->bindless_worlds_slot.get(),
         .instance_data_slot
         = view_input.prepared_scene->bindless_instance_data_slot.get(),
+        .normal_matrices_slot
+        = view_input.prepared_scene->bindless_normals_slot.get(),
       };
       auto allocation = pass_constants_buffer_.Allocate(1U);
       if (!allocation.has_value() || !allocation->IsValid(current_sequence_)

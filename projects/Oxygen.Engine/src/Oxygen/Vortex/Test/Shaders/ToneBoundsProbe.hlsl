@@ -73,6 +73,16 @@ void CS(uint3 thread : SV_DispatchThreadID)
     if (thread.x >= pass.count) {
         return;
     }
+    if (pass.reserved == 32768u) {
+        // Read the shader-visible R32 view of a depth-array texel. The generic
+        // texture readback API intentionally does not copy D32 resources.
+        const uint4 settings = input[thread.x];
+        Texture2DArray<float> source = ResourceDescriptorHeap[NonUniformResourceIndex(settings.x)];
+        const float depth = source.Load(int4(settings.yzw, 0));
+        output.Store4(thread.x * 32u, asuint(float4(depth, 0, 0, 0)));
+        output.Store4(thread.x * 32u + 16u, 0u.xxxx);
+        return;
+    }
     if (pass.reserved == 8192u || pass.reserved == 4096u) {
         const uint4 settings = input[thread.x * 2u];
         const float4 ray = asfloat(input[thread.x * 2u + 1u]);

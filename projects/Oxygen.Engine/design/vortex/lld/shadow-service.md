@@ -290,6 +290,33 @@ These migrations preserve reversed depth and 3x3 PCF, and extend publication to
 all eligible sources and required view products. Historical baseline evidence
 below does not qualify the new ABI or required local/dual-source consumers.
 
+The shadow-depth pass consumes the same inverse-transpose normal-matrix stream
+as the base pass, using the resolved instance transform index. Its private
+128-byte constants use byte offset 124 for `normal_matrices_slot`; the other
+fields retain their offsets. Normal fetch/transform and slope evaluation are
+skipped when the slope-bias coefficient is zero. Applying the world matrix to a
+caster normal is incorrect under nonuniform scale/shear: transform-equivalent
+geometry must produce the same biased shadow depth.
+
+Local maps retain Oxygen's linear reversed-depth profile: stored depth is
+`1 - axial_distance / range - depth_bias`. The authored receiver normal bias is
+in metres and remains separate. Receiver texel offsets use the actual axial
+receiver distance, not the map's far-plane footprint. For cube faces the world
+texel footprint is `2 * receiver_axial_distance / resolution`; projected spots
+also include the outer-cone tangent.
+
+The current point/spot constant-bias coefficient is
+`clamp(3 * 512 / (depth_span_m * resolution) * 2 * user_bias, 0, 0.1)`, with the
+existing safety clamps in the setup functions. It is applied once in the depth
+pass, together with the bounded slope term. Before coefficient clamping, its
+equivalent axial world displacement is `range * depth_bias`; at 1024 resolution
+and range much larger than the near plane it is approximately `3 * user_bias`
+metres before slope scaling. Default authored depth bias is zero. This is
+Oxygen's retained authored response, not quantitative UE5.7 projected-cube bias
+parity. Changing its calibration or the fixed 3x3 filter requires explicit
+quality evidence and an authored-behavior decision; copying UE constants into
+this different depth representation is not a valid conversion.
+
 ### 2.4 Directional-Light Authority
 
 Phase 4C does not run an independent directional-light election.

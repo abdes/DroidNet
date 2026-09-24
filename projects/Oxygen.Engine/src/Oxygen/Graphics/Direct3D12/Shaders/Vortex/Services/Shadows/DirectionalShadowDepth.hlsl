@@ -26,7 +26,7 @@ struct ShadowPassConstants
     uint draw_metadata_slot;
     uint current_worlds_slot;
     uint instance_data_slot;
-    uint _padding0;
+    uint normal_matrices_slot;
 };
 
 struct ShadowDepthVSOutput
@@ -81,22 +81,31 @@ ShadowDepthVSOutput VortexShadowDepthVS(
     float4 world_position = mul(world_matrix, float4(vertex.position, 1.0f));
     output.position = mul(pass_constants.light_view_projection, world_position);
     const float4 unbiased_position = output.position;
-    const float3 world_normal_unnormalized =
-        mul((float3x3)world_matrix, vertex.normal);
-    const float3 world_normal =
-        dot(world_normal_unnormalized, world_normal_unnormalized) > 1.0e-8f
-            ? normalize(world_normal_unnormalized)
-            : float3(0.0f, 1.0f, 0.0f);
-    const float no_l = abs(dot(
-        normalize(pass_constants.light_direction_to_source.xyz), world_normal));
-    const float max_slope_depth_bias = pass_constants.shadow_bias_parameters.z;
-    const float slope = clamp(
-        no_l > 1.0e-4f
-            ? sqrt(saturate(1.0f - no_l * no_l)) / no_l
-            : max_slope_depth_bias,
-        0.0f, max_slope_depth_bias);
+    float slope_bias = 0.0f;
+    if (pass_constants.shadow_bias_parameters.y > 0.0f) {
+        // Reuse the inverse-transpose publication consumed by the base pass.
+        // Multiplying normals by world is incorrect under nonuniform scale.
+        float3x3 normal_matrix = (float3x3)world_matrix;
+        if (pass_constants.normal_matrices_slot != K_INVALID_BINDLESS_INDEX) {
+            const uint transform_index = BX_ResolveTransformIndex(
+                metadata, pass_constants.instance_data_slot, instance_id);
+            StructuredBuffer<float4x4> normals =
+                ResourceDescriptorHeap[pass_constants.normal_matrices_slot];
+            normal_matrix = (float3x3)normals[transform_index];
+        }
+        const float3 transformed_normal = mul(normal_matrix, vertex.normal);
+        const float3 world_normal = dot(transformed_normal, transformed_normal) > 1.0e-8f
+            ? normalize(transformed_normal) : float3(0.0f, 1.0f, 0.0f);
+        const float no_l = abs(dot(
+            normalize(pass_constants.light_direction_to_source.xyz), world_normal));
+        const float max_slope = pass_constants.shadow_bias_parameters.z;
+        const float slope = clamp(no_l > 1.0e-4f
+            ? sqrt(saturate(1.0f - no_l * no_l)) / no_l : max_slope,
+            0.0f, max_slope);
+        slope_bias = pass_constants.shadow_bias_parameters.y * slope;
+    }
     const float depth_bias = pass_constants.shadow_bias_parameters.x
-        + pass_constants.shadow_bias_parameters.y * slope;
+        + slope_bias;
     if (pass_constants.light_position_and_inv_range.w > 0.0f) {
         const float3 light_to_vertex =
             world_position.xyz - pass_constants.light_position_and_inv_range.xyz;
