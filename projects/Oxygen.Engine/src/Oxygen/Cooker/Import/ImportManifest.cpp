@@ -577,6 +577,11 @@ namespace {
           settings.unit_scale_set, errors)) {
       return false;
     }
+    bool omitted_range_set = false;
+    if (!ReadFloatField(obj, "gltf_omitted_light_range_m",
+          settings.gltf_omitted_light_range_m, omitted_range_set, errors)) {
+      return false;
+    }
     if (obj.contains("bake_transforms")) {
       if (!ReadBoolField(
             obj, "bake_transforms", settings.bake_transforms, errors)) {

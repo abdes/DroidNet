@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cmath>
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -141,7 +142,14 @@ auto BuildSceneRequest(const SceneImportSettings& settings,
     }
   }
 
+  if (!std::isfinite(settings.gltf_omitted_light_range_m)
+    || settings.gltf_omitted_light_range_m <= 0.0F
+    || !std::isfinite(1.0F / settings.gltf_omitted_light_range_m)) {
+    error_stream << "ERROR: omitted light range must be finite and positive\n";
+    return std::nullopt;
+  }
   auto options = request.options;
+  options.gltf_omitted_light_range_m = settings.gltf_omitted_light_range_m;
   options.import_content = BuildContentFlags(settings);
   if (settings.content_policy == "static-scalar") {
     options.scene_content_policy = SceneContentPolicy::kStaticScalar;

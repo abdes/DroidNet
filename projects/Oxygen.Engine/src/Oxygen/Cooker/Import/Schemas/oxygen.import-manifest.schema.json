@@ -606,6 +606,11 @@
           "type": "number",
           "minimum": 0.0001
         },
+        "gltf_omitted_light_range_m": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "default": 4096
+        },
         "bake_transforms": {
           "type": "boolean"
         },
@@ -967,6 +972,11 @@
         "unit_scale": {
           "type": "number",
           "minimum": 0.0001
+        },
+        "gltf_omitted_light_range_m": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "default": 4096
         },
         "bake_transforms": {
           "type": "boolean"
