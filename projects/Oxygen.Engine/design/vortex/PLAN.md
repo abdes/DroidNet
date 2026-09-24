@@ -117,8 +117,9 @@ owns current status. **EX07A and EX07B are validated. EX07D is closed (2026-09-2
 with the [durable baseline register](plan/EX07D-baseline-report.md) committed in
 `894a25e57`. EX07E is closed (2026-09-25), including implementation, S9 qualification,
 user visual/numeric acceptance and evidence commit `b8f1376e1`;
-F final acceptance remains open.** EX07C's separately tracked caller-target
-validation remains open; D closure does not close that obligation or overall EX07.
+F final acceptance remains open.** EX07C's caller/importer follow-up is also
+closed; see the [C validation record](plan/EX07C-completion-report.md). Only F
+keeps overall EX07 open.
 
 Retain the accepted FP32/P=1 production policy; varying P/FP16 qualification stays
 explicit diagnostic coverage. Reuse valid EX05 MultiView and EX06 authoring evidence;

@@ -243,8 +243,8 @@ and **16.434 / 15.347 ms** for Instancing; those captures also remain available.
   Background desktop GPU activity is allowed; overloaded CPU windows delay
   timing. Preflight does not prove absence of interference during a capture.
 - No further filter-quality or allocator-policy experiment is part of this
-  closure. F still owns final combined acceptance; unrelated C caller-target
-  validation remains in its existing tracker item.
+  closure. F still owns final combined acceptance; the C caller/importer follow-up
+  is subsequently [closed with qualification evidence](EX07C-completion-report.md).
 
 ## Acceptance and durable evidence
 

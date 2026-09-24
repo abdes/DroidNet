@@ -1,0 +1,1171 @@
+{
+  "status": "EX07C closed; caller and importer qualification complete",
+  "scope": "Correctness validation only. Incidental exposure timings are not an established performance baseline.",
+  "source_head": "3fb0a8b17a34f1812ba5d332018bdb7bf355935d",
+  "tests": [
+    {
+      "file": "AsyncImportCore-Debug.json",
+      "tests": 190,
+      "failures": 0,
+      "skipped": 0
+    },
+    {
+      "file": "AsyncImportCore-Release.json",
+      "tests": 190,
+      "failures": 0,
+      "skipped": 0
+    },
+    {
+      "file": "AsyncImportFbx-Debug.json",
+      "tests": 3,
+      "failures": 0,
+      "skipped": 0
+    },
+    {
+      "file": "AsyncImportFbx-Release.json",
+      "tests": 3,
+      "failures": 0,
+      "skipped": 0
+    },
+    {
+      "file": "AsyncImportGltf-Debug.json",
+      "tests": 32,
+      "failures": 0,
+      "skipped": 0
+    },
+    {
+      "file": "AsyncImportGltf-Release.json",
+      "tests": 32,
+      "failures": 0,
+      "skipped": 0
+    },
+    {
+      "file": "AsyncImportTexture-Debug.json",
+      "tests": 149,
+      "failures": 0,
+      "skipped": 0
+    },
+    {
+      "file": "AsyncImportTexture-Release.json",
+      "tests": 149,
+      "failures": 0,
+      "skipped": 0
+    },
+    {
+      "file": "environment-Debug.json",
+      "tests": 5,
+      "failures": 0,
+      "skipped": 0
+    },
+    {
+      "file": "environment-Release.json",
+      "tests": 5,
+      "failures": 0,
+      "skipped": 0
+    },
+    {
+      "file": "exposure-events-Release.json",
+      "tests": 1,
+      "failures": 0,
+      "skipped": 0
+    }
+  ],
+  "fresh_test_count": 759,
+  "credited_historical_debug_cases": 542,
+  "credited_managed_cases": 88,
+  "credited_pakgen_cases": 123,
+  "exposure_operations": [
+    {
+      "completed_at_event_frame": 61,
+      "event_frame": 60,
+      "frame_sequence": 9663,
+      "lifetime": 1,
+      "operation": "seed",
+      "requested_generation": 1
+    },
+    {
+      "completed_at_event_frame": 121,
+      "event_frame": 120,
+      "frame_sequence": 9723,
+      "lifetime": 1,
+      "operation": "camera-cut",
+      "requested_generation": 2
+    },
+    {
+      "event_frame": 180,
+      "frame_sequence": 9783,
+      "lifetime": 1,
+      "operation": "manual",
+      "requested_generation": 2
+    },
+    {
+      "event_frame": 240,
+      "frame_sequence": 9843,
+      "lifetime": 1,
+      "operation": "restore-auto",
+      "requested_generation": 2
+    },
+    {
+      "event_frame": 300,
+      "frame_sequence": 9903,
+      "lifetime": 1,
+      "operation": "sun-step",
+      "requested_generation": 2
+    },
+    {
+      "event_frame": 360,
+      "frame_sequence": 9963,
+      "lifetime": 1,
+      "operation": "restore-sun",
+      "requested_generation": 2
+    },
+    {
+      "event_frame": 420,
+      "frame_sequence": 10023,
+      "lifetime": 1,
+      "operation": "share-main",
+      "requested_generation": 2
+    },
+    {
+      "event_frame": 480,
+      "frame_sequence": 10083,
+      "lifetime": 0,
+      "operation": "remove-source",
+      "requested_generation": 0
+    },
+    {
+      "event_frame": 540,
+      "frame_sequence": 10143,
+      "lifetime": 0,
+      "operation": "recreate-source",
+      "requested_generation": 0
+    },
+    {
+      "event_frame": 600,
+      "frame_sequence": 10203,
+      "lifetime": 0,
+      "operation": "independent-secondary",
+      "requested_generation": 0
+    },
+    {
+      "event_frame": 660,
+      "frame_sequence": 10263,
+      "lifetime": 0,
+      "operation": "swap-layout",
+      "requested_generation": 0
+    },
+    {
+      "event_frame": 720,
+      "frame_sequence": 10323,
+      "lifetime": 0,
+      "operation": "restore-layout",
+      "requested_generation": 0
+    },
+    {
+      "event_frame": 780,
+      "frame_sequence": 10383,
+      "lifetime": 0,
+      "operation": "remove-secondary",
+      "requested_generation": 0
+    },
+    {
+      "event_frame": 840,
+      "frame_sequence": 10443,
+      "lifetime": 0,
+      "operation": "recreate-secondary",
+      "requested_generation": 0
+    },
+    {
+      "completed_at_event_frame": 906,
+      "event_frame": 900,
+      "frame_sequence": 10503,
+      "lifetime": 3,
+      "operation": "seed-delay-status",
+      "requested_generation": 1
+    },
+    {
+      "event_frame": 906,
+      "frame_sequence": 10509,
+      "lifetime": 3,
+      "operation": "restore-status-delivery",
+      "requested_generation": 1
+    }
+  ],
+  "content": {
+    "complete": true,
+    "source_layout": "PakFormat_core.h TextureResourceDesc, 39 bytes; TextureResourceDescriptor OTEX v1 header, 12 bytes",
+    "table_sha256": "5c1a709bd3a9e484a5a29376b3268b5405bbb34f8f772c950a52c7b3796925f6",
+    "total_table_records": 240,
+    "sponza_texture_count": 72,
+    "formats": {
+      "63": 25,
+      "62": 47
+    },
+    "mip_levels": [13],
+    "payload_bytes": 1610901504,
+    "full_mip_chains": true,
+    "all_sidecars_match_table": true,
+    "unchanged_accepted_scene_inputs": [
+      {
+        "path": "Examples\\RenderScene\\.cooked\\container.index.bin",
+        "sha256": "00db64fab4715a369070fa98d32745b6bb8266fae1b118de0cfdd9e1c3150327"
+      },
+      {
+        "path": "Examples\\RenderScene\\.cooked\\Scenes\\NewSponza_Main_glTF_003.oscene",
+        "sha256": "3665446b42e4e8b7c8cf770c70bc05283a2726dc82c29c462edb15353eb04397"
+      }
+    ],
+    "textures": [
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_arch_stone_wall_01_BaseColor_2f59720ffbf81177.otex",
+        "index": 72,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 63,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_arch_stone_wall_01_Normal_5bba02dceed5e7f4.otex",
+        "index": 81,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 62,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_arch_stone_wall_01_Roughnessarch_stone_wall_01_Metalness_5036a35a56194698.otex",
+        "index": 78,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 62,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_brickwall_01_BaseColor_75dc4243f5071ea5.otex",
+        "index": 123,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 63,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_brickwall_01_Normal_2a0d1186189029aa.otex",
+        "index": 113,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 62,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_brickwall_01_Roughnessbrickwall_01_Metalness_5088da5b976a8604.otex",
+        "index": 125,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 62,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_brickwall_02_BaseColor_989883e1752f64e8.otex",
+        "index": 74,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 63,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_brickwall_02_Normal_f6681030c1f6624d.otex",
+        "index": 85,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 62,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_brickwall_02_Roughnessbrickwall_02_Metalness_6bdb43f8ca1ef5d0.otex",
+        "index": 89,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 62,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_ceiling_plaster_01_BaseColor_29dd3ef90037fc2f.otex",
+        "index": 134,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 63,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_ceiling_plaster_01_Normal_da27a1810c8610ac.otex",
+        "index": 93,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 62,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_ceiling_plaster_01_Roughnessceiling_plaster_01_Metalness_811047fccdf8f4e8.otex",
+        "index": 73,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 62,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_ceiling_plaster_02_BaseColor_f86d05705872d726.otex",
+        "index": 96,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 63,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_ceiling_plaster_02_Roughnessceiling_plaster_01_Metalness_82ef0456fa50b6cd.otex",
+        "index": 84,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 62,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_col_1stfloor_BaseColor_464ca0739c27f431.otex",
+        "index": 92,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 63,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_col_1stfloor_Normal_4d9f28310a4b3ea6.otex",
+        "index": 95,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 62,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_col_1stfloor_Roughnesscol_1stfloor_Metalness_2e81d437492d760c.otex",
+        "index": 80,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 62,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_col_brickwall_01_BaseColor_45c9d753ff4f1b12.otex",
+        "index": 111,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 63,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_col_brickwall_01_Normal_a749580f62586b47.otex",
+        "index": 131,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 62,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_col_brickwall_01_Roughnesscol_brickwall_01_Metalness_517ea319f60e9d04.otex",
+        "index": 124,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 62,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_col_head_1stfloor_BaseColor_b0e49f29078b77d6.otex",
+        "index": 110,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 63,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_col_head_1stfloor_Normal_4d6a1c0a53499f7b.otex",
+        "index": 112,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 62,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_col_head_1stfloor_Roughnesscol_head_1stfloor_Metalness_4d4f227559a9bdd2.otex",
+        "index": 114,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 62,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_col_head_2ndfloor_02_BaseColor_e6efe9b7f858d6db.otex",
+        "index": 133,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 63,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_col_head_2ndfloor_02_Normal_21520deb7b1479e8.otex",
+        "index": 71,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 62,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_col_head_2ndfloor_02_Roughnesscol_head_2ndfloor_02_Metalness_7bb969ee7d4df8d4.otex",
+        "index": 103,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 62,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_col_head_2ndfloor_03_BaseColor_aef8503c6d418890.otex",
+        "index": 88,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 63,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_col_head_2ndfloor_03_Normal_118ae6ed421c8e15.otex",
+        "index": 132,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 62,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_col_head_2ndfloor_03_Roughnesscol_head_2ndfloor_03_Metalness_c4b60a1084b73aa0.otex",
+        "index": 119,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 62,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_dirt_decal_01_dirt_decal_01_mask_gltf_alpha_dirt_decal_Opacity_3b3e027626289242.otex",
+        "index": 106,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 63,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_door_stoneframe_01_BaseColor_f12936078a105a33.otex",
+        "index": 118,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 63,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_door_stoneframe_01_Normal_d50f5859eb05d760.otex",
+        "index": 120,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 62,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_door_stoneframe_01_Roughnessdoor_stoneframe_01_Metalness_d7566fc2a3b4daf4.otex",
+        "index": 82,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 62,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_door_stoneframe_02_BaseColor_dc51cce09f4cdd6a.otex",
+        "index": 117,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 63,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_door_stoneframe_02_Normal_301dfbadb8697b1f.otex",
+        "index": 115,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 62,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_door_stoneframe_02_Roughnessdoor_stoneframe_02_Metalness_4dee2e89918b96d8.otex",
+        "index": 77,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 62,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_floor_tiles_01_BaseColor_75f73b69876c6a8e.otex",
+        "index": 101,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 63,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_floor_tiles_01_Normal_fc20d3a5fc275273.otex",
+        "index": 116,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 62,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_floor_tiles_01_Roughnessfloor_tiles_01_Metalness_660ac09c7880f390.otex",
+        "index": 87,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 62,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_lionhead_01_BaseColor_4bbf7e7fd17b6540.otex",
+        "index": 128,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 63,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_lionhead_01_Normal_a4235d34edb277c5.otex",
+        "index": 129,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 62,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_lionhead_01_Roughnesslionhead_01_Metalness_0873672fb2b95fee.otex",
+        "index": 130,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 62,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_metal_door_01_BaseColor_542e4c3bb2211828.otex",
+        "index": 75,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 63,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_metal_door_01_Normal_6d71cd106ce6c68d.otex",
+        "index": 86,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 62,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_metal_door_01_Roughnessmetal_door_01_Metalness_3312f0e0b741621e.otex",
+        "index": 83,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 62,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_ornament_01_BaseColor_62b42071ed296230.otex",
+        "index": 139,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 63,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_ornament_01_Normal_a90749cfcd036bb5.otex",
+        "index": 140,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 62,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_ornament_01_Roughnessornament_01_Metalness_08528e77dd26058e.otex",
+        "index": 138,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 62,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_roof_tiles_01_BaseColor_948efbeb9edb2168.otex",
+        "index": 135,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 63,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_roof_tiles_01_Normal_380dea3cbdecffcd.otex",
+        "index": 136,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 62,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_roof_tiles_01_Roughnessroof_tiles_01_Metalness_ec9576af6be3d2d6.otex",
+        "index": 137,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 62,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_stone_01_tile_BaseColor_d66a90d93fbc2954.otex",
+        "index": 105,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 63,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_stone_01_tile_Normal_4202ef9b9bbb2fe9.otex",
+        "index": 109,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 62,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_stone_01_tile_Roughnessstone_01_tile_Metalness_3a019d4717576f02.otex",
+        "index": 108,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 62,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_stone_trims_01_BaseColor_edf7d94ff2e8db4f.otex",
+        "index": 70,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 63,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_stone_trims_01_Normal_b493154f269b614c.otex",
+        "index": 79,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 62,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_stone_trims_01_Roughnessstone_trims_01_Metalness_5cbb111c7bf94c78.otex",
+        "index": 76,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 62,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_stone_trims_02_BaseColor_3efe88e8d2158246.otex",
+        "index": 97,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 63,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_stone_trims_02_Normal_4d15833f6086ea6b.otex",
+        "index": 98,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 62,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_stone_trims_02_Roughnessstone_trims_02_Metalness_4dc44199ee792f30.otex",
+        "index": 99,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 62,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_stones_2ndfloor_01_BaseColor_a0486ae8f5be2231.otex",
+        "index": 90,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 63,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_stones_2ndfloor_01_Normal_f16fa43d68fa28a6.otex",
+        "index": 94,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 62,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_stones_2ndfloor_01_Roughnessstones_2ndfloor_01_Metalness_c0d7899fc03ddaac.otex",
+        "index": 91,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 62,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_window_frame_01_BaseColor_a437b0fb6af1aada.otex",
+        "index": 100,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 63,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_window_frame_01_Normal_df8767c0b92b544f.otex",
+        "index": 69,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 62,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_window_frame_01_Roughnesswindow_frame_01_Metalness_03e1730e5150c7ce.otex",
+        "index": 102,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 62,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_wood_door_01_BaseColor_df308f8222893b94.otex",
+        "index": 104,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 63,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_wood_door_01_Normal_a929c888baac1129.otex",
+        "index": 107,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 62,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_wood_door_01_Roughnesswood_door_01_Metalness_710eac54802feb9c.otex",
+        "index": 126,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 62,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_wood_tile_01_BaseColor_348e7e6c3bee5220.otex",
+        "index": 122,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 63,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_wood_tile_01_Normal_505e078f758c11a5.otex",
+        "index": 121,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 62,
+        "payload_bytes": 22373632
+      },
+      {
+        "sidecar": "NewSponza_Main_glTF_003_gltf_tex_wood_tile_01_Roughnesswood_tile_01_Metalness_cb7ad0a74bdb79bc.otex",
+        "index": 127,
+        "width": 4096,
+        "height": 4096,
+        "mips": 13,
+        "format": 62,
+        "payload_bytes": 22373632
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "current/AsyncImportCore-Debug.json.gz",
+      "sha256": "65f88486279dd973d9c9a36db304d79849d6b74817c819b5a1993044617bf283",
+      "original_sha256": "0e311613671b9dbed4e84ba0591714bd94935e4b1d63c96eae749e418dd6e30c"
+    },
+    {
+      "path": "current/AsyncImportCore-Release.json.gz",
+      "sha256": "4eee14c574fc898a1fd1d1936a0e3f42c4cc834610fceb7441cb1e81f6cc7b0d",
+      "original_sha256": "ca69d0ad8b7691afaaa9df410ae24d71d2faf87de891f557640673b50dca508f"
+    },
+    {
+      "path": "current/AsyncImportFbx-Debug.json.gz",
+      "sha256": "3beb812714922cdd0c82dc0754ff624294c3cc0efc492e590ca3b181a78096fb",
+      "original_sha256": "311bf902dea80d5483fbab973f7ee620ac08f0afef887fdcd1072445dff44df7"
+    },
+    {
+      "path": "current/AsyncImportFbx-Release.json.gz",
+      "sha256": "947b29c407a82dc28fcc13b4df7ee37d50f16bb76e7b171cbc98c1e1afd8a3f0",
+      "original_sha256": "6cdff85199ca2411c264e22b3d8fa63b7a419f23b7baa4dbba793a400247914d"
+    },
+    {
+      "path": "current/AsyncImportGltf-Debug.json.gz",
+      "sha256": "c9dbcc3010045eef03666dbb2983c5baee2352b728bbb97ce25c5c687661576c",
+      "original_sha256": "945277e6389869bcb97b1ee4e7bb7f6998cfadc2bfef74e6d015ebf445114177"
+    },
+    {
+      "path": "current/AsyncImportGltf-Release.json.gz",
+      "sha256": "196d99c42405c858d204aa03a6658b46d323b855348beccef393442eb7321a24",
+      "original_sha256": "c9bffb1f736181e3f57a24898b91b50bd6f90e08fc3c40bf670c9a68ac3bfa52"
+    },
+    {
+      "path": "current/AsyncImportTexture-Debug.json.gz",
+      "sha256": "ad487e33135ab7fe0e41d116ffbf42f2b2fc996138fa655b25eac08efac2113d",
+      "original_sha256": "205ca652795f60dd3b2ba598d08184a007cf8ee28c1406c330241e4241b93f5e"
+    },
+    {
+      "path": "current/AsyncImportTexture-Release.json.gz",
+      "sha256": "3b7572f9db34add8b99e9b95b4b6cb40529fc7e751c002a10a2bb5ab49424a7a",
+      "original_sha256": "11fea196aa903653925009e44da1e3412fed651a43cdee7a4bdca313b9446de9"
+    },
+    {
+      "path": "current/content-reconciliation.json.gz",
+      "sha256": "315c71fa966b2f39e0a8d562c6256545221554b2100d2c28c1beca61ac62a873",
+      "original_sha256": "5d8192f7e28b73d336d1cf6604b83eef2f308cdce09d5d15fce82c2344626f5f"
+    },
+    {
+      "path": "current/environment-Debug.json.gz",
+      "sha256": "f8db3e5215fbadc8cc13f0d2b31fcae19c8a890ce988f12088db9031226350bb",
+      "original_sha256": "65a0ee6e15d9405ec0696314507677b1930461b7fcb8b1a2415a433484e135ca"
+    },
+    {
+      "path": "current/environment-Release.json.gz",
+      "sha256": "99aa7dfdb84daa36a0193f3c68706ab7ff7497f68ad4c810e528cafd53449839",
+      "original_sha256": "c554c32aad5583cc0f2774718327ffa70ba301d236785418598d9f91f7ad1d62"
+    },
+    {
+      "path": "current/exposure-events-Release.json.gz",
+      "sha256": "eff2f4c53525af8da166f92bb28407a91a6b5294e785af92d40cc8c2fae9a173",
+      "original_sha256": "58ceaddac494b92b35f87157541105d81fe6f37e0221db95503d1d04a7160ed2"
+    },
+    {
+      "path": "current/exposure-preflight-auto.json.gz",
+      "sha256": "b0a8ddfa26f1ca3b8f52dc5357f8c80f45d32836c3977a30b04630f435980fdd",
+      "original_sha256": "4969c3c8606be68b384dfb1711e477cd70e70633cd99dc1ff3bfa8dd89a45d83"
+    },
+    {
+      "path": "current/exposure-preflight.json.gz",
+      "sha256": "bf353559378df7e85ca715557c0a58c53e23e0011dd581c16963f2ee633ad0c7",
+      "original_sha256": "fe57a7d5289003273e25c691030f696309dd74fa544edf3917d50d922222ecb6"
+    },
+    {
+      "path": "current/identity.json.gz",
+      "sha256": "aecceedd9fb02dce86845e0fc9f3ca2d2477ffa0325cff1eff1554ac000bf5c1",
+      "original_sha256": "021c4944bda9a5bb50a31f0bee2f169c24340cf804ac8e90b8e267fa0cda1ef3"
+    },
+    {
+      "path": "current/AsyncImportCore-Debug.log.gz",
+      "sha256": "df2034fcabb59282a99e0d0fb4cf89dc5d8eabf72a98f1fca67145df1ae4f9ac",
+      "original_sha256": "d89e772d08fd9bd3dff58a098f6778c1e99cce575d721b31b03008b92e0138e4"
+    },
+    {
+      "path": "current/AsyncImportCore-Release.log.gz",
+      "sha256": "41787f3ec34ce03712cbcd7a184850b2bf30511cb75a9f3436df66d2d16eb417",
+      "original_sha256": "e1706461ad05007b3f8715949377a3588ab3bc91a4bb84e9b01538efdc9d40ae"
+    },
+    {
+      "path": "current/AsyncImportFbx-Debug.log.gz",
+      "sha256": "38f95131ccd3e5962cd11d0b31dc1d806e4ac38900139e23d9af59ec83213f57",
+      "original_sha256": "a44e96d7b63d35f8bb42e2ab0704afd33971a630bb83ea1d84dd6ac3f1b7e359"
+    },
+    {
+      "path": "current/AsyncImportFbx-Release.log.gz",
+      "sha256": "e2e7575418ecfaa4abf1366f1fdef3fb38d29b2a6cbd4eedafe865d51aeaa563",
+      "original_sha256": "2ebf76af5fe02b5c2ebffac60a3e3c7af90e0990cf73c9b9a6c4628e089dcced"
+    },
+    {
+      "path": "current/AsyncImportGltf-Debug.log.gz",
+      "sha256": "c8a5b252d9f113d2ca725371b2854e47ce65eb7006016920cc580e92560473de",
+      "original_sha256": "ffc891c8e407d4c41919188beb7db248fcd4f287c8bf3bcfb6c4d07b88e4ae26"
+    },
+    {
+      "path": "current/AsyncImportGltf-Release.log.gz",
+      "sha256": "1b12b453448a45e82f2f2edd6e9521e4c38566851baa243af41632def6f141a5",
+      "original_sha256": "b3458e0f6e69d48e503b4fef47e78727820aa7652db9fd22fe32223934d78893"
+    },
+    {
+      "path": "current/AsyncImportTexture-Debug.log.gz",
+      "sha256": "f934a8591e44798dfb8fa4b836c610eaa202d610c1bae83143290aed4b651418",
+      "original_sha256": "54aa0251c37fd2e89fadfe3b580af77e602ab184233343eb6cb1c3fb052ab89e"
+    },
+    {
+      "path": "current/AsyncImportTexture-Release.log.gz",
+      "sha256": "db2649231b364c7c7761c7110cbc16c6cd090b69cd059f551f4bd6b1774b9592",
+      "original_sha256": "9855153f9f205b165e4fff4e7eb3bb3e731cc290f84daee4ca50a54c9096e0fc"
+    },
+    {
+      "path": "current/build-debug.log.gz",
+      "sha256": "3a0f982ada238fbffdefe61e47d8271be942ae82e05d904d8697ea198859a886",
+      "original_sha256": "8b8ba98061115b7940a66e65fe7fd0e246faea2ff175418bb339ec097e09d3e0"
+    },
+    {
+      "path": "current/build-import-Debug.log.gz",
+      "sha256": "85d423a1eb35f5df5886431aa83ecf2e2ed472259668f017e292f3a5ba6e81bb",
+      "original_sha256": "e81fe44c25ccf5fa135997a83e8a44f552e37079361b9cfdde986b0f999c05d8"
+    },
+    {
+      "path": "current/build-import-Release.log.gz",
+      "sha256": "79ec56b5c7c82e82fbcb9891c7d005aed960d9b9702f4dbf1d0abbeb94b91b0c",
+      "original_sha256": "7716162f3cd3b99cf3b8a8dd6decf324e08c7e941aae7e730baba5e4fc8c075b"
+    },
+    {
+      "path": "current/build-release.log.gz",
+      "sha256": "44e8f41a1a02eb635a81d2fa7d308d9f04d5701470cd8de1f1208c9fa03694d0",
+      "original_sha256": "b4afc1e1f127228b79bfb51241a6519ce68391c16b7be0f806898fbed4c21a03"
+    },
+    {
+      "path": "current/build-repair-Debug.log.gz",
+      "sha256": "2b9d1986344e20527adaec9e1b84308b436b5d72632430837d0d7102275071ff",
+      "original_sha256": "66b4814d74aae0d32558f8b7534d7843af1768d6a6cc624e93cfeb49362323aa"
+    },
+    {
+      "path": "current/build-repair-Release.log.gz",
+      "sha256": "f669ef818b40937b8ff76f102fb965ee388b0dacf8c65a85b5607cd7ab30679f",
+      "original_sha256": "44dd7bdba4399da9d95725e80b04a098c117f6e033d648a16701e94821f6c22c"
+    },
+    {
+      "path": "current/environment-Debug.log.gz",
+      "sha256": "dcc49839278aafcffb86f784603207972225b497c82fe53bf121dd79309e528f",
+      "original_sha256": "cfb47c23f12ac617241ce1a3b847785f715f1b8135a9d84ba30e6de958a1617c"
+    },
+    {
+      "path": "current/environment-Release.log.gz",
+      "sha256": "7644b911840033e9176a3abed19d0b81331d3ea22fee65b41bfcb55de90689c8",
+      "original_sha256": "c5f1b6a5fe19def034f5fff36452afdc9fa465f386fd4e8e68055ab69b3358fa"
+    },
+    {
+      "path": "current/exposure-events-Release.log.gz",
+      "sha256": "3e71201ed2cdb8b5e4f456b501b97c4298a11940d1c5654348eb8642aa4de27c",
+      "original_sha256": "26320b7a879e40a2ea702412d07aac3ac713ec3a72524a05d70de39860e4411c"
+    },
+    {
+      "path": "current/texture-before-repair.log.gz",
+      "sha256": "8ff1b2a4dc667f03bfb502079440f99f63034074d332c276c2ef1e6e17ce51a7",
+      "original_sha256": "80761d6648ad242d45916fa6a9c1721dd6f6c7e2652046d40a12304411f69e17"
+    },
+    {
+      "path": "attempts/exposure-short-window-Release.json.gz",
+      "sha256": "dd6e83d1e79ed48d2fda40be60b66771a605693f5f2a573c028452208ec70bd3",
+      "original_sha256": "78326f9cd52f14fb456637eba2da86cbc870da80b3fbfbb30939bbde918770d9"
+    },
+    {
+      "path": "attempts/exposure-short-window-Release.log.gz",
+      "sha256": "19510e1d6bff0205d52b247ada981110feab7e53409fdd1f6130110b2578a45e",
+      "original_sha256": "8eeacbb4c6e730ef06a1b6594ee202a21abd4cf141565f561db599ba338aa725"
+    },
+    {
+      "path": "credited/final-Oxygen.Content.Loaders.Tests-debug.json.gz",
+      "sha256": "53dd96bb4447b0dd55c5e3be038f4c779644976ee5abecd703abef58073832b8",
+      "original_sha256": "bdda23902bafdd02a800a9d75b5e1e7ab6e03120ddf3ab434ad80af28a2b2343"
+    },
+    {
+      "path": "credited/final-Oxygen.Cooker.AsyncImportGltf.Tests-debug.json.gz",
+      "sha256": "c425585ea6a866bd780d00c1ede2c80c8ef03c0401169ab1e174fdb562309124",
+      "original_sha256": "98f7d87c9c8931671f1cd7679e86fb1fdea08a14e700bb01ede2cd7f4f2868ff"
+    },
+    {
+      "path": "credited/final-Oxygen.Cooker.AsyncImportSceneDescriptor.Tests-debug.json.gz",
+      "sha256": "4e711cb8651d7867b3744cacd484aee6e05077b688db0b2e22f118b298c914e5",
+      "original_sha256": "2a5fc4cf09c4bf9a6a3e308a62f738c1684755b4144df94ab2d6cea381c94dbb"
+    },
+    {
+      "path": "credited/final-Oxygen.Examples.DemoShell.EnvironmentSettingsService.Tests-debug.json.gz",
+      "sha256": "7af0157c184a498f2300b197bda0a54dd59dbe1b71e345f6e5480ac246d29905",
+      "original_sha256": "7925f39ae317558683698e32a285d02b7bd00d5d75f755411660cd83a8e04b7a"
+    },
+    {
+      "path": "credited/final-Oxygen.Examples.DemoShell.PreviewSunController.Tests-debug.json.gz",
+      "sha256": "766b4e7521a5100e7f80d077b851e20106ed04b47320414ea6fa9c129997d17e",
+      "original_sha256": "884748b1cb587bb624461dd92a4336a59ad1a6f9cfb5a12d6303322f37358378"
+    },
+    {
+      "path": "credited/final-Oxygen.Examples.DemoShell.SceneLoaderServicePhase4.Tests-debug.json.gz",
+      "sha256": "500bbfe10bd3ad2761196c1eae591d80290742d34f3b7df3cfb0448ea50380d3",
+      "original_sha256": "c68ed1d18ed20fdf94ae3971d07d0a7a877d930a2237d63e7129283540f01fb3"
+    },
+    {
+      "path": "credited/final-Oxygen.Scene.DirectionalLightResolver.Tests-debug.json.gz",
+      "sha256": "31b3751960563f4263ea7c52a7dfb74bb1917bae54e863bf93d7d588e9763886",
+      "original_sha256": "2743e957334ce041ad72fc9dba8e9b6bdf159b7d2838e0c84db99ad62c4437e3"
+    },
+    {
+      "path": "credited/final-Oxygen.Scene.SceneNode.Tests-debug.json.gz",
+      "sha256": "4c40387a84407a655847145fb3286812a69508298689e7a228059dd03669c0ef",
+      "original_sha256": "7ce150d900cd25f2dd096bd612117c658b52d73978e63e4697dff1761d1dba85"
+    },
+    {
+      "path": "credited/final-Oxygen.Scripting.Bindings.Tests-debug.json.gz",
+      "sha256": "5425db4b781c11b0ffc99bf56e3e181ae191b64c9c360871899d88eb9579658a",
+      "original_sha256": "62563cd577ea68021ac771841d69d88f51f4261cb21386a0326fd98c905aae63"
+    },
+    {
+      "path": "credited/final-Oxygen.Vortex.EnvironmentLightingService.Tests-debug.json.gz",
+      "sha256": "0057dd7f9f4a42d59c231d0d5a25fca3981e636a5ff0501772388ab7d9cf6306",
+      "original_sha256": "64f868809ca13fd8f320ce92f7926296f2810c463d6baedc7c826c4d9782b780"
+    },
+    {
+      "path": "credited/final-Oxygen.Vortex.LightingService.Tests-debug.json.gz",
+      "sha256": "8a3e9aaabf3da6e93c7ab4d66a9d04b8ceba40e158e5552f0966f275506dafcd",
+      "original_sha256": "71199953904b97a79494f843efdcb18de260ea6c4e6f018c1e11476b5668b1d5"
+    },
+    {
+      "path": "credited/final-Oxygen.Vortex.OffscreenSceneFacade.Tests-debug.json.gz",
+      "sha256": "768d785a70fa5513a3458a0267dd59ab5d04310968a8b3697f0cb904f495c488",
+      "original_sha256": "7e6620dd8d939f5a81e18a50272a718841294d0234d6ed8f84a34924873e3abd"
+    },
+    {
+      "path": "credited/final-Oxygen.Vortex.SceneRendererDeferredCore.Tests-debug.json.gz",
+      "sha256": "9d5aeadf06cbbc64c5a816e415a77d96c77ffac692f881b3b822d20f44c32500",
+      "original_sha256": "31b4cab6a0e869fc1485f025301fc298090946ab383c849f8f174939fe9b21b0"
+    },
+    {
+      "path": "credited/final-images-Debug.json.gz",
+      "sha256": "984b8fe3b491c0d7e7c5e56c947bba0eefd7f01611fbf6f3ccb65c9e2044afc0",
+      "original_sha256": "45345cfcfea9026e291c81d998fc6d9b0432e4b9b1bd02bd44c3e522dc8e0f00"
+    },
+    {
+      "path": "credited/final-failures-Debug.json.gz",
+      "sha256": "57b989cf201be3fc843e52b068f544fb84e30da0481cab1c2499ea674aea043b",
+      "original_sha256": "2c75057d42e0fde2a812fb1cd07ae4d2869d9c230f6d31170c3592183405bd87"
+    },
+    {
+      "path": "credited/final-abi-Debug.json.gz",
+      "sha256": "9ed84821a48b14dea99ec146e0fca03748211f06a241a125d0664efe0be18aab",
+      "original_sha256": "77e787c533b8b2b3f28e30d707967278b11cd08ea7290c09272806d62bc82a25"
+    },
+    {
+      "path": "credited/final-editor-native-authoring.trx.gz",
+      "sha256": "5863dcbabe7ecc591a31d6ccf47984181f665fd46555e479651c37bc7600ca8e",
+      "original_sha256": "7ea80a78bd0bced5618a570a2f7242b1a9fb1766f6c08e0e72353583a41a1710"
+    },
+    {
+      "path": "credited/final-managed-authoring-release.trx.gz",
+      "sha256": "c557ef2fbd5eb60e146c89ae6f561f3ac5a995402598bd3a70615ad0edfd2260",
+      "original_sha256": "8ea14a2c01d4f9504337db895aaa20738fb75751f0ba058949aaa4983ee19555"
+    },
+    {
+      "path": "credited/final-runtime-native-light.trx.gz",
+      "sha256": "8de6a77106895ef926f70bfc03f188d310afab7abb5ff6cfb93562012f10ae5a",
+      "original_sha256": "cebc36e5bfab2c1a4122493e0130e7d0d348a6353c9ba648a6101625238e2c2b"
+    },
+    {
+      "path": "credited/pakgen-scene-v7.xml.gz",
+      "sha256": "a6f098e7eb93322daea9a9c3cbc3145a970c75d8cee26cf7ac0cb6c88fb81238",
+      "original_sha256": "eaaafa081c855e7a980fd54a4b9982f6ddf57c0f82d66c71a005e7027457f65c"
+    },
+    {
+      "path": "credited/published-example-pak-report.json.gz",
+      "sha256": "dd0e3e8f2a1539a071994bd79682a2991c0f566dab84ed7ac4d2ec3a14cce9d5",
+      "original_sha256": "818568136ebd500d300463dc6e1af45d95a321bc8cbdbc1d77db06ce821772df"
+    },
+    {
+      "path": "credited/sponza-v7-content-check.json.gz",
+      "sha256": "1d7adf9ab16f3a31081dfe532828a7783456c408c90d2437cf9e12d767cdac38",
+      "original_sha256": "b900f672302ffe4491422b9b5a595cb2d86faee6d62a0cdf0796de2de4792fb5"
+    },
+    {
+      "path": "credited/REPORT.md.gz",
+      "sha256": "a1927b74e52e52eea011929fcce2c5c5c2f33ddfad11b5dd444d7c4ff502427f",
+      "original_sha256": "6e5d014454c033f554cb3c4ceee727e0c94b66dd73d92208642859c75b95e4af"
+    },
+    {
+      "path": "current/indoor-I02-1920-ex07c-final-auto-20260925-Release-event-status.json.gz",
+      "sha256": "617d77503759b150de21b64c9480294f5e459d5ddea70ab338a4bf1c25d95aee",
+      "original_sha256": "07a080a9bf0781e9e7e65d73235e4d119751ba8424f9654de402625243ccc2f5"
+    },
+    {
+      "path": "current/indoor-I02-1920-ex07c-final-auto-20260925-Release.json.gz",
+      "sha256": "30679f6bccc6d358a3b3f5e239d7f0160c39d5e50bb0cec1ea358086dc16f913",
+      "original_sha256": "f7a5b5c7581c444ca9891e8f31c7acf13f10b07ca3d6880a0b91aad90490d133"
+    }
+  ]
+}

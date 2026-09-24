@@ -15,7 +15,7 @@ The following implementation sequence, automated acceptance checks and user
 visual acceptance are **complete**. Visual approval was received on 2026-09-24.
 Evidence is recorded
 in [tracker section 3.4](../IMPLEMENTATION_STATUS.md#34-slice-7-work-items).
-Remaining EX07C integration uses these delivered implementations:
+Completed EX07C integration uses these delivered implementations:
 
 1. **Eligibility and spatial caster culling.** Use the same energy, range,
    participation and view-relevance decisions in allocation, setup, recording
@@ -250,8 +250,9 @@ owns final benchmark, scene, memory and operating-limit results.
 [E01–E08 work ledger and resume checkpoint](../IMPLEMENTATION_STATUS.md#ex07e--work-items-and-resume-checkpoint)
 record all eight investigation/delivery obligations, completion evidence and
 next action. Update that ledger as findings and fixes are delivered. Earlier
-measured repairs remain credited. D is closed; overall EX07 and the separately
-tracked C caller-target validation and F acceptance stay open.
+measured repairs remain credited. A–E are closed, including the
+[C caller/importer follow-up](EX07C-completion-report.md). Overall EX07 remains
+open only for F acceptance.
 
 Begin with the committed
 [baseline register](EX07D-baseline-report.md#how-e-and-f-use-this-register) and
