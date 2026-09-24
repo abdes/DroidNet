@@ -39,6 +39,9 @@ auto BuildLightingWorkload(const LightingWorkloadOptions& options)
     || options.distribution > WorkloadDistribution::kMostlyIrrelevant
     || options.mutation > WorkloadMutation::kDeleteQuarter
     || options.projection > WorkloadProjection::kOrthographic
+    || options.secondary_layout > WorkloadSecondaryLayout::kPartialOverlap
+    || (!options.secondary_view
+      && options.secondary_layout != WorkloadSecondaryLayout::kOffsetHalf)
     || !std::isfinite(options.source_radius_m) || options.source_radius_m < 0.0F
     || options.source_radius_m >= kSourceHeightM
     || !std::isfinite(options.spot_outer_half_angle_radians)
@@ -131,11 +134,19 @@ auto BuildLightingWorkload(const LightingWorkloadOptions& options)
     .content_origin_px = options.content_origin_px,
   });
   if (options.secondary_view) {
+    const auto matched
+      = options.secondary_layout == WorkloadSecondaryLayout::kMatched;
+    const auto half
+      = options.secondary_layout == WorkloadSecondaryLayout::kOffsetHalf;
+    const auto offset = matched ? 0.0F
+      : options.secondary_layout == WorkloadSecondaryLayout::kPartialOverlap
+      ? 26.0F
+      : kSecondaryOffsetM;
     result.views.push_back({
       .id = ViewId { 2U },
-      .eye_ws = { kSecondaryOffsetM, 0.0F, options.camera_height_m },
-      .width = std::max(1U, options.width / 2U),
-      .height = std::max(1U, options.height / 2U),
+      .eye_ws = { offset, 0.0F, options.camera_height_m },
+      .width = half ? std::max(1U, options.width / 2U) : options.width,
+      .height = half ? std::max(1U, options.height / 2U) : options.height,
       .projection = options.projection,
       .content_origin_px = options.content_origin_px,
     });

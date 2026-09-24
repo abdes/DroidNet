@@ -73,6 +73,13 @@ auto ManyLightBaseline::SetUp() -> void
   options_.height = request_.at("height").get<unsigned>();
   options_.moving = request_.at("moving").get<bool>();
   options_.secondary_view = request_.at("secondary_view").get<bool>();
+  const auto layout
+    = request_.value("secondary_view_layout", std::string("offset-half"));
+  options_.secondary_layout = layout == "matched"
+    ? WorkloadSecondaryLayout::kMatched
+    : layout == "offset-full"     ? WorkloadSecondaryLayout::kOffsetFull
+    : layout == "partial-overlap" ? WorkloadSecondaryLayout::kPartialOverlap
+                                  : WorkloadSecondaryLayout::kOffsetHalf;
   options_.point_shadow_requests = request_.at("point_shadows").get<unsigned>();
   options_.spot_shadow_requests = request_.at("spot_shadows").get<unsigned>();
   options_.source_radius_m = request_.at("source_radius_m").get<float>();
@@ -158,6 +165,17 @@ auto ManyLightBaseline::SetupCase() -> void
       return;
     }
     CHECK_F(color.valid && color.texture != nullptr && draws > 0U);
+    const auto* scene_renderer
+      = RendererPublicationProbe::GetSceneRenderer(*renderer_);
+    const auto* shadow_service
+      = RendererPublicationProbe::GetShadowService(*scene_renderer);
+    if (recording_ && shadow_service) {
+      const auto& sharing = shadow_service->GetLastRenderState();
+      frame_shadow_writers_ += sharing.rendered_point_shadow_count
+        + sharing.rendered_spot_shadow_count;
+      frame_shadow_map_uses_ += sharing.attached_map_uses;
+      frame_shadow_backing_uses_ += sharing.attached_backing_uses;
+    }
     if (!capture_) {
       return;
     }
@@ -199,6 +217,8 @@ auto ManyLightBaseline::Milliseconds(const Clock::duration duration) -> double
 auto ManyLightBaseline::RenderFrame(
   const unsigned motion_frame, const bool begin_recording) -> Sample
 {
+  frame_shadow_writers_ = frame_shadow_map_uses_ = frame_shadow_backing_uses_
+    = 0;
   const auto started = Clock::now();
   const auto slot = frame::Slot { sequence % frame::kFramesInFlight.get() };
   const auto current = frame::SequenceNumber { ++sequence };
@@ -252,7 +272,8 @@ auto ManyLightBaseline::RenderFrame(
   const auto ended = Clock::now();
   return { sequence, Milliseconds(ended - started),
     Milliseconds(began - started), Milliseconds(updated - began),
-    Milliseconds(ended - updated) };
+    Milliseconds(ended - updated), frame_shadow_writers_,
+    frame_shadow_map_uses_, frame_shadow_backing_uses_ };
 }
 auto ManyLightBaseline::RunBaseline() -> void
 {
@@ -296,7 +317,11 @@ auto ManyLightBaseline::RunBaseline() -> void
   if (measure_) {
     samples_.reserve(sample_frames_);
     cpu_ = std::make_unique<CpuTimingCapture>(CpuTimingOptions {
-      .record_capacity = CpuTimingRecordCapacity { sample_frames_ * 128U },
+      .record_capacity = CpuTimingRecordCapacity { sample_frames_
+        * (256U
+          + 32U
+            * (options_.point_shadow_requests + options_.spot_shadow_requests)
+            * static_cast<unsigned>(workload_.views.size())) },
       .detailed = true });
     recording_ = true;
     FailureBackend().count_resource_creations = true;

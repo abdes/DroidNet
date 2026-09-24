@@ -12,12 +12,15 @@
 #include <numbers>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/ReadbackManager.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Benchmarks/ManyLightBaseline.h>
 #include <Oxygen/Vortex/Lighting/Types/ClusterLightRange.h>
+#include <Oxygen/Vortex/Shadows/ShadowService.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestGraphics.h>
+#include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
 #include <Oxygen/Vortex/Test/Support/D3D12MemoryCapture.h>
 #include <Oxygen/Vortex/Upload/StagingProvider.h>
 
@@ -34,7 +37,49 @@ auto ManyLightBaseline::SnapshotResources() -> nlohmann::json
   const auto& lighting_staging
     = renderer_->GetLightingStagingProvider().GetStats();
   const auto& shared_staging = renderer_->GetStagingProvider().GetStats();
+  const auto* scene_renderer
+    = RendererPublicationProbe::GetSceneRenderer(*renderer_);
+  const auto* shadows
+    = RendererPublicationProbe::GetShadowService(*scene_renderer);
+  const auto sharing = shadows->InspectLocalSharing();
+  std::uint64_t shadow_bytes = 0, pending_bytes = 0, spare_bytes = 0;
+  for (const auto& backing : sharing.backings) {
+    const auto desc = backing.texture->GetNativeResource()
+                        ->AsPointer<ID3D12Resource>()
+                        ->GetDesc();
+    const auto bytes = Backend()
+                         .GetCurrentDevice()
+                         ->GetResourceAllocationInfo(0, 1, &desc)
+                         .SizeInBytes;
+    shadow_bytes += bytes;
+    pending_bytes += backing.closing ? bytes : 0;
+    spare_bytes += backing.closing ? 0 : backing.spare_texel_bytes;
+  }
+  const auto queue = Backend()
+                       .GetCommandQueue(graphics::QueueRole::kGraphics)
+                       ->InspectSubmissionCounters();
   return { { "allocator", memory.Report() },
+    { "local_sharing",
+      { { "native_bytes", shadow_bytes },
+        { "pending_retirement_bytes", pending_bytes },
+        { "spare_texel_bytes", spare_bytes }, { "aliases", sharing.aliases },
+        { "live_versions", sharing.live_versions },
+        { "canonical_records", sharing.canonical_records },
+        { "canonical_record_bytes", sharing.canonical_record_bytes },
+        { "version_payload_bytes", sharing.version_payload_bytes },
+        { "prepared_request_bytes", sharing.prepared_request_bytes },
+        { "cache_hits", sharing.cache_hits },
+        { "cache_misses", sharing.cache_misses },
+        { "in_place_updates", sharing.in_place_updates },
+        { "first_allocations", sharing.first_allocations },
+        { "copy_on_write_shape", sharing.copy_on_write_shape },
+        { "copy_on_write_family", sharing.copy_on_write_family },
+        { "copy_on_write_reader", sharing.copy_on_write_reader } } },
+    { "graphics_queue",
+      { { "accepted_batches", queue.accepted_batches },
+        { "command_lists", queue.command_lists },
+        { "completion_signals", queue.completion_signals },
+        { "dependency_waits", queue.dependency_waits } } },
     { "resources", FailureBackend().MeasureTrackedPlacement() },
     { "lighting_budget",
       { { "allocated_bytes", budget.allocated.get() },
@@ -207,11 +252,14 @@ auto ManyLightBaseline::WriteResults() -> void
     result["cpu"] = cpu_->Save(directory_ / "cpu-scopes.csv");
     auto csv = std::ofstream(directory_ / "frames.csv");
     csv << std::setprecision(17)
-        << "frame_seq,wall_ms,frame_start_ms,scene_update_ms,submission_ms\n";
+        << "frame_seq,wall_ms,frame_start_ms,scene_update_ms,submission_ms,"
+           "shadow_writer_maps,shadow_map_uses,shadow_backing_uses\n";
     for (const auto& sample : samples_) {
       csv << sample.sequence << ',' << sample.wall_ms << ','
           << sample.frame_start_ms << ',' << sample.scene_update_ms << ','
-          << sample.submission_ms << '\n';
+          << sample.submission_ms << ',' << sample.shadow_writers << ','
+          << sample.shadow_map_uses << ',' << sample.shadow_backing_uses
+          << '\n';
     }
     csv.close();
     ASSERT_TRUE(csv.good());

@@ -44,6 +44,15 @@ def presets() -> dict[str, dict]:
     rows["shadows-finite"] = {"point_shadows": 1, "spot_shadows": 1, "source_radius_m": 0.25}
     rows["shadows-wide"] = {"point_shadows": 1, "spot_shadows": 1, "source_radius_m": 0.25,
                             "spot_outer_half_angle_radians": math.pi / 2}
+    rows["shadow-share-small"] = {"lights": 2, "point_shadows": 1, "spot_shadows": 1,
+                                  "secondary_view": True, "secondary_view_layout": "matched"}
+    rows["shadow-share-static"] = {"lights": 64, "point_shadows": 4, "spot_shadows": 8,
+                                   "secondary_view": True, "secondary_view_layout": "matched"}
+    rows["shadow-share-moving"] = {**rows["shadow-share-static"], "moving": True}
+    rows["shadow-share-partial"] = {"point_shadows": 4, "spot_shadows": 8,
+                                    "secondary_view": True, "secondary_view_layout": "partial-overlap"}
+    rows["shadow-share-incompatible"] = {"point_shadows": 4, "spot_shadows": 8,
+                                         "secondary_view": True, "secondary_view_layout": "offset-half"}
     return rows
 
 
@@ -88,6 +97,16 @@ def freeze(executable: Path, output: Path) -> dict:
                ROOT / "src/Oxygen/Graphics/Common/ResourceRegistry.cpp",
                Path(__file__).with_name("CheckBenchmarkLoad.ps1"),
                Path(__file__).resolve()]
+    # A dirty-worktree patch excludes new files. Preserve changed and new code
+    # explicitly so E06 ownership implementations can be reproduced later.
+    changed = subprocess.check_output(["git", "diff", "--relative", "--name-only", "--", "src", "tools/vortex"],
+                                      cwd=ROOT, text=True).splitlines()
+    added = subprocess.check_output(["git", "ls-files", "--others", "--exclude-standard", "--", "src", "tools/vortex"],
+                                    cwd=ROOT, text=True).splitlines()
+    allowed = {".h", ".cpp", ".hlsl", ".hlsli", ".cmake", ".py", ".ps1", ".json"}
+    sources += [ROOT / name for name in changed + added
+                if (ROOT / name).is_file() and (Path(name).suffix in allowed or Path(name).name == "CMakeLists.txt")]
+    sources = sorted(set(sources))
     source_hashes = {}
     for source in sources:
         relative = source.relative_to(ROOT)
