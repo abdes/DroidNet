@@ -1,7 +1,16 @@
 # Light-Culling Remediation Plan
 
 **Date:** 2026-04-01
-**Status:** Design / Implementation Plan
+**Status:** Retired — not an active implementation plan
+
+This plan and its LC-0–LC-5 statuses describe the retired `Oxygen.Renderer`
+implementation. They are not Vortex backlog or current acceptance gates.
+Vortex's GPU count/scan/scatter implementation and accepted E03 optimization
+are qualified under [EX07 final acceptance](../vortex/plan/EX07F-acceptance-report.md).
+Use [LightingService](../vortex/lld/lighting-service.md) for the current algorithm,
+complete-list capacity contract and ownership. Light-grid visualizations remain
+unsupported under the [DiagnosticsService contract](../vortex/lld/diagnostics-service.md);
+EX07 closure does not claim UE algorithmic parity or close those visualizations.
 
 Audience: renderer engineers remediating Oxygen's light-culling path
 Scope: replace Oxygen's current depth/HZB-driven `LightCullingPass` with one
@@ -9,24 +18,23 @@ final clustered analytic implementation aligned with UE5's non-Lumen
 light-grid architecture, then remove the non-final API, shader, DemoShell, and
 documentation surfaces around it
 
-This document is intentionally strict. It is not a menu of optional cleanup
-ideas. It is the implementation contract for converging `LightCullingPass` on
-one shipping design and deleting the rest.
+The requirements below applied to `Oxygen.Renderer`. Do not execute them as a
+Vortex plan; use the current LightingService contract and EX07 acceptance above.
 
-## 0. Current Snapshot (2026-04-01)
+## 0. Oxygen.Renderer Snapshot (2026-04-01; retired)
 
-Truthful status:
+Status of the retired implementation; these are not Vortex tasks:
 
-- Overall remediation remains `in_progress`.
-- LC-0 through LC-3 are implemented in code.
-- LC-4 is still open because
+- This implementation is retired; no LC tasks are scheduled for Vortex.
+- LC-0 through LC-3 were implemented in Oxygen.Renderer.
+- LC-4 was not closed in the 2026-04-01 record because
   `src/Oxygen/Renderer/Docs/lighting_overview.md`,
   `src/Oxygen/Renderer/Docs/override_slots.md`,
   `src/Oxygen/Renderer/Docs/passes/design-overview.md`, and
   `src/Oxygen/Renderer/Docs/passes/depth_pre_pass.md` still describe the old
   tile/depth/HZB shape, and `src/Oxygen/Renderer/Docs/passes/light_culling.md`
   does not exist yet.
-- LC-5 is still open because the Release benchmark / shipping-configuration
+- LC-5 was not closed in that record because the Release benchmark / shipping-configuration
   selection is not recorded yet, and the current RenderScene capture did not
   exercise VSM light-grid pruning.
 

@@ -366,8 +366,10 @@ tests. Missing transport/consumers are explicitly identified. D2 approves
 physical-only local attenuation and removal of the selector/custom exponent;
 LP16/LP17 now track that strict migration. D3 approves physical local source
 extent; D4 approves the common correlated-GGX/compensation model. Their detailed
-equations and bounds are in the PBR owner; implementation and independent
-renderer qualification remain open. D5 retains hemispherical soft spots; the
+equations and bounds are in the PBR owner; implementation and renderer
+qualification closed with [EX07 final acceptance](../plan/EX07F-acceptance-report.md).
+The accepted production model and independent-reference differences remain
+documented there. D5 retains hemispherical soft spots; the
 inventory also freezes strict scene-v7 records and atomic ingress obligations.
 Directional authority is already settled.
 
