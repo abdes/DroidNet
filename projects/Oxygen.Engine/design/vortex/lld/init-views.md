@@ -6,7 +6,7 @@
 
 ## V0.1 Production Extension
 
-[Editor V0.1 rendering](../plan/editor-v01-rendering-contract.md) extends the
+[Editor V0.1 rendering](editor-rendering.md) extends the
 prepared-scene/view contract with resolved Local/Inherit flags, per-instance
 receiver eligibility, Auto/Fixed camera projection and an editing-main-view
 representation mask. Preserve frame caster/light eligibility when that view
@@ -15,24 +15,9 @@ The dedicated contact caster-depth pass is a ShadowService product, not a new
 InitViews GPU pass or a reason to add another full ScenePrep traversal.
 Original phase evidence remains scoped to the original prepared-scene behavior.
 
-## Mandatory Vortex Rule
-
-- For Vortex planning and implementation, `Oxygen.Renderer` is legacy dead
-  code. It is not production, not a reference implementation, not a fallback,
-  and not a simplification path for any Vortex task.
-- Every Vortex task must be designed and implemented as a new Vortex-native
-  system that targets maximum parity with UE5.7, grounded in
-  `F:\Epic Games\UE_5.7\Engine\Source\Runtime` and
-  `F:\Epic Games\UE_5.7\Engine\Shaders`.
-- No Vortex task may be marked complete until its parity gate is closed with
-  explicit evidence against the relevant UE5.7 source and shader references.
-- If maximum parity cannot yet be achieved, the task remains incomplete until
-  explicit human approval records the accepted gap and the reason the parity
-  gate cannot close.
-
 ## Frame exposure setup
 
-For the [exposure delivery](../plan/exposure-and-lightbench-correction.md),
+For the [exposure delivery](../milestones/exposure/README.md),
 InitViews no longer converts the inactive manual EV into an overloaded scalar.
 Resolve canonical scene/camera/per-view settings and transient lifecycle input
 at the frame boundary through PostProcessService. Renderer Core supplies the

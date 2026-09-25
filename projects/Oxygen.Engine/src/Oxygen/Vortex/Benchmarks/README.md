@@ -4,9 +4,9 @@
 
 `Oxygen.Vortex.Lighting.Benchmarks` owns the deterministic many-light presets,
 complete-list image reference and separate Release timing runs. The accepted
-[D register](../../../../design/vortex/plan/EX07D-baseline-report.md),
-[final E comparisons](../../../../design/vortex/plan/EX07E-shadow-sharing-results.md)
-and [F acceptance](../../../../design/vortex/plan/EX07F-acceptance-report.md)
+[D register](../../../../design/vortex/milestones/exposure/EX07/EX07D/validation.md),
+[final E comparisons](../../../../design/vortex/milestones/exposure/EX07/EX07E/validation.md)
+and [F acceptance](../../../../design/vortex/milestones/exposure/EX07/EX07F/validation.md)
 are the durable results. Reuse unchanged records; stage closure alone does not
 justify a new capture.
 
@@ -69,7 +69,7 @@ that workload:
 ./out/build-ninja/bin/Release/Oxygen.Vortex.Exposure.Benchmarks.exe -v=OFF --gtest_also_run_disabled_tests --gtest_filter=ExposureIndoorOutdoorBenchmarkTest.DISABLED_ReleaseIndoorOutdoorBaseline
 ```
 
-The [exposure inventory](../../../../design/vortex/IMPLEMENTATION_STATUS.md#321-slice-51-performance-qualification-and-correction)
+The [exposure inventory](../../../../design/vortex/milestones/exposure/EX05.1/README.md#tasks-and-outcome)
 owns the recipe controls and measurement requirements. Run GPU workloads
 serially. Do not enable every disabled workload as an ordinary test suite or
 rerun timing experiments merely to validate a directory/target split. Debug

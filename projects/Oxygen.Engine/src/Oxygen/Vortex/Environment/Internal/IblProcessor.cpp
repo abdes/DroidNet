@@ -387,7 +387,7 @@ auto IblProcessor::RefreshStaticSkyLightProducts(
     // TODO(ED-M08, exposure): when publishing prefiltered/BRDF products,
     // qualify their source range before narrowing, preserve canonical radiance
     // scale, and apply the consumer view's P exactly once. Current IBL is
-    // diffuse SH. Scope: design/vortex/plan/editor-v01-captured-sky-ibl.md and
+    // diffuse SH. Scope: design/vortex/lld/captured-sky-ibl.md and
     // design/vortex/lld/scene-textures.md (HDR products 3, 13 and 16).
     // Feature dependency: https://github.com/abdes/DroidNet/issues/13
     cache.products = StaticSkyLightProducts {

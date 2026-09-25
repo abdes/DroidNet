@@ -19,7 +19,7 @@ namespace oxygen::scene {
 // TODO(post-v0.1, EV01-LIGHT-BAKING): Mixed/Baked authoring requires bake
 // products and their publication/runtime workflow; the enum alone does not
 // provide one. Scope:
-// design/vortex/plan/editor-v01-deferred-capabilities.md#ev01-light-baking
+// design/vortex/milestones/ED-M08/deferred-capabilities.md#ev01-light-baking
 enum class LightMobility : std::uint8_t {
   kRealtime,
   kMixed,

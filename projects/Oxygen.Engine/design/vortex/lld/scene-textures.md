@@ -4,21 +4,6 @@
 **Deliverable:** D.1
 **Status:** `ready`
 
-## Mandatory Vortex Rule
-
-- For Vortex planning and implementation, `Oxygen.Renderer` is legacy dead
-  code. It is not production, not a reference implementation, not a fallback,
-  and not a simplification path for any Vortex task.
-- Every Vortex task must be designed and implemented as a new Vortex-native
-  system that targets maximum parity with UE5.7, grounded in
-  `F:\Epic Games\UE_5.7\Engine\Source\Runtime` and
-  `F:\Epic Games\UE_5.7\Engine\Shaders`.
-- No Vortex task may be marked complete until its parity gate is closed with
-  explicit evidence against the relevant UE5.7 source and shader references.
-- If maximum parity cannot yet be achieved, the task remains incomplete until
-  explicit human approval records the accepted gap and the reason the parity
-  gate cannot close.
-
 ## Exposure HDR domain and format inventory
 
 The exposure delivery uses qualified RGBA16F and bootstrap/recovery RGBA32F
@@ -78,7 +63,7 @@ use the separate shared FP32 contract below.
 ### Producer-range qualification
 
 The EX05-16 matrix exercises the active producers in the inventory, with evidence
-linked from `design/vortex/IMPLEMENTATION_STATUS.md`. Native expected values use
+linked from `design/vortex/PLAN.md`. Native expected values use
 double arithmetic, with 2e-5 relative plus 2^-120 absolute RGB tolerance. Direct
 deferred lighting additionally propagates the R8 specular half-code uncertainty
 through the analytic BRDF; this is separate from the FP16 image-error budget.
@@ -235,7 +220,7 @@ choice before producers execute.
 Controlled fixtures verify qualified candidate P, exposure/history preservation,
 invalid-candidate fallbacks and forward/deferred format switches. Workload
 qualification and remaining reference coverage are recorded in
-[EX051-04](../IMPLEMENTATION_STATUS.md#321-slice-51-performance-qualification-and-correction).
+[EX051-04](../milestones/exposure/EX05.1/README.md#tasks-and-outcome).
 
 ### Scene reference-product collection
 
@@ -400,47 +385,6 @@ temporal cases retain/copy FP32. Modeled primary texture reads range from
 [Release allocation phases](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/accounting-summary-Release.json)
 and [traffic/timing results](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/accounting-performance-Release.json).
 [Native reports, capture analysis, exact commands and scope](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/accounting-manifest.json).
-
-### Slice 5.1 workload memory inventory
-
-EX051-03 inventories existing descriptors and evidence; it introduces no new
-allocation measurement. All eight recipes use the same scene/post-process
-owners. C01/C02 have two views; M01/M04/I01 have one; M02/M03/I02 have two.
-Temporal histories participate in C02/M02/M04/I01/I02. I01/I02 additionally
-enable actual shadow rendering. Actual retained generations and placement,
-rather than a fixed multiplier per view, determine the total.
-
-| Population / owner                                              | Descriptor-based expectation                                                                                                                                                                                                                   | Existing observation / retirement rule                                                                                                                                                  |
-| --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Live scene attachments / `SceneTextures`                        | FP32 accumulation: 16 bytes/texel; depth, partial depth, four GBuffers and enabled velocity/custom depth retain the formats in section 5.1. Main/secondary dimensions follow the recipe.                                                       | Deduplicate native identities; count placement separately from raw texels. Family cache and leased counts are distinct.                                                                 |
-| Resolved color and queued fallback / `ResolveSceneColor`        | 8 bytes/texel for admitted half resolve, 16 for FP32 resolve; a conditional extraction additionally retains original FP32 color and its immutable P/state/report.                                                                              | EX051-10A removes the measured whole-family fallback retention below. Queued readers and descriptor retirement remain mandatory and are qualified by its checkpoint.                    |
-| Depth extracts / `ExtractSceneDepth`                            | Resolved and previous depth can alias one artifact; count one native allocation, not two logical outputs.                                                                                                                                      | H4/H5 and the lifecycle fixture verify both delayed aliases after source-family reuse.                                                                                                  |
-| Environment current products and history / environment passes   | Sky-view dimensions use the existing quality descriptor; AP is 64 x 64 x 32 for steady recipes. Fog dimensions come from the existing viewport/grid resolver. Qualified radiance uses 8 bytes/texel, FP32 uses 16.                             | Temporal recipes retain actual previous fog products, stored P and certificates until their readers/fences finish. Reprojection on does not imply half admission.                       |
-| Shared canonical atmosphere cache                               | One shared 256 x 64 and one 32 x 32 RGBA32F table: 136 KiB raw per generation.                                                                                                                                                                 | Count each unique cache generation once across views; include placement alignment and overlapping retired generations.                                                                  |
-| Exposure states, reports and reduction scratch / `ExposurePass` | Histogram allocation is `kHistogramWordCount * sizeof(uint32_t)` when metering needs it; frame/state/status/conversion records and structured constant publishers use their declared buffer descriptors. No full-resolution telemetry texture. | Count actual leased generations and cached buffers, including idle allocations. Status readback reuse is bounded by frame slots; a retained consumer can extend its frame/state leases. |
-| Caller outputs and fixture transport                            | One full and optional half-size FP32 output; lifecycle fixture also has two 1 x 1 delayed outputs and depth readbacks.                                                                                                                         | Keep named fixture/transport allocations separate from engine placement; diagnostic inspection is excluded from the creation trace.                                                     |
-| Other rendering products                                        | Mixed scene assets, HZB and I01/I02 shadow surfaces use their own descriptors and native identities.                                                                                                                                           | Included when observed after trace start; do not attribute ordinary rendering resources to exposure or call a partial trace total device residency.                                     |
-
-`ExposureBaselineScenario::Snapshot` supplies untimed before/after native texture
-and buffer placement and creation counts for steady recipes. Zero warm creation
-churn is the expectation; snapshots are not lifecycle high-water marks.
-`ExposureAllocationScenario` supplies creation-time texture/buffer/combined/
-engine/HDR peaks over three cut/resize/remove/re-add cycles, with delayed color
-and depth readers. The existing 4K temporal-off entry point required by 10A is
-`ExposureLightingGpuTest.DISABLED_ProductionHdrAllocationAccounting`, with
-`OXYGEN_EXPOSURE_TIMING_WIDTH=3840` and precision `production`.
-
-The [current Release table](../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/lifecycle-memory/audit-current-Release-memory-table.json)
-indexes eight raw cases by source hash. The
-[matched 4K production audit](../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice51/lifecycle-memory/audit-matched-3840-production-Release.json)
-and the other matched audits linked in EX051-10 close the common-fix comparison;
-the earlier table's pending-comparison prose is superseded. Their trace is
-queue-drained except for explicit delayed consumers; it is neither a worst-case
-concurrency bound nor heap commitment/residency. Fixed-descriptor populations
-must stabilize after reader/fence retirement. The measured unrelated-attachment
-excess below is a correction target, not an acceptable permanent cache budget.
-Final timings/memory acceptance belong to EX051-13, and post-10A placement must
-be measured before claiming its reduction.
 
 ### Allocation contract
 

@@ -1,0 +1,153 @@
+{
+  "baseline": "2b4f3fada",
+  "reviews": [
+    {
+      "document": "lld/environment-service.md",
+      "reason": "Replace obsolete unchecked implementation list with current C++/HLSL behavior and named remaining work.",
+      "sources": [
+        "src/Oxygen/Vortex/Environment/EnvironmentLightingService.cpp",
+        "src/Oxygen/Vortex/Environment/Passes/AtmosphereCameraAerialPerspectivePass.cpp",
+        "src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Environment/Fog.hlsl",
+        "src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Environment/VolumetricFog.hlsl"
+      ],
+      "before_sha256": "f360f6460a670135b02f9e3fabb7868ccf14043a512aa1425730cd5711694ebb",
+      "after_sha256": "51984a317c5e04cb950a1c94d31e750bec77fecd8b1e818f4709c87e4d69a20c"
+    },
+    {
+      "document": "lld/runtime-motion-producers.md",
+      "reason": "Distinguish implemented WPO publication from absent skinned/morph streams.",
+      "sources": [
+        "src/Oxygen/Vortex/SceneRenderer/Stages/InitViews/InitViewsModule.cpp",
+        "src/Oxygen/Vortex/Internal/DeformationHistoryCache.h"
+      ],
+      "before_sha256": "5c37439644f537d2ffa1d9f93395e111885aef5da8b73b1ff677786c4a9ef5bb",
+      "after_sha256": "9095d2dc0442bd80731cca300e4c651817cb86f3433829cabb21267203edd00d"
+    },
+    {
+      "document": "lld/base-pass.md",
+      "reason": "State actual velocity producer coverage and preserve the full deformation target.",
+      "sources": [
+        "src/Oxygen/Vortex/SceneRenderer/Stages/InitViews/InitViewsModule.cpp",
+        "src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Contracts/Draw/Vertex.hlsli"
+      ],
+      "before_sha256": "73647c55dcc74519243ffeaa686f4f5b3cd753bdad94dd73449852da2d7a12e1",
+      "after_sha256": "38d45e04524c320b7232a79900969f54d54e94a1c8253f172465bcb02325b1d7"
+    },
+    {
+      "document": "lld/offscreen-rendering.md",
+      "reason": "Resolve the backend-capability question from its concrete fixture; retain full-engine qualification.",
+      "sources": [
+        "src/Oxygen/Graphics/Direct3D12/Test/Fixtures/OffscreenTestFixture.h",
+        "src/Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.cpp"
+      ],
+      "before_sha256": "052049d241e35c109f0168b1f2a5e3f2acca7c5a252be66ea162ad89f762b08d",
+      "after_sha256": "956002fbe7f90ffe7fd9444efe89595e6fd02e71ea9eb971766bf987cd2e88ed"
+    },
+    {
+      "document": "lld/occlusion.md",
+      "reason": "Replace hypothetical current bounds with source-verified sphere candidates.",
+      "sources": [
+        "src/Oxygen/Vortex/SceneRenderer/Stages/Occlusion/OcclusionModule.cpp"
+      ],
+      "before_sha256": "c834865e3d1eac8d47ebd50a27f08a729bc5168bbb5c0e1ef6d65b86e375aa95",
+      "after_sha256": "df14c946f8b7686ae47e440a35502c86177923b1c227d49d7673cd2e2ba94147"
+    },
+    {
+      "document": "lld/shadow-service.md",
+      "reason": "Remove stale local-shadow deferral and retain genuine strategy follow-ups.",
+      "sources": [
+        "src/Oxygen/Vortex/Shadows/ShadowService.cpp",
+        "src/Oxygen/Vortex/Shadows/Internal/PointShadowSetup.cpp"
+      ],
+      "before_sha256": "037bf7d4da13e6afcc7986339b27ed56c3678163f8340c09fd699c8e18ecb3fd",
+      "after_sha256": "11efe1bd718a5b0eea29a2dee7d4619aba8b23613fd37b11503b33659490e7fb"
+    },
+    {
+      "document": "lld/shadow-local-lights.md",
+      "reason": "Resolve the obsolete point-shadow gate question and identify the actual optimization alternative.",
+      "sources": [
+        "src/Oxygen/Vortex/Shadows/Internal/PointShadowSetup.cpp",
+        "src/Oxygen/Vortex/Shadows/Passes/ShadowDepthPass.cpp"
+      ],
+      "before_sha256": "0ae2884d55dde5fcd2ce576df59ca327e82cfb701c09db0fb0ec633f823c2a2a",
+      "after_sha256": "e2077fe0a6faab474e342950032ab48e58bec40d5c3f4679cb55877decec830a"
+    },
+    {
+      "document": "lld/lighting-properties.md",
+      "reason": "Replace pre-migration findings and wrong packed sizes with current source contracts.",
+      "sources": [
+        "src/Oxygen/Data/PakFormat_world.h",
+        "src/Oxygen/Cooker/Import/Schemas/oxygen.scene-descriptor.schema.json",
+        "Examples/DemoShell/Services/SceneLoaderService.cpp",
+        "src/Oxygen/Scripting/Bindings/Packs/Scene/SceneNodeLightBindings.cpp",
+        "repo:projects/Oxygen.Managed.Assets/src/Import/Scenes/DirectionalLightSource.cs",
+        "repo:projects/Oxygen.Editor.Runtime/src/Engine/RuntimeAttachDirectionalLight.cs",
+        "repo:projects/Oxygen.Editor.Interop/src/Commands/DirectionalLightPropertyApplier.h"
+      ],
+      "before_sha256": "23feb1e09c1dba7394cb2378d1eb5c5ab603f53a4a1febad274327708ef8680a",
+      "after_sha256": "8999dbaa583daa90f73562e43aa54cbe87baed682d20e175b428a8f7b5404664"
+    },
+    {
+      "document": "lld/lighting-properties.md",
+      "reason": "Update field state after the implemented canonical light migration.",
+      "sources": [],
+      "before_sha256": "2d39d40f5dfb2d6e0895360d6f64ba85f3461a05fc3b46730959a8f659154668",
+      "after_sha256": "16fc90475d3f9d478207edfeb7fcd2c36dcd17a60b65cb969204a646c6216c4c"
+    },
+    {
+      "document": "lld/lighting-properties.md",
+      "reason": "Update field state after the implemented canonical light migration.",
+      "sources": [],
+      "before_sha256": "0067b03f4bde6ac559733cc955e7e51a57a4f08dec859e794ab05a01513e9c8c",
+      "after_sha256": "8b7f640e2887ff77bfaf3cc4abcb26794fdda4227c6503eb7e567ea8c779bd0a"
+    },
+    {
+      "document": "lld/lighting-properties.md",
+      "reason": "Update field state after the implemented canonical light migration.",
+      "sources": [],
+      "before_sha256": "ffe84091041aceed3acf9d25834ccd463674e153d1e564fa55f22e7d6469b690",
+      "after_sha256": "3d3829f4569976475e73c15ac93f5dde833695a34076ed370da082741b8f4d08"
+    },
+    {
+      "document": "lld/lighting-properties.md",
+      "reason": "Update field state after the implemented canonical light migration.",
+      "sources": [],
+      "before_sha256": "8dcfd25d72e6258b7d163c6a1b3209198bea7d1c1c343fe661106fabc07da3e8",
+      "after_sha256": "b254a19d175342712b3c9c55d07edd1d844764b9d16ce31b85561c538b99327c"
+    },
+    {
+      "document": "lld/exposure.md",
+      "reason": "Correct current scene version against PakFormat_world.h and remove personal scope narration.",
+      "sources": ["src/Oxygen/Data/PakFormat_world.h"],
+      "before_sha256": "04fdfc6c38c334cf157a396f07c62fc3223ed7d9076b059d1630113d23c67262",
+      "after_sha256": "dec85d67d1a92c687cc1180b073f2557390afb90d5db4dc15c1a843e4b151127"
+    },
+    {
+      "document": "lld/post-process-service.md",
+      "reason": "Document the measured precision decision, rationale and rejected alternative without assigning responsibility to the user.",
+      "sources": [
+        "src/Oxygen/Vortex/PostProcess/Passes/ExposurePass.cpp",
+        "design/vortex/milestones/exposure/EX05.1/validation.md"
+      ],
+      "before_sha256": "a5f662e37ea0bfa09fc0a670f26881df04669521183b7cd62b5952f8af4a3f5f",
+      "after_sha256": "f4990f74d62c01100dede240bd37ae0186ce5055b5da018be3b1b5551129bad5"
+    },
+    {
+      "document": "milestones/ED-M08/README.md",
+      "reason": "Correct planned status to in-progress using the editor ledger; remove duplicate authority/status paragraphs.",
+      "sources": [
+        "repo:design/editor/IMPLEMENTATION_STATUS.md",
+        "src/Oxygen/Vortex/Environment/Passes/IblProbePass.cpp"
+      ],
+      "before_sha256": "acb5fa7b04be138c90ba48c6a2ed8f3125da1adca5785e40a15c36dad8d6af39",
+      "after_sha256": "9e13f315eedbe7669f18eeffb14819a2b9da0ff96f710007b09edb06d7d063db"
+    },
+    {
+      "document": "milestones/preview-sun/README.md",
+      "reason": "Replace stale cross-package open-work statement with the later closure owners.",
+      "sources": [],
+      "before_sha256": "f9c47bd7d3fd661a65c0493c79dc56bd0fd4f84ee393f63e174013ec9d76b7f8",
+      "after_sha256": "08cfea88ad4c27969156e0e8374fb233f8eb1c3a83847374958fc89979667ab8"
+    }
+  ]
+}

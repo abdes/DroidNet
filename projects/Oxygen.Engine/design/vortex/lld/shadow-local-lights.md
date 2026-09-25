@@ -20,11 +20,11 @@ sampling uses the receiver-to-light vector; physical face views therefore look
 along the negative cube axes. The approved Low/Medium/High/Ultra comparison
 counts are 1/5/29/29. Authored normal displacement remains separate, and the old
 automatic cube texel offsets are removed. The
-[implementation contract](../plan/EX07E-point-pcf-contract.md) owns the current
+[implementation contract](point-shadow-filtering.md) owns the current
 UE5.7 source comparison, units and qualification gates. The
-[New Sponza analysis](../plan/EX07-NewSponza-regression-analysis.md) remains the
+[New Sponza analysis](../milestones/exposure/EX07/EX07C/sponza-analysis.md) remains the
 historical diagnosis preceding this migration. Final baseline visual acceptance
-was received on 2026-09-25; [accepted results](../plan/EX07E-shadow-sharing-results.md)
+was received on 2026-09-25; [accepted results](../milestones/exposure/EX07/EX07E/validation.md)
 retain the filter quality/cost difference.
 
 The baseline evidence below remains historical. EX07 supersedes its bounded
@@ -36,7 +36,7 @@ projected records for ordinary spots, including nonzero source radius. Only
 90-degree soft cones use the existing conventional cube/multiple-face technique.
 Preserve FP32 reversed depth, per-light quality and typed identity. Ordinary
 projected spots retain 3x3 PCF; cube maps use the EX07E04 contract above.
-The [audited EX07 memory work](../plan/EX07-shadow-memory-review.md) selects
+The [audited EX07 memory work](../milestones/exposure/EX07/EX07E/shadow-memory.md) selects
 depth-only D32 conventional targets after coordinated view/clear/PSO migration and
 production qualification; conventional targets now use D32 with R32 SRVs. Scene/custom
 stencil and VSM resources are unaffected. Retain unchanged conventional local
@@ -87,7 +87,7 @@ Fade map visibility smoothly from zero at 32 desired texels to full strength at
 64 desired texels. A zero-strength request publishes `QualityOmitted` without a
 map. Other local records publish `shadow_strength`; both shading families apply
 it once as `lerp(1, map_visibility, shadow_strength)`. This is the normal selected
-quality policy, not a response to memory exhaustion. User visual approval of
+quality policy, not a response to memory exhaustion. Manual visual approval of
 the implemented policy was received on 2026-09-24.
 
 Retain view-local light associations independently of selection indices, while
@@ -121,21 +121,6 @@ without unused spare layers if that spare capacity alone exceeds the budget.
 Retire unused chunks through the existing deferred fence mechanism. Failure to
 allocate the required layers remains an explicit preparation failure.
 
-## Mandatory Vortex Rule
-
-- For Vortex planning and implementation, `Oxygen.Renderer` is legacy dead
-  code. It is not production, not a reference implementation, not a fallback,
-  and not a simplification path for any Vortex task.
-- Every Vortex task must be designed and implemented as a new Vortex-native
-  system that targets maximum parity with UE5.7, grounded in
-  `F:\Epic Games\UE_5.7\Engine\Source\Runtime` and
-  `F:\Epic Games\UE_5.7\Engine\Shaders`.
-- No Vortex task may be marked complete until its parity gate is closed with
-  explicit evidence against the relevant UE5.7 source and shader references.
-- If maximum parity cannot yet be achieved, the task remains incomplete until
-  explicit human approval records the accepted gap and the reason the parity
-  gate cannot close.
-
 ## 1. Scope and Context
 
 ### 1.1 What This Covers
@@ -159,14 +144,14 @@ then extends `ShadowFrameBindings` without pretending that Phase 4 already
 shipped spot-light or point-light conventional shadow payloads.
 
 The M05D CSM audit/remediation gate was satisfied before local-light delivery;
-it is not an outstanding blocker. See the [M05D closure](../plan/VTX-M05D-conventional-shadow-parity.md).
+it is not an outstanding blocker. See the [M05D closure](../milestones/VTX-M05D/README.md).
 
 ### 1.3 Architectural Authority
 
 - [ARCHITECTURE.md §8](../ARCHITECTURE.md) — `ShadowService` ownership
 - [PLAN.md §7](../PLAN.md) — Phase 5 expansion scope
 - [shadow-service.md](shadow-service.md) — Phase 4C directional-first baseline
-- [../plan/VTX-M05D-conventional-shadow-parity.md](../plan/VTX-M05D-conventional-shadow-parity.md)
+- [../plan/VTX-M05D-conventional-shadow-parity.md](../milestones/VTX-M05D/README.md)
   — CSM-first M05D execution plan
 
 ## 2. Interface Contracts
@@ -289,7 +274,7 @@ Slice E adds the first local-light conventional payload to
 - Stage-12 spot deferred lighting multiplies local-light attenuation by the
   sampled spot shadow visibility.
 - Stage-18 translucent spot-shadow consumption is implemented and qualified;
-  see [EX07 final acceptance](../plan/EX07F-acceptance-report.md).
+  see [EX07 final acceptance](../milestones/exposure/EX07/EX07F/validation.md).
 
 Current scope:
 
@@ -310,7 +295,7 @@ Slice E implementation evidence:
 - Stage 12 spot deferred lighting samples the conventional spot shadow array
   and multiplies local-light attenuation by shadow visibility.
 - `SpotShadowValidation` is the focused no-sun/no-atmosphere validation scene.
-  On 2026-04-27 the user confirmed visible spot shadows and then confirmed the
+  On 2026-04-27 manual checks confirmed visible spot shadows and then confirmed the
   shadows were perfect after the authored spot shadow bias was set to `0.0` and
   the scene was recooked.
 - Fresh post-review RenderDoc proof
@@ -388,9 +373,11 @@ before later work decides between layered cubemap rendering and VSM.
 4. The same consuming shader path remains compatible with later VSM activation
    through capability / technique selection rather than ABI replacement.
 
-## 8. Open Questions
+## 8. Follow-ups
 
-1. Whether layered one-pass cubemap rendering should replace the six-face
-   `RecordSlices` implementation before VSM work.
-2. Whether point-light conventional shadows should remain behind a capability
-   gate until content justifies their runtime cost.
+Point lights already use six-face cubemap setup and the shared shadow-depth
+slice recorder. The remaining question is whether layered one-pass rendering
+provides enough benefit to replace it (VX-SHADOW-02). Point-shadow enablement is
+part of the delivered conventional-shadow path, not a pending capability gate.
+
+Track the optimization decision and VSM separately in [OPEN_ITEMS.md](../OPEN_ITEMS.md).

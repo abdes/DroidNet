@@ -11,32 +11,17 @@ task-level planning.
 
 Related:
 
-- [PRD.md](./PRD.md)
-- [DESIGN.md](./DESIGN.md)
-- [PLAN.md](./PLAN.md)
+- [PRD.md](PRD.md)
+- [DESIGN.md](DESIGN.md)
+- [PLAN.md](PLAN.md)
 
 Reference:
 
-- [PROJECT-LAYOUT.md](./PROJECT-LAYOUT.md) — authoritative project layout
+- [PROJECT-LAYOUT.md](PROJECT-LAYOUT.md) — authoritative project layout
   reference
 - UE 5.7 parity evidence is integrated directly into this document and the
   Vortex LLD set; there is no separate `parity-analysis.md` document in this
   package
-
-## Mandatory Vortex Rule
-
-- For Vortex planning and implementation, Vortex is the renderer architecture
-  in scope. No alternate renderer product, fallback path, or reference
-  implementation defines Vortex requirements or lowers its parity bar.
-- Every Vortex task must be designed and implemented as a new Vortex-native
-  system that targets maximum parity with UE5.7, grounded in
-  `F:\Epic Games\UE_5.7\Engine\Source\Runtime` and
-  `F:\Epic Games\UE_5.7\Engine\Shaders`.
-- No Vortex task may be marked complete until its parity gate is closed with
-  explicit evidence against the relevant UE5.7 source and shader references.
-- If maximum parity cannot yet be achieved, the task remains incomplete until
-  explicit human approval records the accepted gap and the reason the parity
-  gate cannot close.
 
 ## Table of Contents
 
@@ -55,7 +40,7 @@ Reference:
 ## 1. Purpose and Scope
 
 This document is the architectural contract for Vortex. It translates the
-product intent in [PRD.md](./PRD.md) into stable architectural decisions that
+product intent in [PRD.md](PRD.md) into stable architectural decisions that
 designers, planners, and implementers can build against without re-opening
 fundamental structure questions.
 
@@ -617,8 +602,8 @@ This split preserves the UE5.7 architecture while keeping Oxygen's current
 ownership boundaries: importer/cooker create and validate cubemap assets,
 Environment owns sky/background and SkyLight product publication, Lighting owns
 direct surface illumination, and IndirectLighting owns indirect surface evaluation.
-The [V0.1 rendering contract](plan/editor-v01-rendering-contract.md) and
-[captured-sky IBL contract](plan/editor-v01-captured-sky-ibl.md) define the scheduled
+The [V0.1 rendering contract](lld/editor-rendering.md) and
+[captured-sky IBL contract](lld/captured-sky-ibl.md) define the scheduled
 ED-M08 extension, algorithms and qualification. Closed VTX-M08 evidence retains
 its original static diffuse-only scope; ED-M08 implementation and rendered gates
 remain distinct from that evidence.
@@ -653,7 +638,7 @@ remain distinct from that evidence.
 
 ### 5.2 Layer Model
 
-For the [global exposure delivery](plan/exposure-and-lightbench-correction.md),
+For the [global exposure delivery](milestones/exposure/README.md),
 PostProcessService also owns the small pre-HDR GPU resolve of frame-pinned P.
 InitViews/Renderer Core route validated settings, source ownership and lifecycle
 events; they do not maintain a separate numerical exposure. Stage 22 updates
@@ -1534,7 +1519,7 @@ architecture without weakening it.
 
 Rules:
 
-1. [DESIGN.md](./DESIGN.md) and the LLD set may refine API surfaces, payload
+1. [DESIGN.md](DESIGN.md) and the LLD set may refine API surfaces, payload
    shapes, and implementation-facing contracts, but they must not change
    architectural ownership without an explicit update here first.
 2. Cross-cutting LLDs may become the authoritative contract for one bounded

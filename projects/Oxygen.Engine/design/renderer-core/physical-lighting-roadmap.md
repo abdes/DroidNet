@@ -5,7 +5,7 @@
 
 ## Current exposure and light calibration delivery
 
-The [exposure / LightBench / MultiView plan](../vortex/plan/exposure-and-lightbench-correction.md)
+The [exposure / LightBench / MultiView plan](../vortex/milestones/exposure/README.md)
 owns the ten-slice execution order and gates. The [PBR specification](physically-based-rendering.md)
 owns calibration, exact hybrid EV/s adaptation, light-unit equations and error
 budgets. The [panel design](post-process-panel-design.md) owns current UI and
@@ -34,7 +34,7 @@ ForwardPipeline or EnvironmentDynamicData.exposure.
 > `src/Oxygen/Vortex/SceneRenderer/SceneRenderer.cpp`, and
 > `src/Oxygen/Vortex/SceneRenderer/Stages/InitViews/InitViewsModule.cpp`.
 > Modern UE5.7 parity work is now tracked in
-> [design/vortex/lld/exposure-ue57-parity-plan.md](../vortex/lld/exposure-improvement-plan.md)
+> [design/vortex/lld/exposure-ue57-parity-plan.md](../vortex/lld/exposure.md)
 > and remains `in_progress` until that plan's exit gates are closed with
 > validation evidence.
 
@@ -364,7 +364,7 @@ absolute tolerance.
 - [x] Demo UI exposes camera exposure parameters and persists them.
 - [x] Manual exposure path uses EV100 formula end-to-end in renderer.
 - [x] **Renderer camera EV wiring & calibration:** Update `Renderer::UpdateViewExposure` to consume camera **`_ev`** for `kManualCamera` and apply the ISO 2720 calibration formula `exposure = (1/12.5) * 2^{-EV100}`. Apply a display key scale after calibration to align mid-gray for display. (Files: `src/Oxygen/Renderer/Renderer.cpp`, `src/Oxygen/Scene/Camera/CameraExposure.h`). Verification: unit tests for **`_ev`** -> exposure conversion and an integration test using LightBench mid-gray scene.
-- [ ] **Histogram-based auto exposure parity:** A Stage 22 histogram-based auto-exposure path exists in Vortex, but parity is not yet closed. Remaining gaps include unified pre-exposure authority, reset/history control, authoring round-trip, and validation. See [design/vortex/lld/exposure-ue57-parity-plan.md](../vortex/lld/exposure-ue57-parity-plan.md).
+- [ ] **Histogram-based auto exposure parity:** A Stage 22 histogram-based auto-exposure path exists in Vortex, but parity is not yet closed. Remaining gaps include unified pre-exposure authority, reset/history control, authoring round-trip, and validation. See [design/vortex/lld/exposure-ue57-parity-plan.md](../vortex/lld/exposure.md).
 - [x] **Compositing tonemap behavior documented:** Tonemapping is performed per-view by `ToneMapPass` in `ForwardPipeline`. The `CompositingTaskType::kTonemap` enum value and placeholders were removed to avoid confusion; `Renderer::OnCompositing` focuses on copy/blend/texture-blend/taa operations. (File: `src/Oxygen/Renderer/Renderer.cpp`). Verification: end-to-end compositing test that exercises ForwardPipeline tonemap behavior.
 - [x] **Shader conversion helpers & refactor:** Add named helpers (`LuxToIrradiance`, `LumensToCandela`, `CandelaToRadiance`) to `src/Oxygen/Graphics/Direct3D12/Shaders/Common/PhysicalLighting.hlsli` and refactor `ForwardDirectLighting.hlsli` to call them.
 - [x] **Shader conversion validation:** Add shader unit tests or numeric validation

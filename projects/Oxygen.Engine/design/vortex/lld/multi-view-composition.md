@@ -5,21 +5,6 @@
 **Roadmap Status:** `validated`
 **LLD Status:** `review-addressed; implementation validated`
 
-## Mandatory Vortex Rule
-
-- For Vortex planning and implementation, `Oxygen.Renderer` is legacy dead
-  code. It is not production, not a reference implementation, not a fallback,
-  and not a simplification path for any Vortex task.
-- Every Vortex task must be designed and implemented as a Vortex-native system
-  that targets maximum parity with UE5.7, grounded in local source under
-  `F:\Epic Games\UE_5.7\Engine\Source` and
-  `F:\Epic Games\UE_5.7\Engine\Shaders`.
-- No Vortex task may be marked complete until its parity gate is closed with
-  explicit evidence against the relevant UE5.7 source and shader references.
-- If maximum parity cannot yet be achieved, the task remains incomplete until
-  explicit human approval records the accepted gap and the reason the parity
-  gate cannot close.
-
 ## 1. Scope Correction
 
 M06A is not "render a secondary PiP over the main scene." PiP is one trivial
@@ -856,7 +841,7 @@ f/11–125/s–ISO100 ManualCamera at 60, zero Auto target at 64, positive targe
 must remain unaffected; each event is checked on its GPU frame rather than after
 settling.
 
-The [exposure execution plan](../plan/exposure-and-lightbench-correction.md#42-shared-exposure-one-writer-and-deterministic-readers)
+The [exposure execution plan](exposure.md#42-shared-exposure-one-writer-and-deterministic-readers)
 owns the complete source, fallback and destruction contract:
 
 - each history-capable view owns exposure state through `ViewStateHandle`

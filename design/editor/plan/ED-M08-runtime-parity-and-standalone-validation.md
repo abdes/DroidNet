@@ -22,36 +22,36 @@ Each document owns the details listed below. This plan owns execution order and
 acceptance gates; field defaults and wire contracts are not independently
 redefined by the schedule.
 
-| Document | Implementation authority |
-| --- | --- |
-| [PRD](../PRD.md), sections 8–10 | Feature boundary, workload and release envelope |
-| [V0.1 authoring contract](../review/ED-M08-v01-authoring-scope.md) | Complete scope, exclusions and rejected alternatives |
-| [Visibility and light participation](../review/ED-M08-node-light-visibility-review.md) | Local/Inherit flags, workspace Hide, contribution and shadow semantics |
-| [Celestial-light contract](../review/ED-M08-celestial-light-authoring.md) | None/Primary/Secondary ownership, two contributors and conflicts |
-| [Scene authoring model](../lld/scene-authoring-model.md) | Canonical scene/component identities, hierarchy and workspace-state separation |
-| [Property inspector](../lld/property-inspector.md) | Exact fields, units, defaults, validation and conditional UI |
-| [Material editor](../lld/material-editor.md) | Scalar PBR/emission representation, editing, persistence and preview |
-| [Environment authoring](../lld/environment-authoring.md) | Atmosphere, captured sky light, exposure, grading and background |
-| [Property pipeline](../lld/property-pipeline.md) | Edit sessions, revisions, validation, mixed selection and history |
-| [Live engine sync](../lld/live-engine-sync.md) | Full projection, asset completion, native mutation and convergence |
-| [Content pipeline](../lld/content-pipeline.md) | Slot identity, migration, saved snapshots, provenance, publication, ordered mounts and native producers |
-| [Runtime integration](../lld/runtime-integration.md) | Build compatibility, scene/view lifetimes and production capabilities |
-| [Standalone qualification](../lld/standalone-runtime-validation.md) | Development topology, protocol, admission, observations, capture, comparison and cleanup |
-| [Settings architecture](../lld/settings-architecture.md) | Authored settings, local workspace state, runtime-session and startup preferences |
-| [Documents and commands](../lld/documents-and-commands.md) | Save/close lifecycle, command outcomes and document ownership |
-| [Cooking workflows](../lld/content-cooking-workflows.md) | Actual Save/Cook/reimport/recovery actions used by qualification |
-| [Engine deferred capabilities](../../../projects/Oxygen.Engine/design/vortex/plan/editor-v01-deferred-capabilities.md) | Post-V0.1 exclusions and source-local TODO IDs |
+| Document                                                                                                                 | Implementation authority                                                                                |
+| ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| [PRD](../PRD.md), sections 8–10                                                                                          | Feature boundary, workload and release envelope                                                         |
+| [V0.1 authoring contract](../review/ED-M08-v01-authoring-scope.md)                                                       | Complete scope, exclusions and rejected alternatives                                                    |
+| [Visibility and light participation](../review/ED-M08-node-light-visibility-review.md)                                   | Local/Inherit flags, workspace Hide, contribution and shadow semantics                                  |
+| [Celestial-light contract](../review/ED-M08-celestial-light-authoring.md)                                                | None/Primary/Secondary ownership, two contributors and conflicts                                        |
+| [Scene authoring model](../lld/scene-authoring-model.md)                                                                 | Canonical scene/component identities, hierarchy and workspace-state separation                          |
+| [Property inspector](../lld/property-inspector.md)                                                                       | Exact fields, units, defaults, validation and conditional UI                                            |
+| [Material editor](../lld/material-editor.md)                                                                             | Scalar PBR/emission representation, editing, persistence and preview                                    |
+| [Environment authoring](../lld/environment-authoring.md)                                                                 | Atmosphere, captured sky light, exposure, grading and background                                        |
+| [Property pipeline](../lld/property-pipeline.md)                                                                         | Edit sessions, revisions, validation, mixed selection and history                                       |
+| [Live engine sync](../lld/live-engine-sync.md)                                                                           | Full projection, asset completion, native mutation and convergence                                      |
+| [Content pipeline](../lld/content-pipeline.md)                                                                           | Slot identity, migration, saved snapshots, provenance, publication, ordered mounts and native producers |
+| [Runtime integration](../lld/runtime-integration.md)                                                                     | Build compatibility, scene/view lifetimes and production capabilities                                   |
+| [Standalone qualification](../lld/standalone-runtime-validation.md)                                                      | Development topology, protocol, admission, observations, capture, comparison and cleanup                |
+| [Settings architecture](../lld/settings-architecture.md)                                                                 | Authored settings, local workspace state, runtime-session and startup preferences                       |
+| [Documents and commands](../lld/documents-and-commands.md)                                                               | Save/close lifecycle, command outcomes and document ownership                                           |
+| [Cooking workflows](../lld/content-cooking-workflows.md)                                                                 | Actual Save/Cook/reimport/recovery actions used by qualification                                        |
+| [Engine deferred capabilities](../../../projects/Oxygen.Engine/design/vortex/milestones/ED-M08/deferred-capabilities.md) | Post-V0.1 exclusions and source-local TODO IDs                                                          |
 
 ### Native implementation references
 
-| Document | Native implementation authority |
-| --- | --- |
-| [V0.1 rendering contract](../../../projects/Oxygen.Engine/design/vortex/plan/editor-v01-rendering-contract.md) | Concrete source owners and required changes for light enumeration, visibility, shadow receiving/contact, camera framing and grading |
-| [Captured-sky IBL](../../../projects/Oxygen.Engine/design/vortex/plan/editor-v01-captured-sky-ibl.md) | Scene-global capture anchor, HDR products, diffuse SH, GGX filtering/BRDF integration, atomic publication and Stage 13 activation |
-| [Lighting service](../../../projects/Oxygen.Engine/design/vortex/lld/lighting-service.md), [shadow service](../../../projects/Oxygen.Engine/design/vortex/lld/shadow-service.md) | Direct-light/shadow family ownership, wire/resource contracts and established CSM filtering/bias behavior |
-| [Environment service](../../../projects/Oxygen.Engine/design/vortex/lld/environment-service.md), [indirect lighting service](../../../projects/Oxygen.Engine/design/vortex/lld/indirect-lighting-service.md) | Environment product publication and canonical indirect surface evaluation; retirement of the Stage 12 ambient bridge |
-| [Cubemap processing](../../../projects/Oxygen.Engine/design/vortex/lld/cubemap-processing.md), [static skylight baseline](../../../projects/Oxygen.Engine/design/vortex/lld/skybox-static-skylight.md) | Existing source orientation, SH/radiance normalization and static-cubemap behavior reused by the new IBL contract |
-| [View initialization](../../../projects/Oxygen.Engine/design/vortex/lld/init-views.md), [post-process service](../../../projects/Oxygen.Engine/design/vortex/lld/post-process-service.md) | View/history ownership, exposure, output composition and per-view processing |
+| Document                                                                                                                                                                                                     | Native implementation authority                                                                                                     |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| [V0.1 rendering contract](../../../projects/Oxygen.Engine/design/vortex/lld/editor-rendering.md)                                                                                                             | Concrete source owners and required changes for light enumeration, visibility, shadow receiving/contact, camera framing and grading |
+| [Captured-sky IBL](../../../projects/Oxygen.Engine/design/vortex/lld/captured-sky-ibl.md)                                                                                                                    | Scene-global capture anchor, HDR products, diffuse SH, GGX filtering/BRDF integration, atomic publication and Stage 13 activation   |
+| [Lighting service](../../../projects/Oxygen.Engine/design/vortex/lld/lighting-service.md), [shadow service](../../../projects/Oxygen.Engine/design/vortex/lld/shadow-service.md)                             | Direct-light/shadow family ownership, wire/resource contracts and established CSM filtering/bias behavior                           |
+| [Environment service](../../../projects/Oxygen.Engine/design/vortex/lld/environment-service.md), [indirect lighting service](../../../projects/Oxygen.Engine/design/vortex/lld/indirect-lighting-service.md) | Environment product publication and canonical indirect surface evaluation; retirement of the Stage 12 ambient bridge                |
+| [Cubemap processing](../../../projects/Oxygen.Engine/design/vortex/lld/cubemap-processing.md), [static skylight baseline](../../../projects/Oxygen.Engine/design/vortex/lld/skybox-static-skylight.md)       | Existing source orientation, SH/radiance normalization and static-cubemap behavior reused by the new IBL contract                   |
+| [View initialization](../../../projects/Oxygen.Engine/design/vortex/lld/init-views.md), [post-process service](../../../projects/Oxygen.Engine/design/vortex/lld/post-process-service.md)                    | View/history ownership, exposure, output composition and per-view processing                                                        |
 
 Closed VTX-M08 evidence proves its original static diffuse-only implementation.
 The V0.1 rendering/IBL contracts explicitly extend that baseline; the ED-M08
@@ -82,13 +82,13 @@ implementation must produce new evidence for captured sky and specular lighting.
 
 ### Development topology
 
-| Target/location | Responsibility |
-| --- | --- |
-| `projects/Oxygen.Engine/tools/validation/Schemas` | Versioned qualification schemas and rejection corpus |
-| `Oxygen.Tools.EditorValidation.Native` | Exact native request execution and standalone process |
-| `Oxygen.Tools.EditorValidation.Capture` | Opt-in observations, checkpoints, exposure telemetry and capture bridge |
-| `tests/EditorValidation/Oxygen.Editor.Validation.csproj` | Preparation, fixture/expectations, process ownership and comparisons |
-| Existing WorldEditor UI test host with `OxygenEditorValidation=true` | Real editor workflows and saved-revision capture adapter |
+| Target/location                                                      | Responsibility                                                          |
+| -------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `projects/Oxygen.Engine/tools/validation/Schemas`                    | Versioned qualification schemas and rejection corpus                    |
+| `Oxygen.Tools.EditorValidation.Native`                               | Exact native request execution and standalone process                   |
+| `Oxygen.Tools.EditorValidation.Capture`                              | Opt-in observations, checkpoints, exposure telemetry and capture bridge |
+| `tests/EditorValidation/Oxygen.Editor.Validation.csproj`             | Preparation, fixture/expectations, process ownership and comparisons    |
+| Existing WorldEditor UI test host with `OxygenEditorValidation=true` | Real editor workflows and saved-revision capture adapter                |
 
 Native qualification requires `OXYGEN_BUILD_EDITOR_VALIDATION=ON`; managed
 qualification requires `OxygenEditorValidation=true`. Both default off,
@@ -341,21 +341,21 @@ and evidence identities.
 
 The standalone LLD owns measurement algorithms. These constants are fixed:
 
-| Gate | Required value |
-| --- | --- |
-| Full workload | Exactly 100 nodes: 98 geometry, one camera, one Primary light; exactly 1,000 logical catalog entries; ≤250,000 visible triangles |
-| Field cases | Separate bounded scenes cover multiple lights and non-default fields without changing full-workload counts |
-| Base image profile | 1920×1080; Fixed 16:9; Manual EV9.7; ACES fitted; conventional shadows; no overlays |
-| Time/history | Fixed 1/60-second scene step; seed 0; reset histories; frame 0 starts after content/uploads/camera/profile readiness |
-| Checkpoints | Completed frame 120; Auto also at 240 and 600 |
-| IDs/enums/booleans/membership/rectangles | Exact through the declared identity map |
-| Finite scalars/vectors | `abs(a-b) <= max(1e-4, 1e-4 * max(abs(a), abs(b)))` |
-| Quaternion orientation | ≤0.01 degree; opposite signs equivalent; invalid quaternions rejected |
-| Images | Display-encoded sRGB RGB; RMSE ≤0.01; nearest-rank P99 absolute channel error ≤0.03; only outer one-pixel border excluded |
-| Auto exposure | GPU-observed difference ≤0.05 EV at each checkpoint, with the same image thresholds |
-| Framing | Fixed 4:3 in 1920×1080: `(240,0,1440,1080)`; Fixed 16:9 in 1440×1080: `(0,135,1440,810)`; bars stay in images and outside metering |
-| Deadlines | Cancellable 120-second active preparation/capture bound and 120-second child deadline per run; cancellable admission wait; separately bounded cleanup/drain ownership |
-| Feedback | Development progress/cancel state within 100 ms; responsive production authoring |
+| Gate                                     | Required value                                                                                                                                                        |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Full workload                            | Exactly 100 nodes: 98 geometry, one camera, one Primary light; exactly 1,000 logical catalog entries; ≤250,000 visible triangles                                      |
+| Field cases                              | Separate bounded scenes cover multiple lights and non-default fields without changing full-workload counts                                                            |
+| Base image profile                       | 1920×1080; Fixed 16:9; Manual EV9.7; ACES fitted; conventional shadows; no overlays                                                                                   |
+| Time/history                             | Fixed 1/60-second scene step; seed 0; reset histories; frame 0 starts after content/uploads/camera/profile readiness                                                  |
+| Checkpoints                              | Completed frame 120; Auto also at 240 and 600                                                                                                                         |
+| IDs/enums/booleans/membership/rectangles | Exact through the declared identity map                                                                                                                               |
+| Finite scalars/vectors                   | `abs(a-b) <= max(1e-4, 1e-4 * max(abs(a), abs(b)))`                                                                                                                   |
+| Quaternion orientation                   | ≤0.01 degree; opposite signs equivalent; invalid quaternions rejected                                                                                                 |
+| Images                                   | Display-encoded sRGB RGB; RMSE ≤0.01; nearest-rank P99 absolute channel error ≤0.03; only outer one-pixel border excluded                                             |
+| Auto exposure                            | GPU-observed difference ≤0.05 EV at each checkpoint, with the same image thresholds                                                                                   |
+| Framing                                  | Fixed 4:3 in 1920×1080: `(240,0,1440,1080)`; Fixed 16:9 in 1440×1080: `(0,135,1440,810)`; bars stay in images and outside metering                                    |
+| Deadlines                                | Cancellable 120-second active preparation/capture bound and 120-second child deadline per run; cancellable admission wait; separately bounded cleanup/drain ownership |
+| Feedback                                 | Development progress/cancel state within 100 ms; responsive production authoring                                                                                      |
 
 No image resizing/alignment/content masking, automatic rebaselining or tolerance
 adjustment is part of comparison. Required geometry and visible-effect checks

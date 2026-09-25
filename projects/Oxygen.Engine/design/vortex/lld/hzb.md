@@ -4,21 +4,6 @@
 **Deliverable:** D.16 supplement
 **Status:** `ready`
 
-## Mandatory Vortex Rule
-
-- For Vortex planning and implementation, `Oxygen.Renderer` is legacy dead
-  code. It is not production, not a reference implementation, not a fallback,
-  and not a simplification path for any Vortex task.
-- Every Vortex task must be designed and implemented as a new Vortex-native
-  system that targets maximum parity with UE5.7, grounded in
-  `F:\Epic Games\UE_5.7\Engine\Source\Runtime` and
-  `F:\Epic Games\UE_5.7\Engine\Shaders`.
-- No Vortex task may be marked complete until its parity gate is closed with
-  explicit evidence against the relevant UE5.7 source and shader references.
-- If maximum parity cannot yet be achieved, the task remains incomplete until
-  explicit human approval records the accepted gap and the reason the parity
-  gate cannot close.
-
 ## 1. Scope and Context
 
 ### 1.1 What This Covers
@@ -78,7 +63,7 @@ through the existing frame-retirement contract; no GPU wait is introduced.
 - [ARCHITECTURE.md §6.2](../ARCHITECTURE.md) — runtime stage table
 - [ARCHITECTURE.md §6.3.1](../ARCHITECTURE.md) — deferred-core invariants
 - [occlusion.md](occlusion.md) — Stage 5 umbrella scope
-- [hzb-parity-remediation.md](hzb-parity-remediation.md) — UE5.7 parity closure record
+- [HZB consumer qualification](../milestones/VTX-M05B/README.md) — UE5.7 parity closure record
 
 ### 1.5 Classification
 

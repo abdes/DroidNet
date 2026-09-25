@@ -6,7 +6,7 @@
 This plan and its LC-0–LC-5 statuses describe the retired `Oxygen.Renderer`
 implementation. They are not Vortex backlog or current acceptance gates.
 Vortex's GPU count/scan/scatter implementation and accepted E03 optimization
-are qualified under [EX07 final acceptance](../vortex/plan/EX07F-acceptance-report.md).
+are qualified under [EX07 final acceptance](../vortex/milestones/exposure/EX07/EX07F/validation.md).
 Use [LightingService](../vortex/lld/lighting-service.md) for the current algorithm,
 complete-list capacity contract and ownership. Light-grid visualizations remain
 unsupported under the [DiagnosticsService contract](../vortex/lld/diagnostics-service.md);

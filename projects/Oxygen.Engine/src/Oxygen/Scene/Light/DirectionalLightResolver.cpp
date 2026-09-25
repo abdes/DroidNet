@@ -7,8 +7,8 @@
 #include <algorithm>
 #include <array>
 #include <string>
-#include <vector>
 #include <utility>
+#include <vector>
 
 #include <glm/geometric.hpp>
 
@@ -74,7 +74,7 @@ namespace {
       // TODO(post-v0.1, EV01-LIGHT-SKY-ONLY): Authored sky-only contribution
       // needs explicit destination semantics; affects_world remains the master
       // gate. Scope:
-      // design/vortex/plan/editor-v01-deferred-capabilities.md#ev01-light-sky-only
+      // design/vortex/milestones/ED-M08/deferred-capabilities.md#ev01-light-sky-only
       if (!light.Common().affects_world) {
         return VisitResult::kContinue;
       }
@@ -245,7 +245,8 @@ auto DirectionalLightResolver::ResolveCanonicalAtmosphereLights() const
 
   for (const auto& entry : directional_lights_) {
     const auto slot = entry.Light().GetAtmosphereLightSlot();
-    if (slot == AtmosphereLightSlot::kNone) continue;
+    if (slot == AtmosphereLightSlot::kNone)
+      continue;
     const auto index = slot == AtmosphereLightSlot::kPrimary ? 0U : 1U;
     result.slots[index] = entry;
     result.explicit_slot_claims[index] = true;
@@ -257,15 +258,19 @@ auto DirectionalLightResolver::ResolveCanonicalAtmosphereLights() const
 auto DirectionalLightResolver::ValidationErrorMessage() const
   -> std::optional<std::string>
 {
-  // Ownership includes stored inactive/hidden lights, independently of rendering.
+  // Ownership includes stored inactive/hidden lights, independently of
+  // rendering.
   std::array<std::string, 2> owners;
   std::optional<std::string> error;
   const auto& scene = std::as_const(*scene_);
   static_cast<void>(scene.Traverse().Traverse(
     [&](const ConstVisitedNode& visited, bool) -> VisitResult {
-      if (!visited.node_impl->HasComponent<DirectionalLight>()) return VisitResult::kContinue;
-      const auto slot = visited.node_impl->GetComponent<DirectionalLight>().GetAtmosphereLightSlot();
-      if (slot == AtmosphereLightSlot::kNone) return VisitResult::kContinue;
+      if (!visited.node_impl->HasComponent<DirectionalLight>())
+        return VisitResult::kContinue;
+      const auto slot = visited.node_impl->GetComponent<DirectionalLight>()
+                          .GetAtmosphereLightSlot();
+      if (slot == AtmosphereLightSlot::kNone)
+        return VisitResult::kContinue;
       if (slot > AtmosphereLightSlot::kSecondary) {
         error = "Unknown atmosphere light slot";
         return VisitResult::kStop;
@@ -273,13 +278,15 @@ auto DirectionalLightResolver::ValidationErrorMessage() const
       const auto index = slot == AtmosphereLightSlot::kPrimary ? 0U : 1U;
       const auto name = std::string(visited.node_impl->GetName());
       if (!owners[index].empty()) {
-        error = "Atmosphere slot conflict between '" + owners[index] + "' and '" + name + "'";
+        error = "Atmosphere slot conflict between '" + owners[index] + "' and '"
+          + name + "'";
         return VisitResult::kStop;
       }
       owners[index] = name.empty() ? "<unnamed>" : name;
       return VisitResult::kContinue;
     }));
-  if (error) return error;
+  if (error)
+    return error;
 
   return std::nullopt;
 }

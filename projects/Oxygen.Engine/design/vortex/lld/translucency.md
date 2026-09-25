@@ -4,18 +4,6 @@
 **Deliverable:** `VTX-M05C`
 **Status:** `validated`
 
-## Mandatory Vortex Rule
-
-- `Oxygen.Renderer` is legacy dead code. It is not a reference
-  implementation, fallback, compatibility layer, or shortcut for this work.
-- Vortex translucency is a native SceneRenderer stage. Parity claims must be
-  grounded in UE5.7 renderer/shader source under
-  `F:\Epic Games\UE_5.7\Engine\Source\Runtime` and
-  `F:\Epic Games\UE_5.7\Engine\Shaders`.
-- If the implemented scope is narrower than UE5.7, the accepted Oxygen
-  divergence must be documented here and in the detailed milestone plan before
-  status can advance.
-
 ## 1. Goal
 
 Implement Stage 18 standard forward-lit translucency for the production
@@ -115,13 +103,13 @@ M05C parity re-check result:
   payload is used directly.
 - Draw-command state merging into `DrawIndexedInstanced` buckets. Stage 18
   still emits per-mesh draw commands for M05C.
-- Per-material sided rasterizer selection was deferred by M05C. Its follow-up
-  implementation and validation are tracked in
-  [material-sidedness-correction.md](../plan/material-sidedness-correction.md).
+  Per-material sided rasterizer selection is implemented through `MeshRasterState`
+  and the translucency pipeline-cache key. Its qualification is recorded in
+  [material sidedness](../milestones/material-sidedness/README.md).
 
-These are not hidden gaps in the M05C claim. They are future scope because the
-current Vortex baseline needs correct standard alpha-blended meshes before the
-larger UE translucency family is worth implementing.
+The remaining translucency extensions are tracked as
+[VX-TRANS-01](../OPEN_ITEMS.md). The delivered baseline uses standard
+alpha-blended draws, back-to-front sorting and direct SceneColor composition.
 
 ## 4. Stage Position
 
@@ -321,10 +309,10 @@ M05C cannot be marked `validated` until the single VTX-M05C ledger row records:
   magenta material-color pixels are detected after Stage 18, `SceneColor`
   changes from the pre-Stage-18 baseline, and D3D12 debug layer reports no
   errors.
-- User visual confirmation that the validation scene shows translucent
+- Manual visual confirmation that the validation scene shows translucent
   blending and depth occlusion correctly.
 
 Closure evidence is recorded in
-[`../IMPLEMENTATION_STATUS.md`](../IMPLEMENTATION_STATUS.md): focused
+[Milestone roadmap](../PLAN.md): focused
 build/tests, CDB/D3D12 audit, RenderDoc analyzer proof, UE5.7 re-check, and
-user visual confirmation all passed for the final validation scene.
+manual visual confirmation all passed for the final validation scene.

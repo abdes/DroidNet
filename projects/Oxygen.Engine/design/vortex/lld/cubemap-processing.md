@@ -5,7 +5,7 @@
 
 ## Current V0.1 extension
 
-[Captured-sky IBL](../plan/editor-v01-captured-sky-ibl.md) is the current
+[Captured-sky IBL](captured-sky-ibl.md) is the current
 implementation contract for captured sky, complete diffuse/specular products,
 readiness and Stage13 consumption. The closed VTX-M08 baseline below retains its
 historical evidence scope. Its captured/specular deferrals, diffuse-only readiness
@@ -18,8 +18,8 @@ diffuse SkyLight lighting. Visual skyboxes may share the same authored cubemap
 asset and the same resource-resolution path, but they do not share the
 renderer-owned SkyLight lighting products. It is retained as the validated
 design reference for the closed VTX-M08 milestone; closure evidence lives in
-[`../plan/VTX-M08-skybox-static-skylight.md`](../plan/VTX-M08-skybox-static-skylight.md)
-and [`../IMPLEMENTATION_STATUS.md`](../IMPLEMENTATION_STATUS.md).
+[`../plan/VTX-M08-skybox-static-skylight.md`](../milestones/VTX-M08/README.md)
+and [Milestone roadmap](../PLAN.md).
 
 ## 1. Scope
 
@@ -599,19 +599,12 @@ per-frame resource allocation churn for already-generated static products.
 Repeat the proof after toggling SkyLight off and back on so disposal,
 republication, and product reuse do not hide churn.
 
-## 9. Residual Gaps To Record At Closure
+## 9. Remaining products
 
-The VTX-M08 closure report must explicitly list any of these that remain
-deferred:
+Static specified-cubemap diffuse SH is implemented and recorded under VTX-M08.
+Captured-scene diffuse/specular and specified-cubemap specular products are
+scheduled under VX-IBL-01. Continuous capture, blending, SkyLight AO/bent normals,
+baked integration, probe arrays and cloud capture remain VX-SKY-01.
 
-- captured-scene SkyLight
-- real-time capture
-- cubemap blending / time-of-day transition
-- SkyLight AO / DFAO / bent-normal occlusion
-- baked/static-lighting SkyLight integration
-- specular reflection contribution
-- reflection captures and probe arrays
-- volumetric-cloud sky capture
-
-These are not blockers for VTX-M08 if the diffuse static cubemap baseline is
-implemented and proven, but they must remain visible.
+[OPEN_ITEMS.md](../OPEN_ITEMS.md) owns their status. These products build on the
+same source-cubemap validation, processing identity and lifetime contracts.

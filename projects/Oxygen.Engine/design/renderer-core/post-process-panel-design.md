@@ -1,7 +1,7 @@
 # Post-process panel design
 
 Updated: 2026-09-16. Exposure delivery contract; runtime and visual qualification
-are tracked in the [execution plan](../vortex/plan/exposure-and-lightbench-correction.md).
+are tracked in the [execution plan](../vortex/milestones/exposure/README.md).
 
 ## Ownership and defaults
 

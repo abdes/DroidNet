@@ -1,10 +1,10 @@
 # LightingService LLD
 
 Current execution and qualification status lives only in
-[tracker section 3.4](../IMPLEMENTATION_STATUS.md#34-slice-7-work-items).
-The [EX07 plan](../plan/EX07-lighting-correctness-and-scalability.md) owns execution,
+[tracker section 3.4](../milestones/exposure/EX07/README.md#stages-and-ownership).
+The [EX07 plan](../milestones/exposure/EX07/README.md) owns execution,
 workloads and gates. This LLD owns data, execution, publication and failure
-semantics. The [A review checkpoint](../plan/EX07A-contract-review.md) records
+semantics. The [A review checkpoint](lighting-decisions.md) records
 source evidence, approved decisions and remaining implementation/validation
 work. Its [GPU ABI contract](lighting-gpu-abi.md) and
 [property inventory](lighting-properties.md) make the migration reviewable before
@@ -18,12 +18,12 @@ validation of this complete path, including pre-existing defects and necessary
 dependencies in scene/editor input, shaders, shadows and resource lifetime.
 Both correctness and performance must pass; an existing limitation is repair work.
 
-| Stage/consumer | Responsibility                                                                                                                                                                                                                                |
-| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Stage 6        | Prepare shared immutable light records and record/publish per-view culling products before their first consumer.                                                                                                                              |
-| Stage 12       | Evaluate deferred direct lighting into SceneColor from the canonical frame-light selection. Start with directional fullscreen draws and bounded point/spot volumes; algorithm improvements retain this stage owner.                           |
-| Forward        | Consume the same physical records, relevant per-view lists and matching shadows, including supported translucent receivers.                                                                                                                   |
-| Stage 13       | Indirect/IBL ownership stays under its [own contract](../plan/editor-v01-captured-sky-ibl.md#1-ownership-and-scope). An existing ambient bridge is an explicitly bounded environment input; never duplicate it when Stage 13 takes ownership. |
+| Stage/consumer | Responsibility                                                                                                                                                                                                             |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Stage 6        | Prepare shared immutable light records and record/publish per-view culling products before their first consumer.                                                                                                           |
+| Stage 12       | Evaluate deferred direct lighting into SceneColor from the canonical frame-light selection. Start with directional fullscreen draws and bounded point/spot volumes; algorithm improvements retain this stage owner.        |
+| Forward        | Consume the same physical records, relevant per-view lists and matching shadows, including supported translucent receivers.                                                                                                |
+| Stage 13       | Indirect/IBL ownership stays under its [own contract](captured-sky-ibl.md#1-ownership-and-scope). An existing ambient bridge is an explicitly bounded environment input; never duplicate it when Stage 13 takes ownership. |
 
 Use existing renderer, LightingService, ShadowService, publication, allocator,
 recorder and fence-retirement owners. The service does not own scene light
@@ -32,7 +32,7 @@ preview light or separate lighting framework is introduced. Qualification uses
 opt-in tests/benchmarks observing the production paths.
 
 The [architecture](../ARCHITECTURE.md),
-[directional/shadow authoring contract](../plan/editor-v01-rendering-contract.md#3-independent-directional-array-and-atmosphere-assignments)
+[directional/shadow authoring contract](editor-rendering.md#3-independent-directional-array-and-atmosphere-assignments)
 and [PBR specification](../../renderer-core/physically-based-rendering.md) remain
 authoritative. Ground UE5.7 parity comparisons in the matching local
 `PrepareForwardLightData`, `ComputeLightGrid` and `RenderLights` source/shader
@@ -253,12 +253,12 @@ projection and near/far boundaries.
 
 ## 4. Capacity, failure and recovery
 
-The [A capacity decision](../plan/EX07A-contract-review.md#d1--admission-capacities)
+The [A capacity decision](lighting-decisions.md#d1--admission-capacities)
 records approved D1/D6: a configurable **4 GiB** renderer-wide allocation ceiling
 and **128 MiB** aggregate compact-index sublimit included within it. These are
 uint64 byte ceilings, not preallocations; backend/driver availability is an
 additional admission check. Original per-view/count proposals remain withdrawn.
-The [bounded shadow-memory work](../plan/EX07-shadow-memory-review.md) reduces
+The [bounded shadow-memory work](../milestones/exposure/EX07/EX07E/shadow-memory.md) reduces
 unused storage and duplication without changing these ceilings. Parent allocator
 admission accounts for other engine commitments, pending growth and explicit
 headroom (configurable `lighting_driver_headroom_bytes`, default **256 MiB**
@@ -367,7 +367,7 @@ physical-only local attenuation and removal of the selector/custom exponent;
 LP16/LP17 now track that strict migration. D3 approves physical local source
 extent; D4 approves the common correlated-GGX/compensation model. Their detailed
 equations and bounds are in the PBR owner; implementation and renderer
-qualification closed with [EX07 final acceptance](../plan/EX07F-acceptance-report.md).
+qualification closed with [EX07 final acceptance](../milestones/exposure/EX07/EX07F/validation.md).
 The accepted production model and independent-reference differences remain
 documented there. D5 retains hemispherical soft spots; the
 inventory also freezes strict scene-v7 records and atomic ingress obligations.
@@ -389,7 +389,7 @@ consumer or transport is a defect to repair, not a newly deferred feature.
 | Cast/receive, shadow resolution/bias/normal bias/contact, CSM fields | Separate light/caster/receiver roles, supported shadow consumers and correct per-light association; use existing shadow/contact contracts and eliminate dead settings. |
 
 Declared exclusions remain under the
-[capability contract](../plan/editor-v01-deferred-capabilities.md); this audit
+[capability contract](../milestones/ED-M08/deferred-capabilities.md); this audit
 does not add new baking or finite-source directional shading. Distinguish those
 explicit exclusions from ignored retained settings. No silent removal or legacy
 compatibility route is permitted. Validate complete candidates atomically so
@@ -419,8 +419,8 @@ Its `embed` command generates the private build header. Never edit generated byt
 The common evaluator returns cosine-weighted lobes. Finite-source response is
 analytic; cone/range masks are evaluated once from the center. Ordinary spots
 use cone proxies and projected shadows, while hemispheres retain multi-face
-coverage. Current equations and the user-approved quality/performance policy are
-in the PBR owner; [section 3.4](../IMPLEMENTATION_STATUS.md#34-slice-7-work-items)
+coverage. Current equations and the approved quality/performance policy are
+in the PBR owner; [section 3.4](../milestones/exposure/EX07/README.md#stages-and-ownership)
 is the only progress/acceptance record.
 
 Records and per-view grids/maps/constants use existing upload/frame allocators,

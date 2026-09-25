@@ -2,7 +2,7 @@
 
 ## Current V0.1 extension
 
-[Captured-sky IBL](../plan/editor-v01-captured-sky-ibl.md) owns the current
+[Captured-sky IBL](captured-sky-ibl.md) owns the current
 captured-source, full diffuse/specular and Stage13 integration contract. The
 VTX-M08 text below records the validated static diffuse baseline. Its Stage12
 bridge and captured/specular deferrals are historical scope, superseded for
@@ -16,8 +16,8 @@ This LLD defines how Vortex renders a visual cubemap skybox and consumes the
 static specified-cubemap SkyLight products defined in
 [`cubemap-processing.md`](cubemap-processing.md). It is retained as the
 validated design reference for the closed VTX-M08 milestone; closure evidence
-lives in [`../plan/VTX-M08-skybox-static-skylight.md`](../plan/VTX-M08-skybox-static-skylight.md)
-and [`../IMPLEMENTATION_STATUS.md`](../IMPLEMENTATION_STATUS.md).
+lives in [`../plan/VTX-M08-skybox-static-skylight.md`](../milestones/VTX-M08/README.md)
+and [Milestone roadmap](../PLAN.md).
 
 ## 1. Design Goals
 
@@ -517,20 +517,14 @@ VTX-M08 cannot be marked validated until all of these pass:
 - RenderDoc scripted analysis proving skybox draw, product publication, and
   diffuse SkyLight contribution
 - allocation-churn proof over at least 60 steady-state frames
-- visual validation scene approved by the user
+- visual validation scene approved in review
 - `git diff --check`
 
-## 11. Required Residual-Gap Record
+## 11. Follow-up capabilities
 
-Closure must explicitly state whether these remain deferred:
+VTX-M08 delivers a visible static cubemap and specified-cubemap diffuse SH.
+Captured-scene and specular IBL are VX-IBL-01. Continuous capture, blending,
+SkyLight AO/shadowing, baked integration and broader probes are VX-SKY-01.
+A procedural disk over a static cubemap is VX-SKY-02.
 
-- captured-scene SkyLight
-- real-time capture
-- cubemap blending
-- SkyLight AO/shadowing
-- static/baked lightmap SkyLight integration
-- specular reflection contribution
-- broader reflection probes
-- procedural sun-disk overlay on static cubemap skybox
-
-No closure report may imply those are implemented unless code and proof exist.
+The current states and implementation owners are in [OPEN_ITEMS.md](../OPEN_ITEMS.md).

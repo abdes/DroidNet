@@ -8,28 +8,13 @@
 > executes a Vortex-native one-view scene-renderer path into the
 > caller-provided framebuffer, with deferred and forward shading selection.
 > Runtime closeout is validated under
-> [../plan/VTX-M06B-offscreen-proof-closeout.md](../plan/VTX-M06B-offscreen-proof-closeout.md).
+> [../plan/VTX-M06B-offscreen-proof-closeout.md](../milestones/VTX-M06B/README.md).
 >
 > Scope correction: `ShadingMode::kForward` means a real solid forward scene
 > product that writes directly to SceneColor with forward lighting. A forward
 > wireframe/debug render is useful proof that the offscreen route can execute a
 > forward-selected view, but it is not a substitute for the solid forward
 > offscreen product required by this LLD.
-
-## Mandatory Vortex Rule
-
-- For Vortex planning and implementation, `Oxygen.Renderer` is legacy dead
-  code. It is not production, not a reference implementation, not a fallback,
-  and not a simplification path for any Vortex task.
-- Every Vortex task must be designed and implemented as a new Vortex-native
-  system that targets maximum parity with UE5.7, grounded in
-  `F:\Epic Games\UE_5.7\Engine\Source\Runtime` and
-  `F:\Epic Games\UE_5.7\Engine\Shaders`.
-- No Vortex task may be marked complete until its parity gate is closed with
-  explicit evidence against the relevant UE5.7 source and shader references.
-- If maximum parity cannot yet be achieved, the task remains incomplete until
-  explicit human approval records the accepted gap and the reason the parity
-  gate cannot close.
 
 ## 1. Scope and Context
 
@@ -234,11 +219,14 @@ Each variant must compile, run, and produce expected output (capability-
 gated stages are null-safe no-ops).
 
 VTX-M06C tracks this Phase 5F closeout in
-[../plan/VTX-M06C-feature-gated-runtime-variants.md](../plan/VTX-M06C-feature-gated-runtime-variants.md).
+[../plan/VTX-M06C-feature-gated-runtime-variants.md](../milestones/VTX-M06C/README.md).
 
-## 7. Open Questions
+## 7. Headless integration
 
-1. **Headless renderer support:** Does the current D3D12 backend support
-   rendering without a swap chain? This is needed for true offscreen
-   rendering (server-side, CI tests). If not, Phase 5E documents the gap
-   and a follow-up task is created.
+The D3D12 `OffscreenTestFixture` creates a backend and command queues without a
+surface or swapchain. `ReadbackTestFixture` and native exposure tests use it.
+Backend offscreen execution therefore exists.
+
+The remaining qualification is the supported full-engine headless application
+and CI lifecycle, tracked as [VX-OFFSCREEN-01](../OPEN_ITEMS.md). M06B's recorded
+MultiView preview/capture proof covers embedded offscreen rendering.

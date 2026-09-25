@@ -4,18 +4,6 @@
 **Deliverable:** D.14
 **Status:** `authoritative_for_M05A_implementation`
 
-## Mandatory Vortex Rule
-
-- For Vortex planning and implementation, `Oxygen.Renderer` is legacy dead
-  code. It is not production, not a reference implementation, not a fallback,
-  and not a simplification path for any Vortex task.
-- Vortex diagnostics must be grounded in UE5.7 runtime and shader patterns from
-  `F:\Epic Games\UE_5.7\Engine\Source\Runtime` and
-  `F:\Epic Games\UE_5.7\Engine\Shaders`, adapted to Oxygen's renderer facade,
-  bindless resource model, publication contracts, and external proof tooling.
-- No diagnostics milestone may be marked complete until implementation,
-  docs/status, and validation evidence are all recorded.
-
 ## Exposure validation boundary
 
 The user removed the proposed reusable region-statistics/consumed-gain service
@@ -23,7 +11,7 @@ from EX08–EX10 on 2026-09-25. LightBench uses focused native tests and existin
 readback fixtures for numerical qualification; the live application does not
 claim numerical verdicts for arbitrary edited frames. No new measurement API,
 readback scheduler, instrumented tonemap shader or runtime state is required.
-See the [approved scope](../plan/EX08-execution.md).
+See the [approved scope](../milestones/exposure/EX08/README.md).
 
 Existing initialization/range/FP16 eligibility status remains the bounded
 PostProcessService path. Preserve its ownership and diagnostics; this scope
@@ -475,9 +463,9 @@ Rules:
   it or the registry marks it unsupported with a specific reason. Forward-only
   material probes such as UV0/opacity are not valid deferred fullscreen debug
   views unless the G-buffer or another published product carries that data.
-- IBL debug modes remain unsupported until Oxygen has a real deferred IBL
-  product with capture/proof. Do not expose placeholder IBL shader variants as
-  working runtime modes.
+- `ibl-only` and `direct-plus-ibl` use the implemented lighting service path.
+  Raw-sky, irradiance, specular and other registry-disabled IBL probes remain
+  VX-DIAG-02 until their products and visualization paths are implemented.
 - Light-culling debug modes remain unsupported until the deferred light-grid
   visualization path exists. The presence of light-grid build code or shader
   assets is not enough to expose a mode.
@@ -699,8 +687,8 @@ If a later slice enables them, the scope is deliberately small:
 - enabled-path runtime or RenderDoc proof that primitives appear and overflow is
   bounded
 
-Until then the status remains deferred. M05A can reference the existing debug
-shader asset inventory, but it must not claim a debug-primitive runtime.
+The shader assets are present; the debug-primitive runtime remains deferred
+under [VX-DIAG-01](../OPEN_ITEMS.md).
 
 ## 13. Contract Failures And Minimal Runtime Issues
 
@@ -764,7 +752,7 @@ M05A can close with GPU debug primitives deferred. It cannot close unless:
 4. Existing GPU timeline functionality is preserved and service-facing.
 5. Capture manifest export exists and has tests.
 6. DemoShell diagnostics panel registry is implemented, or panel rendering is
-   explicitly deferred with an issue/status record and no false claim.
+   deferred with a named entry in [OPEN_ITEMS.md](../OPEN_ITEMS.md).
 7. Docs/status contain exact validation evidence.
 
 ## 16. Replan Triggers

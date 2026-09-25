@@ -4,32 +4,17 @@
 > **Location:** `src/Oxygen/Vortex/`
 > **CMake target:** `oxygen::vortex`
 
-This document is the authoritative reference for the Vortex module's directory
+This document describes the Vortex module's directory
 structure, file placement rules, and organizational conventions. Every developer
 working on Vortex should read this document before adding files.
 
 Related:
 
-- [ARCHITECTURE.md](./ARCHITECTURE.md) — architectural model, frame structure,
+- [ARCHITECTURE.md](ARCHITECTURE.md) — architectural model, frame structure,
   ownership rules
-- [DESIGN.md](./DESIGN.md) — concrete solution shapes and service contracts
-- [PLAN.md](./PLAN.md) — implementation slices and migration plan
-- [PRD.md](./PRD.md) — product requirements
-
-## Mandatory Vortex Rule
-
-- For Vortex planning and implementation, `Oxygen.Renderer` is legacy dead
-  code. It is not production, not a reference implementation, not a fallback,
-  and not a simplification path for any Vortex task.
-- Every Vortex task must be designed and implemented as a new Vortex-native
-  system that targets maximum parity with UE5.7, grounded in
-  `F:\Epic Games\UE_5.7\Engine\Source\Runtime` and
-  `F:\Epic Games\UE_5.7\Engine\Shaders`.
-- No Vortex task may be marked complete until its parity gate is closed with
-  explicit evidence against the relevant UE5.7 source and shader references.
-- If maximum parity cannot yet be achieved, the task remains incomplete until
-  explicit human approval records the accepted gap and the reason the parity
-  gate cannot close.
+- [DESIGN.md](DESIGN.md) — concrete solution shapes and service contracts
+- [PLAN.md](PLAN.md) — implementation slices and migration plan
+- [PRD.md](PRD.md) — product requirements
 
 ## 1. Directory Tree
 

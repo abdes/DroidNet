@@ -24,7 +24,7 @@ The shader library compiled 196 modules. A bounded native run with animation and
 the D3D12 debug layer completed with exit 0.
 
 Detailed engine scope and limits:
-[material-sidedness-correction.md](../../../projects/Oxygen.Engine/design/vortex/plan/material-sidedness-correction.md).
+[material-sidedness-correction.md](../../../projects/Oxygen.Engine/design/vortex/milestones/material-sidedness/README.md).
 
 ## Editor implementation and automated evidence
 

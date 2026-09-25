@@ -6,9 +6,9 @@
 
 ## V0.1 Production Extension
 
-[Editor V0.1 rendering](../plan/editor-v01-rendering-contract.md) defines the
+[Editor V0.1 rendering](editor-rendering.md) defines the
 canonical per-light None/Primary/Secondary assignment and independent direct/
-shadowed contribution. The [captured-sky companion](../plan/editor-v01-captured-sky-ibl.md)
+shadowed contribution. The [captured-sky companion](captured-sky-ibl.md)
 defines complete products and Stage-13/forward indirect ownership. Older Sun
 abstractions, role fallbacks, preset examples and incomplete IBL status below are
 historical design/implementation baselines where they conflict with this extension.
@@ -30,21 +30,6 @@ textures through the existing frame reclaimer. A failed fog dispatch does not
 replace the previous temporal history. These rules establish resource availability;
 FP16 pre-store and cumulative error checks are separate requirements owned by
 [SceneTextures](scene-textures.md#per-view-fp16-suitability).
-
-## Mandatory Vortex Rule
-
-- For Vortex planning and implementation, `Oxygen.Renderer` is legacy dead
-  code. It is not production, not a reference implementation, not a fallback,
-  and not a simplification path for any Vortex task.
-- Every Vortex task must be designed and implemented as a new Vortex-native
-  system that targets maximum parity with UE5.7, grounded in
-  `F:\Epic Games\UE_5.7\Engine\Source\Runtime` and
-  `F:\Epic Games\UE_5.7\Engine\Shaders`.
-- No Vortex task may be marked complete until its parity gate is closed with
-  explicit evidence against the relevant UE5.7 source and shader references.
-- If maximum parity cannot yet be achieved, the task remains incomplete until
-  explicit human approval records the accepted gap and the reason the parity
-  gate cannot close.
 
 ## Exposure-domain migration contract
 
@@ -593,7 +578,7 @@ stored atmospheric assignment or a synthetic-vs-scene fallback policy.
 Primary/Secondary are stable integration assignments, not body type, brightness
 priority or promotion rules. An existing `ResolveMoon` convenience alias does not
 implement lunar textures, phases or orbital simulation. The exact production
-contract is [the rendering extension](../plan/editor-v01-rendering-contract.md#3-independent-directional-array-and-atmosphere-assignments).
+contract is [the rendering extension](editor-rendering.md#3-independent-directional-array-and-atmosphere-assignments).
 
 #### 4.2.5 `scene::DirectionalLight`
 
@@ -640,7 +625,7 @@ needed by opaque or translucent AP composition.
 `AngularSizeRadians` remains the full analytic disk diameter. V0.1 adds no
 finite-source GGX or PCSS effect through that field. Migrate useful old explicit
 slots/sun intent into this source, diagnose ambiguity and remove implicit fallback
-readers. See [captured-sky IBL](../plan/editor-v01-captured-sky-ibl.md) for complete
+readers. See [captured-sky IBL](captured-sky-ibl.md) for complete
 diffuse/specular products and their Stage-13/forward consumption.
 
 Authoring source: `src/Oxygen/Scene/Light/DirectionalLight.h`.
@@ -1405,96 +1390,39 @@ Required proof surfaces:
   - volumetric fog
   - sky-light contribution
 
-## 10. Deferred Items
+## 10. Deferred items
 
-Still deferred:
+The current environment path implements atmosphere, two atmosphere-light slots,
+analytic height/local fog, volumetric fog, publication and DemoShell authoring.
+The remaining extensions have shared tracker entries:
 
-- volumetric clouds
-- heterogeneous volumes
-- Stage-13 canonical indirect-light ownership and ambient-bridge retirement
+- VX-IBL-01: captured-sky/specular products, Stage 13 and ambient-bridge retirement.
+- VX-FOG-01: height-fog inscattering cubemaps.
+- VX-AP-01: reflection/360-view aerial-perspective resources.
+- VX-SKY-01: continuous capture, blending, occlusion/baking and probe extensions.
+- VX-FAMILY-01: volumetric clouds and heterogeneous volumes.
 
-Not deferred:
+See [OPEN_ITEMS.md](../OPEN_ITEMS.md) for status and next actions.
 
-- atmosphere model coverage
-- two atmosphere-light slots
-- full fog coverage
-- local fog volumes
-- volumetric fog
-- sky-light coupling
-- DemoShell authoring and diagnostics support
+## 11. Implemented coverage and remaining extensions
 
-## 11. Continuation Checklist
+Height fog uses the analytic two-layer path. Local fog has per-view packing,
+tiled HZB culling, analytic composition and volumetric injection. Volumetric fog
+publishes integrated scattering with history/reprojection; the environment
+service publishes the corresponding frame/view bindings. These paths are
+implemented in `EnvironmentLightingService.cpp`, `Fog.hlsl`, the local-fog
+passes and `VolumetricFog.hlsl`.
 
-This checklist is intentionally split between surfaces that already exist and
-work that still blocks the Phase 4D parity gate. Existing code is listed here
-only to prevent duplicate implementation; it is not a completion claim.
+The recorded runtime, shader and publication checks belong to
+[height fog](../milestones/VTX-M04D.2/validation.md),
+[local fog](../milestones/VTX-M04D.3/validation.md),
+[volumetric fog](../milestones/VTX-M04D.4/validation.md) and
+[aerial perspective](../milestones/VTX-M04D.6/validation.md).
+The linear-clamp correction is recorded in the
+[filter-gradient manifest](../../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/filter-gradients-manifest.json).
 
-### 11.1 Existing Surfaces To Preserve
-
-- [x] Expanded `scene::environment::SkyAtmosphere` authoring surface exists.
-- [x] Expanded `scene::environment::Fog` authoring surface exists.
-- [x] Expanded `scene::environment::SkyLight` authoring surface exists.
-- [x] `scene::DirectionalLight` atmosphere-light slot authoring exists.
-- [x] `scene::LocalFogVolume` node component exists.
-- [x] Scene-asset environment records use the widened v3 shape.
-- [x] `LocalFogVolumeRecord` exists as a component-table record.
-- [x] Scene-loader hydration for local fog volumes exists.
-- [x] DemoShell environment settings, VM, and panel surfaces exist for the
-      widened authoring set.
-- [x] Atmosphere state translation, LUT cache, sky-view LUT, camera aerial
-      perspective, and distant-sky-light LUT surfaces exist.
-- [x] Below-horizon sky invariants listed in this LLD are represented in the
-      active sky path and must be preserved.
-- [x] First volumetric-fog integrated-light-scattering runtime path exists:
-      authored/requested volumetric fog allocates a 3D product, runs a Stage-14
-      compute pass, publishes SRV/static binding validity, and composes through
-      Stage 15 fog.
-- [x] First UE5.7-shaped volumetric froxel-depth and primary directional CSM
-      shadow sampling path exists: Stage-14 volumetric fog computes
-      `CalculateGridZParams`-style logarithmic z slices and samples the
-      validated conventional directional CSM product without surface normal
-      receiver bias.
-
-### 11.2 Blocking Work Before Fog Parity Can Close
-
-- [x] Use slot-3 linear clamp for finite view-local fog composition and history.
-      Debug/Release captures qualify 8 composition draws and 150 history cases
-      per build, including viewport/depth edges, interior controls and 84
-      outside-frustum rejections. Native regressions reproduce opposite-edge
-      mixing with the former wrap sampler; focused debugger checks pass.
-      [Evidence](../../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/filter-gradients-manifest.json).
-      This bounded correction does not close the full fog-parity work below.
-- [ ] Replace the current simplified height-fog shader path with the UE5.7
-      parity-grade height-fog family described in Section 4.
-- [ ] Implement full height-fog use of second layer, cubemap inscattering,
-      directional inscattering, sky-atmosphere ambient contribution, start/end
-      distance, cutoff distance, max opacity, and visibility flags.
-- [ ] Bring local fog to the UE5.7 local-volume contract: per-view pack/sort,
-      tiled culling, Screen HZB consumption, analytic integral, dedicated
-      Stage-15 composition/splat behavior, sky-depth exclusion, and
-      atmosphere-aware lighting.
-- [ ] Implement local-fog injection into volumetric fog when volumetric fog is
-      enabled.
-- [ ] Complete volumetric fog as a UE5.7-informed froxel system: full
-      media/local/sky-light injection, local-fog injection, temporal
-      history/reprojection, final integration, volumetric shadow artifact proof,
-      and city-scale capture/analyzer proof. The first Vortex integrated
-      scattering product plus directional CSM sampling path does not close this
-      gate.
-- [ ] Publish complete environment frame/view products for height fog, local
-      fog, volumetric fog, and sky-light coupling.
-- [ ] Validate the environment path against UE5.7 source/shader contracts and
-      RenderDoc/runtime captures before any completion claim.
-
-### 11.3 Validation Evidence Required For Closure
-
-- [ ] Scene component and data round-trip tests for all authored environment
-      fields.
-- [ ] DemoShell hydration, persistence, dirty-domain, and panel-facing tests.
-- [ ] Renderer publication tests for atmosphere, height fog, local fog,
-      volumetric fog, sky light, and Stage 14/15 handoff products.
-- [ ] Shader catalog tests for every required environment shader entrypoint.
-- [ ] Runtime capture evidence for sky atmosphere, aerial perspective,
-      height fog, local fog volumes, volumetric fog, and sky-light coupling.
-- [ ] Source-to-target parity review against the listed UE5.7 renderer and
-      shader files.
+Remaining work is tracked in [OPEN_ITEMS.md](../OPEN_ITEMS.md): height-fog
+cubemap sampling (VX-FOG-01), reflection-view AP resources (VX-AP-01), captured
+sky/specular IBL and Stage 13 activation (VX-IBL-01), clouds and heterogeneous
+volumes (VX-FAMILY-01). The authored height-fog cubemap currently publishes an
+invalid SRV and zero mip count; the reflection-360 AP constant remains zero.

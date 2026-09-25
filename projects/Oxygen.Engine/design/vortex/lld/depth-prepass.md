@@ -4,21 +4,6 @@
 **Deliverable:** D.4
 **Status:** `ready`
 
-## Mandatory Vortex Rule
-
-- For Vortex planning and implementation, `Oxygen.Renderer` is legacy dead
-  code. It is not production, not a reference implementation, not a fallback,
-  and not a simplification path for any Vortex task.
-- Every Vortex task must be designed and implemented as a new Vortex-native
-  system that targets maximum parity with UE5.7, grounded in
-  `F:\Epic Games\UE_5.7\Engine\Source\Runtime` and
-  `F:\Epic Games\UE_5.7\Engine\Shaders`.
-- No Vortex task may be marked complete until its parity gate is closed with
-  explicit evidence against the relevant UE5.7 source and shader references.
-- If maximum parity cannot yet be achieved, the task remains incomplete until
-  explicit human approval records the accepted gap and the reason the parity
-  gate cannot close.
-
 ## 1. Scope and Context
 
 ### 1.1 What This Covers
@@ -39,7 +24,7 @@ publish opaque `SceneVelocity`.
 | ----------- | -------------------------------------------------------- | --------------------------------------------- |
 | Predecessor | Stage 2 (InitViews)                                      | Current-view prepared-scene payload published |
 | **This**    | **Stage 3 — DepthPrepass**                               | Depth-only                                    |
-| Successor   | Stage 5 (Occlusion/HZB — reserved) or Stage 9 (BasePass) |                                               |
+| Successor   | Stage 5 (Screen HZB and occlusion) or Stage 9 (BasePass) |                                               |
 
 ### 1.3 Architectural Authority
 
@@ -167,7 +152,7 @@ together:
 3. stage-9 stops claiming ownership for the same producer scope
 4. docs/tests/validation are updated as one policy change
 
-This LLD does not authorize mixing both policies implicitly.
+Select one velocity policy explicitly for each rendering path.
 
 ## 6. Testability and Validation
 

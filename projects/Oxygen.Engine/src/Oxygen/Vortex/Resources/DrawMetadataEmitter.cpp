@@ -129,7 +129,7 @@ auto ApplyShadowCasterPassRouting(oxygen::vortex::PassMask mask,
   // TODO(post-v0.1, EV01-SHADOW-BLEND): Add blended shadow transmission
   // semantics; routing Blend through the opaque/masked depth path would give
   // wrong shadows. Scope:
-  // design/vortex/plan/editor-v01-deferred-capabilities.md#ev01-shadow-blend
+  // design/vortex/milestones/ED-M08/deferred-capabilities.md#ev01-shadow-blend
   const bool supports_shadow_casting
     = mask.IsSet(oxygen::vortex::PassMaskBit::kOpaque)
     || mask.IsSet(oxygen::vortex::PassMaskBit::kMasked);

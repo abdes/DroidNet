@@ -6,7 +6,7 @@
 its visual/UI behavior and final Sponza sun integration on 2026-09-16. Sponza's
 non-sun lighting/rendering defects remain open; full normal-view renderer
 acceptance and exposure qualification are not implied. The
-[preview/profile record](../../../projects/Oxygen.Engine/design/vortex/plan/renderscene-preview-sun.md)
+[preview/profile record](../../../projects/Oxygen.Engine/design/vortex/milestones/preview-sun/README.md)
 contains the scoped closeout evidence.
 
 The final Release sweep `20260916-071101` passed load/capture acceptance for all
@@ -40,11 +40,11 @@ archives. Each result records settings and history restoration using the runner'
 comparison with the saved original files. Those original result statuses and
 history files remain unchanged.
 
-| Evidence | Result / boundary |
-| --- | --- |
-| [Machine aggregate](../../../artifacts/ed-m08/all-scenes/native-scene-validation.json) | Exact 20/20 inventory/result coverage, per-image observations, restoration, capture provenance and remaining gates. |
-| [Build-order verification](../../../artifacts/ed-m08/all-scenes/build-order-verification.json) | Parallel Release probe: all three forced objects finished before linking; all 117 direct object inputs predate their binaries. |
-| [Final native test log](../../../artifacts/ed-m08/all-scenes/final-debug-tests.log), [XML](../../../artifacts/ed-m08/all-scenes/final-debug-tests.xml) | 8/8 suites pass: AssetLoader, AsyncImportGltf, FrameContext, ModuleManager, ScriptingComponent, Scripting Module, CompilationService and Bindings. |
+| Evidence                                                                                                                                                 | Result / boundary                                                                                                                                                                 |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Machine aggregate](../../../artifacts/ed-m08/all-scenes/native-scene-validation.json)                                                                   | Exact 20/20 inventory/result coverage, per-image observations, restoration, capture provenance and remaining gates.                                                               |
+| [Build-order verification](../../../artifacts/ed-m08/all-scenes/build-order-verification.json)                                                           | Parallel Release probe: all three forced objects finished before linking; all 117 direct object inputs predate their binaries.                                                    |
+| [Final native test log](../../../artifacts/ed-m08/all-scenes/final-debug-tests.log), [XML](../../../artifacts/ed-m08/all-scenes/final-debug-tests.xml)   | 8/8 suites pass: AssetLoader, AsyncImportGltf, FrameContext, ModuleManager, ScriptingComponent, Scripting Module, CompilationService and Bindings.                                |
 | [SDK install log](../../../artifacts/ed-m08/all-scenes/install-sdk.log), [Interop rebuild log](../../../artifacts/ed-m08/all-scenes/interop-rebuild.log) | Current Debug SDK installed, then Interop rebuilt with MSBuild; both exit zero. Interop's minimal log has no warning/error lines; no unprinted build-summary counts are inferred. |
 
 Capture and source evidence live below
@@ -127,7 +127,7 @@ not a canonical importer or renderer workaround. Canonical role import and
 independent directional lighting remain ED-M08 gates.
 
 Exposure is governed by the
-[exposure and LightBench correction plan](../../../projects/Oxygen.Engine/design/vortex/plan/exposure-and-lightbench-correction.md).
+[exposure and LightBench correction plan](../../../projects/Oxygen.Engine/design/vortex/milestones/exposure/README.md).
 The fixed-exposure floor, automatic initialization/history and settings precedence
 issues prevent treating this scene as an exposure calibration. No Vortex shader,
 exposure equation or Vortex lighting implementation changed for this workflow.

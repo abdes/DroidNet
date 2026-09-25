@@ -4,21 +4,6 @@
 **Deliverable:** D.7
 **Status:** `ready`
 
-## Mandatory Vortex Rule
-
-- For Vortex planning and implementation, `Oxygen.Renderer` is legacy dead
-  code. It is not production, not a reference implementation, not a fallback,
-  and not a simplification path for any Vortex task.
-- Every Vortex task must be designed and implemented as a new Vortex-native
-  system that targets maximum parity with UE5.7, grounded in
-  `F:\Epic Games\UE_5.7\Engine\Source\Runtime` and
-  `F:\Epic Games\UE_5.7\Engine\Shaders`.
-- No Vortex task may be marked complete until its parity gate is closed with
-  explicit evidence against the relevant UE5.7 source and shader references.
-- If maximum parity cannot yet be achieved, the task remains incomplete until
-  explicit human approval records the accepted gap and the reason the parity
-  gate cannot close.
-
 ## Exposure ABI extension
 
 The exact [GPU record layouts](post-process-service.md#gpu-record-layouts) own
@@ -37,7 +22,7 @@ Exposure arithmetic uses full float32, with no dependence on subnormals.
 
 ShaderBake currently uses SM6.6, HLSL 2021, `-Ges -enable-16bit-types`, Debug
 `-Od -Zi`, Release `-O3`, no explicit denormal mode. The
-[compiler audit](../plan/exposure-contract-checkpoint.md) records actual compiled
+[compiler audit](../milestones/exposure/EX01/validation.md) records actual compiled
 DXIL. Any compiler-flag change must also update CompileProfile's action-key
 schema. Qualify both profiles and explicit invalid/nonfinite inputs.
 
