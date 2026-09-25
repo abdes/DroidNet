@@ -11,7 +11,6 @@
 asap_module_declare(
   MODULE_NAME "Oxygen.Graphics.Headless"
   DESCRIPTION "Headless graphics backend for testing and simulation"
-  WITHOUT_VERSION_H
 )
 asap_push_module("${META_MODULE_NAME}")
 

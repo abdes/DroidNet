@@ -18,7 +18,6 @@ residency: it decides what enters the GPU, what remains resident, and what
 gets evicted. Nexus is bindless-first, batch-oriented, and supports both
 GPU-backed and CPU-only configurations.
 ]=]
-  WITHOUT_VERSION_H
 )
 asap_push_module("${META_MODULE_NAME}")
 

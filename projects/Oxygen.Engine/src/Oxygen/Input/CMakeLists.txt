@@ -18,7 +18,6 @@ evaluates mappings deterministically during PhaseInput and produces an
 immutable per‑frame ActionSnapshot that the engine publishes into FrameContext
 for FixedSim/Gameplay consumption.
 ]=]
-  WITHOUT_VERSION_H
 )
 asap_push_module("${META_MODULE_NAME}")
 

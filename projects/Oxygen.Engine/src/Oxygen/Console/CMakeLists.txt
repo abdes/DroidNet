@@ -12,7 +12,6 @@ asap_module_declare(
   MODULE_NAME "Oxygen.Console"
   DESCRIPTION
     "Runtime CVars, console command registry, execution, history, and completion."
-  WITHOUT_VERSION_H
 )
 asap_push_module("${META_MODULE_NAME}")
 

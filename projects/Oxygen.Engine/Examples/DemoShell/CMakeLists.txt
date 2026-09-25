@@ -11,7 +11,6 @@
 asap_module_declare(
   MODULE_NAME "Oxygen.Examples.DemoShell"
   DESCRIPTION "Reusable demo UI shell for example applications"
-  WITHOUT_VERSION_H
 )
 
 asap_push_module("${META_MODULE_NAME}")

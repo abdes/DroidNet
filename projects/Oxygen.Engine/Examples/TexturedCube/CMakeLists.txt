@@ -23,7 +23,6 @@ Controls:
 
 An ImGui overlay shows the current camera/orbit parameters.
 ]=]
-  WITHOUT_VERSION_H
 )
 
 asap_push_module("${META_MODULE_NAME}")

@@ -21,7 +21,6 @@ reset/spawn controls and live diagnostics (active bodies, contacts, settle
 state), serving as both a developer showcase and a practical validation harness
 for scene hydration contracts and stable simulation behavior.
 ]=]
-  WITHOUT_VERSION_H
 )
 asap_push_module("${META_MODULE_NAME}")
 

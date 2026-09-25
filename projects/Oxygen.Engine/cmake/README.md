@@ -1,5 +1,76 @@
 # CMake Helper Notes
 
+## Module declarations, diagnostics and IDE headers
+
+`asap_module_declare(MODULE_NAME Oxygen.Base DESCRIPTION "...")` declares
+metadata, not targets. Callers retain native `add_library`, `add_executable`,
+`target_sources` and file-set declarations. Dotted module names derive stable
+lowercase target names (`oxygen-base`) and link aliases (`oxygen::base`). Unknown
+arguments, missing values, malformed names and collisions with existing targets
+fail configuration. Quoted descriptions may contain spaces and semicolons.
+The unused `MODULE_TARGET_NAME` override and `WITHOUT_VERSION_H` switch have been
+removed, together with the unused version/export-header generators. Keep the
+existing checked-in export headers and Core's product version/provenance API.
+
+Use the existing `declare`, `asap_push_module`, child configuration,
+`asap_pop_module` sequence. Hierarchy state is inherited by child directories;
+helper inclusion does not reset it. Empty or mismatched pops fail explicitly.
+Helper temporaries do not overwrite caller variables. Hierarchy and target
+messages remain visible at the normal CMake log level.
+
+`arrange_target_files_for_ide(target [EXCLUDE_PATTERNS regex...])` must be called
+in the directory defining a local, non-alias target, after its source/header
+declarations. It groups declared source files, header sets and generated headers
+under `src`, `generated` or `external`, without adding files to compilation.
+Its separate automatic advisory inventory scans `.h`, `.hpp`, `.c` and `.cpp`
+files at configure time. It excludes `Test`, `Benchmarks`, `Examples` and `Tools`
+directory segments and any explicit exclusion patterns (case-insensitive).
+Scripting's existing whole-`Bindings/` exclusion is intentionally retained;
+[issue #17](https://github.com/abdes/DroidNet/issues/17) tracks its review.
+The inventory does not watch new files or replace explicit source lists: rerun
+configuration to audit a newly added file. Warnings never add or delete files.
+
+Inventory recognizes literal paths and single literal paths wrapped by
+`$<0:path>`, `$<1:path>`, `$<BUILD_INTERFACE:path>` or a single `BOOL`,
+`PLATFORM_ID` or `CONFIG` guard, such as `$<$<BOOL:${WIN32}>:Platform_win.cpp>`.
+An inactive guarded path still counts as declared. Other expressions produce an
+explicit incomplete-inventory diagnostic; the helper does not pretend to evaluate
+arbitrary nested expressions. Multi-path expression payloads are not supported.
+
+For header-only libraries, list headers directly on the native interface target
+as well as exposing the appropriate header file set. OxCo and Config already do
+this. For Visual Studio, the IDE helper sets `VS_TOOL_OVERRIDE=ClInclude` on their
+declared `.h`/`.hpp` files unless an explicit override already exists. CMake
+otherwise classifies interface-library files as generic `None` items. This keeps
+the headers explicitly represented as C++ header items in both the native project
+and its filters, with the dotted module name as the project display label.
+An `INTERFACE`-only file-set declaration does not put the headers in the native
+project's own source list. The old artificial targets used an undefined
+`header_files` variable, yielding empty projects; the native targets replace them.
+This changes IDE representation only, without adding compilation or link steps.
+See [CMake's item-type override](https://cmake.org/cmake/help/latest/prop_sf/VS_TOOL_OVERRIDE.html)
+and [Microsoft's project/filter contract](https://learn.microsoft.com/en-us/cpp/build/reference/vcxproj-filters-files).
+
+Dotted build shortcuts remain explicit and local, as in ShaderBake:
+
+```cmake
+add_custom_target(${META_MODULE_NAME} DEPENDS ${META_MODULE_TARGET})
+```
+
+This command-free dependency target lets either build name select the same
+artifact/configuration. A CMake `ALIAS` alone is not a build-tool entry point.
+Keep the executable output in a binary subdirectory, as Oxygen does, so a POSIX
+executable basename cannot collide with a same-named Ninja custom target at the
+build root.
+No global shortcut registry or auxiliary-target renaming is introduced.
+
+`test_build_helpers.py` checks metadata, all production declaration preambles,
+hierarchy isolation, argument errors, inventory exclusions and generated Visual
+Studio header projects. Set `OXYGEN_RUN_HELPER_BUILD_TESTS=1` to additionally build
+and run a C++23 shortcut fixture with Ninja, Ninja Multi-Config and Visual Studio
+on Windows, checking unchanged object/executable timestamps across both names.
+The contract CI job enables these tests on the minimum CMake version.
+
 ## Full-engine build contract
 
 Minimum tools: **CMake 4.2 and Conan 2.32**. The root CMake project and presets

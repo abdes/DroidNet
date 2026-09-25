@@ -8,7 +8,6 @@ asap_module_declare(
   MODULE_NAME "Oxygen.SceneSync"
   DESCRIPTION
     "Bridge module that synchronizes Scene observers at phase boundaries"
-  WITHOUT_VERSION_H
 )
 asap_push_module("${META_MODULE_NAME}")
 

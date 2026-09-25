@@ -17,7 +17,6 @@ AssetLoader, then renders them with Vortex and Direct3D12. DemoShell provides
 interactive model import, camera, lighting, environment, and diagnostics panels.
 Optional preview sunlight illuminates loaded scenes without directional lights.
 ]=]
-  WITHOUT_VERSION_H
 )
 
 asap_push_module("${META_MODULE_NAME}")

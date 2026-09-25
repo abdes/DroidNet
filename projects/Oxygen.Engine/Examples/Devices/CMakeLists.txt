@@ -11,8 +11,7 @@
 set(description "Sample program using oxygen::graphics device manager.")
 asap_module_declare(
   MODULE_NAME "Oxygen.Graphics.DeviceManager.Example"
-  DESCRIPTION description
-  WITHOUT_VERSION_H
+  DESCRIPTION "${description}"
 )
 asap_push_module("${META_MODULE_NAME}")
 

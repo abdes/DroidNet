@@ -8,14 +8,10 @@
 # Meta information about the this module
 # ------------------------------------------------------------------------------
 
-set(
-  description
-  "A tool to dump the contents of a PAK file and analyze it in different ways."
-)
+set(description "A tool to compile and package Direct3D12 shaders.")
 asap_module_declare(
   MODULE_NAME "Oxygen.Graphics.Direct3D12.ShaderBake"
-  DESCRIPTION description
-  WITHOUT_VERSION_H
+  DESCRIPTION "${description}"
 )
 asap_push_module("${META_MODULE_NAME}")
 
@@ -90,7 +86,7 @@ add_executable(
 )
 
 # Convenience build target: allow building by module name (matches OUTPUT_NAME)
-# in addition to the generated target name (e.g. oxygen-content-pakdump).
+# in addition to the canonical oxygen-graphics-direct3d12-shaderbake target.
 add_custom_target(${META_MODULE_NAME} DEPENDS ${META_MODULE_TARGET})
 arrange_target_files_for_ide(${META_MODULE_TARGET})
 set_target_properties(

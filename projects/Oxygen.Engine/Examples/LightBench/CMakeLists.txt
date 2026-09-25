@@ -15,7 +15,6 @@ asap_module_declare(
 A dedicated demo for validating physically based lighting and exposure.
 It provides a minimal reference scene and uses DemoShell for controls.
 ]=]
-  WITHOUT_VERSION_H
 )
 
 asap_push_module("${META_MODULE_NAME}")
