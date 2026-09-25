@@ -35,7 +35,7 @@ From `src/Oxygen/Core/Meta/Bindless.yaml`, the tool generates:
 
 ### Example
 
-**YAML Input:**
+**ABI excerpt** (a complete input also declares `meta`, `defaults` and `backends`):
 
 ```yaml
 abi:
@@ -95,14 +95,15 @@ namespace oxygen::bindless::generated {
   `Generated.RootSignature.D3D12.h`, `Generated.PipelineLayout.Vulkan.h`,
   `Generated.Meta.h`, `Generated.Strategy.D3D12.h`
 - **Generated HLSL**: `src/Oxygen/Core/Bindless/Generated.BindlessAbi.hlsl`
-- **Generated JSON**: `src/Oxygen/Core/Meta/Generated.All.json`,
-  `Generated.Strategy.D3D12.json`, `Generated.Strategy.Vulkan.json`
+- **Normalized JSON**: `src/Oxygen/Core/Meta/Generated.All.json`
+- **Backend JSON**: `src/Oxygen/Core/Meta/Generated.Strategy.D3D12.json` and
+  `Generated.Strategy.Vulkan.json`
 
 ## Usage
 
 ### Command Line Interface
 
-Run the packaged CLI from the repository root:
+Run the packaged CLI from Oxygen.Engine with the repository environment active:
 
 ```powershell
 python -m bindless_codegen.cli `
@@ -157,8 +158,8 @@ headers fails.
 
 If you prefer to run generation without running the compile-check (for a
 one-off quick generation), build only the generated files by
-invoking the Python CLI directly rather than the CMake target, or adjust CMake
-configuration in environments where the check should be skipped.
+invoking the Python CLI directly. The normal CMake generation target always
+retains the mandatory compile check.
 
 Example (build generation and compile-check via CMake):
 
@@ -209,24 +210,25 @@ BindlessCodeGen/
 **Via CTest (Recommended):**
 
 ```powershell
-# Run all tests including BindlessCodeGen:
-cmake --build --preset oxygen-ninja-debug
-ctest --preset=test-windows -C Debug --output-on-failure
+# From Oxygen.Engine, build generated headers and the ABI compile check:
+cmake --build --preset oxygen-ninja-debug --target oxygen-core_bindless_gen
 
 # Run only BindlessCodeGen tests:
-ctest --preset=test-windows -C Debug -R BindlessCodeGen_UnitTests --output-on-failure
+ctest --preset oxygen-ninja-debug -R BindlessCodeGen_UnitTests --output-on-failure
 
 # Run only YAML examples validation (CTest target: BindlessExamplesValidate):
-ctest --preset=test-windows -C Debug -R BindlessExamplesValidate --output-on-failure
+ctest --preset oxygen-ninja-debug -R BindlessExamplesValidate --output-on-failure
 
 # Run tests with specific labels:
-ctest --preset=test-windows -C Debug -L "Tools" --output-on-failure
+ctest --preset oxygen-ninja-debug -L "Tools" --output-on-failure
 ```
 
+The [examples guide](examples/README.md) describes all 11 schema-v2 examples,
+including the replacements for retired CBV-array and counter fields.
 The examples validation test runs the Python script at
 `src/Oxygen/Core/Tools/BindlessCodeGen/examples/run_validate_examples.py` to
-validate example YAML specs. If the editable install target exists, it’s set as
-an explicit dependency so the test can import the tool without extra steps.
+validate example YAML specs. Setup provisions the repository environment; CTest
+uses its selected interpreter without installing packages or building targets.
 
 **Direct pytest:**
 
@@ -234,12 +236,13 @@ an explicit dependency so the test can import the tool without extra steps.
 # From the BindlessCodeGen directory with dependencies installed:
 pytest tests/
 
-# Or from the repository root:
-pytest src/Oxygen/Core/Tools/BindlessCodeGen/tests/
+# Or from Oxygen.Engine with the repository environment active:
+python -m pytest src/Oxygen/Core/Tools/BindlessCodeGen/tests/
 ```
 
-The CTest integration automatically ensures the tool is installed before running
-tests and integrates with the project's testing infrastructure.
+Provision with `build-tree generate <profile>` or root `uv sync --locked` before
+configuring and running tests. Both `BUILD_TESTING` and `OXYGEN_BUILD_TESTS` must
+allow Oxygen tests.
 
 ### Editor Setup
 
@@ -329,9 +332,9 @@ Notes:
 {
   "$meta": {
     "source": "projects/Oxygen.Engine/src/Oxygen/Core/Meta/Bindless.yaml",
-    "source_version": "1.0.0",
-    "schema_version": "1.0.0",
-    "tool_version": "1.0.0",
+    "source_version": "2.0.0",
+    "schema_version": "2.0.0",
+    "tool_version": "1.2.2",
     "generated": "YYYY-MM-DD HH:MM:SS",
     "format": "BindlessStrategy.D3D12/1"
   },

@@ -151,86 +151,44 @@ for (uint32_t idx : view.IndexBuffer().Widened()) { /* ... */ }
 
 ## 7. Building This Module
 
-Preferred workflow: use CMake presets (they encapsulate cache variables,
-toolchain, Conan integration, and multi-config build logic). Manual commands
-are still documented as a fallback or for CI scripting.
-
-### 7.1 Preset-Based Build (Recommended)
-
-First run Conan to materialize dependencies and generate the Conan CMake
-toolchain + included preset snippet (required for both preset and manual
-workflows):
+Run from Oxygen.Engine in an initialized compiler shell. Data is part of the
+full-engine build; it is not one of the six source-embeddable reusable modules.
 
 ```powershell
-conan install . --profile:host=profiles/windows-msvc.ini --profile:build=profiles/windows-msvc.ini --output-folder=out/build --build=missing --deployer=full_deploy -s build_type=Debug
+# One-time setup, or repeat when Conan/Python dependency inputs change:
+.\tools\build-tree.ps1 generate profiles/windows-msvc.ini -Generator Ninja
+
+# Reconfigure an existing tree after CMake edits:
+.\tools\build-tree.ps1 configure oxygen-ninja-default
+
+# Build just Data and its tests:
+cmake --build --preset oxygen-ninja-debug --target oxygen-data Oxygen.Data.All.Tests Oxygen.Data.LinkTest
 ```
 
-Then configure (creates build dir, consumes Conan toolchain, sets cache vars):
+The contributor generation command enables tests. Both `BUILD_TESTING` and
+`OXYGEN_BUILD_TESTS` must permit test creation. Use the ASan profile for the
+separate ASan trees; see the [preset guide](../../../tools/presets/README.md).
+For a Release library build, select `oxygen-ninja-release` instead.
 
-```powershell
-cmake --preset windows -DOXYGEN_BUILD_TESTS=ON
-```
-
-Build (Debug):
-
-```powershell
-cmake --build --preset windows-debug --target oxygen-data Oxygen.Data.All.Tests Oxygen.Data.LinkTest
-```
-
-Build (Release):
-
-```powershell
-cmake --build --preset windows-release --target oxygen-data
-```
-
-Run tests with preset (Debug config implied by build preset):
-
-```powershell
-ctest --preset test-windows -R Oxygen.Data --output-on-failure
-```
-
-Notes:
-
-- `windows` configure preset inherits `conan-default` (see `tools/presets/*`).
-- Build presets choose configuration: `windows-debug` / `windows-release`.
-- You can still pass extra cache vars: `cmake --preset windows -DOXYGEN_BUILD_TESTS=OFF`.
-
-### 7.2 Manual (Fallback) Build
-
-Only use if you must override preset logic explicitly (e.g., experimental
-toolchain path). Equivalent to the preset steps above:
-
-```powershell
-conan install . --profile:host=profiles/windows-msvc-asan.ini --profile:build=profiles/windows-msvc-asan.ini --output-folder=out/build --build=missing --deployer=full_deploy -s build_type=Debug
-cmake -S . -B out/build -G "Ninja Multi-Config" -DCMAKE_TOOLCHAIN_FILE=out/build/conan_toolchain.cmake -DOXYGEN_BUILD_TESTS=ON
-cmake --build out/build --target oxygen-data Oxygen.Data.All.Tests Oxygen.Data.LinkTest --config Debug
-```
-
-Target names (from CMake):
-
-- Library: `oxygen-data` (alias `oxygen::data`).
-- Link test exe: `Oxygen.Data.LinkTest`.
-- Mesh tests exe: `Oxygen.Data.All.Tests` (aggregated GTest sources).
-- Historical/alt aggregated name in docs/code examples: `Mesh_tests` (older helper macro output).
+Targets are `oxygen-data` (link alias `oxygen::data`), `Oxygen.Data.LinkTest`
+and `Oxygen.Data.All.Tests`. Installed SDK and Conan applications link
+`oxygen::data`; they do not build Oxygen's development tests.
 
 ---
 
 ## 8. Running Tests
 
-After building with `-DOXYGEN_BUILD_TESTS=ON`:
+After building the selected configuration:
 
 ```powershell
-ctest --test-dir out/build --output-on-failure -C Debug -R Oxygen.Data
-# Or run specific target executable directly
-out/build/bin/Debug/Oxygen.Data.LinkTest.exe
-out/build/bin/Debug/Oxygen.Data.All.Tests.exe --gtest_filter=MeshAssetBasicTest.*
+ctest --preset oxygen-ninja-debug -R '^Oxygen\.Data\.' --output-on-failure
+# Select cases inside the aggregated executable through GoogleTest:
+.\tools\cli\oxyrun.ps1 Oxygen.Data.All.Tests -Preset oxygen-ninja-debug -NoBuild -- --gtest_filter=MeshAssetBasicTest.*
 ```
 
-Filtering examples (new exe name):
-
-```powershell
-out/build/bin/Debug/Oxygen.Data.All.Tests.exe --gtest_filter=ProceduralMeshTest.MeshValidity
-```
+CTest registers one entry per executable. A GoogleTest case name is not a CTest
+name; use `--gtest_filter` for individual cases. The launcher supplies the selected
+configuration's runtime paths without changing the caller's shell environment.
 
 ---
 
@@ -313,33 +271,17 @@ Performance tweaks (safe & optional):
 
 ## 13. Quick Reference Commands
 
-Configure + build (preset example):
+From an already configured Oxygen.Engine checkout:
 
 ```powershell
-conan install . --profile:host=profiles/windows-msvc.ini --profile:build=profiles/windows-msvc.ini --output-folder=out/build --build=missing --deployer=full_deploy -s build_type=Release
-cmake --preset windows -DOXYGEN_BUILD_TESTS=ON
-cmake --build --preset windows-release --target oxygen-data
+cmake --build --preset oxygen-ninja-release --target oxygen-data
+cmake --build --preset oxygen-ninja-debug --target Oxygen.Data.All.Tests Oxygen.Data.LinkTest
+ctest --preset oxygen-ninja-debug -R '^Oxygen\.Data\.' --output-on-failure
+.\tools\cli\oxyrun.ps1 Oxygen.Data.All.Tests -Preset oxygen-ninja-debug -NoBuild -- --gtest_filter=MeshBuilderBasicTest.*
 ```
 
-Manual fallback (Release):
-
-```powershell
-conan install . --profile:host=profiles/windows-msvc.ini --profile:build=profiles/windows-msvc.ini --output-folder=out/build --build=missing --deployer=full_deploy -s build_type=Release
-cmake -S . -B out/build -G "Ninja Multi-Config" -DCMAKE_TOOLCHAIN_FILE=out/build/conan_toolchain.cmake -DOXYGEN_BUILD_TESTS=ON
-cmake --build out/build --target oxygen-data --config Release
-```
-
-Test subset (preset):
-
-```powershell
-ctest --preset test-windows -R MeshAssetBasicTest --output-on-failure
-```
-
-Run single executable (Debug preset already built):
-
-```powershell
-out/build/bin/Debug/Oxygen.Data.All.Tests.exe --gtest_filter=MeshBuilderBasicTest.*
-```
+See [building](#7-building-this-module) for initial setup and
+[running tests](#8-running-tests) for executable-level and case-level selection.
 
 ---
 

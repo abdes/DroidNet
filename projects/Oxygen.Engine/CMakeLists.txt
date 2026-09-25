@@ -36,11 +36,6 @@ string(MAKE_C_IDENTIFIER ${META_PROJECT_NAME} META_PROJECT_ID)
 string(TOUPPER ${META_PROJECT_ID} META_PROJECT_ID)
 string(TOLOWER ${META_PROJECT_ID} META_PROJECT_ID_LOWER)
 
-# Silence redundant toolchain warnings (often caused by IDEs passing the
-# toolchain manually when it is already defined in the CMake preset).
-if(CMAKE_TOOLCHAIN_FILE)
-endif()
-
 # Declare project
 project(
   ${META_PROJECT_NAME}
@@ -142,13 +137,6 @@ if(OXYGEN_WITH_TRACY)
 endif()
 
 # ------------------------------------------------------------------------------
-# Installation Setup
-# ------------------------------------------------------------------------------
-
-# Install.cmake owns defaults and distinguishes developer deployment from Conan
-# cache packaging. Never force a caller/toolchain's prefix here.
-
-# ------------------------------------------------------------------------------
 # Testing
 # ------------------------------------------------------------------------------
 
@@ -159,7 +147,7 @@ include(CTest)
 enable_testing()
 
 # ------------------------------------------------------------------------------
-# Documentation - doxygen, sphinx/breathe/exhale
+# Documentation - Doxygen
 # ------------------------------------------------------------------------------
 
 if(OXYGEN_BUILD_DOCS)
@@ -176,12 +164,8 @@ endif()
 
 # Register general cmake commands
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/BuildHelpers.cmake")
-#include(AsapTargets)
-
-# Override the ${META_PROJECT_ID}_INSTALL option to ON/OFF to respectively force
-# install/no-install behavior for this project. This is particularly useful when
-# this project is used as a sub-project and the user publicly depends on it and
-# wants to have a self-contained install.
+# OXYGEN_INSTALL controls install rules; embedded modules default to OFF.
+# Install.cmake owns developer SDK destinations and Conan package installation.
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/Install.cmake")
 
 # ------------------------------------------------------------------------------
@@ -240,12 +224,6 @@ message(STATUS "     Build documentation: ${OXYGEN_BUILD_DOCS}")
 message(STATUS "     Address sanitizer: ${OXYGEN_WITH_ASAN}")
 message(STATUS "     Tracy profiler: ${OXYGEN_WITH_TRACY}")
 message(STATUS "     Doxygen: ${OXYGEN_WITH_DOXYGEN}")
-# message(STATUS "     Undefined behavior sanitizer: ${OXYGEN_WITH_UBSAN}")
-# message(STATUS "     Thread sanitizer: ${OXYGEN_WITH_TSAN}")
-# message(STATUS "     Valgrind: ${OXYGEN_WITH_VALGRIND}")
-# message(STATUS "     Sphinx: ${OXYGEN_WITH_SPHINX}")
-# message(STATUS "     Clang format: ${OXYGEN_WITH_CLANG_FORMAT}")
-# message(STATUS "     Clang tidy: ${OXYGEN_WITH_CLANG_TIDY}")
 message(STATUS "     CCache: ${OXYGEN_CCACHE_STATUS}")
 message(STATUS "     Configured C launcher: ${CMAKE_C_COMPILER_LAUNCHER}")
 message(STATUS "     Configured CXX launcher: ${CMAKE_CXX_COMPILER_LAUNCHER}")
@@ -281,10 +259,9 @@ if(OXYGEN_BUILD_FULL_ENGINE)
 endif()
 
 # ------------------------------------------------------------------------------
-# Code analyzers: clang-tidy, cppcheck, valgrind, sanitizers, etc...
+# Apply compiler policy to Oxygen-owned targets
 #
-# Call after sub-modules have been added so that source code files can be
-# properly collected for analysis.
+# Call after submodules have declared all targets.
 # ------------------------------------------------------------------------------
 
 oxygen_apply_directory_build_policy("${CMAKE_CURRENT_SOURCE_DIR}/src")
