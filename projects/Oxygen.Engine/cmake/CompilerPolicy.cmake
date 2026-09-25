@@ -77,6 +77,83 @@ function(oxygen_apply_build_policy target)
     )
   endif()
 
+  # /Zi and /ZI are not cacheable with MSVC ccache. Default only Oxygen-owned
+  # targets using a recognizable native ccache launcher to embedded symbols.
+  # Explicit target/toolchain choices (including an empty format) remain intact.
+  if(MSVC AND CMAKE_GENERATOR MATCHES "Ninja|Makefiles|WMake")
+    get_property(
+      _debug_format_set
+      TARGET ${target}
+      PROPERTY MSVC_DEBUG_INFORMATION_FORMAT
+      SET
+    )
+    if(NOT _debug_format_set)
+      get_target_property(_sources ${target} SOURCES)
+      get_target_property(_target_source_dir ${target} SOURCE_DIR)
+      set(_compiled_languages)
+      foreach(_source IN LISTS _sources)
+        # Policy is applied from Oxygen's root after subdirectories are processed.
+        # Resolve source names in the owning target's directory before lookup.
+        cmake_path(
+          ABSOLUTE_PATH
+          _source
+          BASE_DIRECTORY "${_target_source_dir}"
+          NORMALIZE
+        )
+        # get_property materializes lazy target_sources() entries so CMake can
+        # determine their language; get_source_file_property can return NOTFOUND.
+        get_property(
+          _header_only
+          SOURCE "${_source}"
+          TARGET_DIRECTORY ${target}
+          PROPERTY HEADER_FILE_ONLY
+        )
+        if(NOT _header_only)
+          get_property(
+            _language
+            SOURCE "${_source}"
+            TARGET_DIRECTORY ${target}
+            PROPERTY LANGUAGE
+          )
+          if(_language MATCHES "^(C|CXX)$")
+            list(APPEND _compiled_languages "${_language}")
+          endif()
+        endif()
+      endforeach()
+      list(REMOVE_DUPLICATES _compiled_languages)
+      foreach(_language IN LISTS _compiled_languages)
+        get_target_property(_launcher ${target} ${_language}_COMPILER_LAUNCHER)
+        if(_launcher)
+          list(GET _launcher 0 _program)
+          get_filename_component(_name "${_program}" NAME)
+          string(TOLOWER "${_name}" _name)
+          if(
+            _name
+              MATCHES
+              "^ccache(\\.exe)?$"
+            OR
+              (
+                CCACHE_TOOL_PATH
+                AND
+                  _program
+                    STREQUAL
+                    CCACHE_TOOL_PATH
+              )
+          )
+            set_property(
+              TARGET
+                ${target}
+              PROPERTY
+                MSVC_DEBUG_INFORMATION_FORMAT
+                  "$<$<CONFIG:Debug,RelWithDebInfo>:Embedded>"
+            )
+            break()
+          endif()
+        endif()
+      endforeach()
+    endif()
+  endif()
+
   if(NOT OXYGEN_WITH_ASAN)
     return()
   endif()

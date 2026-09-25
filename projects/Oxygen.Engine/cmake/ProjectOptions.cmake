@@ -29,7 +29,11 @@ option(
 option(OXYGEN_WITH_ASAN "Instrument code with address sanitizer." OFF)
 option(OXYGEN_WITH_TRACY "Enable Tracy profiler integration." OFF)
 option(OXYGEN_WITH_DOXYGEN "Create Doxygen API documentation targets." OFF)
-option(OXYGEN_USE_CCACHE "Enable compiler caching using ccache." OFF)
+option(
+  OXYGEN_USE_CCACHE
+  "Select installed ccache automatically when no compiler launcher is specified."
+  OFF
+)
 set(
   OXYGEN_AWAITER_STATE_CHECKER
   AUTO

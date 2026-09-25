@@ -203,7 +203,7 @@ endif()
 set(CMAKE_COMPILE_WARNING_AS_ERROR OFF)
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/CompilerPolicy.cmake")
 
-# ---- Speedup build using ccache (needs CPM) ----
+# ---- Optional native compiler-cache launchers ----
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/FasterBuild.cmake")
 
 # ------------------------------------------------------------------------------
@@ -243,7 +243,9 @@ message(STATUS "     Doxygen: ${OXYGEN_WITH_DOXYGEN}")
 # message(STATUS "     Sphinx: ${OXYGEN_WITH_SPHINX}")
 # message(STATUS "     Clang format: ${OXYGEN_WITH_CLANG_FORMAT}")
 # message(STATUS "     Clang tidy: ${OXYGEN_WITH_CLANG_TIDY}")
-message(STATUS "     CCache: ${OXYGEN_USE_CCACHE}")
+message(STATUS "     CCache: ${OXYGEN_CCACHE_STATUS}")
+message(STATUS "     Configured C launcher: ${CMAKE_C_COMPILER_LAUNCHER}")
+message(STATUS "     Configured CXX launcher: ${CMAKE_CXX_COMPILER_LAUNCHER}")
 message(STATUS "")
 
 # ------------------------------------------------------------------------------
