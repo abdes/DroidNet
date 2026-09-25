@@ -383,3 +383,14 @@ Conventions:
 2. Keep module control in module `CMakeLists.txt` by calling `oxygen_embed_json_schemas(...)` there.
 3. Keep generation logic centralized under `cmake/`.
 4. Prefer stable symbol names (`k...Schema`) and canonical schema filenames (`*.schema.json`).
+
+## OxCo awaiter checking
+
+`awaitable_state_checker=auto` enables OxCo checking in Debug, including ASan,
+and disables it in Release and RelWithDebInfo. Explicit `True` and `False`
+override the default. The equivalent CMake setting is
+`OXYGEN_AWAITER_STATE_CHECKER=AUTO|ON|OFF`. Conan prevents a CMake override from
+disagreeing with the selected recipe option. A generated `Oxygen/OxCo/Config.h`
+records the built mode, so installed headers remain consistent with the binaries
+even when the consuming application uses a different configuration name. Change
+the build option instead of defining checker macros in individual source files.

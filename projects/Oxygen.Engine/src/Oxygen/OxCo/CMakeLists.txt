@@ -31,6 +31,30 @@ find_package(asio CONFIG REQUIRED)
 add_library(${META_MODULE_TARGET} INTERFACE)
 add_library(${META_MODULE_TARGET_ALIAS} ALIAS ${META_MODULE_TARGET})
 
+# Freeze the selected mode in the installed header. A developer may consume a
+# Debug SDK from a differently named application configuration; their headers
+# must still agree with the Oxygen binaries' awaiter layout and behavior.
+set(
+  _checker_enabled
+  "$<OR:$<STREQUAL:${OXYGEN_AWAITER_STATE_CHECKER},ON>,$<AND:$<STREQUAL:${OXYGEN_AWAITER_STATE_CHECKER},AUTO>,$<CONFIG:Debug>>>"
+)
+set(_config_root "${CMAKE_CURRENT_BINARY_DIR}/config/$<CONFIG>")
+set(_config_header "${_config_root}/Oxygen/OxCo/Config.h")
+file(
+  GENERATE
+  OUTPUT
+  "${_config_header}"
+  CONTENT
+    "// Generated Oxygen configuration; use the package's build options.\n#pragma once\n#if ${_checker_enabled}\n#ifndef OXCO_AWAITER_STATE_DEBUG\n#define OXCO_AWAITER_STATE_DEBUG 1\n#endif\n#else\n#ifdef OXCO_AWAITER_STATE_DEBUG\n#error Awaiter checker override conflicts with this Oxygen build\n#endif\n#endif\n"
+)
+target_sources(
+  ${META_MODULE_TARGET}
+  INTERFACE
+    FILE_SET HEADERS
+    BASE_DIRS "${_config_root}"
+    FILES "${_config_header}"
+)
+
 set(
   OXYGEN_OXCO_HEADERS
   "asio.h"
