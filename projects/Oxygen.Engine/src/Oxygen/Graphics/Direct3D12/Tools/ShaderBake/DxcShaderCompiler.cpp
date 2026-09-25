@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/DxcShaderCompiler.h>
-
 #include <cstdint>
 #include <filesystem>
 #include <limits>
@@ -16,13 +14,11 @@
 #include <string_view>
 #include <vector>
 
-#include <windows.h>
-
-#include <unknwn.h>
-
 #include <d3dcommon.h>
 #include <dxcapi.h>
 #include <fmt/format.h>
+#include <unknwn.h>
+#include <windows.h>
 #include <wrl/client.h>
 
 #include <Oxygen/Base/Logging.h>
@@ -31,6 +27,7 @@
 #include <Oxygen/Graphics/Common/ShaderByteCode.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/CompileProfile.h>
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/DxcShaderCompiler.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/TrackingIncludeHandler.h>
 
 using Microsoft::WRL::ComPtr;
@@ -268,6 +265,17 @@ auto CompileDxc(IDxcCompiler3& compiler, IDxcIncludeHandler& include_handler,
       .diagnostics
       = LogDxcFailureReport(ctx, "Compilation failed", error_blob.Get()),
     };
+  }
+
+  // Successful compilations can still contain diagnostics. Keep these visible
+  // even when routine cache and reflection details are suppressed.
+  ComPtr<IDxcBlobUtf8> warnings;
+  ThrowOnFailed(
+    result->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&warnings), nullptr));
+  if (warnings != nullptr && warnings->GetStringLength() > 0) {
+    LOG_F(WARNING, "{}",
+      std::string_view(
+        warnings->GetStringPointer(), warnings->GetStringLength()));
   }
 
   ComPtr<IDxcBlob> output;

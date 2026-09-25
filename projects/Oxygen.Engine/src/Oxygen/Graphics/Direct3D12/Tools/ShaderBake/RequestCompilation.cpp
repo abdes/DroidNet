@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/RequestCompilation.h>
-
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
@@ -24,6 +22,7 @@
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/CompileProfile.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/DxcShaderCompiler.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Reflect.h>
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/RequestCompilation.h>
 
 using oxygen::graphics::ShaderInfo;
 
@@ -108,7 +107,7 @@ auto CompileExpandedShaderRequest(const RequestCompilerConfig& config,
     const auto action_key
       = ComputeShaderActionKey(request, config.include_dirs);
 
-    LOG_F(INFO, "  dxil={} bytes, reflection={} bytes", dxil.size(),
+    LOG_F(1, "  dxil={} bytes, reflection={} bytes", dxil.size(),
       reflection.size());
 
     return RequestCompileOutcome {

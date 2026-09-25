@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Execution.h>
-
 #include <algorithm>
 #include <stdexcept>
 #include <system_error>
@@ -17,6 +15,7 @@
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/BuildState.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/CompileProfile.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/DirtyAnalysis.h>
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Execution.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/FinalArchivePack.h>
 
 namespace oxygen::graphics::d3d12::tools::shader_bake {
@@ -237,8 +236,8 @@ auto ExecuteUpdate(const ExecutionOptions& options)
       ++dirty_count;
     }
   }
-  LOG_F(INFO, "dirty_requests={} clean_requests={} stale_requests={}",
-    dirty_count, dirty_analysis.requests.size() - dirty_count,
+  LOG_F(1, "dirty_requests={} clean_requests={} stale_requests={}", dirty_count,
+    dirty_analysis.requests.size() - dirty_count,
     dirty_analysis.stale_artifact_paths.size());
 
   std::vector<ModuleArtifact> artifacts;
@@ -251,7 +250,7 @@ auto ExecuteUpdate(const ExecutionOptions& options)
     ++index;
     const auto request_key = request_analysis.expanded_request.request_key;
     if (request_analysis.IsDirty()) {
-      LOG_F(INFO, "[dirty:{}] {}",
+      LOG_F(1, "[dirty:{}] {}",
         JoinDirtyReasons(request_analysis.dirty_reasons),
         FormatShaderLogKey(request_analysis.expanded_request.request));
       ClearRequestDiagnosticsLog(options.layout, request_key);
@@ -271,7 +270,7 @@ auto ExecuteUpdate(const ExecutionOptions& options)
       artifacts.push_back(*compile_outcome.artifact);
       ++compiled_count;
     } else {
-      LOG_F(INFO, "[clean] {}",
+      LOG_F(1, "[clean] {}",
         FormatShaderLogKey(request_analysis.expanded_request.request));
       ClearRequestDiagnosticsLog(options.layout, request_key);
       if (!request_analysis.reusable_artifact.has_value()) {
@@ -299,9 +298,9 @@ auto ExecuteUpdate(const ExecutionOptions& options)
     || (removed_stale_artifacts > 0) || dirty_analysis.final_archive_missing
     || dirty_analysis.manifest_changed;
   if (!should_repack) {
-    LOG_F(INFO, "Final archive is up to date; skipping repack");
+    LOG_F(1, "Final archive is up to date; skipping repack");
   } else {
-    LOG_F(INFO,
+    LOG_F(1,
       "Repack required: compiled_any={} removed_stale={} final_missing={} "
       "manifest_changed={}",
       compiled_count > 0, removed_stale_artifacts > 0,

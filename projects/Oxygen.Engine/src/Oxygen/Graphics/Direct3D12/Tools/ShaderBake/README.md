@@ -100,6 +100,8 @@ Legacy compatibility alias for `update`.
 - `--oxygen-include-root <path>`: optional Oxygen include root.
   Default: `src/Oxygen`
 - `--include-dir <path>`: optional extra include directory; repeatable.
+- `--verbose`: include cache hits, dirty reasons, paths, reflection details and
+  routine-check timing. The existing `-v=1` logging option also enables these.
 - `--mode dev|production`: optional policy mode.
   Default: `dev`
 
@@ -111,6 +113,22 @@ Path rules:
 - Relative paths are resolved against `--workspace-root`.
 - `--build-root` owns all ShaderBake intermediary state.
 - `--out` can be inside or outside the build tree.
+
+### Build output
+
+By default, `update` produces no output when the archive is current. Compiling a
+shader prints one progress line, and writing the archive prints its summary.
+Actual cache cleanup, warnings and errors remain visible. Compiler warnings are
+reported even when compilation succeeds.
+
+Use `ShaderBake update --verbose ...` (or `rebuild --verbose`) to inspect cache
+hits, invalidation reasons and compilation details. `inspect` retains its normal
+report output. Verbosity changes reporting only; every update still checks all
+inputs and recovers missing artifacts.
+
+The same default applies when CMake runs ShaderBake. Application arguments after
+`oxyrun --`, such as `-v=-1`, do not control the build tool. CMake's own
+`--verbose` prints build commands; it does not forward that option to ShaderBake.
 
 ### Inspect Command
 
