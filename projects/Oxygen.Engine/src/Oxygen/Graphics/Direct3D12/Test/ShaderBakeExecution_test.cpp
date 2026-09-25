@@ -18,6 +18,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Graphics/Common/ShaderLibraryIO.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/ActionKey.h>
@@ -29,6 +30,7 @@
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/FinalArchivePack.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Manifest.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedLogCapture.h>
 
 namespace {
 
@@ -308,6 +310,47 @@ NOLINT_TEST_F(ShaderBakeExecutionTest,
     / "Services" / "Environment" / "AtmosphereMultiScatteringLut.hlsl"
     / ("VortexAtmosphereMultiScatteringLutCS__" + key_hex + ".pdb");
   EXPECT_EQ(pdb_path, expected_pdb);
+}
+
+NOLINT_TEST_F(ShaderBakeExecutionTest, UnchangedUpdateIsSilentUnlessVerbose)
+{
+  const auto previous_verbosity = loguru::g_global_verbosity;
+  const oxygen::ScopeGuard restore_verbosity([previous_verbosity]() noexcept {
+    loguru::g_global_verbosity = previous_verbosity;
+  });
+  loguru::g_global_verbosity = loguru::Verbosity_INFO;
+  oxygen::testing::ScopedLogCapture capture(
+    "ShaderBakeOutput", loguru::Verbosity_1);
+
+  const auto request
+    = MakeExpandedRequest("Leaf/Quiet_PS.hlsl", "PS", ShaderType::kPixel);
+  const std::array requests { request };
+  WriteTextFile(shader_root_ / request.request.source_path,
+    "float4 PS() : SV_Target { return 1; }\n");
+  FakeCompiler compiler(
+    workspace_root_, shader_root_, include_dirs_, toolchain_hash_);
+  const auto options = MakeOptions(requests, compiler);
+  ASSERT_TRUE(ExecuteUpdate(options).has_value());
+  EXPECT_TRUE(capture.Contains("Wrote 1 modules"));
+  EXPECT_FALSE(capture.Contains("[dirty:"));
+  const auto archive_time = std::filesystem::last_write_time(out_file_);
+
+  capture.Clear();
+  const auto quiet = ExecuteUpdate(options);
+  ASSERT_TRUE(quiet.has_value());
+  EXPECT_EQ(quiet->compiled_request_count, 0U);
+  EXPECT_FALSE(quiet->repacked);
+  EXPECT_TRUE(capture.Messages().empty());
+
+  loguru::g_global_verbosity = loguru::Verbosity_1;
+  const auto verbose = ExecuteUpdate(options);
+  ASSERT_TRUE(verbose.has_value());
+  EXPECT_EQ(verbose->compiled_request_count, 0U);
+  EXPECT_FALSE(verbose->repacked);
+  EXPECT_TRUE(capture.Contains("[clean]"));
+  EXPECT_TRUE(capture.Contains("skipping repack"));
+  EXPECT_EQ(std::filesystem::last_write_time(out_file_), archive_time);
+  EXPECT_EQ(compiler.CompileCount(request.request_key), 1U);
 }
 
 NOLINT_TEST_F(ShaderBakeExecutionTest, UpdateRecompilesOnlyEditedLeafRequest)

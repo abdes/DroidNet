@@ -55,12 +55,12 @@ namespace {
 
 auto BakeShaderLibrary(const BakeArgs& args) -> int
 {
-  LOG_SCOPE_F(INFO, "ShaderBake");
+  LOG_SCOPE_F(1, "ShaderBake");
 
   const auto layout = GetBuildRootLayout(args.build_root);
 
   if (args.command == ShaderBakeCommand::kCleanCache) {
-    LOG_SCOPE_F(INFO, "ShaderBakeCleanCache");
+    LOG_SCOPE_F(1, "ShaderBakeCleanCache");
     LOG_F(INFO, "Cleaning ShaderBake cache under {}",
       ToUtf8PathString(layout.root));
     ClearCache(layout);
@@ -71,13 +71,13 @@ auto BakeShaderLibrary(const BakeArgs& args) -> int
   ResetTempDirectory(layout);
   RemoveLegacyDebugExportTree(layout);
 
-  LOG_F(INFO, "command={} mode={} build_root={} out={}",
+  LOG_F(1, "command={} mode={} build_root={} out={}",
     args.command == ShaderBakeCommand::kRebuild ? "rebuild" : "update",
     ModeToString(args.mode), ToUtf8PathString(args.build_root),
     ToUtf8PathString(args.out_file));
 
   const auto expanded_requests = ExpandShaderCatalog(std::span(kEngineShaders));
-  LOG_F(INFO, "expanded_requests={}", expanded_requests.size());
+  LOG_F(1, "expanded_requests={}", expanded_requests.size());
   const uint64_t toolchain_hash = ComputeToolchainHash();
   auto include_dirs = BuildIncludeDirs(args);
   const ExecutionOptions options {

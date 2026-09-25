@@ -11,21 +11,18 @@
 #include <string>
 #include <vector>
 
+#include <d3d12shader.h>
+#include <dxcapi.h>
 #include <unknwn.h>
 #include <windows.h>
 #include <wrl/client.h>
 
-#include <d3d12shader.h>
-
-#include <dxcapi.h>
-
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Windows/ComError.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Reflect.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Writer.h>
-
-#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Reflect.h>
 
 using Microsoft::WRL::ComPtr;
 
@@ -210,7 +207,7 @@ auto ExtractAndSerializeReflection(const oxygen::graphics::ShaderInfo& shader,
   const auto bytes = stream.Data();
   std::vector<std::byte> out(bytes.begin(), bytes.end());
 
-  LOG_F(INFO, "Reflection: {} resources", desc.BoundResources);
+  LOG_F(1, "Reflection: {} resources", desc.BoundResources);
   return out;
 }
 

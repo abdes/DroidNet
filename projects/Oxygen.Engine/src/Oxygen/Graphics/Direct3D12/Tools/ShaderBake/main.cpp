@@ -59,6 +59,7 @@ using oxygen::graphics::d3d12::tools::shader_bake::ShaderBakeCommand;
 using oxygen::graphics::d3d12::tools::shader_bake::ShaderBakeMode;
 
 struct BakeCliStorage {
+  bool verbose { false };
   std::string workspace_root_string;
   std::string build_root_string;
   std::string out_file_string;
@@ -84,6 +85,13 @@ auto AddBakeOptions(
   using namespace oxygen::clap;
 
   command
+    .WithOption(OptionBuilder("verbose")
+        .Long("verbose")
+        .About("Show cache checks, dirty reasons and compilation details.")
+        .WithValue<bool>()
+        .StoreTo(&storage.verbose)
+        .DefaultValue(false)
+        .Build())
     .WithOption(OptionBuilder("workspace_root")
         .Long("workspace-root")
         .About("Workspace root (repo root).")
@@ -306,6 +314,10 @@ auto GetBakeCommand(const oxygen::clap::CommandLineContext& context)
 auto RunBakeCommand(const oxygen::clap::CommandLineContext& context,
   const BakeCliStorage& storage) -> int
 {
+  if (storage.verbose) {
+    loguru::g_global_verbosity = std::max<loguru::Verbosity>(
+      loguru::g_global_verbosity, loguru::Verbosity_1);
+  }
   const auto command = GetBakeCommand(context);
   const auto bake_args = ParseBakeArgs(storage, context, command);
   return oxygen::graphics::d3d12::tools::shader_bake::BakeShaderLibrary(
