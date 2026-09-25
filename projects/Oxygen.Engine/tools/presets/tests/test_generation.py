@@ -27,7 +27,8 @@ class PresetGenerationTests(unittest.TestCase):
                 f"spec = importlib.util.spec_from_file_location('oxygen_recipe', {str(recipe)!r})\n"
                 "module = importlib.util.module_from_spec(spec)\nspec.loader.exec_module(module)\n"
                 "class PolicyFixture(module.OxygenConan):\n"
-                "    def requirements(self):\n        pass\n", encoding="utf-8",
+                "    def requirements(self):\n        pass\n"
+                "    def build_requirements(self): pass\n", encoding="utf-8",
             )
             (root / "VERSION").write_text("0.1.0\n", encoding="utf-8")
             shutil.copyfile(ENGINE / "CMakePresets.json", root / "CMakePresets.json")
@@ -103,6 +104,7 @@ class PresetGenerationTests(unittest.TestCase):
         configure = {p["name"]: p for p in data["configurePresets"]}
         self.assertEqual(configure["oxygen-configure-defaults"]["cacheVariables"], {
             "CMAKE_EXPORT_COMPILE_COMMANDS": "ON", "OXYGEN_USE_CCACHE": "ON",
+            "CMAKE_INTERMEDIATE_DIR_STRATEGY": "SHORT",
         })
         self.assertEqual(configure["oxygen-windows-defaults"]["cacheVariables"], {"OXYGEN_PHYSICS_BACKEND": "jolt"})
         self.assertEqual(configure["oxygen-posix-defaults"]["installDir"], "${sourceDir}/out/install")
@@ -130,7 +132,7 @@ class PresetGenerationTests(unittest.TestCase):
                 (root / "tools").mkdir()
                 (root / "caller").mkdir()
                 shutil.copyfile(ENGINE / "tools/generate-builds.ps1", root / "tools/generate-builds.ps1")
-                (root / "profile.ini").write_text("[settings]\nsanitizer=" + ("asan" if asan else "None") + "\n", encoding="utf-8")
+                (root / "profile.ini").write_text("[conf]\nuser.oxygen:sanitizer=" + ("asan" if asan else "none") + "\n", encoding="utf-8")
                 wrapper = root / "invoke.ps1"
                 wrapper.write_text(
                     "$global:CallLog = Join-Path $PSScriptRoot 'calls.jsonl'\n"
@@ -138,7 +140,7 @@ class PresetGenerationTests(unittest.TestCase):
                     "function global:conan {\n"
                     "  @{ tool='conan'; cwd=$PWD.Path; arguments=@($args) } | ConvertTo-Json -Compress | Add-Content $global:CallLog\n"
                     "  $global:LASTEXITCODE = if ($global:FailTool -eq 'conan') { 37 } else { 0 }\n"
-                    f"  if ($args[0] -eq 'profile') {{ '{{\"host\":{{\"settings\":{{\"sanitizer\":\"{'asan' if asan else 'None'}\"}}}}}}' }}\n"
+                    f"  if ($args[0] -eq 'profile') {{ '{{\"host\":{{\"conf\":{{\"user.oxygen:sanitizer\":\"{'asan' if asan else 'none'}\"}}}}}}' }}\n"
                     "}\n"
                     "function global:cmake {\n"
                     "  @{ tool='cmake'; cwd=$PWD.Path; arguments=@($args) } | ConvertTo-Json -Compress | Add-Content $global:CallLog\n"
@@ -207,7 +209,8 @@ class PresetGenerationTests(unittest.TestCase):
                 "spec.loader.exec_module(module)\n"
                 "class PresetFixture(module.OxygenConan):\n"
                 "    def requirements(self):\n"
-                "        pass\n",
+                "        pass\n"
+                "    def build_requirements(self): pass\n",
                 encoding="utf-8",
             )
             (root / "VERSION").write_text("0.1.0\n", encoding="utf-8")
@@ -277,6 +280,7 @@ class PresetGenerationTests(unittest.TestCase):
             f"--profile:host={profile}", f"--profile:build={profile}",
             "-s", f"build_type={config}",
             "-o", f"with_tracy={tracy}", "-o", f"with_asan={asan}",
+            "-o", "&:tests=True",
             "-c", f"tools.cmake.cmaketoolchain:generator={generator}",
         ], root)
 

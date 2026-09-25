@@ -165,6 +165,8 @@ function(oxygen_finalize_install)
     return()
   endif()
   list(REMOVE_DUPLICATES OXYGEN_INSTALLED_MODULES)
+  include("${CMAKE_CURRENT_FUNCTION_LIST_DIR}/ConanMetadata.cmake")
+  oxygen_generate_conan_metadata()
   # Conan's graph produces these rules per configuration. Their destinations are
   # relative; installed consumers never load the producer's Conan toolchain.
   if(NOT OXYGEN_CONAN_PACKAGE_BUILD AND OXYGEN_SDK_DEPENDENCY_DIR)

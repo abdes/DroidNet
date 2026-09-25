@@ -27,7 +27,7 @@ class SdkGeneratorTests(CommandTests):
             command = [CONAN, "install", str(recipe),
                        "-pr:h", str(ENGINE / "profiles/windows-msvc.ini"),
                        "-pr:b", str(ENGINE / "profiles/windows-msvc.ini"),
-                       "-s", "build_type=Debug", "-o", "shared=True",
+                       "-s", "build_type=Debug", "-o", "shared=False", "-o", "with_tracy=True",
                        "-o", "tools=False", "-o", "tests=False", "-o", "examples=False",
                        "-o", "benchmarks=False", "-o", "docs=False",
                        "-c", "tools.cmake.cmaketoolchain:generator=Ninja Multi-Config",
@@ -36,11 +36,11 @@ class SdkGeneratorTests(CommandTests):
                 command += ["-c", "tools.cmake.cmakedeps:new=will_break_next"]
             deploy = root / "deployed dependencies"
             command += [f"--deployer-folder={deploy.as_posix()}",
-                        "--deployer-package=Oxygen/" + (ENGINE / "VERSION").read_text().strip()]
+                        "--deployer-package=oxygen/" + (ENGINE / "VERSION").read_text().strip()]
             self.run_command(command, root)
             self.assertTrue((deploy / "Debug/bin/SDL3.dll").is_file())
             self.assertEqual(list((deploy / "Debug/bin").rglob("*.exe")), [])
-            rules = recipe / "out/build-ninja/generators/oxygen-sdk"
+            rules = recipe / "out/build-tracy-ninja/generators/oxygen-sdk"
             libdir = "lib/native" if modern else "lib"
             (root / "CMakeLists.txt").write_text(f'''cmake_minimum_required(VERSION 4.2)
 project(SdkProbe VERSION 1.0.0 LANGUAGES NONE)

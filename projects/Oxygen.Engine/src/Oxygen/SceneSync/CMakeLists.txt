@@ -57,6 +57,7 @@ target_compile_features(${META_MODULE_TARGET} PUBLIC cxx_std_20)
 target_compile_definitions(
   ${META_MODULE_TARGET}
   PRIVATE
+  PUBLIC
     $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXGN_SCNSYNC_STATIC>
 )
 

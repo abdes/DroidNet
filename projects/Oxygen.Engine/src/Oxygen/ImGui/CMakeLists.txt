@@ -85,6 +85,7 @@ target_compile_definitions(
   ${META_MODULE_TARGET}
   PRIVATE
     OXYGEN_IMGUI_USE_DARK_THEME
+  PUBLIC
     $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXGN_IMGUI_STATIC>
 )
 

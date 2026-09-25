@@ -62,6 +62,8 @@ set(
   "Fluent/OptionBuilder.h"
   "Fluent/OptionValueBuilder.h"
   "Fluent/PositionalOptionBuilder.h"
+  "Internal/Errors.h"
+  "Internal/ValueDescriptor.h"
   "Parser/Context.h"
   "Parser/Events.h"
   "Parser/Parser.h"
@@ -82,9 +84,7 @@ set(
   "Internal/Args.cpp"
   "Internal/Args.h"
   "Internal/Errors.cpp"
-  "Internal/Errors.h"
   "Internal/StyledWrap.h"
-  "Internal/ValueDescriptor.h"
 )
 
 target_sources(

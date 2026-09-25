@@ -172,7 +172,10 @@ class ProvenanceTests(ProvenanceFixture):
             'class Fixture(module.OxygenConan):\n'
             '    name = "oxygen-provenance-fixture"\n'
             '    settings = ()\n'
-            '    def requirements(self): pass\n', encoding="utf-8",
+            '    def requirements(self): pass\n'
+            '    def build_requirements(self): pass\n'
+            '    def _package_component_metadata(self): pass\n'
+            '    def package_info(self): pass\n', encoding="utf-8",
         )
         self.commit()
         environment = {**os.environ, "CONAN_HOME": str(self.root / "conan-cache")}
@@ -214,7 +217,10 @@ class ProvenanceTests(ProvenanceFixture):
             f'spec = importlib.util.spec_from_file_location("oxygen_recipe", {str(ENGINE / "conanfile.py")!r})\n'
             'module = importlib.util.module_from_spec(spec)\nspec.loader.exec_module(module)\n'
             'class Fixture(module.OxygenConan):\n'
-            '    def requirements(self): pass\n', encoding="utf-8",
+            '    def requirements(self): pass\n'
+            '    def build_requirements(self): pass\n'
+            '    def _package_component_metadata(self): pass\n'
+            '    def package_info(self): pass\n', encoding="utf-8",
         )
         shutil.copyfile(ENGINE / "CMakePresets.json", self.source / "CMakePresets.json")
         (self.source / ".gitignore").write_text("out/\nCMakeUserPresets.json\n")
@@ -343,7 +349,10 @@ class VersionBuildTests(ProvenanceFixture):
             'class Fixture(module.OxygenConan):\n'
             '    name = "oxygen-provenance-fixture"\n'
             '    exports_sources = (*module.OxygenConan.exports_sources, "version.h.in", "main.cpp")\n'
-            '    def requirements(self): pass\n', encoding="utf-8",
+            '    def requirements(self): pass\n'
+            '    def build_requirements(self): pass\n'
+            '    def _package_component_metadata(self): pass\n'
+            '    def package_info(self): pass\n', encoding="utf-8",
         )
         revision = self.commit()
         home = self.root / "conan-cache"

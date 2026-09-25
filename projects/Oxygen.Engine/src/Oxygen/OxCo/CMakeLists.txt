@@ -169,9 +169,9 @@ set_target_properties(
 
 if(OXYGEN_BUILD_TESTS)
   add_subdirectory("Test")
-  if(OXYGEN_BUILD_BENCHMARKS)
-    add_subdirectory("Benchmarks")
-  endif()
+endif()
+if(OXYGEN_BUILD_BENCHMARKS)
+  add_subdirectory("Benchmarks")
 endif()
 
 # ------------------------------------------------------------------------------

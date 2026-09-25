@@ -21,7 +21,7 @@ Conan build mode passed to 'conan install' (default: "missing").
 Output folder for deployment artifacts (default: "out/install").
 
 .PARAMETER DeployerPackage
-Deployer package name (default: "Oxygen/0.1.0").
+Deployer package name (default: "oxygen/0.1.0").
 
 .PARAMETER NoClean
 Do not clean existing build directories.
@@ -49,7 +49,7 @@ param(
     [Parameter(Position = 0)][string]$BuildProfile,
     [string]$Build = "missing",
     [string]$DeployerFolder = "out/install",
-    [string]$DeployerPackage = "Oxygen/0.1.0",
+    [string]$DeployerPackage = "oxygen/0.1.0",
     [switch]$NoClean,
     [switch]$WithTracy,
     [ValidateSet('All', 'Ninja', 'VisualStudio')][string]$Generator = 'All'
@@ -66,7 +66,7 @@ function Show-Usage {
     Write-Host "  profile             Path to Conan profile used for both host and build (required, positional)"
     Write-Host "  -Build              Conan build mode (default: missing)"
     Write-Host "  -DeployerFolder     Deployer output folder (default: out/install)"
-    Write-Host "  -DeployerPackage    Deployer package (default: Oxygen/0.1.0)"
+    Write-Host "  -DeployerPackage    Deployer package (default: oxygen/0.1.0)"
     Write-Host "  -NoClean            Do not clean existing build directories"
     Write-Host "  -WithTracy          Generate Tracy build trees; keep standard trees"
     Write-Host "  -Generator          All (default), Ninja, or VisualStudio"
@@ -137,7 +137,7 @@ try {
 } finally {
     Pop-Location
 }
-$isAsan = $resolvedProfile.host.settings.sanitizer -eq 'asan'
+$isAsan = $resolvedProfile.host.conf.'user.oxygen:sanitizer' -eq 'asan'
 
 $suffix = if ($isAsan) { "asan-" } else { "" }
 $prefix = if ($WithTracy) { 'tracy-' } else { '' }
@@ -178,6 +178,9 @@ $conanBaseArgs = @(
     "--deployer-folder=$DeployerFolder",
     "--deployer-package=$DeployerPackage",
     "-o", "with_tracy=$([bool]$WithTracy)",
+    # This is the contributor entry point. Dependency consumers default these off.
+    "-o", "&:tools=True", "-o", "&:tests=True", "-o", "&:benchmarks=True",
+    "-o", "&:examples=True", "-o", "&:docs=True",
     # NOTE: CMakeConfigDeps is required for multi-config generators (Ninja Multi-Config, Visual Studio).
     # Conan only generates Debug/Release packages, but multi-config generators (especially Ninja)
     # may request other configurations (RelWithDebInfo, MinSizeRel, etc.). CMakeDeps cannot map

@@ -132,7 +132,7 @@ class RecipeContractTests(CommandTests):
     def test_validation_and_package_scoped_language(self):
         cases = (
             ([], None),
-            (["-s", "Oxygen/*:compiler.cppstd=20"], "C++ standard"),
+            (["-s", "oxygen/*:compiler.cppstd=20"], "C++ standard"),
             (["-s", "compiler.version=194"], "requires MSVC 19.50"),
             (["-s", "compiler=clang", "-s", "compiler.version=18"], "requires MSVC 19.50"),
             (["-s", "arch=x86"], "requires Windows x64"),

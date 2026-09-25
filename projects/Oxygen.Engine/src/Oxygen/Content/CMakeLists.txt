@@ -148,6 +148,7 @@ target_compile_options(
 target_compile_definitions(
   ${META_MODULE_TARGET}
   PRIVATE
+  PUBLIC
     $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXGN_CNTT_STATIC>
 )
 
