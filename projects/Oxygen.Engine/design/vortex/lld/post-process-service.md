@@ -1911,6 +1911,12 @@ The transport/history substep is qualified by the 74-frame native fixture and
 GPU binding audits recorded in the implementation tracker. Local product/image
 and direct-product meter checks consume this tail through evaluator byte 84;
 FP32 recovery retains uncertainty until its history permits qualification.
+Fog temporal reuse distinguishes candidate rejection (completed-status bit 2)
+from producer-origin failure (bit 16). A rejected half-precision candidate does
+not invalidate already produced history: its error bounds continue through
+FP32 recovery. Producer failure still rejects history, as do invalid error
+certificates. `FogErrorBoundsContainRepeatedHalfHistoryAndSurviveFloatRecovery`
+qualifies both retained uncertainty and rejection/recovery after nonfinite input.
 The complete SceneColor envelope now combines these retained bounds with sampled
 consumer composition, coverage and display/meter checks, qualified in EX05-15.
 Production format switching remains EX05-17; producer-domain completion is EX05-16.
@@ -1960,6 +1966,23 @@ an upstream write failure. The 80-byte completed-status prefix and offsets are u
 Sky-view uses existing constant padding at bytes 40/44 for status UAV and FP16
 store flag; camera AP uses bytes 88/108; volumetric fog uses bytes 532/536.
 The flag follows the actual destination format, not an inferred exposure mode.
+
+## DemoShell authoring and test boundaries
+
+DemoShell's panels and `pp.*` console commands use the same validated
+`PostProcessSettingsService`. Console edits target an explicit scene revision;
+seed/remeter requests target published persistent exposure-owner handles.
+Authored acceptance is distinct from renderer capture, mask readiness and
+transition acknowledgement. Commands never write GPU state or replace a
+producer's per-view override. Ordinary commands remain available in Release.
+See [the command contract](../../../Examples/DemoShell/Console.md).
+
+EX08.2's real-app widget driver and fixtures are compiled only with the explicit
+UI-test option. They reuse the existing ImGui context and settings owners; they
+add no production readback or measurement channel. Loader setup and renderer
+inspection retain their engine-thread requirement. Debug/Release qualification,
+ordinary-build isolation and final user acceptance are recorded in
+[EX10 closeout](../plan/EX10-completion.md).
 
 ## Unified solve controls (slice 4 implementation)
 

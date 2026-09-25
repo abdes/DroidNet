@@ -1,0 +1,12 @@
+{
+  "preset": "point-falloff",
+  "pid": 54812,
+  "window": 78384470,
+  "extent": [
+    1920,
+    1080
+  ],
+  "settle_seconds": 5,
+  "method": "native visible client-area screenshot",
+  "path": "design\\vortex\\plan\\validation\\ex09-completion-20260925\\preset-overlay-final\\point-falloff.png"
+}

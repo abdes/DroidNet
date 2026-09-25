@@ -1,0 +1,12 @@
+{
+  "preset": "auto-adaptation",
+  "pid": 89332,
+  "window": 72881652,
+  "extent": [
+    1920,
+    1080
+  ],
+  "settle_seconds": 18,
+  "method": "native visible client-area screenshot",
+  "path": "design\\vortex\\plan\\validation\\ex09-completion-20260925\\preset-overlay\\auto-adaptation.png"
+}

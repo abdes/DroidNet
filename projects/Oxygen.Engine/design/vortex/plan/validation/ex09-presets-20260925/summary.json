@@ -1,0 +1,47 @@
+{
+  "status": "native_qualified_visual_pending",
+  "build_tree": "out/build-ninja",
+  "tracy": false,
+  "debug": {
+    "tests": 13,
+    "failures": 0
+  },
+  "release": {
+    "suite_tests": 13,
+    "initial_failures": 1,
+    "corrected_case": "AutoPresetLightStepsPreserveHistoryAndAdaptBothWays",
+    "targeted_rerun_passed": true,
+    "qualified_distinct_tests": 13
+  },
+  "note": "The initial step oracle assumed perfect histogram scale invariance. The corrected test independently reintegrates each stepped HDR input at the unchanged numerical tolerance. No exposure solver was changed. Unaffected passing Release cases were credited.",
+  "raw_sha256": {
+    "lightbench-ex09-all-debug.json.gz": "f85c283d904b315332307ff2290a4569f6a29599f1763bc1f4570b5f1d1c3c5a",
+    "lightbench-ex09-all-debug.log.gz": "1a0cd2998248a96a2742dba23f482ee0a4668d880410591add292295ea15e7dd",
+    "lightbench-ex09-all-release.json.gz": "a06a5f1b07e920ccbbc7e29f542847ade4c5b3c2e0765f1320fb9788d93c5ebb",
+    "lightbench-ex09-all-release.log.gz": "97fcd4a085cabc85c48fe212c9309149d9c485d63f41445a3844d886600c6490",
+    "lightbench-ex09-steps-release.json.gz": "974f8acc9fc1f5cb47d4807f407c012f8e35117cbec2bdd57bfa6f8910a8858d",
+    "lightbench-ex09-steps-release.log.gz": "a2ced2d3f31b99b984803ed5824acf7de2273f078c76b2e6aaf7536cf58dd64d",
+    "lightbench-ex09-settings-release.json.gz": "c4e936d491346c89f3f4ad35bcc8dd7d2e63869bcf834ea2fa3d402c2e3291cc",
+    "lightbench-ex09-settings-release.log.gz": "486a784e165d4dd16f286a5f9c080cd458dee42f40d8db729259c6fb2b739ba4",
+    "lightbench-ex09-presets-release.json.gz": "50858a2abf3375dfec385d2e3598836cadd57324197c350b92645cc8e3c29588",
+    "lightbench-ex09-presets-release.log.gz": "868f3bac37297faa73b5d298570cc2b7625f340c010e09509737bdaca5c89e05"
+  },
+  "source_sha256": {
+    "Examples/LightBench/demo_settings_indoor.json": "f96df1369481b107003ea1c1583e7f7914f16ed268b91ff49cdefcfae3f7efec",
+    "Examples/LightBench/lightbench-settings.schema.json": "be8fbb4e83a6827176d7f2bb5eac99b89e494a1f8ad8aa24b70695eb635fe7b8",
+    "Examples/LightBench/LightBenchPanel.cpp": "c87aa0af132972c784994d4cd7f1e83149de4f67bfaa4723fc5f93cce4b5a411",
+    "Examples/LightBench/LightBenchPanel.h": "67dcf855a717afc5523031916481200315684fcb6e927333be6a09a59f9ba9e5",
+    "Examples/LightBench/LightBenchSettings.cpp": "da6513ca28eb56ff4c35e6fcd3f008d866a153bb8928cbba33e6d6c33026d77b",
+    "Examples/LightBench/LightBenchSettings.h": "5c8d1355ef30ffcb53c44261ef3e42ae1ecf6b4e3a0e1a20240aa44ff9263933",
+    "Examples/LightBench/LightScene.cpp": "7d8f6e850bcb6923abeb5d9687047e16c02a5bc21654d7c2fc3a20915f34d4e7",
+    "Examples/LightBench/LightScene.h": "56ad038d39d11d23373a7551b100138affcea11925c453ac12ea72675b4521e6",
+    "Examples/LightBench/MainModule.cpp": "0c08c469ac06e4e63d3d54cf391a3e70e64be35755c31e32e40a347bf6c97ccb",
+    "Examples/LightBench/MainModule.h": "da1a580e6ec979287a9e9fa48aea1929911d2c64f38dff1d0dac24487753db2a",
+    "Examples/LightBench/main_impl.cpp": "9297ebc8533e64b9d5d3c547c64253770e40ca085b885f4a6f89779e3360024d",
+    "Examples/LightBench/ReferenceScene.h": "82c4b2f65888d9974ff72e56356ee55483a35042465f582e6f4bdfaf14f1b8a5",
+    "Examples/LightBench/Test/Reference_test.cpp": "6771526100f3f6d3bf6ae6003da24f0b34d528961e27be5f36ca4afecc9faa6b",
+    "Examples/LightBench/Test/Settings_test.cpp": "c3244fd99fade11fd14568ea0dda55c1daa2d2368297c529f86a004a3c5d4b2a",
+    "Examples/LightBench/Test/Data/auto-full-scene.json": "7de2ab6617e5b5bf9c7999f1a3f041ed62af92267cfe75abcd6dffa41f0ffb8e"
+  },
+  "release_executable_sha256": "92ebbf38762f2c3b721ce8eb064347a4ebeedad2f37d1eba89f589485dfe6b93"
+}

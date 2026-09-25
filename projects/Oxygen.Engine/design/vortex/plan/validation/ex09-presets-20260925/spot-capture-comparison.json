@@ -1,0 +1,8 @@
+{
+  "pixel_count": 502652,
+  "maximum_ideal_difference_8bit_codes": 1.5405469732596373,
+  "mean_ideal_difference_8bit_codes": 0.32607713620186146,
+  "inner_radius_m": 0.8038475772933681,
+  "outer_radius_m": 1.7320508075688772,
+  "note": "Screenshot comparison includes material packing, dithering, display quantization and pixel registration. Native HDR tests carry the numerical acceptance budget."
+}

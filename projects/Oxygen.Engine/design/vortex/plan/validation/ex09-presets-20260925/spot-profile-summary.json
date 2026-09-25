@@ -1,0 +1,17 @@
+{
+  "release": {
+    "tests": 2,
+    "failures": 0,
+    "timestamp": "2026-09-25T04:32:24Z",
+    "json_sha256": "43df4928f9824c7bc13c17ee771a4e3468c8d2403c0f3acb9095745333924edb",
+    "log_sha256": "9b9fd36b6c0355963406bb4b63c44cea93367b34b3f73c062d598208790d144c"
+  },
+  "debug": {
+    "tests": 2,
+    "failures": 0,
+    "timestamp": "2026-09-25T04:33:05Z",
+    "json_sha256": "1d3e9bf1cc457966e633b5294b41380fdeec33cff7ea65af38829d54d21ed716",
+    "log_sha256": "68ae35f675432f19988e1a1101fc6f454a449739d802cd5d7374947ead9715ae"
+  },
+  "test_source_sha256": "f51f9d8e2562130cd55fd9dc9bc690f97aa321245781144b3c7d29f8b92f7b40"
+}

@@ -1,0 +1,166 @@
+{
+  "date": "2026-09-25",
+  "build_tree": "out/build-ninja",
+  "tracy": false,
+  "commit": null,
+  "disposition": "Uncommitted for user code review; integrated UI acceptance remains open.",
+  "results": [
+    {
+      "configuration": "debug",
+      "suite": "console",
+      "passed": 50,
+      "timestamp": "2026-09-25T12:49:47Z",
+      "results": {
+        "path": "ex081-console-review-debug.json.gz",
+        "uncompressed_sha256": "98f00dfebebc7854ab77c6f4dd360bbf09552a6f9e5a5c7ebe369d9ff1470123"
+      },
+      "log": {
+        "path": "ex081-console-review-debug.log.gz",
+        "uncompressed_sha256": "7a4643ede3d7e5d190033bceb923a7c430a7fcf0c2792b0ca1221eccbdaeca89"
+      }
+    },
+    {
+      "configuration": "debug",
+      "suite": "bindings",
+      "passed": 7,
+      "timestamp": "2026-09-25T12:49:47Z",
+      "results": {
+        "path": "ex081-bindings-review-debug.json.gz",
+        "uncompressed_sha256": "72e8feaa2a32f051149061e7df6b4fcc165800e3bb4aab92d30f553d2280008d"
+      },
+      "log": {
+        "path": "ex081-bindings-review-debug.log.gz",
+        "uncompressed_sha256": "e1e3f1074fe3004af01c228786388bd2dc672a888ac00d9c75e89f68a664a982"
+      }
+    },
+    {
+      "configuration": "debug",
+      "suite": "settings",
+      "passed": 7,
+      "timestamp": "2026-09-25T12:49:47Z",
+      "results": {
+        "path": "ex081-settings-review-debug.json.gz",
+        "uncompressed_sha256": "9aad2e7c35546a58cc072c14bc2788f281c3b86bdc3436027e3baa28888c3ec6"
+      },
+      "log": {
+        "path": "ex081-settings-review-debug.log.gz",
+        "uncompressed_sha256": "83b27f366107a02f75336470eda79ec471825d873fd4eab0cc7bb09d0cac9227"
+      }
+    },
+    {
+      "configuration": "debug",
+      "suite": "lightbench",
+      "passed": 2,
+      "timestamp": "2026-09-25T12:49:47Z",
+      "results": {
+        "path": "ex081-lightbench-review-debug.json.gz",
+        "uncompressed_sha256": "63aa9aa82bb693fb94a78b652cd71b3bf0b5d727fc62c288caa67d30b6161673"
+      },
+      "log": {
+        "path": "ex081-lightbench-review-debug.log.gz",
+        "uncompressed_sha256": "c1d09c43532e728c30bd2ab26204086106da77266656901a5485c2ebad8750e6"
+      }
+    },
+    {
+      "configuration": "release",
+      "suite": "console",
+      "passed": 50,
+      "timestamp": "2026-09-25T12:49:48Z",
+      "results": {
+        "path": "ex081-console-review-release.json.gz",
+        "uncompressed_sha256": "05404d6d75d2e6aab8c1d505dc5d814c5f41d71250984a8755c0bb15b34fd6b2"
+      },
+      "log": {
+        "path": "ex081-console-review-release.log.gz",
+        "uncompressed_sha256": "381cde91bff42e68b9adc36b219659c61c1b61080b82a6e349b954397a4beaef"
+      }
+    },
+    {
+      "configuration": "release",
+      "suite": "bindings",
+      "passed": 7,
+      "timestamp": "2026-09-25T12:49:48Z",
+      "results": {
+        "path": "ex081-bindings-review-release.json.gz",
+        "uncompressed_sha256": "972de37c80041048f18f7d0a4709980eb28bb03e4639bdfca236ade8b31b011e"
+      },
+      "log": {
+        "path": "ex081-bindings-review-release.log.gz",
+        "uncompressed_sha256": "5ff190089d870272ad5f6c0b6f7572fc1847ebdce9e76040aaf9604f467a22a7"
+      }
+    },
+    {
+      "configuration": "release",
+      "suite": "settings",
+      "passed": 7,
+      "timestamp": "2026-09-25T12:49:48Z",
+      "results": {
+        "path": "ex081-settings-review-release.json.gz",
+        "uncompressed_sha256": "dcd87e855640fa169a870a6c8f5e70fee75b3b44441c272638571f54ce0017ce"
+      },
+      "log": {
+        "path": "ex081-settings-review-release.log.gz",
+        "uncompressed_sha256": "29370c1638e7267428b8b475aa1bffddfbe6dbee1253e11dbdd6a18e8071ddfe"
+      }
+    },
+    {
+      "configuration": "release",
+      "suite": "lightbench",
+      "passed": 2,
+      "timestamp": "2026-09-25T12:49:48Z",
+      "results": {
+        "path": "ex081-lightbench-review-release.json.gz",
+        "uncompressed_sha256": "2b5addff9549b7b28d8bc0e3e99b9c170527303881b13c48888e251621ddaa1e"
+      },
+      "log": {
+        "path": "ex081-lightbench-review-release.log.gz",
+        "uncompressed_sha256": "32fef6113fb486f0fae03a050f16ef8af4d486f63326acf853f6c9987f3964fb"
+      }
+    }
+  ],
+  "source_sha256": {
+    "src/Oxygen/Console/Console.cpp": "36aa23c6ee870ee9f6e836a2b0a01f09c43651d2c5b0cacdfdfbc17a324663ac",
+    "src/Oxygen/Console/Console.h": "2dabeabe311582c4ccc0edb276e9beb307365174f68ec52bdbf02f1e38203d5c",
+    "src/Oxygen/Console/Registry.cpp": "fa04b098b42251cc382f857727609cbd10c6a79457a1a20306141996d1d33cd4",
+    "src/Oxygen/Console/Registry.h": "76a6fce7262764798ecafa7713d55d07af43f00d5e87a2b1f27fc47018823b56",
+    "src/Oxygen/Console/Test/Command_test.cpp": "0fe6f5c4b197d12d8d4da566b9d912bf1119c5e4a761a0e7388e8660a4ffda68",
+    "Examples/DemoShell/DemoShell.cpp": "19f73e08f7eee4c5dfb8b2f47d41918362f0b8f8ec8a20ca80534cbf6c961c4d",
+    "Examples/DemoShell/Internal/PostProcessConsoleBindings.cpp": "523ac4117bcc49ebe2a85ab49b611a96dc1e0adaa4d0acd173c77f9020d8efcb",
+    "Examples/DemoShell/Internal/PostProcessConsoleBindings.h": "afff272bc6926f052272f47d1e981f4f4bcf473c540092f1d787b95470c28efe",
+    "Examples/DemoShell/Services/PostProcessSettingsService.cpp": "22e8aaa63d2581b22dff1f5042b0d58d3c2b0b96de4d1f9939ec6c89ba563214",
+    "Examples/DemoShell/Services/PostProcessSettingsService.h": "be790203fa15a42c330419f0fc92a94c8536287e37067ee0b4d41414e1d778fa",
+    "Examples/DemoShell/Test/PostProcessConsole_test.cpp": "d8a7d493435ac7ae7f55552eae4948d1e6bea03667530276dcd9b2ec5ab4e846",
+    "Examples/LightBench/LightBenchConsoleBindings.cpp": "2a2ebde43cd1c2918a60a8d3a8fa1376d6f1f563c98990a9abed993516262706",
+    "Examples/LightBench/LightBenchConsoleBindings.h": "c4417a84f6ce3e2c4f9eb953b8e5807e46626e9b087b82f7a43226a458b1965b",
+    "Examples/LightBench/Test/ConsoleBindings_test.cpp": "5f6b590bb7f08856f4e47e56ef09b3950c740ca7a0ce9934be8a6697e49cf012",
+    "Examples/LightBench/MainModule.cpp": "5fae37f0250e5cf6c8d4384c61c425337c3b5a0d9dcadf192498741bb47e363d",
+    "Examples/LightBench/MainModule.h": "6e24d1cce3fd20dbf50a1277578ab14181c40e4f633cc915f46ab0387c06b9b7",
+    "Examples/DemoShell/CMakeLists.txt": "ba7439e499b47ad6cd67736c6972774c25ef4eab673704ea8307b782784f3fa8",
+    "Examples/DemoShell/Test/CMakeLists.txt": "755975ee7de4e7829850e63a757cdb673a2b1e202966605c5ff75be7cc5fcc5f",
+    "Examples/LightBench/CMakeLists.txt": "0a624235354e4c1636d3b5201333b2c2d2b82ca892dea281127f6de64258acff"
+  },
+  "build_logs": [
+    {
+      "path": "ex081-final-build-debug.log.gz",
+      "uncompressed_sha256": "6fa80ff0684efc2ac97aa02088321571b53e83b6b9a01eef5262cc92c765c087"
+    },
+    {
+      "path": "ex081-final-build-release.log.gz",
+      "uncompressed_sha256": "e516de7273ea88ffc57917711067e9818e49eefe259b32e022bc3cd8805ee1d9"
+    }
+  ],
+  "tidy": {
+    "new_binding_translation_units": "clean, 3 Debug contexts (LightBench compiled by app and tests)",
+    "owners": "127 existing-scope warnings, zero diagnostics on changed lines; not a whole-file clean claim",
+    "logs": [
+      {
+        "path": "ex081-bindings-tidy-final.log.gz",
+        "uncompressed_sha256": "b41b4f439e5da126769d9b8ff5803863264a7ab846a574cabbfcae6d40aaf319"
+      },
+      {
+        "path": "ex081-owners-tidy-final.log.gz",
+        "uncompressed_sha256": "787ba20e1e2a91f8748268408e8e8890ad1a4bea90d15752851f69ad3106655e"
+      }
+    ]
+  }
+}

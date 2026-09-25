@@ -1,0 +1,36 @@
+{
+  "tree": "out/build-ninja",
+  "configuration_options": {
+    "OXYGEN_BUILD_UI_TESTS": "ON",
+    "OXYGEN_IMGUI_TEST_ENGINE_AVAILABLE": "ON"
+  },
+  "configurations": [
+    "Debug",
+    "Release",
+    "RelWithDebInfo"
+  ],
+  "ui_compile_entries": 9,
+  "clangd_version": "22.1.6 (VS Code installed binary)",
+  "clangd_files_checked": 3,
+  "clangd_errors": 0,
+  "binaries_rebuilt_by_configuration_repair": false,
+  "user_confirmation": "Problem solved.",
+  "records": [
+    {
+      "path": "development-ninja-ui-enable.log.gz",
+      "uncompressed_sha256": "9e67cefcf637103dc3cc19d39fd73ba4ba525e08f85273dd3be24de2208a81cc"
+    },
+    {
+      "path": "dev-clangd-lightbench-final.log.gz",
+      "uncompressed_sha256": "ca3b2943ae85876a9ee38322284d198787365161cb0aba0d02fec279847e33f5"
+    },
+    {
+      "path": "dev-clangd-texturedcube.log.gz",
+      "uncompressed_sha256": "5e9f482bfed95e56222a2edfaac99a3758170a0b91f7f60984ed60d1805a3cea"
+    },
+    {
+      "path": "dev-clangd-session.log.gz",
+      "uncompressed_sha256": "80de9b7f3982de8377f0ae5f7dec26ed443878fad3d5aae806103e42c2d3117a"
+    }
+  ]
+}

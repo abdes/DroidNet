@@ -1,8 +1,8 @@
 # EX08–EX10 approved scope and execution
 
-Status: scope revision approved and recorded (2026-09-25); implementation not
-resumed. The initial four C++ instrumentation drafts were discarded. No code,
-new build/test result, capture or UI acceptance is claimed by this revision.
+Status: EX08–EX10 validated and closed (2026-09-25); structured commit delivery authorized after user review.
+See [final results and acceptance](EX10-completion.md). The initial four
+instrumentation drafts were discarded before the reduced implementation.
 
 ## User decision
 
@@ -15,39 +15,40 @@ affected checks. No EX07 capture or benchmark campaign is to be repeated.
 
 ## Retained work
 
-- [ ] EX08: calibrated three-card/1000-lux Neutral Reference with independently
+- [x] EX08: calibrated three-card/1000-lux Neutral Reference with independently
       resolved exposure, readable controls and one shared canonical scene
       definition used by the app and focused native reference test.
-- [ ] EX08: complete reset, explicit validated local save/load, Reference/Modified
+- [x] EX08: complete reset, explicit validated local save/load, Reference/Modified
       configuration status and personal UI preference isolation.
-- [ ] EX08.1: existing console drives existing settings/transition owners, with
+- [x] EX08.1: existing console drives existing settings/transition owners, with
       ordinary Release availability, explicit targets, atomic rejection and
       honest asynchronous status; local preset/reset operations stay in LightBench.
-- [ ] EX09A: useful point/spot presets and relevant controls; reuse EX07 proof.
-- [ ] EX09B: fixed-exposure interaction on the reference scene plus existing or
+- [x] EX09A: useful point/spot presets and relevant controls; reuse EX07 proof.
+- [x] EX09B: fixed-exposure interaction on the reference scene plus existing or
       affected native numerical checks.
-- [ ] EX09C: simple bright/dark transition/reset; timing and lifecycle matrices
+- [x] EX09C: simple bright/dark transition/reset; timing and lifecycle matrices
       stay in native tests, with focused gap/regression repair.
-- [ ] EX09D: audit applicable HDR evidence and close concrete gaps; no new HDR UI.
-- [ ] EX09E: existing MultiView controls/tests/proofs and remaining user checks.
-- [ ] EX10: affected final checks, user acceptance, actual commands and durable
+- [x] EX09D: audit applicable HDR evidence and close concrete gaps; no new HDR UI.
+- [x] EX09E: existing MultiView controls/tests/proofs and user checks.
+- [x] EX08.2: build-configured real-app Test Engine workflows, appropriate test migration,
+      Debug/Release qualification and ordinary-build isolation.
+- [x] EX10: affected final checks, user acceptance, actual commands and durable
       evidence summary; reconcile the tracker and operating docs.
 
 ## Removed and deferred work
 
-| Former requirement                                                                     | Disposition                                                                                               |
-| -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| EX08-01–06 reusable GPU region/gain instrument and qualification                       | Removed from package; fixture-level numerical correctness remains required.                               |
-| Universal experiment schema/controller and matching UI/batch engine (EX09-01, EX10-01) | Removed; local validated settings and shared canonical scene definition suffice.                          |
-| New LightBench runner/report schema (EX10-02)                                          | Removed; use existing tests/output and durable Markdown.                                                  |
-| Seven complete experiment UIs and runtime numerical verdicts                           | Removed; retain useful presets/controls, native numerical tests and user inspection.                      |
-| Live/on-demand measurement scheduler and instrumented tonemap variant                  | Removed; earlier interactive design approvals do not authorize implementing them under the reduced scope. |
-| EX08.2 ImGui Test Engine integration                                                   | Deferred outside package; not complete or a dependency.                                                   |
+| Former requirement                                                                     | Disposition                                                                                                    |
+| -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| EX08-01–06 reusable GPU region/gain instrument and qualification                       | Removed from package; fixture-level numerical correctness remains required.                                    |
+| Universal experiment schema/controller and matching UI/batch engine (EX09-01, EX10-01) | Removed; local validated settings and shared canonical scene definition suffice.                               |
+| General measurement/batch runner and report schema (EX10-02)                           | Removed; use existing numerical tests/output and durable Markdown. EX08.2's widget runner uses standard JUnit. |
+| Seven complete experiment UIs and runtime numerical verdicts                           | Removed; retain useful presets/controls, native numerical tests and user inspection.                           |
+| Live/on-demand measurement scheduler and instrumented tonemap variant                  | Removed; earlier interactive design approvals do not authorize implementing them under the reduced scope.      |
 
-Earlier build-policy agreement remains a constraint only if future measurement
-work is separately approved: explicit build capability independent of NDEBUG,
-usable by rebuilding either existing Ninja tree in Release or Debug, with no new
-build trees. There is no reason to implement that capability now. Native test
+The earlier EX08.2 deferral was superseded by the user's goal. Its explicit
+build option works independently of NDEBUG in the existing Ninja trees and is
+off in ordinary builds. Both trees have been restored without UI instrumentation.
+This does not restore the removed measurement platform. Native numerical
 readbacks remain test-owned; ordinary rendering gains no new diagnostic work.
 
 ## Acceptance limits and retained guarantees
@@ -75,9 +76,43 @@ Diagnostics LLD reflect this decision. Sections 3–6 of the exposure plan retai
 the production mathematical/ownership contracts. EX01–EX07 closure and immutable
 historical evidence remain unchanged. No reviewer-owned documents are included.
 
-Scope audit: all 42 original EX08–EX10 tracker IDs are retained; nine are
-explicitly removed, and five EX08.2 entries are deferred. Five new EX08 IDs name
-the smaller demo deliverables. Exposure-plan production contract sections 3–6
-were compared against HEAD and are textually unchanged apart from whitespace.
-Documentation formatting and diff whitespace checks were performed. No build,
-test or capture was needed for this documentation-only scope revision.
+Scope audit: all 42 original EX08–EX10 tracker IDs are retained, with five new
+EX08 IDs for the smaller demo. Nine removed requirements remain removed; the
+other 38 entries are validated, including the five reactivated EX08.2 entries.
+The original scope revision preserved production contract sections 3–6; final
+build/test/acceptance evidence is recorded separately in EX10.
+
+## User priority update: usable EX09 presets
+
+The user prioritized EX09 scenarios after the saved-scene Auto diagnosis.
+EX08.1 and the subsequently reactivated EX08.2 were also completed before EX10.
+Neutral Reference remains the manual numerical reference; Point Falloff, Spot
+Cone, Material Lighting and Auto Adaptation stage complete settings rather than
+inherit accidental state from a previous scenario. Reset restores the selected
+preset. Auto light steps change illumination without recreating exposure history.
+No generic controller, new runtime measurements or automatic UI testing is added.
+EX09D/E and the group closure still need their retained evidence/operational gates.
+
+Indoor and Outdoor Daylight were added at the user's explicit request. The
+[EX09 preset result](EX09-presets-results.md) records implementation, native
+qualification, the corrected step-test expectation and outstanding visual gate.
+
+## Active completion order (user goal, 2026-09-25)
+
+Finish EX09, then return to EX08.2, then perform EX10 closeout. This instruction
+reactivates ImGui Test Engine integration and its named widget workflows after
+EX09; earlier deferral text above records the preceding scope decision. EX08.1
+console controls remain a retained, unfinished obligation and may not be silently
+waived at closeout. No runtime measurement/controller infrastructure is restored.
+Use only the existing Ninja trees; test-only UI hooks must be explicitly isolated
+so normal Release builds do not acquire test instrumentation overhead.
+
+EX09's native HDR/lifecycle coverage, local settings/UI checks and MultiView
+operational acceptance are complete. Spot full-profile verification and all
+seven preset images remain applicable; they were not recaptured for closeout.
+
+EX08.1 and EX08.2 are complete before EX10. The small permanent preset overlay
+has margin, rounded corners, a scrollbar-free seven-item popup and an amber
+modified-state border. Full-window scene rendering and translucent sidebar
+overlays remain the established contract. Structured commits were authorized
+after qualification and user review.

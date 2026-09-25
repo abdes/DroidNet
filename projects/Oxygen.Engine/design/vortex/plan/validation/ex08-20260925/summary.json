@@ -1,0 +1,45 @@
+{
+  "status": "directional_toggle_fix_automated_passed_manual_retest_pending",
+  "build_tree": "out/build-ninja",
+  "configurations": [
+    "Debug",
+    "Release"
+  ],
+  "tracy": false,
+  "tests_per_configuration": 5,
+  "followup_indoor_tests_per_configuration": 1,
+  "source_sha256": {
+    "Examples/LightBench/demo_settings_indoor.json": "60e9b391e6343632782c5342ed737d7ed0dc460023a1f454a5d1621404b6e406",
+    "Examples/LightBench/lightbench-settings.schema.json": "311c5f3a7ac4f059c515a16e06d5c3e48c352cc10953697be23b17185b766ddb",
+    "Examples/LightBench/LightBenchPanel.cpp": "c109e907fd34796290ed94e2fbadd522bf7795badaa52c853167583a25df7108",
+    "Examples/LightBench/LightBenchPanel.h": "d334e05f300728f91afda2ed48dcac45c2e19a17bdadae0dc565794eb41c0ac5",
+    "Examples/LightBench/LightBenchSettings.cpp": "4b4a5141174f3446a8875c4afa7dd4256ff5703976f16a610e21e2382ff12641",
+    "Examples/LightBench/LightBenchSettings.h": "ae619d1b1869a14757408fd9fa52f8cc27181e1e6c34a15d7b41a065a0b57fb0",
+    "Examples/LightBench/LightScene.cpp": "0dae1d8daaa0ed75f43431c5437d71a651dc32dba3e1eeb456826a2bf25ce9c6",
+    "Examples/LightBench/LightScene.h": "7cb52e59f50706c58e9e77d1237aeb21021dc6ac577911620cdf068a16b947ac",
+    "Examples/LightBench/MainModule.cpp": "b442d1fd829d0a283dfe7df5d1da351c244bea92a5a378f95e1ac990e2d301e3",
+    "Examples/LightBench/MainModule.h": "808519530310f59559bbece15b66e0e053958a455564acc3025b9532ea68e4b1",
+    "Examples/LightBench/main_impl.cpp": "9297ebc8533e64b9d5d3c547c64253770e40ca085b885f4a6f89779e3360024d",
+    "Examples/LightBench/ReferenceScene.h": "82c4b2f65888d9974ff72e56356ee55483a35042465f582e6f4bdfaf14f1b8a5",
+    "Examples/LightBench/Test/Reference_test.cpp": "3ae771c00f49057c8416929b9e54eeed5c3c4c18ead2130cbeacdad9a165b0cd",
+    "Examples/LightBench/Test/Settings_test.cpp": "f530aa498575ea9647ab967446f1ba6a6738c1d2de9cc25d0a3119a7c9f64380"
+  },
+  "raw_result_sha256": {
+    "lightbench-ex08-debug.json.gz": "8a77c73dc88a3c63411fa06ad862368fe7714448c7274f043819e864936aa5db",
+    "lightbench-ex08-debug.log.gz": "9fef1cd513fd2b97dbfaae53453969f13f980aef2b71ab0f5e6d99e878e63322",
+    "lightbench-ex08-release.json.gz": "1c2febcab749db9e24aa42ef3badaa4d8e7b631a1ff65a0c158ee993f984d048",
+    "lightbench-ex08-release.log.gz": "8b719c83d692d63b4c70a7f88b77fa425267772f8fbffd0b3c921274b6ec1df6",
+    "lightbench-ex08-indoor-debug.json.gz": "1c1419cdd87e439556fc6fbd1bcba344205778c7da74f1339d57f0c1ed7dd44f",
+    "lightbench-ex08-indoor-debug.log.gz": "18e30a5b401f7826b2d5075218c51a16cc602bbbb6bf445787b7938948e002ab",
+    "lightbench-ex08-indoor-release.json.gz": "123b97dc52c0410d13ea7b12b382270b8e6e05ccaf1ac02935abd669efb9eb19",
+    "lightbench-ex08-indoor-release.log.gz": "ebb4dfa90470f5b3bdfebef7157f2a585b79af62aa1f1c69532624b2404d464e",
+    "lightbench-ex08-toggle-debug.json.gz": "bee1232a4ba2f68ad8e1f2a9b1a8ae77aab472af61a98e362a752d30b1ad97a6",
+    "lightbench-ex08-toggle-debug.log.gz": "badb4fe175da7708428b4dcc3a226718be25845c52b1b35b52ef5a75c62b3735",
+    "lightbench-ex08-toggle-release.json.gz": "1d09c15d96d6d734f37c2a2a2392ee4e1488342fb70e8293785dd1d5c31fc849",
+    "lightbench-ex08-toggle-release.log.gz": "319cd96075fab23bbc38a8c579b7164805cbbf78a111b341c9c71612f63cc5cc"
+  },
+  "release_executable_sha256": "d45e5b4ad38390a60a5953f07a317c89dfd03ec243eba0792708e033b95295cf",
+  "note": "Initial five cases and final indoor check are credited; the added directional toggle regression passes separately in Debug and Release. User reported the toggle bug during UI acceptance; the corrected candidate needs that retest.",
+  "directional_toggle_tests_per_configuration": 1,
+  "unique_qualified_tests_per_configuration": 6
+}

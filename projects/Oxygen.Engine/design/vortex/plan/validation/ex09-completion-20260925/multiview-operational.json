@@ -1,0 +1,16 @@
+{
+  "interactions": {
+    "engine_frames": 144,
+    "last_frame": 144,
+    "exit_code": 0,
+    "scripted_phases_verified": true,
+    "raw_sha256": "f4a6f613da4faf46da3723a21656f86782ab48fd4949cdb2993f8eea4572cd56"
+  },
+  "offscreen": {
+    "engine_frames": 144,
+    "last_frame": 144,
+    "exit_code": 0,
+    "scripted_phases_verified": true,
+    "raw_sha256": "61887fc59fcd80df818af6552a86a7104b9b7f9920485e974daf934c5d1a6f32"
+  }
+}

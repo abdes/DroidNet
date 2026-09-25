@@ -7,7 +7,7 @@ Status: `in_progress` — current slice state and evidence are maintained in the
 are updated there; this plan owns the requirements and gates.
 
 Date: 2026-09-16
-Updated: 2026-09-25 — EX06 and EX07A–F are closed, including final user editor acceptance. The user approved a smaller EX08–EX10 scope; implementation has not resumed. See [scope decision and execution](EX08-execution.md). EX07 closure is recorded in the [F report](EX07F-acceptance-report.md).
+Updated: 2026-09-25 — EX01–EX10 are validated and closed under the approved reduced scope. [EX10 closeout](EX10-completion.md) records final qualification and user acceptance. Structured commit delivery was authorized after user review.
 
 Paths are relative to `projects/Oxygen.Engine` unless identified as
 repository-root paths.
@@ -30,18 +30,18 @@ measurement platform is no longer a package deliverable.
    with independent exposure unless sharing is explicit, including camera,
    layout and view-lifetime changes.
 
-### Remaining delivery at a glance
+### Completed delivery at a glance
 
-EX07 is closed. Execute **EX08 -> EX08.1 -> EX09A -> EX09B -> EX09C -> EX09D ->
-EX09E -> EX10**. EX08.2 is deferred and is not a dependency or closure gate.
-EX08 scope is agreed; code implementation has not resumed after discarding the
-initial instrumentation draft. Stable tracker IDs record removals explicitly.
+EX07 remains closed. EX08, EX09A–E, retained EX08.1, reactivated EX08.2 and
+EX10 are complete. The initial instrumentation draft was discarded; stable IDs
+preserve removed requirements explicitly. [Final evidence and acceptance](EX10-completion.md)
+cover the reduced package. Structured commit delivery was authorized after user review.
 
 | Step   | User value                                                                          | Completion evidence                                                                                                       |
 | ------ | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | EX08   | Readable calibrated Neutral Reference; complete reset and explicit local save/load. | Shared canonical scene definition, focused native numerical check, user UI acceptance and README.                         |
 | EX08.1 | Inspect/edit post-processing and request transitions through the existing console.  | Same validated owners as UI; atomic rejection, honest asynchronous status and user console checks.                        |
-| EX08.2 | Deferred ImGui Test Engine integration.                                             | Not required for this package; manual UI checks are user-owned.                                                           |
+| EX08.2 | ImGui interaction regression automation, reactivated after EX09.                    | Named widget workflows and build isolation qualified before EX10.                                                         |
 | EX09A  | Useful point and spot presets with distance/cone controls.                          | Applicable EX07 references plus focused checks for changed inputs and user visual acceptance.                             |
 | EX09B  | Predictable EV, compensation and physical-camera controls on the reference scene.   | Existing/focused native fixed-exposure tests and user interaction checks.                                                 |
 | EX09C  | Simple reproducible bright/dark transitions and reset.                              | Native timing/lifecycle evidence and user checks for transitions without unintended flashes.                              |
@@ -71,7 +71,7 @@ reusable region-measurement service, live measurement scheduling/readbacks,
 instrumented tonemap variants/refactoring, runtime numerical verdicts for edited
 frames, universal experiment schema/controller, matching interactive/batch recipe
 engine, new LightBench runner/report schema, and seven complete experiment UIs.
-EX08.2 ImGui Test Engine integration is **deferred**, not waived as completed.
+EX08.2 was deferred in the earlier scope decision; the latest user goal reactivates it after EX09.
 
 Earlier discussions of a validation build flag and on-demand/live measurement
 are superseded as implementation tasks by this reduction. If a concrete future
@@ -1276,7 +1276,7 @@ and explicit supported limits. Primary workload: 1,024 mixed local lights at
 measured separately. Benchmarks remain opt-in executables under `Benchmarks`,
 separate from correctness tests. Use existing fixtures/profiling; EX07 does not
 depend on future demo or automation work. EX08 runtime instruments are removed
-from package scope; EX08.2 remains deferred.
+from package scope; EX08.2 now follows EX09 under the latest user goal.
 
 ### Slice 8 - Deliver a calibrated Neutral Reference
 
@@ -1323,12 +1323,19 @@ transition ordering. The user tests the integrated console UI from a checklist.
 and transitions; native tests cover validation/lifetime; user confirms visible
 behavior. No measured-output service or new persistence path is needed.
 
-### Slice 8.2 - ImGui interaction regression automation (deferred)
+### Slice 8.2 - ImGui interaction regression automation
 
-**Disposition:** explicitly deferred by the user on 2026-09-25. EX082-01–04/GATE
-are future work, not complete and not dependencies of EX09 or EX10. Native tests
-remain agent-owned; the user performs UI acceptance. Do not add Test Engine,
-its dependency/configuration, widget runner or capture/report infrastructure now.
+**Disposition:** reactivated by the latest user goal after EX09 and before EX10.
+The prior 2026-09-25 deferral is superseded. EX082-01–04/GATE cover Test Engine
+dependency/configuration/context integration; numeric/focus/drag/mode/curve/mask/
+reset/save/load workflows; TexturedCube assignment and panel-return workflows;
+and the native UI runner with failure evidence and build isolation. Reuse the
+existing application controls and native owners. Do not restore the removed
+experiment controller, measurement system or universal recipe/report engine.
+
+The UI test configuration must be explicitly enabled in an existing Ninja tree
+and excluded from ordinary Release builds. Native rendering tests remain the
+numerical authority; widget tests verify actual input, focus and visible state.
 
 ### Slice 9 - Close renderer gaps and deliver useful controls
 
@@ -1414,8 +1421,8 @@ Reconcile owner docs and tracker. No new acceptance platform, runner or schema.
 
 **Exit gate:** no unresolved retained product requirement or discovered defect;
 automated evidence, user acceptance and operating instructions are recorded.
-Removed infrastructure and deferred EX08.2 remain labelled accordingly, never
-reported as implemented or required to close this package.
+Removed infrastructure stays removed. Reactivated EX08.2 must qualify its named
+workflows before EX10 can close; it is not covered by earlier native-only checks.
 
 ## 9. Acceptance matrix and execution
 
@@ -1460,7 +1467,7 @@ forward, rerunning affected cases only when relevant changes invalidate them.
 | Authoring                          | Schema boundaries; current packed records and obsolete-format rejection; cook/load/save/reload; mask pending/failure; curve round-trip; experiment-owned activation                                               |
 | Calibration                        | Directional lux; point inverse square; spot flux normalization; near-field finite behavior; range/cone edges; production BRDF                                                                                     |
 | Many-light correctness/performance | Conservative culling/reference equivalence; dense/overflow/capacity behavior; shared shader response; shadow identity; mutation/lifetime/multi-view; CPU/GPU/memory scaling and measured improvements under EX07. |
-| Console and user UI acceptance     | Shared command/UI validation, explicit targets and async outcomes; native unit tests plus user edit/reset/save/load/panel checks. EX08.2 automation is deferred.                                                  |
+| Console and user UI acceptance     | Shared command/UI validation, explicit targets and async outcomes; native unit tests plus user edit/reset/save/load/panel checks. EX08.2 automation follows EX09.                                                 |
 | Native reference verification      | Existing fixtures/readbacks; independent expected values and valid reference regions. Reusable runtime instruments are removed from scope.                                                                        |
 | LightBench calibration             | Neutral/point/spot presets and bright/dark transition; clean startup, complete reset/save/load, shared canonical scene definition, readable UI and correct exposure interaction.                                  |
 | MultiView visual integration       | Ordinary lit main/PiP plus standard, auxiliary, offscreen and feature layouts; standalone/family equivalence, per-view isolation, intentional sharing, resize/reorder/lifecycle, stable UI/backgrounds            |
@@ -1586,10 +1593,10 @@ Package closure remains dependent on final integrated evidence.
 - [x] Directional, point and spot reference units and material expectations pass.
 - [x] EX07 many-light correctness, supported capacities and measured performance/improvement gates pass.
 - [x] EX07 final editor interaction sign-off; user confirmed creation, live light edits, undo/redo and save/reopen persistence.
-- [ ] LightBench is a properly repaired, visually useful exposure benchmark;
+- [x] LightBench is a properly repaired, visually useful exposure benchmark;
       retained reference/presets/transition workflows pass focused numerical and user UI acceptance.
-- [ ] MultiView succeeds visually in ordinary and proof layouts; multiple views
+- [x] MultiView succeeds visually in ordinary and proof layouts; multiple views
       do not break exposure, and exposure changes do not break rendering/composition.
-- [ ] Retained renderer requirements have applicable existing proof or focused passing new checks.
-- [ ] Post-processing console tests and user UI checks pass (EX08.1); EX08.2 remains deferred.
-- [ ] Owning documents and operational instructions describe the implemented behavior.
+- [x] Retained renderer requirements have applicable existing proof or focused passing new checks.
+- [x] Post-processing console tests and user UI checks pass (EX08.1); EX08.2 widget automation and build isolation pass in Debug/Release.
+- [x] Owning documents and operational instructions describe the implemented behavior.

@@ -64,7 +64,7 @@ its implementation evidence, validation evidence, and remaining work.
 
 The [implementation plan](plan/exposure-and-lightbench-correction.md) owns scope
 and measurable delivery gates. Slices 1-6, including 5.1 and 5.2, are validated;
-EX07 is validated and closed, including user-confirmed editor interaction. The user approved a smaller EX08–EX10 scope: calibrated LightBench, focused native tests, existing console controls and remaining MultiView acceptance. EX08.2 is deferred. Stable IDs explicitly record removed infrastructure; renderer correctness requirements remain.
+EX07 is validated and closed, including user-confirmed editor interaction. The user approved a smaller EX08–EX10 scope: calibrated LightBench, focused native tests, existing console controls and remaining MultiView acceptance. EX08.2 is reactivated after EX09 by the latest user goal. Stable IDs explicitly record removed infrastructure; renderer correctness requirements remain.
 
 **Resume entry point:** [Current work](#31-current-work). Historical manifests do
 not reopen completed items. The accepted EX051 CPU cost and FP32/P=1 production
@@ -82,12 +82,12 @@ and [CPU decision](lld/post-process-service.md#approved-ex051-13ab-joint-cpu-cor
 | 5.1 — Exposure performance               | validated | Closed 2026-09-21: format/policy, independent SceneColor ownership, CPU corrections, correctness and final GPU acceptance complete. User accepts measured CPU cost; further CPU optimization is deferred to a later milestone. | [Current work](#31-current-work), [final CPU decision](lld/post-process-service.md#approved-ex051-13ab-joint-cpu-correction)                                                                                                                                                                                                                                    |
 | 5.2 — Focused exposure quality           | validated | Approved residual owner fixes and Release include repair committed; 65 Debug and 65 Release cases pass, scoped changed code is tidy-clean, and one matched I02 preservation run passes.                                        | [Bounded scope and result](#322-slice-52-code-quality-and-test-structure)                                                                                                                                                                                                                                                                                       |
 | 6 — Authoring and persistence            | validated | Strict source/cook/load/script/editor migration, C++20 editor boundary, PAK repacking, rendered UI acceptance and configuration isolation closed.                                                                              | [Detailed items](#33-slice-6-work-items), [acceptance evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/slice6/slice6-progress.json)                                                                                                                                                                                                          |
-| 7 — Physical and scalable lighting       | validated | EX07A–F closed (2026-09-25), including final user editor approval; EX08 not started.                                                                                                                                           | [A checkpoint](plan/EX07A-contract-review.md), [EX07 items](#34-slice-7-work-items), [workloads and gates](plan/EX07-lighting-correctness-and-scalability.md)                                                                                                                                                                                                   |
-| 8 — Calibrated Neutral Reference         | planned   | Revised scope approved; complete reset/save/load, focused native reference check and user UI acceptance.                                                                                                                       | [Approved scope](plan/EX08-execution.md), [items](#35-slice-8-work-items)                                                                                                                                                                                                                                                                                       |
-| 8.1 — Console controls                   | planned   | Existing console drives validated post-process settings and transitions.                                                                                                                                                       | [EX08.1](#351-slice-81-post-processing-console-controls)                                                                                                                                                                                                                                                                                                        |
-| 8.2 — ImGui UI automation                | future    | Explicitly deferred; not a package dependency or gate. User owns UI acceptance.                                                                                                                                                | [Disposition](#352-slice-82-imgui-interaction-automation)                                                                                                                                                                                                                                                                                                       |
-| 9A-E — Useful controls and renderer gaps | planned   | Point/spot presets, fixed/adaptation controls, HDR evidence and existing MultiView acceptance.                                                                                                                                 | [Delivery ownership](#36-slice-9-work-items)                                                                                                                                                                                                                                                                                                                    |
-| 10 — Package closeout                    | planned   | Applicable evidence, affected final checks, user acceptance and operating docs; no new validation platform.                                                                                                                    | [EX10](#37-slice-10-work-items)                                                                                                                                                                                                                                                                                                                                 |
+| 7 — Physical and scalable lighting       | validated | EX07A–F closed (2026-09-25), including final user editor approval; EX08/EX09 work follows.                                                                                                                                     | [A checkpoint](plan/EX07A-contract-review.md), [EX07 items](#34-slice-7-work-items), [workloads and gates](plan/EX07-lighting-correctness-and-scalability.md)                                                                                                                                                                                                   |
+| 8 — Calibrated LightBench                | validated | Reference, complete reset/save/load and final user acceptance. Uncommitted for code review.                                                                                                                                    | [EX10 closeout](plan/EX10-completion.md)                                                                                                                                                                                                                                                                                                                        |
+| 8.1 — Console controls                   | validated | Shared validated owners, explicit targets, asynchronous status, native/widget checks and user acceptance.                                                                                                                      | [Console results](plan/EX081-execution.md)                                                                                                                                                                                                                                                                                                                      |
+| 8.2 — ImGui UI automation                | validated | Real-app Debug/Release workflows, test migration and ordinary-build isolation.                                                                                                                                                 | [UI qualification](plan/EX082-execution.md)                                                                                                                                                                                                                                                                                                                     |
+| 9A-E — Useful controls and renderer gaps | validated | Seven presets, focused renderer repair, numerical coverage and accepted MultiView workflows.                                                                                                                                   | [EX09 results](plan/EX09-completion.md)                                                                                                                                                                                                                                                                                                                         |
+| 10 — Package closeout                    | validated | Evidence, user acceptance and operating docs reconciled. Structured commits authorized after review.                                                                                                                           | [EX10 closeout](plan/EX10-completion.md)                                                                                                                                                                                                                                                                                                                        |
 
 ### 3.1 Current work
 
@@ -97,7 +97,7 @@ complete. The TexturedCube panel-refresh regression is covered by automated
 tests and the user's successful rebuilt-app test. See the
 [EX06 result and evidence](#33-slice-6-work-items).
 
-**Current: EX08–EX10 scope revision is approved (2026-09-25); code implementation has not resumed.** The initial four instrumentation drafts were discarded. Next is the calibrated Neutral Reference and focused native qualification, then EX08.1. The agent owns automated tests; the user owns UI acceptance. See [approved scope and execution](plan/EX08-execution.md). EX07 remains closed; reuse applicable evidence without repeating its captures or benchmarks.
+**Current: EX08–EX10 validated and closed (2026-09-25).** Native reference/HDR/console evidence, real-app widget tests, migrated CPU checks, build isolation and final user LightBench/MultiView acceptance are recorded in [EX10 closeout](plan/EX10-completion.md). Qualification covered both existing Ninja trees with instrumentation disabled; the development Ninja tree was subsequently configured with UI tests enabled. [Test migration decisions](plan/EX082-test-migration.md) preserve numerical/file/lifetime tests while replacing simulated workflows with actual widgets. No implementation or acceptance item remains. **Structured commit delivery is approved; no implementation or acceptance gate remains.**
 
 [Section 3.4](#34-slice-7-work-items) is the single authoritative EX07 progress
 tracker. It shows the execution stages, numbered deliverables, completed portions
@@ -115,7 +115,7 @@ from normal whole-engine memory consumption.
 
 The
 [revised delivery sequence](plan/exposure-and-lightbench-correction.md#remaining-delivery-at-a-glance)
-is EX08 -> EX08.1 -> EX09A-E -> EX10 after closed EX07. EX08 delivers a calibrated demo and focused native check; EX09 adds useful presets/controls and closes concrete renderer gaps. EX08.2 is deferred; EX10 records concise closeout evidence.
+is EX08 -> EX08.1 -> EX09A-E -> EX10 after closed EX07. EX08 delivers a calibrated demo and focused native check; EX09 adds useful presets/controls and closes concrete renderer gaps. EX08.2 is reactivated after EX09; EX10 records final closeout evidence.
 
 ### 3.2 Slice 5 work items
 
@@ -161,7 +161,7 @@ current status, including decisions that supersede older manifest limitations.
 | EX05-28   | MultiView per-view mode, seed, cut and diagnostic events                             | validated | Paused scripted events and diagnostic restoration are qualified; runtime physical-camera values are covered, persistence is not.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | [Modes](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/modes-manifest.json), [diagnostics](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/diagnostic-manifest.json)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | EX05-29   | Complete standard/auxiliary/offscreen/feature layout matrix                          | validated | All five native layouts pass in Debug and Release: 17 selected views/19 comparisons within frozen tolerances, exact auxiliary copies, three expected-black cells and feature-stage checks. The offscreen proof preserves its original Average profile; corrected Debug/Release comparisons and image inspection pass.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | [Debug layout evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/layout-matrix-manifest.json), [Final closure](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/slice5-closure-manifest.json)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | EX05-30   | Native combined interactions and active adaptation                                   | validated | The refreshed native sequence passes 227 view checks across 58 frames: modes, camera motion, seed/cut, ordering, viewport/scissor/window resize, retained/recreated lifetime, prior-owner sharing, source loss/recreation and pause. Independent histogram/target/response checks pass; 11 negative checker controls reject corruption. Both native debug-layer audits and complete client inspection pass. Owning Debug gate: 284 passed with 38 unchanged runtime inputs. Release is qualified in EX05-GATE.                                                                                                                                                                                                                                                                                                                                                                                                                             | [Section 7.5](plan/exposure-and-lightbench-correction.md#75-multiview-visual-acceptance), [Active evidence](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/mixed-interactions-manifest.json), [Offscreen intent prerequisite](../../out/build-ninja/analysis/vortex/exposure-lightbench/multiview/offscreen-intent-validation-result.json)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| EX05-GATE | Slice 5 numerical and integration acceptance gate                                    | validated | Passed in Debug and Release. Release: 504 owning tests plus four opt-in accounting runs; 47 runtime hashes unchanged. Native layouts, material contributions, 227 active view checks/58 frames, debug-layer audits and presented output pass. This is not native 60 fps acceptance: EX051-GATE remains open. Approved inactive feature boundaries remain documented.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | [Full requirement/evidence mapping, commands and results](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/slice5-closure-manifest.json)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| EX05-GATE | Slice 5 numerical and integration acceptance gate                                    | validated | Passed in Debug and Release. Release: 504 owning tests plus four opt-in accounting runs; 47 runtime hashes unchanged. Native layouts, material contributions, 227 active view checks/58 frames, debug-layer audits and presented output pass. Performance acceptance and its operating limits are recorded separately under EX051-GATE. Approved inactive feature boundaries remain documented.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | [Full requirement/evidence mapping, commands and results](../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/slice5-closure-manifest.json)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 
 ### 3.2.1 Slice 5.1 performance qualification and correction
 
@@ -733,7 +733,7 @@ Accepted evidence is committed in `b8f1376e1`; the [report](plan/EX07E-shadow-sh
 | **S7/S8 — Cross-view maps and every consumer**           | **Complete: 50/50 service and 26/26 native image tests in each Release tree.** Includes deferred/forward/translucent readers, typed retained leases, cross-queue ordering, expired frame rejection, five-frame delayed capture, six-layer budget fallback and actual retained-byte accounting.                  | None for S7/S8. S9 measurements and user visual approval are complete.                        |
 | **S9 / E08 — Measure and qualify**                       | **Automated work complete:** 13 native + 9 Tracy final benchmark rows and four final application captures; ownership, CPU/GPU, memory, image and noise results are in the [report](plan/EX07E-shadow-sharing-results.md). Initial captures and the bounded endpoint repeat are retained.                        | None for E. Visual acceptance and numeric review approved; evidence committed in `b8f1376e1`. |
 
-**Next:** EX07 is closed; EX08 reduced scope is approved; implementation has not resumed, and EX08.1 follows. No E/F implementation or qualification remains. The three reviewer documents are intentionally excluded from commits. Detailed suite
+**Next:** EX07 is closed; EX08/EX09 reduced-scope implementation and native qualification are delivered; remaining acceptance/source review and EX08.1 are tracked below. No E/F implementation or qualification remains. The three reviewer documents were committed in `fa94bbae3` after the user clarified that their earlier exclusion was temporary. Detailed suite
 results are in the [E06 implementation plan](plan/EX07E-cross-view-shadow-sharing.md).
 
 The two approved design amendments are recorded: allocation-free descriptor
@@ -831,8 +831,9 @@ existing Ninja Release RenderScene targets are rebuilt. Qualification currently
 proves 31/31 setup tests (non-Tracy), 21/21 native image tests in each tree, and
 3/3 shadow ABI tests in each tree. The report records the 108 bilinear comparison
 cases and 594 rendered cube samples per material state, including masked cache
-invalidation. Scene timing and visual acceptance remain open; do not accept a
-baseline from test success. New baselines require manual visual validation before commit.
+invalidation. Scene timing and visual acceptance were still open at this E04
+checkpoint; the final accepted operating point is recorded in the
+[E closeout report](plan/EX07E-shadow-sharing-results.md).
 E07.1 is repaired; its native regression now uses a projected spot, where caster
 slope bias remains active.
 
@@ -886,7 +887,8 @@ and frozen-D image comparisons pass; steady buffer/texture creation remains zero
 The report and local candidate evidence at
 `plan/baselines/ex07e-20260924/cpu-submission/register.json` record the one-light
 result, noise, CPU storage tradeoff and remaining
-dynamic/multi-view/final-scene gates. New baseline acceptance remains pending.
+dynamic/multi-view/final-scene gates at that checkpoint. Final baseline
+acceptance is recorded in the [E closeout report](plan/EX07E-shadow-sharing-results.md).
 
 The moving, two-view, orthographic and three shadowed interaction recipes now
 pass in forward and deferred: **12 rows / 20 images**, all exactly matching their
@@ -1452,95 +1454,111 @@ credit. The existing stage table records closed C–E work and closed F acceptan
 
 ### 3.5 Slice 8 work items
 
-**Planned; revised scope approved 2026-09-25.** Code drafts were discarded.
+**Validated and closed.** Final user acceptance and widget qualification are recorded in [EX10 closeout](plan/EX10-completion.md). Structured commit delivery was authorized after user review. The initial instrumentation drafts were discarded; the reduced implementation is recorded in [EX08 validation](plan/EX08-validation.md).
 Deliver a calibrated Neutral Reference and focused native verification, not a
 runtime measurement platform. `removed` below means user-approved scope removal,
 not implementation or successful validation. New IDs preserve historical meaning.
 
-| ID        | Required result / disposition                                                                                              | Status  |
-| --------- | -------------------------------------------------------------------------------------------------------------------------- | ------- |
-| EX08-01   | Reusable runtime region-statistics API removed; reference-region validity remains a native fixture requirement.            | removed |
-| EX08-02   | Runtime same-frame consumed-gain probe/instrumented shader removed. Existing production gain correctness remains required. | removed |
-| EX08-03   | General runtime sample-validity system removed; native reference tests still reject invalid/missing samples.               | removed |
-| EX08-04   | Runtime measurement readback scheduler/stale-result service removed. Reuse test fixture lifetime handling.                 | removed |
-| EX08-05   | New instrument enable/disable and resource-budget subsystem removed; no new runtime measurement work.                      | removed |
-| EX08-06   | General GPU instrument qualification project removed; focused fixture/reference correctness remains required.              | removed |
-| EX08-07   | Canonical three-card/1000-lux scene, independent reference exposure and shared app/test scene definition.                  | planned |
-| EX08-08   | Complete reset and explicit atomic local save/load; personal UI preferences preserved.                                     | planned |
-| EX08-09   | Readable controls/units/reference values and Reference/Modified configuration status; no live numerical verdict.           | planned |
-| EX08-10   | Focused native Debug/Release reference checks against independent oracle, valid regions and frozen budgets.                | planned |
-| EX08-11   | Launch demo; user checklist/OK-NOK acceptance for edits/reset/save/load/layouts; working README.                           | planned |
-| EX08-GATE | Calibrated demo, complete reset/save/load, focused native proof and user UI acceptance.                                    | planned |
+| ID        | Required result / disposition                                                                                              | Status    |
+| --------- | -------------------------------------------------------------------------------------------------------------------------- | --------- |
+| EX08-01   | Reusable runtime region-statistics API removed; reference-region validity remains a native fixture requirement.            | removed   |
+| EX08-02   | Runtime same-frame consumed-gain probe/instrumented shader removed. Existing production gain correctness remains required. | removed   |
+| EX08-03   | General runtime sample-validity system removed; native reference tests still reject invalid/missing samples.               | removed   |
+| EX08-04   | Runtime measurement readback scheduler/stale-result service removed. Reuse test fixture lifetime handling.                 | removed   |
+| EX08-05   | New instrument enable/disable and resource-budget subsystem removed; no new runtime measurement work.                      | removed   |
+| EX08-06   | General GPU instrument qualification project removed; focused fixture/reference correctness remains required.              | removed   |
+| EX08-07   | Canonical three-card/1000-lux scene, independent reference exposure and shared app/test scene definition.                  | validated |
+| EX08-08   | Complete reset and explicit atomic local save/load; personal UI preferences preserved.                                     | validated |
+| EX08-09   | Readable controls/units/reference values and amber modified-state border; no live numerical verdict.                       | validated |
+| EX08-10   | Focused native Debug/Release reference checks against independent oracle, valid regions and frozen budgets.                | validated |
+| EX08-11   | Launch demo; user checklist/OK-NOK acceptance for edits/reset/save/load/layouts; working README.                           | validated |
+| EX08-GATE | Calibrated demo, complete reset/save/load, focused native proof and user UI acceptance.                                    | validated |
 
 ### 3.5.1 Slice 8.1 post-processing console controls
 
-**Planned; follows EX08.** Ordinary controls remain available in normal Release
-under existing console policies; no new measurement commands or framework.
+**Validated, including real-console widget tests and user exposure/console checks.**
+Ordinary controls remain available in normal Release under existing console
+policies; no new measurement commands or framework. See the
+[66/66 Debug and Release results and review guide](plan/EX081-execution.md).
 
-| ID         | Required result                                                                                                 | Status  |
-| ---------- | --------------------------------------------------------------------------------------------------------------- | ------- |
-| EX081-01   | Existing namespace/help/completion/access policy and explicit view/owner targeting.                             | planned |
-| EX081-02   | Settings, camera/mask/curve/output edits and seed/remeter use existing validated owners.                        | planned |
-| EX081-03   | Local LightBench preset/reset calls and truthful async revision/token/error reporting.                          | planned |
-| EX081-04   | Valid/invalid/stale-target tests, automation execution, unregistration and operating commands.                  | planned |
-| EX081-GATE | UI/console converge on accepted settings/transitions with atomic rejection; user accepts integrated console UI. | planned |
+| ID         | Required result                                                                                                 | Status    |
+| ---------- | --------------------------------------------------------------------------------------------------------------- | --------- |
+| EX081-01   | Existing namespace/help/completion/access policy and explicit view/owner targeting.                             | validated |
+| EX081-02   | Settings, camera/mask/curve/output edits and seed/remeter use existing validated owners.                        | validated |
+| EX081-03   | Local LightBench preset/reset calls and truthful async revision/token/error reporting.                          | validated |
+| EX081-04   | Valid/invalid/stale-target tests, automation execution, unregistration and operating commands.                  | validated |
+| EX081-GATE | UI/console converge on accepted settings/transitions with atomic rejection; user accepts integrated console UI. | validated |
 
 ### 3.5.2 Slice 8.2 ImGui interaction automation
 
-**Deferred by the user (2026-09-25), outside package closure.** Not complete,
-not a dependency. User UI acceptance replaces the package's automated-widget gate.
+**Validated after EX09.** Six LightBench workflows and one TexturedCube workflow
+pass in both Debug and Release. Both ordinary Ninja trees exclude UI instrumentation.
+See [qualification](plan/EX082-execution.md) and [migration review](plan/EX082-test-migration.md).
 
-| ID         | Deferred work                                                             | Status |
-| ---------- | ------------------------------------------------------------------------- | ------ |
-| EX082-01   | Test Engine dependency/configuration/context integration.                 | future |
-| EX082-02   | Automated numeric/focus/drag/mode/curve/mask/reset/load/save workflows.   | future |
-| EX082-03   | Automated TexturedCube assignment/panel-return workflows.                 | future |
-| EX082-04   | Native UI runner, reports/failure artifacts and build isolation.          | future |
-| EX082-GATE | Automated widget suite qualification; not required for EX08–EX10 closure. | future |
+| ID         | Required work                                                                          | Status    |
+| ---------- | -------------------------------------------------------------------------------------- | --------- |
+| EX082-01   | Test Engine dependency/configuration/context integration.                              | validated |
+| EX082-02   | Automated numeric/focus/drag/mode/curve/mask/reset/load/save workflows.                | validated |
+| EX082-03   | Automated TexturedCube assignment/panel-return workflows.                              | validated |
+| EX082-04   | Native UI runner, reports/failure artifacts and build isolation.                       | validated |
+| EX082-GATE | Automated widget suite qualification; required before EX10 under the latest user goal. | validated |
 
 ### 3.6 Slice 9 work items
 
-**Planned.** Useful demo controls plus retained renderer guarantees. Applicable
+**Validated.** Useful demo controls plus retained renderer guarantees. Applicable
 EX01–EX07 evidence counts; only changed or uncovered behavior needs new checks.
 Original IDs remain, with narrowed delivery obligations stated explicitly.
 
-| ID        | Required result / disposition                                                                                 | Delivery step | Status      |
-| --------- | ------------------------------------------------------------------------------------------------------------- | ------------- | ----------- |
-| EX09-01   | Universal UI/batch experiment schema/controller removed.                                                      | —             | removed     |
-| EX09-02   | Local complete frame-boundary settings application/reset, including temporal state.                           | EX08          | planned     |
-| EX09-03   | Calibrated readable three-card Neutral Reference.                                                             | EX08          | planned     |
-| EX09-04   | EV/camera/key/compensation/disabled controls and existing/focused numerical proof; no separate UI experiment. | EX09B         | planned     |
-| EX09-05   | Simple bright/dark transition; native schedule/mask/profile/curve evidence.                                   | EX09C         | planned     |
-| EX09-06   | Native startup/seed/cut/mode/pause/zero/sharing/stateless/recovery coverage; no lifecycle UI framework.       | EX09C         | planned     |
-| EX09-07   | Useful point preset, distance relationship and applicable independent reference proof.                        | EX09A         | planned     |
-| EX09-08   | Useful spot preset, aimed receiver/cone controls and applicable flux proof.                                   | EX09A         | planned     |
-| EX09-09   | Applicable HDR endpoint/mixed-path/history evidence and focused gap repair; no HDR demo experiment.           | EX09D         | planned     |
-| EX09-10   | Relevant controls/units and truthful Reference/Modified/settings status; live numerical verdict removed.      | EX08–EX09C    | planned     |
-| EX09-11   | Explicit local save/load, supported indoor settings, personal preferences preserved.                          | EX08          | planned     |
-| EX09-12   | User visual acceptance for retained presets/transitions and layouts; seven-experiment capture gate removed.   | EX08–EX09C    | planned     |
-| EX09-13   | Existing MultiView controls/proofs and remaining operational checks; no new measurement integration.          | EX09E         | in_progress |
-| EX09-14   | Actual LightBench launch/reset/load/save and focused native test instructions.                                | EX08–EX09C    | planned     |
-| EX09-15   | Existing MultiView README: actual controls, sharing delay and supported commands.                             | EX09E         | in_progress |
-| EX09-GATE | Retained renderer requirements covered; useful workflows accepted; discovered bugs fixed.                     | After EX09E   | planned     |
+| ID        | Required result / disposition                                                                                 | Delivery step | Status    |
+| --------- | ------------------------------------------------------------------------------------------------------------- | ------------- | --------- |
+| EX09-01   | Universal UI/batch experiment schema/controller removed.                                                      | —             | removed   |
+| EX09-02   | Local complete frame-boundary settings application/reset, including temporal state.                           | EX08          | validated |
+| EX09-03   | Calibrated readable three-card Neutral Reference.                                                             | EX08          | validated |
+| EX09-04   | EV/camera/key/compensation/disabled controls and existing/focused numerical proof; no separate UI experiment. | EX09B         | validated |
+| EX09-05   | Simple bright/dark transition; native schedule/mask/profile/curve evidence.                                   | EX09C         | validated |
+| EX09-06   | Native startup/seed/cut/mode/pause/zero/sharing/stateless/recovery coverage; no lifecycle UI framework.       | EX09C         | validated |
+| EX09-07   | Useful point preset, distance relationship and applicable independent reference proof.                        | EX09A         | validated |
+| EX09-08   | Useful spot preset, aimed receiver/cone controls and applicable flux proof.                                   | EX09A         | validated |
+| EX09-09   | Applicable HDR endpoint/mixed-path/history evidence and focused gap repair; no HDR demo experiment.           | EX09D         | validated |
+| EX09-10   | Relevant controls/units and truthful Reference/Modified/settings status; live numerical verdict removed.      | EX08–EX09C    | validated |
+| EX09-11   | Explicit local save/load, supported indoor settings, personal preferences preserved.                          | EX08          | validated |
+| EX09-12   | User visual acceptance for retained presets/transitions and layouts; seven-experiment capture gate removed.   | EX08–EX09C    | validated |
+| EX09-13   | Existing MultiView controls/proofs and remaining operational checks; no new measurement integration.          | EX09E         | validated |
+| EX09-14   | Actual LightBench launch/reset/load/save and focused native test instructions.                                | EX08–EX09C    | validated |
+| EX09-15   | Existing MultiView README: actual controls, sharing delay and supported commands.                             | EX09E         | validated |
+| EX09-GATE | Retained renderer requirements covered; useful workflows accepted; discovered bugs fixed.                     | After EX09E   | validated |
 
-EX09-13/15 retain existing EX05 prerequisites; remaining acceptance has not
-started. Reuse the existing MultiView demo, README and assertion scripts.
+**Concrete EX09B/C usability case (2026-09-25):** Auto/Average on the user's
+modified Full scene with tone mapper None and compensation 0 clips the bright
+cards. A native Release reproduction with saved authored settings and a 5:4
+viewport passes the independent histogram/stability check: meter 0.0092475 cd/m²,
+constant target gain 19.4647, converged gain 19.4646 after 30 simulated seconds.
+The rise from reference gain is 12.66 stops, not runaway feedback. The dim ground
+dominates metering while the horizontal directional light illuminates vertical
+cards. Provide an explicit Auto viewing setup with useful lighting/metering and
+a tone curve; preserve Manual/None for the neutral reference. No solver/tolerance
+change, runtime instrumentation or capture campaign. See [diagnosis and proof](plan/EX08-validation.md#saved-scene-auto-diagnosis-native-release).
+
+EX09-13 has final user OK for ordinary and offscreen MultiView. Both 144-frame
+operational sequences pass and EX09-15 operating instructions are updated. EX09-06/09 native
+coverage and the fog repair are qualified in the [checkpoint](plan/EX09-completion.md).
 
 ### 3.7 Slice 10 work items
 
-**Planned.** Concise integration closeout, no new features or validation platform.
+**Validated and closed.** [The closeout report](plan/EX10-completion.md) records
+applicable proof, final user acceptance and review entry points. Structured commits are authorized after user review.
 
-| ID        | Required result / disposition                                                                                            | Delivery step | Status      |
-| --------- | ------------------------------------------------------------------------------------------------------------------------ | ------------- | ----------- |
-| EX10-01   | Shared interactive/batch recipe engine removed; shared canonical app/test scene definition retained in EX08-07.          | —             | removed     |
-| EX10-02   | New LightBench runner/versioned result schema removed; existing test output suffices.                                    | —             | removed     |
-| EX10-03   | Applicable native non-DemoShell lifecycle/sharing/recovery evidence and focused gap repair.                              | EX09C         | planned     |
-| EX10-04   | Existing MultiView scripts retain structural/numerical checks; no new measurement/schema integration.                    | EX09E         | planned     |
-| EX10-05   | Existing isolation/sharing/reorder/resize/lifetime/mode proofs credited or affected checks rerun.                        | EX09E         | in_progress |
-| EX10-06   | Durable Markdown with relevant build/shader/scene identities, tolerances, test results and prior-evidence applicability. | Each step     | planned     |
-| EX10-07   | Affected final Debug/Release checks and user UI acceptance; no repeat capture/benchmark campaign.                        | EX10          | planned     |
-| EX10-08   | Owner docs, both operating READMEs, plan and tracker reconciled.                                                         | EX10          | planned     |
-| EX10-GATE | No unresolved retained product requirement/defect; evidence, user acceptance and instructions recorded.                  | EX10          | planned     |
+| ID        | Required result / disposition                                                                                             | Delivery step | Status    |
+| --------- | ------------------------------------------------------------------------------------------------------------------------- | ------------- | --------- |
+| EX10-01   | Shared interactive/batch recipe engine removed; shared canonical app/test scene definition retained in EX08-07.           | —             | removed   |
+| EX10-02   | General measurement/batch runner and result schema removed; existing numerical output and standard UI-test JUnit suffice. | —             | removed   |
+| EX10-03   | Applicable native non-DemoShell lifecycle/sharing/recovery evidence and focused gap repair.                               | EX09C         | validated |
+| EX10-04   | Existing MultiView scripts retain structural/numerical checks; no new measurement/schema integration.                     | EX09E         | validated |
+| EX10-05   | Existing isolation/sharing/reorder/resize/lifetime/mode proofs credited or affected checks rerun.                         | EX09E         | validated |
+| EX10-06   | Durable Markdown with relevant build/shader/scene identities, tolerances, test results and prior-evidence applicability.  | Each step     | validated |
+| EX10-07   | Affected final Debug/Release checks and user UI acceptance; no repeat capture/benchmark campaign.                         | EX10          | validated |
+| EX10-08   | Owner docs, both operating READMEs, plan and tracker reconciled.                                                          | EX10          | validated |
+| EX10-GATE | No unresolved retained product requirement/defect; evidence, user acceptance and instructions recorded.                   | EX10          | validated |
 
 ### 3.8 Requirement coverage and update discipline
 
@@ -1561,7 +1579,7 @@ reading tool logs or reconstructing Git history.
 | Slice 7: physical/dual-directional calibration; baseline; culling; shaders/resources/shadows; native/editor correctness; performance and closure | EX07-01–06; EX07-07; EX07-08; EX07-09–11; EX07-12; EX07-13–14/GATE                                 |
 | Slice 8: calibrated reference, local reset/save/load, native check, user acceptance                                                              | EX08-07–11/GATE; EX09-02–03/10–11/14; EX10-06; EX08-01–06 and EX09-01 removed                      |
 | Slice 8.1: console commands and async outcomes                                                                                                   | EX081-01–04/GATE                                                                                   |
-| Slice 8.2: deferred automated widget suite, outside closure                                                                                      | EX082-01–04/GATE future; user owns current UI acceptance                                           |
+| Slice 8.2: reactivated automated widget suite after EX09                                                                                         | EX082-01–04/GATE validated; Debug/Release automation and build isolation                           |
 | Slice 9A-E: point/spot controls; fixed/adaptation; native lifecycle/HDR; existing MultiView                                                      | EX09-04–15/GATE; EX10-03–05                                                                        |
 | Slice 10: concise final checks, evidence, user acceptance and docs                                                                               | EX10-03–08/GATE; EX10-01–02 removed                                                                |
 

@@ -1,0 +1,64 @@
+{
+  "ex09-settings-panel-debug": {
+    "tests": 9,
+    "failures": 0,
+    "timestamp": "2026-09-25T11:10:47Z",
+    "json_sha256": "929ccce79e3e998708525b8ee93e4129c818a082658182bab20533f283d14ca2",
+    "log_sha256": "bdf75ba98c84a07382f70c2c0c630c26f77ea782b9c339ff9b41543a9220f4f8"
+  },
+  "ex09-settings-panel-release": {
+    "tests": 9,
+    "failures": 0,
+    "timestamp": "2026-09-25T11:14:56Z",
+    "json_sha256": "da123511ccfa83fee42ceff66801660ab93e93414361f081dc3f272c86b162f1",
+    "log_sha256": "09f1cd2a1fdec608ae62a0bc9f8283ea40b9673bbd479e97f140ea2d00b4d93c"
+  },
+  "screenshots": {
+    "camera.png": {
+      "white_card_bbox_xywh": [
+        1157,
+        432,
+        215,
+        216
+      ],
+      "sha256": "4888b0e41be2c530064fc4583a8a2e3766af465139054fcf00e61aa9570c8922"
+    },
+    "lightbench-return.png": {
+      "white_card_bbox_xywh": [
+        1172,
+        432,
+        216,
+        216
+      ],
+      "sha256": "f2efd7e40aca2630e1701ecd1cc8d35a244676e45b410316d86ee3eeb705d50a"
+    },
+    "neutral-reference.png": {
+      "white_card_bbox_xywh": [
+        1172,
+        432,
+        216,
+        216
+      ],
+      "sha256": "2d6f8c7509eff111e525f45b0b32a015b2ad0ceda8c7271c60bcd11e1ba01245"
+    },
+    "post-process.png": {
+      "white_card_bbox_xywh": [
+        1072,
+        432,
+        216,
+        216
+      ],
+      "sha256": "b2e3793021199043121efdf6df6f969ee3cc85346aa9f1a8774407b70d973fe6"
+    }
+  },
+  "note": "post-process.png names the existing Settings panel screenshot; actual panel title was visually checked. Native test checks 60 dock width changes; actual UI captures check one cycle with subpixel horizontal raster rounding.",
+  "source_sha256": {
+    "Examples/LightBench/LightBenchPanel.cpp": "32c4bf554ce856d057767ae38f0198a2b38b9402e405d9220029702eb4bb49f2",
+    "Examples/LightBench/LightBenchSettings.cpp": "e74eac2d98ea0a255dcefb514a3940e666b043056e361d57777ff6cda9f77539",
+    "Examples/LightBench/LightBenchSettingsFile.cpp": "56829daaec5ff3810adbb7c376011f54230ce505bc056812a95002b1887b70f2",
+    "Examples/LightBench/LightScene.cpp": "5620e8b5c423e5d5563219257c25c87eaccae5599c3d383a2fc4a63d8f20b41a",
+    "Examples/LightBench/MainModule.cpp": "e5eee63bb5ed2d5d671d2ff1c95d998951a8d1e258dac0af21dd85b6fc648c25",
+    "Examples/LightBench/main_impl.cpp": "d8e7fbd6e32d22b7d3af276f96526f794dd4b9b193d499a8a3807a5cde89f140"
+  },
+  "disposition": "Rejected docked-viewport design; superseded by full-window translucent overlays. Preserve only as historical evidence."
+}
