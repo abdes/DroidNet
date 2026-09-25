@@ -1,0 +1,25 @@
+{
+  "$schema": "../../../../src/Oxygen/Cooker/Import/Schemas/oxygen.material-descriptor.schema.json",
+  "name": "SdkWood",
+  "domain": "opaque",
+  "alpha_mode": "opaque",
+  "orm_policy": "auto",
+  "parameters": {
+    "base_color": [1, 1, 1, 1],
+    "metalness": 0,
+    "roughness": 1,
+    "normal_scale": 1,
+    "ambient_occlusion": 1
+  },
+  "textures": {
+    "base_color": {
+      "virtual_path": "/.cooked/Resources/Textures/SdkWood_base_color.otex"
+    },
+    "normal": {
+      "virtual_path": "/.cooked/Resources/Textures/SdkWood_normal.otex"
+    },
+    "roughness": {
+      "virtual_path": "/.cooked/Resources/Textures/SdkWood_roughness.otex"
+    }
+  }
+}

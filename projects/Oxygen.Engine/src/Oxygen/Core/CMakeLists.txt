@@ -217,3 +217,12 @@ oxygen_module_install(
 )
 
 asap_pop_module("${META_MODULE_NAME}")
+
+if(OXYGEN_INSTALL)
+  install(
+    FILES
+      "${CMAKE_CURRENT_SOURCE_DIR}/Meta/Bindless.schema.json"
+    DESTINATION "${OXYGEN_INSTALL_SCHEMAS}"
+    COMPONENT Oxygen_data
+  )
+endif()

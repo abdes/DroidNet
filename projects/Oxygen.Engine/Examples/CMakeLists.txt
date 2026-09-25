@@ -6,19 +6,27 @@
 
 set(OXYGEN_EXAMPLES_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
 
-add_subdirectory("Platform")
-add_subdirectory("Devices")
-add_subdirectory("Async")
-add_subdirectory("InputSystem")
-add_subdirectory("LightBench")
-add_subdirectory("TexturedCube")
+# RenderScene and DemoShell form the installed engine showcase.
 add_subdirectory("DemoShell")
 add_subdirectory("RenderScene")
-add_subdirectory("MultiView")
-add_subdirectory("Physics")
-add_subdirectory("VortexBasic")
+# SDK preparation is unnecessary for source-only development builds.
+if(OXYGEN_INSTALL)
+  add_subdirectory("Content")
+endif()
 
-# add_subdirectory("Graphics")
+if(OXYGEN_BUILD_EXAMPLES)
+  add_subdirectory("Platform")
+  add_subdirectory("Devices")
+  add_subdirectory("Async")
+  add_subdirectory("InputSystem")
+  add_subdirectory("LightBench")
+  add_subdirectory("TexturedCube")
+  add_subdirectory("MultiView")
+  add_subdirectory("Physics")
+  add_subdirectory("VortexBasic")
 
-# OxCo Examples
-add_subdirectory("OxCo/BatchExecution")
+  # add_subdirectory("Graphics")
+
+  # OxCo Examples
+  add_subdirectory("OxCo/BatchExecution")
+endif()

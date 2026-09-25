@@ -410,9 +410,8 @@ target_link_libraries(
 # Tools
 # ------------------------------------------------------------------------------
 
-if(OXYGEN_BUILD_TOOLS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Tools")
-  add_subdirectory("Tools")
-endif()
+# All four native cooker tools are part of the engine SDK.
+add_subdirectory("Tools")
 
 # ------------------------------------------------------------------------------
 # Tests
@@ -426,37 +425,16 @@ endif()
 # Deployment instructions
 # ==============================================================================
 
-if(${META_PROJECT_ID}_INSTALL)
-  set(
-    _oxygen_cooker_schema_files
-    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.import-manifest.schema.json"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.scene-source-inspection.schema.json"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.cooked-dependencies.schema.json"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.asset-key-request.schema.json"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.asset-key-map.schema.json"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.buffer-container.schema.json"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.texture-descriptor.schema.json"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.material-descriptor.schema.json"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.geometry-descriptor.schema.json"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.scene-descriptor.schema.json"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.input.schema.json"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.input-action.schema.json"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.physics-sidecar.schema.json"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.physics-material-descriptor.schema.json"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.collision-shape-descriptor.schema.json"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Pak/Schemas/oxygen.pak-catalog.schema.json"
-  )
-  foreach(_schema_file IN LISTS _oxygen_cooker_schema_files)
-    if(NOT EXISTS "${_schema_file}")
-      message(FATAL_ERROR "Missing schema file: ${_schema_file}")
-    endif()
-  endforeach()
-
+if(OXYGEN_INSTALL)
   install(
-    FILES
-      ${_oxygen_cooker_schema_files}
+    DIRECTORY
+      "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/"
+      "${CMAKE_CURRENT_SOURCE_DIR}/Pak/Schemas/"
     DESTINATION "${OXYGEN_INSTALL_SCHEMAS}"
-    COMPONENT ${META_PROJECT_NAME}_data
+    COMPONENT Oxygen_data
+    FILES_MATCHING
+    PATTERN
+    "*.schema.json"
   )
 endif()
 

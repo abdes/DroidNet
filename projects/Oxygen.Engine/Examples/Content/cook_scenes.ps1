@@ -1,45 +1,49 @@
 <#
 .SYNOPSIS
-Cooks one or all scenes in the Examples/Content/scenes folder using the Oxygen.Cooker.ImportTool.
+Cooks one or all shipped scene manifests with Oxygen ImportTool.
 
 .DESCRIPTION
 This script finds and runs the Oxygen.Cooker.ImportTool against scene 'import-manifest.json' files.
 It can target a specific scene by folder name, or all scenes found in the 'scenes' subdirectory.
-By default, it selects an existing importer from available CMake presets.
-Selection prefers Release, ordinary builds, then Ninja. No reconfiguration is run.
+In an installed SDK, it uses the importer in that SDK's bin directory.
+In a source checkout, it selects an existing importer from CMake presets,
+preferring Release, ordinary builds, then Ninja. No reconfiguration is run.
 The native ImportTool validates manifests and descriptors against its current schemas.
 The -All scope is the authored scene manifests and their dependencies; unreferenced
 raw FBX models and standalone images are not imported, and PAKs are not rebuilt.
 
 .PARAMETER Scene
-The name of the scene folder to cook (e.g. "bottle-on-box"). Required if -All is not specified.
+The name of the scene folder to cook (e.g. "sdk-materials"). Required if -All is not specified.
 
 .PARAMETER All
 Switch to cook all scene folders that contain an import-manifest.json.
 
 .PARAMETER Preset
-Optional exact CMake build preset. Overrides automatic selection.
+Source checkouts only: exact CMake build preset.
 
 .PARAMETER BuildTree
-Optional build tree name or path.
+Source checkouts only: build tree name or path.
 
 .PARAMETER Config
-Optional required configuration.
+Source checkouts only: required configuration.
 
 .PARAMETER NoTUI
 Switch to disable the Text User Interface of the ImportTool (useful for CI or plain logs).
 
 .PARAMETER ToolPath
-Optional explicit path to the Oxygen.Cooker.ImportTool.exe. If omitted, it will try resolving via the specified CMake Preset.
+Optional explicit importer executable; otherwise use the SDK or source-checkout selection.
+
+.PARAMETER ContentRoot
+Content directory containing scenes/<name>/import-manifest.json. Defaults to this script directory.
 
 .PARAMETER Help
 Show usage, options and examples without selecting tools or cooking. Alias: -h.
 
 .EXAMPLE
-.\cook_scenes.ps1 -Scene bottle-on-box
+.\cook_scenes.ps1 -Scene sdk-materials
 
 .EXAMPLE
-.\cook_scenes.ps1 -All -NoTUI -Preset oxygen-ninja-release
+.\cook_scenes.ps1 -All -NoTUI
 #>
 
 [CmdletBinding(DefaultParameterSetName = 'Single')]
@@ -61,6 +65,8 @@ param(
 
     [string]$Config,
 
+    [string]$ContentRoot,
+
     [Parameter(Mandatory = $true, ParameterSetName = 'Help')]
     [Alias('h')][switch]$Help
 )
@@ -73,7 +79,8 @@ if ($Help) {
 $ErrorActionPreference = "Stop"
 
 # Paths
-$ContentDir = $PSScriptRoot
+if ([string]::IsNullOrWhiteSpace($ContentRoot)) { $ContentRoot = $PSScriptRoot }
+$ContentDir = [IO.Path]::GetFullPath($ContentRoot)
 $ScenesDir = Join-Path $ContentDir "scenes"
 
 # Ensure scenes directory exists
@@ -82,8 +89,14 @@ if (-not (Test-Path $ScenesDir)) {
     exit 1
 }
 
-$RepoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
-. (Join-Path $RepoRoot 'tools/cli/BuildSelection.ps1')
+$SdkSupport = Join-Path $PSScriptRoot '../Tools/BuildSelection.ps1'
+if (Test-Path -LiteralPath $SdkSupport) {
+    . $SdkSupport
+    $RepoRoot = Get-OxygenSourceRoot
+} else {
+    $RepoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
+    . (Join-Path $RepoRoot 'tools/cli/BuildSelection.ps1')
+}
 $tools = Resolve-OxygenExecutables -SourceRoot $RepoRoot -Targets 'oxygen-cooker-importtool' -BuildTree $BuildTree -Config $Config -Preset $Preset -Overrides @{ 'oxygen-cooker-importtool' = $ToolPath }
 Write-OxygenExecutableSelection $tools
 

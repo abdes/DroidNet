@@ -8,6 +8,7 @@
 #include <fstream>
 #include <mutex>
 #include <shared_mutex>
+#include <stdexcept>
 
 #include "DemoShell/Services/SettingsService.h"
 #include <nlohmann/json.hpp>
@@ -42,8 +43,12 @@ namespace {
 
 } // namespace
 
-SettingsService::SettingsService(std::filesystem::path storage_path)
+SettingsService::SettingsService(
+  std::filesystem::path storage_path, std::filesystem::path portable_root)
   : storage_path_(std::move(storage_path))
+  , portable_root_(portable_root.empty()
+        ? std::filesystem::path {}
+        : std::filesystem::absolute(portable_root).lexically_normal())
   , storage_(std::make_unique<JsonStorage>())
 {
   Load();
@@ -82,6 +87,40 @@ auto SettingsService::ResolveDefault(std::source_location location)
     state.owned = CreateForDemo(location);
   }
   return observer_ptr { state.owned.get() };
+}
+
+auto SettingsService::InitializeForDemoApp(std::filesystem::path storage_path,
+  std::filesystem::path portable_root) -> void
+{
+  auto& state = GetDefaultState();
+  if (state.owned) {
+    throw std::logic_error("Demo settings were already initialized");
+  }
+  state.owned = std::make_unique<SettingsService>(
+    std::move(storage_path), std::move(portable_root));
+}
+
+auto SettingsService::EncodePath(const std::filesystem::path& path) const
+  -> std::filesystem::path
+{
+  if (portable_root_.empty() || path.empty()) {
+    return path;
+  }
+  const auto absolute = std::filesystem::absolute(path).lexically_normal();
+  const auto relative = absolute.lexically_relative(portable_root_);
+  if (!relative.empty() && *relative.begin() != "..") {
+    return relative;
+  }
+  return absolute;
+}
+
+auto SettingsService::DecodePath(const std::filesystem::path& path) const
+  -> std::filesystem::path
+{
+  if (portable_root_.empty() || path.empty() || path.is_absolute()) {
+    return path;
+  }
+  return (portable_root_ / path).lexically_normal();
 }
 
 auto SettingsService::Load() -> void

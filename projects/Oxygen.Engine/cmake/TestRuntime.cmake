@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 include_guard(GLOBAL)
+include("${CMAKE_CURRENT_LIST_DIR}/RuntimeEnvironment.cmake")
 
 # TEST_LAUNCHER is used both by GoogleTest discovery and by CTest. Keep the
 # environment attached to the executable instead of guessing an ordinary Debug
@@ -21,40 +22,25 @@ function(oxygen_configure_test_runtime target)
       OXYGEN_TEST_RUNTIME_CONFIGURED
         TRUE
   )
-  get_filename_component(_compiler_bin "${CMAKE_CXX_COMPILER}" DIRECTORY)
+  oxygen_get_runtime_launcher(${target} _launcher)
+  # Resolve list-valued expressions before GoogleTest serializes TEST_LAUNCHER.
+  # Its serialization differs between CMake releases; the script path is always
+  # one argument, while the generated script owns the runtime-directory list.
+  string(SHA256 _id "${CMAKE_CURRENT_BINARY_DIR}/${target}")
+  string(SUBSTRING "${_id}" 0 16 _id)
+  set(_script "${CMAKE_CURRENT_BINARY_DIR}/test-runtime/${_id}-$<CONFIG>.cmake")
+  file(
+    GENERATE
+    OUTPUT
+    "${_script}"
+    CONTENT
+      "set(OXYGEN_RUNTIME_COMMAND [==[${_launcher}]==])\ninclude([==[${CMAKE_CURRENT_FUNCTION_LIST_DIR}/RunTest.cmake]==])\n"
+  )
   set(
     _launcher
     "${CMAKE_COMMAND}"
-    -E
-    env
-    --modify
-    "PATH=path_list_prepend:${_compiler_bin}"
-  )
-  if(DEFINED OXYGEN_CONAN_DEPLOY_DIR)
-    if(OXYGEN_WITH_ASAN)
-      set(_configuration Asan)
-    else()
-      set(_configuration "$<CONFIG>")
-    endif()
-    list(
-      APPEND
-      _launcher
-      --modify
-      "PATH=path_list_prepend:${OXYGEN_CONAN_DEPLOY_DIR}/${_configuration}/bin"
-    )
-  endif()
-  # Expand a sequence of --modify arguments, one per transitive DLL directory.
-  # The executable directory is always present, so this never produces an empty
-  # launcher argument even when the executable links only static libraries.
-  set(
-    _dll_dirs
-    "$<REMOVE_DUPLICATES:$<TARGET_FILE_DIR:${target}>;$<TARGET_RUNTIME_DLL_DIRS:${target}>>"
-  )
-  list(
-    APPEND
-    _launcher
-    --modify
-    "PATH=path_list_prepend:$<JOIN:${_dll_dirs},;--modify;PATH=path_list_prepend:>"
+    -P
+    "${_script}"
     --
   )
   get_property(_existing TARGET ${target} PROPERTY TEST_LAUNCHER)

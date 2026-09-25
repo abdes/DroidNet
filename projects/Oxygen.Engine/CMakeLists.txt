@@ -142,40 +142,8 @@ endif()
 # Installation Setup
 # ------------------------------------------------------------------------------
 
-if(PROJECT_IS_TOP_LEVEL AND OXYGEN_BUILD_FULL_ENGINE)
-  if(NOT DEFINED OXYGEN_CONAN_DEPLOY_DIR)
-    set(OXYGEN_CONAN_DEPLOY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/out/install")
-  endif()
-
-  if(OXYGEN_WITH_ASAN)
-    set(_OXYGEN_INSTALL_SUBDIR "Asan")
-  else()
-    get_property(_IS_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
-    if(_IS_MULTI_CONFIG)
-      # For multi-config generators, keep a shared install base here and resolve
-      # the active configuration into the install prefix at install time.
-      set(_OXYGEN_INSTALL_SUBDIR "")
-    else()
-      set(_OXYGEN_INSTALL_SUBDIR "${CMAKE_BUILD_TYPE}")
-    endif()
-  endif()
-
-  set(_OXYGEN_INSTALL_PREFIX "${OXYGEN_CONAN_DEPLOY_DIR}")
-  if(NOT _OXYGEN_INSTALL_SUBDIR STREQUAL "")
-    set(
-      _OXYGEN_INSTALL_PREFIX
-      "${_OXYGEN_INSTALL_PREFIX}/${_OXYGEN_INSTALL_SUBDIR}"
-    )
-  endif()
-
-  set(
-    CMAKE_INSTALL_PREFIX
-    "${_OXYGEN_INSTALL_PREFIX}"
-    CACHE PATH
-    "Install path prefix, prepended onto install directories."
-    FORCE
-  )
-endif()
+# Install.cmake owns defaults and distinguishes developer deployment from Conan
+# cache packaging. Never force a caller/toolchain's prefix here.
 
 # ------------------------------------------------------------------------------
 # Testing
@@ -297,7 +265,7 @@ endif()
 
 add_subdirectory("src")
 
-if(OXYGEN_BUILD_EXAMPLES AND OXYGEN_BUILD_FULL_ENGINE)
+if(OXYGEN_BUILD_FULL_ENGINE)
   add_subdirectory("Examples")
 endif()
 
@@ -309,8 +277,10 @@ endif()
 # ------------------------------------------------------------------------------
 
 oxygen_apply_directory_build_policy("${CMAKE_CURRENT_SOURCE_DIR}/src")
-if(OXYGEN_BUILD_EXAMPLES AND OXYGEN_BUILD_FULL_ENGINE)
+if(OXYGEN_BUILD_FULL_ENGINE)
   oxygen_apply_directory_build_policy("${CMAKE_CURRENT_SOURCE_DIR}/Examples")
 endif()
+
+oxygen_finalize_install()
 
 asap_pop_project(${META_PROJECT_NAME})

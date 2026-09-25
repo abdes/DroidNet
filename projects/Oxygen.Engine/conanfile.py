@@ -59,7 +59,7 @@ class OxygenConan(ConanFile):
         # Optional components:
         "base": [True, False],
         "oxco": [True, False],
-        # Also build and install:
+        # Optional development outputs (core cooker tools and RenderScene are mandatory):
         "tools": [True, False],
         "examples": [True, False],
         "tests": [True, False],
@@ -75,7 +75,7 @@ class OxygenConan(ConanFile):
         # Optional components:
         "base": True,
         "oxco": True,
-        # Also build and package:
+        # Optional development outputs:
         "tools": True,
         "examples": True,
         "tests": True,
@@ -347,14 +347,17 @@ set(OXYGEN_CONAN_PACKAGE_BUILD {{ 'ON' if package_build else 'OFF' }})
 
         tc.blocks["oxygen_options"] = OxygenOptionsBlock
         # Set OXYGEN_CONAN_DEPLOY_DIR to the base install directory.
-        # CMakeLists.txt will append the configuration (Debug, Release, Asan)
-        # to form the actual CMAKE_INSTALL_PREFIX.
+        # The default local install rules select Debug, Release or Asan.
+        # Explicit prefixes and Conan package roots remain unchanged.
         install_base = str(
             Path(cast(str, self.recipe_folder)) / "out" / "install"
         )
         tc.variables["OXYGEN_CONAN_DEPLOY_DIR"] = install_base.replace(
             "\\", "/"
         )
+        tc.variables["OXYGEN_SDK_DEPENDENCY_DIR"] = (
+            Path(self.generators_folder) / "oxygen-sdk"
+        ).as_posix()
 
         self._reset_legacy_presets(tc.presets_prefix)
         tc.generate()
@@ -362,6 +365,200 @@ set(OXYGEN_CONAN_PACKAGE_BUILD {{ 'ON' if package_build else 'OFF' }})
 
         deps = CMakeDeps(self)
         deps.generate()
+        if not package_build:
+            self._generate_sdk_dependencies()
+
+    @staticmethod
+    def _sdk_runtime_file(path):
+        """Runtime DLLs and their matching development symbols, not build tools."""
+        return path.suffix.lower() == ".dll" or (
+            path.suffix.lower() == ".pdb" and path.with_suffix(".dll").is_file())
+
+    def _sdk_payload(self):
+        """Select public headers, declared libraries and runtime payloads only."""
+        packages = {}
+        directories = []
+        libraries = {}
+        for require, dep in self.dependencies.host.items():
+            if require.test or dep.ref.name in getattr(self, "_test_deps", set()):
+                continue
+            name = dep.ref.name
+            packages[name] = dep
+            folder = Path(dep.package_folder)
+            info = dep.cpp_info.aggregated_components()
+            for kind in ("includedirs", "bindirs", "resdirs"):
+                for raw in getattr(info, kind, []) or []:
+                    source = Path(raw)
+                    if not source.is_absolute():
+                        source = folder / source
+                    if not source.is_dir():
+                        continue
+                    try:
+                        relative = source.relative_to(folder)
+                    except ValueError:
+                        continue  # Platform SDK paths remain platform-owned.
+                    if relative == Path('.'):
+                        raise ConanInvalidConfiguration(f"SDK needs an explicit {kind} for {name}")
+                    directories.append((source, relative, kind == "bindirs"))
+            if (folder / "licenses").is_dir():
+                directories.append((folder / "licenses", Path("share/oxygen/licenses") / name, False))
+            for lib in info.libs:
+                candidates = set()
+                for raw in info.libdirs:
+                    directory = Path(raw)
+                    if not directory.is_absolute():
+                        directory = folder / directory
+                    if not directory.is_dir():
+                        continue
+                    # cpp_info.libs supplies logical link names, not every
+                    # archive that happens to have been packaged upstream.
+                    stems = {str(lib).casefold(), ("lib" + str(lib)).casefold()}
+                    for item in directory.rglob('*'):
+                        if item.is_file() and (item.stem.casefold() in stems
+                                               and item.suffix.lower() in ('.lib', '.a', '.so', '.dylib')):
+                            candidates.add(item)
+                if not candidates:
+                    raise ConanInvalidConfiguration(f"SDK cannot locate declared library {name}:{lib}")
+                for item in sorted(candidates):
+                    previous = libraries.get(item.name.casefold())
+                    if previous and previous != item and previous.read_bytes() != item.read_bytes():
+                        raise ConanInvalidConfiguration(f"Declared SDK library collision: {previous} and {item}")
+                    libraries[item.name.casefold()] = item
+        # Validate the flattened payload before deploy() can overwrite anything.
+        destinations = {}
+        for source, relative, runtime in directories:
+            for artifact in source.rglob("*"):
+                if not artifact.is_file() or (runtime and not self._sdk_runtime_file(artifact)):
+                    continue
+                destination = (relative / artifact.relative_to(source)).as_posix().casefold()
+                existing = destinations.get(destination)
+                if existing and existing != artifact and existing.read_bytes() != artifact.read_bytes():
+                    raise ConanInvalidConfiguration(f"SDK file collision: {destination}")
+                destinations[destination] = artifact
+        return packages, directories, list(libraries.values())
+
+    def _generate_sdk_dependencies(self):
+        """Install declared artifacts and rebase Conan's generated target metadata."""
+        import hashlib
+
+        config = str(self.settings.build_type)
+        packages, directories, libraries = self._sdk_payload()
+        identity = "\n".join(f"{name}:{dep.ref}:{dep.package_folder}" for name, dep in sorted(packages.items()))
+        root = Path(self.generators_folder) / "oxygen-sdk"
+        output = root / config / hashlib.sha256(identity.encode()).hexdigest()[:16]
+        output.mkdir(parents=True, exist_ok=True)
+
+        def quote(value):
+            return '[==[' + str(value).replace('\\', '/') + ']==]'
+
+        rules = ["# Generated from Oxygen's resolved Conan host graph."]
+        for source, relative, runtime in directories:
+            component = "Oxygen_runtime" if runtime else "Oxygen_dev"
+            if not runtime:
+                rules.append(f'install(DIRECTORY {quote(source.as_posix() + "/")} DESTINATION {quote(relative)} COMPONENT {component} CONFIGURATIONS {config})')
+            for artifact in source.rglob('*'):
+                if not artifact.is_file() or (runtime and not self._sdk_runtime_file(artifact)):
+                    continue
+                if runtime:
+                    destination_dir = relative / artifact.parent.relative_to(source)
+                    artifact_component = "Oxygen_dev" if artifact.suffix.lower() == ".pdb" else "Oxygen_runtime"
+                    rules.append(f'install(FILES {quote(artifact)} DESTINATION {quote(destination_dir)} COMPONENT {artifact_component} CONFIGURATIONS {config})')
+        for library in libraries:
+            rules.append(f'install(FILES {quote(library)} DESTINATION "${{OXYGEN_INSTALL_LIB}}" COMPONENT Oxygen_dev CONFIGURATIONS {config})')
+
+        names = [dep.cpp_info.get_property("cmake_file_name") or name for name, dep in sorted(packages.items())]
+        roots = [Path(dep.package_folder) for dep in packages.values()]
+        metadata = {name: {"files": [], "targets": set(), "requires": set()} for name in names}
+        common_files = []
+        for source in Path(self.generators_folder).glob('*.cmake'):
+            lower = source.name.lower()
+            if lower != 'cmakedeps_macros.cmake' and not any(
+                    lower.startswith(n.lower() + suffix) for n in names
+                    for suffix in ('-', 'config', 'targets')):
+                continue
+            suffix_config = re.search(r'-(debug|release|relwithdebinfo|minsizerel)(?:-|\.)', lower)
+            if suffix_config and suffix_config.group(1) != config.lower():
+                continue
+            text = source.read_text(encoding='utf-8')
+            for library in libraries:
+                target_path = '${_OXYGEN_SDK_LIBRARY_DIR}/' + library.name
+                text = text.replace(library.as_posix(), target_path)
+                for folder in roots:
+                    if library.is_relative_to(folder):
+                        relative = library.relative_to(folder).as_posix()
+                        text = re.sub(r'\$\{[^}]*PACKAGE_FOLDER[^}]*\}/' + re.escape(relative),
+                                      lambda _: target_path, text)
+            for folder in sorted(roots, key=lambda item: len(str(item)), reverse=True):
+                text = text.replace(folder.as_posix(), '${_OXYGEN_SDK_PREFIX}')
+            # CMakeDeps resolves logical libraries through these variables;
+            # CMakeConfigDeps instead supplies explicit imported locations above.
+            text = re.sub(
+                r'(set\(\s*[^\s()]+_LIB_DIRS_[A-Z0-9_]+)\s+([^\n)]*)\)',
+                lambda match: match.group(1) + ' "${_OXYGEN_SDK_LIBRARY_DIR}")'
+                if 'PACKAGE_FOLDER' in match.group(2) or '_OXYGEN_SDK_PREFIX' in match.group(2)
+                else match.group(0), text)
+            text = text.replace('${CMAKE_CURRENT_LIST_DIR}/cmakedeps_macros.cmake',
+                                '${CMAKE_CURRENT_LIST_DIR}/../Oxygen/cmakedeps_macros.cmake')
+            text = ('include("${CMAKE_CURRENT_LIST_DIR}/../Oxygen/OxygenSDKPaths.cmake")\n'
+                    + text)
+            target = output / source.name
+            save(self, target, text)
+            owner = next((name for name in names if any(
+                lower.startswith(name.lower() + suffix) for suffix in ('-', 'config', 'targets'))), None)
+            if owner:
+                metadata[owner]["files"].append(target)
+                metadata[owner]["targets"].update(re.findall(r'add_library\(\s*([^\s)]+)', text))
+                metadata[owner]["requires"].update(re.findall(r'find_dependency\(\s*([A-Za-z0-9_.-]+)', text))
+                # CMakeDeps declares component targets and dependency package
+                # names in data variables instead of literal add/find calls.
+                for values in re.findall(
+                        r'(?:set\(\s*\S+_COMPONENT_NAMES|list\(\s*APPEND\s+\S+_COMPONENT_NAMES)\s+([^)]*)\)', text):
+                    metadata[owner]["targets"].update(
+                        token.strip('"') for token in values.split()
+                        if '::' in token and '$' not in token)
+                for values in re.findall(
+                        r'(?:set\(\s*\S+_FIND_DEPENDENCY_NAMES|list\(\s*APPEND\s+\S+_FIND_DEPENDENCY_NAMES)\s+([^)]*)\)', text):
+                    metadata[owner]["requires"].update(token.strip('"') for token in values.split())
+            else:
+                common_files.append(target)
+        # Only metadata referenced by the exported Oxygen interfaces belongs to
+        # the SDK. Selection happens while defining install rules, not by copying
+        # every package and deleting files afterwards.
+        rules += ['set(_sdk_needed)', 'set(_sdk_links "")',
+                  'get_property(_sdk_targets GLOBAL PROPERTY OXYGEN_INSTALLED_TARGETS)',
+                  'foreach(_target IN LISTS _sdk_targets)',
+                  '  get_target_property(_links "${_target}" INTERFACE_LINK_LIBRARIES)',
+                  '  string(APPEND _sdk_links ";${_links}")', 'endforeach()']
+        for name, entry in metadata.items():
+            for target in sorted(target for target in entry["targets"] if "$" not in target):
+                rules += [f'string(FIND "${{_sdk_links}}" {quote(target)} _position)',
+                          f'if(NOT _position EQUAL -1)\n  list(APPEND _sdk_needed {quote(name)})\nendif()']
+        rules += ['list(REMOVE_DUPLICATES _sdk_needed)', 'set(_sdk_changed TRUE)', 'while(_sdk_changed)',
+                  '  set(_sdk_before "${_sdk_needed}")']
+        for name, entry in metadata.items():
+            children = sorted(entry["requires"].intersection(metadata))
+            if children:
+                rules += [f'  if({quote(name)} IN_LIST _sdk_needed)',
+                          '    list(APPEND _sdk_needed ' + ' '.join(quote(c) for c in children) + ')', '  endif()']
+        rules += ['  list(REMOVE_DUPLICATES _sdk_needed)',
+                  '  if(_sdk_before STREQUAL _sdk_needed)\n    set(_sdk_changed FALSE)\n  endif()', 'endwhile()',
+                  'set(_sdk_registry "include(CMakeFindDependencyMacro)\\n")']
+        for name, entry in metadata.items():
+            # Explicit local package dirs prevent fallback to a producer cache.
+            statement = f'set({name}_DIR "${{CMAKE_CURRENT_LIST_DIR}}/../{name}")\n'
+            rules += [f'if({quote(name)} IN_LIST _sdk_needed)',
+                      '  string(APPEND _sdk_registry ' + quote(statement) + ')', 'endif()']
+        for name, entry in metadata.items():
+            rules += [f'if({quote(name)} IN_LIST _sdk_needed)',
+                      '  install(FILES ' + ' '.join(quote(p) for p in entry["files"])
+                      + f' DESTINATION "${{OXYGEN_INSTALL_LIB}}/cmake/{name}" COMPONENT Oxygen_dev CONFIGURATIONS {config})',
+                      '  string(APPEND _sdk_registry ' + quote(f'find_dependency({name} CONFIG REQUIRED)\n') + ')', 'endif()']
+        selected = '${PROJECT_BINARY_DIR}/sdk-metadata/' + config + '/OxygenDependencies.cmake'
+        rules += [f'file(CONFIGURE OUTPUT "{selected}" CONTENT "${{_sdk_registry}}" @ONLY)',
+                  f'install(FILES "{selected}" ' + ' '.join(quote(p) for p in common_files)
+                  + f' DESTINATION "${{OXYGEN_INSTALL_CMAKE}}" COMPONENT Oxygen_dev CONFIGURATIONS {config})',
+                  f'message(STATUS "Oxygen SDK dependency metadata ({config}): ${{_sdk_needed}}")']
+        save(self, root / f'install-{config}.cmake', '\n'.join(rules) + '\n')
 
     def _generate_project_presets(self):
         """Derive project presets only for installed trees and configurations.
@@ -523,76 +720,16 @@ set(OXYGEN_CONAN_PACKAGE_BUILD {{ 'ON' if package_build else 'OFF' }})
     #     self.build_requires("ninja/[>=1.11.0]")
 
     def deploy(self):
-        test_deps = getattr(self, "_test_deps", set())
-
-        # Determine the target subfolder for deployment using the common logic
-        target_deploy_folder = os.path.join(
-            self.deploy_folder, self._install_subfolder
-        )
-
-        def try_copy(patterns, src, dst, pkg_name):
-            for pattern in patterns:
-                try:
-                    copy(self, pattern, src=src, dst=dst)
-                except Exception as e:
-                    self.output.error(
-                        f"Failed copying {pattern} from {pkg_name}: {e}"
-                    )
-                    raise
-
-        for dep in self.dependencies.values():
-            # Derive a safe package name (ref may be None for some deps)
-            try:
-                dep_name = dep.ref.name if dep.ref is not None else None
-            except Exception:
-                dep_name = None
-            # Skip test-only dependencies during deploy
-            if dep_name in test_deps:
-                continue
-            if dep_name:
-                name = dep_name
+        """Deploy Oxygen's dependency interface, not upstream package mirrors."""
+        target = Path(self.deploy_folder) / self._install_subfolder
+        _, directories, libraries = self._sdk_payload()
+        for source, relative, runtime in directories:
+            if runtime:
+                for artifact in source.rglob("*"):
+                    if artifact.is_file() and self._sdk_runtime_file(artifact):
+                        destination = target / relative / artifact.parent.relative_to(source)
+                        copy(self, artifact.name, src=artifact.parent, dst=destination)
             else:
-                # Fallback to the package folder basename if ref is not present
-                try:
-                    name = os.path.basename(dep.package_folder)
-                except Exception:
-                    name = "unknown"
-
-            # ---- Headers (namespaced per package) ----
-            for incdir in getattr(dep.cpp_info, "includedirs", []) or []:
-                try:
-                    copy(
-                        self,
-                        "*",
-                        src=incdir,
-                        dst=os.path.join(target_deploy_folder, "include"),
-                    )
-                except Exception as e:
-                    self.output.error(
-                        f"Failed copying headers from {name}: {e}"
-                    )
-                    raise
-
-            # Static/import libs go to lib; shared libs may be in libdirs but belong in bin
-            for libdir in getattr(dep.cpp_info, "libdirs", []) or []:
-                try_copy(
-                    ["*.lib", "*.a"],
-                    libdir,
-                    os.path.join(target_deploy_folder, "lib"),
-                    name,
-                )
-                try_copy(
-                    ["*.dll", "*.so*", "*.dylib*"],
-                    libdir,
-                    os.path.join(target_deploy_folder, "bin"),
-                    name,
-                )
-
-            # Executables + shared objects in bindirs
-            for bindir in getattr(dep.cpp_info, "bindirs", []) or []:
-                try_copy(
-                    ["*.exe", "*.dll", "*.so*", "*.dylib*"],
-                    bindir,
-                    os.path.join(target_deploy_folder, "bin"),
-                    name,
-                )
+                copy(self, "*", src=source, dst=target / relative)
+        for library in libraries:
+            copy(self, library.name, src=library.parent, dst=target / "lib", keep_path=False)

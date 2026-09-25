@@ -1,0 +1,36 @@
+{
+  "$schema": "../../../../src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json",
+  "version": 1,
+  "max_in_flight_jobs": 1,
+  "output": "../../.cooked",
+  "jobs": [
+    {
+      "id": "tableRound",
+      "type": "fbx",
+      "source": "../../fbx/showcase/tableRound.fbx",
+      "name": "tableRound",
+      "content_hashing": true
+    },
+    {
+      "id": "chair",
+      "type": "fbx",
+      "source": "../../fbx/showcase/chair.fbx",
+      "name": "chair",
+      "content_hashing": true
+    },
+    {
+      "id": "lampRoundTable",
+      "type": "fbx",
+      "source": "../../fbx/showcase/lampRoundTable.fbx",
+      "name": "lampRoundTable",
+      "content_hashing": true
+    },
+    {
+      "id": "pottedPlant",
+      "type": "fbx",
+      "source": "../../fbx/showcase/pottedPlant.fbx",
+      "name": "pottedPlant",
+      "content_hashing": true
+    }
+  ]
+}

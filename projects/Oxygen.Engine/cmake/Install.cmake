@@ -1,246 +1,215 @@
-# ===-----------------------------------------------------------------------===#
-# Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-# copy at https://opensource.org/licenses/BSD-3-Clause.
+# Distributed under the 3-Clause BSD License. See accompanying file LICENSE.
 # SPDX-License-Identifier: BSD-3-Clause
-# ===-----------------------------------------------------------------------===#
 
-# Determine if this is built as a subproject  or if it is the master project.
-# By default we only add the install target if this is the master project. If
-# it is used as a sub-project, then the user can request to add the install
-# targets by overriding this option.
-if(NOT DEFINED ${META_PROJECT_ID}_INSTALL)
-  option(
-    ${META_PROJECT_ID}_INSTALL
-    "Generate the install target for this project."
-    ${${META_PROJECT_ID}_IS_MASTER_PROJECT}
-  )
+include_guard(GLOBAL)
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
+option(OXYGEN_INSTALL "Install Oxygen artifacts." ${PROJECT_IS_TOP_LEVEL})
+
+set(OXYGEN_INSTALL_LIB "${CMAKE_INSTALL_LIBDIR}")
+set(OXYGEN_INSTALL_BIN "${CMAKE_INSTALL_BINDIR}")
+set(OXYGEN_INSTALL_INCLUDE "${CMAKE_INSTALL_INCLUDEDIR}")
+set(OXYGEN_INSTALL_CMAKE "${CMAKE_INSTALL_LIBDIR}/cmake/Oxygen")
+set(OXYGEN_INSTALL_DATA "${CMAKE_INSTALL_DATADIR}/oxygen")
+set(OXYGEN_INSTALL_SCHEMAS "${OXYGEN_INSTALL_DATA}/schemas")
+set(OXYGEN_INSTALL_MISC "${OXYGEN_INSTALL_DATA}")
+set(OXYGEN_INSTALL_DOC "${CMAKE_INSTALL_DOCDIR}")
+set(OXYGEN_INSTALL_SHARED "${CMAKE_INSTALL_LIBDIR}")
+if(WIN32)
+  set(OXYGEN_INSTALL_SHARED "${CMAKE_INSTALL_BINDIR}")
 endif()
 
-function(_oxygen_emit_multi_config_install_prefix_hook)
-  get_property(
-    _oxygen_is_multi_config
-    GLOBAL
-    PROPERTY GENERATOR_IS_MULTI_CONFIG
-  )
-  if(NOT _oxygen_is_multi_config OR OXYGEN_WITH_ASAN)
-    return()
-  endif()
-
-  install(
-    CODE
-      [[
-    set(_oxygen_install_base_prefix "${CMAKE_INSTALL_PREFIX}")
-    if(_oxygen_install_base_prefix MATCHES "/(Debug|Release|RelWithDebInfo|MinSizeRel)$")
-      string(
-        REGEX REPLACE
-        "/(Debug|Release|RelWithDebInfo|MinSizeRel)$"
-        ""
-        _oxygen_install_base_prefix
-        "${_oxygen_install_base_prefix}"
+if(OXYGEN_INSTALL)
+  if(PROJECT_IS_TOP_LEVEL AND NOT OXYGEN_CONAN_PACKAGE_BUILD)
+    if(NOT DEFINED OXYGEN_CONAN_DEPLOY_DIR)
+      set(OXYGEN_CONAN_DEPLOY_DIR "${OXYGEN_PROJECT_SOURCE_DIR}/out/install")
+    endif()
+    if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+      set_property(
+        CACHE
+          CMAKE_INSTALL_PREFIX
+        PROPERTY
+          VALUE
+            "${OXYGEN_CONAN_DEPLOY_DIR}"
       )
     endif()
-    set(
-      CMAKE_INSTALL_PREFIX
-      "${_oxygen_install_base_prefix}/${CMAKE_INSTALL_CONFIG_NAME}"
+    # Only the default developer destination follows the selected configuration.
+    # In a fresh install-script process, --prefix is a cache definition, whereas
+    # the generated default is a normal variable. Never rewrite that override.
+    # ALL_COMPONENTS keeps full and component installs on the same destination.
+    set(OXYGEN_DEFAULT_INSTALL_ROOT "${OXYGEN_CONAN_DEPLOY_DIR}")
+    configure_file(
+      "${CMAKE_CURRENT_LIST_DIR}/InstallPrefix.cmake.in"
+      "${PROJECT_BINARY_DIR}/oxygen-install-prefix.cmake"
+      @ONLY
     )
-  ]]
-  )
-endfunction()
-
-macro(_setup_install_dirs)
-  message(STATUS "Using CMAKE_INSTALL_PREFIX: ${CMAKE_INSTALL_PREFIX}")
-  # Check for system dir install
-  set(_system_dir_install FALSE)
-  if(
-    "${CMAKE_INSTALL_PREFIX}"
-      STREQUAL
-      "/usr"
-    OR
-      "${CMAKE_INSTALL_PREFIX}"
-        STREQUAL
-        "/usr/local"
-  )
-    set(_system_dir_install TRUE)
-  endif()
-
-  # cmake-format: off
-  if(UNIX AND _system_dir_install)
-    # Installation paths
-    include(GNUInstallDirs)
-    # Install into the system (/usr/bin or /usr/local/bin)
-    set(OXYGEN_INSTALL_LIB "${CMAKE_INSTALL_LIBDIR}") # /usr/[local]/lib
-    set(OXYGEN_INSTALL_SHARED "${OXYGEN_INSTALL_LIB}") # /usr/[local]/lib
-    set(
-      OXYGEN_INSTALL_CMAKE
-      "${CMAKE_INSTALL_DATAROOTDIR}/cmake/${META_PROJECT_NAME}"
-    ) # /usr/[local]/share/cmake/<project>
-    set(OXYGEN_INSTALL_PKGCONFIG "${CMAKE_INSTALL_DATAROOTDIR}/pkgconfig") # /usr/[local]/share/pkgconfig
-    set(
-      OXYGEN_INSTALL_EXAMPLES
-      "${CMAKE_INSTALL_DATAROOTDIR}/${META_PROJECT_NAME}/examples"
-    ) # /usr/[local]/share/<project>/examples
-    set(OXYGEN_INSTALL_DATA "${CMAKE_INSTALL_DATAROOTDIR}/${META_PROJECT_NAME}") # /usr/[local]/share/<project>
-    set(OXYGEN_INSTALL_BIN "${CMAKE_INSTALL_BINDIR}") # /usr/[local]/bin
-    set(OXYGEN_INSTALL_INCLUDE "${CMAKE_INSTALL_INCLUDEDIR}") # /usr/[local]/include
-    set(OXYGEN_INSTALL_DOC "${CMAKE_INSTALL_DOCDIR}") # /usr/[local]/share/doc/<project>
-    set(OXYGEN_INSTALL_SHORTCUTS "${CMAKE_INSTALL_DATAROOTDIR}/applications") # /usr/[local]/share/applications
-    set(OXYGEN_INSTALL_ICONS "${CMAKE_INSTALL_DATAROOTDIR}/pixmaps") # /usr/[local]/share/pixmaps
-    set(OXYGEN_INSTALL_INIT "/etc/init") # /etc/init (upstart init scripts)
-    set(OXYGEN_INSTALL_MISC "${CMAKE_INSTALL_DATAROOTDIR}/${META_PROJECT_NAME}") # /etc/init (upstart init scripts)
-  else()
-    # Install into local directory
-    set(OXYGEN_INSTALL_LIB "lib") # ./lib
-    set(OXYGEN_INSTALL_BIN "bin") # ./bin
-    if(${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
-      set(OXYGEN_INSTALL_SHARED "${OXYGEN_INSTALL_BIN}") # ./lib
-    else()
-      set(OXYGEN_INSTALL_SHARED "${OXYGEN_INSTALL_LIB}") # ./lib
-    endif()
-    set(OXYGEN_INSTALL_CMAKE "share/cmake/${META_PROJECT_NAME}") # ./share/cmake/<project>
-    set(OXYGEN_INSTALL_PKGCONFIG "share/pkgconfig") # ./share/pkgconfig
-    set(OXYGEN_INSTALL_EXAMPLES "examples") # ./examples
-    set(OXYGEN_INSTALL_DATA ".") # ./
-    set(OXYGEN_INSTALL_INCLUDE "include") # ./include
-    set(OXYGEN_INSTALL_DOC "doc") # ./doc
-    set(OXYGEN_INSTALL_SHORTCUTS "shortcuts") # ./shortcuts
-    set(OXYGEN_INSTALL_ICONS "icons") # ./icons
-    set(OXYGEN_INSTALL_INIT "init") # ./init
-    set(OXYGEN_INSTALL_MISC ".") # ./
-  endif()
-  if(OXYGEN_INSTALL_DATA STREQUAL ".")
-    set(OXYGEN_INSTALL_SCHEMAS "schemas")
-  else()
-    cmake_path(
-      APPEND
-      OXYGEN_INSTALL_DATA
-      "schemas"
-      OUTPUT_VARIABLE OXYGEN_INSTALL_SCHEMAS
+    install(
+      SCRIPT "${PROJECT_BINARY_DIR}/oxygen-install-prefix.cmake"
+      ALL_COMPONENTS
     )
   endif()
-  # cmake-format: on
-endmacro()
-
-if(${META_PROJECT_ID}_INSTALL)
-  if(PROJECT_IS_TOP_LEVEL AND OXYGEN_BUILD_FULL_ENGINE)
-    _oxygen_emit_multi_config_install_prefix_hook()
-  endif()
-  _setup_install_dirs()
-
-  set(runtime "${META_PROJECT_NAME}_runtime")
-  set(dev "${META_PROJECT_NAME}_dev")
-  set(meta "${META_PROJECT_NAME}_meta")
-  set(data "${META_PROJECT_NAME}_data")
-  set(docs "${META_PROJECT_NAME}_docs")
-
-  # Install the project meta files
   if(PROJECT_IS_TOP_LEVEL)
-    install(FILES AUTHORS DESTINATION ${OXYGEN_INSTALL_MISC} COMPONENT ${meta})
-    install(FILES LICENSE DESTINATION ${OXYGEN_INSTALL_MISC} COMPONENT ${meta})
+    if(OXYGEN_BUILD_FULL_ENGINE)
+      install(
+        FILES
+          "${CMAKE_CURRENT_LIST_DIR}/SDK_README.md"
+        DESTINATION .
+        RENAME README.md
+        COMPONENT Oxygen_dev
+      )
+    endif()
     install(
       FILES
-        README.md
-      DESTINATION ${OXYGEN_INSTALL_MISC}
-      COMPONENT ${meta}
+        "${OXYGEN_PROJECT_SOURCE_DIR}/AUTHORS"
+        "${OXYGEN_PROJECT_SOURCE_DIR}/LICENSE"
+      DESTINATION "${OXYGEN_INSTALL_MISC}"
+      COMPONENT Oxygen_dev
+    )
+    install(
+      FILES
+        "${CMAKE_CURRENT_LIST_DIR}/oxygen-source.schema.json"
+      DESTINATION "${OXYGEN_INSTALL_SCHEMAS}"
+      COMPONENT Oxygen_data
     )
   endif()
-
-  # # Install master docs
-  # string(MAKE_C_IDENTIFIER ${META_PROJECT_NAME} project_id)
-  # string(TOLOWER ${project_id} project_id)
-  # set(master_sphinx_target ${project_id}_master)
-  # install(DIRECTORY ${SPHINX_BUILD_DIR}/${master_sphinx_target} DESTINATION ${OXYGEN_INSTALL_DOC} COMPONENT ${docs} OPTIONAL)
-
-  # # Install data
-  # install(DIRECTORY ${PROJECT_SOURCE_DIR}/data DESTINATION ${OXYGEN_INSTALL_DATA} COMPONENT ${data} OPTIONAL)
 endif()
 
 function(oxygen_module_install)
-  if(NOT ${META_PROJECT_ID}_INSTALL)
+  if(NOT OXYGEN_INSTALL)
     return()
   endif()
-
-  set(options)
-  set(
-    oneValueArgs
-    EXPORT
-    INCLUDE_PREFIX
+  cmake_parse_arguments(PARSE_ARGV 0 arg "" "EXPORT;INCLUDE_PREFIX" "TARGETS")
+  if(
+    DEFINED
+      arg_UNPARSED_ARGUMENTS
+    OR
+      DEFINED
+        arg_KEYWORDS_MISSING_VALUES
+    OR
+      NOT
+        arg_TARGETS
   )
-  set(multiValueArgs TARGETS)
+    message(FATAL_ERROR "oxygen_module_install: invalid/missing arguments.")
+  endif()
+  if(NOT arg_EXPORT STREQUAL "oxygen")
+    message(FATAL_ERROR "oxygen_module_install: expected EXPORT oxygen.")
+  endif()
+  foreach(_target IN LISTS arg_TARGETS)
+    if(NOT TARGET "${_target}")
+      message(FATAL_ERROR "Cannot install missing target ${_target}.")
+    endif()
+    get_target_property(_type "${_target}" TYPE)
+    if(_type STREQUAL "EXECUTABLE")
+      install(
+        TARGETS
+          "${_target}"
+        RUNTIME
+          DESTINATION "${OXYGEN_INSTALL_BIN}"
+          COMPONENT Oxygen_runtime
+      )
+    else()
+      string(REGEX REPLACE "^oxygen-" "" _export_name "${_target}")
+      set_property(
+        TARGET
+          "${_target}"
+        PROPERTY
+          EXPORT_NAME
+            "${_export_name}"
+      )
+      install(
+        TARGETS
+          "${_target}"
+        EXPORT OxygenTargets
+        RUNTIME
+          DESTINATION "${OXYGEN_INSTALL_BIN}"
+          COMPONENT Oxygen_runtime
+        LIBRARY
+          DESTINATION "${OXYGEN_INSTALL_SHARED}"
+          COMPONENT Oxygen_runtime
+        ARCHIVE
+          DESTINATION "${OXYGEN_INSTALL_LIB}"
+          COMPONENT Oxygen_dev
+        FILE_SET
+        HEADERS
+          DESTINATION "${OXYGEN_INSTALL_INCLUDE}/${arg_INCLUDE_PREFIX}"
+          COMPONENT Oxygen_dev
+      )
+      set_property(
+        GLOBAL
+        APPEND
+        PROPERTY
+          OXYGEN_INSTALLED_MODULES
+            "${META_MODULE_NAME}"
+      )
+      set_property(
+        GLOBAL
+        APPEND
+        PROPERTY
+          OXYGEN_INSTALLED_TARGETS
+            "${_target}"
+      )
+    endif()
+  endforeach()
+endfunction()
 
-  cmake_parse_arguments(
-    x
-    "${options}"
-    "${oneValueArgs}"
-    "${multiValueArgs}"
-    ${ARGN}
-  )
-
-  if(NOT DEFINED x_EXPORT)
-    message(FATAL_ERROR "Export name is required.")
+function(oxygen_finalize_install)
+  if(NOT OXYGEN_INSTALL)
     return()
   endif()
-
-  set(mod_runtime "${META_MODULE_NAME}_runtime")
-  set(mod_dev "${META_MODULE_NAME}_dev")
-
-  message(STATUS "[oxygen_module_install] Namespace: ${x_EXPORT}")
-  message(STATUS "[oxygen_module_install] Targets: ${x_TARGETS}")
-  message(STATUS "[oxygen_module_install] Runtime component: ${mod_runtime}")
-  message(STATUS "[oxygen_module_install] Dev component: ${mod_dev}")
-
-  install(
-    TARGETS
-      ${x_TARGETS}
-    EXPORT ${META_MODULE_NAME}
-    RUNTIME
-      DESTINATION ${OXYGEN_INSTALL_BIN}
-      COMPONENT ${mod_runtime}
-    LIBRARY
-      DESTINATION ${OXYGEN_INSTALL_SHARED}
-      COMPONENT ${mod_runtime}
-    ARCHIVE
-      DESTINATION ${OXYGEN_INSTALL_LIB}
-      COMPONENT ${mod_dev}
-    FILE_SET
-    HEADERS
-      DESTINATION ${OXYGEN_INSTALL_INCLUDE}/${x_INCLUDE_PREFIX}
-      COMPONENT ${mod_dev}
+  get_property(
+    OXYGEN_INSTALLED_MODULES
+    GLOBAL
+    PROPERTY OXYGEN_INSTALLED_MODULES
   )
-
-  # Must install the export per module.
-  install(
-    EXPORT ${META_MODULE_NAME}
-    NAMESPACE ${x_EXPORT}::
-    DESTINATION ${OXYGEN_INSTALL_CMAKE}
-    FILE ${META_MODULE_NAME}-targets.cmake
-    COMPONENT ${mod_dev}
+  if(NOT OXYGEN_INSTALLED_MODULES)
+    return()
+  endif()
+  list(REMOVE_DUPLICATES OXYGEN_INSTALLED_MODULES)
+  # Conan's graph produces these rules per configuration. Their destinations are
+  # relative; installed consumers never load the producer's Conan toolchain.
+  if(NOT OXYGEN_CONAN_PACKAGE_BUILD AND OXYGEN_SDK_DEPENDENCY_DIR)
+    file(
+      GLOB _oxygen_dependency_rules
+      "${OXYGEN_SDK_DEPENDENCY_DIR}/install-*.cmake"
+    )
+    foreach(_rules IN LISTS _oxygen_dependency_rules)
+      include("${_rules}")
+    endforeach()
+    configure_package_config_file(
+      "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/OxygenSDKPaths.cmake.in"
+      "${PROJECT_BINARY_DIR}/OxygenSDKPaths.cmake"
+      INSTALL_DESTINATION "${OXYGEN_INSTALL_CMAKE}"
+      NO_SET_AND_CHECK_MACRO
+      NO_CHECK_REQUIRED_COMPONENTS_MACRO
+    )
+    install(
+      FILES
+        "${PROJECT_BINARY_DIR}/OxygenSDKPaths.cmake"
+      DESTINATION "${OXYGEN_INSTALL_CMAKE}"
+      COMPONENT Oxygen_dev
+    )
+  endif()
+  configure_package_config_file(
+    "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/OxygenConfig.cmake.in"
+    "${PROJECT_BINARY_DIR}/OxygenConfig.cmake"
+    INSTALL_DESTINATION "${OXYGEN_INSTALL_CMAKE}"
   )
-
-  install(
-    TARGETS
-      ${x_TARGETS}
-    EXPORT ${x_EXPORT}
-    RUNTIME
-      DESTINATION ${OXYGEN_INSTALL_BIN}
-      COMPONENT ${runtime}
-    LIBRARY
-      DESTINATION ${OXYGEN_INSTALL_SHARED}
-      COMPONENT ${runtime}
-    ARCHIVE
-      DESTINATION ${OXYGEN_INSTALL_LIB}
-      COMPONENT ${dev}
-    FILE_SET
-    HEADERS
-      DESTINATION ${OXYGEN_INSTALL_INCLUDE}/${x_INCLUDE_PREFIX}
-      COMPONENT ${dev}
+  write_basic_package_version_file(
+    "${PROJECT_BINARY_DIR}/OxygenConfigVersion.cmake"
+    VERSION "${META_VERSION}"
+    COMPATIBILITY ExactVersion
   )
-
-  # Must install the export per module.
   install(
-    EXPORT ${META_MODULE_NAME}
-    NAMESPACE ${x_EXPORT}::
-    DESTINATION ${OXYGEN_INSTALL_CMAKE}
-    FILE ${META_MODULE_NAME}-targets.cmake
-    COMPONENT ${dev}
+    EXPORT OxygenTargets
+    NAMESPACE oxygen::
+    DESTINATION "${OXYGEN_INSTALL_CMAKE}"
+    COMPONENT Oxygen_dev
+  )
+  install(
+    FILES
+      "${PROJECT_BINARY_DIR}/OxygenConfig.cmake"
+      "${PROJECT_BINARY_DIR}/OxygenConfigVersion.cmake"
+    DESTINATION "${OXYGEN_INSTALL_CMAKE}"
+    COMPONENT Oxygen_dev
   )
 endfunction()

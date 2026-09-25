@@ -24,7 +24,8 @@ namespace oxygen::examples {
 //! JSON-backed settings persistence for demo UIs.
 class SettingsService {
 public:
-  explicit SettingsService(std::filesystem::path storage_path);
+  explicit SettingsService(std::filesystem::path storage_path,
+    std::filesystem::path portable_root = {});
 
   OXYGEN_MAKE_NON_COPYABLE(SettingsService);
   OXYGEN_MAKE_NON_MOVABLE(SettingsService);
@@ -34,6 +35,19 @@ public:
   //! Creates a settings service stored alongside the calling demo source file.
   static auto CreateForDemo(std::source_location location
     = std::source_location::current()) -> std::unique_ptr<SettingsService>;
+
+  //! Selects the installed showcase's settings file before its first use.
+  static auto InitializeForDemoApp(std::filesystem::path storage_path,
+    std::filesystem::path portable_root = {}) -> void;
+
+  //! Encode SDK-local paths relative to its root; retain external absolute
+  //! paths.
+  [[nodiscard]] auto EncodePath(const std::filesystem::path& path) const
+    -> std::filesystem::path;
+
+  //! Resolve stored relative paths against the selected portable root.
+  [[nodiscard]] auto DecodePath(const std::filesystem::path& path) const
+    -> std::filesystem::path;
 
   //! Returns the process-wide default settings service.
   static auto ForDemoApp(std::source_location location
@@ -96,6 +110,7 @@ private:
 
   mutable std::shared_mutex mutex_;
   std::filesystem::path storage_path_;
+  const std::filesystem::path portable_root_;
   bool persistence_enabled_ { true };
   bool dirty_ { false };
   bool loaded_ { false };

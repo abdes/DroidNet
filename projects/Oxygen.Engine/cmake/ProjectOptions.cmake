@@ -3,11 +3,15 @@
 
 option(BUILD_SHARED_LIBS "Build shared instead of static libraries." OFF)
 option(OXYGEN_BUILD_TESTS "Build Oxygen tests." ${PROJECT_IS_TOP_LEVEL})
-option(OXYGEN_BUILD_EXAMPLES "Build Oxygen examples." ${PROJECT_IS_TOP_LEVEL})
+option(
+  OXYGEN_BUILD_EXAMPLES
+  "Build development examples in addition to the mandatory RenderScene showcase."
+  ${PROJECT_IS_TOP_LEVEL}
+)
 option(OXYGEN_BUILD_DOCS "Enable Oxygen documentation." ${PROJECT_IS_TOP_LEVEL})
 option(
   OXYGEN_BUILD_TOOLS
-  "Build optional Oxygen tools."
+  "Build optional development tools; native cooker tools and ShaderBake are mandatory."
   ${PROJECT_IS_TOP_LEVEL}
 )
 option(

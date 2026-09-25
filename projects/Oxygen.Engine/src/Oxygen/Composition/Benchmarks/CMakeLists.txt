@@ -36,11 +36,3 @@ target_link_libraries(
 
 # Define the test
 add_test(NAME ${program_name} COMMAND ${program_name})
-
-install(
-  TARGETS
-    ${program_name}
-  RUNTIME
-    DESTINATION bin
-    COMPONENT benchmarks
-)

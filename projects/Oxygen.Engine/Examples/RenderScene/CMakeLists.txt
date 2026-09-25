@@ -31,6 +31,8 @@ add_executable(
   "main_impl.cpp"
   "MainModule.h"
   "MainModule.cpp"
+  "RuntimePaths.h"
+  "RuntimePaths.cpp"
 )
 
 set_target_properties(
@@ -87,3 +89,25 @@ oxygen_module_install(
 )
 
 asap_pop_module("${META_MODULE_NAME}")
+
+if(OXYGEN_INSTALL)
+  install(
+    FILES
+      "${CMAKE_CURRENT_SOURCE_DIR}/README.md"
+    DESTINATION "${OXYGEN_INSTALL_DATA}/RenderScene"
+    COMPONENT Oxygen_data
+  )
+  install(
+    FILES
+      "${CMAKE_CURRENT_SOURCE_DIR}/RenderScene.ps1"
+      "${CMAKE_CURRENT_SOURCE_DIR}/RenderScene.cmd"
+    DESTINATION .
+    COMPONENT Oxygen_runtime
+  )
+  install(
+    FILES
+      "${CMAKE_CURRENT_SOURCE_DIR}/reimport-sources.schema.json"
+    DESTINATION "${OXYGEN_INSTALL_SCHEMAS}"
+    COMPONENT Oxygen_data
+  )
+endif()
