@@ -7,14 +7,14 @@ repos:
     rev: v6.0.0
     hooks:
       - id: end-of-file-fixer
-        exclude: \.verified\.
+        exclude: '\.verified\.|^projects/Oxygen\.Engine/Examples/Content/fbx/showcase/'
       - id: trailing-whitespace
-        exclude: \.verified\.
+        exclude: '\.verified\.|^projects/Oxygen\.Engine/Examples/Content/fbx/showcase/'
       # Keep these exclusions aligned with the -text rules in .gitattributes.
       - id: mixed-line-ending
         name: Normalize text to LF
         args: [--fix=lf]
-        exclude: '(?i)\.(bat|cmd|pak|7z|br|gz|tar|zip|pdf|gif|ico|jpg|png|psd|webp|woff2|exe)$'
+        exclude: '(?i)\.(bat|cmd|pak|7z|br|gz|tar|zip|pdf|gif|ico|jpg|png|psd|webp|woff2|exe)$|^projects/Oxygen\.Engine/Examples/Content/fbx/showcase/'
       - id: mixed-line-ending
         name: Normalize batch scripts to CRLF
         args: [--fix=crlf]

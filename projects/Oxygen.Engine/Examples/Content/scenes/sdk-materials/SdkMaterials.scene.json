@@ -1,0 +1,279 @@
+{
+  "$schema": "../../../../src/Oxygen/Cooker/Import/Schemas/oxygen.scene-descriptor.schema.json",
+  "version": 7,
+  "name": "SdkMaterials",
+  "nodes": [
+    {
+      "name": "Root",
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "name": "Cube",
+      "parent": 0,
+      "transform": {
+        "translation": [0.0, 0.0, 0.0],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "name": "CubeB",
+      "parent": 0,
+      "transform": {
+        "translation": [2.0, 0.0, -1.0],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [0.8, 0.8, 0.8]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "name": "CubeC",
+      "parent": 0,
+      "transform": {
+        "translation": [-2.0, 0.0, -1.5],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.25, 0.6, 1.25]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "name": "MainCamera",
+      "parent": 0,
+      "transform": {
+        "translation": [4.5, 9.0, 3.5],
+        "rotation": [
+          0.12497288726593046, 0.5293936458028993, 0.8166737189866418,
+          0.19279051311840817
+        ],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "name": "Sun",
+      "parent": 0,
+      "transform": {
+        "translation": [0.0, 5.0, 8.0],
+        "rotation": [0.5, 0.0, 0.0, 0.8660254],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "name": "FillLight",
+      "parent": 0,
+      "transform": {
+        "translation": [1.5, 1.2, 2.0],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "name": "SpotRig",
+      "parent": 0,
+      "transform": {
+        "translation": [-1.5, 2.0, 2.5],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "name": "SideSpotX",
+      "parent": 0,
+      "transform": {
+        "translation": [2.75, 0.0, 0.0],
+        "rotation": [0.0, 0.0, -0.70710678, 0.70710678],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "name": "SidePointX",
+      "parent": 0,
+      "transform": {
+        "translation": [1.5, 0.0, 0.0],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "name": "CubeD",
+      "parent": 0,
+      "transform": {
+        "translation": [2.0, 0.0, -2.0],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [0.9, 0.9, 0.9]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    }
+  ],
+  "renderables": [
+    {
+      "node": 1,
+      "geometry_ref": "/.cooked/Geometry/SdkCube.ogeo",
+      "visible": true
+    },
+    {
+      "node": 2,
+      "geometry_ref": "/.cooked/Geometry/SdkCubeB.ogeo",
+      "visible": true
+    },
+    {
+      "node": 3,
+      "geometry_ref": "/.cooked/Geometry/SdkCubeC.ogeo",
+      "visible": true
+    },
+    {
+      "node": 10,
+      "geometry_ref": "/.cooked/Geometry/SdkCubeD.ogeo",
+      "visible": true
+    }
+  ],
+  "cameras": {
+    "perspective": [
+      {
+        "node": 4,
+        "fov_y": 0.785398,
+        "aspect_ratio": 1.777778,
+        "near_plane": 0.1,
+        "far_plane": 100.0
+      }
+    ]
+  },
+  "lights": {
+    "directional": [
+      {
+        "node": 5,
+        "common": {
+          "affects_world": true,
+          "color_rgb": [1.0, 0.98, 0.92],
+          "casts_shadows": true,
+          "shadow": {
+            "bias": 0.03
+          }
+        },
+        "angular_size_radians": 0.00935,
+        "atmosphere_light_slot": 1,
+        "intensity_lux": 150000.0
+      }
+    ],
+    "point": [
+      {
+        "node": 6,
+        "common": {
+          "affects_world": true,
+          "color_rgb": [1.0, 0.35, 0.25],
+          "casts_shadows": false,
+          "shadow": {
+            "bias": 0.03
+          }
+        },
+        "range": 8.0,
+        "source_radius": 0.05,
+        "luminous_flux_lm": 1200.0
+      },
+      {
+        "node": 9,
+        "common": {
+          "affects_world": true,
+          "color_rgb": [1.0, 1.0, 1.0],
+          "casts_shadows": false,
+          "shadow": {
+            "bias": 0.03
+          }
+        },
+        "range": 3.0,
+        "source_radius": 0.02,
+        "luminous_flux_lm": 1200.0
+      }
+    ],
+    "spot": [
+      {
+        "node": 7,
+        "common": {
+          "affects_world": true,
+          "color_rgb": [0.25, 0.6, 1.0],
+          "casts_shadows": false,
+          "shadow": {
+            "bias": 0.03
+          }
+        },
+        "range": 12.0,
+        "inner_cone_angle_radians": 0.25,
+        "outer_cone_angle_radians": 0.45,
+        "source_radius": 0.02,
+        "luminous_flux_lm": 3000.0
+      },
+      {
+        "node": 8,
+        "common": {
+          "affects_world": true,
+          "color_rgb": [1.0, 1.0, 1.0],
+          "casts_shadows": false,
+          "shadow": {
+            "bias": 0.03
+          }
+        },
+        "range": 6.0,
+        "inner_cone_angle_radians": 0.18,
+        "outer_cone_angle_radians": 0.3,
+        "source_radius": 0.02,
+        "luminous_flux_lm": 3000.0
+      }
+    ]
+  },
+  "references": {
+    "materials": [
+      "/.cooked/Materials/SdkMarble.omat",
+      "/.cooked/Materials/SdkWood.omat"
+    ]
+  }
+}

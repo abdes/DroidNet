@@ -777,7 +777,7 @@ if(WIN32)
         FILES
           "${OXYGEN_WINPIXEVENTRUNTIME_DLL}"
         DESTINATION ${OXYGEN_INSTALL_BIN}
-        COMPONENT "${META_MODULE_NAME}_runtime"
+        COMPONENT Oxygen_runtime
       )
     endif()
 
@@ -843,7 +843,7 @@ if(WIN32)
           FILES
             "${OXYGEN_RENDERDOC_DLL}"
           DESTINATION ${OXYGEN_INSTALL_BIN}
-          COMPONENT "${META_MODULE_NAME}_runtime"
+          COMPONENT Oxygen_runtime
         )
       endif()
 
@@ -925,7 +925,7 @@ if(WIN32)
           FILES
             "${OXYGEN_AFTERMATH_DLL}"
           DESTINATION ${OXYGEN_INSTALL_BIN}
-          COMPONENT "${META_MODULE_NAME}_runtime"
+          COMPONENT Oxygen_runtime
         )
       endif()
 

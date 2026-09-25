@@ -268,7 +268,7 @@ function(oxygen_add_version_metadata target)
       FILES
         "${OXYGEN_VERSION_CAPSULE}"
       DESTINATION share/oxygen
-      COMPONENT "${META_MODULE_NAME}_dev"
+      COMPONENT Oxygen_dev
     )
   endif()
 endfunction()

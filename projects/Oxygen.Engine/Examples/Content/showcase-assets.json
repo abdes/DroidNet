@@ -1,0 +1,90 @@
+{
+  "$schema": "./showcase-assets.schema.json",
+  "version": 1,
+  "assets": [
+    {
+      "name": "Lantern.glb",
+      "url": "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/0b4f3a5862f3037c7092206e75c6f2a31a504ca5/Models/Lantern/glTF-Binary/Lantern.glb",
+      "bytes": 9564264,
+      "sha256": "a79458c4b02d695187a952f23a63b8bf278e7bc3d316a3c2a314f2d6974181f1"
+    },
+    {
+      "name": "Sky.hdr",
+      "url": "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/kloppenheim_06_puresky_1k.hdr",
+      "bytes": 1173154,
+      "sha256": "206c67e3a1b992282821cf06662bdd69bbb4915c1c4444a66338a40d6a7d4e34"
+    },
+    {
+      "name": "Marble001.zip",
+      "url": "https://ambientcg.com/get?file=Marble001_1K-JPG.zip",
+      "bytes": 5861258,
+      "sha256": "76468a81047917a4f4d6c8c789c828e6e39c8a4e9b71e904787d79752e0fa34e"
+    },
+    {
+      "name": "Wood051.zip",
+      "url": "https://ambientcg.com/get?file=Wood051_1K-JPG.zip",
+      "bytes": 6712631,
+      "sha256": "debf3d60f69a09c30613dc95a94da49c8116160ab8a29f77ac8e32cc33f1a1c3"
+    },
+    {
+      "name": "Marble001_1K-JPG_Color.jpg",
+      "bytes": 687896,
+      "sha256": "953f608af2db75ad55d041bca4626a5a8255eeeb2e7cd18fd2467921b011e90a",
+      "archive": "Marble001.zip"
+    },
+    {
+      "name": "Marble001_1K-JPG_NormalGL.jpg",
+      "bytes": 1346056,
+      "sha256": "18e861a239f679af261c0a14cd0ed088d84595b45f2877b6476f0c0f1e3a4a9b",
+      "archive": "Marble001.zip"
+    },
+    {
+      "name": "Marble001_1K-JPG_Roughness.jpg",
+      "bytes": 660777,
+      "sha256": "2b83bb56f640a164676fbb5ade3324bf1270186556f3356aa07e1b070cc50af5",
+      "archive": "Marble001.zip"
+    },
+    {
+      "name": "Wood051_1K-JPG_Color.jpg",
+      "bytes": 871537,
+      "sha256": "f3c6c5456457e8d05c1fee4d2f186f41d0aea2b8a06859b69ce2934e11aa8798",
+      "archive": "Wood051.zip"
+    },
+    {
+      "name": "Wood051_1K-JPG_NormalGL.jpg",
+      "bytes": 1583401,
+      "sha256": "9078dc50c43b55831ae322460fc96b62df68c7a148400bd7755ab2788fec1708",
+      "archive": "Wood051.zip"
+    },
+    {
+      "name": "Wood051_1K-JPG_Roughness.jpg",
+      "bytes": 680793,
+      "sha256": "b5736b940d721b49922cb14eebd52fd34f134b7ef99331ecf28565ce40358098",
+      "archive": "Wood051.zip"
+    },
+    {
+      "name": "tableRound.fbx",
+      "bytes": 19706,
+      "sha256": "2e024db523150e4661a58012ca063c22a73724e004d1805ad2ed2fc88cd03563",
+      "archive": "kenney_furniture-kit.zip"
+    },
+    {
+      "name": "chair.fbx",
+      "bytes": 25130,
+      "sha256": "e7b7be9a7f4220db05a1bddd0cfa595e1d816e7446545223b3b04f6cdc566ca5",
+      "archive": "kenney_furniture-kit.zip"
+    },
+    {
+      "name": "lampRoundTable.fbx",
+      "bytes": 21261,
+      "sha256": "5bbe92f7b42614d166ba6070fbca5cd2dfaacbf9ae96d3dd97a50df3d08bf65c",
+      "archive": "kenney_furniture-kit.zip"
+    },
+    {
+      "name": "pottedPlant.fbx",
+      "bytes": 23744,
+      "sha256": "61e963d81fbf4e0772b5b8d542a44dbb0c794affa9994b6d5715f425d71fc97d",
+      "archive": "kenney_furniture-kit.zip"
+    }
+  ]
+}

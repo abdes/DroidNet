@@ -4,15 +4,16 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Base/Logging.h>
-
 #include "DemoShell/Services/ContentSettingsService.h"
 #include "DemoShell/Services/SettingsService.h"
+
+#include <Oxygen/Base/Logging.h>
 
 namespace oxygen::examples {
 
 namespace {
-  auto JoinPaths(const std::vector<std::filesystem::path>& paths) -> std::string
+  auto JoinPaths(const std::vector<std::filesystem::path>& paths,
+    const SettingsService& settings) -> std::string
   {
     std::string value;
     bool first = true;
@@ -24,13 +25,13 @@ namespace {
         value.push_back('\n');
       }
       first = false;
-      value += path.string();
+      value += settings.EncodePath(path).generic_string();
     }
     return value;
   }
 
-  auto SplitPaths(const std::string& serialized)
-    -> std::vector<std::filesystem::path>
+  auto SplitPaths(const std::string& serialized,
+    const SettingsService& settings) -> std::vector<std::filesystem::path>
   {
     std::vector<std::filesystem::path> paths;
     std::size_t begin = 0;
@@ -39,7 +40,7 @@ namespace {
       const auto token = serialized.substr(
         begin, end == std::string::npos ? std::string::npos : end - begin);
       if (!token.empty()) {
-        paths.emplace_back(token);
+        paths.push_back(settings.DecodePath(token));
       }
       if (end == std::string::npos) {
         break;
@@ -110,7 +111,7 @@ auto ContentSettingsService::GetExplorerSettings() const
   DCHECK_NOTNULL_F(settings);
 
   if (auto val = settings->GetString(kModelRootKey)) {
-    s.model_root = *val;
+    s.model_root = settings->DecodePath(*val);
   }
   if (auto val = settings->GetBool(kIncludeFbxKey)) {
     s.include_fbx = *val;
@@ -143,7 +144,8 @@ auto ContentSettingsService::SetExplorerSettings(
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
 
-  settings->SetString(kModelRootKey, s.model_root.string());
+  settings->SetString(
+    kModelRootKey, settings->EncodePath(s.model_root).generic_string());
   settings->SetBool(kIncludeFbxKey, s.include_fbx);
   settings->SetBool(kIncludeGlbKey, s.include_glb);
   settings->SetBool(kIncludeGltfKey, s.include_gltf);
@@ -328,7 +330,9 @@ auto ContentSettingsService::GetLastCookedOutputDirectory() const -> std::string
 {
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
-  return settings->GetString(kLastCookedOutputKey).value_or("");
+  return settings
+    ->DecodePath(settings->GetString(kLastCookedOutputKey).value_or(""))
+    .string();
 }
 
 auto ContentSettingsService::SetLastCookedOutputDirectory(
@@ -337,7 +341,8 @@ auto ContentSettingsService::SetLastCookedOutputDirectory(
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
 
-  settings->SetString(kLastCookedOutputKey, path);
+  settings->SetString(
+    kLastCookedOutputKey, settings->EncodePath(path).generic_string());
   ++epoch_;
 }
 
@@ -347,7 +352,7 @@ auto ContentSettingsService::GetMountedPakPaths() const
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
   const auto serialized = settings->GetString(kMountedPaksKey).value_or("");
-  return SplitPaths(serialized);
+  return SplitPaths(serialized, *settings);
 }
 
 auto ContentSettingsService::SetMountedPakPaths(
@@ -355,7 +360,7 @@ auto ContentSettingsService::SetMountedPakPaths(
 {
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
-  settings->SetString(kMountedPaksKey, JoinPaths(paths));
+  settings->SetString(kMountedPaksKey, JoinPaths(paths, *settings));
   ++epoch_;
 }
 
@@ -365,7 +370,7 @@ auto ContentSettingsService::GetMountedIndexPaths() const
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
   const auto serialized = settings->GetString(kMountedIndicesKey).value_or("");
-  return SplitPaths(serialized);
+  return SplitPaths(serialized, *settings);
 }
 
 auto ContentSettingsService::SetMountedIndexPaths(
@@ -373,7 +378,7 @@ auto ContentSettingsService::SetMountedIndexPaths(
 {
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
-  settings->SetString(kMountedIndicesKey, JoinPaths(paths));
+  settings->SetString(kMountedIndicesKey, JoinPaths(paths, *settings));
   ++epoch_;
 }
 
@@ -392,7 +397,7 @@ auto ContentSettingsService::GetActiveSceneSelection() const
   ContentActiveSceneSelection selection;
   selection.scene_name = settings->GetString(kActiveSceneNameKey).value_or("");
   selection.scene_key = settings->GetString(kActiveSceneKeyKey).value_or("");
-  selection.source_path = source_path;
+  selection.source_path = settings->DecodePath(source_path);
   selection.source_is_pak
     = settings->GetBool(kActiveSceneSourceIsPakKey).value_or(true);
   return selection;
@@ -415,8 +420,8 @@ auto ContentSettingsService::SetActiveSceneSelection(
 
   settings->SetString(kActiveSceneNameKey, selection->scene_name);
   settings->SetString(kActiveSceneKeyKey, selection->scene_key);
-  settings->SetString(
-    kActiveSceneSourcePathKey, selection->source_path.string());
+  settings->SetString(kActiveSceneSourcePathKey,
+    settings->EncodePath(selection->source_path).generic_string());
   settings->SetBool(kActiveSceneSourceIsPakKey, selection->source_is_pak);
   ++epoch_;
 }

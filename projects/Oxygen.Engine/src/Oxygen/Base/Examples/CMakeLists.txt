@@ -35,12 +35,6 @@ macro(add_example EXAMPLE_NAME SOURCE_FILE)
     ${EXAMPLE_TARGET_NAME}
     PARENT_SCOPE
   )
-
-  oxygen_module_install(
-    EXPORT ${META_MODULE_NAMESPACE}
-    TARGETS
-      ${EXAMPLE_TARGET_NAME}
-  )
 endmacro()
 
 add_subdirectory("StateMachine_Door_1")

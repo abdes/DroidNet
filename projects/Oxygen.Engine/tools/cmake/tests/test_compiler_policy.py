@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import sys
 import tempfile
 import unittest
 
@@ -84,6 +85,45 @@ class CompilerPolicyTests(CommandTests):
                     parent = next(c["command"] for c in commands if c["file"].endswith("main.cpp"))
                     self.assertIn("/W4" if os.name == "nt" else "-Wextra", own)
                     self.assertNotIn("/W4" if os.name == "nt" else "-Wextra", parent)
+
+    @unittest.skipUnless(os.name == "nt", "Windows DLL search path regression")
+    def test_discovery_with_multiple_transitive_runtime_directories(self):
+        with tempfile.TemporaryDirectory(prefix="oxygen runtime ") as tmp:
+            root = Path(tmp)
+            self.write_project(root, shared=True)
+            with (root / "oxygen/CMakeLists.txt").open("a", encoding="utf-8") as source:
+                source.write(
+                    'add_library(second SHARED second.cpp)\n'
+                    'set_target_properties(second PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON\n'
+                    '  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/second dependency")\n'
+                    'target_link_libraries(subject PRIVATE second)\n')
+            (root / "oxygen/second.cpp").write_text(
+                'extern "C" int second_value() { return 42; }\n', encoding="utf-8")
+            path = root / "oxygen/subject.cpp"
+            path.write_text(path.read_text().replace(
+                'extern "C" int exercise', 'extern "C" int second_value();\nextern "C" int exercise'
+            ).replace('p[0] = 42;', 'p[0] = second_value();'), encoding="utf-8")
+            self.configure(root, "Ninja Multi-Config")
+            self.run_command([CMAKE, "--build", "build", "--config", "Debug"], root)
+            ctest = str(Path(CMAKE).with_name("ctest.exe"))
+            result = self.run_command([ctest, "--test-dir", "build", "-C", "Debug", "-R", "^Policy.Clean$", "-V"], root)
+            self.assertIn("100% tests passed", result.stdout)
+
+    def test_runtime_launcher_preserves_arguments_and_exit_status(self):
+        with tempfile.TemporaryDirectory(prefix="oxygen arguments ") as tmp:
+            root = Path(tmp)
+            script = root / "launcher.cmake"
+            script.write_text(
+                f'set(OXYGEN_RUNTIME_COMMAND [==[{Path(CMAKE).as_posix()};-E;env;--]==])\n'
+                f'include("{ENGINE.as_posix()}/cmake/RunTest.cmake")\n', encoding="utf-8")
+            arguments = ["", "a;b", '"quoted"', "]==]", "trailing\\", "${not_expanded}"]
+            result = self.run_command([
+                CMAKE, "-P", str(script), "--", sys.executable, "-c",
+                "import json,sys; print(json.dumps(sys.argv[1:])); sys.exit(37)",
+                *arguments,
+            ], root, success=False)
+            self.assertEqual(result.returncode, 37, result.stdout + result.stderr)
+            self.assertEqual(json.loads(result.stdout), arguments)
 
     def test_static_and_shared_asan_detection_and_test_discovery(self):
         generators = ["Ninja", "Ninja Multi-Config"]

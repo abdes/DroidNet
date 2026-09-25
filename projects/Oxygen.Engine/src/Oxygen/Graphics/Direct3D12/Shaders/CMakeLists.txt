@@ -94,3 +94,12 @@ add_custom_target(
 
 # Make the main module target depend on the baked shader library
 add_dependencies(${META_MODULE_TARGET} ${META_MODULE_TARGET}_shaders)
+
+if(OXYGEN_INSTALL)
+  install(
+    FILES
+      "${SHADER_LIBRARY_OUTPUT}"
+    DESTINATION "${OXYGEN_INSTALL_DATA}/shaders"
+    COMPONENT Oxygen_data
+  )
+endif()

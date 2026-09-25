@@ -92,10 +92,4 @@ target_link_libraries(${program_name} PRIVATE SDL3::SDL3)
 # Deployment instructions
 # ==============================================================================
 
-oxygen_module_install(
-  EXPORT ${META_MODULE_NAMESPACE}
-  TARGETS
-    ${META_MODULE_TARGET}
-)
-
 asap_pop_module("${META_MODULE_NAME}")

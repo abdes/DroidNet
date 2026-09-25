@@ -158,4 +158,22 @@ oxygen_module_install(
     ${META_MODULE_TARGET}
 )
 
+if(OXYGEN_INSTALL AND WIN32)
+  install(
+    FILES
+      "${dxc_bin_path}/dxcompiler.dll"
+      "${dxc_bin_path}/dxil.dll"
+    DESTINATION "${OXYGEN_INSTALL_BIN}"
+    COMPONENT Oxygen_runtime
+  )
+  install(
+    FILES
+      "${OXYGEN_PROJECT_SOURCE_DIR}/packages/DXC/LICENSE-LLVM.txt"
+      "${OXYGEN_PROJECT_SOURCE_DIR}/packages/DXC/LICENSE-MIT.txt"
+      "${OXYGEN_PROJECT_SOURCE_DIR}/packages/DXC/LICENSE-MS.txt"
+    DESTINATION "${OXYGEN_INSTALL_DATA}/licenses/DXC"
+    COMPONENT Oxygen_runtime
+  )
+endif()
+
 asap_pop_module("${META_MODULE_NAME}")
