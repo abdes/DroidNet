@@ -38,11 +38,9 @@ add_subdirectory("Bindless")
 # Main module target
 # ------------------------------------------------------------------------------
 
-# Generate version-header
-configure_file("version.h.in" ${CMAKE_CURRENT_SOURCE_DIR}/version-info.h)
-
 add_library(${META_MODULE_TARGET})
 add_library(${META_MODULE_TARGET_ALIAS} ALIAS ${META_MODULE_TARGET})
+oxygen_add_version_metadata(${META_MODULE_TARGET})
 set_target_properties(
   ${META_MODULE_TARGET}
   PROPERTIES
@@ -97,8 +95,6 @@ set(
   "Types/ViewPort.h"
   "Types/ViewResolver.h"
   "Version.h"
-  # Generated header
-  "version-info.h"
   # Generated headers (Bindless)
   "Bindless/Generated.BindlessAbi.h"
   "Bindless/Generated.Meta.h"

@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Oxygen exported source provenance",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "version", "commit", "dirty"],
+  "properties": {
+    "schema": {
+      "const": 1,
+      "type": "integer"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\\.(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\\.(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])$"
+    },
+    "commit": {
+      "type": ["string", "null"],
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+    },
+    "dirty": {
+      "type": ["boolean", "null"]
+    }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "commit": {
+          "type": "string"
+        },
+        "dirty": {
+          "type": "boolean"
+        }
+      }
+    },
+    {
+      "properties": {
+        "commit": {
+          "type": "null"
+        },
+        "dirty": {
+          "type": "null"
+        }
+      }
+    }
+  ]
+}

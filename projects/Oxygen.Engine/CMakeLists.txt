@@ -19,16 +19,8 @@ set(CMAKE_DEBUG_POSTFIX "-d")
 # Project description and (meta) information
 # ------------------------------------------------------------------------------
 
-# Get git revision
-include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/GetGitRevisionDescription.cmake")
-get_git_head_revision(GIT_REFSPEC GIT_SHA1)
-string(SUBSTRING "${GIT_SHA1}" 0 12 GIT_REV)
-if(NOT GIT_SHA1)
-  set(GIT_REV "0")
-endif()
-
 # Meta information about the project
-include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/VersionHelpers.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/SourceProvenance.cmake")
 # gersemi: off
 set(META_PROJECT_NAME        "Oxygen")
 set(META_PROJECT_DESCRIPTION "Oxygen game engine")
@@ -37,9 +29,7 @@ set(META_GITHUB_REPO         "https://github.com/abdes/OxygenEngine")
 set(META_AUTHOR_DOMAIN       "https://github.com/abdes/OxygenEngine")
 set(META_AUTHOR_MAINTAINER   "Abdessattar Sassi")
 asap_version_read() # from `VERSION` file
-set(META_VERSION_REVISION    "${GIT_REV}")
 set(META_VERSION             "${META_VERSION_MAJOR}.${META_VERSION_MINOR}.${META_VERSION_PATCH}")
-set(META_NAME_VERSION        "${META_PROJECT_NAME} v${META_VERSION} (${META_VERSION_REVISION})")
 # gersemi: on
 
 string(MAKE_C_IDENTIFIER ${META_PROJECT_NAME} META_PROJECT_ID)
@@ -60,6 +50,13 @@ project(
   LANGUAGES
     C
     CXX
+)
+
+oxygen_read_source_provenance("${CMAKE_CURRENT_SOURCE_DIR}" OXYGEN_SOURCE)
+set(META_VERSION_REVISION "${OXYGEN_SOURCE_REVISION}")
+set(
+  META_NAME_VERSION
+  "${META_PROJECT_NAME} v${META_VERSION} (${OXYGEN_SOURCE_SHORT_REVISION})"
 )
 
 set(OXYGEN_IS_MASTER_PROJECT "${PROJECT_IS_TOP_LEVEL}")

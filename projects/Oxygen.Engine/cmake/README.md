@@ -47,6 +47,75 @@ Tool versions used to build dependencies remain dependency-specific. For example
 a recipe's build-context CMake requirement below version 4 does not lower the
 minimum for configuring Oxygen itself.
 
+## Product version and source provenance
+
+`VERSION` is the single product-version authority for CMake, Conan and the runtime
+API. It contains canonical decimal `major.minor.patch`, with each component in
+0..255 to match the existing `std::uint8_t` numeric accessors. Invalid versions
+fail explicitly. `asap_version_read(VERSION_FILE ...)` accepts an absolute path
+or a path relative to the calling source directory; omitting the argument uses
+`VERSION`. Editing the selected file triggers CMake reconfiguration.
+
+Oxygen.Engine is one component within the repository. Its revision is the last
+commit affecting its directory, including its build files, tooling and docs.
+Unrelated sibling-project commits do not change it. Local modifications and
+relevant untracked files mark it dirty; Git-ignored outputs and the uncommitted
+`plans/CMAKE_CONAN_MODERNIZATION_PLAN.md` are excluded. There are currently no
+shared repository build files outside the engine directory in this scope. If
+that changes, update both the CMake and Conan scope and their parity tests.
+
+The existing string API reports:
+
+| Function        | Clean source                            | Modified source                               |
+| --------------- | --------------------------------------- | --------------------------------------------- |
+| `Version()`     | `0.1.0`                                 | `0.1.0`                                       |
+| `VersionFull()` | `0.1.0 (<full component commit>)`       | `0.1.0 (<full component commit>-dirty)`       |
+| `NameVersion()` | `Oxygen v0.1.0 (<12-character commit>)` | `Oxygen v0.1.0 (<12-character commit>-dirty)` |
+
+Missing or unverifiable provenance is `unknown`, never revision zero or a clean
+claim. Shallow checkouts conservatively report unknown; fetch full history
+explicitly when component provenance is needed. CMake never fetches automatically.
+Rebasing or committing inside the component scope may change the revision even
+when compiled behavior is unchanged; it is a source-history identifier.
+
+Core generates `version/include/Oxygen/Core/version-info.h` and the corresponding
+`version/oxygen-source.json` within its binary directory. A small dependency of
+Core checks provenance at each Core build, writes only changed content, and lets
+normal header dependencies recompile the version implementation when needed.
+Separate build trees cannot overwrite each other's header. The legacy ignored
+source-tree header is neither preferred by Core nor exported by Conan.
+
+MSVC static Core carries `/INCREMENTAL:NO` as a link requirement for its final
+consumers. Validation reproduced the incremental linker retaining an old revision
+even though the generated header, object and archive already contained the new
+one. Full linking avoids that stale binary. This affects link time when those
+consumers need relinking; unchanged builds do not relink. Shared Core and unrelated
+targets retain their existing link policy.
+
+Local `conan install` does not freeze the checkout's provenance: subsequent builds
+observe current source state. Conan export captures deterministic metadata under
+the schema in `cmake/oxygen-source.schema.json`, alongside both the recipe and
+exported sources. Cache builds use that capsule, without Git lookup. Captured
+metadata takes precedence over a surrounding application's repository and must
+match the product version. The package/native SDK retains the capsule under
+`share/oxygen/oxygen-source.json`. Conan keeps its normal content-derived recipe
+and package revisions; no commit-hash package option is added.
+
+Local dirty packages are allowed and identified. B04 adds no official-release
+mode or publication gate. Release automation must eventually apply its own policy
+to this factual metadata; CMake `Release` is only a build configuration.
+
+`test_source_provenance.py` runs script/Git/export checks without invoking a
+compiler. Its native incremental, runtime and install tests are opt-in:
+
+```powershell
+$env:OXYGEN_RUN_PROVENANCE_BUILD_TESTS = '1'
+python -m unittest discover -s tools/cmake/tests -p test_source_provenance.py -v
+```
+
+Obtain build permission first on shared hosts. The native fixtures build the
+production version implementation sequentially, without engine dependencies.
+
 ## Selecting reusable modules
 
 The reusable set is `Base`, `Composition`, `OxCo`, `Serio`, `TextWrap`, and `Clap`.
