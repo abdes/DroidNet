@@ -7,7 +7,7 @@ Status: `in_progress` — current slice state and evidence are maintained in the
 are updated there; this plan owns the requirements and gates.
 
 Date: 2026-09-16
-Updated: 2026-09-25 — EX01–EX10 are validated and closed under the approved reduced scope. [EX10 closeout](EX10-completion.md) records final qualification and user acceptance. Structured commit delivery was authorized after user review.
+Updated: 2026-09-25 — EX01–EX10 are validated and closed under the approved reduced scope. [EX10 closeout](EX10-completion.md) records final qualification and user acceptance. Structured delivery is complete; the EX10 closeout lists the commits.
 
 Paths are relative to `projects/Oxygen.Engine` unless identified as
 repository-root paths.
@@ -35,7 +35,7 @@ measurement platform is no longer a package deliverable.
 EX07 remains closed. EX08, EX09A–E, retained EX08.1, reactivated EX08.2 and
 EX10 are complete. The initial instrumentation draft was discarded; stable IDs
 preserve removed requirements explicitly. [Final evidence and acceptance](EX10-completion.md)
-cover the reduced package. Structured commit delivery was authorized after user review.
+cover the reduced package. Structured delivery is complete; the EX10 closeout lists the commits.
 
 | Step   | User value                                                                          | Completion evidence                                                                                                       |
 | ------ | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
@@ -71,7 +71,8 @@ reusable region-measurement service, live measurement scheduling/readbacks,
 instrumented tonemap variants/refactoring, runtime numerical verdicts for edited
 frames, universal experiment schema/controller, matching interactive/batch recipe
 engine, new LightBench runner/report schema, and seven complete experiment UIs.
-EX08.2 was deferred in the earlier scope decision; the latest user goal reactivates it after EX09.
+EX08.2's earlier deferral was superseded; its implementation and qualification
+are complete in the [EX08.2 report](EX082-execution.md).
 
 Earlier discussions of a validation build flag and on-demand/live measurement
 are superseded as implementation tasks by this reduction. If a concrete future
@@ -1064,8 +1065,9 @@ are qualified. The [item tracker](../IMPLEMENTATION_STATUS.md#33-slice-6-work-it
 and [local evidence](../../../out/build-ninja/analysis/vortex/exposure-lightbench/slice6/slice6-progress.json)
 record validation. The TexturedCube assignment/panel-refresh regression is
 unit-tested and confirmed fixed by the user's rebuilt-app test. Its deferred console
-work is scheduled in EX08.1; ImGui Test Engine integration (EX08.2) is now
-explicitly deferred outside this package.
+work subsequently closed in [EX08.1](EX081-execution.md). ImGui Test Engine
+integration also closed in [EX08.2](EX082-execution.md); its earlier deferral
+is superseded.
 
 - Include native aperture/shutter/ISO source/cook/load persistence, as
   approved on 2026-09-16. Scene-v6 perspective/orthographic records are 32/40
@@ -1325,8 +1327,9 @@ behavior. No measured-output service or new persistence path is needed.
 
 ### Slice 8.2 - ImGui interaction regression automation
 
-**Disposition:** reactivated by the latest user goal after EX09 and before EX10.
-The prior 2026-09-25 deferral is superseded. EX082-01–04/GATE cover Test Engine
+**Disposition:** validated and closed (2026-09-25), following reactivation after
+EX09. The [execution report](EX082-execution.md) and [EX10 closeout](EX10-completion.md)
+supersede the prior deferral. EX082-01–04/GATE cover Test Engine
 dependency/configuration/context integration; numeric/focus/drag/mode/curve/mask/
 reset/save/load workflows; TexturedCube assignment and panel-return workflows;
 and the native UI runner with failure evidence and build isolation. Reuse the

@@ -2,7 +2,7 @@
 
 **Phase:** 5D — Conventional Shadow Parity And Expansion
 **Deliverable:** `VTX-M05D`
-**Status:** `m05d_spot_slice_validated`
+**Status:** M05D baseline validated; EX07 production extension validated
 
 ## EX07 production contract
 
@@ -149,19 +149,17 @@ VTX-M05D directional CSM parity/stability gate:
 
 ### 1.2 Why This Exists
 
-Phase 4C intentionally narrowed scope to avoid bluffing about point-light
-storage. This future LLD is the handoff artifact that closes that gap. The
-ShadowService roadmap now has a named later-phase owner for local-light
-conventional shadows instead of leaving the issue as an open-ended note.
+M05D delivered and validated spot/point conventional shadows. EX07 completed
+the production extension described above, including forward/translucent
+consumption, local-map caching and compatible cross-view sharing.
 
 The corrected Phase 4C contract published **directional** conventional shadow
 data only. VTX-M05D first audits and stabilizes that directional CSM baseline,
 then extends `ShadowFrameBindings` without pretending that Phase 4 already
 shipped spot-light or point-light conventional shadow payloads.
 
-The local-light implementation is blocked until the M05D CSM audit/remediation
-gate records why city-scale projected shadows were unstable under camera
-movement and proves the corrected behavior.
+The M05D CSM audit/remediation gate was satisfied before local-light delivery;
+it is not an outstanding blocker. See the [M05D closure](../plan/VTX-M05D-conventional-shadow-parity.md).
 
 ### 1.3 Architectural Authority
 
@@ -187,9 +185,9 @@ today's conventional storage choice into the long-lived binding ABI.
 VTX-M05D therefore inherits these rules from the remediated directional
 baseline:
 
-1. directional conventional shadow publication exists but must pass the M05D
-   parity/stability gate before local-light work starts
-2. local-light conventional shadow publication is added here for the first time
+1. directional conventional shadow publication passed the M05D parity/stability gate
+2. M05D added local-light conventional shadow publication; EX07 extended its
+   indexed ABI, lifetime and consumers
 3. the public binding seam stays consumer-oriented and does not freeze one
    internal storage layout
 
@@ -219,10 +217,10 @@ ShadowService upgrades.
 
 ### 3.2 Outputs
 
-| Product                         | Consumer                                                                                   | Delivery                                          |
-| ------------------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------- |
-| Spot-light shadow publications  | LightingService Stage 12. Stage 18 translucent local-light shadow consumption is deferred. | `ShadowFrameBindings` through `ViewFrameBindings` |
-| Point-light shadow publications | LightingService Stage 12. Stage 18 translucent local-light shadow consumption is deferred. | `ShadowFrameBindings` through `ViewFrameBindings` |
+| Product                         | Consumer                                                                                | Delivery                                          |
+| ------------------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| Spot-light shadow publications  | LightingService Stage 12 and forward/Stage 18 translucent consumers; qualified by EX07. | `ShadowFrameBindings` through `ViewFrameBindings` |
+| Point-light shadow publications | LightingService Stage 12 and forward/Stage 18 translucent consumers; qualified by EX07. | `ShadowFrameBindings` through `ViewFrameBindings` |
 
 ## 4. Resource Management
 
@@ -290,17 +288,16 @@ Slice E adds the first local-light conventional payload to
 - Stage-8 depth rendering through the existing Vortex shadow-caster draw path;
 - Stage-12 spot deferred lighting multiplies local-light attenuation by the
   sampled spot shadow visibility.
-- Stage-18 translucent spot-shadow consumption is not part of Slice E. The
-  current forward/translucency path accumulates positional lights without a
-  conventional spot shadow lookup, so this remains deferred until the forward
-  local-light shadow contract is designed and validated.
+- Stage-18 translucent spot-shadow consumption is implemented and qualified;
+  see [EX07 final acceptance](../plan/EX07F-acceptance-report.md).
 
-Intentional Slice E divergences, not closure claims:
+Current scope:
 
-- no local-light shadow caching;
-- no per-light CPU interaction list or screen-radius resolution fade yet;
+- local-map caching, spatial caster selection and screen-radius resolution/fade
+  policy are implemented and qualified under EX07;
 - no UE shadow border emulation for the dedicated `Texture2DArray` storage;
-- no point-light cubemap payload until Slice F.
+- point-light cubemap payloads are implemented and qualified; Slice F records
+  their initial validation and EX07 owns the current indexed contract.
 
 Slice E implementation evidence:
 

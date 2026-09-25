@@ -1,10 +1,16 @@
 # VTX-M05D Conventional Shadow Parity And Local-Light Expansion
 
-**Status:** `in_progress`
+**Status:** `validated` (2026-04-27)
 **Milestone:** `VTX-M05D - Conventional Shadow Parity And Local-Light Expansion`
 **Scope owner:** Vortex ShadowService / LightingService
 **Primary LLDs:** [../lld/shadow-service.md](../lld/shadow-service.md),
 [../lld/shadow-local-lights.md](../lld/shadow-local-lights.md)
+
+M05D is complete. [EX07 final acceptance](EX07F-acceptance-report.md) also closes forward/
+translucent local-shadow consumption, spatial caster selection, local-map caching,
+resolution/fade policy and compatible cross-view sharing. Layered one-pass
+point shadows and VSM remain future work; the [current local-shadow contract](../lld/shadow-local-lights.md#ex07-production-contract)
+owns production behavior.
 
 ## 1. Goal
 
@@ -98,7 +104,7 @@ complete.
 
 ### Slice A - Design Scope And Truth Surface
 
-**Status:** `planned`
+**Status:** `validated`; the plan, LLDs and milestone ledger are delivered.
 
 Tasks:
 
@@ -148,7 +154,8 @@ Validation:
 
 ### Slice D - Directional CSM Remediation
 
-**Status:** `in_progress`
+**Status:** `validated`; see the recorded M05D closure below and the
+[milestone evidence](../IMPLEMENTATION_STATUS.md#4-milestone-ledger).
 
 Tasks:
 
@@ -172,22 +179,21 @@ Validation:
 
 UE5.7 local-source audit for this slice:
 
-| UE5.7 concern                                                                                                                                                                                                                                                                             | Oxygen target for Slice E                                                                                                                                                                                                                                                                                                                                                                              |
-| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `SpotLightComponent.cpp::GetWholeSceneProjectedShadowInitializer` creates one whole-scene projected shadow with light-relative pre-translation, `WorldToLight`, `InvTanOuterCone` scale, cone subject bounds, `MinLightW = 0.1`, and `MaxDistanceToCastInLightW = Radius`.                | Build one view-independent spot-light projection per shadow-casting spot light using the authored light transform, `outer_cone_cos`, range, and reversed-Z perspective depth. Publish the resulting matrix as a consumer-facing spot binding, not as a directional cascade.                                                                                                                            |
-| `ShadowSetup.cpp::CreateWholeSceneProjectedShadow` computes local-light shadow resolution from effective screen radius, clamps to renderer/scalability limits, uses a border for non-cubemap shadows, and adds shadow-casting primitives affected by the light.                           | Slice E uses the existing conventional quality tiers and authored `resolution_hint` for deterministic first activation. It conservatively submits prepared `kShadowCaster` draws, matching the current directional correctness-first culling divergence. Screen-radius resolution fading, borders, caching, and per-light interaction lists remain documented gaps until a later optimization pass.    |
-| `FProjectedShadowInfo::SetupWholeSceneProjection` uses non-directional subject depth from the light-space subject bounds, records caster/receiver frusta, and updates shader depth-bias terms.                                                                                            | Use near `0.1`, far `range`, `MakeReversedZPerspectiveProjectionRH_ZO`, and UE-style whole-scene spot depth-bias scaling: `3.0 * 512 / ((far-near) * resolution) * 2 * user_bias`, clamped to `0.1`, with slope multiplier `3.0` and max slope `1.0`.                                                                                                                                                  |
-| `ShadowDepthVertexShader.usf` / `ShadowDepthPixelShader.usf` keep perspective spot rasterization projection separate from biased shadow depth. UE's perspective-correct path carries bias to pixel depth output instead of clipping casters by moving `SV_Position` before rasterization. | Spot slices render with the projected cone for clipping/rasterization but write biased linear reversed depth along the spot axis. Stage 12 samples that same spot-axis depth convention before the 3x3 PCF compare. This fixes the `SpotShadowValidation` capture where UE-style slope bias pushed all caster `SV_Position.z` behind the far plane and left `Vortex.SpotShadowSurface` at clear depth. |
-| `DeferredLightPixelShaders.usf` obtains local-light attenuation and multiplies it by `GetLightAttenuationFromShadow`; `ShadowProjectionCommon.ush`/`ShadowFilteringCommon.ush` provide projection and PCF filtering.                                                                      | Extend Stage 12 spot lighting to sample the published spot shadow array before BRDF evaluation. Use the same compact 3x3 reversed-Z PCF convention already accepted for directional conventional shadows.                                                                                                                                                                                              |
+| UE5.7 concern                                                                                                                                                                                                                                                                             | Oxygen target for Slice E                                                                                                                                                                                                                                                                                                                                                                                   |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SpotLightComponent.cpp::GetWholeSceneProjectedShadowInitializer` creates one whole-scene projected shadow with light-relative pre-translation, `WorldToLight`, `InvTanOuterCone` scale, cone subject bounds, `MinLightW = 0.1`, and `MaxDistanceToCastInLightW = Radius`.                | Build one view-independent spot-light projection per shadow-casting spot light using the authored light transform, `outer_cone_cos`, range, and reversed-Z perspective depth. Publish the resulting matrix as a consumer-facing spot binding, not as a directional cascade.                                                                                                                                 |
+| `ShadowSetup.cpp::CreateWholeSceneProjectedShadow` computes local-light shadow resolution from effective screen radius, clamps to renderer/scalability limits, uses a border for non-cubemap shadows, and adds shadow-casting primitives affected by the light.                           | Slice E uses the existing conventional quality tiers and authored `resolution_hint` for deterministic first activation. It conservatively submits prepared `kShadowCaster` draws, matching the current directional correctness-first culling divergence. EX07 now supplies spatial caster selection, local-map caching and screen-radius resolution/fade policy. UE shadow-border emulation is not claimed. |
+| `FProjectedShadowInfo::SetupWholeSceneProjection` uses non-directional subject depth from the light-space subject bounds, records caster/receiver frusta, and updates shader depth-bias terms.                                                                                            | Use near `0.1`, far `range`, `MakeReversedZPerspectiveProjectionRH_ZO`, and UE-style whole-scene spot depth-bias scaling: `3.0 * 512 / ((far-near) * resolution) * 2 * user_bias`, clamped to `0.1`, with slope multiplier `3.0` and max slope `1.0`.                                                                                                                                                       |
+| `ShadowDepthVertexShader.usf` / `ShadowDepthPixelShader.usf` keep perspective spot rasterization projection separate from biased shadow depth. UE's perspective-correct path carries bias to pixel depth output instead of clipping casters by moving `SV_Position` before rasterization. | Spot slices render with the projected cone for clipping/rasterization but write biased linear reversed depth along the spot axis. Stage 12 samples that same spot-axis depth convention before the 3x3 PCF compare. This fixes the `SpotShadowValidation` capture where UE-style slope bias pushed all caster `SV_Position.z` behind the far plane and left `Vortex.SpotShadowSurface` at clear depth.      |
+| `DeferredLightPixelShaders.usf` obtains local-light attenuation and multiplies it by `GetLightAttenuationFromShadow`; `ShadowProjectionCommon.ush`/`ShadowFilteringCommon.ush` provide projection and PCF filtering.                                                                      | Extend Stage 12 spot lighting to sample the published spot shadow array before BRDF evaluation. Use the same compact 3x3 reversed-Z PCF convention already accepted for directional conventional shadows.                                                                                                                                                                                                   |
 
 Tasks:
 
 - [x] Design the spot-light shadow payload extension under `ShadowFrameBindings`.
 - [x] Render spot-light shadow depth under Stage 8.
 - [x] Consume the spot-light shadow product in Stage 12 deferred lighting.
-- [x] Document Stage 18 as a deferred local-light shadow consumer. The current
-      forward/translucency path accumulates positional lights without conventional
-      spot shadow lookup, so Slice E does not claim translucent spot-shadow parity.
+- [x] Forward/translucent local-shadow consumption is implemented and qualified in EX07;
+      see [final acceptance](EX07F-acceptance-report.md).
 - [x] Add a focused validation scene with a clear spot-light projected shadow.
 
 Validation:
@@ -295,9 +301,9 @@ M05D can move to `validated` only when:
 
 As of 2026-04-27, directional conventional shadow parity/remediation, Slice E
 spot-light conventional shadows, and Slice F point-light conventional shadows
-are implemented, documented, and validated. Stage 18 translucent local-light
-shadow consumption remains explicitly deferred outside M05D. The conventional
-local-light baseline is validated for deferred Stage 12 lighting.
+are implemented, documented, and validated. EX07 also qualified forward/
+translucent local-shadow consumption, caching and compatible cross-view
+sharing; see [final acceptance](EX07F-acceptance-report.md).
 
 If any future regression invalidates one of the evidence items above, M05D must
 return to `in_progress` until the failed proof is replaced.

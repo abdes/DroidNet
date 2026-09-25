@@ -330,17 +330,19 @@ Remaining gaps:
   suppression when disabled or when procedural atmosphere is active, and the
   final SkyBox/procedural-atmosphere interaction.
 
-## Accepted Deferred Gaps
+## Remaining Work
 
-These remain outside VTX-M08 and must be owned by future milestones before any
-broader indirect-lighting or reflection parity claim:
+These remain outside the closed VTX-M08 milestone. ED-M08 now owns captured-sky
+diffuse/specular lighting, specified-cubemap specular products, Stage 13 activation
+and ambient-bridge retirement under the [captured-sky contract](editor-v01-captured-sky-ibl.md).
+That extension is specified but not implemented or rendered-qualified. Its
+capture policy is automatic and change-driven.
 
-- Captured-scene SkyLight.
-- Real-time SkyLight capture.
+- Captured-scene SkyLight and static-cubemap specular contribution: planned in ED-M08.
+- Continuous time-sliced SkyLight capture: future work outside ED-M08.
 - Cubemap blend transitions / time-of-day blending.
 - SkyLight AO, DFAO, bent-normal occlusion, and cloud AO.
 - Baked/static-lightmap SkyLight integration.
-- Specular reflection contribution from static cubemap products.
 - Reflection captures and broader reflection-probe arrays.
 - Volumetric-cloud sky capture.
 - Procedural sun-disk overlay composited into static cubemap skybox imagery.
