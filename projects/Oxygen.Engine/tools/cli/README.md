@@ -216,3 +216,11 @@ Get-Help ./tools/cli/oxyrun.ps1 -Examples
 . ./tools/cli/oxy-targets.ps1
 Get-Help Resolve-TargetName -Detailed
 ```
+
+### Configuration ownership
+
+`oxybuild` and `oxyrun` build an already configured tree. They do not issue an
+extra configure command based on preset or cache timestamps. Use `build-tree
+generate` to provision and configure, or `build-tree configure` to apply preset
+and cache-option changes. CMake's native build system still regenerates when
+its tracked CMake inputs change during a build.

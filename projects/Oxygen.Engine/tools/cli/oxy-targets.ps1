@@ -412,42 +412,6 @@ function Get-ConanProfile($Config) {
 
 <#
 .SYNOPSIS
-    Runs CMake configuration using the appropriate preset.
-
-.DESCRIPTION
-    Executes cmake configuration for the selected build tree to configure
-    the build system when the build directory exists but isn't configured.
-
-.PARAMETER Config
-    The build configuration (Debug, Release, etc.).
-
-.PARAMETER DryRun
-    If specified, shows what command would be executed without running it.
-
-.EXAMPLE
-    Invoke-CMakeConfigure -Selection (Resolve-OxygenBuildSelection -Config Debug)
-
-.NOTES
-    Requires that Conan has already been run to set up the build environment.
-    Uses the selected project configure preset or existing cache.
-#>
-function Invoke-CMakeConfigure($Selection, [switch]$DryRun) {
-  $PSNativeCommandUseErrorActionPreference = $false
-  $arguments = if ($Selection.ConfigurePreset) { @('--preset', $Selection.ConfigurePreset) }
-  else { @('-S', $Selection.SourceRoot, '-B', $Selection.BuildRoot) }
-  if ($DryRun) {
-    Write-Host "Would configure: cmake $($arguments -join ' ')"
-    return
-  }
-  Push-Location $Selection.SourceRoot
-  try {
-    & cmake @arguments | Out-Host
-    if ($LASTEXITCODE -ne 0) { Write-LogErrorAndExit 'CMake configuration failed' $LASTEXITCODE }
-  } finally { Pop-Location }
-}
-
-<#
-.SYNOPSIS
     Shortens an absolute path for display by showing drive + first folder + ... + relative path from project root.
 
 .DESCRIPTION
@@ -859,15 +823,15 @@ function Get-PlatformName() {
     Builds a CMake target using the standardized Oxygen Engine build workflow.
 
 .DESCRIPTION
-    Orchestrates the complete build process for a CMake target using the standardized
-    workflow: Conan -> CMake Configure -> Build. Automatically detects the build state
-    and runs the appropriate steps to ensure a complete build environment.
+    Builds a resolved target in the selected, already configured tree. Explicit
+    configuration belongs to build-tree. CMake handles native regeneration when
+    tracked build-system inputs change.
 
 .PARAMETER Target
-    The name of the CMake target to build. Can be exact or fuzzy name - will be resolved internally if CMake configure runs.
+    The exact CMake target name, already resolved by the caller.
 
-.PARAMETER Config
-    The build configuration (Debug, Release, etc.).
+.PARAMETER Selection
+    The build tree, configuration and preset resolved by the caller.
 
 .PARAMETER DryRun
     If specified, shows what commands would be executed without running them.
@@ -881,31 +845,17 @@ function Get-PlatformName() {
 .NOTES
     Workflow:
     1. Require the selected build root; dependency installation is a separate step
-    2. Check if CMake is configured -> if not, run CMake configure
-    3. If configure ran, resolve target name using CMake File API
-    4. Build the target using appropriate preset or direct cmake command
+    2. Require an already configured build tree
+    3. Build the target using its preset or direct cmake command
+    4. Let the native build system regenerate when CMake inputs change
 
     Receives the selection resolved by the caller; never changes build trees.
-    Target resolution happens automatically when CMake configure runs during this function.
+    Preset timestamps do not trigger a standalone configure here.
 #>
 function Invoke-BuildForTarget($Target, $Selection, [switch]$DryRun) {
   $PSNativeCommandUseErrorActionPreference = $false
-  $cachePath = Join-Path $Selection.BuildRoot 'CMakeCache.txt'
-  $needsConfigure = -not (Test-Path -LiteralPath $cachePath)
-  if (-not $needsConfigure) {
-    $cacheTime = (Get-Item -LiteralPath $cachePath).LastWriteTimeUtc
-    foreach ($path in @((Join-Path $Selection.SourceRoot 'CMakePresets.json'),
-        (Join-Path $Selection.SourceRoot 'CMakeUserPresets.json'),
-        (Join-Path $Selection.BuildRoot 'generators/CMakePresets.json'),
-        (Join-Path $Selection.BuildRoot 'generators/conan_toolchain.cmake'))) {
-      if ((Test-Path -LiteralPath $path) -and (Get-Item -LiteralPath $path).LastWriteTimeUtc -gt $cacheTime) {
-        $needsConfigure = $true
-      }
-    }
-  }
-  if ($needsConfigure -or -not (Test-OxygenFileApiReply $Selection.BuildRoot)) {
-    Invoke-CMakeConfigure $Selection -DryRun:$DryRun
-    if (-not $DryRun) { $Target = Resolve-TargetName $Target $Selection.BuildRoot }
+  if (-not (Test-Path -LiteralPath (Join-Path $Selection.BuildRoot 'CMakeCache.txt'))) {
+    throw "Build tree is not configured: $($Selection.BuildRoot). Run build-tree generate <profile> or build-tree configure <preset> first."
   }
   if (-not $Target) { Write-LogErrorAndExit 'Target resolution failed or was cancelled' 1 }
   $arguments = if ($Selection.BuildPreset) { @('--build', '--preset', $Selection.BuildPreset, '--target', $Target) }

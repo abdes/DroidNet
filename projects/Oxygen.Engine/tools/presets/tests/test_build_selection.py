@@ -1,6 +1,7 @@
 """Selection and launcher regressions; no engine build, import or launch."""
 
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -93,6 +94,71 @@ catch { if ($_.Exception.Message -notlike 'No available preset*') { throw } }
                     self.assertIn("-ListBuilds", result.stdout)
                     self.assertIn("-Preset", result.stdout)
 
+    def test_build_does_not_configure_for_newer_presets_or_missing_file_api(self):
+        build = self.tree("ninja")
+        cache = build / "CMakeCache.txt"
+        cache.write_text("CMAKE_BUILD_TYPE:STRING=Release\n", encoding="utf-8")
+        os.utime(cache, (1, 1))
+        self.command("""
+. (Join-Path $PSScriptRoot 'tools/cli/oxy-targets.ps1')
+$selection = Resolve-OxygenBuildSelection -BuildTree build-ninja -Config Release
+function global:cmake {
+    if ($args[0] -ne '--build') { throw 'Unexpected standalone configure' }
+    ConvertTo-Json -InputObject @($args) -Compress | Add-Content (Join-Path $PSScriptRoot 'calls.jsonl')
+    $global:LASTEXITCODE = 0
+}
+$null = Invoke-BuildForTarget probe $selection
+$null = Invoke-BuildForTarget probe $selection
+""")
+        calls = [json.loads(line) for line in (self.root / "calls.jsonl").read_text().splitlines()]
+        self.assertEqual(calls, [["--build", "--preset", "conan-ninja-release", "--target", "probe"]] * 2)
+
+    def test_unconfigured_tree_requires_explicit_setup(self):
+        self.tree("ninja")
+        output = self.command("""
+. (Join-Path $PSScriptRoot 'tools/cli/oxy-targets.ps1')
+$selection = Resolve-OxygenBuildSelection -BuildTree build-ninja -Config Release
+function global:cmake { throw 'Unconfigured tree must not invoke CMake' }
+try { $null = Invoke-BuildForTarget probe $selection; throw 'Accepted unconfigured tree' }
+catch {
+    if ($_.Exception.Message -notlike 'Build tree is not configured:*') { throw }
+    $_.Exception.Message
+}
+""")
+        self.assertIn("build-tree configure", output)
+
+    @unittest.skipUnless(shutil.which("ninja"), "Ninja required")
+    def test_native_build_still_regenerates_changed_cmake_inputs(self):
+        build = self.tree("ninja")
+        cmakelists = self.root / "CMakeLists.txt"
+        project = (
+            'cmake_minimum_required(VERSION 4.2)\nproject(Regeneration NONE)\n'
+            'file(WRITE "${CMAKE_BINARY_DIR}/configured.txt" "before")\n'
+            'add_custom_target(probe COMMAND "${CMAKE_COMMAND}" -E true)\n'
+        )
+        cmakelists.write_text(project, encoding="utf-8")
+        configured = subprocess.run(["cmake", "-S", str(self.root), "-B", str(build), "-G", "Ninja"],
+                                    capture_output=True, text=True)
+        self.assertEqual(configured.returncode, 0, configured.stdout + configured.stderr)
+        cmakelists.write_text(project.replace('"before"', '"after"'), encoding="utf-8")
+        # Make ordering deterministic even on filesystems with coarse timestamps.
+        os.utime(build / "build.ninja", (1, 1))
+        self.command("""
+. (Join-Path $PSScriptRoot 'tools/cli/oxy-targets.ps1')
+$nativeCmake = (Get-Command cmake -CommandType Application).Source
+function global:cmake {
+    if ($args[0] -ne '--build') { throw 'Wrapper must not configure' }
+    & $nativeCmake @args
+    if ($LASTEXITCODE -ne 0) { throw 'Native build failed' }
+}
+$selection = [pscustomobject]@{
+    SourceRoot=$PSScriptRoot; BuildRoot=(Join-Path $PSScriptRoot 'out/build-ninja')
+    BuildPreset=$null; Config='Release'
+}
+$null = Invoke-BuildForTarget probe $selection
+""")
+        self.assertEqual((build / "configured.txt").read_text(), "after")
+
     def test_missing_disabled_and_artifact_availability(self):
         self.tree("ninja", exists=False)
         self.tree("vs", disabled=True)
@@ -119,6 +185,7 @@ catch { if ($_.Exception.Message -notlike 'No available preset*') { throw } }
         self.assertEqual(self.command("(Resolve-OxygenBuildSelection).BuildPreset").strip(), "conan-tracy-vs-release")
 
     def artifact(self, root, configs, available):
+        (root / "CMakeCache.txt").write_text("CMAKE_BUILD_TYPE:STRING=Release\n", encoding="utf-8")
         reply = root / ".cmake/api/v1/reply"
         reply.mkdir(parents=True)
         model = {"configurations": []}
