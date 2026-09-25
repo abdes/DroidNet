@@ -407,6 +407,44 @@ The existing dependency graph is not yet pruned for disabled optional outputs;
 that recipe work remains B07. Source-embedded consumers own their own dependency
 graph and need only the selected modules' dependencies.
 
+## API documentation
+
+Documentation uses locally installed Doxygen 1.14 or newer and Graphviz `dot`.
+Both `OXYGEN_BUILD_DOCS` and `OXYGEN_WITH_DOXYGEN` must be ON; missing required
+tools are configuration errors only when documentation setup is requested.
+Conan's `docs=True` option allows documentation targets but does not install
+Doxygen/Graphviz or automatically generate/package HTML. The contributor
+`tools/generate-builds.ps1` workflow already sets that recipe option. If your
+current Conan graph has `docs=False`, regenerate it with `docs=True` before
+enabling documentation in CMake.
+
+```powershell
+cmake --preset oxygen-ninja-default -DOXYGEN_BUILD_DOCS=ON -DOXYGEN_WITH_DOXYGEN=ON
+cmake --build --preset oxygen-ninja-debug --target dox
+# Or request one opted-in module:
+cmake --build --preset oxygen-ninja-debug --target oxygen-base_dox
+```
+
+Visual Studio exposes the same `dox` and `<module>_dox` targets. Documentation
+remains an explicit action and is not part of the default build. Existing
+standalone module opt-ins are preserved. CMake's `DOXYGEN_EXECUTABLE` and
+`DOXYGEN_DOT_EXECUTABLE` cache entries can select specific installed executables.
+
+Each generated `<module>.Doxyfile` lives in that module's binary directory.
+Inputs, examples, and displayed source paths are explicit; running from a build
+directory therefore does not change the documented sources. HTML stays under
+`<build-dir>/dox/<module>/html`. Unchanged configure runs preserve Doxyfile timestamps.
+
+Warnings remain visible and nonfatal. Each module target prints its current
+warnings and writes `module_warnings.txt` alongside its HTML output directory.
+After a successful aggregate `dox` build, `dox/doxygen_warnings.txt` contains the
+current registered modules' reports, without accumulating previous runs or
+including leftover reports from modules removed from the configuration.
+
+The theme continues to follow `doxygen-awesome-css/main` using FetchContent's
+normal download/cache behavior. It is intentionally unpinned; a fresh cache needs
+network access, and separate downloads may contain different upstream revisions.
+
 ## Embedded JSON Schemas
 
 Use `cmake/JsonSchemaHelpers.cmake` to embed JSON schema files into generated C++
