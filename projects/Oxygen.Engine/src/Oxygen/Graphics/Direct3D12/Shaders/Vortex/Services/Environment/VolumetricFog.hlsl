@@ -559,7 +559,10 @@ void VortexVolumetricFogCS(uint3 dispatch_id : SV_DispatchThreadID)
     bool certified_history = true;
     if (pass.previous_error_bounds_srv != K_INVALID_BINDLESS_INDEX) {
         ByteAddressBuffer previous_status = ResourceDescriptorHeap[pass.previous_error_bounds_srv];
-        certified_history = (previous_status.Load(48u) & 18u) == 0u;
+        // Candidate FP16 rejection (bit 2) does not invalidate the produced
+        // history. Retain its quantified error when recovering to FP32; only
+        // a producer-origin failure (bit 16) makes this history unusable.
+        certified_history = (previous_status.Load(48u) & 16u) == 0u;
     }
     if (certified_history && !fp32_only && pass.exposure_status_uav != K_INVALID_BINDLESS_INDEX) {
         certified_history = pass.previous_error_bounds_srv != K_INVALID_BINDLESS_INDEX;
