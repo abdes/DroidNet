@@ -27,7 +27,6 @@
       "name": "oxygen-posix-defaults",
       "inherits": "oxygen-configure-defaults",
       "hidden": true,
-      "installDir": "${sourceDir}/out/install",
       "environment": {
         "caexcludepath": "${sourceDir}/third_party;${sourceDir}/out"
       }

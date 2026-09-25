@@ -239,7 +239,7 @@ function Resolve-OxygenBuildSelection {
     }
     $request = @("tree='$BuildTree'", "config='$Config'", "preset='$Preset'") -join ', '
     $needed = if ($RequiredExecutables.Count) { " Required executable(s): $($RequiredExecutables -join ', ')." } else { '' }
-    throw "No available preset matches $request.$needed Run cmake --list-presets=build or initialize a tree with tools/generate-builds.ps1."
+    throw "No available preset matches $request.$needed Run cmake --list-presets=build or initialize a tree with tools/build-tree.ps1 generate <profile>."
 }
 
 function Write-OxygenBuildSelection($Selection) {

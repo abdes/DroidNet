@@ -38,8 +38,17 @@ the extension can still supply debugging features.
 
 Visual Studio trees belong to Visual Studio, not to this clangd workflow. Missing
 or invalid databases are task errors: configure the selected Ninja tree or rerun
-the preparation task. If configuration was run outside CMake Tools, run the same
-task explicitly, or use:
+the preparation task. `tools/build-tree.ps1` automatically prepares the
+database once after each successful Ninja configuration; Visual Studio is skipped.
+A preparation failure makes the command fail as well. For terminal configuration,
+use the same entry point without Conan or cleanup:
+
+```powershell
+.\tools\build-tree.ps1 configure oxygen-ninja-default
+```
+
+A direct `cmake --preset ...` invocation does not run CMake Tools' post-configure
+task. After that command, run the preparation task explicitly, or use:
 
 ```powershell
 python .vscode/prepare_clangd.py --build-dir out/build-ninja

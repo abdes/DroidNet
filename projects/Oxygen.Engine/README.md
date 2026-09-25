@@ -37,7 +37,7 @@ On this Microsoft site you find the downloads.
 
 Oxygen declares `dxc/1.9.2607` directly in Conan for both its host API/runtime
 and its build-machine compiler executable. Run the normal Conan dependency
-installation or `tools/generate-builds.ps1`; there is no separate DXC download.
+installation or `tools/build-tree.ps1`; there is no separate DXC download.
 CMake resolves only the directories supplied by that Conan graph.
 
 ShaderBake links `dxc::dxcompiler`. Its build target stages `dxcompiler.dll` and
@@ -150,20 +150,33 @@ without requiring per-dependency options.
 
 ### Example install commands
 
-**Preferred (recommended):** use the helper script `tools/generate-builds.ps1` to perform Conan installs and generate both Ninja (multi-config) and Visual Studio build trees with sane defaults. The script accepts a single required positional `profile` argument and resolves relative profile/output paths relative to the repository root.
+Use `tools/build-tree.ps1` from an initialized compiler shell. `generate` runs
+Conan installation and CMake configuration; `configure` reconfigures an existing
+preset without Conan, deployment or cleanup. Both prepare clangd after a
+successful Ninja configuration. VS Code retains its existing post-configure hook.
+
+Generation preserves existing output by default. `-Clean` explicitly resets the
+selected build trees and their family's SDK configuration directories. Profile
+paths are relative to Oxygen.Engine; Conan profile names are also accepted.
 
 ```powershell
 # ASan (recommended)
-.\tools\generate-builds.ps1 profiles/windows-msvc-asan.ini
+.\tools\build-tree.ps1 generate profiles/windows-msvc-asan.ini
 
 # Non-ASan, preserving existing build products
-.\tools\generate-builds.ps1 profiles/windows-msvc.ini -NoClean
+.\tools\build-tree.ps1 generate profiles/windows-msvc.ini
 
 # Generate Tracy-enabled builds alongside standard builds
-.\tools\generate-builds.ps1 profiles/windows-msvc.ini -WithTracy -NoClean
+.\tools\build-tree.ps1 generate profiles/windows-msvc.ini -WithTracy
+
+# Reconfigure as often as needed, without installing dependencies or cleaning
+.\tools\build-tree.ps1 configure oxygen-ninja-default
+
+# Optional local narrowing; a normal preset configure restores recipe defaults
+.\tools\build-tree.ps1 configure oxygen-ninja-default -Define 'OXYGEN_BUILD_TESTS=OFF'
 
 # Show usage
-.\tools\generate-builds.ps1 -Help
+.\tools\build-tree.ps1 -Help
 ```
 
 **CLI tools (oxybuild / oxyrun / oxytidy):**
@@ -177,9 +190,9 @@ configure `oxygen-ninja-default` or `oxygen-tracy-ninja-default`, then build wit
 [preset guide](tools/presets/README.md) for migration, schema compatibility, and
 VS Code selection. The old platform wrapper names are no longer used.
 
-- Use `tools\oxybuild.ps1` and `tools\oxyrun.ps1` to build and run targets with convenient, preset-based workflows.
+- Use `tools\cli\oxybuild.ps1` and `tools\cli\oxyrun.ps1` to build and run targets with convenient, preset-based workflows. Direct `cmake --build` remains supported.
 - Use `tools\cli\oxytidy.ps1` to run scoped parallel `clang-tidy` with the repo's `.clang-tidy`, `.clangd`, and CMake compile database.
-- Important: these CLI helpers **do not** run Conan automatically. Initialize build roots with `tools\generate-builds.ps1` (or `tools\generate-builds.bat`).
+- These build/run helpers **do not** run Conan automatically. Initialize build roots with `tools\build-tree.ps1 generate <profile>`.
 - Build-root conventions:
   - Automatic selection uses initialized CMake presets: Release first, ordinary
     builds before ASan/Tracy, then Ninja before VS. Use `oxybuild -ListBuilds`.
@@ -193,7 +206,7 @@ Examples:
 
 ```powershell
 # Initialize build roots (ASan)
-.\tools\generate-builds.ps1 profiles/windows-msvc-asan.ini
+.\tools\build-tree.ps1 generate profiles/windows-msvc-asan.ini
 
 # Build and run using sanitized presets (defaults to Debug and uses asan presets)
 .\tools\cli\oxybuild.ps1 MyApp -Sanitized
@@ -203,16 +216,13 @@ Examples:
 **Advanced / manual (direct Conan):**
 
 ```shell
-conan remote remove conancenter
-conan remote add mycenter ./conan-center-index
-
 cd DroidNet/projects/Oxygen.Engine
 
 # ASan
-conan install . --profile:host=profiles/windows-msvc-asan.ini --profile:build=profiles/windows-msvc-asan.ini --build=missing -s build_type=Debug --deployer-folder=out/install --deployer-package=oxygen/0.1.0
+conan install . --profile:host=profiles/windows-msvc-asan.ini --profile:build=profiles/windows-msvc-asan.ini --build=missing -s build_type=Debug --deployer-folder=out/install --deployer-package="oxygen/*"
 
 # Non-ASan
-conan install . --profile:host=profiles/windows-msvc.ini --profile:build=profiles/windows-msvc.ini --build=all -s build_type=Debug --deployer-folder=out/install --deployer-package=oxygen/0.1.0
+conan install . --profile:host=profiles/windows-msvc.ini --profile:build=profiles/windows-msvc.ini --build=missing -s build_type=Debug --deployer-folder=out/install --deployer-package="oxygen/*"
 ```
 
 ## Useful commands

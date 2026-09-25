@@ -10,7 +10,7 @@ import re
 import subprocess
 from typing import Any
 from conan import ConanFile  # type: ignore
-from conan.tools.cmake import CMakeToolchain, CMakeDeps  # type: ignore
+from conan.tools.cmake import CMakeToolchain, CMakeConfigDeps  # type: ignore
 from conan.tools.files import load, copy, save  # type: ignore
 from conan.tools.cmake import cmake_layout, CMake  # type: ignore
 from conan.tools.microsoft import is_msvc_static_runtime, is_msvc  # type: ignore
@@ -323,10 +323,14 @@ class OxygenConan(ConanFile):
                 "reusable-module selection.")
 
     @property
-    def _is_ninja(self):
-        """Identify if Ninja (Multi-Config) is requested via conf or environment."""
-        gen = self.conf.get("tools.cmake.cmaketoolchain:generator", default="")
-        return "Ninja" in str(gen) or (not gen and "VSCODE_PID" in os.environ)
+    def _cmake_generator(self):
+        """Use Conan's resolved generator, independently of the calling IDE."""
+        return CMakeToolchain(self).generator
+
+    @property
+    def _install_root(self):
+        return Path(self.recipe_folder) / "out" / (
+            "install-tracy" if self.options.with_tracy else "install")
 
     @property
     def _with_asan(self):
@@ -345,14 +349,72 @@ class OxygenConan(ConanFile):
             parts.append("tracy")
         if self._with_asan:
             parts.append("asan")
-        parts.append("ninja" if self._is_ninja else "vs")
+        generator = self._cmake_generator
+        if generator == "Ninja Multi-Config":
+            parts.append("ninja")
+        elif generator.startswith("Visual Studio"):
+            parts.append("vs")
+        elif generator == "Ninja":
+            parts.append("ninja-single")
+        else:
+            parts.append(re.sub(r"[^a-z0-9]+", "-", generator.lower()).strip("-"))
         return "-".join(parts)
+
+    def _check_build_identity(self):
+        """Reject incompatible reuse before replacing generated build metadata."""
+        settings = dict(self.settings.items())
+        # These vary normally between Debug and Release in one multi-config tree.
+        settings.pop("build_type", None)
+        settings.pop("compiler.runtime_type", None)
+        identity = {"generator": self._cmake_generator, "settings": settings,
+                    "shared": bool(self.options.shared),
+                    "asan": self._with_asan, "tracy": bool(self.options.with_tracy),
+                    "fPIC": str(self.options.get_safe("fPIC"))}
+        # These become one set of configure-time choices, even when dependency
+        # binaries are installed separately for each build configuration.
+        choices = {name: str(self.options.get_safe(name)) for name in (
+            "awaitable_state_checker", "tools", "examples", "tests", "benchmarks", "docs")}
+        choices["modules"] = ";".join(self._modules)
+        configurations = {}
+        configuration = str(self.settings.build_type)
+        path = Path(self.generators_folder) / "oxygen-build-identity.json"
+        remedy = (
+            f"Regenerate the selected build tree '{self.build_folder}' consistently "
+            "(build-tree.ps1 generate <profile> -Clean for the selected family/generator, "
+            "or remove that build tree and "
+            "repeat its Conan installs). Other build trees need not be removed.")
+        if path.exists():
+            previous = json.loads(path.read_text(encoding="utf-8"))
+            differences = [f"{key}: {previous.get(key)!r} -> {value!r}"
+                           for key, value in identity.items() if previous.get(key) != value]
+            if differences:
+                raise ConanInvalidConfiguration(
+                    "Incompatible Oxygen build-tree reuse: " + "; ".join(differences)
+                    + ". " + remedy)
+            configurations = previous.get("configurations", {})
+            for other, other_choices in configurations.items():
+                if other == configuration:
+                    continue
+                changed = [name for name, value in choices.items()
+                           if other_choices.get(name) != value]
+                if changed:
+                    raise ConanInvalidConfiguration(
+                        f"Incompatible Oxygen build-tree options for {configuration} and {other}: "
+                        + ", ".join(changed) + ". " + remedy)
+        elif (path.parent / "conan_toolchain.cmake").exists():
+            raise ConanInvalidConfiguration(
+                "This existing Oxygen tree predates build-identity validation; "
+                "its compatibility cannot be verified. " + remedy)
+        configurations[configuration] = choices
+        identity["configurations"] = configurations
+        return path, identity
 
     def generate(self):
         # Package destinations exist for cache builds, not for local dependency
         # installation. Do not reject a contributor's static development graph.
         if self.package_folder:
             self._require_package_linkage()
+        identity_path, identity = self._check_build_identity()
         tc = CMakeToolchain(self)
         tc.absolute_paths = True
         tc.presets_prefix = f"conan-{self._build_variant}"
@@ -401,20 +463,19 @@ set(OXYGEN_DXC_RUNTIME_BINDIRS [==[{{ dxc_runtime_dirs }}]==])
         # The default local install rules select Debug, Release or Asan.
         # Explicit prefixes and Conan package roots remain unchanged.
         if not package_build:
-            tc.variables["OXYGEN_CONAN_DEPLOY_DIR"] = (
-                Path(self.recipe_folder) / "out" / "install").as_posix()
+            tc.variables["OXYGEN_CONAN_DEPLOY_DIR"] = self._install_root.as_posix()
             tc.variables["OXYGEN_SDK_DEPENDENCY_DIR"] = (
                 Path(self.generators_folder) / "oxygen-sdk").as_posix()
 
         self._reset_legacy_presets(tc.presets_prefix)
         tc.generate()
-        if not package_build:
-            self._generate_project_presets()
 
-        deps = CMakeDeps(self)
+        deps = CMakeConfigDeps(self)
         deps.generate()
         if not package_build:
             self._generate_sdk_dependencies()
+            self._generate_project_presets()
+        save(self, str(identity_path), json.dumps(identity, indent=2) + "\n")
 
     @staticmethod
     def _sdk_runtime_file(path):
@@ -705,7 +766,8 @@ set(OXYGEN_DXC_RUNTIME_BINDIRS [==[{{ dxc_runtime_dirs }}]==])
             self.output.info(f"Regenerating legacy presets with prefix '{prefix}'")
 
     def layout(self):
-        cmake_layout(self, build_folder=f"out/build-{self._build_variant}")
+        cmake_layout(self, generator=self._cmake_generator,
+                     build_folder=f"out/build-{self._build_variant}")
 
         # Ensure generated headers are available to the build
         self.cpp.build.includedirs.append(
@@ -862,6 +924,10 @@ set(OXYGEN_DXC_RUNTIME_BINDIRS [==[{{ dxc_runtime_dirs }}]==])
 
     def deploy(self):
         """Deploy Oxygen's dependency interface, not upstream package mirrors."""
+        # Conan deploys before generate(): reject incompatible local reuse before
+        # copying dependency binaries, not only before writing the toolchain.
+        if not self.package_folder:
+            self._check_build_identity()
         target = Path(self.deploy_folder) / self._install_subfolder
         _, directories, libraries = self._sdk_payload()
         for source, relative, runtime in directories:

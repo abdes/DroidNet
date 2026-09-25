@@ -1,7 +1,8 @@
 """Prepare clangd databases from CMake's commands, without changing any flags.
 
-Run by CMake Tools' post-configure task. Each build tree/configuration owns its
-output, so configuring another tree never selects an editor configuration.
+Run after generation by CMake Tools' post-configure task or build-tree.ps1.
+Each build tree/configuration owns its output, so configuring another tree never
+selects an editor configuration.
 """
 
 import argparse
