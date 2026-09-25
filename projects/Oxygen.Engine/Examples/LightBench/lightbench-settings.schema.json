@@ -1,0 +1,454 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "LightBench local settings",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "objects",
+    "directional",
+    "point",
+    "spot",
+    "camera",
+    "exposure",
+    "tone_mapper",
+    "gamma"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "objects": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["enabled", "position", "rotation_deg", "scale"],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "position": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "items": {
+              "type": "number",
+              "minimum": -1000000.0,
+              "maximum": 1000000.0
+            }
+          },
+          "rotation_deg": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "items": {
+              "type": "number",
+              "minimum": -360,
+              "maximum": 360
+            }
+          },
+          "scale": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "items": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 1000
+            }
+          }
+        }
+      }
+    },
+    "directional": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "color", "lux"],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "color": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "lux": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1000000000.0
+        },
+        "direction": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "type": "number",
+            "minimum": -1000000.0,
+            "maximum": 1000000.0
+          }
+        },
+        "casts_shadows": {
+          "type": "boolean"
+        }
+      }
+    },
+    "point": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "position",
+        "color",
+        "flux_lm",
+        "range_m",
+        "radius_m"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "position": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "type": "number",
+            "minimum": -1000000.0,
+            "maximum": 1000000.0
+          }
+        },
+        "color": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "flux_lm": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1000000000.0
+        },
+        "range_m": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1000000.0
+        },
+        "radius_m": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10000
+        },
+        "casts_shadows": {
+          "type": "boolean"
+        }
+      }
+    },
+    "spot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "position",
+        "color",
+        "flux_lm",
+        "range_m",
+        "radius_m",
+        "direction",
+        "inner_degrees",
+        "outer_degrees"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "position": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "type": "number",
+            "minimum": -1000000.0,
+            "maximum": 1000000.0
+          }
+        },
+        "color": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "flux_lm": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1000000000.0
+        },
+        "range_m": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1000000.0
+        },
+        "radius_m": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10000
+        },
+        "direction": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "type": "number",
+            "minimum": -1000000.0,
+            "maximum": 1000000.0
+          }
+        },
+        "inner_degrees": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 90
+        },
+        "outer_degrees": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 90
+        },
+        "casts_shadows": {
+          "type": "boolean"
+        }
+      }
+    },
+    "camera": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "position",
+        "rotation",
+        "aperture_f",
+        "shutter_rate",
+        "iso",
+        "extents",
+        "fit_to_view"
+      ],
+      "properties": {
+        "position": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "type": "number",
+            "minimum": -1000000.0,
+            "maximum": 1000000.0
+          }
+        },
+        "rotation": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "number",
+            "minimum": -1,
+            "maximum": 1
+          }
+        },
+        "aperture_f": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1000000.0
+        },
+        "shutter_rate": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1000000.0
+        },
+        "iso": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1000000.0
+        },
+        "extents": {
+          "type": "array",
+          "minItems": 6,
+          "maxItems": 6,
+          "items": {
+            "type": "number",
+            "minimum": -1000000.0,
+            "maximum": 1000000.0
+          }
+        },
+        "fit_to_view": {
+          "type": "boolean"
+        }
+      }
+    },
+    "exposure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "mode",
+        "metering_mode",
+        "manual_ev",
+        "compensation_ev",
+        "key",
+        "min_ev",
+        "max_ev",
+        "speed_up",
+        "speed_down",
+        "low_percentile",
+        "high_percentile",
+        "min_log_luminance",
+        "log_luminance_range",
+        "target_luminance",
+        "spot_meter_radius",
+        "black_influence",
+        "transition_distance",
+        "curve"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "mode": {
+          "type": "integer",
+          "enum": [0, 1, 2]
+        },
+        "metering_mode": {
+          "type": "integer",
+          "enum": [0, 1, 2]
+        },
+        "manual_ev": {
+          "type": "number",
+          "minimum": -3e38,
+          "maximum": 3e38
+        },
+        "compensation_ev": {
+          "type": "number",
+          "minimum": -3e38,
+          "maximum": 3e38
+        },
+        "key": {
+          "type": "number",
+          "minimum": -3e38,
+          "maximum": 3e38
+        },
+        "min_ev": {
+          "type": "number",
+          "minimum": -3e38,
+          "maximum": 3e38
+        },
+        "max_ev": {
+          "type": "number",
+          "minimum": -3e38,
+          "maximum": 3e38
+        },
+        "speed_up": {
+          "type": "number",
+          "minimum": -3e38,
+          "maximum": 3e38
+        },
+        "speed_down": {
+          "type": "number",
+          "minimum": -3e38,
+          "maximum": 3e38
+        },
+        "low_percentile": {
+          "type": "number",
+          "minimum": -3e38,
+          "maximum": 3e38
+        },
+        "high_percentile": {
+          "type": "number",
+          "minimum": -3e38,
+          "maximum": 3e38
+        },
+        "min_log_luminance": {
+          "type": "number",
+          "minimum": -3e38,
+          "maximum": 3e38
+        },
+        "log_luminance_range": {
+          "type": "number",
+          "minimum": -3e38,
+          "maximum": 3e38
+        },
+        "target_luminance": {
+          "type": "number",
+          "minimum": -3e38,
+          "maximum": 3e38
+        },
+        "spot_meter_radius": {
+          "type": "number",
+          "minimum": -3e38,
+          "maximum": 3e38
+        },
+        "black_influence": {
+          "type": "number",
+          "minimum": -3e38,
+          "maximum": 3e38
+        },
+        "transition_distance": {
+          "type": "number",
+          "minimum": -3e38,
+          "maximum": 3e38
+        },
+        "curve": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "type": "number",
+              "minimum": -3e38,
+              "maximum": 3e38
+            }
+          }
+        }
+      }
+    },
+    "tone_mapper": {
+      "type": "integer",
+      "enum": [0, 1, 2, 3]
+    },
+    "gamma": {
+      "type": "number",
+      "minimum": 0.001,
+      "maximum": 100
+    },
+    "preset": {
+      "type": "string",
+      "enum": [
+        "neutral-reference",
+        "point-falloff",
+        "spot-cone",
+        "material-lighting",
+        "auto-adaptation",
+        "indoor",
+        "outdoor-daylight"
+      ]
+    },
+    "initial_auto_ev": {
+      "type": "number",
+      "minimum": -32,
+      "maximum": 32
+    }
+  }
+}

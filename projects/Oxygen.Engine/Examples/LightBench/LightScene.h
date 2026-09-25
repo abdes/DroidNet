@@ -32,6 +32,13 @@ public:
   //! Create a new scene and bind it for subsequent updates.
   auto CreateScene() -> std::unique_ptr<scene::Scene>;
 
+  //! Shared canonical camera construction for the app and its native test.
+  static auto CreateReferenceCamera(scene::Scene& scene) -> scene::SceneNode;
+  static auto FitReferenceCamera(scene::SceneNode& camera, float aspect)
+    -> void;
+  //! Restore local geometry/light state before staging a fresh reference scene.
+  auto ResetReference() -> void;
+
   //! Bind an externally owned scene for updates.
   void SetScene(observer_ptr<scene::Scene> scene);
 
@@ -43,22 +50,18 @@ public:
     Vec3 position { 0.0F, 0.0F, 0.0F };
     Vec3 rotation_deg { 0.0F, 0.0F, 0.0F };
     Vec3 scale { 1.0F, 1.0F, 1.0F };
-  };
-
-  enum class ScenePreset {
-    kBaseline,
-    kThreeCards,
-    kSpecular,
-    kFull,
+    auto operator==(const SceneObjectState&) const -> bool = default;
   };
 
   struct PointLightState {
-    bool enabled { true };
+    bool enabled { false };
     Vec3 position { -3.0F, 3.0F, 3.0F };
     Vec3 color_rgb { 1.0F, 1.0F, 1.0F };
     float intensity { 50.0F };
     float range { 15.0F };
     float source_radius { 0.0F };
+    bool casts_shadows { false };
+    auto operator==(const PointLightState&) const -> bool = default;
   };
 
   struct SpotLightState {
@@ -71,7 +74,22 @@ public:
     float inner_angle_deg { 20.0F };
     float outer_angle_deg { 30.0F };
     float source_radius { 0.0F };
+    bool casts_shadows { false };
+    auto operator==(const SpotLightState&) const -> bool = default;
   };
+
+  struct DirectionalLightState {
+    bool enabled { true };
+    Vec3 color_rgb { 1.0F };
+    float illuminance_lux { 1000.0F };
+    Vec3 direction_ws { 0.0F, -1.0F, 0.0F };
+    bool casts_shadows { false };
+    auto operator==(const DirectionalLightState&) const -> bool = default;
+  };
+  [[nodiscard]] auto GetDirectionalLightState() -> DirectionalLightState&
+  {
+    return directional_light_state_;
+  }
 
   LightScene();
   explicit LightScene(std::string_view name);
@@ -85,9 +103,6 @@ public:
 
   //! Update light nodes to match the current state.
   auto Update() -> void;
-
-  //! Apply a scene preset for reference geometry.
-  auto ApplyScenePreset(ScenePreset preset) -> void;
 
   //! Reset a scene object to its default transform/state.
   auto ResetSceneObject(std::string_view label) -> void;
@@ -170,8 +185,10 @@ private:
   std::string name_;
   observer_ptr<scene::Scene> scene_ { nullptr };
   scene::SceneNode point_light_node_ {};
+  scene::SceneNode directional_light_node_ {};
   scene::SceneNode spot_light_node_ {};
   PointLightState point_light_state_ {};
+  DirectionalLightState directional_light_state_ {};
   SpotLightState spot_light_state_ {};
 
   SceneObjectState gray_card_state_ {};

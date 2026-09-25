@@ -6,26 +6,43 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <cstring>
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "LightBench/LightScene.h"
-#include <glm/glm.hpp>
+#include "LightBench/ReferenceScene.h"
+#include <glm/ext/quaternion_float.hpp>
+#include <glm/ext/quaternion_trigonometric.hpp>
+#include <glm/geometric.hpp>
 #include <glm/gtc/quaternion.hpp>
+#include <glm/trigonometric.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
-#include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/MaterialDomain.h>
+#include <Oxygen/Data/PakFormat_geometry.h>
+#include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Data/ShaderReference.h>
+#include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/ExposureSettings.h>
+#include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
+#include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scene/SceneNode.h>
 
 namespace oxygen::examples::light_bench {
 
@@ -37,7 +54,7 @@ namespace {
     const float cos_theta = std::clamp(glm::dot(from_dir, to), -1.0F, 1.0F);
 
     if (cos_theta >= 0.9999F) {
-      return Quat(1.0F, 0.0F, 0.0F, 0.0F);
+      return { 1.0F, 0.0F, 0.0F, 0.0F };
     }
 
     if (cos_theta <= -0.9999F) {
@@ -68,6 +85,14 @@ LightScene::LightScene()
 LightScene::LightScene(std::string_view name)
   : name_(name)
 {
+  ResetReference();
+}
+
+auto LightScene::ResetReference() -> void
+{
+  point_light_state_ = {};
+  spot_light_state_ = {};
+  directional_light_state_ = {};
   ResetSceneObject("18% Gray Card");
   ResetSceneObject("White Card");
   ResetSceneObject("Black Card");
@@ -81,10 +106,46 @@ auto LightScene::CreateScene() -> std::unique_ptr<scene::Scene>
   constexpr size_t kDefaultSceneCapacity = 128;
   auto result = std::make_unique<scene::Scene>(name_, kDefaultSceneCapacity);
   auto environment = std::make_unique<scene::SceneEnvironment>();
-  static_cast<void>(
-    environment->AddSystem<scene::environment::PostProcessVolume>());
+  auto& post = environment->AddSystem<scene::environment::PostProcessVolume>();
+  auto exposure = scene::ExposureSettings {};
+  exposure.mode = engine::ExposureMode::kManual;
+  exposure.manual_ev = reference::kExposureEv;
+  exposure.key = reference::kExposureKey;
+  post.SetExposureSettings(exposure);
+  post.SetToneMapper(engine::ToneMapper::kNone);
+  post.SetDisplayGamma(reference::kDisplayGamma);
+  post.SetBloomIntensity(0.0F);
   result->SetEnvironment(std::move(environment));
   return result;
+}
+
+auto LightScene::CreateReferenceCamera(scene::Scene& scene) -> scene::SceneNode
+{
+  auto camera = scene.CreateNode("MainCamera");
+  CHECK_F(camera.AttachCamera(std::make_unique<scene::OrthographicCamera>()),
+    "Could not attach reference camera");
+  auto transform = camera.GetTransform();
+  CHECK_F(transform.SetLocalPosition(Vec3 { 0.0F, 6.0F, 1.0F }),
+    "Could not position reference camera");
+  CHECK_F(transform.SetLocalRotation(
+            glm::quatLookAtRH(space::move::Forward, space::move::Up)),
+    "Could not orient reference camera");
+  FitReferenceCamera(camera, 16.0F / 9.0F);
+  return camera;
+}
+
+auto LightScene::FitReferenceCamera(
+  scene::SceneNode& camera, const float aspect) -> void
+{
+  auto lens = camera.GetCameraAs<scene::OrthographicCamera>();
+  if (!lens || !std::isfinite(aspect) || aspect <= 0.0F) {
+    return;
+  }
+  const float height = std::max(
+    reference::kMinimumViewHeight, reference::kMinimumViewWidth / aspect);
+  const float width = height * aspect;
+  lens->get().SetExtents(
+    -width / 2.0F, width / 2.0F, -height / 2.0F, height / 2.0F, 0.1F, 100.0F);
 }
 
 void LightScene::SetScene(observer_ptr<scene::Scene> scene)
@@ -95,6 +156,7 @@ void LightScene::SetScene(observer_ptr<scene::Scene> scene)
 
   scene_ = scene;
   point_light_node_ = {};
+  directional_light_node_ = {};
   spot_light_node_ = {};
   gray_card_node_ = {};
   white_card_node_ = {};
@@ -121,57 +183,38 @@ auto LightScene::Update() -> void
 
   EnsureSceneGeometry();
   ApplySceneTransforms();
+  if (!directional_light_node_.IsAlive()) {
+    directional_light_node_ = scene_->CreateNode("ReferenceKey");
+    auto light = std::make_unique<scene::DirectionalLight>();
+    light->Common().casts_shadows = false;
+    CHECK_F(directional_light_node_.AttachLight(std::move(light)),
+      "Could not attach reference directional light");
+  }
+  directional_light_node_.GetTransform().SetLocalRotation(
+    RotationFromForwardToDir(
+      NormalizeOrFallback(directional_light_state_.direction_ws)));
+  directional_light_node_.EditLight<scene::DirectionalLight>(
+    [this](auto& light) -> auto {
+      light.Common().affects_world = directional_light_state_.enabled;
+      light.Common().casts_shadows = directional_light_state_.casts_shadows;
+      light.Common().color_rgb = directional_light_state_.color_rgb;
+      light.SetIntensityLux(directional_light_state_.illuminance_lux);
+    });
 
   if (point_light_state_.enabled) {
     EnsurePointLightNode();
     ApplyPointLightState();
   } else if (point_light_node_.IsAlive()) {
-    point_light_node_.EditLight<scene::PointLight>([](auto& light) { light.Common().affects_world = false; });
+    point_light_node_.EditLight<scene::PointLight>(
+      [](auto& light) -> auto { light.Common().affects_world = false; });
   }
 
   if (spot_light_state_.enabled) {
     EnsureSpotLightNode();
     ApplySpotLightState();
   } else if (spot_light_node_.IsAlive()) {
-    spot_light_node_.EditLight<scene::SpotLight>([](auto& light) { light.Common().affects_world = false; });
-  }
-}
-
-auto LightScene::ApplyScenePreset(const ScenePreset preset) -> void
-{
-  switch (preset) {
-  case ScenePreset::kBaseline:
-    gray_card_state_.enabled = true;
-    white_card_state_.enabled = false;
-    black_card_state_.enabled = false;
-    matte_sphere_state_.enabled = false;
-    glossy_sphere_state_.enabled = false;
-    ground_plane_state_.enabled = false;
-    break;
-  case ScenePreset::kThreeCards:
-    gray_card_state_.enabled = true;
-    white_card_state_.enabled = true;
-    black_card_state_.enabled = true;
-    matte_sphere_state_.enabled = false;
-    glossy_sphere_state_.enabled = false;
-    ground_plane_state_.enabled = false;
-    break;
-  case ScenePreset::kSpecular:
-    gray_card_state_.enabled = false;
-    white_card_state_.enabled = false;
-    black_card_state_.enabled = false;
-    matte_sphere_state_.enabled = true;
-    glossy_sphere_state_.enabled = true;
-    ground_plane_state_.enabled = true;
-    break;
-  case ScenePreset::kFull:
-    gray_card_state_.enabled = true;
-    white_card_state_.enabled = true;
-    black_card_state_.enabled = true;
-    matte_sphere_state_.enabled = true;
-    glossy_sphere_state_.enabled = true;
-    ground_plane_state_.enabled = true;
-    break;
+    spot_light_node_.EditLight<scene::SpotLight>(
+      [](auto& light) -> auto { light.Common().affects_world = false; });
   }
 }
 
@@ -182,7 +225,7 @@ auto LightScene::ResetSceneObject(std::string_view label) -> void
   if (label == "18% Gray Card") {
     gray_card_state_ = SceneObjectState {
       .enabled = true,
-      .position = Vec3 { -1.6F, 0.0F, 1.0F },
+      .position = Vec3 { 1.6F, 0.0F, 1.0F },
       .rotation_deg = Vec3 { -180.0F, 0.0F, 0.0F },
       .scale = Vec3 { 1.0F, 1.0F, 1.0F },
     };
@@ -200,7 +243,7 @@ auto LightScene::ResetSceneObject(std::string_view label) -> void
   if (label == "Black Card") {
     black_card_state_ = SceneObjectState {
       .enabled = true,
-      .position = Vec3 { 1.6F, 0.0F, 1.0F },
+      .position = Vec3 { -1.6F, 0.0F, 1.0F },
       .rotation_deg = Vec3 { -180.0F, 0.0F, 0.0F },
       .scale = Vec3 { 1.0F, 1.0F, 1.0F },
     };
@@ -248,12 +291,15 @@ auto LightScene::EnsureGeometryAssets() -> void
     return;
   }
 
-  const auto gray_mat = MakeSolidColorMaterial(
-    "GrayCard", Vec4 { 0.18F, 0.18F, 0.18F, 1.0F }, 0.9F, 0.0F, true);
-  const auto white_mat = MakeSolidColorMaterial(
-    "WhiteCard", Vec4 { 1.0F, 1.0F, 1.0F, 1.0F }, 0.9F, 0.0F, true);
-  const auto black_mat = MakeSolidColorMaterial(
-    "BlackCard", Vec4 { 0.02F, 0.02F, 0.02F, 1.0F }, 0.9F, 0.0F, true);
+  const auto gray_mat = MakeSolidColorMaterial("GrayCard",
+    Vec4 { Vec3 { reference::kReflectances[0] }, 1.0F }, reference::kRoughness,
+    0.0F, false);
+  const auto white_mat = MakeSolidColorMaterial("WhiteCard",
+    Vec4 { Vec3 { reference::kReflectances[1] }, 1.0F }, reference::kRoughness,
+    0.0F, false);
+  const auto black_mat = MakeSolidColorMaterial("BlackCard",
+    Vec4 { Vec3 { reference::kReflectances[2] }, 1.0F }, reference::kRoughness,
+    0.0F, false);
   const auto matte_mat = MakeSolidColorMaterial(
     "MatteSphere", Vec4 { 0.5F, 0.5F, 0.5F, 1.0F }, 0.95F, 0.0F, false);
   const auto glossy_mat = MakeSolidColorMaterial(
@@ -386,8 +432,9 @@ auto LightScene::ApplyPointLightState() -> void
   point_light_node_.GetTransform().SetLocalPosition(
     point_light_state_.position);
 
-  point_light_node_.EditLight<scene::PointLight>([this](auto& light) {
+  point_light_node_.EditLight<scene::PointLight>([this](auto& light) -> auto {
     light.Common().affects_world = point_light_state_.enabled;
+    light.Common().casts_shadows = point_light_state_.casts_shadows;
     light.Common().color_rgb = point_light_state_.color_rgb;
     light.SetLuminousFluxLm(point_light_state_.intensity);
     light.SetRange(point_light_state_.range);
@@ -406,8 +453,9 @@ auto LightScene::ApplySpotLightState() -> void
   const Quat rot = RotationFromForwardToDir(direction);
   spot_light_node_.GetTransform().SetLocalRotation(rot);
 
-  spot_light_node_.EditLight<scene::SpotLight>([this](auto& light) {
+  spot_light_node_.EditLight<scene::SpotLight>([this](auto& light) -> auto {
     light.Common().affects_world = spot_light_state_.enabled;
+    light.Common().casts_shadows = spot_light_state_.casts_shadows;
     light.Common().color_rgb = spot_light_state_.color_rgb;
     light.SetLuminousFluxLm(spot_light_state_.intensity);
     light.SetRange(spot_light_state_.range);
@@ -434,7 +482,7 @@ auto LightScene::BuildSurfaceGeometry(std::string_view generator,
   CHECK_F(surface_data.has_value());
 
   auto mesh
-    = MeshBuilder(0, std::string(name))
+    = MeshBuilder(0, name)
         .WithVertices(surface_data->first)
         .WithIndices(surface_data->second)
         .BeginSubMesh("full", material)
@@ -477,7 +525,7 @@ auto LightScene::BuildSphereGeometry(
   CHECK_F(sphere_data.has_value());
 
   auto mesh
-    = MeshBuilder(0, std::string(name))
+    = MeshBuilder(0, name)
         .WithVertices(sphere_data->first)
         .WithIndices(sphere_data->second)
         .BeginSubMesh("full", material)
@@ -525,7 +573,7 @@ auto LightScene::MakeSolidColorMaterial(std::string_view name, const Vec4& rgba,
   desc.header.streaming_priority = 255;
   desc.material_domain = static_cast<uint8_t>(MaterialDomain::kOpaque);
   desc.flags = pak::render::kMaterialFlag_NoTextureSampling
-    | (double_sided ? pak::render::kMaterialFlag_DoubleSided : 0u);
+    | (double_sided ? pak::render::kMaterialFlag_DoubleSided : 0U);
   desc.shader_stages = 0;
   desc.base_color[0] = rgba.r;
   desc.base_color[1] = rgba.g;

@@ -5,14 +5,25 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cfloat>
+#include <cmath>
+#include <cstddef>
+#include <filesystem>
 #include <stdexcept>
 #include <string>
+#include <string_view>
+#include <utility>
 
-#include "DemoShell/Services/SettingsService.h"
 #include "LightBench/LightBenchPanel.h"
+#include "LightBench/LightBenchSettings.h"
+#include "LightBench/LightScene.h"
+#include "LightBench/ReferenceScene.h"
 #include <imgui.h>
 
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
+#include <Oxygen/ImGui/Styles/Spectrum.h>
 
 namespace oxygen::examples::light_bench {
 
@@ -20,19 +31,121 @@ namespace {
   constexpr Vec3 kAxisColorX { 1.0F, 0.2F, 0.2F };
   constexpr Vec3 kAxisColorY { 0.2F, 1.0F, 0.2F };
   constexpr Vec3 kAxisColorZ { 0.2F, 0.4F, 1.0F };
+
+  auto PresetButton(const char* label, bool selected, float width) -> bool
+  {
+    ImGui::PushStyleColor(ImGuiCol_Button,
+      ImGui::GetStyleColorVec4(selected ? ImGuiCol_Header : ImGuiCol_Button));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
+      ImGui::GetStyleColorVec4(
+        selected ? ImGuiCol_HeaderHovered : ImGuiCol_ButtonHovered));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive,
+      ImGui::GetStyleColorVec4(
+        selected ? ImGuiCol_HeaderActive : ImGuiCol_ButtonActive));
+    const auto clicked = ImGui::Button(label, ImVec2 { width, 0 });
+    ImGui::PopStyleColor(3);
+    return clicked;
+  }
 } // namespace
 
 LightBenchPanel::LightBenchPanel(observer_ptr<LightScene> light_scene,
-  const SceneActivationPolicy activation_policy)
-  : activation_policy_(activation_policy)
+  Actions actions, const std::filesystem::path& settings_path)
+  : actions_(std::move(actions))
   , light_scene_(light_scene)
   , icon_(std::string(imgui::icons::kIconDemoPanel) + "##LightBench")
 {
-  if (activation_policy_ != SceneActivationPolicy::kRestorePreferences
-    && activation_policy_ != SceneActivationPolicy::kExperimentOwned) {
-    throw std::invalid_argument("Unknown scene activation policy");
+  const auto text = settings_path.string();
+  if (text.size() >= settings_path_.size()) {
+    throw std::length_error("LightBench settings path is too long");
   }
-  LoadSettings();
+  std::ranges::copy(text, settings_path_.begin());
+}
+
+auto LightBenchPanel::DrawPresetOverlay() -> void
+{
+  if (!light_scene_) {
+    return;
+  }
+  const auto* viewport = ImGui::GetMainViewport();
+  const auto& style = ImGui::GetStyle();
+  const auto font_size = ImGui::GetFontSize();
+  const auto padding = std::ceil(font_size * .6F);
+  const auto margin = std::ceil(font_size * .8F);
+  const auto button_width = [&style](const char* label) {
+    return ImGui::CalcTextSize(label).x + 2.0F * style.FramePadding.x;
+  };
+  float label_width = 0;
+  for (const auto& preset : GetPresets()) {
+    label_width = std::max(label_width, ImGui::CalcTextSize(preset.name).x);
+  }
+  const auto reset_width = button_width("Reset");
+  const auto selector_width
+    = label_width + ImGui::GetFrameHeight() + 2.0F * style.FramePadding.x;
+  const auto step_width = std::max(
+    { button_width("Dim"), button_width("Normal"), button_width("Bright") });
+  const auto steps_width = 3.0F * step_width + 2.0F * style.ItemSpacing.x;
+  const auto desired_width = 2.0F * padding
+    + std::max(selector_width + reset_width + style.ItemSpacing.x, steps_width);
+  const auto width
+    = std::min(desired_width, std::max(1.0F, viewport->Size.x - 2.0F * margin));
+  ImGui::SetNextWindowPos(ImVec2 { viewport->Pos.x + viewport->Size.x * .5F,
+                            viewport->Pos.y + margin },
+    ImGuiCond_Always, ImVec2 { .5F, 0 });
+  ImGui::SetNextWindowSize(ImVec2 { width, 0 }, ImGuiCond_Always);
+  ImGui::SetNextWindowBgAlpha(.8F);
+  const auto modified = !actions_.is_reference();
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, modified ? 2.0F : 0.0F);
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, font_size * .5F);
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2 { padding, padding });
+  ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, font_size * .22F);
+  ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0F);
+  ImGui::PushStyleColor(ImGuiCol_Border,
+    ImGui::ColorConvertU32ToFloat4(imgui::spectrum::Static::kOrange400));
+  constexpr ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration
+    | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings
+    | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoFocusOnAppearing;
+  const auto visible = ImGui::Begin("##LightBenchPresets", nullptr, flags);
+  // Begin draws this window's border. Restore the normal color before any
+  // popup or child control is drawn; only the preset panel signals dirtiness.
+  ImGui::PopStyleColor();
+  if (!visible) {
+    ImGui::End();
+    ImGui::PopStyleVar(5);
+    return;
+  }
+  const auto selected = actions_.selected();
+  const auto& info = GetPresetInfo(selected);
+  ImGui::SetNextItemWidth(std::max(1.0F,
+    ImGui::GetContentRegionAvail().x - reset_width - style.ItemSpacing.x));
+  const auto popup_height = std::ceil(2.0F * style.WindowPadding.y
+    + ImGui::GetTextLineHeightWithSpacing()
+      * static_cast<float>(GetPresets().size())
+    + 2.0F * style.PopupBorderSize);
+  ImGui::SetNextWindowSizeConstraints(
+    ImVec2 { 0, popup_height }, ImVec2 { FLT_MAX, FLT_MAX });
+  if (ImGui::BeginCombo(
+        "##Scenario", info.name, ImGuiComboFlags_HeightLargest)) {
+    for (const auto& preset : GetPresets()) {
+      const auto is_selected = preset.preset == selected;
+      if (ImGui::Selectable(preset.name, is_selected)) {
+        actions_.select(preset.preset);
+      }
+      if (is_selected) {
+        ImGui::SetItemDefaultFocus();
+      }
+    }
+    ImGui::EndCombo();
+  }
+  ImGui::SameLine();
+  if (ImGui::Button("Reset", ImVec2 { reset_width, 0 })) {
+    actions_.reset();
+    file_status_.clear();
+  }
+  DrawPresetControls(std::max(1.0F,
+    (ImGui::GetWindowWidth() - 2.0F * padding - 2.0F * style.ItemSpacing.x)
+      / 3.0F));
+  ImGui::End();
+  ImGui::PopStyleVar(5);
 }
 
 auto LightBenchPanel::DrawContents() -> void
@@ -40,8 +153,42 @@ auto LightBenchPanel::DrawContents() -> void
   if (!light_scene_) {
     return;
   }
-
-  if (ImGui::CollapsingHeader("Scene", ImGuiTreeNodeFlags_DefaultOpen)) {
+  const auto selected = actions_.selected();
+  if (selected == LightBenchPreset::kNeutralReference) {
+    ImGui::SeparatorText("Reference (cd/m2)");
+    if (ImGui::BeginTable(
+          "ReferenceValues", 3, ImGuiTableFlags_SizingStretchSame)) {
+      constexpr std::array names { "18% Gray", "90% White", "2% Black" };
+      for (std::size_t i = 0; i < names.size(); ++i) {
+        ImGui::TableNextColumn();
+        ImGui::TextUnformatted(names.at(i));
+        ImGui::Text("%.3f", reference::kExpectedLuminance.at(i));
+      }
+      ImGui::EndTable();
+    }
+  }
+  if (ImGui::CollapsingHeader("Save / Load settings")) {
+    ImGui::SetNextItemWidth(-1);
+    ImGui::InputText(
+      "##settings_path", settings_path_.data(), settings_path_.size());
+    if (ImGui::Button("Save settings")) {
+      const auto result
+        = actions_.save(std::filesystem::path(settings_path_.data()));
+      file_status_ = result ? "Settings saved." : result.error();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Load settings")) {
+      const auto result
+        = actions_.load(std::filesystem::path(settings_path_.data()));
+      file_status_
+        = result ? "Settings validated; applying next frame." : result.error();
+    }
+    if (!file_status_.empty()) {
+      ImGui::TextWrapped("%s", file_status_.c_str());
+    }
+  }
+  ImGui::Separator();
+  if (ImGui::CollapsingHeader("Geometry (advanced)")) {
     DrawSceneSection();
   }
 
@@ -50,40 +197,36 @@ auto LightBenchPanel::DrawContents() -> void
   }
 }
 
-auto LightBenchPanel::OnLoaded() -> void { LoadSettings(); }
+auto LightBenchPanel::DrawSceneSection() -> void { DrawSceneAdvancedSection(); }
 
-auto LightBenchPanel::OnUnloaded() -> void { SaveSettings(); }
-
-auto LightBenchPanel::DrawSceneSection() -> void
+auto LightBenchPanel::DrawPresetControls(const float button_width) -> void
 {
-  DrawScenePresets();
+  if (actions_.selected() == LightBenchPreset::kPointFalloff) {
+    for (const auto distance : { 1.0F, 2.0F, 4.0F }) {
+      const auto label = std::to_string(static_cast<int>(distance)) + " m";
+      const auto selected = light_scene_->GetPointLightState().position
+        == Vec3 { 0.0F, distance, 1.0F };
+      if (PresetButton(label.c_str(), selected, button_width)) {
+        light_scene_->GetPointLightState().position = { 0.0F, distance, 1.0F };
+      }
+      if (distance != 4.0F) {
+        ImGui::SameLine();
+      }
+    }
 
-  if (ImGui::CollapsingHeader("Advanced", ImGuiTreeNodeFlags_DefaultOpen)) {
-    DrawSceneAdvancedSection();
-  }
-}
-
-auto LightBenchPanel::DrawScenePresets() -> void
-{
-  ImGui::Text("Presets");
-  if (ImGui::Button("Baseline")) {
-    light_scene_->ApplyScenePreset(LightScene::ScenePreset::kBaseline);
-    MarkChanged();
-  }
-  ImGui::SameLine();
-  if (ImGui::Button("3 Cards")) {
-    light_scene_->ApplyScenePreset(LightScene::ScenePreset::kThreeCards);
-    MarkChanged();
-  }
-  ImGui::SameLine();
-  if (ImGui::Button("Specular")) {
-    light_scene_->ApplyScenePreset(LightScene::ScenePreset::kSpecular);
-    MarkChanged();
-  }
-  ImGui::SameLine();
-  if (ImGui::Button("Full")) {
-    light_scene_->ApplyScenePreset(LightScene::ScenePreset::kFull);
-    MarkChanged();
+  } else if (actions_.selected() == LightBenchPreset::kAutoAdaptation) {
+    constexpr std::array steps { std::pair { "Dim", 100.0F },
+      std::pair { "Normal", 1000.0F }, std::pair { "Bright", 10000.0F } };
+    for (const auto& [label, lux] : steps) {
+      auto& current_lux
+        = light_scene_->GetDirectionalLightState().illuminance_lux;
+      if (PresetButton(label, current_lux == lux, button_width)) {
+        current_lux = lux;
+      }
+      if (lux != steps.back().second) {
+        ImGui::SameLine();
+      }
+    }
   }
 }
 
@@ -93,13 +236,11 @@ auto LightBenchPanel::DrawSceneObjectControls(std::string_view label,
   ImGui::Text("%s", std::string(label).c_str());
   ImGui::Indent();
   const std::string id(label);
-  if (ImGui::Checkbox(("Enabled##" + id).c_str(), &state.enabled)) {
-    MarkChanged();
-  }
+  static_cast<void>(
+    ImGui::Checkbox(("Enabled##" + id).c_str(), &state.enabled));
   ImGui::SameLine();
   if (ImGui::Button(("Reset##" + id).c_str())) {
     light_scene_->ResetSceneObject(label);
-    MarkChanged();
   }
   DrawVector3Table(
     id + "_pos", "Position", state.position, 0.05F, -100000.0F, 100000.0F);
@@ -182,20 +323,48 @@ auto LightBenchPanel::DrawAxisFloatCell(const std::string& id,
 
   ImGui::SetCursorScreenPos(ImVec2(cursor.x + rect_width + 6.0F, cursor.y));
   ImGui::PushItemWidth(-1.0F);
-  if (ImGui::DragFloat(
-        id.c_str(), &value, speed, min_value, max_value, "%.3F")) {
-    MarkChanged();
-  }
+  static_cast<void>(ImGui::DragFloat(id.c_str(), &value, speed, min_value,
+    max_value, "%.3F", ImGuiSliderFlags_AlwaysClamp));
   ImGui::PopItemWidth();
 }
 
 auto LightBenchPanel::DrawLightsSection() -> void
 {
-  ImGui::Text("Local Lights");
-  ImGui::Separator();
-  DrawPointLightControls();
-  ImGui::Spacing();
-  DrawSpotLightControls();
+  ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x * .52F);
+  const std::array controls {
+    std::pair { light_scene_->GetDirectionalLightState().enabled,
+      &LightBenchPanel::DrawDirectionalLightControls },
+    std::pair { light_scene_->GetPointLightState().enabled,
+      &LightBenchPanel::DrawPointLightControls },
+    std::pair { light_scene_->GetSpotLightState().enabled,
+      &LightBenchPanel::DrawSpotLightControls },
+  };
+  // Keep every control accessible; present the active sources first.
+  for (const bool active : { true, false }) {
+    for (const auto& [enabled, draw] : controls) {
+      if (enabled != active) {
+        continue;
+      }
+      (this->*draw)();
+      ImGui::Spacing();
+      ImGui::Separator();
+    }
+  }
+  ImGui::PopItemWidth();
+}
+
+auto LightBenchPanel::DrawDirectionalLightControls() -> void
+{
+  ImGui::TextUnformatted("Directional Light");
+  auto& key = light_scene_->GetDirectionalLightState();
+  static_cast<void>(ImGui::Checkbox("Enabled##directional", &key.enabled));
+  static_cast<void>(ImGui::DragFloat("Lux", &key.illuminance_lux, 10.0F, 0.0F,
+    200000.0F, "%.1f", ImGuiSliderFlags_AlwaysClamp));
+  static_cast<void>(ImGui::ColorEdit3("Color##directional", &key.color_rgb.x));
+  static_cast<void>(ImGui::DragFloat3(
+    "Ray direction##directional", &key.direction_ws.x, .01F, -1.0F, 1.0F));
+  static_cast<void>(
+    ImGui::Checkbox("Cast shadows##directional", &key.casts_shadows));
 }
 
 auto LightBenchPanel::DrawPointLightControls() -> void
@@ -205,26 +374,18 @@ auto LightBenchPanel::DrawPointLightControls() -> void
   ImGui::Text("Point Light");
   ImGui::Indent();
 
-  if (ImGui::Checkbox("Enabled##point", &point.enabled)) {
-    MarkChanged();
-  }
-  if (ImGui::DragFloat3("Position##point", &point.position.x, 0.1F)) {
-    MarkChanged();
-  }
-  if (ImGui::ColorEdit3("Color##point", &point.color_rgb.x)) {
-    MarkChanged();
-  }
-  if (ImGui::DragFloat("Luminous Flux (lm)##point", &point.intensity, 1.0F,
-        0.0F, 200000.0F, "%.2F", ImGuiSliderFlags_Logarithmic)) {
-    MarkChanged();
-  }
-  if (ImGui::DragFloat("Range##point", &point.range, 0.1F, 0.1F, 500.0F)) {
-    MarkChanged();
-  }
-  if (ImGui::DragFloat(
-        "Source Radius##point", &point.source_radius, 0.01F, 0.0F, 10.0F)) {
-    MarkChanged();
-  }
+  static_cast<void>(ImGui::Checkbox("Enabled##point", &point.enabled));
+  ImGui::SameLine();
+  static_cast<void>(ImGui::Checkbox("Shadows##point", &point.casts_shadows));
+  static_cast<void>(
+    ImGui::DragFloat3("Position##point", &point.position.x, 0.1F));
+  static_cast<void>(ImGui::ColorEdit3("Color##point", &point.color_rgb.x));
+  static_cast<void>(ImGui::DragFloat("Lumens##point", &point.intensity, 1.0F,
+    0.0F, 200000.0F, "%.2F", ImGuiSliderFlags_Logarithmic));
+  static_cast<void>(
+    ImGui::DragFloat("Range (m)##point", &point.range, 0.1F, 0.1F, 500.0F));
+  static_cast<void>(ImGui::DragFloat(
+    "Radius (m)##point", &point.source_radius, 0.01F, 0.0F, 10.0F));
 
   point.range = (std::max)(point.range, 0.1F);
 
@@ -238,37 +399,24 @@ auto LightBenchPanel::DrawSpotLightControls() -> void
   ImGui::Text("Spot Light");
   ImGui::Indent();
 
-  if (ImGui::Checkbox("Enabled##spot", &spot.enabled)) {
-    MarkChanged();
-  }
-  if (ImGui::DragFloat3("Position##spot", &spot.position.x, 0.1F)) {
-    MarkChanged();
-  }
-  if (ImGui::DragFloat3("Direction##spot", &spot.direction_ws.x, 0.05F)) {
-    MarkChanged();
-  }
-  if (ImGui::ColorEdit3("Color##spot", &spot.color_rgb.x)) {
-    MarkChanged();
-  }
-  if (ImGui::DragFloat("Luminous Flux (lm)##spot", &spot.intensity, 1.0F, 0.0F,
-        200000.0F, "%.2F", ImGuiSliderFlags_Logarithmic)) {
-    MarkChanged();
-  }
-  if (ImGui::DragFloat("Range##spot", &spot.range, 0.1F, 0.1F, 500.0F)) {
-    MarkChanged();
-  }
-  if (ImGui::DragFloat(
-        "Inner Angle (deg)##spot", &spot.inner_angle_deg, 0.1F, 0.0F, 89.0F)) {
-    MarkChanged();
-  }
-  if (ImGui::DragFloat(
-        "Outer Angle (deg)##spot", &spot.outer_angle_deg, 0.1F, 0.1F, 89.9F)) {
-    MarkChanged();
-  }
-  if (ImGui::DragFloat(
-        "Source Radius##spot", &spot.source_radius, 0.01F, 0.0F, 10.0F)) {
-    MarkChanged();
-  }
+  static_cast<void>(ImGui::Checkbox("Enabled##spot", &spot.enabled));
+  ImGui::SameLine();
+  static_cast<void>(ImGui::Checkbox("Shadows##spot", &spot.casts_shadows));
+  static_cast<void>(
+    ImGui::DragFloat3("Position##spot", &spot.position.x, 0.1F));
+  static_cast<void>(
+    ImGui::DragFloat3("Direction##spot", &spot.direction_ws.x, 0.05F));
+  static_cast<void>(ImGui::ColorEdit3("Color##spot", &spot.color_rgb.x));
+  static_cast<void>(ImGui::DragFloat("Lumens##spot", &spot.intensity, 1.0F,
+    0.0F, 200000.0F, "%.2F", ImGuiSliderFlags_Logarithmic));
+  static_cast<void>(
+    ImGui::DragFloat("Range (m)##spot", &spot.range, 0.1F, 0.1F, 500.0F));
+  static_cast<void>(ImGui::DragFloat(
+    "Inner (deg)##spot", &spot.inner_angle_deg, 0.1F, 0.0F, 89.0F));
+  static_cast<void>(ImGui::DragFloat(
+    "Outer (deg)##spot", &spot.outer_angle_deg, 0.1F, 0.1F, 89.9F));
+  static_cast<void>(ImGui::DragFloat(
+    "Radius (m)##spot", &spot.source_radius, 0.01F, 0.0F, 10.0F));
 
   spot.range = (std::max)(spot.range, 0.1F);
   if (spot.outer_angle_deg < spot.inner_angle_deg) {
@@ -277,192 +425,5 @@ auto LightBenchPanel::DrawSpotLightControls() -> void
 
   ImGui::Unindent();
 }
-
-auto LightBenchPanel::LoadSettings() -> void
-{
-  if (activation_policy_ == SceneActivationPolicy::kExperimentOwned) {
-    settings_loaded_ = true;
-    return;
-  }
-  if (settings_loaded_) {
-    return;
-  }
-
-  const auto settings = SettingsService::ForDemoApp();
-  if (!settings) {
-    return;
-  }
-
-  auto load_bool = [&](std::string_view key, bool& value) {
-    if (const auto stored = settings->GetBool(key)) {
-      value = *stored;
-    }
-  };
-  auto load_float = [&](std::string_view key, float& value) {
-    if (const auto stored = settings->GetFloat(key)) {
-      value = *stored;
-    }
-  };
-  auto load_vec3 = [&](std::string_view prefix, Vec3& value) {
-    std::string key(prefix);
-    key += ".x";
-    load_float(key, value.x);
-    key.resize(prefix.size());
-    key += ".y";
-    load_float(key, value.y);
-    key.resize(prefix.size());
-    key += ".z";
-    load_float(key, value.z);
-  };
-
-  auto& gray = light_scene_->GetGrayCardState();
-  load_bool("lightbench.scene.gray_card.enabled", gray.enabled);
-  load_vec3("lightbench.scene.gray_card.position", gray.position);
-  load_vec3("lightbench.scene.gray_card.rotation", gray.rotation_deg);
-  load_vec3("lightbench.scene.gray_card.scale", gray.scale);
-
-  auto& white = light_scene_->GetWhiteCardState();
-  load_bool("lightbench.scene.white_card.enabled", white.enabled);
-  load_vec3("lightbench.scene.white_card.position", white.position);
-  load_vec3("lightbench.scene.white_card.rotation", white.rotation_deg);
-  load_vec3("lightbench.scene.white_card.scale", white.scale);
-
-  auto& black = light_scene_->GetBlackCardState();
-  load_bool("lightbench.scene.black_card.enabled", black.enabled);
-  load_vec3("lightbench.scene.black_card.position", black.position);
-  load_vec3("lightbench.scene.black_card.rotation", black.rotation_deg);
-  load_vec3("lightbench.scene.black_card.scale", black.scale);
-
-  auto& matte = light_scene_->GetMatteSphereState();
-  load_bool("lightbench.scene.matte_sphere.enabled", matte.enabled);
-  load_vec3("lightbench.scene.matte_sphere.position", matte.position);
-  load_vec3("lightbench.scene.matte_sphere.rotation", matte.rotation_deg);
-  load_vec3("lightbench.scene.matte_sphere.scale", matte.scale);
-
-  auto& glossy = light_scene_->GetGlossySphereState();
-  load_bool("lightbench.scene.glossy_sphere.enabled", glossy.enabled);
-  load_vec3("lightbench.scene.glossy_sphere.position", glossy.position);
-  load_vec3("lightbench.scene.glossy_sphere.rotation", glossy.rotation_deg);
-  load_vec3("lightbench.scene.glossy_sphere.scale", glossy.scale);
-
-  auto& ground = light_scene_->GetGroundPlaneState();
-  load_bool("lightbench.scene.ground_plane.enabled", ground.enabled);
-  load_vec3("lightbench.scene.ground_plane.position", ground.position);
-  load_vec3("lightbench.scene.ground_plane.rotation", ground.rotation_deg);
-  load_vec3("lightbench.scene.ground_plane.scale", ground.scale);
-
-  auto& point = light_scene_->GetPointLightState();
-  load_bool("lightbench.light.point.enabled", point.enabled);
-  load_vec3("lightbench.light.point.position", point.position);
-  load_vec3("lightbench.light.point.color", point.color_rgb);
-  load_float("lightbench.light.point.intensity", point.intensity);
-  load_float("lightbench.light.point.range", point.range);
-  load_float("lightbench.light.point.source_radius", point.source_radius);
-
-  auto& spot = light_scene_->GetSpotLightState();
-  load_bool("lightbench.light.spot.enabled", spot.enabled);
-  load_vec3("lightbench.light.spot.position", spot.position);
-  load_vec3("lightbench.light.spot.direction", spot.direction_ws);
-  load_vec3("lightbench.light.spot.color", spot.color_rgb);
-  load_float("lightbench.light.spot.intensity", spot.intensity);
-  load_float("lightbench.light.spot.range", spot.range);
-  load_float("lightbench.light.spot.inner_angle", spot.inner_angle_deg);
-  load_float("lightbench.light.spot.outer_angle", spot.outer_angle_deg);
-  load_float("lightbench.light.spot.source_radius", spot.source_radius);
-
-  settings_loaded_ = true;
-}
-
-auto LightBenchPanel::SaveSettings() -> void
-{
-  if (activation_policy_ == SceneActivationPolicy::kExperimentOwned) {
-    pending_changes_ = false;
-    return;
-  }
-  if (!pending_changes_) {
-    return;
-  }
-
-  const auto settings = SettingsService::ForDemoApp();
-  if (!settings) {
-    return;
-  }
-
-  auto save_bool
-    = [&](std::string_view key, bool value) { settings->SetBool(key, value); };
-  auto save_float = [&](std::string_view key, float value) {
-    settings->SetFloat(key, value);
-  };
-  auto save_vec3 = [&](std::string_view prefix, const Vec3& value) {
-    std::string key(prefix);
-    key += ".x";
-    save_float(key, value.x);
-    key.resize(prefix.size());
-    key += ".y";
-    save_float(key, value.y);
-    key.resize(prefix.size());
-    key += ".z";
-    save_float(key, value.z);
-  };
-
-  const auto& gray = light_scene_->GetGrayCardState();
-  save_bool("lightbench.scene.gray_card.enabled", gray.enabled);
-  save_vec3("lightbench.scene.gray_card.position", gray.position);
-  save_vec3("lightbench.scene.gray_card.rotation", gray.rotation_deg);
-  save_vec3("lightbench.scene.gray_card.scale", gray.scale);
-
-  const auto& white = light_scene_->GetWhiteCardState();
-  save_bool("lightbench.scene.white_card.enabled", white.enabled);
-  save_vec3("lightbench.scene.white_card.position", white.position);
-  save_vec3("lightbench.scene.white_card.rotation", white.rotation_deg);
-  save_vec3("lightbench.scene.white_card.scale", white.scale);
-
-  const auto& black = light_scene_->GetBlackCardState();
-  save_bool("lightbench.scene.black_card.enabled", black.enabled);
-  save_vec3("lightbench.scene.black_card.position", black.position);
-  save_vec3("lightbench.scene.black_card.rotation", black.rotation_deg);
-  save_vec3("lightbench.scene.black_card.scale", black.scale);
-
-  const auto& matte = light_scene_->GetMatteSphereState();
-  save_bool("lightbench.scene.matte_sphere.enabled", matte.enabled);
-  save_vec3("lightbench.scene.matte_sphere.position", matte.position);
-  save_vec3("lightbench.scene.matte_sphere.rotation", matte.rotation_deg);
-  save_vec3("lightbench.scene.matte_sphere.scale", matte.scale);
-
-  const auto& glossy = light_scene_->GetGlossySphereState();
-  save_bool("lightbench.scene.glossy_sphere.enabled", glossy.enabled);
-  save_vec3("lightbench.scene.glossy_sphere.position", glossy.position);
-  save_vec3("lightbench.scene.glossy_sphere.rotation", glossy.rotation_deg);
-  save_vec3("lightbench.scene.glossy_sphere.scale", glossy.scale);
-
-  const auto& ground = light_scene_->GetGroundPlaneState();
-  save_bool("lightbench.scene.ground_plane.enabled", ground.enabled);
-  save_vec3("lightbench.scene.ground_plane.position", ground.position);
-  save_vec3("lightbench.scene.ground_plane.rotation", ground.rotation_deg);
-  save_vec3("lightbench.scene.ground_plane.scale", ground.scale);
-
-  const auto& point = light_scene_->GetPointLightState();
-  save_bool("lightbench.light.point.enabled", point.enabled);
-  save_vec3("lightbench.light.point.position", point.position);
-  save_vec3("lightbench.light.point.color", point.color_rgb);
-  save_float("lightbench.light.point.intensity", point.intensity);
-  save_float("lightbench.light.point.range", point.range);
-  save_float("lightbench.light.point.source_radius", point.source_radius);
-
-  const auto& spot = light_scene_->GetSpotLightState();
-  save_bool("lightbench.light.spot.enabled", spot.enabled);
-  save_vec3("lightbench.light.spot.position", spot.position);
-  save_vec3("lightbench.light.spot.direction", spot.direction_ws);
-  save_vec3("lightbench.light.spot.color", spot.color_rgb);
-  save_float("lightbench.light.spot.intensity", spot.intensity);
-  save_float("lightbench.light.spot.range", spot.range);
-  save_float("lightbench.light.spot.inner_angle", spot.inner_angle_deg);
-  save_float("lightbench.light.spot.outer_angle", spot.outer_angle_deg);
-  save_float("lightbench.light.spot.source_radius", spot.source_radius);
-
-  pending_changes_ = false;
-}
-
-auto LightBenchPanel::MarkChanged() -> void { pending_changes_ = true; }
 
 } // namespace oxygen::examples::light_bench

@@ -46,6 +46,7 @@
 #include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/OxCo/asio.h>
 #include <Oxygen/Platform/Platform.h>
+#include <Oxygen/SceneSync/SceneObserverSyncModule.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
 
@@ -98,7 +99,8 @@ template <> struct co::EventLoopTraits<oxygen::examples::DemoAppContext> {
 
 namespace {
 
-auto RegisterEngineModules(oxygen::examples::DemoAppContext& app) -> void
+auto RegisterEngineModules(oxygen::examples::DemoAppContext& app,
+  oxygen::examples::light_bench::LightBenchPreset preset) -> void
 {
   LOG_F(INFO, "Registering engine modules...");
 
@@ -131,15 +133,21 @@ auto RegisterEngineModules(oxygen::examples::DemoAppContext& app) -> void
       | oxygen::vortex::RendererCapabilityFamily::kDeferredShading;
 
     register_module(
-      std::make_unique<oxygen::examples::light_bench::MainModule>(app));
+      std::make_unique<oxygen::examples::light_bench::MainModule>(app, preset));
 
-    register_module(std::make_unique<oxygen::vortex::Renderer>(
-      app.gfx_weak, renderer_config, kLightBenchVortexCapabilities));
+    register_module(
+      std::make_unique<oxygen::scenesync::SceneObserverSyncModule>(
+        engine::kSceneObserverSyncModulePriority));
+
+    auto renderer = std::make_unique<oxygen::vortex::Renderer>(
+      app.gfx_weak, renderer_config, kLightBenchVortexCapabilities);
+    renderer->SetGroundGridConfig({ .enabled = false });
+    register_module(std::move(renderer));
   }
 }
 
-auto AsyncMain(oxygen::examples::DemoAppContext& app, uint32_t frames)
-  -> co::Co<int>
+auto AsyncMain(oxygen::examples::DemoAppContext& app, uint32_t frames,
+  oxygen::examples::light_bench::LightBenchPreset preset) -> co::Co<int>
 {
   OXCO_WITH_NURSERY(n)
   {
@@ -156,9 +164,9 @@ auto AsyncMain(oxygen::examples::DemoAppContext& app, uint32_t frames)
     co_await n.Start(&AsyncEngine::ActivateAsync, std::ref(*app.engine));
     app.engine->Run();
 
-    RegisterEngineModules(app);
+    RegisterEngineModules(app, preset);
 
-    n.Start([&app, &n]() -> co::Co<> {
+    n.Start([&app, &n] -> co::Co<> {
       co_await app.platform->Windows().LastWindowClosed();
       LOG_F(INFO, "LightBench: last window closed -> shutting down engine");
 
@@ -187,6 +195,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
   bool headless = false;
   bool enable_vsync = true;
   std::string resolution;
+  std::string preset_id = "neutral-reference";
   oxygen::examples::cli::GraphicsToolingCliState graphics_tooling_cli {};
   oxygen::examples::cli::FrameCaptureCliState capture_cli {};
   oxygen::examples::DemoAppContext app {};
@@ -204,6 +213,15 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
           }))
           .WithOptions(oxygen::examples::cli::MakeGraphicsToolingOptions(
             graphics_tooling_cli))
+          .WithOption(Option::WithKey("preset")
+              .About("Initial scenario: neutral-reference, point-falloff, "
+                     "spot-cone, material-lighting, auto-adaptation, indoor, "
+                     "outdoor-daylight")
+              .Long("preset")
+              .WithValue<std::string>()
+              .DefaultValue("neutral-reference")
+              .StoreTo(&preset_id)
+              .Build())
           .WithOptions(oxygen::examples::cli::MakeCaptureOptions(capture_cli))
           .WithOptions(
             oxygen::examples::cli::MakeAdvancedCaptureOptions(capture_cli),
@@ -218,6 +236,13 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
     if (oxygen::examples::cli::HandleMetaCommand(context, default_command)) {
       return EXIT_SUCCESS;
     }
+    const auto presets = oxygen::examples::light_bench::GetPresets();
+    const auto selected = std::ranges::find_if(
+      presets, [&](const auto& entry) { return entry.id == preset_id; });
+    if (selected == presets.end()) {
+      throw std::invalid_argument("Unknown LightBench preset: " + preset_id);
+    }
+    const auto preset = selected->preset;
     app.window_resolution = oxygen::examples::cli::ResolveWindowResolution(
       context, resolution, headless);
 
@@ -292,7 +317,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
       startup_cvars
     );
 
-    const auto rc = co::Run(app, AsyncMain(app, frames));
+    const auto rc = co::Run(app, AsyncMain(app, frames, preset));
 
     app.engine->Stop();
     app.platform->Stop();
