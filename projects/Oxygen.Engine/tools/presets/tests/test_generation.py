@@ -73,15 +73,18 @@ class PresetGenerationTests(unittest.TestCase):
 
     @unittest.skipUnless(POWERSHELL, "PowerShell is required")
     def test_generate_builds_selection_and_failure_propagation(self):
-        for tracy, asan, failing_tool, generator in (
-            (False, False, None, "All"), (True, False, None, "All"),
-            (False, True, None, "All"), (True, True, None, "All"),
-            (False, False, "conan", "All"), (False, False, "ninja", "All"),
-            (True, False, "vs", "All"),
-            (False, False, None, "Ninja"), (True, False, None, "VisualStudio"),
-            (False, True, None, "Ninja"),
+        for tracy, asan, failing_tool, generator, ui_tests in (
+            (False, False, None, "All", None), (True, False, None, "All", None),
+            (False, True, None, "All", None), (True, True, None, "All", None),
+            (False, False, "conan", "All", None), (False, False, "ninja", "All", None),
+            (True, False, "vs", "All", None),
+            (False, False, None, "Ninja", None), (True, False, None, "VisualStudio", None),
+            (False, True, None, "Ninja", None),
+            (False, False, None, "Ninja", True),
+            (False, False, None, "Ninja", False),
+            (True, False, None, "VisualStudio", False),
         ):
-            with self.subTest(tracy=tracy, asan=asan, failure=failing_tool), tempfile.TemporaryDirectory(prefix="oxygen-generate-") as directory:
+            with self.subTest(tracy=tracy, asan=asan, failure=failing_tool, generator=generator, ui_tests=ui_tests), tempfile.TemporaryDirectory(prefix="oxygen-generate-") as directory:
                 root = Path(directory)
                 (root / "tools").mkdir()
                 (root / "caller").mkdir()
@@ -101,7 +104,9 @@ class PresetGenerationTests(unittest.TestCase):
                     "}\n"
                     "& (Join-Path $PSScriptRoot 'tools/generate-builds.ps1') profile.ini -NoClean "
                     + f"-Generator {generator} "
-                    + ("-WithTracy" if tracy else "") + "\nexit $LASTEXITCODE\n",
+                    + ("-WithTracy " if tracy else "")
+                    + (f"-UiTests:${str(ui_tests).lower()}" if ui_tests is not None else "")
+                    + "\nexit $LASTEXITCODE\n",
                     encoding="utf-8",
                 )
                 result = subprocess.run([POWERSHELL, "-NoProfile", "-File", str(wrapper)], cwd=root / "caller", capture_output=True, text=True, encoding="utf-8", errors="replace")
@@ -120,6 +125,12 @@ class PresetGenerationTests(unittest.TestCase):
                 self.assertEqual(len(installs), len(trees) * (1 if asan else 3))
                 self.assertTrue(all(f"with_tracy={tracy}" in call["arguments"] for call in installs))
                 self.assertTrue(all(f"with_asan={asan}" in call["arguments"] for call in installs))
+                expected_ui_tests = True if ui_tests is None else ui_tests
+                self.assertTrue(all(f"ui_tests={expected_ui_tests}" in call["arguments"] for call in installs))
+                # Development instrumentation must not suppress SDK deployment.
+                for call in installs:
+                    self.assertIn(f"--deployer-folder={root / 'out/install'}", call["arguments"])
+                    self.assertIn("--deployer-package=Oxygen/0.1.0", call["arguments"])
 
     def test_native_generation_coexists_and_migrates(self):
         with tempfile.TemporaryDirectory(prefix="oxygen-presets-") as directory:

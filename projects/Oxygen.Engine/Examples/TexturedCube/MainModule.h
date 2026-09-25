@@ -10,6 +10,15 @@
 #include <memory>
 #include <optional>
 
+#include "DemoShell/DemoShell.h"
+#include "DemoShell/Runtime/DemoAppContext.h"
+#include "DemoShell/Runtime/DemoModuleBase.h"
+#include "DemoShell/Services/SkyboxService.h"
+#include "TexturedCube/SceneSetup.h"
+#include "TexturedCube/TextureLoadingService.h"
+#include "TexturedCube/UI/MaterialsSandboxPanel.h"
+#include "TexturedCube/UI/MaterialsSandboxVm.h"
+
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Core/EngineModule.h>
@@ -19,15 +28,6 @@
 #include <Oxygen/Platform/Window.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
-
-#include "DemoShell/DemoShell.h"
-#include "DemoShell/Runtime/DemoAppContext.h"
-#include "DemoShell/Runtime/DemoModuleBase.h"
-#include "DemoShell/Services/SkyboxService.h"
-#include "TexturedCube/SceneSetup.h"
-#include "TexturedCube/TextureLoadingService.h"
-#include "TexturedCube/UI/MaterialsSandboxPanel.h"
-#include "TexturedCube/UI/MaterialsSandboxVm.h"
 
 namespace oxygen::examples::textured_cube {
 
@@ -100,6 +100,9 @@ public:
     -> co::Co<> override;
 
 protected:
+#if defined(OXYGEN_BUILD_UI_TESTS)
+  auto RegisterUiTests(ImGuiTestEngine* engine) -> void override;
+#endif
   auto BuildDefaultWindowProperties() const
     -> platform::window::Properties override;
 

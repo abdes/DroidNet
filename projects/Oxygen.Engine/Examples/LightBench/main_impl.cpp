@@ -20,6 +20,9 @@
 #include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Services/SettingsService.h"
 #include "LightBench/MainModule.h"
+#if defined(OXYGEN_BUILD_UI_TESTS)
+#  include "DemoShell/Test/UiTestSession.h"
+#endif
 #include <SDL3/SDL.h>
 #include <asio/signal_set.hpp>
 
@@ -331,7 +334,11 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
     app.platform.reset();
 
     LOG_F(INFO, "exit code: {}", rc);
+#if defined(OXYGEN_BUILD_UI_TESTS)
+    return oxygen::examples::testing::UiTestSession::ExitCode(rc);
+#else
     return rc;
+#endif
   } catch (const oxygen::examples::cli::FrameCaptureCliError& e) {
     LOG_F(ERROR, "CLI parse error: {}", e.what());
     return EXIT_FAILURE;

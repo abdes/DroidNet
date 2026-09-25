@@ -30,6 +30,11 @@
 #include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Renderer.h>
 
+#if defined(OXYGEN_BUILD_UI_TESTS)
+#  include "DemoShell/Services/SettingsService.h"
+#  include "DemoShell/Test/UiTestSession.h"
+#endif
+
 namespace oxygen::examples {
 
 namespace {
@@ -141,6 +146,11 @@ auto DemoModuleBase::OnAttached(observer_ptr<IAsyncEngine> engine) noexcept
   -> bool
 {
   DCHECK_NOTNULL_F(engine);
+#if defined(OXYGEN_BUILD_UI_TESTS)
+  if (testing::UiTestSession::Requested()) {
+    SettingsService::ForDemoApp()->SetPersistenceEnabled(false);
+  }
+#endif
   LOG_SCOPE_FUNCTION(1);
 
   if (!app_.headless) {
@@ -164,6 +174,9 @@ auto DemoModuleBase::OnAttached(observer_ptr<IAsyncEngine> engine) noexcept
 
 auto DemoModuleBase::OnShutdown() noexcept -> void
 {
+#if defined(OXYGEN_BUILD_UI_TESTS)
+  StopUiTests();
+#endif
   if (auto renderer = ResolveVortexRenderer(); renderer != nullptr) {
     for (const auto& [_, view_id] : view_registry_) {
       renderer->RemovePublishedRuntimeView(view_id);
@@ -181,6 +194,40 @@ auto DemoModuleBase::GetShell() -> DemoShell&
   DCHECK_NOTNULL_F(shell_);
   return *shell_;
 }
+
+#if defined(OXYGEN_BUILD_UI_TESTS)
+auto DemoModuleBase::StopUiTests() -> void { ui_tests_.reset(); }
+auto DemoModuleBase::UiTestOutputDirectory() const -> std::filesystem::path
+{
+  return ui_tests_->OutputDirectory();
+}
+
+auto DemoModuleBase::OnFrameEnd(observer_ptr<engine::FrameContext>) -> void
+try {
+  if (!testing::UiTestSession::Requested() || app_.headless) {
+    return;
+  }
+  if (!ui_tests_) {
+    const auto renderer = ResolveVortexRenderer();
+    const auto window = app_window_->GetWindow();
+    auto* context = renderer ? renderer->GetImGuiContext() : nullptr;
+    if (!context || !window) {
+      return;
+    }
+    ui_tests_ = std::make_unique<testing::UiTestSession>(
+      *context, window->Native().window_handle);
+    RegisterUiTests(ui_tests_->Engine());
+    ui_tests_->Start();
+  }
+  if (ui_tests_->AfterPresent()) {
+    app_.engine->Stop();
+  }
+} catch (const std::exception& error) {
+  LOG_F(ERROR, "UI test session failed: {}", error.what());
+  StopUiTests();
+  app_.engine->Stop();
+}
+#endif
 
 auto DemoModuleBase::ResolveVortexRenderer() const noexcept
   -> observer_ptr<vortex::Renderer>

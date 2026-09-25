@@ -186,8 +186,6 @@ target_sources(
     FILES ${OXYGEN_DEMOSHELL_HEADERS}
 )
 
-arrange_target_files_for_ide(${META_MODULE_TARGET})
-
 target_compile_features(${META_MODULE_TARGET} PUBLIC cxx_std_23)
 target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
 target_include_directories(
@@ -227,6 +225,31 @@ target_link_libraries(
     fmt::fmt-header-only
     nlohmann_json::nlohmann_json
 )
+
+if(OXYGEN_BUILD_UI_TESTS)
+  if(NOT WIN32)
+    message(
+      FATAL_ERROR
+      "The demo UI test capture backend currently requires Windows"
+    )
+  endif()
+  target_sources(
+    ${META_MODULE_TARGET}
+    PRIVATE
+      "Test/UiTestSession.cpp"
+      "Test/UiTestSession.h"
+      "Test/UiTestAssets.cpp"
+      "Test/UiTestAssets.h"
+  )
+  target_link_libraries(
+    ${META_MODULE_TARGET}
+    PRIVATE
+      gdi32
+      user32
+  )
+endif()
+
+arrange_target_files_for_ide(${META_MODULE_TARGET})
 
 if(OXYGEN_BUILD_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Test")
   add_subdirectory("Test")

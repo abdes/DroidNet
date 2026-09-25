@@ -49,6 +49,7 @@ class OxygenConan(ConanFile):
         "with_asan": [True, False],
         "with_coverage": [True, False],
         "with_tracy": [True, False],
+        "ui_tests": [True, False],
         # Optional components:
         "base": [True, False],
         "oxco": [True, False],
@@ -66,6 +67,7 @@ class OxygenConan(ConanFile):
         "with_asan": False,
         "with_coverage": False,
         "with_tracy": False,
+        "ui_tests": False,
         # Optional components:
         "base": True,
         "oxco": True,
@@ -133,6 +135,7 @@ class OxygenConan(ConanFile):
         self._test_deps.add(ref.split("/")[0])
 
     def configure(self):
+        self.options["imgui"].enable_test_engine = self.options.ui_tests
         sanitizer = self.settings.get_safe("sanitizer")
         if sanitizer == "asan":
             # Do not reassign recipe options here. If the global
@@ -184,6 +187,8 @@ class OxygenConan(ConanFile):
             self.options["tracy"].shared = self.options.get_safe("shared", False)
 
     def validate(self):
+        if self.options.ui_tests and not self.options.examples:
+            raise ConanInvalidConfiguration("UI tests require the demo applications")
         if self._with_asan and self.settings.build_type != "Debug":
             raise ConanInvalidConfiguration(
                 "ASan is only supported for Debug builds. "
@@ -257,6 +262,12 @@ class OxygenConan(ConanFile):
         enable_tracy = self.options.get_safe("with_tracy", False)
         tc.variables["OXYGEN_WITH_TRACY"] = "ON" if enable_tracy else "OFF"
         tc.cache_variables["OXYGEN_WITH_TRACY"] = tc.variables["OXYGEN_WITH_TRACY"]
+
+        # Keep an existing tree's cache synchronized when instrumentation is
+        # enabled or removed through the generated preset, just as for Tracy.
+        enable_ui_tests = bool(self.options.ui_tests)
+        tc.cache_variables["OXYGEN_BUILD_UI_TESTS"] = enable_ui_tests
+        tc.cache_variables["OXYGEN_IMGUI_TEST_ENGINE_AVAILABLE"] = enable_ui_tests
 
         self._reset_legacy_presets(tc.presets_prefix)
         tc.generate()
@@ -358,6 +369,8 @@ class OxygenConan(ConanFile):
         defs["OXYGEN_BUILD_TOOLS"] = self.options.tools
         defs["OXYGEN_BUILD_EXAMPLES"] = self.options.examples
         defs["OXYGEN_BUILD_TESTS"] = self.options.tests
+        defs["OXYGEN_BUILD_UI_TESTS"] = self.options.ui_tests
+        defs["OXYGEN_IMGUI_TEST_ENGINE_AVAILABLE"] = self.options.ui_tests
         defs["OXYGEN_BUILD_BENCHMARKS"] = self.options.benchmarks
         defs["OXYGEN_BUILD_DOCS"] = self.options.docs
         defs["BUILD_SHARED_LIBS"] = self.options.shared
