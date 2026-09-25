@@ -14,6 +14,7 @@
 #include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Runtime/DemoModuleBase.h"
 #include "LightBench/LightBenchPanel.h"
+#include "LightBench/LightBenchSettings.h"
 #include "LightBench/LightScene.h"
 
 #include <Oxygen/Base/Macros.h>
@@ -32,6 +33,8 @@ struct CompositionView;
 
 namespace oxygen::examples::light_bench {
 
+class LightBenchConsoleBindings;
+
 //! Main module for the LightBench demo.
 /*!
  Provides a minimal DemoShell-driven reference scene for validating
@@ -45,7 +48,8 @@ class MainModule final : public DemoModuleBase {
 public:
   using Base = oxygen::examples::DemoModuleBase;
 
-  explicit MainModule(const oxygen::examples::DemoAppContext& app);
+  explicit MainModule(const oxygen::examples::DemoAppContext& app,
+    LightBenchPreset startup_preset = LightBenchPreset::kNeutralReference);
 
   [[nodiscard]] auto GetName() const noexcept -> std::string_view override
   {
@@ -67,7 +71,7 @@ public:
       PhaseId::kPreRender, PhaseId::kCompositing, PhaseId::kFrameEnd>();
   }
 
-  ~MainModule() override = default;
+  ~MainModule() override;
 
   OXYGEN_MAKE_NON_COPYABLE(MainModule);
   OXYGEN_MAKE_NON_MOVABLE(MainModule);
@@ -99,10 +103,23 @@ protected:
     std::vector<vortex::CompositionView>& views) -> void override;
 
 private:
-  auto StageInitialScene(DemoShell& shell) -> void;
+  auto StageInitialScene(DemoShell& shell, const LightBenchSettings& settings)
+    -> void;
+  auto CaptureCurrentSettings() -> LightBenchSettings;
+  auto SaveSettings(const std::filesystem::path& path)
+    -> Result<void, std::string>;
+  auto LoadSettings(const std::filesystem::path& path)
+    -> Result<void, std::string>;
   auto ResetMainViewState(observer_ptr<engine::FrameContext> context = {})
     -> void;
 
+  LightBenchPreset active_preset_ { LightBenchPreset::kNeutralReference };
+  float initial_auto_ev_ { 8.0F };
+  std::optional<float> pending_auto_seed_;
+  std::optional<LightBenchSettings> pending_settings_;
+  std::optional<std::array<float, 6>> fitted_camera_extents_;
+  std::uint32_t reference_width_ { 0 };
+  std::uint32_t reference_height_ { 0 };
   ActiveScene active_scene_ {};
   scene::SceneNode main_view_state_camera_ {};
   scene::SceneNode main_camera_ {};
@@ -110,6 +127,7 @@ private:
   LightScene light_scene_ {};
 
   std::shared_ptr<LightBenchPanel> light_bench_panel_ {};
+  std::unique_ptr<LightBenchConsoleBindings> console_bindings_;
 
   // Hosted view
   ViewId main_view_id_ { kInvalidViewId };

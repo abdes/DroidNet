@@ -6,22 +6,34 @@
 
 #pragma once
 
+#include <array>
+#include <filesystem>
+#include <functional>
 #include <string>
 #include <string_view>
 
-#include "DemoShell/Runtime/SceneActivationPolicy.h"
 #include "DemoShell/UI/DemoPanel.h"
+#include "LightBench/LightBenchSettings.h"
 #include "LightBench/LightScene.h"
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Result.h>
 
 namespace oxygen::examples::light_bench {
 
 //! Demo panel for LightBench-specific controls.
 class LightBenchPanel final : public DemoPanel {
 public:
-  explicit LightBenchPanel(observer_ptr<LightScene> light_scene,
-    SceneActivationPolicy activation_policy);
+  struct Actions {
+    std::function<void()> reset;
+    std::function<void(LightBenchPreset)> select;
+    std::function<LightBenchPreset()> selected;
+    std::function<bool()> is_reference;
+    std::function<Result<void, std::string>(const std::filesystem::path&)> save;
+    std::function<Result<void, std::string>(const std::filesystem::path&)> load;
+  };
+  LightBenchPanel(observer_ptr<LightScene> light_scene, Actions actions,
+    const std::filesystem::path& settings_path);
 
   [[nodiscard]] auto GetName() const noexcept -> std::string_view override
   {
@@ -39,12 +51,14 @@ public:
   }
 
   auto DrawContents() -> void override;
-  auto OnLoaded() -> void override;
-  auto OnUnloaded() -> void override;
+  //! Persistent preset controls, independent of the active sidebar panel.
+  auto DrawPresetOverlay() -> void;
+  auto OnLoaded() -> void override { }
+  auto OnUnloaded() -> void override { }
 
 private:
   auto DrawSceneSection() -> void;
-  auto DrawScenePresets() -> void;
+  auto DrawPresetControls(float button_width) -> void;
   auto DrawSceneAdvancedSection() -> void;
   auto DrawSceneObjectControls(std::string_view label,
     LightScene::SceneObjectState& state, bool allow_rotation) -> void;
@@ -53,17 +67,15 @@ private:
   auto DrawAxisFloatCell(const std::string& id, const Vec3& color, float& value,
     float speed, float min_value, float max_value) -> void;
   auto DrawLightsSection() -> void;
+  auto DrawDirectionalLightControls() -> void;
   auto DrawPointLightControls() -> void;
   auto DrawSpotLightControls() -> void;
 
-  auto LoadSettings() -> void;
-  auto SaveSettings() -> void;
-  auto MarkChanged() -> void;
-  SceneActivationPolicy activation_policy_;
+  Actions actions_;
+  std::array<char, 1024> settings_path_ {};
+  std::string file_status_;
   observer_ptr<LightScene> light_scene_ { nullptr };
   std::string icon_ {};
-  bool settings_loaded_ { false };
-  bool pending_changes_ { false };
 };
 
 } // namespace oxygen::examples::light_bench
