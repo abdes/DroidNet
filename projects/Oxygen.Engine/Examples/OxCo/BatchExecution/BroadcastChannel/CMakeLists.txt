@@ -15,8 +15,7 @@ operations in batch, using a broadcast channel"
 )
 asap_module_declare(
   MODULE_NAME "Oxygen.OxCo.Examples.BatchExecution.BroadcastChannel"
-  DESCRIPTION description
-  WITHOUT_VERSION_H
+  DESCRIPTION "${description}"
 )
 asap_push_module("${META_MODULE_NAME}")
 

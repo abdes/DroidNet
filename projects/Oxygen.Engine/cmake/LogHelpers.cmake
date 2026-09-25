@@ -1,79 +1,137 @@
-# ===-----------------------------------------------------------------------===#
-# Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-# copy at https://opensource.org/licenses/BSD-3-Clause.
+# Distributed under the 3-Clause BSD License. See accompanying file LICENSE.
 # SPDX-License-Identifier: BSD-3-Clause
-# ===-----------------------------------------------------------------------===#
 
-# ------------------------------------------------------------------------------
-# Helpers to enhance progress reporting in the cmake output log.
-#
-# This module defines a global variable: `ASAP_LOG_PROJECT_HIERARCHY` that holds
-# a string with the current project/module nesting hierarchy. It can be used in
-# cmake `message` calls.
-#
-# Maintenance of the nesting hierarchy is done with the following macros:
-#
-# * asap_push_project(project_name)
-# * asap_pop_project(project_name)
-# * asap_push_module(module_name)
-# * asap_pop_module(module_name)
-#
-# They must be called at the start(push) and end(pop) of a project/module cmake
-# script to keep the hierarchy correct.
-# ------------------------------------------------------------------------------
+# Only definitions are guarded. Stack state belongs to the caller's directory
+# and is inherited by child directories without being reset on inclusion.
+include_guard(GLOBAL)
 
-if(NOT DEFINED ASAP_LOG_PROJECT_HIERARCHY)
-  set(ASAP_LOG_PROJECT_HIERARCHY_STACK "")
-  set(ASAP_LOG_PROJECT_HIERARCHY "")
-endif()
-
-macro(asap_push_project project_name)
-  list(APPEND ASAP_LOG_PROJECT_HIERARCHY_STACK "[${project_name}]")
-  list(JOIN ASAP_LOG_PROJECT_HIERARCHY_STACK " > " ASAP_LOG_PROJECT_HIERARCHY)
-  list(LENGTH ASAP_LOG_PROJECT_HIERARCHY_STACK depth)
-  if(${META_PROJECT_ID}_IS_MASTER_PROJECT)
-    message("=> [${depth}] in project ${ASAP_LOG_PROJECT_HIERARCHY} (master)")
-  else()
-    message(
-      "=> [${depth}] in project ${ASAP_LOG_PROJECT_HIERARCHY} (sub-project)"
-    )
-  endif()
-endmacro()
-
-macro(asap_pop_project project_name)
-  list(POP_BACK ASAP_LOG_PROJECT_HIERARCHY_STACK removed)
-  if(NOT removed STREQUAL "[${project_name}]")
-    message(
-      FATAL_ERROR
-      "Project [${removed}] was pushed but not popped, please fix this"
-    )
-  endif()
-  list(JOIN ASAP_LOG_PROJECT_HIERARCHY_STACK " > " ASAP_LOG_PROJECT_HIERARCHY)
-  list(LENGTH ASAP_LOG_PROJECT_HIERARCHY_STACK depth)
-  if(NOT ${depth} EQUAL 0)
-    message(".. [${depth}] back to ${ASAP_LOG_PROJECT_HIERARCHY}")
-  endif()
-endmacro()
-
-macro(asap_push_module module_name)
-  list(APPEND ASAP_LOG_PROJECT_HIERARCHY_STACK "(${module_name})")
-  list(JOIN ASAP_LOG_PROJECT_HIERARCHY_STACK " > " ASAP_LOG_PROJECT_HIERARCHY)
-  list(LENGTH ASAP_LOG_PROJECT_HIERARCHY_STACK depth)
-  message("=> [${depth}] in module ${ASAP_LOG_PROJECT_HIERARCHY}")
-  message(
-    "   Target: ${META_MODULE_TARGET} - Alias: ${META_MODULE_TARGET_ALIAS}"
+function(_oxygen_log_change operation kind name)
+  if(
+    NOT
+      ARGC
+        EQUAL
+        3
+    OR
+      name
+        STREQUAL
+        ""
+    OR
+      name
+        MATCHES
+        ";"
+    OR
+      name
+        MATCHES
+        "\\(|\\)|\\[|\\]"
   )
-endmacro()
-
-macro(asap_pop_module module_name)
-  list(POP_BACK ASAP_LOG_PROJECT_HIERARCHY_STACK removed)
-  if(NOT removed STREQUAL "(${module_name})")
     message(
       FATAL_ERROR
-      "Module [${removed}] was pushed but not popped, please fix this"
+      "Oxygen hierarchy: expected one nonempty ${kind} name without hierarchy delimiters."
     )
   endif()
-  list(JOIN ASAP_LOG_PROJECT_HIERARCHY_STACK " > " ASAP_LOG_PROJECT_HIERARCHY)
-  list(LENGTH ASAP_LOG_PROJECT_HIERARCHY_STACK depth)
-  message(".. [${depth}] back to ${ASAP_LOG_PROJECT_HIERARCHY}")
-endmacro()
+  if(kind STREQUAL "project")
+    set(entry "[${name}]")
+  else()
+    set(entry "(${name})")
+  endif()
+  set(stack "${ASAP_LOG_PROJECT_HIERARCHY_STACK}")
+  if(operation STREQUAL "push")
+    if(kind STREQUAL "module" AND NOT name STREQUAL META_MODULE_NAME)
+      message(
+        FATAL_ERROR
+        "Oxygen hierarchy: declare module '${name}' before pushing it."
+      )
+    endif()
+    list(APPEND stack "${entry}")
+  else()
+    list(LENGTH stack count)
+    if(count EQUAL 0)
+      message(
+        FATAL_ERROR
+        "Oxygen hierarchy: cannot pop ${kind} '${name}' from an empty stack."
+      )
+    endif()
+    list(GET stack -1 top)
+    if(NOT top STREQUAL entry)
+      message(
+        FATAL_ERROR
+        "Oxygen hierarchy: cannot pop ${entry}; top of stack is ${top}."
+      )
+    endif()
+    list(POP_BACK stack)
+  endif()
+  list(JOIN stack " > " hierarchy)
+  list(LENGTH stack depth)
+  if(operation STREQUAL "push")
+    if(kind STREQUAL "project")
+      if(OXYGEN_IS_MASTER_PROJECT)
+        set(role "master")
+      else()
+        set(role "sub-project")
+      endif()
+      message(STATUS "=> [${depth}] in project ${hierarchy} (${role})")
+    else()
+      message(STATUS "=> [${depth}] in module ${hierarchy}")
+      message(
+        STATUS
+        "   Target: ${META_MODULE_TARGET} - Alias: ${META_MODULE_TARGET_ALIAS}"
+      )
+    endif()
+  elseif(depth GREATER 0)
+    message(STATUS ".. [${depth}] back to ${hierarchy}")
+  endif()
+  set(ASAP_LOG_PROJECT_HIERARCHY_STACK "${stack}" PARENT_SCOPE)
+  set(ASAP_LOG_PROJECT_HIERARCHY "${hierarchy}" PARENT_SCOPE)
+endfunction()
+
+function(asap_push_project name)
+  if(NOT ARGC EQUAL 1)
+    message(FATAL_ERROR "asap_push_project: expected exactly one name.")
+  endif()
+  _oxygen_log_change(push project "${name}")
+  set(
+    ASAP_LOG_PROJECT_HIERARCHY_STACK
+    "${ASAP_LOG_PROJECT_HIERARCHY_STACK}"
+    PARENT_SCOPE
+  )
+  set(ASAP_LOG_PROJECT_HIERARCHY "${ASAP_LOG_PROJECT_HIERARCHY}" PARENT_SCOPE)
+endfunction()
+
+function(asap_pop_project name)
+  if(NOT ARGC EQUAL 1)
+    message(FATAL_ERROR "asap_pop_project: expected exactly one name.")
+  endif()
+  _oxygen_log_change(pop project "${name}")
+  set(
+    ASAP_LOG_PROJECT_HIERARCHY_STACK
+    "${ASAP_LOG_PROJECT_HIERARCHY_STACK}"
+    PARENT_SCOPE
+  )
+  set(ASAP_LOG_PROJECT_HIERARCHY "${ASAP_LOG_PROJECT_HIERARCHY}" PARENT_SCOPE)
+endfunction()
+
+function(asap_push_module name)
+  if(NOT ARGC EQUAL 1)
+    message(FATAL_ERROR "asap_push_module: expected exactly one name.")
+  endif()
+  _oxygen_log_change(push module "${name}")
+  set(
+    ASAP_LOG_PROJECT_HIERARCHY_STACK
+    "${ASAP_LOG_PROJECT_HIERARCHY_STACK}"
+    PARENT_SCOPE
+  )
+  set(ASAP_LOG_PROJECT_HIERARCHY "${ASAP_LOG_PROJECT_HIERARCHY}" PARENT_SCOPE)
+endfunction()
+
+function(asap_pop_module name)
+  if(NOT ARGC EQUAL 1)
+    message(FATAL_ERROR "asap_pop_module: expected exactly one name.")
+  endif()
+  _oxygen_log_change(pop module "${name}")
+  set(
+    ASAP_LOG_PROJECT_HIERARCHY_STACK
+    "${ASAP_LOG_PROJECT_HIERARCHY_STACK}"
+    PARENT_SCOPE
+  )
+  set(ASAP_LOG_PROJECT_HIERARCHY "${ASAP_LOG_PROJECT_HIERARCHY}" PARENT_SCOPE)
+endfunction()

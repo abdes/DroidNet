@@ -14,8 +14,7 @@ set(
 )
 asap_module_declare(
   MODULE_NAME "Oxygen.Cooker.PakDump"
-  DESCRIPTION description
-  WITHOUT_VERSION_H
+  DESCRIPTION "${description}"
 )
 asap_push_module("${META_MODULE_NAME}")
 

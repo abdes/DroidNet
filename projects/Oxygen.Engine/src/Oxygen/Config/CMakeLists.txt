@@ -11,7 +11,6 @@
 asap_module_declare(
   MODULE_NAME "Oxygen.Config"
   DESCRIPTION "Oxygen engine configuration module"
-  WITHOUT_VERSION_H
 )
 asap_push_module("${META_MODULE_NAME}")
 
@@ -66,15 +65,13 @@ target_include_directories(
 
 target_compile_features(${META_MODULE_TARGET} INTERFACE cxx_std_20)
 
-# Header only libraries don't get a Visual Studio project file generated for
-# them. This is a workaround to make sure the header files are visible in the
-# IDE.
-add_custom_target(_${META_MODULE_NAME} SOURCES ${header_files})
+# The native interface target lists its headers directly, so Visual Studio
+# displays them without a separate utility project.
 set_target_properties(
-  _${META_MODULE_NAME}
+  ${META_MODULE_TARGET}
   PROPERTIES
     PROJECT_LABEL
-      ${META_MODULE_NAME}
+      "${META_MODULE_NAME}"
 )
 
 # ------------------------------------------------------------------------------

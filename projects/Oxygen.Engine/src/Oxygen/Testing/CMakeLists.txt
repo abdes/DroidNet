@@ -11,7 +11,6 @@
 asap_module_declare(
   MODULE_NAME "Oxygen.Testing"
   DESCRIPTION "Testing helpers for unit test code writing"
-  WITHOUT_VERSION_H
 )
 asap_push_module("${META_MODULE_NAME}")
 

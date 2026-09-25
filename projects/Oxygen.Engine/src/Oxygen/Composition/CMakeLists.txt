@@ -12,7 +12,6 @@ asap_module_declare(
   MODULE_NAME "Oxygen.Composition"
   DESCRIPTION
     "Basic infrastructure to support object composition and non-RTTI type system"
-  WITHOUT_VERSION_H
 )
 asap_push_module("${META_MODULE_NAME}")
 

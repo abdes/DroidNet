@@ -12,8 +12,7 @@ set(description "A CLI tool for invoking async import jobs.")
 set(import_tool_version "0.1")
 asap_module_declare(
   MODULE_NAME "Oxygen.Cooker.ImportTool"
-  DESCRIPTION description
-  WITHOUT_VERSION_H
+  DESCRIPTION "${description}"
 )
 asap_push_module("${META_MODULE_NAME}")
 

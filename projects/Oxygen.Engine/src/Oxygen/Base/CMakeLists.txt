@@ -11,7 +11,6 @@
 asap_module_declare(
   MODULE_NAME "Oxygen.Base"
   DESCRIPTION "Common utilities and classes for Oxygen modules"
-  WITHOUT_VERSION_H
 )
 asap_push_module("${META_MODULE_NAME}")
 

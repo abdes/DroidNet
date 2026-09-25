@@ -8,11 +8,7 @@
 # Meta information about the this module
 # ------------------------------------------------------------------------------
 
-asap_module_declare(
-  MODULE_NAME "Oxygen.Engine"
-  DESCRIPTION "Oxygen engine"
-  WITHOUT_VERSION_H
-)
+asap_module_declare(MODULE_NAME "Oxygen.Engine" DESCRIPTION "Oxygen engine")
 asap_push_module("${META_MODULE_NAME}")
 
 # ------------------------------------------------------------------------------

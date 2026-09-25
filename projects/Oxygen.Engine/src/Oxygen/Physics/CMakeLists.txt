@@ -17,7 +17,6 @@ simulations, supporting multiple backends (initially Jolt and None). It
 covers rigid body dynamics, character controllers, collision filtering,
 and scene queries like raycasts and sweeps.
 ]=]
-  WITHOUT_VERSION_H
 )
 asap_push_module("${META_MODULE_NAME}")
 

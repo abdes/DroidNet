@@ -8,7 +8,6 @@ asap_module_declare(
   MODULE_NAME "Oxygen.Vortex.Test.Support"
   DESCRIPTION
     "Shared Vortex infrastructure for correctness tests and benchmarks"
-  WITHOUT_VERSION_H
 )
 asap_push_module("${META_MODULE_NAME}")
 

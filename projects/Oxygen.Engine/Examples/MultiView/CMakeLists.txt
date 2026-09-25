@@ -14,7 +14,6 @@ asap_module_declare(
     [=[
 An example demonstrating the Oxygen engine multi-view rendering capabilities.
 ]=]
-  WITHOUT_VERSION_H
 )
 asap_push_module("${META_MODULE_NAME}")
 

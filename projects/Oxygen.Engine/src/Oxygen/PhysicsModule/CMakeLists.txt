@@ -17,7 +17,6 @@ modules. It synchronizes SceneNode transforms with their corresponding physical
 bodies and handles the propagation of collision events and state changes between
 the two systems.
 ]=]
-  WITHOUT_VERSION_H
 )
 asap_push_module("${META_MODULE_NAME}")
 

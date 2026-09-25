@@ -22,7 +22,6 @@ action state, analog values and per-action sparklines; the sample shows how
 gameplay code queries action edge events and Axis2D values to implement camera
 pan/zoom and simple movement behaviours.
 ]=]
-  WITHOUT_VERSION_H
 )
 asap_push_module("${META_MODULE_NAME}")
 

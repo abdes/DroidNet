@@ -11,7 +11,6 @@
 asap_module_declare(
   MODULE_NAME "Oxygen.Graphics.Direct3D12"
   DESCRIPTION "Oxygen graphics backend for Direct3D 12"
-  WITHOUT_VERSION_H
 )
 asap_push_module("${META_MODULE_NAME}")
 

@@ -19,7 +19,6 @@ camera projections (orthographic/perspective), light/renderable utilities,
 pretty-printing/string converters, and comprehensive tests and docs to support
 rendering and editor workflows.
 ]=]
-  WITHOUT_VERSION_H
 )
 asap_push_module("${META_MODULE_NAME}")
 

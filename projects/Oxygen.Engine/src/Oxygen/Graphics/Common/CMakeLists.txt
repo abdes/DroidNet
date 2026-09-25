@@ -11,7 +11,6 @@
 asap_module_declare(
   MODULE_NAME "Oxygen.Graphics.Common"
   DESCRIPTION "Oxygen graphics layer abstractions"
-  WITHOUT_VERSION_H
 )
 asap_push_module("${META_MODULE_NAME}")
 

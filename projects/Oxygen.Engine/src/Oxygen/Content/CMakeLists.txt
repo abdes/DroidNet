@@ -11,7 +11,6 @@
 asap_module_declare(
   MODULE_NAME "Oxygen.Content"
   DESCRIPTION "Oxygen asset management."
-  WITHOUT_VERSION_H
 )
 asap_push_module("${META_MODULE_NAME}")
 

@@ -12,7 +12,6 @@ asap_module_declare(
   MODULE_NAME "Oxygen.Serio"
   DESCRIPTION
     "Provides support for serialization and deserialization of Oxygen objects."
-  WITHOUT_VERSION_H
 )
 asap_push_module("${META_MODULE_NAME}")
 
