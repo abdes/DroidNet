@@ -1,27 +1,64 @@
-# Example: UAV domain with uav_counter_register
+# Resource creation and synchronization remain runtime responsibilities.
 meta:
-  version: "1.0.0"
-  description: "UAV example for BindlessCodeGen"
+  version: 2.0.0
+  description: A bounded array of writable structured buffers.
 defaults:
   invalid_index: 4294967295
-domains:
-  - id: uavs
-    name: UAVs
-    kind: UAV
-    register: u0
-    space: space0
-    root_table: UAVTable
-    uav_counter_register: u1
-    domain_base: 0
-    capacity: 16
-root_signature:
-  - type: descriptor_table
-    name: UAVTable
-    index: 5
-    visibility: ALL
-    ranges:
-      - range_type: UAV
-        domain: uavs
-        base_shader_register: u0
-        register_space: space0
-        num_descriptors: 16
+abi:
+  index_spaces:
+    - id: srv_uav_cbv
+  domains:
+    - id: uavs
+      name: UAVs
+      index_space: srv_uav_cbv
+      shader_index_base: 0
+      capacity: 16
+      shader_access_class: buffer_uav
+      view_types:
+        - StructuredBuffer_UAV
+backends:
+  d3d12:
+    strategy:
+      heaps:
+        - id: CBV_SRV_UAV:gpu
+          type: CBV_SRV_UAV
+          shader_visible: true
+          capacity: 16
+          base_index: 0
+          allow_growth: false
+      tables:
+        - id: UAVsTable
+          descriptor_kind: UAV
+          heap: CBV_SRV_UAV:gpu
+          shader_register: u0
+          register_space: space0
+          descriptor_count: 16
+      domain_realizations:
+        - domain: uavs
+          table: UAVsTable
+          heap_local_base: 0
+    root_signature:
+      - type: descriptor_table
+        id: UAVsTable
+        table: UAVsTable
+        index: 0
+        visibility: ALL
+  vulkan:
+    strategy:
+      descriptor_sets:
+        - id: resources
+          set: 0
+      bindings:
+        - id: uavs_binding
+          set: resources
+          binding: 0
+          descriptor_type: STORAGE_BUFFER
+          descriptor_count: 16
+      domain_realizations:
+        - domain: uavs
+          binding: uavs_binding
+          array_element_base: 0
+    pipeline_layout:
+      - type: descriptor_set
+        id: Resources
+        set_ref: resources

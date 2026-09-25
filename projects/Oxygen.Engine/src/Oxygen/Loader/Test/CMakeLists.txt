@@ -23,11 +23,6 @@ set_target_properties(
     FOLDER
       "Testing"
 )
-target_compile_options(
-  "Oxygen.Loader.LinkTest"
-  PRIVATE
-    ${OXYGEN_COMMON_CXX_FLAGS}
-)
 target_link_libraries("Oxygen.Loader.LinkTest" PRIVATE oxygen::loader)
 add_test(NAME "Oxygen.Loader Link Test" COMMAND "Oxygen.Loader.LinkTest")
 
@@ -39,11 +34,6 @@ set_target_properties(
   PROPERTIES
     FOLDER
       "Testing"
-)
-target_compile_options(
-  "Oxygen.Loader.InitializationTest"
-  PRIVATE
-    ${OXYGEN_COMMON_CXX_FLAGS}
 )
 target_link_libraries("Oxygen.Loader.InitializationTest" PRIVATE oxygen::loader)
 foreach(mode IN ITEMS strict relaxed)
@@ -68,6 +58,7 @@ m_gtest_program(
 m_gtest_program("PlatformServices" SOURCES "PlatformServices_test.cpp")
 m_gtest_program(
   BackendLifetimeIntegration
+  GPU
   SOURCES
     "BackendLifetimeIntegration_test.cpp"
 )

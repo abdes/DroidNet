@@ -1,93 +1,78 @@
-# ===-----------------------------------------------------------------------===#
-# Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-# copy at https://opensource.org/licenses/BSD-3-Clause.
+# Distributed under the 3-Clause BSD License. See accompanying file LICENSE.
 # SPDX-License-Identifier: BSD-3-Clause
-# ===-----------------------------------------------------------------------===#
 
-# ------------------------------------------------------------------------------
-# Function: asap_version_read
-# Purpose:
-#   Reads version information from a specified file and sets the variables
-#   META_VERSION_MAJOR, META_VERSION_MINOR, and META_VERSION_PATCH.
-#
-# Arguments:
-#   VERSION_FILE (optional): The path to the version file. Can be absolute
-#   or relative to CMAKE_CURRENT_SOURCE_DIR. Defaults to "VERSION".
-#
-# Behavior:
-#   This function reads a specified version file, ensuring it follows the format
-#   "major.minor.patch." If the file path isn't provided, it defaults to "VERSION"
-#   in the current source directory. The major, minor, and patch numbers are
-#   extracted from the file content (which must be eactly `major.minor.patch`).
-#   If the file isn't found or the format is incorrect, it outputs a fatal error.
-#
-# Variables Set:
-#   META_VERSION_MAJOR: The major version number.
-#   META_VERSION_MINOR: The minor version number.
-#   META_VERSION_PATCH: The patch version number.
-#
-# Example Usage:
-#   asap_version_read()  # Uses default "VERSION"
-#   message(STATUS "Version: ${META_VERSION_MAJOR}.${META_VERSION_MINOR}.${META_VERSION_PATCH}")
-# ------------------------------------------------------------------------------
+include_guard(GLOBAL)
+
+# VERSION_FILE is relative to the caller's source directory unless absolute.
+# Keep the numeric limits in sync with Oxygen's uint8_t public version API.
 function(asap_version_read)
-  set(options)
-  set(oneValueArgs VERSION_FILE)
-  set(multiValueArgs)
-
-  cmake_parse_arguments(
-    x
-    "${options}"
-    "${oneValueArgs}"
-    "${multiValueArgs}"
-    ${ARGN}
-  )
-
-  # Use default "VERSION" if no version_file argument is provided
-  set(
-    version_file
-    ${X_VERSION_FILE}
-    "VERSION"
-  )
-  if(NOT IS_ABSOLUTE "${version_file}")
-    cmake_path(
-      SET
-      version_file
-      NORMALIZE
-      "${CMAKE_CURRENT_SOURCE_DIR}/${version_file}"
-    )
-  endif()
-
-  # Ensure the version file path is absolute or resolve it relative to the current source directory
-
-  # Check if the version file exists
-  if(NOT EXISTS "${version_file}")
-    message(FATAL_ERROR "Version file not found: ${version_file}")
-  endif()
-
-  # Read the version file content
-  file(READ "${version_file}" version)
-  string(STRIP "${version}" version)
-
-  # Use regex to match the version pattern and extract major, minor, patch
-  string(
-    REGEX
-    MATCH
-    "^([0-9]+)\\.([0-9]+)\\.([0-9]+)$"
-    VERSION_MATCHES
-    "${version}"
-  )
-
-  # Ensure the version pattern is correctly matched
-  if(NOT VERSION_MATCHES)
+  cmake_parse_arguments(PARSE_ARGV 0 x "" "VERSION_FILE" "")
+  if(x_UNPARSED_ARGUMENTS OR x_KEYWORDS_MISSING_VALUES)
     message(
       FATAL_ERROR
-      "Invalid version format (${version}) in file: ${version_file}. Expected format: major.minor.patch"
+      "asap_version_read expects an optional VERSION_FILE path."
     )
   endif()
-
-  # Extract and set version components
-  set(META_VERSION_MAJOR "${CMAKE_MATCH_1}" PARENT_SCOPE)
-  set(META_VERSION_MINOR "${CMAKE_MATCH_2}" PARENT_SCOPE)
-  set(META_VERSION_PATCH "${CMAKE_MATCH_3}" PARENT_SCOPE)
+  if(DEFINED x_VERSION_FILE)
+    if(x_VERSION_FILE STREQUAL "")
+      message(FATAL_ERROR "VERSION_FILE must not be empty.")
+    endif()
+    set(version_file "${x_VERSION_FILE}")
+  else()
+    set(version_file "VERSION")
+  endif()
+  cmake_path(
+    ABSOLUTE_PATH
+    version_file
+    BASE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    NORMALIZE
+  )
+  if(NOT EXISTS "${version_file}" OR IS_DIRECTORY "${version_file}")
+    message(FATAL_ERROR "Version file not found: ${version_file}")
+  endif()
+  file(READ "${version_file}" version)
+  string(STRIP "${version}" version)
+  if(NOT version MATCHES "^([0-9]+)\\.([0-9]+)\\.([0-9]+)$")
+    message(
+      FATAL_ERROR
+      "Invalid version '${version}' in ${version_file}; expected major.minor.patch (0..255 each)."
+    )
+  endif()
+  set(
+    _components
+    "${CMAKE_MATCH_1}"
+    "${CMAKE_MATCH_2}"
+    "${CMAKE_MATCH_3}"
+  )
+  foreach(_component IN LISTS _components)
+    string(LENGTH "${_component}" _length)
+    if(_length GREATER 3 OR _component MATCHES "^0[0-9]")
+      message(
+        FATAL_ERROR
+        "Invalid version '${version}'; components must be canonical decimal values in 0..255."
+      )
+    endif()
+    if(_component GREATER 255)
+      message(
+        FATAL_ERROR
+        "Invalid version '${version}'; each component must be in 0..255."
+      )
+    endif()
+  endforeach()
+  if(NOT CMAKE_SCRIPT_MODE_FILE)
+    set_property(
+      DIRECTORY
+      APPEND
+      PROPERTY
+        CMAKE_CONFIGURE_DEPENDS
+          "${version_file}"
+    )
+  endif()
+  list(GET _components 0 _major)
+  list(GET _components 1 _minor)
+  list(GET _components 2 _patch)
+  set(META_VERSION_MAJOR "${_major}" PARENT_SCOPE)
+  set(META_VERSION_MINOR "${_minor}" PARENT_SCOPE)
+  set(META_VERSION_PATCH "${_patch}" PARENT_SCOPE)
+  set(META_VERSION "${version}" PARENT_SCOPE)
 endfunction()

@@ -369,11 +369,11 @@ TEMPLATE_META_CPP = """//===----------------------------------------------------
 
 namespace oxygen::bindless::generated {{
 
-static constexpr const char kBindlessSourcePath[] = "{src}";
-static constexpr const char kBindlessSourceVersion[] = "{src_ver}";
-static constexpr const char kBindlessSchemaVersion[] = "{schema_ver}";
-static constexpr const char kBindlessToolVersion[] = "{tool_ver}";
-static constexpr const char kBindlessGeneratedAt[] = "{ts}";
+static constexpr const char kBindlessSourcePath[] = {src_cpp};
+static constexpr const char kBindlessSourceVersion[] = {src_ver_cpp};
+static constexpr const char kBindlessSchemaVersion[] = {schema_ver_cpp};
+static constexpr const char kBindlessToolVersion[] = {tool_ver_cpp};
+static constexpr const char kBindlessGeneratedAt[] = {ts_cpp};
 
 }} // namespace oxygen::bindless::generated
 // clang-format on

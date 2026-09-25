@@ -1,0 +1,4 @@
+CompileFlags:
+  # Preserve the selected compilation command's language mode and definitions.
+  # These MSVC driver switches are not useful to the clangd frontend.
+  Remove: [/MP, /Zc:*]

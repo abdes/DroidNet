@@ -12,8 +12,7 @@ set(description "Simple example using AsyncEngine.")
 
 asap_module_declare(
   MODULE_NAME "Oxygen.Examples.Async"
-  DESCRIPTION description
-  WITHOUT_VERSION_H
+  DESCRIPTION "${description}"
 )
 asap_push_module("${META_MODULE_NAME}")
 
@@ -54,7 +53,6 @@ set_target_properties(
 )
 
 target_compile_features(${META_MODULE_TARGET} PRIVATE cxx_std_23)
-target_compile_options(${META_MODULE_TARGET} PRIVATE ${OXYGEN_COMMON_CXX_FLAGS})
 target_compile_features(${META_MODULE_TARGET} PRIVATE cxx_std_23)
 
 target_include_directories(
@@ -96,12 +94,6 @@ add_custom_command(
 # ------------------------------------------------------------------------------
 # Install
 # ------------------------------------------------------------------------------
-
-oxygen_module_install(
-  EXPORT ${META_MODULE_NAMESPACE}
-  TARGETS
-    ${META_MODULE_TARGET}
-)
 
 # ------------------------------------------------------------------------------
 # Tests

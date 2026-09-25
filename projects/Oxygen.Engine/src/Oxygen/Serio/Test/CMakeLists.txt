@@ -22,11 +22,6 @@ set_target_properties(
     FOLDER
       "Testing"
 )
-target_compile_options(
-  ${OXYGEN_SERIO_LINK_TEST_TARGET}
-  PRIVATE
-    ${OXYGEN_COMMON_CXX_FLAGS}
-)
 target_link_libraries(
   ${OXYGEN_SERIO_LINK_TEST_TARGET}
   PRIVATE

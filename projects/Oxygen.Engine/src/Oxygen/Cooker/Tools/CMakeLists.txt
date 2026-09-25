@@ -5,7 +5,9 @@
 # ===-----------------------------------------------------------------------===#
 
 add_subdirectory("ImportTool")
-add_subdirectory("PakDump")
 add_subdirectory("Inspector")
 add_subdirectory("PakTool")
-add_subdirectory("PakGen")
+add_subdirectory("PakDump")
+if(OXYGEN_BUILD_TOOLS OR OXYGEN_BUILD_TESTS)
+  add_subdirectory("PakGen")
+endif()

@@ -26,11 +26,6 @@ set_target_properties(
     FOLDER
       "Testing"
 )
-target_compile_options(
-  "Oxygen.Cooker.LinkTest"
-  PRIVATE
-    ${OXYGEN_COMMON_CXX_FLAGS}
-)
 target_link_libraries("Oxygen.Cooker.LinkTest" PRIVATE oxygen::cooker)
 add_test(NAME "Oxygen.Cooker.LinkTest" COMMAND "Oxygen.Cooker.LinkTest")
 
@@ -59,6 +54,15 @@ target_include_directories(
   Oxygen.Cooker.InspectorMetadata.Tests
   PRIVATE
     "${CMAKE_BINARY_DIR}/generated"
+)
+get_target_property(
+  _inspector_schema_targets
+  oxygen-cooker-inspector
+  OXYGEN_JSON_SCHEMA_TARGETS
+)
+add_dependencies(
+  Oxygen.Cooker.InspectorMetadata.Tests
+  ${_inspector_schema_targets}
 )
 
 m_gtest_program(

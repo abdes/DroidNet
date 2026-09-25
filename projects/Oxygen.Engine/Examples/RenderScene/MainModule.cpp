@@ -13,6 +13,15 @@
 #include <string>
 #include <string_view>
 
+#include "DemoShell/DemoShell.h"
+#include "DemoShell/Runtime/DemoAppContext.h"
+#include "DemoShell/Runtime/PathNormalization.h"
+#include "DemoShell/Services/DefaultSceneLighting.h"
+#include "DemoShell/Services/SceneLoaderService.h"
+#include "DemoShell/Services/SkyboxService.h"
+#include "DemoShell/UI/ContentVm.h"
+#include "RenderScene/MainModule.h"
+#include "RenderScene/RuntimePaths.h"
 #include <glm/common.hpp>
 #include <glm/gtc/quaternion.hpp>
 
@@ -37,15 +46,6 @@
 #include <Oxygen/Scene/Environment/SkyLight.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Vortex/CompositionView.h>
-
-#include "DemoShell/DemoShell.h"
-#include "DemoShell/Runtime/DemoAppContext.h"
-#include "DemoShell/Runtime/PathNormalization.h"
-#include "DemoShell/Services/DefaultSceneLighting.h"
-#include "DemoShell/Services/SceneLoaderService.h"
-#include "DemoShell/Services/SkyboxService.h"
-#include "DemoShell/UI/ContentVm.h"
-#include "RenderScene/MainModule.h"
 
 using oxygen::scene::SceneNodeFlags;
 
@@ -286,12 +286,10 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
   auto shell = std::make_unique<DemoShell>();
   DemoShellConfig shell_config;
   shell_config.engine = observer_ptr { engine.get() };
-  const auto demo_root
-    = std::filesystem::path(std::source_location::current().file_name())
-        .parent_path();
-  shell_config.content_roots
-    = { .content_root = demo_root.parent_path() / "Content",
-        .cooked_root = demo_root / ".cooked" };
+  const auto runtime_paths = ResolveRuntimePaths();
+  const auto& demo_root = runtime_paths.showcase;
+  shell_config.content_roots = { .content_root = runtime_paths.content,
+    .cooked_root = demo_root / ".cooked" };
   shell_config.panel_config.content_loader = true;
   shell_config.panel_config.camera_controls = true;
   shell_config.panel_config.lighting = true;
@@ -362,7 +360,7 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
     pending_physics_sidecar_.reset();
     active_scene_load_key_.reset();
 
-    const auto cooked_index = demo_root.parent_path() / "Content" / ".cooked"
+    const auto cooked_index = runtime_paths.content / ".cooked"
       / std::filesystem::path(kLooseCookedIndexFileName);
     pending_source_requests_.push_back(PendingSourceRequest {
       .action = PendingSourceAction::kMountIndex,

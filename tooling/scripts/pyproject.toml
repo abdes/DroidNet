@@ -12,9 +12,11 @@ dependencies = [
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["tooling*"]
+[tool.setuptools]
+packages = ["tooling.scripts", "tooling.scripts.traversal", "tooling.scripts.traversal.tasks"]
+
+[tool.setuptools.package-dir]
+"tooling.scripts" = "."
 
 [project.scripts]
 get-artifacts = "tooling.scripts.get_artifacts:run"

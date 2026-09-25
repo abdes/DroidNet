@@ -1,20 +1,75 @@
-# Minimal valid BindingSlots example: single CBV root parameter for scene constants
+# Root CBVs are backend data, not ABI domains; Vulkan uses a uniform buffer binding.
 meta:
-  version: "1.0.0"
+  version: 2.0.0
+  description: Minimal texture ABI plus a backend-specific scene constant buffer.
 defaults:
   invalid_index: 4294967295
-domains:
-  - id: scene
-    name: Scene
-    kind: CBV
-    register: b1
-    space: space0
-    domain_base: 0
-    capacity: 1
-root_signature:
-  - type: cbv
-    name: SceneCBV
-    index: 0
-    visibility: ALL
-    shader_register: b1
-    register_space: space0
+abi:
+  index_spaces:
+    - id: srv_uav_cbv
+  domains:
+    - id: textures
+      name: Textures
+      index_space: srv_uav_cbv
+      shader_index_base: 0
+      capacity: 1
+      shader_access_class: texture_srv
+      view_types:
+        - Texture_SRV
+backends:
+  d3d12:
+    strategy:
+      heaps:
+        - id: CBV_SRV_UAV:gpu
+          type: CBV_SRV_UAV
+          shader_visible: true
+          capacity: 1
+          base_index: 0
+          allow_growth: false
+      tables:
+        - id: TexturesTable
+          descriptor_kind: SRV
+          heap: CBV_SRV_UAV:gpu
+          shader_register: t0
+          register_space: space0
+          descriptor_count: 1
+      domain_realizations:
+        - domain: textures
+          table: TexturesTable
+          heap_local_base: 0
+    root_signature:
+      - type: cbv
+        id: SceneCBV
+        index: 0
+        visibility: ALL
+        shader_register: b1
+        register_space: space0
+      - type: descriptor_table
+        id: TexturesTable
+        table: TexturesTable
+        index: 1
+        visibility: ALL
+  vulkan:
+    strategy:
+      descriptor_sets:
+        - id: resources
+          set: 0
+      bindings:
+        - id: textures_binding
+          set: resources
+          binding: 0
+          descriptor_type: SAMPLED_IMAGE
+          descriptor_count: 1
+        - id: scene_constants
+          set: resources
+          binding: 1
+          descriptor_type: UNIFORM_BUFFER
+          descriptor_count: 1
+      domain_realizations:
+        - domain: textures
+          binding: textures_binding
+          array_element_base: 0
+    pipeline_layout:
+      - type: descriptor_set
+        id: Resources
+        set_ref: resources

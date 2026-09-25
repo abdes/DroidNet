@@ -11,7 +11,6 @@
 asap_module_declare(
   MODULE_NAME "Oxygen.Graphics.Direct3D12"
   DESCRIPTION "Oxygen graphics backend for Direct3D 12"
-  WITHOUT_VERSION_H
 )
 asap_push_module("${META_MODULE_NAME}")
 
@@ -86,6 +85,13 @@ set_target_properties(
 
 set(
   OXYGEN_GFX_D3D12_HEADERS
+  "Detail/PipelineBindingState.h"
+  "Detail/PipelineStateCache.h"
+  "Detail/TextureReadback.h"
+  "Detail/Types.h"
+  "Detail/dx12_utils.h"
+  "Devices/DebugLayer.h"
+  "ImGui/imgui_impl_dx12.h"
   "api_export.h"
   "Allocator/D3D12MemAlloc.h"
   "Buffer.h"
@@ -124,19 +130,13 @@ set(
   "Detail/Converters.cpp"
   "Detail/Converters.h"
   "Detail/TextureReadback.cpp"
-  "Detail/TextureReadback.h"
-  "Detail/dx12_utils.h"
   "Detail/FormatUtils.cpp"
   "Detail/FormatUtils.h"
   "Detail/PipelineStateCache.cpp"
-  "Detail/PipelineStateCache.h"
-  "Detail/PipelineBindingState.h"
   "Detail/SwapChain.h"
   "Detail/SwapChain.cpp"
-  "Detail/Types.h"
   "Detail/WindowSurface.h"
   "Devices/DebugLayer.cpp"
-  "Devices/DebugLayer.h"
   "Devices/AftermathTracker.cpp"
   "Devices/AftermathTracker.h"
   "Devices/DeviceManager.cpp"
@@ -147,7 +147,6 @@ set(
   "RenderDocFrameCaptureController.h"
   "RenderDocFrameCaptureController.cpp"
   "ImGui/imgui_impl_dx12.cpp"
-  "ImGui/imgui_impl_dx12.h"
   "../External/RenderDoc/README.md"
   "../External/RenderDoc/renderdoc_app.h"
   "Shaders/EngineShaders.cpp"
@@ -214,8 +213,6 @@ if(MSVC)
         "/wd4100;/wd4324;/wd4505;/wd4189"
   )
 endif()
-
-target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
 
 set(OXYGEN_D3D12_PIX_MARKERS_ENABLED OFF)
 set(OXYGEN_D3D12_PIX_GPU_CAPTURE_AVAILABLE OFF)
@@ -717,7 +714,9 @@ target_compile_definitions(
   PRIVATE
     $<$<PLATFORM_ID:Windows>:WIN32_LEAN_AND_MEAN>
     $<$<PLATFORM_ID:Windows>:NOMINMAX>
+  PUBLIC
     $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXGN_D3D12_STATIC>
+  PRIVATE
     $<$<AND:$<PLATFORM_ID:Windows>,$<BOOL:${OXYGEN_D3D12_PIX_MARKERS_ENABLED}>>:USE_PIX>
     $<$<AND:$<PLATFORM_ID:Windows>,$<BOOL:${OXYGEN_D3D12_PIX_GPU_CAPTURE_AVAILABLE}>>:OXYGEN_PIX_GPU_CAPTURE_AVAILABLE=1>
     $<$<AND:$<PLATFORM_ID:Windows>,$<BOOL:${OXYGEN_D3D12_PIX_TIMING_CAPTURE_AVAILABLE}>>:OXYGEN_PIX_TIMING_CAPTURE_AVAILABLE=1>
@@ -781,7 +780,7 @@ if(WIN32)
         FILES
           "${OXYGEN_WINPIXEVENTRUNTIME_DLL}"
         DESTINATION ${OXYGEN_INSTALL_BIN}
-        COMPONENT "${META_MODULE_NAME}_runtime"
+        COMPONENT Oxygen_runtime
       )
     endif()
 
@@ -847,7 +846,7 @@ if(WIN32)
           FILES
             "${OXYGEN_RENDERDOC_DLL}"
           DESTINATION ${OXYGEN_INSTALL_BIN}
-          COMPONENT "${META_MODULE_NAME}_runtime"
+          COMPONENT Oxygen_runtime
         )
       endif()
 
@@ -929,7 +928,7 @@ if(WIN32)
           FILES
             "${OXYGEN_AFTERMATH_DLL}"
           DESTINATION ${OXYGEN_INSTALL_BIN}
-          COMPONENT "${META_MODULE_NAME}_runtime"
+          COMPONENT Oxygen_runtime
         )
       endif()
 

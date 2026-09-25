@@ -203,7 +203,7 @@ if ($null -ne (Get-OxygenExecutableArtifact $choice.BuildRoot oxygen-examples-sc
         root = self.tree("ninja")
         self.artifact(root, ("Debug", "Release"), ("Release",))
         output = self.command("""
-$global:NativeCMake = (Get-Command cmake -CommandType Application).Source
+$global:NativeCMake = (Get-Command cmake -CommandType Application | Select-Object -First 1).Source
 function global:cmake {
     if ($args -contains '--list-presets=build') { & $global:NativeCMake @args; return }
     if ($args -contains '--build') { Write-Host 'SIMULATED BUILD FAILURE'; $global:LASTEXITCODE = 19 }
@@ -422,7 +422,7 @@ try {
 
     def test_migrated_tool_scripts_have_dependency_free_help(self):
         scripts = [
-            "tools/cli/BuildSelection.ps1", "tools/generate-builds.ps1",
+            "tools/cli/BuildSelection.ps1", "tools/build-tree.ps1",
             "tools/RunVsmTests.ps1", "tools/run-test-exes.ps1",
             "tools/csm/Run-ConventionalShadowBaseline.ps1",
             "tools/vortex/Run-AsyncRuntimeValidation.ps1",

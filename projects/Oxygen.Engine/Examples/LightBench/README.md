@@ -134,5 +134,5 @@ When visually inspecting LightBench:
 The Test Engine suite runs the actual app's controls in Debug and Release:
 numeric entry/cancel/focus/drag, modes/curves/masks, complete Save/Reset/Load,
 panel return without camera changes, and typed console workflows. Instrumentation
-is enabled by default by `generate-builds.ps1`. Use `-UiTests:$false` for
+is enabled by default by `build-tree generate`. Use `-UiTests:$false` for
 final-release builds. See [test setup and commands](Test/README.md).

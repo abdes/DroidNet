@@ -10,6 +10,7 @@ if(WIN32)
   include(GTestHelpers)
   gtest_program(
     "Oxygen.Vortex.Lighting.Benchmarks"
+    NO_TEST
     SOURCES
       "LightingCollection_bench.cpp"
       "ManyLightBaseline.h"
@@ -27,6 +28,7 @@ if(WIN32)
   )
   gtest_program(
     "Oxygen.Vortex.Exposure.Benchmarks"
+    NO_TEST
     SOURCES
       "ExposureAllocationLifecycle.cpp"
       "ExposureAllocationMeasurement.cpp"

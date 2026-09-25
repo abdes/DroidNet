@@ -689,6 +689,11 @@ def generate(
         schema_ver=schema_version or "",
         tool_ver=TOOL_VERSION,
         ts=ts,
+        src_cpp=json.dumps(src_rel, ensure_ascii=False),
+        src_ver_cpp=json.dumps(src_ver, ensure_ascii=False),
+        schema_ver_cpp=json.dumps(str(schema_version or ""), ensure_ascii=False),
+        tool_ver_cpp=json.dumps(TOOL_VERSION, ensure_ascii=False),
+        ts_cpp=json.dumps(ts, ensure_ascii=False),
     )
     files[out_meta_h] = content_meta_h
     if d3d12_strategy_json:

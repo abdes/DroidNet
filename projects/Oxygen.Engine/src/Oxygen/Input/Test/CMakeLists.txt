@@ -23,11 +23,6 @@ set_target_properties(
     FOLDER
       "Testing"
 )
-target_compile_options(
-  "Oxygen.Input.LinkTest"
-  PRIVATE
-    ${OXYGEN_COMMON_CXX_FLAGS}
-)
 target_link_libraries("Oxygen.Input.LinkTest" PRIVATE oxygen::input)
 add_test(NAME "Oxygen.Input Link Test" COMMAND "Oxygen.Input.LinkTest")
 

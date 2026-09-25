@@ -12,7 +12,6 @@ asap_module_declare(
   MODULE_NAME "Oxygen.Core"
   DESCRIPTION
     "Oxygen engine core module, containing shared core types and classes."
-  WITHOUT_VERSION_H
 )
 asap_push_module("${META_MODULE_NAME}")
 
@@ -38,11 +37,9 @@ add_subdirectory("Bindless")
 # Main module target
 # ------------------------------------------------------------------------------
 
-# Generate version-header
-configure_file("version.h.in" ${CMAKE_CURRENT_SOURCE_DIR}/version-info.h)
-
 add_library(${META_MODULE_TARGET})
 add_library(${META_MODULE_TARGET_ALIAS} ALIAS ${META_MODULE_TARGET})
+oxygen_add_version_metadata(${META_MODULE_TARGET})
 set_target_properties(
   ${META_MODULE_TARGET}
   PROPERTIES
@@ -97,8 +94,6 @@ set(
   "Types/ViewPort.h"
   "Types/ViewResolver.h"
   "Version.h"
-  # Generated header
-  "version-info.h"
   # Generated headers (Bindless)
   "Bindless/Generated.BindlessAbi.h"
   "Bindless/Generated.Meta.h"
@@ -184,10 +179,10 @@ target_sources(
 arrange_target_files_for_ide(${META_MODULE_TARGET})
 
 target_compile_features(${META_MODULE_TARGET} PUBLIC cxx_std_23)
-target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
 target_compile_definitions(
   ${META_MODULE_TARGET}
   PRIVATE
+  PUBLIC
     $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXGN_CORE_STATIC>
 )
 
@@ -223,3 +218,12 @@ oxygen_module_install(
 )
 
 asap_pop_module("${META_MODULE_NAME}")
+
+if(OXYGEN_INSTALL)
+  install(
+    FILES
+      "${CMAKE_CURRENT_SOURCE_DIR}/Meta/Bindless.schema.json"
+    DESTINATION "${OXYGEN_INSTALL_SCHEMAS}"
+    COMPONENT Oxygen_data
+  )
+endif()

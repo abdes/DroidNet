@@ -11,7 +11,6 @@
 asap_module_declare(
   MODULE_NAME "Oxygen.Scripting"
   DESCRIPTION "Oxygen scripting module"
-  WITHOUT_VERSION_H
 )
 asap_push_module("${META_MODULE_NAME}")
 
@@ -157,12 +156,12 @@ target_sources(
 arrange_target_files_for_ide(${META_MODULE_TARGET} EXCLUDE_PATTERNS "bindings/")
 
 target_compile_features(${META_MODULE_TARGET} PUBLIC cxx_std_20)
-target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
 target_compile_definitions(
   ${META_MODULE_TARGET}
   PRIVATE
     $<$<PLATFORM_ID:Windows>:WIN32_LEAN_AND_MEAN>
     $<$<PLATFORM_ID:Windows>:NOMINMAX>
+  PUBLIC
     $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXGN_SCRP_STATIC>
 )
 

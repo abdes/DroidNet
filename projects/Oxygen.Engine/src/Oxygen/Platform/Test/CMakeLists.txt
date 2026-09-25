@@ -23,11 +23,6 @@ set_target_properties(
     FOLDER
       "Testing"
 )
-target_compile_options(
-  "Oxygen.Platform.LinkTest"
-  PRIVATE
-    ${OXYGEN_COMMON_CXX_FLAGS}
-)
 target_link_libraries("Oxygen.Platform.LinkTest" PRIVATE oxygen::platform)
 add_test(NAME "Oxygen.Platform.LinkTest" COMMAND "Oxygen.Platform.LinkTest")
 
@@ -35,4 +30,9 @@ add_test(NAME "Oxygen.Platform.LinkTest" COMMAND "Oxygen.Platform.LinkTest")
 
 include(GTestHelpers)
 
-m_gtest_program(Input SOURCES "Input_test.cpp" "InputEvents_test.cpp")
+m_gtest_program(
+  Input
+  SOURCES
+    "Input_test.cpp"
+    "InputEvents_test.cpp"
+)

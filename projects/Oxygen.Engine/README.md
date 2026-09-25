@@ -1,5 +1,39 @@
 # Oxygen Game Engine
 
+## Build requirements
+
+The full engine requires CMake 4.2+, Conan 2.32+, and Windows x64 with MSVC 19.50+
+(Visual Studio 2026) and C++23. See the [build contract](cmake/README.md#full-engine-build-contract) for
+supported generators, configuration behavior, and focused validation commands.
+
+Reusable module selection and embedding are described in the
+[CMake helper notes](cmake/README.md#selecting-reusable-modules).
+For configuration-aware clangd setup, see the [VS Code workflow](.vscode/README.md).
+
+For the design principles and contracts behind these workflows, read
+[Build System Design](design/BUILD_SYSTEM.md).
+
+## Choose a workflow
+
+| Goal                          | Entry point                                                                                                                                                                            |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Develop Oxygen                | `tools/build-tree.ps1 generate <profile>`, then `configure <preset>` as needed; build with `oxybuild` or `cmake --build`.                                                              |
+| Use an installed SDK          | Install the chosen configuration, then use `find_package(Oxygen CONFIG REQUIRED COMPONENTS ...)`. See the [SDK guide](cmake/SDK_README.md).                                            |
+| Consume through Conan         | Require `oxygen/0.1.0`; select reusable modules when needed. See [package consumption](cmake/README.md#consume-oxygen-through-conan).                                                  |
+| Embed reusable source modules | Explicitly select from Base, Composition, OxCo, Serio, TextWrap and Clap; supply their dependencies in the parent. See [source embedding](cmake/README.md#selecting-reusable-modules). |
+
+Full-engine packages use shared libraries; the six reusable modules also support
+static libraries on Windows, Linux and macOS. Full-engine source embedding is not
+part of the supported module contract. The editor consumes the installed SDK.
+
+GitHub CI is intentionally disabled during this development stage. Build, test,
+formatting and SDK checks remain local, explicit workflows.
+
+Developer generation enables ImGui UI instrumentation by default, including
+Release. Use `build-tree generate <profile> -UiTests:$false` for an
+uninstrumented graph. The mode must agree across configurations; changing it
+is dependency provisioning, not a configure-only override.
+
 ## Install latest VC Redistributable Package
 
 **Optimized version crashes on Mutex machinery in the STL.**
@@ -25,105 +59,41 @@ On this Microsoft site you find the downloads.
 
 ## Shader Compilation Setup
 
-### DXC (Direct3D Shader Compiler) Installation
+Oxygen declares `dxc/1.9.2607` directly in Conan for both its host API/runtime
+and its build-machine compiler executable. Run the normal Conan dependency
+installation or `tools/build-tree.ps1 generate <profile>`; there is no separate
+DXC download.
+CMake resolves only the directories supplied by that Conan graph.
 
-The engine requires the **DirectX Shader Compiler (DXC)** for shader compilation at build time.
+ShaderBake links `dxc::dxcompiler`. Its build target stages `dxcompiler.dll` and
+`dxil.dll` beside the executable; the native SDK installs both DLLs and their
+license notices through dependency deployment. Shader-probe commands use the
+build-context `dxc` executable. The shared runtime launcher supplies other build
+and sanitizer runtime paths for the selected configuration without changing the
+user's shell environment.
 
-#### Obtaining DXC
+If DXC is missing, regenerate dependencies for the selected tree/configuration,
+then reconfigure and build ShaderBake. Do not copy a compiler from another build
+or add a machine-wide DXC PATH entry. For an installed SDK, retain its complete
+`bin` directory. See the [ShaderBake guide](src/Oxygen/Graphics/Direct3D12/Tools/ShaderBake/README.md)
+for cache and compilation commands.
 
-Download the latest DXC release from the [GetDXC](https://github.com/Devaniti/GetDXC) repository:
+## Python tools
 
-```powershell
-# Using PowerShell to download and extract DXC
-$DXCFolder = "packages\DXC"
-& .\GetDXC.ps1 $DXCFolder
-```
+Install Python 3.14 and uv 0.12.17+. From the DroidNet repository root, run
+`uv sync --locked` to prepare this checkout's `.venv`. The normal
+`tools/build-tree.ps1 generate <profile>` workflow also provisions it through
+Conan. All C++ configurations and generators share this environment.
 
-This installs DXC to `packages/DXC/` with the following structure:
-
-- `bin/{arch}/` (dxcompiler.dll, dxil.dll, dxc.exe)
-- `lib/{arch}/` (dxcompiler.lib, dxil.lib - import libraries)
-- `inc/` (DXC header files)
-
-### ShaderBake.exe Build-Time DLL Resolution
-
-**ShaderBake.exe** is a build tool that compiles HLSL shaders at build time. It depends on DXC runtime DLLs and other Conan-deployed dependencies.
-
-#### Config-Scoped Runtime PATH
-
-Conan-deployed runtime DLLs live under `out/install/<Config>/bin` (or `out/install/Asan/bin` for ASan builds).
-
-PATH handling is now **config-scoped**:
-
-1. `generate-builds.ps1` does **not** modify user or session PATH.
-2. The shader bake CMake custom command sets PATH per active CMake config before invoking `ShaderBake.exe`.
-3. `tools/cli/oxyrun.ps1` sets process-local PATH based on `-Config` (or `-Sanitized` -> `Asan`) before running the executable.
-
-This avoids global PATH pollution and ensures each build/run uses the correct deployment directory.
-
-#### Troubleshooting DLL Resolution Issues
-
-If you encounter build failures with ShaderBake.exe stating that DLLs are missing:
-
-1. **Check Session PATH** (inside the active process):
-
-   ```powershell
-   $env:PATH -split ';' | Select-String "out/install"
-   ```
-
-2. **Verify DXC Installation**: Confirm that `packages/DXC/bin/{arch}/dxcompiler.dll` and `packages/DXC/bin/{arch}/dxil.dll` exist.
-
-   ```powershell
-   # Check on 64-bit (x64) systems:
-   Test-Path "packages\DXC\bin\x64\dxcompiler.dll"
-   Test-Path "packages\DXC\bin\x64\dxil.dll"
-   ```
-
-3. **Verify Conan Deployment**: Check that the Conan deployment directories contain the required DLLs:
-
-   ```powershell
-   Get-ChildItem "out\install\Debug\bin\*.dll" | Select-Object Name
-   ```
-
-4. **Regenerate Build Configuration**: If DLLs are missing from deployment, re-run Conan install:
-
-   ```powershell
-   .\tools\generate-builds.ps1 profiles/windows-msvc.ini
-   ```
-
-5. **Clean and Rebuild**:
-
-   ```powershell
-   # Remove build artifacts and reconfigure
-   Remove-Item -Recurse out/build-ninja -Force
-   .\tools\generate-builds.ps1 profiles/windows-msvc.ini
-   ```
-
-$env:VIRTUAL_ENV_DISABLE_PROMPT = 1
-oh-my-posh init pwsh --config E:\dev\ohmyposh-config.json | Out-String | Invoke-Expression
-function AutoActivateVenv {
-$venvActivate = ".venv\Scripts\Activate"
-if (Test-Path $venvActivate) {
-& $venvActivate
-}
-}
-
-function Set-Location {
-param ([string]$Path)
-Microsoft.PowerShell.Management\Set-Location -Path $Path
-AutoActivateVenv
-}
-
-## Python venv
-
-cd dev/projects
-python -m venv .venv
-
-.venv/Scripts/activate
+Configure, builds and developer tools consume the provisioned environment without
+installing packages. See [repository Python tooling](../../tooling/PYTHON.md)
+for dependency ownership, updates and Conan source exports. Automatic activation
+is a personal shell-profile preference; Oxygen does not configure your shell.
 
 ## Pre-commit
 
-./Init.cmd
+From the DroidNet repository root, run `./init.cmd` to install the repository
+hooks. See [pre-commit tooling](../../tooling/doc/pre-commit.md) for their scope.
 
 ## Visual Studio
 
@@ -131,85 +101,72 @@ Make sure the "Desktop development with C++" workload is checked.
 After installation, check for vcvarsall.bat in:
 
 ```pwsh
-C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\
+C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\
 ```
 
 ## Conan
 
-### Install prerequisites
+### Contributor setup
 
-```shell
-cd dev/projects
-pip install conan
-git clone https://github.com/abdes/conan-center-index.git
-```
+Install Conan 2.32+ separately from the repository Python environment. Configure
+access to Oxygen's recipes using your checkout of
+[the recipe fork](https://github.com/abdes/conan-center-index). A local recipe index
+can be registered with `conan remote add mycenter <recipe-checkout-path>
+--type=local-recipes-index`; use `conan remote list` to inspect existing remotes.
+This is machine setup, not something a normal engine build repeats.
 
-### Sanitizer-aware package IDs (Conan 2)
+The supplied contributor profiles use the `sanitizer` setting declared in
+[conan-settings_user.yml](conan-settings_user.yml). Put that declaration in
+`settings_user.yml` under the directory reported by `conan config home`, preserving
+any custom settings you already maintain. Ordinary Conan package consumers do not
+need Oxygen's contributor settings file.
 
-Goal: avoid mixing ASan and non-ASan binaries in the Conan cache by making the
-sanitizer a first-class setting that participates in package IDs.
+### ASan and dependency identity
 
-#### 1) Project-owned user settings file
+Use [windows-msvc-asan.ini](profiles/windows-msvc-asan.ini) for ASan and
+[windows-msvc.ini](profiles/windows-msvc.ini) for ordinary builds. The profiles
+already set Oxygen's option, instrumentation flags and dependency identity:
 
-We keep a repo-local Conan user settings file at:
+- ASan selects Debug, `oxygen/*:with_asan=True`, and `-fsanitize=address` for C/C++.
+- `user.oxygen:sanitizer` participates in dependency package IDs through
+  `tools.info.package_id:confs`; header-only recipes can still share their packages.
+- Conan rejects an ASan option paired with an ordinary dependency profile or a
+  non-Debug configuration. CMake checks consistency with the generated toolchain.
 
-- [conan-settings_user.yml](conan-settings_user.yml)
-
-It contains:
-
-```text
-sanitizer: [None, asan]
-```
-
-#### 2) Install the user settings into Conan home
-
-Use Conan to install the user settings file into Conan home (this is the
-recommended flow in the Conan docs):
-
-PowerShell (one line):
-
-```powershell
-$tmp=Join-Path $env:TEMP "settings_user.yml"; Copy-Item -Path "conan-settings_user.yml" -Destination $tmp -Force; conan config install $tmp
-```
-
-Conan only reads settings_user.yml from Conan home and merges it with the
-built-in settings at runtime.
-
-When switching between ASan and non-ASan, regenerate the Conan toolchain and
-reconfigure CMake in a clean build folder (CMake caches OXYGEN_WITH_ASAN).
-
-#### 3) Add sanitizer to profiles
-
-- In [profiles/windows-msvc-asan.ini](profiles/windows-msvc-asan.ini)
-  - [settings] → sanitizer=asan
-- In [profiles/windows-msvc.ini](profiles/windows-msvc.ini)
-  - [settings] → sanitizer=None
-
-#### 4) Wire the setting in the recipe
-
-Update [conanfile.py](conanfile.py) to use the setting inside `generate()`:
-
-- If sanitizer is asan, set `OXYGEN_WITH_ASAN=ON` and add -fsanitize=address
-
-This makes the sanitizer a package ID dimension across all dependencies,
-without requiring per-dependency options.
+Keep the ordinary and ASan build trees alongside each other. Switch presets or
+use `-Sanitized` with the build/run helpers; do not toggle instrumentation inside
+an existing tree or edit the recipe to enable it. See the
+[preset guide](tools/presets/README.md) for tree identities and SDK destinations.
 
 ### Example install commands
 
-**Preferred (recommended):** use the helper script `tools/generate-builds.ps1` to perform Conan installs and generate both Ninja (multi-config) and Visual Studio build trees with sane defaults. The script accepts a single required positional `profile` argument and resolves relative profile/output paths relative to the repository root.
+Use `tools/build-tree.ps1` from an initialized compiler shell. `generate` runs
+Conan installation and CMake configuration; `configure` reconfigures an existing
+preset without Conan, deployment or cleanup. Both prepare clangd after a
+successful Ninja configuration. VS Code retains its existing post-configure hook.
+
+Generation preserves existing output by default. `-Clean` explicitly resets the
+selected build trees and their family's SDK configuration directories. Profile
+paths are relative to Oxygen.Engine; Conan profile names are also accepted.
 
 ```powershell
 # ASan (recommended)
-.\tools\generate-builds.ps1 profiles/windows-msvc-asan.ini
+.\tools\build-tree.ps1 generate profiles/windows-msvc-asan.ini
 
 # Non-ASan, preserving existing build products
-.\tools\generate-builds.ps1 profiles/windows-msvc.ini -NoClean
+.\tools\build-tree.ps1 generate profiles/windows-msvc.ini
 
 # Generate Tracy-enabled builds alongside standard builds
-.\tools\generate-builds.ps1 profiles/windows-msvc.ini -WithTracy -NoClean
+.\tools\build-tree.ps1 generate profiles/windows-msvc.ini -WithTracy
+
+# Reconfigure as often as needed, without installing dependencies or cleaning
+.\tools\build-tree.ps1 configure oxygen-ninja-default
+
+# Optional local narrowing; a normal preset configure restores recipe defaults
+.\tools\build-tree.ps1 configure oxygen-ninja-default -Define 'OXYGEN_BUILD_TESTS=OFF'
 
 # Show usage
-.\tools\generate-builds.ps1 -Help
+.\tools\build-tree.ps1 -Help
 ```
 
 **CLI tools (oxybuild / oxyrun / oxytidy):**
@@ -223,9 +180,9 @@ configure `oxygen-ninja-default` or `oxygen-tracy-ninja-default`, then build wit
 [preset guide](tools/presets/README.md) for migration, schema compatibility, and
 VS Code selection. The old platform wrapper names are no longer used.
 
-- Use `tools\oxybuild.ps1` and `tools\oxyrun.ps1` to build and run targets with convenient, preset-based workflows.
+- Use `tools\cli\oxybuild.ps1` and `tools\cli\oxyrun.ps1` to build and run targets with convenient, preset-based workflows. Direct `cmake --build` remains supported.
 - Use `tools\cli\oxytidy.ps1` to run scoped parallel `clang-tidy` with the repo's `.clang-tidy`, `.clangd`, and CMake compile database.
-- Important: these CLI helpers **do not** run Conan automatically. Initialize build roots with `tools\generate-builds.ps1` (or `tools\generate-builds.bat`).
+- These build/run helpers **do not** run Conan automatically. Initialize build roots with `tools\build-tree.ps1 generate <profile>`.
 - Build-root conventions:
   - Automatic selection uses initialized CMake presets: Release first, ordinary
     builds before ASan/Tracy, then Ninja before VS. Use `oxybuild -ListBuilds`.
@@ -239,7 +196,7 @@ Examples:
 
 ```powershell
 # Initialize build roots (ASan)
-.\tools\generate-builds.ps1 profiles/windows-msvc-asan.ini
+.\tools\build-tree.ps1 generate profiles/windows-msvc-asan.ini
 
 # Build and run using sanitized presets (defaults to Debug and uses asan presets)
 .\tools\cli\oxybuild.ps1 MyApp -Sanitized
@@ -249,16 +206,13 @@ Examples:
 **Advanced / manual (direct Conan):**
 
 ```shell
-conan remote remove conancenter
-conan remote add mycenter ./conan-center-index
-
 cd DroidNet/projects/Oxygen.Engine
 
 # ASan
-conan install . --profile:host=profiles/windows-msvc-asan.ini --profile:build=profiles/windows-msvc-asan.ini --build=missing -s build_type=Debug --deployer-folder=out/install --deployer-package=Oxygen/0.1.0
+conan install . --profile:host=profiles/windows-msvc-asan.ini --profile:build=profiles/windows-msvc-asan.ini --build=missing -s build_type=Debug --deployer-folder=out/install --deployer-package="oxygen/*"
 
 # Non-ASan
-conan install . --profile:host=profiles/windows-msvc.ini --profile:build=profiles/windows-msvc.ini --build=all -s build_type=Debug --deployer-folder=out/install --deployer-package=Oxygen/0.1.0
+conan install . --profile:host=profiles/windows-msvc.ini --profile:build=profiles/windows-msvc.ini --build=missing -s build_type=Debug --deployer-folder=out/install --deployer-package="oxygen/*"
 ```
 
 ## Useful commands
@@ -280,7 +234,8 @@ $repoRoot=$(git rev-parse --show-toplevel); git diff --name-only --cached | Wher
 The bindless codegen tool is provided as a small library and a CLI entrypoint. To avoid a Python runtime warning when running the CLI directly, prefer invoking it as a module from a clean interpreter process:
 
 ```powershell
-& F:/projects/.venv/Scripts/python.exe -m bindless_codegen.cli --input <path-to-BindingSlots.yaml> --out-cpp out.h --out-hlsl out.hlsl
+# From Oxygen.Engine after provisioning the repository environment:
+& ../../.venv/Scripts/python.exe -m bindless_codegen.cli --input <path-to-BindingSlots.yaml> --out-cpp out.h --out-hlsl out.hlsl
 ```
 
 Notes:

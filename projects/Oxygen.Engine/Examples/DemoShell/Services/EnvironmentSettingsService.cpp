@@ -196,7 +196,9 @@ namespace {
       }
 
       if (const auto light = node.GetLightAs<scene::DirectionalLight>();
-        light.has_value() && light->get().GetAtmosphereLightSlot() == scene::AtmosphereLightSlot::kPrimary) {
+        light.has_value()
+        && light->get().GetAtmosphereLightSlot()
+          == scene::AtmosphereLightSlot::kPrimary) {
         candidate = candidate.value_or(node);
         ++candidate_count;
       }
@@ -732,7 +734,6 @@ namespace {
       | (static_cast<std::uint32_t>(bytes[3]) << 24U);
   }
 
-
 } // namespace
 
 /*!
@@ -1209,7 +1210,8 @@ auto EnvironmentSettingsService::OnLightChanged(
   preview_reconcile_pending_ = true;
   if (auto node = scene->GetNode(node_handle)) {
     if (const auto light = node->GetLightAs<scene::DirectionalLight>(); light
-      && light->get().GetAtmosphereLightSlot() != scene::AtmosphereLightSlot::kNone) {
+      && light->get().GetAtmosphereLightSlot()
+        != scene::AtmosphereLightSlot::kNone) {
       // Scalar role restoration is safe during mutation dispatch. Creation,
       // removal, and observer sync wait for the normal apply phase.
       preview_sun_.YieldToAuthoredSun(*scene);
@@ -3322,17 +3324,20 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
   if (apply_sun) {
     UpdateSunLightCandidate();
     if (sun_light_available_) {
-      const bool accepted = sun_light_node_.EditLight<scene::DirectionalLight>([this](auto& light) {
-        ApplySunShadowSettingsToLight(light);
-        auto& common = light.Common();
-        common.affects_world = sun_enabled_;
-        common.casts_shadows = sun_enabled_;
-        light.SetIntensityLux(sun_illuminance_lx_);
-        common.color_rgb = sun_use_temperature_
-          ? KelvinToLinearRgb(sun_temperature_kelvin_) : sun_color_rgb_;
-      });
+      const bool accepted = sun_light_node_.EditLight<scene::DirectionalLight>(
+        [this](auto& light) {
+          ApplySunShadowSettingsToLight(light);
+          auto& common = light.Common();
+          common.affects_world = sun_enabled_;
+          common.casts_shadows = sun_enabled_;
+          light.SetIntensityLux(sun_illuminance_lx_);
+          common.color_rgb = sun_use_temperature_
+            ? KelvinToLinearRgb(sun_temperature_kelvin_)
+            : sun_color_rgb_;
+        });
       if (accepted && sun_enabled_) {
-        const auto sun_dir = DirectionFromAzimuthElevation(sun_azimuth_deg_, sun_elevation_deg_);
+        const auto sun_dir
+          = DirectionFromAzimuthElevation(sun_azimuth_deg_, sun_elevation_deg_);
         ApplyLightDirectionWorldSpace(sun_light_node_, -sun_dir);
       }
     }
@@ -4244,7 +4249,7 @@ auto EnvironmentSettingsService::LoadSettings(const bool custom_only) -> void
     skybox_settings_loaded
       |= load_float(kSkyboxHdrExposureKey, skybox_hdr_exposure_ev_);
     if (const auto path = settings->GetString(kSkyboxPathKey)) {
-      skybox_path_ = *path;
+      skybox_path_ = settings->DecodePath(*path).string();
       skybox_settings_loaded = true;
     }
     any_loaded |= skybox_settings_loaded;
@@ -4520,7 +4525,8 @@ auto EnvironmentSettingsService::SaveSettings() const -> void
   save_bool(kSkyboxTonemapKey, skybox_tonemap_hdr_to_ldr_);
   save_float(kSkyboxHdrExposureKey, skybox_hdr_exposure_ev_);
   if (!skybox_path_.empty()) {
-    settings->SetString(kSkyboxPathKey, skybox_path_);
+    settings->SetString(
+      kSkyboxPathKey, settings->EncodePath(skybox_path_).generic_string());
   }
 
   save_bool(kSkyLightEnabledKey, sky_light_enabled_);

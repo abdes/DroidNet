@@ -31,7 +31,6 @@ set_target_properties(
     FOLDER
       "Testing"
 )
-target_compile_options(${link_test_target} PRIVATE ${OXYGEN_COMMON_CXX_FLAGS})
 target_compile_definitions(
   ${link_test_target}
   PRIVATE
@@ -492,15 +491,9 @@ if(WIN32)
       oxygen::testing
       nlohmann_json::nlohmann_json
   )
-  if(OXYGEN_WITH_COVERAGE)
-    target_compile_options(
-      oxygen-vortex-exposure-test-support
-      PRIVATE
-        "--coverage"
-    )
-  endif()
   gtest_program(
     "Oxygen.Vortex.Exposure.Tests"
+    GPU
     SOURCES
       "Exposure/Adaptation_test.cpp"
       "Exposure/CheckedConversion_test.cpp"
@@ -551,13 +544,6 @@ if(WIN32)
       $<$<CXX_COMPILER_ID:MSVC>:/bigobj>
   )
   # Compile the arithmetic probe separately; it must not enter shaders.bin.
-  if(CMAKE_SYSTEM_PROCESSOR STREQUAL "AMD64")
-    set(exposure_probe_arch "x64")
-  elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86")
-    set(exposure_probe_arch "x86")
-  elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "ARM64")
-    set(exposure_probe_arch "arm64")
-  endif()
   set(
     exposure_shader_root
     "${PROJECT_SOURCE_DIR}/src/Oxygen/Graphics/Direct3D12/Shaders"
@@ -572,19 +558,19 @@ if(WIN32)
     COMMAND
       ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>"
     COMMAND
-      "${PROJECT_SOURCE_DIR}/packages/DXC/bin/${exposure_probe_arch}/dxc.exe" -T
-      cs_6_6 -E CS -O3 -HV 2021 -I "${exposure_shader_root}" -I
-      "${PROJECT_SOURCE_DIR}/src/Oxygen" -Fo "${exposure_probe_output}"
+      "${OXYGEN_DXC_EXECUTABLE}" -T cs_6_6 -E CS -O3 -HV 2021 -I
+      "${exposure_shader_root}" -I "${PROJECT_SOURCE_DIR}/src/Oxygen" -Fo
+      "${exposure_probe_output}"
       "${CMAKE_CURRENT_SOURCE_DIR}/Shaders/ToneBoundsProbe.hlsl"
     # DXC dependency generation is a separate preprocessing action; -MD does
     # not compile DXIL, even when -Fo is supplied.
     COMMAND
-      "${PROJECT_SOURCE_DIR}/packages/DXC/bin/${exposure_probe_arch}/dxc.exe" -T
-      cs_6_6 -E CS -O3 -HV 2021 -I "${exposure_shader_root}" -I
-      "${PROJECT_SOURCE_DIR}/src/Oxygen" -MD -MF "${exposure_probe_output}.d"
-      -Fo "${exposure_probe_output}"
+      "${OXYGEN_DXC_EXECUTABLE}" -T cs_6_6 -E CS -O3 -HV 2021 -I
+      "${exposure_shader_root}" -I "${PROJECT_SOURCE_DIR}/src/Oxygen" -MD -MF
+      "${exposure_probe_output}.d" -Fo "${exposure_probe_output}"
       "${CMAKE_CURRENT_SOURCE_DIR}/Shaders/ToneBoundsProbe.hlsl"
     DEPENDS
+      "${OXYGEN_DXC_EXECUTABLE}"
       "Shaders/ToneBoundsProbe.hlsl"
       "${exposure_shader_root}/Vortex/Contracts/View/HdrHardwareSampling.hlsli"
       "${exposure_shader_root}/Vortex/Contracts/View/HdrIntervalMath.hlsli"

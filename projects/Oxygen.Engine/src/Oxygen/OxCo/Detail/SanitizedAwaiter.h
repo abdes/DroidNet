@@ -7,6 +7,7 @@
 #pragma once
 
 #include <tuple>
+#include <type_traits>
 #include <utility>
 
 #include <Oxygen/OxCo/Coroutine.h>
@@ -47,7 +48,7 @@ public:
 
   [[nodiscard]] auto await_suspend(Handle h) -> Handle
   {
-#if defined(OXCO_AWAITABLE_STATE_DEBUG)
+#if defined(OXCO_AWAITER_STATE_DEBUG)
     try {
       return AwaitSuspend(awaiter_, checker_.AboutToSuspend(h));
     } catch (...) {
@@ -77,13 +78,28 @@ public:
 
   auto await_cancel(const Handle h) noexcept
   {
-    return checker_.CancelReturned(
-      AwaitCancel(awaiter_, checker_.AboutToCancel(h)));
+    const auto result = AwaitCancel(awaiter_, checker_.AboutToCancel(h));
+    if constexpr (!Cancellable<Awaiter>) {
+      // The normalized interface must remain Cancellable: std::false_type is
+      // not an allowed await_cancel return type. Otherwise type-erased callers
+      // skip this method and the checker never observes the cancellation.
+      return checker_.CancelReturned(static_cast<bool>(result));
+    } else {
+      return checker_.CancelReturned(result);
+    }
   }
 
   [[nodiscard]] auto await_must_resume() const noexcept
   {
-    return checker_.MustResumeReturned(AwaitMustResume(awaiter_));
+    const auto result = AwaitMustResume(awaiter_);
+    if constexpr (std::is_same_v<std::remove_cv_t<decltype(result)>,
+                    std::true_type>) {
+      // Like await_cancel, expose a return type accepted by the public concept.
+      // Keep std::false_type where it conveys that results are discardable.
+      return checker_.MustResumeReturned(static_cast<bool>(result));
+    } else {
+      return checker_.MustResumeReturned(result);
+    }
   }
 
   void await_set_executor(Executor* ex) noexcept

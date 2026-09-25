@@ -16,6 +16,13 @@
 #include <string_view>
 #include <thread>
 
+#include "Common/DemoCli.h"
+#include "Common/FrameCaptureCliOptions.h"
+#include "DemoShell/Runtime/DemoAppContext.h"
+#include "DemoShell/Services/SettingsService.h"
+#include "DemoShell/UI/EnvironmentVm.h"
+#include "RenderScene/MainModule.h"
+#include "RenderScene/RuntimePaths.h"
 #include <asio/signal_set.hpp>
 #include <glm/vec3.hpp>
 
@@ -45,13 +52,6 @@
 #include <Oxygen/Scripting/Module/ScriptingModule.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
-
-#include "Common/DemoCli.h"
-#include "Common/FrameCaptureCliOptions.h"
-#include "DemoShell/Runtime/DemoAppContext.h"
-#include "DemoShell/Services/SettingsService.h"
-#include "DemoShell/UI/EnvironmentVm.h"
-#include "RenderScene/MainModule.h"
 
 using namespace oxygen;
 using namespace oxygen::engine;
@@ -220,6 +220,12 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
 {
   using namespace oxygen::clap; // NOLINT
 
+  const auto runtime_paths
+    = oxygen::examples::render_scene::ResolveRuntimePaths();
+  if (runtime_paths.installed) {
+    SettingsService::InitializeForDemoApp(
+      runtime_paths.showcase / "demo_settings.json", runtime_paths.root);
+  }
   // Initialize settings service
   const auto startup_settings = SettingsService::ForDemoApp();
   bool preview_sun_enabled
@@ -337,6 +343,18 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
     if (oxygen::examples::cli::HandleMetaCommand(context, default_command)) {
       return EXIT_SUCCESS;
     }
+    if (runtime_paths.installed && startup_scene_name.empty()
+      && startup_settings->GetString("content.active_scene.key")
+        .value_or("")
+        .empty()) {
+      startup_scene_name = "Lantern";
+    }
+    if (runtime_paths.installed && startup_scene_name == "Lantern"
+      && startup_skybox_path.empty() && environment_profile_key.empty()) {
+      startup_skybox_path
+        = (runtime_paths.content / "images/showcase/Sky.hdr").string();
+      preview_sun_enabled = true;
+    }
     app.window_resolution = oxygen::examples::cli::ResolveWindowResolution(
       context, resolution, false);
 
@@ -410,21 +428,18 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
       .thread_pool_size = (std::min)(4u, std::thread::hardware_concurrency()),
     });
 
-    const auto workspace_root
-      = std::filesystem::path(std::source_location::current().file_name())
-          .parent_path()
-          .parent_path()
-          .parent_path();
-
-    const auto demo_root
-      = std::filesystem::path(std::source_location::current().file_name())
-          .parent_path();
-
-    // Load the graphics backend
     auto path_finder_builder
       = PathFinderConfig::Create()
-          .WithWorkspaceRoot(workspace_root)
-          .WithScriptSourceRoots({ demo_root.parent_path() / "Content" });
+          .WithWorkspaceRoot(runtime_paths.root)
+          .WithScriptSourceRoots({ runtime_paths.content });
+    if (runtime_paths.installed) {
+      path_finder_builder
+        = std::move(path_finder_builder)
+            .WithShaderLibraryPath("share/oxygen/shaders/shaders.bin")
+            .WithCVarsArchivePath(runtime_paths.showcase / "cvars.json")
+            .WithScriptBytecodeCachePath(
+              runtime_paths.showcase / "scripts.bin");
+    }
     if (!cvars_archive_path.empty()) {
       path_finder_builder
         = std::move(path_finder_builder)

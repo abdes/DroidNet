@@ -4,18 +4,22 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # ===-----------------------------------------------------------------------===#
 
-if(NOT GTest::gtest)
+if(NOT TARGET GTest::gtest)
   find_package(GTest REQUIRED CONFIG)
 endif()
 
-include(GoogleTest)
+include("${CMAKE_CURRENT_LIST_DIR}/TestRuntime.cmake")
 
 # ------------------------------------------------------------------------------
 # Build Helpers to simplify test target creation.
 # ------------------------------------------------------------------------------
 
 function(gtest_program program_name)
-  set(options)
+  set(
+    options
+    GPU
+    NO_TEST
+  )
   set(one_value_args)
   set(
     multi_value_args
@@ -39,30 +43,27 @@ function(gtest_program program_name)
         "Testing"
   )
 
-  target_compile_options(${program_name} PRIVATE ${OXYGEN_COMMON_CXX_FLAGS})
-
-  if(OXYGEN_WITH_COVERAGE)
-    target_compile_options(${program_name} PRIVATE "--coverage")
-    target_link_options(${program_name} PRIVATE "--coverage")
-  endif()
-
   target_link_libraries(${program_name} PRIVATE ${x_DEPS})
 
-  # Set the DLL path relative to the build directory
-  set(RUNTIME_DLL_PATH "${CMAKE_BINARY_DIR}/../install/$<CONFIG>")
-  # For all test targets, set the PATH environment
-  gtest_discover_tests(
-    ${program_name}
-    DISCOVERY_TIMEOUT 60
-    WORKING_DIRECTORY ${RUNTIME_DLL_PATH}
-  )
-
-  # Define the test
-  add_test(NAME ${program_name} COMMAND ${program_name})
+  oxygen_configure_test_runtime(${program_name})
+  # Benchmarks reuse the executable setup without joining the correctness suite.
+  # Register the entire suite once; individual cases remain selectable directly
+  # through the executable's --gtest_filter option.
+  if(NOT x_NO_TEST)
+    add_test(NAME ${program_name} COMMAND ${program_name})
+    if(x_GPU)
+      set_tests_properties(
+        ${program_name}
+        PROPERTIES
+          RESOURCE_LOCK
+            oxygen_gpu
+      )
+    endif()
+  endif()
 endfunction()
 
 function(m_gtest_program program_name)
-  set(options)
+  set(options GPU)
   set(oneValueArgs)
   set(multiValueArgs SOURCES)
 
@@ -73,8 +74,13 @@ function(m_gtest_program program_name)
     "${multiValueArgs}"
     ${ARGN}
   )
+  set(_options)
+  if(x_GPU)
+    list(APPEND _options GPU)
+  endif()
   gtest_program(
     "${META_MODULE_NAME}.${program_name}.Tests"
+    ${_options}
     SOURCES
       ${x_SOURCES}
     DEPS

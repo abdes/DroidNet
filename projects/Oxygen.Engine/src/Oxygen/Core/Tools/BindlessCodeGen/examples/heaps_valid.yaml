@@ -1,76 +1,101 @@
-## Full BindingSlots example with heaps and mappings
+# Heap-global offsets do not change the domain-local shader index ranges.
 meta:
-  version: "1.0.0"
-  description: "Example showing SRV and SAMPLER domains mapped to D3D12 heaps"
-
+  version: 2.0.0
+  description: Texture and sampler domains with independent heaps and ABI index spaces.
 defaults:
   invalid_index: 4294967295
-
-domains:
-  - id: textures
-    name: Textures
-    kind: SRV
-    register: t0
-    space: space0
-    root_table: BindlessSRV
-    domain_base: 0
-    capacity: 1024
-
-  - id: samplers
-    name: Samplers
-    kind: SAMPLER
-    register: s0
-    space: space0
-    root_table: SamplerTable
-    domain_base: 0
-    capacity: 64
-
-root_signature:
-  - type: descriptor_table
-    name: BindlessSRV
-    index: 0
-    visibility: ALL
-    ranges:
-      - range_type: SRV
-        domain: textures
-        base_shader_register: t0
-        register_space: space0
-        num_descriptors: unbounded
-
-  - type: descriptor_table
-    name: SamplerTable
-    index: 1
-    visibility: ALL
-    ranges:
-      - range_type: SAMPLER
-        domain: samplers
-        base_shader_register: s0
-        register_space: space0
-        num_descriptors: 64
-
-# D3D12 heap strategy inputs. These feed the runtime JSON too.
-heaps:
-  - id: "CBV_SRV_UAV:gpu"
-    type: CBV_SRV_UAV
-    shader_visible: true
-    capacity: 65536
-    base_index: 0
-    allow_growth: false
-    debug_name: "CBV_SRV_UAV shader-visible"
-
-  - id: "SAMPLER:gpu"
-    type: SAMPLER
-    shader_visible: true
-    capacity: 2048
-    base_index: 100000
-    allow_growth: false
-    debug_name: "SAMPLER shader-visible"
-
-mappings:
-  - domain: textures
-    heap: "CBV_SRV_UAV:gpu"
-    local_base: 0
-
-  - domain: samplers
-    heap: "SAMPLER:gpu"
-    local_base: 0
+abi:
+  index_spaces:
+    - id: srv_uav_cbv
+    - id: sampler
+  domains:
+    - id: textures
+      name: Textures
+      index_space: srv_uav_cbv
+      shader_index_base: 0
+      capacity: 1024
+      shader_access_class: texture_srv
+      view_types:
+        - Texture_SRV
+    - id: samplers
+      name: Samplers
+      index_space: sampler
+      shader_index_base: 0
+      capacity: 64
+      shader_access_class: sampler
+      view_types:
+        - Sampler
+backends:
+  d3d12:
+    strategy:
+      heaps:
+        - id: CBV_SRV_UAV:gpu
+          type: CBV_SRV_UAV
+          shader_visible: true
+          capacity: 65536
+          base_index: 0
+          allow_growth: false
+        - id: SAMPLER:gpu
+          type: SAMPLER
+          shader_visible: true
+          capacity: 2048
+          base_index: 100000
+          allow_growth: false
+      tables:
+        - id: TexturesTable
+          descriptor_kind: SRV
+          heap: CBV_SRV_UAV:gpu
+          shader_register: t0
+          register_space: space0
+          descriptor_count: 1024
+        - id: SamplersTable
+          descriptor_kind: SAMPLER
+          heap: SAMPLER:gpu
+          shader_register: s0
+          register_space: space1
+          descriptor_count: 64
+      domain_realizations:
+        - domain: textures
+          table: TexturesTable
+          heap_local_base: 0
+        - domain: samplers
+          table: SamplersTable
+          heap_local_base: 0
+    root_signature:
+      - type: descriptor_table
+        id: TexturesTable
+        table: TexturesTable
+        index: 0
+        visibility: ALL
+      - type: descriptor_table
+        id: SamplersTable
+        table: SamplersTable
+        index: 1
+        visibility: ALL
+  vulkan:
+    strategy:
+      descriptor_sets:
+        - id: resources
+          set: 0
+      bindings:
+        - id: textures_binding
+          set: resources
+          binding: 0
+          descriptor_type: SAMPLED_IMAGE
+          descriptor_count: 1024
+        - id: samplers_binding
+          set: resources
+          binding: 1
+          descriptor_type: SAMPLER
+          descriptor_count: 64
+      domain_realizations:
+        - domain: textures
+          binding: textures_binding
+          array_element_base: 0
+        - domain: samplers
+          binding: samplers_binding
+          array_element_base: 0
+    pipeline_layout:
+      - type: descriptor_set
+        id: Resources
+        set_ref: resources
