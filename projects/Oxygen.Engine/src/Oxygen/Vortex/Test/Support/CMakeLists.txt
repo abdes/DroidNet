@@ -32,6 +32,7 @@ set_target_properties(
 target_sources(
   ${META_MODULE_TARGET}
   PRIVATE
+    "CpuAllocationCounter.h"
     "CpuTimingCapture.cpp"
     "CpuTimingCapture.h"
     "D3D12MemoryCapture.cpp"
@@ -46,6 +47,7 @@ target_sources(
     FILE_SET HEADERS
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
     FILES
+      "CpuAllocationCounter.h"
       "CpuTimingCapture.h"
       "D3D12MemoryCapture.h"
       "ResourceCreationCounter.h"
