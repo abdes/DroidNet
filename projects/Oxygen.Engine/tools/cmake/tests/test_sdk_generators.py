@@ -27,7 +27,7 @@ class SdkGeneratorTests(CommandTests):
             command = [CONAN, "install", str(recipe),
                        "-pr:h", str(ENGINE / "profiles/windows-msvc.ini"),
                        "-pr:b", str(ENGINE / "profiles/windows-msvc.ini"),
-                       "-s", "build_type=Debug", "-o", "shared=False", "-o", "with_tracy=True",
+                       "-s", "build_type=Debug", "-o", "shared=True", "-o", "with_tracy=True",
                        "-o", "tools=False", "-o", "tests=False", "-o", "examples=False",
                        "-o", "benchmarks=False", "-o", "docs=False",
                        "-c", "tools.cmake.cmaketoolchain:generator=Ninja Multi-Config",
@@ -37,6 +37,8 @@ class SdkGeneratorTests(CommandTests):
                         "--deployer-package=oxygen/" + (ENGINE / "VERSION").read_text().strip()]
             self.run_command(command, root)
             self.assertTrue((deploy / "Debug/bin/SDL3.dll").is_file())
+            self.assertTrue((deploy / "Debug/bin/TracyClient.dll").is_file())
+            self.assertFalse((deploy / "Debug/bin/Debug").exists())
             self.assertEqual(list((deploy / "Debug/bin").rglob("*.exe")), [])
             rules = recipe / "out/build-tracy-ninja/generators/oxygen-sdk"
             (root / "CMakeLists.txt").write_text(f'''cmake_minimum_required(VERSION 4.2)
@@ -62,6 +64,8 @@ oxygen_finalize_install()
             relocated = root / "relocated SDK"
             sdk.rename(relocated)
             self.assertTrue((relocated / libdir / "TracyClient.lib").is_file())
+            self.assertTrue((relocated / "bin/TracyClient.dll").is_file())
+            self.assertFalse((relocated / "bin/Debug").exists())
             self.assertFalse((relocated / libdir / "Debug").exists())
             self.assertEqual(list((relocated / "bin").rglob("*.exe")), [])
             registry = (relocated / libdir / "cmake/Oxygen/OxygenDependencies.cmake").read_text()
@@ -73,6 +77,10 @@ oxygen_finalize_install()
             (consumer / "CMakeLists.txt").write_text('''cmake_minimum_required(VERSION 4.2)
 project(SdkConsumer LANGUAGES CXX)
 find_package(Oxygen CONFIG REQUIRED COMPONENTS Probe)
+get_target_property(tracy_runtime Tracy::TracyClient IMPORTED_LOCATION_DEBUG)
+if(NOT tracy_runtime STREQUAL "${OXYGEN_RUNTIME_DIR}/TracyClient.dll")
+  message(FATAL_ERROR "Tracy runtime path was not rebased: ${tracy_runtime}")
+endif()
 add_executable(consumer main.cpp)
 target_compile_features(consumer PRIVATE cxx_std_23)
 target_compile_definitions(consumer PRIVATE _WIN32_WINNT=0x0A00)

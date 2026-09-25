@@ -331,7 +331,8 @@ class OxygenConan(ConanFile):
         self.requires("luau/0.739", transitive_headers=True, transitive_libs=True)
         self.requires("joltphysics/5.5.0", transitive_headers=True, transitive_libs=True)
         self.requires("xxhash/0.8.3")
-        self.requires("tracy/0.13.1")
+        if self.options.with_tracy:
+            self.requires("tracy/0.13.1")
 
     def build_requirements(self):
         if self._full_engine:
@@ -358,8 +359,9 @@ class OxygenConan(ConanFile):
             self.options["tinyexr"].with_thread = True
             self.options["tinyexr"].with_openmp = not self._with_asan
             self.options["pdcurses"].enable_widec = True
-            self.options["tracy"].enable = bool(self.options.with_tracy)
-            self.options["tracy"].shared = bool(self.options.shared)
+            if self.options.with_tracy:
+                self.options["tracy"].enable = True
+                self.options["tracy"].shared = bool(self.options.shared)
 
     def validate(self):
         if self.options.ui_tests and (not self._full_engine or not self.options.examples):
@@ -636,12 +638,26 @@ set(OXYGEN_DXC_RUNTIME_BINDIRS [==[{{ dxc_runtime_dirs }}]==])
             for artifact in source.rglob("*"):
                 if not artifact.is_file() or (runtime and not self._sdk_runtime_file(artifact)):
                     continue
-                destination = (relative / artifact.relative_to(source)).as_posix().casefold()
+                destination = (Path("bin") / artifact.name if runtime
+                               else relative / artifact.relative_to(source)).as_posix().casefold()
                 existing = destinations.get(destination)
                 if existing and existing != artifact and existing.read_bytes() != artifact.read_bytes():
                     raise ConanInvalidConfiguration(f"SDK file collision: {destination}")
                 destinations[destination] = artifact
         return packages, directories, list(libraries.values())
+
+    @staticmethod
+    def _sdk_rebase_binary_paths(text, artifacts, roots, destination_variable):
+        """Point SDK imports at flattened binaries without changing cache paths."""
+        for artifact in artifacts:
+            target_path = '${' + destination_variable + '}/' + artifact.name
+            text = text.replace(artifact.as_posix(), target_path)
+            for folder in roots:
+                if artifact.is_relative_to(folder):
+                    relative = artifact.relative_to(folder).as_posix()
+                    text = re.sub(r'\$\{[^}]*PACKAGE_FOLDER[^}]*\}/' + re.escape(relative),
+                                  lambda _: target_path, text)
+        return text
 
     def _generate_sdk_dependencies(self):
         """Install declared artifacts and rebase Conan's generated target metadata."""
@@ -664,14 +680,16 @@ set(OXYGEN_DXC_RUNTIME_BINDIRS [==[{{ dxc_runtime_dirs }}]==])
                 if not artifact.is_file() or (runtime and not self._sdk_runtime_file(artifact)):
                     continue
                 if runtime:
-                    destination_dir = relative / artifact.parent.relative_to(source)
                     artifact_component = "Oxygen_dev" if artifact.suffix.lower() == ".pdb" else "Oxygen_runtime"
-                    rules.append(f'install(FILES {quote(artifact)} DESTINATION {quote(destination_dir)} COMPONENT {artifact_component} CONFIGURATIONS {config})')
+                    rules.append(f'install(FILES {quote(artifact)} DESTINATION "${{OXYGEN_INSTALL_BIN}}" COMPONENT {artifact_component} CONFIGURATIONS {config})')
         for library in libraries:
             rules.append(f'install(FILES {quote(library)} DESTINATION "${{OXYGEN_INSTALL_LIB}}" COMPONENT Oxygen_dev CONFIGURATIONS {config})')
 
         names = [dep.cpp_info.get_property("cmake_file_name") or name for name, dep in sorted(packages.items())]
         roots = [Path(dep.package_folder) for dep in packages.values()]
+        runtime_files = sorted({artifact for source, _, runtime in directories if runtime
+                                for artifact in source.rglob('*')
+                                if artifact.is_file() and self._sdk_runtime_file(artifact)})
         metadata = {name: {"files": [], "targets": set(), "requires": set()} for name in names}
         common_files = []
         for source in Path(self.generators_folder).glob('*.cmake'):
@@ -684,14 +702,8 @@ set(OXYGEN_DXC_RUNTIME_BINDIRS [==[{{ dxc_runtime_dirs }}]==])
             if suffix_config and suffix_config.group(1) != config.lower():
                 continue
             text = source.read_text(encoding='utf-8')
-            for library in libraries:
-                target_path = '${_OXYGEN_SDK_LIBRARY_DIR}/' + library.name
-                text = text.replace(library.as_posix(), target_path)
-                for folder in roots:
-                    if library.is_relative_to(folder):
-                        relative = library.relative_to(folder).as_posix()
-                        text = re.sub(r'\$\{[^}]*PACKAGE_FOLDER[^}]*\}/' + re.escape(relative),
-                                      lambda _: target_path, text)
+            text = self._sdk_rebase_binary_paths(text, libraries, roots, '_OXYGEN_SDK_LIBRARY_DIR')
+            text = self._sdk_rebase_binary_paths(text, runtime_files, roots, '_OXYGEN_SDK_RUNTIME_DIR')
             for folder in sorted(roots, key=lambda item: len(str(item)), reverse=True):
                 text = text.replace(folder.as_posix(), '${_OXYGEN_SDK_PREFIX}')
             # CMakeDeps resolves logical libraries through these variables;
@@ -699,6 +711,11 @@ set(OXYGEN_DXC_RUNTIME_BINDIRS [==[{{ dxc_runtime_dirs }}]==])
             text = re.sub(
                 r'(set\(\s*[^\s()]+_LIB_DIRS_[A-Z0-9_]+)\s+([^\n)]*)\)',
                 lambda match: match.group(1) + ' "${_OXYGEN_SDK_LIBRARY_DIR}")'
+                if 'PACKAGE_FOLDER' in match.group(2) or '_OXYGEN_SDK_PREFIX' in match.group(2)
+                else match.group(0), text)
+            text = re.sub(
+                r'(set\(\s*[^\s()]+_BIN_DIRS_[A-Z0-9_]+)\s+([^\n)]*)\)',
+                lambda match: match.group(1) + ' "${_OXYGEN_SDK_RUNTIME_DIR}")'
                 if 'PACKAGE_FOLDER' in match.group(2) or '_OXYGEN_SDK_PREFIX' in match.group(2)
                 else match.group(0), text)
             text = text.replace('${CMAKE_CURRENT_LIST_DIR}/cmakedeps_macros.cmake',
@@ -1031,8 +1048,7 @@ set(OXYGEN_DXC_RUNTIME_BINDIRS [==[{{ dxc_runtime_dirs }}]==])
             if runtime:
                 for artifact in source.rglob("*"):
                     if artifact.is_file() and self._sdk_runtime_file(artifact):
-                        destination = target / relative / artifact.parent.relative_to(source)
-                        copy(self, artifact.name, src=artifact.parent, dst=destination)
+                        copy(self, artifact.name, src=artifact.parent, dst=target / "bin", keep_path=False)
             else:
                 copy(self, "*", src=source, dst=target / relative)
         for library in libraries:
