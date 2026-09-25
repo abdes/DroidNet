@@ -138,6 +138,7 @@ class PresetGenerationTests(unittest.TestCase):
                     "function global:conan {\n"
                     "  @{ tool='conan'; cwd=$PWD.Path; arguments=@($args) } | ConvertTo-Json -Compress | Add-Content $global:CallLog\n"
                     "  $global:LASTEXITCODE = if ($global:FailTool -eq 'conan') { 37 } else { 0 }\n"
+                    f"  if ($args[0] -eq 'profile') {{ '{{\"host\":{{\"settings\":{{\"sanitizer\":\"{'asan' if asan else 'None'}\"}}}}}}' }}\n"
                     "}\n"
                     "function global:cmake {\n"
                     "  @{ tool='cmake'; cwd=$PWD.Path; arguments=@($args) } | ConvertTo-Json -Compress | Add-Content $global:CallLog\n"
@@ -160,10 +161,38 @@ class PresetGenerationTests(unittest.TestCase):
                 trees = ["ninja", "vs"] if generator == "All" else ["ninja" if generator == "Ninja" else "vs"]
                 self.assertEqual([record["arguments"] for record in records if record["tool"] == "cmake"],
                                  [["--preset", prefix + tree + "-default"] for tree in trees])
-                installs = [record for record in records if record["tool"] == "conan"]
+                installs = [record for record in records if record["tool"] == "conan" and record["arguments"][0] == "install"]
                 self.assertEqual(len(installs), len(trees) * (1 if asan else 3))
                 self.assertTrue(all(f"with_tracy={tracy}" in call["arguments"] for call in installs))
-                self.assertTrue(all(f"with_asan={asan}" in call["arguments"] for call in installs))
+                self.assertTrue(all(not any("with_asan=" in arg or "user.oxygen:sanitizer=" in arg
+                                            for arg in call["arguments"]) for call in installs))
+
+    def test_generate_builds_resolves_an_inherited_asan_profile(self):
+        with tempfile.TemporaryDirectory(prefix="oxygen-inherited-profile-") as directory:
+            root = Path(directory)
+            (root / "tools").mkdir()
+            shutil.copyfile(ENGINE / "tools/generate-builds.ps1", root / "tools/generate-builds.ps1")
+            (root / "profile.ini").write_text(
+                f"include({(ENGINE / 'profiles/windows-msvc-asan.ini').as_posix()})\n",
+                encoding="utf-8",
+            )
+            (root / "invoke.ps1").write_text(
+                "$global:CallLog = Join-Path $PSScriptRoot 'calls.jsonl'\n"
+                "function global:conan {\n"
+                f"  if ($args[0] -eq 'profile') {{ & '{CONAN}' @args; return }}\n"
+                "  @{ tool='conan'; arguments=@($args) } | ConvertTo-Json -Compress | Add-Content $global:CallLog\n"
+                "  $global:LASTEXITCODE = 0\n}\n"
+                "function global:cmake {\n"
+                "  @{ tool='cmake'; arguments=@($args) } | ConvertTo-Json -Compress | Add-Content $global:CallLog\n"
+                "  $global:LASTEXITCODE = 0\n}\n"
+                "& (Join-Path $PSScriptRoot 'tools/generate-builds.ps1') profile.ini -NoClean -Generator Ninja\n"
+                "exit $LASTEXITCODE\n", encoding="utf-8",
+            )
+            self.run_command([POWERSHELL, "-NoProfile", "-File", str(root / "invoke.ps1")], root)
+            calls = [json.loads(line) for line in (root / "calls.jsonl").read_text(encoding="utf-8-sig").splitlines()]
+            self.assertEqual(len(calls), 2)
+            self.assertIn("build_type=Debug", calls[0]["arguments"])
+            self.assertEqual(calls[1]["arguments"], ["--preset", "oxygen-asan-ninja-default"])
 
     def test_native_generation_coexists_and_migrates(self):
         with tempfile.TemporaryDirectory(prefix="oxygen-presets-") as directory:

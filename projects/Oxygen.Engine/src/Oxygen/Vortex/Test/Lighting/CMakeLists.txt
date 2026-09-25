@@ -12,11 +12,6 @@ add_executable(
   "Reference/GgxMoments.cpp"
   "Reference/ReferenceQuadrature.cpp"
 )
-target_compile_options(
-  Oxygen.Vortex.GgxMomentTable
-  PRIVATE
-    ${OXYGEN_COMMON_CXX_FLAGS}
-)
 target_link_libraries(
   Oxygen.Vortex.GgxMomentTable
   PRIVATE

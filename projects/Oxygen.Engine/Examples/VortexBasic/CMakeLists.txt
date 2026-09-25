@@ -8,7 +8,10 @@
 # Meta information about this module
 # ------------------------------------------------------------------------------
 
-set(description "Minimal Vortex deferred renderer exercise with RenderDoc capture support.")
+set(
+  description
+  "Minimal Vortex deferred renderer exercise with RenderDoc capture support."
+)
 
 asap_module_declare(
   MODULE_NAME "Oxygen.Examples.VortexBasic"
@@ -49,7 +52,6 @@ set_target_properties(
 )
 
 target_compile_features(${META_MODULE_TARGET} PRIVATE cxx_std_23)
-target_compile_options(${META_MODULE_TARGET} PRIVATE ${OXYGEN_COMMON_CXX_FLAGS})
 
 target_include_directories(
   ${META_MODULE_TARGET}

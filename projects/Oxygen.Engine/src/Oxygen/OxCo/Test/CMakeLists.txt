@@ -57,8 +57,3 @@ target_compile_definitions(
   PRIVATE
     OXCO_AWAITABLE_STATE_DEBUG
 )
-
-if(OXYGEN_WITH_COVERAGE)
-  target_compile_options(${func_tests_target} PRIVATE "--coverage")
-  target_link_options(${func_tests_target} PRIVATE "--coverage")
-endif()

@@ -26,11 +26,6 @@ set_target_properties(
     FOLDER
       "Testing"
 )
-target_compile_options(
-  "Oxygen.Cooker.LinkTest"
-  PRIVATE
-    ${OXYGEN_COMMON_CXX_FLAGS}
-)
 target_link_libraries("Oxygen.Cooker.LinkTest" PRIVATE oxygen::cooker)
 add_test(NAME "Oxygen.Cooker.LinkTest" COMMAND "Oxygen.Cooker.LinkTest")
 

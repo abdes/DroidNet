@@ -4,11 +4,12 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # ===-----------------------------------------------------------------------===#
 
-if(NOT GTest::gtest)
+if(NOT TARGET GTest::gtest)
   find_package(GTest REQUIRED CONFIG)
 endif()
 
 include(GoogleTest)
+include("${CMAKE_CURRENT_LIST_DIR}/TestRuntime.cmake")
 
 # ------------------------------------------------------------------------------
 # Build Helpers to simplify test target creation.
@@ -39,22 +40,13 @@ function(gtest_program program_name)
         "Testing"
   )
 
-  target_compile_options(${program_name} PRIVATE ${OXYGEN_COMMON_CXX_FLAGS})
-
-  if(OXYGEN_WITH_COVERAGE)
-    target_compile_options(${program_name} PRIVATE "--coverage")
-    target_link_options(${program_name} PRIVATE "--coverage")
-  endif()
-
   target_link_libraries(${program_name} PRIVATE ${x_DEPS})
 
-  # Set the DLL path relative to the build directory
-  set(RUNTIME_DLL_PATH "${CMAKE_BINARY_DIR}/../install/$<CONFIG>")
-  # For all test targets, set the PATH environment
+  oxygen_configure_test_runtime(${program_name})
   gtest_discover_tests(
     ${program_name}
     DISCOVERY_TIMEOUT 60
-    WORKING_DIRECTORY ${RUNTIME_DLL_PATH}
+    WORKING_DIRECTORY "$<TARGET_FILE_DIR:${program_name}>"
   )
 
   # Define the test

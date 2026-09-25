@@ -23,11 +23,6 @@ set_target_properties(
     FOLDER
       "Testing"
 )
-target_compile_options(
-  "Oxygen.Profiling.Cpu.LinkTest"
-  PRIVATE
-    ${OXYGEN_COMMON_CXX_FLAGS}
-)
 target_link_libraries(
   "Oxygen.Profiling.Cpu.LinkTest"
   PRIVATE
@@ -45,11 +40,6 @@ set_target_properties(
   PROPERTIES
     FOLDER
       "Testing"
-)
-target_compile_options(
-  "Oxygen.Profiling.Gpu.LinkTest"
-  PRIVATE
-    ${OXYGEN_COMMON_CXX_FLAGS}
 )
 target_link_libraries(
   "Oxygen.Profiling.Gpu.LinkTest"

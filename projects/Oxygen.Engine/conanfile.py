@@ -43,8 +43,9 @@ class OxygenConan(ConanFile):
     topics = ("graphics programming", "gamedev", "math")
 
     # Binary model: Settings and Options
-    # Include `sanitizer` so profiles can control sanitizer across the
-    # whole dependency graph and it is part of package identity.
+    # Oxygen consumes the profile's sanitizer setting. The profiles separately
+    # extend compiled dependencies' identities through tools.info.package_id:confs;
+    # declaring this setting here does not add it to other recipes.
     settings = "os", "arch", "compiler", "build_type", "sanitizer"
     options: Any = {
         # Options
@@ -52,7 +53,6 @@ class OxygenConan(ConanFile):
         "fPIC": [True, False],
         "awaitable_state_checker": [True, False],
         "with_asan": [True, False],
-        "with_coverage": [True, False],
         "with_tracy": [True, False],
         # Optional components:
         "base": [True, False],
@@ -69,7 +69,6 @@ class OxygenConan(ConanFile):
         "fPIC": True,
         "awaitable_state_checker": True,
         "with_asan": False,
-        "with_coverage": False,
         "with_tracy": False,
         # Optional components:
         "base": True,
@@ -168,10 +167,10 @@ class OxygenConan(ConanFile):
             # gtest may not be present in this configuration
             pass
 
-        # Enable tinyexr to build with threading and OpenMP support when available
+        # Preserve threading; MSVC ASan does not support OpenMP.
         try:
             self.options["tinyexr"].with_thread = True
-            self.options["tinyexr"].with_openmp = True
+            self.options["tinyexr"].with_openmp = not self._with_asan
         except Exception:
             # If tinyexr isn't present in this configuration, ignore silently
             pass
@@ -202,6 +201,16 @@ class OxygenConan(ConanFile):
                 "(Conan compiler=msvc, compiler.version>=195)."
             )
         check_min_cppstd(self, 23)
+
+        if self._with_asan:
+            identity = self.conf.get("user.oxygen:sanitizer", default="none")
+            identity_confs = self.conf.get("tools.info.package_id:confs", default=[], check_type=list)
+            if (self.settings.get_safe("sanitizer") != "asan"
+                    or identity != "asan" or "user.oxygen:sanitizer" not in identity_confs):
+                raise ConanInvalidConfiguration(
+                    "ASan requires the ASan host profile, including its dependency "
+                    "binary-identity configuration; with_asan alone is insufficient."
+                )
 
         if self._with_asan and self.settings.build_type != "Debug":
             raise ConanInvalidConfiguration(
@@ -253,7 +262,6 @@ class OxygenConan(ConanFile):
         # Keep graph expectations separate from overridable local build choices.
         self._set_cmake_defs(tc.cache_variables)
         tc.cache_variables["OXYGEN_WITH_ASAN"] = self._with_asan
-        tc.cache_variables["OXYGEN_WITH_COVERAGE"] = bool(self.options.with_coverage)
         tc.cache_variables["OXYGEN_WITH_TRACY"] = bool(self.options.with_tracy)
         expectations = dict(tc.cache_variables)
         package_build = bool(self.package_folder)
@@ -272,11 +280,6 @@ set(OXYGEN_CONAN_PACKAGE_BUILD {{ 'ON' if package_build else 'OFF' }})
                 return {"options": expectations, "package_build": package_build}
 
         tc.blocks["oxygen_options"] = OxygenOptionsBlock
-        if is_msvc(self):
-            tc.variables["USE_MSVC_RUNTIME_LIBRARY_DLL"] = (
-                not is_msvc_static_runtime(self)
-            )
-
         # Set OXYGEN_CONAN_DEPLOY_DIR to the base install directory.
         # CMakeLists.txt will append the configuration (Debug, Release, Asan)
         # to form the actual CMAKE_INSTALL_PREFIX.

@@ -22,7 +22,6 @@ set_target_properties(
     FOLDER
       "Testing"
 )
-target_compile_options(${link_test_target} PRIVATE ${OXYGEN_COMMON_CXX_FLAGS})
 target_link_libraries(${link_test_target} PRIVATE oxygen::clap)
 add_test(NAME ${link_test_target} COMMAND ${link_test_target})
 

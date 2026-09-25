@@ -127,15 +127,17 @@ if (-not [System.IO.Path]::IsPathRooted($DeployerFolder)) {
     $DeployerFolder = Join-Path $repoRoot $DeployerFolder
 }
 
-$hostProfilePath = $null
-if (Test-Path $BuildProfileHost) {
-    $hostProfilePath = Resolve-Path $BuildProfileHost
+# Resolve includes and profile composition exactly as Conan does. Resolve from the
+# same directory as install, before touching any build/deployment output.
+Push-Location $repoRoot
+try {
+    $profileJson = conan profile show "--profile:host=$BuildProfileHost" "--profile:build=$BuildProfileBuild" --format=json
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    $resolvedProfile = ($profileJson -join "`n") | ConvertFrom-Json
+} finally {
+    Pop-Location
 }
-
-$isAsan = $false
-if ($hostProfilePath) {
-    $isAsan = [bool](Select-String -Path $hostProfilePath -Pattern "^\s*sanitizer\s*=\s*asan\s*$")
-}
+$isAsan = $resolvedProfile.host.settings.sanitizer -eq 'asan'
 
 $suffix = if ($isAsan) { "asan-" } else { "" }
 $prefix = if ($WithTracy) { 'tracy-' } else { '' }
@@ -145,7 +147,6 @@ $trees = @(
 ) | Where-Object { $Generator -eq 'All' -or $_.Selection -eq $Generator }
 $configurations = if ($isAsan) { @("Debug") } else { @("Debug", "Release", "RelWithDebInfo") }
 
-$sanitizer = if ($isAsan) { 'asan' } else { 'none' }
 
 # Clean up specific directories
 if (-not $NoClean) {
@@ -176,18 +177,14 @@ $conanBaseArgs = @(
     "--build=$Build",
     "--deployer-folder=$DeployerFolder",
     "--deployer-package=$DeployerPackage",
-    "-o", "with_asan=$isAsan",
     "-o", "with_tracy=$([bool]$WithTracy)",
     # NOTE: CMakeConfigDeps is required for multi-config generators (Ninja Multi-Config, Visual Studio).
     # Conan only generates Debug/Release packages, but multi-config generators (especially Ninja)
     # may request other configurations (RelWithDebInfo, MinSizeRel, etc.). CMakeDeps cannot map
     # these gracefully; only CMakeConfigDeps handles this scenario without breaking builds.
     # This flag is marked "will_break_next" (experimental), so monitor Conan releases for changes.
-    "-c", "tools.cmake.cmakedeps:new=will_break_next",
-    # Force binary isolation in the Conan cache so that ASan and non-ASan
-    # dependencies are treated as different packages and don't pollute each other.
-    "-c", "tools.info.package_id:confs=['user.oxygen:sanitizer']",
-    "-c", "user.oxygen:sanitizer=$sanitizer"
+    "-c", "tools.cmake.cmakedeps:new=will_break_next"
+
 )
 
 Push-Location $repoRoot

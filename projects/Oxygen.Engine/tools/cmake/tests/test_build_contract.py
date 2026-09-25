@@ -19,10 +19,10 @@ CONAN = shutil.which("conan")
 
 
 class CommandTests(unittest.TestCase):
-    def run_command(self, command, root, *, success=True):
+    def run_command(self, command, root, *, success=True, env=None):
         result = subprocess.run(
             command, cwd=root, capture_output=True, text=True,
-            encoding="utf-8", errors="replace",
+            encoding="utf-8", errors="replace", env=env,
         )
         output = result.stdout + result.stderr
         if success:

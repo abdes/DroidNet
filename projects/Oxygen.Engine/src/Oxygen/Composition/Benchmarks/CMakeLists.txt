@@ -26,8 +26,6 @@ set_target_properties(
 )
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${sources})
 
-target_compile_options(${program_name} PRIVATE ${OXYGEN_COMMON_CXX_FLAGS})
-
 target_link_libraries(
   ${program_name}
   PRIVATE

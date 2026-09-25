@@ -76,9 +76,8 @@ set_target_properties(
 target_compile_features(${META_MODULE_TARGET} INTERFACE cxx_std_20)
 target_compile_options(
   ${META_MODULE_TARGET}
-  INTERFACE
-    ${OXYGEN_COMMON_CXX_FLAGS}
-    $<$<CXX_COMPILER_ID:MSVC>:/wd4702> # Unreachable code
+  PRIVATE
+    $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/wd4702> # Unreachable code
 )
 target_link_libraries(
   ${META_MODULE_TARGET}

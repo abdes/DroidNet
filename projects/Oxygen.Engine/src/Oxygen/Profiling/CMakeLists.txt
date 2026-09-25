@@ -184,11 +184,6 @@ target_sources(
 )
 
 target_compile_features(${META_MODULE_TARGET}-cpu PUBLIC cxx_std_23)
-target_compile_options(
-  ${META_MODULE_TARGET}-cpu
-  PUBLIC
-    ${OXYGEN_COMMON_CXX_FLAGS}
-)
 target_compile_definitions(
   ${META_MODULE_TARGET}-cpu
   PRIVATE
