@@ -10,6 +10,25 @@ Reusable module selection and embedding are described in the
 [CMake helper notes](cmake/README.md#selecting-reusable-modules).
 For configuration-aware clangd setup, see the [VS Code workflow](.vscode/README.md).
 
+For the design principles and contracts behind these workflows, read
+[Build System Design](design/BUILD_SYSTEM.md).
+
+## Choose a workflow
+
+| Goal                          | Entry point                                                                                                                                                                            |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Develop Oxygen                | `tools/build-tree.ps1 generate <profile>`, then `configure <preset>` as needed; build with `oxybuild` or `cmake --build`.                                                              |
+| Use an installed SDK          | Install the chosen configuration, then use `find_package(Oxygen CONFIG REQUIRED COMPONENTS ...)`. See the [SDK guide](cmake/SDK_README.md).                                            |
+| Consume through Conan         | Require `oxygen/0.1.0`; select reusable modules when needed. See [package consumption](cmake/README.md#consume-oxygen-through-conan).                                                  |
+| Embed reusable source modules | Explicitly select from Base, Composition, OxCo, Serio, TextWrap and Clap; supply their dependencies in the parent. See [source embedding](cmake/README.md#selecting-reusable-modules). |
+
+Full-engine packages use shared libraries; the six reusable modules also support
+static libraries on Windows, Linux and macOS. Full-engine source embedding is not
+part of the supported module contract. The editor consumes the installed SDK.
+
+GitHub CI is intentionally disabled during this development stage. Build, test,
+formatting and SDK checks remain local, explicit workflows.
+
 ## Install latest VC Redistributable Package
 
 **Optimized version crashes on Mutex machinery in the STL.**
@@ -37,7 +56,8 @@ On this Microsoft site you find the downloads.
 
 Oxygen declares `dxc/1.9.2607` directly in Conan for both its host API/runtime
 and its build-machine compiler executable. Run the normal Conan dependency
-installation or `tools/build-tree.ps1`; there is no separate DXC download.
+installation or `tools/build-tree.ps1 generate <profile>`; there is no separate
+DXC download.
 CMake resolves only the directories supplied by that Conan graph.
 
 ShaderBake links `dxc::dxcompiler`. Its build target stages `dxcompiler.dll` and
@@ -67,7 +87,8 @@ is a personal shell-profile preference; Oxygen does not configure your shell.
 
 ## Pre-commit
 
-./Init.cmd
+From the DroidNet repository root, run `./init.cmd` to install the repository
+hooks. See [pre-commit tooling](../../tooling/doc/pre-commit.md) for their scope.
 
 ## Visual Studio
 
@@ -80,63 +101,37 @@ C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\
 
 ## Conan
 
-### Install prerequisites
+### Contributor setup
 
-```shell
-cd dev/projects
-pip install conan
-git clone https://github.com/abdes/conan-center-index.git
-```
+Install Conan 2.32+ separately from the repository Python environment. Configure
+access to Oxygen's recipes using your checkout of
+[the recipe fork](https://github.com/abdes/conan-center-index). A local recipe index
+can be registered with `conan remote add mycenter <recipe-checkout-path>
+--type=local-recipes-index`; use `conan remote list` to inspect existing remotes.
+This is machine setup, not something a normal engine build repeats.
 
-### Sanitizer-aware package IDs (Conan 2)
+The supplied contributor profiles use the `sanitizer` setting declared in
+[conan-settings_user.yml](conan-settings_user.yml). Put that declaration in
+`settings_user.yml` under the directory reported by `conan config home`, preserving
+any custom settings you already maintain. Ordinary Conan package consumers do not
+need Oxygen's contributor settings file.
 
-Goal: avoid mixing ASan and non-ASan binaries in the Conan cache by making the
-sanitizer a first-class setting that participates in package IDs.
+### ASan and dependency identity
 
-#### 1) Project-owned user settings file
+Use [windows-msvc-asan.ini](profiles/windows-msvc-asan.ini) for ASan and
+[windows-msvc.ini](profiles/windows-msvc.ini) for ordinary builds. The profiles
+already set Oxygen's option, instrumentation flags and dependency identity:
 
-We keep a repo-local Conan user settings file at:
+- ASan selects Debug, `oxygen/*:with_asan=True`, and `-fsanitize=address` for C/C++.
+- `user.oxygen:sanitizer` participates in dependency package IDs through
+  `tools.info.package_id:confs`; header-only recipes can still share their packages.
+- Conan rejects an ASan option paired with an ordinary dependency profile or a
+  non-Debug configuration. CMake checks consistency with the generated toolchain.
 
-- [conan-settings_user.yml](conan-settings_user.yml)
-
-It contains:
-
-```text
-sanitizer: [None, asan]
-```
-
-#### 2) Install the user settings into Conan home
-
-Use Conan to install the user settings file into Conan home (this is the
-recommended flow in the Conan docs):
-
-PowerShell (one line):
-
-```powershell
-$tmp=Join-Path $env:TEMP "settings_user.yml"; Copy-Item -Path "conan-settings_user.yml" -Destination $tmp -Force; conan config install $tmp
-```
-
-Conan only reads settings_user.yml from Conan home and merges it with the
-built-in settings at runtime.
-
-When switching between ASan and non-ASan, regenerate the Conan toolchain and
-reconfigure CMake in a clean build folder (CMake caches OXYGEN_WITH_ASAN).
-
-#### 3) Add sanitizer to profiles
-
-- In [profiles/windows-msvc-asan.ini](profiles/windows-msvc-asan.ini)
-  - [settings] → sanitizer=asan
-- In [profiles/windows-msvc.ini](profiles/windows-msvc.ini)
-  - [settings] → sanitizer=None
-
-#### 4) Wire the setting in the recipe
-
-Update [conanfile.py](conanfile.py) to use the setting inside `generate()`:
-
-- If sanitizer is asan, set `OXYGEN_WITH_ASAN=ON` and add -fsanitize=address
-
-This makes the sanitizer a package ID dimension across all dependencies,
-without requiring per-dependency options.
+Keep the ordinary and ASan build trees alongside each other. Switch presets or
+use `-Sanitized` with the build/run helpers; do not toggle instrumentation inside
+an existing tree or edit the recipe to enable it. See the
+[preset guide](tools/presets/README.md) for tree identities and SDK destinations.
 
 ### Example install commands
 
@@ -234,7 +229,8 @@ $repoRoot=$(git rev-parse --show-toplevel); git diff --name-only --cached | Wher
 The bindless codegen tool is provided as a small library and a CLI entrypoint. To avoid a Python runtime warning when running the CLI directly, prefer invoking it as a module from a clean interpreter process:
 
 ```powershell
-& F:/projects/.venv/Scripts/python.exe -m bindless_codegen.cli --input <path-to-BindingSlots.yaml> --out-cpp out.h --out-hlsl out.hlsl
+# From Oxygen.Engine after provisioning the repository environment:
+& ../../.venv/Scripts/python.exe -m bindless_codegen.cli --input <path-to-BindingSlots.yaml> --out-cpp out.h --out-hlsl out.hlsl
 ```
 
 Notes:

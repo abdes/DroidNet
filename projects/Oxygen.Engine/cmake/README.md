@@ -1,5 +1,9 @@
 # CMake Helper Notes
 
+For ownership, rationale and change-review principles, see
+[Build System Design](../design/BUILD_SYSTEM.md). This reference documents
+the concrete helper APIs and workflows.
+
 ## Module declarations, diagnostics and IDE headers
 
 `asap_module_declare(MODULE_NAME Oxygen.Base DESCRIPTION "...")` declares
@@ -69,14 +73,14 @@ hierarchy isolation, argument errors, inventory exclusions and generated Visual
 Studio header projects. Set `OXYGEN_RUN_HELPER_BUILD_TESTS=1` to additionally build
 and run a C++23 shortcut fixture with Ninja, Ninja Multi-Config and Visual Studio
 on Windows, checking unchanged object/executable timestamps across both names.
-The contract CI job enables these tests on the minimum CMake version.
+These checks remain available locally; GitHub CI is intentionally disabled.
 
 ## Full-engine build contract
 
 Minimum tools: **CMake 4.2 and Conan 2.32**. The root CMake project and presets
 enforce the same CMake minimum; the recipe declares its Conan minimum. CMake 4.2
-is the first release with the Visual Studio 18 2026 generator. CI exercises only
-the minimum versions, pinned to CMake 4.2.0 and Conan 2.32.0.
+is the first release with the Visual Studio 18 2026 generator. Use CMake 4.2.0 and
+Conan 2.32.0 when qualifying the minimum supported tool versions locally.
 
 The supported full-engine target is **Windows x64 with MSVC 19.50 or newer**
 (Visual Studio 2026, v145 or newer). Supported generators are `Ninja`,
@@ -108,7 +112,7 @@ the Conan recipe through dependency-free fixtures. Run it in an x64 VS 2026
 developer shell:
 
 ```powershell
-python -m unittest discover -s tools/cmake/tests -v
+python -m unittest discover -s tools/cmake/tests -p test_build_contract.py -v
 ```
 
 Set `OXYGEN_TEST_CMAKE` to an absolute CMake executable path to exercise another
@@ -162,7 +166,7 @@ assembled `out/install/<Config>` SDK remains the self-contained distribution.
 
 Consumer defaults disable tests, benchmarks, optional examples, documentation
 and optional development tools, including when Conan builds Oxygen from source.
-`tools/generate-builds.ps1` explicitly enables those contributor outputs, retaining
+`tools/build-tree.ps1 generate <profile>` explicitly enables those contributor outputs, retaining
 the repository development workflow. They can also be enabled individually with
 recipe options. CPU benchmarks can be built without unit tests. Vortex's GPU
 benchmark workloads still require both tests and benchmarks because they share
@@ -200,9 +204,12 @@ Oxygen.Engine is one component within the repository. Its revision is the last
 commit affecting its directory, including its build files, tooling and docs.
 Unrelated sibling-project commits do not change it. Local modifications and
 relevant untracked files mark it dirty; Git-ignored outputs and the uncommitted
-`plans/CMAKE_CONAN_MODERNIZATION_PLAN.md` are excluded. There are currently no
-shared repository build files outside the engine directory in this scope. If
-that changes, update both the CMake and Conan scope and their parity tests.
+`plans/CMAKE_CONAN_MODERNIZATION_PLAN.md` are excluded. The shared root Python
+workspace inputs now affect tooling but remain outside the component Git scope;
+their lock-derived exported requirements are tracked separately by Conan revisions.
+This is not a complete build-input identity. Extending the scope requires matching
+CMake and Conan changes and their parity tests; see the
+[provenance boundary](../design/BUILD_SYSTEM.md#11-report-provenance-without-inventing-release-policy).
 
 The existing string API reports:
 
@@ -299,8 +306,8 @@ is a standalone option and is rejected when embedded.
 
 Composition's existing `oxygen::cs-init` target remains available in static builds
 for applications that need its cross-module registry initialization contract.
-Source-module support does not imply that the existing Conan package metadata or
-native installed exports are complete; those are separate workstream items B06/B07.
+The same six modules are available through the Conan recipe and native installed
+exports; see [Conan package consumption](#consume-oxygen-through-conan).
 
 ## Compiler policy and instrumentation
 
@@ -419,12 +426,12 @@ storage and configuration are independent of this CMake migration.
 ## Conan defaults and local narrowing
 
 `conan install` generates the dependency graph, toolchain and presets; it does not
-configure CMake. A normal `cmake --preset oxygen-...` reapplies explicit recipe
+configure CMake. A normal `build-tree configure oxygen-...` reapplies explicit recipe
 defaults, including OFF values. A local configure may explicitly disable
 provisioned tests/examples/docs/optional tools/benchmarks:
 
 ```powershell
-cmake --preset oxygen-ninja-default -DOXYGEN_BUILD_TESTS=OFF
+.\tools\build-tree.ps1 configure oxygen-ninja-default -Define 'OXYGEN_BUILD_TESTS=OFF'
 ```
 
 The next normal preset configure restores the recipe default. `cmake --build`
@@ -435,9 +442,10 @@ and rerun Conan instead. A noncached native Conan toolchain block carries graph
 expectations so changing recipe options cannot leave stale validation facts.
 
 Mandatory code-generation tools remain required even with `OXYGEN_BUILD_TOOLS=OFF`.
-The existing dependency graph is not yet pruned for disabled optional outputs;
-that recipe work remains B07. Source-embedded consumers own their own dependency
-graph and need only the selected modules' dependencies.
+Local CMake narrowing does not modify the already resolved Conan graph. Recipe
+options select test/benchmark requirements, and module selection limits the graph
+to the requested modules' dependency closure. Source-embedded consumers own their
+own dependency graph and need only the selected modules' dependencies.
 
 ## Python build tools
 
@@ -473,7 +481,7 @@ current Conan graph has `docs=False`, regenerate it with `docs=True` before
 enabling documentation in CMake.
 
 ```powershell
-cmake --preset oxygen-ninja-default -DOXYGEN_BUILD_DOCS=ON -DOXYGEN_WITH_DOXYGEN=ON
+.\tools\build-tree.ps1 configure oxygen-ninja-default -Define 'OXYGEN_BUILD_DOCS=ON','OXYGEN_WITH_DOXYGEN=ON'
 cmake --build --preset oxygen-ninja-debug --target dox
 # Or request one opted-in module:
 cmake --build --preset oxygen-ninja-debug --target oxygen-base_dox

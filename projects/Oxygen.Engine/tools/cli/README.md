@@ -3,12 +3,13 @@
 Use the helpers from the intended Oxygen.Engine checkout. They resolve its
 presets from their own location, so invoking them from a subdirectory is safe.
 
-| Command     | Purpose                                  | Prerequisites                                                        |
-| ----------- | ---------------------------------------- | -------------------------------------------------------------------- |
-| `oxybuild`  | Build a CMake target                     | Initialized build tree, CMake 4.2+, configured compiler environment  |
-| `oxyrun`    | Build and run an executable target       | Same as `oxybuild`; `-NoBuild` uses an existing executable           |
-| `oxytidy`   | Analyze selected C++ sources and headers | Repository Python environment, LLVM 23.x tools, compilation database |
-| `oxyformat` | Check or format owned C++ files          | Repository Python environment, clang-format 23.x                     |
+| Command      | Purpose                                                         | Prerequisites                                                                                  |
+| ------------ | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `build-tree` | Generate dependencies/build trees or configure an existing tree | Compiler environment, CMake, Conan and uv for generation; provisioned Python for configuration |
+| `oxybuild`   | Build a CMake target                                            | Initialized build tree, CMake 4.2+, configured compiler environment                            |
+| `oxyrun`     | Build and run an executable target                              | Same as `oxybuild`; `-NoBuild` uses an existing executable                                     |
+| `oxytidy`    | Analyze selected C++ sources and headers                        | Repository Python environment, LLVM 23.x tools, compilation database                           |
+| `oxyformat`  | Check or format owned C++ files                                 | Repository Python environment, clang-format 23.x                                               |
 
 The PowerShell launchers for oxytidy and oxyformat require PowerShell 7.3+.
 `oxy-targets.ps1` contains the shared CMake target-discovery and build helpers;
