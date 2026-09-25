@@ -4,9 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
+#include <algorithm>
+#include <memory>
+#include <string>
+#include <vector>
 
 #include <Oxygen/Console/Console.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 
@@ -96,6 +100,98 @@ NOLINT_TEST(ConsoleCommand, RejectsUnregisteredCommands)
   Console console {};
   const auto result = console.Execute("unknown.command");
   EXPECT_EQ(result.status, ExecutionStatus::kNotFound);
+}
+
+NOLINT_TEST(ConsoleCommand, RetirementRemovesDiscoveryAndRejectsStaleHandles)
+{
+  Console console {};
+  const auto make_command = [](const char* output) {
+    return CommandDefinition {
+      .name = "test.retired",
+      .help = "Retirement test",
+      .flags = CommandFlags::kNone,
+      .handler = [output](const auto&, const auto&) -> ExecutionResult {
+        return { .output = output };
+      },
+    };
+  };
+  const auto first = console.RegisterCommand(make_command("first"));
+  ASSERT_TRUE(first.IsValid());
+  ASSERT_NE(console.BeginCompletionCycle("test.retired"), nullptr);
+  EXPECT_TRUE(console.UnregisterCommand(first));
+  EXPECT_EQ(console.CurrentCompletion(), nullptr);
+  EXPECT_TRUE(console.Complete("test.retired").empty());
+  EXPECT_EQ(console.Execute("test.retired").status, ExecutionStatus::kNotFound);
+  const auto symbols = console.ListSymbols();
+  EXPECT_TRUE(std::ranges::none_of(symbols,
+    [](const auto& symbol) { return symbol.token == "test.retired"; }));
+  EXPECT_FALSE(console.UnregisterCommand(first));
+  EXPECT_FALSE(console.UnregisterCommand({}));
+  const auto second = console.RegisterCommand(make_command("second"));
+  ASSERT_TRUE(second.IsValid());
+  EXPECT_NE(first.id, second.id);
+  EXPECT_FALSE(console.UnregisterCommand(first));
+  EXPECT_EQ(console.Execute("test.retired").output, "second");
+}
+
+NOLINT_TEST(ConsoleCommand, RepeatedExecutionPreservesMutableCallableState)
+{
+  Console console {};
+  const auto handle = console.RegisterCommand({
+    .name = "test.counter",
+    .help = "Mutable command state",
+    .flags = CommandFlags::kNone,
+    .handler = [calls = 0](const auto&, const auto&) mutable
+      -> ExecutionResult { return { .output = std::to_string(++calls) }; },
+  });
+  ASSERT_TRUE(handle.IsValid());
+  const auto context = CommandContext {
+    .source = oxygen::console::CommandSource::kAutomation,
+    .shipping_build = true,
+  };
+  EXPECT_EQ(console.Execute("test.counter", context).output, "1");
+  EXPECT_EQ(console.Execute("test.counter", context).output, "2");
+  EXPECT_TRUE(console.UnregisterCommand(handle));
+}
+
+NOLINT_TEST(ConsoleCommand, SelfRetirementPinsCallableAndAllowsReplacement)
+{
+  Console console {};
+  oxygen::console::CommandHandle original;
+  oxygen::console::CommandHandle replacement;
+  auto payload = std::make_shared<int>(42);
+  const auto weak = std::weak_ptr<int>(payload);
+  original = console.RegisterCommand({
+    .name = "test.replace",
+    .help = "Original command",
+    .flags = CommandFlags::kNone,
+    .handler = [&, owner = std::move(payload)](
+                 const auto&, const auto&) -> ExecutionResult {
+      EXPECT_TRUE(console.UnregisterCommand(original));
+      EXPECT_FALSE(weak.expired());
+      EXPECT_EQ(*owner, 42);
+      replacement = console.RegisterCommand({
+        .name = "test.replace",
+        .help = "Replacement command",
+        .flags = CommandFlags::kNone,
+        .handler = [](const auto&, const auto&) -> ExecutionResult {
+          return { .output = "replacement" };
+        },
+      });
+      return { .output = "original" };
+    },
+  });
+  ASSERT_TRUE(original.IsValid());
+  EXPECT_EQ(console.Execute("test.replace").output, "original");
+  EXPECT_TRUE(weak.expired());
+  EXPECT_TRUE(replacement.IsValid());
+  EXPECT_FALSE(console.UnregisterCommand(original));
+  const auto symbols = console.ListSymbols();
+  const auto found = std::ranges::find_if(
+    symbols, [](const auto& symbol) { return symbol.token == "test.replace"; });
+  ASSERT_NE(found, symbols.end());
+  EXPECT_EQ(found->usage_frequency, 0U);
+  EXPECT_EQ(console.Execute("test.replace").output, "replacement");
 }
 
 } // namespace

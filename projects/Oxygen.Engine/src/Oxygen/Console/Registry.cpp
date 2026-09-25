@@ -10,13 +10,16 @@
 #include <exception>
 #include <filesystem>
 #include <fstream>
-#include <nlohmann/json.hpp>
+#include <memory>
 #include <ranges>
 #include <sstream>
 #include <string>
 #include <utility>
 
+#include <nlohmann/json.hpp>
+
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/PathFinder.h>
 #include <Oxygen/Console/Parser.h>
 #include <Oxygen/Console/Registry.h>
@@ -205,6 +208,9 @@ Registry::Registry(const size_t history_capacity)
 auto Registry::RegisterCVar(CVarDefinition definition,
   const CVarRegistrationOptions& options) -> CVarHandle
 {
+  if (next_id_ == 0U) {
+    return {};
+  }
   auto entry = CVarEntry {
     .snapshot = CVarSnapshot {
       .definition = std::move(definition),
@@ -241,17 +247,39 @@ auto Registry::RegisterCVar(CVarDefinition definition,
 
 auto Registry::RegisterCommand(CommandDefinition definition) -> CommandHandle
 {
-  if (!definition.handler || definition.name.empty()) {
+  if (!definition.handler || definition.name.empty() || next_id_ == 0U
+    || commands_.contains(definition.name)) {
     return {};
   }
 
-  const auto id = next_id_++;
-  const auto [_, inserted]
-    = commands_.emplace(definition.name, std::move(definition));
+  const auto handle = CommandHandle { .id = next_id_ };
+  auto entry = std::make_shared<CommandEntry>(
+    CommandEntry { .handle = handle, .definition = std::move(definition) });
+  const auto [_, inserted] = commands_.emplace(entry->definition.name, entry);
   if (!inserted) {
     return {};
   }
-  return CommandHandle { .id = id };
+  ++next_id_;
+  completion_cycle_.Reset();
+  return handle;
+}
+
+auto Registry::UnregisterCommand(const CommandHandle handle) -> bool
+{
+  if (!handle.IsValid()) {
+    return false;
+  }
+  const auto found
+    = std::ranges::find_if(commands_, [handle](const auto& item) -> bool {
+        return item.second->handle.id == handle.id;
+      });
+  if (found == commands_.end()) {
+    return false;
+  }
+  completion_usage_.erase(found->first);
+  commands_.erase(found);
+  completion_cycle_.Reset();
+  return true;
 }
 
 auto Registry::FindCVar(const std::string_view name) const
@@ -268,7 +296,7 @@ auto Registry::FindCommand(const std::string_view name) const
 {
   if (const auto it = commands_.find(std::string(name));
     it != commands_.end()) {
-    return make_observer(&it->second);
+    return make_observer(&it->second->definition);
   }
   return observer_ptr<const CommandDefinition> {};
 }
@@ -1016,7 +1044,10 @@ auto Registry::ExecuteSingle(
 
   if (const auto command_it = commands_.find(first);
     command_it != commands_.end()) {
-    const auto& command = command_it->second;
+    // Pin the registration, not a copy of its std::function: mutable handler
+    // state must persist, and self-unregistration must not destroy this call.
+    const auto entry = command_it->second;
+    const auto& command = entry->definition;
     if (!IsCommandAllowed(command, context)) {
       const auto result = ExecutionResult {
         .status = ExecutionStatus::kDenied,
@@ -1033,7 +1064,10 @@ auto Registry::ExecuteSingle(
 
     const auto result = command.handler(args, context);
     if (result.status == ExecutionStatus::kOk) {
-      RecordCompletionUsage(first);
+      const auto live = commands_.find(first);
+      if (live != commands_.end() && live->second == entry) {
+        RecordCompletionUsage(first);
+      }
     }
     emit(first, result, result.status == ExecutionStatus::kDenied);
     return result;
@@ -1059,7 +1093,7 @@ auto Registry::Complete(const std::string_view prefix) const
       out.push_back({
         .kind = CompletionKind::kCommand,
         .token = name,
-        .help = command.help,
+        .help = command->definition.help,
       });
     }
   }
@@ -1122,7 +1156,7 @@ auto Registry::ListSymbols(const bool include_hidden) const
     out.push_back(ConsoleSymbol {
       .kind = CompletionKind::kCommand,
       .token = name,
-      .help = command.help,
+      .help = command->definition.help,
       .usage_frequency = usage_frequency,
       .usage_last_tick = usage_last_tick,
     });
@@ -1281,8 +1315,8 @@ void Registry::RegisterBuiltinCommands()
       for (const auto& [name, command] : commands_) {
         if (ContainsCaseInsensitive({ .text = name, .needle = pattern })
           || ContainsCaseInsensitive(
-            { .text = command.help, .needle = pattern })) {
-          matches.push_back("cmd  " + name + " - " + command.help);
+            { .text = command->definition.help, .needle = pattern })) {
+          matches.push_back("cmd  " + name + " - " + command->definition.help);
         }
       }
       for (const auto& [name, cvar] : cvars_) {
@@ -1350,7 +1384,7 @@ void Registry::RegisterBuiltinCommands()
       std::vector<std::string> lines;
       if (include_commands) {
         for (const auto& [name, command] : commands_) {
-          lines.push_back("cmd  " + name + " - " + command.help);
+          lines.push_back("cmd  " + name + " - " + command->definition.help);
         }
       }
       if (include_cvars) {
