@@ -93,6 +93,21 @@ class PresetGenerationTests(unittest.TestCase):
                     expected.add(f"conan-{suffix}-{config.lower()}")
                     self.assert_presets(root, expected)
 
+    def test_asan_multi_config_presets_generate_only_debug(self):
+        for generator, variant in (("Ninja Multi-Config", "ninja"), ("Visual Studio 18 2026", "vs")):
+            for asan in (False, True):
+                with self.subTest(generator=generator, asan=asan), tempfile.TemporaryDirectory(prefix="oxygen-asan-config-") as directory:
+                    root = Path(directory)
+                    self.make_fixture(root)
+                    self.install(root, generator, False, asan, "Debug")
+                    prefix = "asan-" if asan else ""
+                    presets = root / f"out/build-{prefix}{variant}/generators/CMakePresets.json"
+                    cache = json.loads(presets.read_text())["configurePresets"][0]["cacheVariables"]
+                    if asan:
+                        self.assertEqual(cache["CMAKE_CONFIGURATION_TYPES"], "Debug")
+                    else:
+                        self.assertNotIn("CMAKE_CONFIGURATION_TYPES", cache)
+
     def test_configurations_share_configure_time_options(self):
         with tempfile.TemporaryDirectory(prefix="oxygen-config-options-") as directory:
             root = Path(directory)

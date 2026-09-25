@@ -521,6 +521,13 @@ class OxygenConan(ConanFile):
         tc.cache_variables["OXYGEN_MODULES"] = modules
         tc.cache_variables["OXYGEN_AWAITER_STATE_CHECKER"] = checker
         tc.cache_variables["CMAKE_INTERMEDIATE_DIR_STRATEGY"] = "SHORT"
+        if self._with_asan and (
+            tc.generator in ("Ninja Multi-Config", "Xcode")
+            or tc.generator.startswith("Visual Studio")
+        ):
+            # ASan has only a Debug dependency graph. Do not generate projects
+            # or File API metadata for unsupported configurations.
+            tc.cache_variables["CMAKE_CONFIGURATION_TYPES"] = "Debug"
         if python:
             tc.cache_variables["Python3_EXECUTABLE"] = python[0]
             tc.variables["OXYGEN_PYTHON_LOCKFILE"] = python[1]
