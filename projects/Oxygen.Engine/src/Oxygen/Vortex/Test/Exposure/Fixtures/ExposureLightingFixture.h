@@ -31,7 +31,11 @@ class ExposureLightingGpuTest : public ExposureGpuTest {
   friend class ExposureAllocationScenario;
 
 protected:
-  enum class ExpectedViewOutcome : std::uint8_t { kRendered, kRejected };
+  enum class ExpectedViewOutcome : std::uint8_t {
+    kRendered,
+    kRejected,
+    kDiscardedAfterRecording,
+  };
 
   virtual auto AdditionalCapabilities() const -> CapabilitySet;
   virtual auto ConfigureRenderer(RendererConfig& /*unused*/) const -> void { }

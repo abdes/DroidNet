@@ -540,6 +540,11 @@ auto ExposureLightingGpuTest::RenderSurface(
     EXPECT_EQ(probe->color, nullptr);
     return;
   }
+  if (outcome == ExpectedViewOutcome::kDiscardedAfterRecording) {
+    // The probe observes recording, not submission. A late extension failure
+    // can occur after draws; the session above must still reject publication.
+    return;
+  }
   ASSERT_EQ(probe->draws, expected_draws);
   ASSERT_NE(probe->color, nullptr);
   ASSERT_NE(probe->exposure, nullptr);

@@ -429,7 +429,7 @@ auto ExposureGpuTest::CheckSceneExposureRetry(
   backend.recorder_names.clear();
   if (late_failure) {
     abort->Arm();
-    EXPECT_THROW(invoke(2U), std::runtime_error);
+    EXPECT_FALSE(invoke(2U));
   } else {
     backend.fail_recorder_name = "Vortex View";
     EXPECT_FALSE(invoke(1U));

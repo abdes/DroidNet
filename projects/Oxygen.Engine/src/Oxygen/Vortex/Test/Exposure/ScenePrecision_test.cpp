@@ -26,6 +26,7 @@
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/MaterialDomain.h>
+#include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Scene/Environment/Fog.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
@@ -765,9 +766,15 @@ NOLINT_TEST_F(
     EXPECT_TRUE(capture->EndCapture());
   }
   const auto submitted_count = records.size();
+  const auto prior_output = ReadFloatTexture(
+    *framebuffer->GetDescriptor().color_attachments.front().texture);
   abort_recording = true;
-  EXPECT_THROW(RenderSurface(false, 2, 1), std::runtime_error);
+  ASSERT_NO_FATAL_FAILURE(
+    RenderSurface(false, 2, 1, ExpectedViewOutcome::kDiscardedAfterRecording));
   EXPECT_EQ(records.size(), submitted_count);
+  EXPECT_EQ(ReadFloatTexture(
+              *framebuffer->GetDescriptor().color_attachments.front().texture),
+    prior_output);
   ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 2, 1));
   EXPECT_EQ(
     records.back().color.texture->GetDescriptor().format, Format::kRGBA32Float);

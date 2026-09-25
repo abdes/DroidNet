@@ -47,28 +47,18 @@ namespace {
     double diffuse_environment;
   };
 
-  // Independent roughness=1, NoV=NoL=1 moments from the certified reference
-  // JSON. No production lookup or shader helper contributes to this oracle.
+  // Independent roughness=1, NoV=NoL=1 raster model-2 response. The directional
+  // moments come from the certified reference, not a production lookup. The
+  // reciprocal multi-scattering comparison is not the EX07 raster contract.
   auto EvaluateRoughWhiteResponse(const double f0) -> RoughWhiteResponse
   {
     constexpr double energy = 0.3068528194400547;
     constexpr double bias = 3.3614294725518486e-5;
-    constexpr double mean_energy = 0.4091370876317315;
-    constexpr double mean_bias = 0.0027557506363920627;
-    const double fresnel = f0 + ((1.0 - f0) / 21.0);
-    const double compensation = fresnel * fresnel * mean_energy
-      / ((1.0 - fresnel) + (fresnel * mean_energy));
-    const double transmission = 1.0
-      - ((f0 * energy) + ((1.0 - f0) * bias) + (compensation * (1.0 - energy)));
-    const double mean_transmission = 1.0
-      - ((f0 * mean_energy) + ((1.0 - f0) * mean_bias)
-        + (compensation * (1.0 - mean_energy)));
+    const double compensation = 1.0 + f0 * (1.0 / energy - 1.0);
+    const double transmission
+      = 1.0 - compensation * ((f0 * energy) + ((1.0 - f0) * bias));
     return {
-      .direct = ((0.25 * f0)
-                  + (compensation * (1.0 - energy) * (1.0 - energy)
-                    / (1.0 - mean_energy))
-                  + (transmission * transmission / mean_transmission))
-        / std::numbers::pi,
+      .direct = ((0.25 * f0 * compensation) + transmission) / std::numbers::pi,
       .diffuse_environment = transmission,
     };
   }
@@ -85,7 +75,8 @@ NOLINT_TEST_F(
     .5F,
     1.0F,
   };
-  directional->SetAtmosphereLightSlot(oxygen::scene::AtmosphereLightSlot::kPrimary);
+  directional->SetAtmosphereLightSlot(
+    oxygen::scene::AtmosphereLightSlot::kPrimary);
   ASSERT_TRUE(sun.AttachLight(std::move(directional)));
   sun.GetTransform().SetLocalRotation(glm::quat {
     .70710678F,
@@ -158,9 +149,12 @@ NOLINT_TEST_F(
         if (!spot_light.has_value()) {
           FAIL() << "Expected spot_light to contain a value";
         }
-        ASSERT_TRUE(sun.EditLight<scene::DirectionalLight>([kind](auto& light) { light.Common().affects_world = kind == 0; }));
-        ASSERT_TRUE(point_node.EditLight<scene::PointLight>([kind](auto& light) { light.Common().affects_world = kind == 1; }));
-        ASSERT_TRUE(spot_node.EditLight<scene::SpotLight>([kind](auto& light) { light.Common().affects_world = kind == 2; }));
+        ASSERT_TRUE(sun.EditLight<scene::DirectionalLight>(
+          [kind](auto& light) { light.Common().affects_world = kind == 0; }));
+        ASSERT_TRUE(point_node.EditLight<scene::PointLight>(
+          [kind](auto& light) { light.Common().affects_world = kind == 1; }));
+        ASSERT_TRUE(spot_node.EditLight<scene::SpotLight>(
+          [kind](auto& light) { light.Common().affects_world = kind == 2; }));
         directional_light = sun.GetLightAs<scene::DirectionalLight>();
         point_light = point_node.GetLightAs<scene::PointLight>();
         spot_light = spot_node.GetLightAs<scene::SpotLight>();
@@ -203,9 +197,16 @@ NOLINT_TEST_F(
             SCOPED_TRACE(radiance);
             SCOPED_TRACE(ev);
             const auto intensity = static_cast<float>(radiance / coefficient);
-            ASSERT_TRUE(sun.EditLight<scene::DirectionalLight>([intensity](auto& light) { light.SetIntensityLux(intensity); }));
-            ASSERT_TRUE(point_node.EditLight<scene::PointLight>([intensity](auto& light) { light.SetLuminousFluxLm(intensity); }));
-            ASSERT_TRUE(spot_node.EditLight<scene::SpotLight>([intensity](auto& light) { light.SetLuminousFluxLm(intensity); }));
+            ASSERT_TRUE(sun.EditLight<scene::DirectionalLight>(
+              [intensity](auto& light) { light.SetIntensityLux(intensity); }));
+            ASSERT_TRUE(
+              point_node.EditLight<scene::PointLight>([intensity](auto& light) {
+                light.SetLuminousFluxLm(intensity);
+              }));
+            ASSERT_TRUE(
+              spot_node.EditLight<scene::SpotLight>([intensity](auto& light) {
+                light.SetLuminousFluxLm(intensity);
+              }));
             ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, ev));
             const auto pixels = ReadFloatTexture(*probe->color);
             ASSERT_EQ(pixels.size(), 1U);
@@ -277,8 +278,14 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
           SCOPED_TRACE(prepass);
           depth_mode = prepass ? DepthPrePassMode::kOpaqueAndMasked
                                : DepthPrePassMode::kDisabled;
-          ASSERT_TRUE(point_node.EditLight<scene::PointLight>([invalid_light](auto& light) { light.SetLuminousFluxLm(invalid_light ? 0.0F : 100.0F); }));
-          ASSERT_TRUE(fill_node.EditLight<scene::PointLight>([invalid_light](auto& light) { light.SetLuminousFluxLm(invalid_light ? 200.0F : 0.0F); }));
+          ASSERT_TRUE(point_node.EditLight<scene::PointLight>(
+            [invalid_light](auto& light) {
+              light.SetLuminousFluxLm(invalid_light ? 0.0F : 100.0F);
+            }));
+          ASSERT_TRUE(fill_node.EditLight<scene::PointLight>(
+            [invalid_light](auto& light) {
+              light.SetLuminousFluxLm(invalid_light ? 200.0F : 0.0F);
+            }));
           SetSurface(domain, 1);
           ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0));
           const auto before
@@ -291,8 +298,12 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
           EXPECT_EQ(before.flags & 12U, 12U);
           if (invalid_light) {
             const auto previous_exposure = probe->exposure;
-            // Deliberately bypass ingress to exercise the renderer's defensive failure gate.
-            point_node.GetImpl()->get().GetComponent<scene::PointLight>().SetLuminousFluxLm(-100.0F);
+            // Deliberately bypass ingress to exercise the renderer's defensive
+            // failure gate.
+            point_node.GetImpl()
+              ->get()
+              .GetComponent<scene::PointLight>()
+              .SetLuminousFluxLm(-100.0F);
             ASSERT_NO_FATAL_FAILURE(
               RenderSurface(forward, 0, 1, ExpectedViewOutcome::kRejected));
             const auto retained = Read<ExposureStateData>(
