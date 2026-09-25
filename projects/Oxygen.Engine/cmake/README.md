@@ -464,6 +464,14 @@ same lock and provision their own environment without the developer checkout.
 Dependency deployment and CMake installation retain their existing roles: Conan
 prepares host dependencies for development; CMake installs Oxygen's declared SDK
 payload and dependency metadata. Ordinary generation preserves existing output.
+Dependency DLLs and their matching PDBs are flattened into the SDK's `bin`
+directory, just as declared libraries are flattened into `lib`. Upstream paths
+such as `bin/Debug` are not replicated inside an already selected SDK
+configuration. Exported dependency targets refer to these flattened locations.
+
+Tracy is a Conan requirement only when `with_tracy=True`; disabling profiling
+omits the dependency entirely instead of packaging a disabled Tracy client.
+
 To discard stale SDK files, explicitly use `build-tree generate <profile> -Clean`
 and rebuild/install. Cleanup covers the selected build trees and SDK family;
 ordinary, ASan and Tracy deployment locations remain separate. In-place generation

@@ -51,6 +51,16 @@ class ModuleGraphTests(CommandTests):
         development = self.graph("-o", "&:modules=OxCo", "-o", "&:tests=True", "-o", "&:benchmarks=True")
         self.assertTrue({"gtest", "benchmark"}.issubset(node["name"] for node in development.values()))
 
+    def test_tracy_dependency_is_present_only_when_enabled(self):
+        for enabled in (False, True):
+            with self.subTest(enabled=enabled):
+                nodes = self.graph("-o", f"&:with_tracy={enabled}")
+                self.assertIsNone(nodes["0"].get("info_invalid"))
+                tracy = [node for node in nodes.values() if node["name"] == "tracy"]
+                self.assertEqual(len(tracy), int(enabled))
+                if tracy:
+                    self.assertEqual(tracy[0]["options"]["enable"], "True")
+
     def test_ui_instrumentation_selects_matching_imgui_and_package_identity(self):
         ordinary = self.graph("-o", "&:examples=True")
         instrumented = self.graph("-o", "&:examples=True", "-o", "&:ui_tests=True")
