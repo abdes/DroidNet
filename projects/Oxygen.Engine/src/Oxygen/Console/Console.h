@@ -44,6 +44,8 @@ public:
     -> void;
   OXGN_CONS_NDAPI auto RegisterCommand(CommandDefinition definition)
     -> CommandHandle;
+  //! Remove a registration issued by this console; stale handles are harmless.
+  OXGN_CONS_API auto UnregisterCommand(CommandHandle handle) -> bool;
   OXGN_CONS_NDAPI auto Execute(std::string_view line,
     const CommandContext& context = {}) -> ExecutionResult;
   OXGN_CONS_NDAPI auto Complete(std::string_view prefix) const

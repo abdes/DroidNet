@@ -43,6 +43,11 @@ auto Console::Execute(
   return registry_.Execute(line, context);
 }
 
+auto Console::UnregisterCommand(const CommandHandle handle) -> bool
+{
+  return registry_.UnregisterCommand(handle);
+}
+
 auto Console::Complete(const std::string_view prefix) const
   -> std::vector<CompletionCandidate>
 {

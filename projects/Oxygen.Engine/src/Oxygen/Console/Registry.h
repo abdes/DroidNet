@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <span>
 #include <string>
@@ -73,6 +74,8 @@ public:
     const CVarRegistrationOptions& options = {}) -> CVarHandle;
   OXGN_CONS_NDAPI auto RegisterCommand(CommandDefinition definition)
     -> CommandHandle;
+  //! A callback may retire its own registration; its current call stays alive.
+  OXGN_CONS_API auto UnregisterCommand(CommandHandle handle) -> bool;
 
   OXGN_CONS_NDAPI auto FindCVar(std::string_view name) const
     -> observer_ptr<const CVarSnapshot>;
@@ -212,7 +215,11 @@ private:
   std::unordered_map<std::string, CVarEntry> cvars_;
   std::unordered_map<std::string, StampedCVarValue> startup_cvar_values_;
   std::unordered_map<std::string, CVarValue> persisted_cvar_values_;
-  std::unordered_map<std::string, CommandDefinition> commands_;
+  struct CommandEntry {
+    CommandHandle handle;
+    CommandDefinition definition;
+  };
+  std::unordered_map<std::string, std::shared_ptr<CommandEntry>> commands_;
   size_t execution_record_capacity_ { kDefaultExecutionRecordCapacity };
   std::vector<ExecutionRecord> execution_records_;
 };
