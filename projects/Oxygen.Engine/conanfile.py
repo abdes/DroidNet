@@ -13,7 +13,12 @@ from conan.tools.files import load, copy  # type: ignore
 from conan.tools.cmake import cmake_layout, CMake  # type: ignore
 from conan.tools.microsoft import is_msvc_static_runtime, is_msvc  # type: ignore
 from conan.errors import ConanInvalidConfiguration  # type: ignore
+from conan.tools.build import check_min_cppstd  # type: ignore
+from conan.tools.scm import Version  # type: ignore
 from pathlib import Path
+
+
+required_conan_version = ">=2.32"
 
 
 class OxygenConan(ConanFile):
@@ -184,6 +189,20 @@ class OxygenConan(ConanFile):
             self.options["tracy"].shared = self.options.get_safe("shared", False)
 
     def validate(self):
+        if self.settings.os != "Windows" or self.settings.arch != "x86_64":
+            raise ConanInvalidConfiguration(
+                "Oxygen's full-engine build requires Windows x64."
+            )
+        if (
+            self.settings.compiler != "msvc"
+            or Version(str(self.settings.compiler.version)) < "195"
+        ):
+            raise ConanInvalidConfiguration(
+                "Oxygen requires MSVC 19.50 or newer "
+                "(Conan compiler=msvc, compiler.version>=195)."
+            )
+        check_min_cppstd(self, 23)
+
         if self._with_asan and self.settings.build_type != "Debug":
             raise ConanInvalidConfiguration(
                 "ASan is only supported for Debug builds. "
