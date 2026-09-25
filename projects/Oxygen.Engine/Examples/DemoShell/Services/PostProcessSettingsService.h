@@ -17,6 +17,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Scene/Camera/CameraExposure.h>
@@ -45,6 +46,11 @@ namespace ui {
     float maximum;
   };
 
+  struct PostProcessAuthoringTarget {
+    ViewId main_view_id;
+    std::uint64_t scene_revision;
+  };
+
   //! Settings persistence for the PostProcessPanel.
   class PostProcessSettingsService {
   public:
@@ -60,6 +66,16 @@ namespace ui {
     auto BindMainView(ViewId view_id) -> void;
     auto OnFrameStart() -> void;
     [[nodiscard]] auto GetSceneRevision() const noexcept -> std::uint64_t;
+    [[nodiscard]] auto GetAuthoringTarget() const noexcept
+      -> std::optional<PostProcessAuthoringTarget>;
+    [[nodiscard]] auto GetSceneMeteringMask() const -> content::ResourceKey;
+    [[nodiscard]] auto GetCameraExposure() const
+      -> std::optional<scene::CameraExposure>;
+    //! Validate the complete camera request before changing any camera input.
+    auto TrySetCameraExposure(const scene::CameraExposure& requested) -> bool;
+    //! Apply the explicit output pair as one validated edit (None disables tone
+    //! mapping).
+    auto TrySetOutputSettings(engine::ToneMapper mode, float gamma) -> bool;
     [[nodiscard]] auto GetExposureStatus() const
       -> std::optional<vortex::ExposureSettingsStatus>;
     [[nodiscard]] auto GetExposureSettings() const -> scene::ExposureSettings;
@@ -206,6 +222,7 @@ namespace ui {
     auto EnsureStateLoaded() const -> void;
     auto ValidateExposure(const scene::ExposureSettings& requested) const
       -> bool;
+    auto ValidateOutput(engine::ToneMapper mode, float gamma) const -> bool;
     auto CommitExposure(const scene::ExposureSettings& requested) -> bool;
     auto SetExposureFloat(float scene::ExposureSettings::* member, float value,
       std::string_view key) -> void;

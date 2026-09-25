@@ -123,6 +123,8 @@ set(
   "FileBrowser/VERSION.txt"
   "Internal/SceneControlBlock.h"
   "Internal/DemoShellConsoleDefaults.h"
+  "Internal/PostProcessConsoleBindings.h"
+  "Internal/PostProcessConsoleBindings.cpp"
   "PanelRegistry.cpp"
   "Runtime/AppWindow.cpp"
   "Runtime/DemoModuleBase.cpp"

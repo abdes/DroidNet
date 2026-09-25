@@ -13,6 +13,7 @@
 
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/Internal/DemoShellConsoleDefaults.h"
+#include "DemoShell/Internal/PostProcessConsoleBindings.h"
 #include "DemoShell/Internal/SceneControlBlock.h"
 #include "DemoShell/PanelRegistry.h"
 #include "DemoShell/Services/CameraSettingsService.h"
@@ -59,6 +60,7 @@ struct DemoShell::Impl {
   EnvironmentSettingsService environment_settings_service;
   ui::PostProcessSettingsService post_process_settings_service;
   GridSettingsService grid_settings_service;
+  std::unique_ptr<internal::PostProcessConsoleBindings> post_process_console;
 
   // Panels still managed by DemoShell (non-MVVM panels)
   std::unique_ptr<SkyboxService> skybox_service;
@@ -118,6 +120,7 @@ DemoShell::~DemoShell() noexcept
   }
 
   try {
+    impl_->post_process_console.reset();
     impl_->post_process_settings_service.BindScene(nullptr);
     impl_->post_process_settings_service.BindVortexRenderer(nullptr);
     impl_->scene_control.ClearScene();
@@ -205,7 +208,6 @@ auto DemoShell::CompleteInitialization() -> bool
     observer_ptr { &impl_->camera_settings_service });
 
   internal::ApplyDemoShellConsoleDefaults(impl_->config.engine->GetConsole());
-
   // Create DemoShellUi with all services
   impl_->demo_shell_ui.emplace(impl_->config.engine,
     observer_ptr { &impl_->panel_registry },
@@ -251,6 +253,14 @@ auto DemoShell::CompleteInitialization() -> bool
     }
     impl_->pending_panels.clear();
   }
+  impl_->post_process_console
+    = std::make_unique<internal::PostProcessConsoleBindings>(
+      impl_->config.engine->GetConsole(), impl_->post_process_settings_service,
+      [engine = impl_->config.engine]() -> observer_ptr<vortex::Renderer> {
+        const auto renderer = engine->GetModule<vortex::Renderer>();
+        return renderer ? observer_ptr { &renderer->get() }
+                        : observer_ptr<vortex::Renderer> {};
+      });
   impl_->initialized = true;
 
   return true;
