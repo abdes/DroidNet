@@ -27,6 +27,7 @@ set_target_properties(
 
 gtest_program(
   "Oxygen.Vortex.LightingImageReference.Tests"
+  GPU
   SOURCES
     "LightingImageReference_test.cpp"
     "ShadowAdmissionGpu_test.cpp"
@@ -65,6 +66,7 @@ target_compile_definitions(
 
 gtest_program(
   "Oxygen.Vortex.LightingInstrumentationGpu.Tests"
+  GPU
   SOURCES
     "LightingInstrumentationGpu_test.cpp"
     "MemoryAccountingGpu_test.cpp"
@@ -76,6 +78,7 @@ gtest_program(
 
 gtest_program(
   "Oxygen.Vortex.LightingGpuAbi.Tests"
+  GPU
   SOURCES
     "LightingGpuAbiFixture.cpp"
     "LightingGpuAbiFixture.h"

@@ -3,6 +3,13 @@
 
 option(BUILD_SHARED_LIBS "Build shared instead of static libraries." OFF)
 option(OXYGEN_BUILD_TESTS "Build Oxygen tests." ${PROJECT_IS_TOP_LEVEL})
+# Match CTest's global switch without changing an embedding parent's setting.
+option(BUILD_TESTING "Build the testing tree." ON)
+if(NOT BUILD_TESTING)
+  # A directory-local effective value preserves the user's cached Oxygen choice
+  # when global testing is enabled again. Conan validates this narrowing below.
+  set(OXYGEN_BUILD_TESTS OFF)
+endif()
 option(
   OXYGEN_BUILD_EXAMPLES
   "Build development examples in addition to the mandatory RenderScene showcase."

@@ -36,13 +36,11 @@ class CompilerPolicyTests(CommandTests):
             'int warning_probe(void) { int intentionally_unused; return 0; }\n', encoding="utf-8",
         )
         (root / "main.cpp").write_text(
-            '#include <cstdio>\n#include <cstring>\n'
+            '#include <cstring>\n'
             'extern "C" int exercise(int);\n'
             'struct A { virtual ~A() = default; }; struct B : A {};\n'
             'int main(int argc, char** argv) { B b; A* a = &b;\n'
             '  if (!dynamic_cast<B*>(a)) return 2;\n'
-            '  if (argc > 1 && !std::strcmp(argv[1], "--gtest_list_tests")) {\n'
-            '    if (exercise(0) != 42) return 3; std::puts("Policy.\\n  Clean"); return 0; }\n'
             '  return exercise(argc > 1 && !std::strcmp(argv[1], "bad") ? 12 : 0) == 42 ? 0 : 1;\n}\n',
             encoding="utf-8",
         )
@@ -87,7 +85,7 @@ class CompilerPolicyTests(CommandTests):
                     self.assertNotIn("/W4" if os.name == "nt" else "-Wextra", parent)
 
     @unittest.skipUnless(os.name == "nt", "Windows DLL search path regression")
-    def test_discovery_with_multiple_transitive_runtime_directories(self):
+    def test_execution_with_multiple_transitive_runtime_directories(self):
         with tempfile.TemporaryDirectory(prefix="oxygen runtime ") as tmp:
             root = Path(tmp)
             self.write_project(root, shared=True)
@@ -106,7 +104,7 @@ class CompilerPolicyTests(CommandTests):
             self.configure(root, "Ninja Multi-Config")
             self.run_command([CMAKE, "--build", "build", "--config", "Debug"], root)
             ctest = str(Path(CMAKE).with_name("ctest.exe"))
-            result = self.run_command([ctest, "--test-dir", "build", "-C", "Debug", "-R", "^Policy.Clean$", "-V"], root)
+            result = self.run_command([ctest, "--test-dir", "build", "-C", "Debug", "-R", "^consumer$", "--no-tests=error", "-V"], root)
             self.assertIn("100% tests passed", result.stdout)
 
     def test_runtime_launcher_preserves_arguments_and_exit_status(self):
@@ -125,7 +123,7 @@ class CompilerPolicyTests(CommandTests):
             self.assertEqual(result.returncode, 37, result.stdout + result.stderr)
             self.assertEqual(json.loads(result.stdout), arguments)
 
-    def test_static_and_shared_asan_detection_and_test_discovery(self):
+    def test_static_and_shared_asan_detection_and_test_execution(self):
         generators = ["Ninja", "Ninja Multi-Config"]
         if os.name == "nt":
             generators.append("Visual Studio 18 2026")
@@ -145,7 +143,7 @@ class CompilerPolicyTests(CommandTests):
                         self.assertNotIn("/RTC", own)
                         self.assertNotIn("/ZI", own)
                     ctest = str(Path(CMAKE).with_name("ctest.exe" if os.name == "nt" else "ctest"))
-                    result = self.run_command([ctest, "--test-dir", "build", "-C", "Debug", "-R", "^Policy.Clean$", "-V"], root)
+                    result = self.run_command([ctest, "--test-dir", "build", "-C", "Debug", "-R", "^consumer$", "--no-tests=error", "-V"], root)
                     self.assertIn("100% tests passed", result.stdout)
                     executable = (root / "build/consumer-Debug.txt").read_text()
                     env = os.environ.copy()

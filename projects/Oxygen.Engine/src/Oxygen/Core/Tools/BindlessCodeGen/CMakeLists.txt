@@ -70,7 +70,7 @@ add_library(
 )
 
 # Do not build the compile-check target independently as part of 'ALL'. Core's
-# bindless generation umbrella depends on it, and CTest can request it directly.
+# bindless generation umbrella depends on it. It can also be built explicitly.
 set_target_properties(
   BindlessCodeGen_CompileCheck
   PROPERTIES
@@ -103,24 +103,7 @@ elseif(TARGET fmt::fmt)
 endif()
 
 # Add CTest integration for running the Python unit tests
-if(BUILD_TESTING)
-  # Expose a ctest that merely builds the compile-check object. It will fail
-  # if the generated header is invalid.
-  add_test(
-    NAME BindlessCodeGen_CompileCheck
-    COMMAND
-      ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target
-      BindlessCodeGen_CompileCheck --config $<CONFIG>
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-  )
-
-  set_tests_properties(
-    BindlessCodeGen_CompileCheck
-    PROPERTIES
-      LABELS
-        "Tools;BindlessCodeGen;CompileCheck"
-  )
-
+if(OXYGEN_BUILD_TESTS)
   add_test(
     NAME BindlessCodeGen_UnitTests
     COMMAND
@@ -128,12 +111,10 @@ if(BUILD_TESTING)
     WORKING_DIRECTORY "${_tool_dir}"
   )
 
-  # Ensure the tool is installed before running tests
+  # The normal build provisions the tool; CTest DEPENDS cannot name build targets.
   set_tests_properties(
     BindlessCodeGen_UnitTests
     PROPERTIES
-      DEPENDS
-        bindless_codegen_editable_install
       LABELS
         "Tools;BindlessCodeGen;Python"
   )

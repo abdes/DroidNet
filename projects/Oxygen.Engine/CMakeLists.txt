@@ -149,9 +149,11 @@ endif()
 # Testing
 # ------------------------------------------------------------------------------
 
-if(OXYGEN_BUILD_TESTS)
-  include(CTest)
-endif()
+include(CTest)
+# Regenerate this directory's inventory even when test creation is disabled.
+# Otherwise CTest can still execute stale registrations after an ON-to-OFF
+# reconfigure. The two testing options control targets and add_test calls.
+enable_testing()
 
 # ------------------------------------------------------------------------------
 # Documentation - doxygen, sphinx/breathe/exhale
