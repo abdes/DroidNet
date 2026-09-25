@@ -1,5 +1,11 @@
 # Oxygen Game Engine
 
+## Build requirements
+
+The full engine requires CMake 4.2+, Conan 2.32+, and Windows x64 with MSVC 19.50+
+(Visual Studio 2026) and C++23. See the [build contract](cmake/README.md#full-engine-build-contract) for
+supported generators, configuration behavior, and focused validation commands.
+
 ## Install latest VC Redistributable Package
 
 **Optimized version crashes on Mutex machinery in the STL.**
@@ -131,7 +137,7 @@ Make sure the "Desktop development with C++" workload is checked.
 After installation, check for vcvarsall.bat in:
 
 ```pwsh
-C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\
+C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\
 ```
 
 ## Conan

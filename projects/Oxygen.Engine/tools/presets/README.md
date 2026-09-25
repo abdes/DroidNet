@@ -85,8 +85,10 @@ Oxygen presets used by CMake, CTest, VS Code and the CLI helpers. Conan's separa
 `conan build`/`conan create` package workflow uses the recipe's CMake helper and
 does not interpret project preset inheritance.
 
-The root and generated user file use schema **9** (CMake **3.30+**), supported by
-VS Code CMake Tools **1.20.52+**. Conan's native files retain their own schema.
+The root and generated user file use schema **9**, supported by
+VS Code CMake Tools **1.20.52+**. Oxygen requires **CMake 4.2+** for its full
+toolchain contract, including VS 2026; schema 9 alone only requires CMake 3.30.
+Conan's native files retain their own schema.
 CMakeUserPresets implicitly includes the root; no platform include hierarchy or
 include cycle is needed. This uses normal [CMake preset inheritance](https://cmake.org/cmake/help/latest/manual/cmake-presets.7.html)
 and the [Conan extension pattern](https://docs.conan.io/2/examples/tools/cmake/cmake_toolchain/extend_own_cmake_presets.html),

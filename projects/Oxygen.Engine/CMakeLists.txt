@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # ===-----------------------------------------------------------------------===#
 
-cmake_minimum_required(VERSION 3.29)
+cmake_minimum_required(VERSION 4.2)
 
 if(POLICY CMP0177)
   cmake_policy(SET CMP0177 NEW)
@@ -102,6 +102,8 @@ project(
     CXX
 )
 
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/ToolchainRequirements.cmake")
+
 # Publish a complete File API reply even when configured outside an IDE.
 # CMake Tools loads an existing index before configuring; a codemodel-only
 # index prevents it from starting because its required cache object is absent.
@@ -135,35 +137,7 @@ if(CMAKE_GENERATOR MATCHES "^Visual Studio")
   endif()
 endif()
 
-# The default build type provided by CMake is to include no compiler flags for
-# optimization. For some projects you may want to set a default build type so
-# that you do not have to remember to set it.
-
-# TODO: check for multi-config
-# get_property(IS_MULTICONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
-# if (NOT IS_MULTICONFIG AND NOT DEFINED CMAKE_BUILD_TYPE)
-#     set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the type of build.")
-# endif()
-
-if(NOT CMAKE_CONFIGURATION_TYPES)
-  message(STATUS "Setting build type to 'Debug' as none was specified.")
-  set(
-    CMAKE_DEFAULT_CONFIGS
-    Debug
-    CACHE STRING
-    "Choose the type of build."
-    FORCE
-  )
-  set_property(
-    CACHE
-      CMAKE_CONFIGURATION_TYPES
-    PROPERTY
-      STRINGS
-        "Debug"
-        "Release"
-        "RelWithDebInfo"
-  )
-endif()
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/BuildConfiguration.cmake")
 
 # Set output directories
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)

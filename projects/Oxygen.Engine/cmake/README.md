@@ -1,5 +1,52 @@
 # CMake Helper Notes
 
+## Full-engine build contract
+
+Minimum tools: **CMake 4.2 and Conan 2.32**. The root CMake project and presets
+enforce the same CMake minimum; the recipe declares its Conan minimum. CMake 4.2
+is the first release with the Visual Studio 18 2026 generator. CI exercises only
+the minimum versions, pinned to CMake 4.2.0 and Conan 2.32.0.
+
+The supported full-engine target is **Windows x64 with MSVC 19.50 or newer**
+(Visual Studio 2026, v145 or newer). Supported generators are `Ninja`,
+`Ninja Multi-Config`, and `Visual Studio 18 2026`. CMake and Conan reject unsupported
+target platforms and compiler versions before configuring engine dependencies or
+generating build files, respectively. This contract does not remove portable
+source modules; existing Linux/macOS profiles are not full-engine support claims.
+
+Oxygen requires C++23. Keep language requirements on targets through
+`target_compile_features()`; the recipe also validates `compiler.cppstd >= 23`.
+The Windows profiles select `Oxygen/*:compiler.cppstd=23` while retaining C++20
+as their dependency default. Dependencies that erase the standard setting from
+their package identity continue to do so. This avoids changing dependency
+language modes simply to correct Oxygen's own settings.
+
+For a single-config generator, an absent or empty `CMAKE_BUILD_TYPE` defaults to
+Debug. Explicit values are preserved on initial configuration and reconfiguration.
+Multi-config generators retain their configured list of configurations and select
+the active configuration at build time. The supplied development workflows install
+Debug, Release and RelWithDebInfo dependencies; ASan remains Debug-only. Selecting
+another configuration requires matching dependency artifacts and is not certified
+by those workflows.
+
+The policy is implemented in `ToolchainRequirements.cmake` and
+`BuildConfiguration.cmake`, included by the engine root after compiler detection.
+`tools/cmake/tests/test_build_contract.py` exercises the real helpers, builds and
+runs a C++23 consumer with each generator, rejects a real Win32 target, and checks
+the Conan recipe through dependency-free fixtures. Run it in an x64 VS 2026
+developer shell:
+
+```powershell
+python -m unittest discover -s tools/cmake/tests -v
+```
+
+Set `OXYGEN_TEST_CMAKE` to an absolute CMake executable path to exercise another
+tool version. These focused checks do not replace full-engine build/runtime tests.
+
+Tool versions used to build dependencies remain dependency-specific. For example,
+a recipe's build-context CMake requirement below version 4 does not lower the
+minimum for configuring Oxygen itself.
+
 ## Embedded JSON Schemas
 
 Use `cmake/JsonSchemaHelpers.cmake` to embed JSON schema files into generated C++ headers at build time.
