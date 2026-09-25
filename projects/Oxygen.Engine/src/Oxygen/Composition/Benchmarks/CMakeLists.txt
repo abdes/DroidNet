@@ -33,6 +33,3 @@ target_link_libraries(
     benchmark::benchmark_main
     oxygen::composition
 )
-
-# Define the test
-add_test(NAME ${program_name} COMMAND ${program_name})

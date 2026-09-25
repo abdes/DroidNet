@@ -492,6 +492,7 @@ if(WIN32)
   )
   gtest_program(
     "Oxygen.Vortex.Exposure.Tests"
+    GPU
     SOURCES
       "Exposure/Adaptation_test.cpp"
       "Exposure/CheckedConversion_test.cpp"

@@ -8,7 +8,6 @@ if(NOT TARGET GTest::gtest)
   find_package(GTest REQUIRED CONFIG)
 endif()
 
-include(GoogleTest)
 include("${CMAKE_CURRENT_LIST_DIR}/TestRuntime.cmake")
 
 # ------------------------------------------------------------------------------
@@ -16,7 +15,11 @@ include("${CMAKE_CURRENT_LIST_DIR}/TestRuntime.cmake")
 # ------------------------------------------------------------------------------
 
 function(gtest_program program_name)
-  set(options)
+  set(
+    options
+    GPU
+    NO_TEST
+  )
   set(one_value_args)
   set(
     multi_value_args
@@ -43,18 +46,24 @@ function(gtest_program program_name)
   target_link_libraries(${program_name} PRIVATE ${x_DEPS})
 
   oxygen_configure_test_runtime(${program_name})
-  gtest_discover_tests(
-    ${program_name}
-    DISCOVERY_TIMEOUT 60
-    WORKING_DIRECTORY "$<TARGET_FILE_DIR:${program_name}>"
-  )
-
-  # Define the test
-  add_test(NAME ${program_name} COMMAND ${program_name})
+  # Benchmarks reuse the executable setup without joining the correctness suite.
+  # Register the entire suite once; individual cases remain selectable directly
+  # through the executable's --gtest_filter option.
+  if(NOT x_NO_TEST)
+    add_test(NAME ${program_name} COMMAND ${program_name})
+    if(x_GPU)
+      set_tests_properties(
+        ${program_name}
+        PROPERTIES
+          RESOURCE_LOCK
+            oxygen_gpu
+      )
+    endif()
+  endif()
 endfunction()
 
 function(m_gtest_program program_name)
-  set(options)
+  set(options GPU)
   set(oneValueArgs)
   set(multiValueArgs SOURCES)
 
@@ -65,8 +74,13 @@ function(m_gtest_program program_name)
     "${multiValueArgs}"
     ${ARGN}
   )
+  set(_options)
+  if(x_GPU)
+    list(APPEND _options GPU)
+  endif()
   gtest_program(
     "${META_MODULE_NAME}.${program_name}.Tests"
+    ${_options}
     SOURCES
       ${x_SOURCES}
     DEPS

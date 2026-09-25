@@ -330,11 +330,10 @@ The existing ASan profiles and separate Debug build trees remain the workflow.
 ASan compile options are private; static/object libraries carry the sanitizer's
 required link options to their consumers. Oxygen targets disable MSVC runtime
 checks and incremental linking and use embedded debug information for ASan,
-without overwriting unrelated compiler/linker cache entries. GoogleTest discovery
-and CTest share a target launcher that resolves DLLs from the built targets, the
+without overwriting unrelated compiler/linker cache entries. CTest uses a target
+launcher that resolves DLLs from the built targets, the
 selected deployment (`Asan` for ASan builds), and the active MSVC compiler directory.
-Tests run from their executable directory, without requiring an ordinary Debug
-installation. An application embedding instrumented modules owns its own
+Tests do not require an ordinary Debug installation. An application embedding instrumented modules owns its own
 compatible compiler settings and runtime launch environment.
 
 Coverage instrumentation is no longer part of the build. The former Conan/CMake
@@ -342,10 +341,48 @@ options and Linux coverage profile have been removed.
 
 Native compile/run tests live in `tools/cmake/tests/test_compiler_policy.py`.
 They exercise private warning policy, module-local errors, RTTI isolation, PIC,
-ASan static/shared linking, discovery and deliberate memory-error detection.
+ASan static/shared linking, test execution and deliberate memory-error detection.
 Enable `OXYGEN_RUN_CONAN_GRAPH_INTEGRATION=1` to additionally compare cached Conan
 graphs using `test_conan_instrumentation.py`. Graph identity is checked separately
 from actual compiler/runtime instrumentation.
+
+## Test execution
+
+Oxygen tests require both `BUILD_TESTING=ON` and `OXYGEN_BUILD_TESTS=ON`.
+Global OFF disables Oxygen tests without overwriting the cached Oxygen choice.
+Oxygen OFF leaves an embedding parent's tests alone. Local disabling is allowed;
+Conan cache-package builds must still match the recipe's requested options.
+Oxygen always enables directory-level CTest inventory generation, so disabling
+tests in an existing tree removes stale Oxygen registrations. The generic `test`
+target can therefore remain available with no Oxygen tests. An embedding parent
+owns its root-level `enable_testing()` and the registration of its own tests.
+
+Build the desired test targets before invoking CTest. Each GoogleTest executable
+has one CTest entry, using its existing executable name. There is no build-time
+GoogleTest case discovery or second per-case CTest run. For example:
+
+```powershell
+cmake --build --preset oxygen-ninja-debug --target Oxygen.Base.Config.Tests
+ctest --test-dir out/build-ninja -C Debug -R '^Oxygen\.Base\.Config\.Tests$' --output-on-failure
+```
+
+CTest reports each executable's result; GoogleTest's output identifies its cases.
+For a single case, run the executable directly with `--gtest_filter=Suite.Case`
+in an environment that provides its runtime dependencies. Whole-executable tests
+retain CTest's default working directory (the module's binary directory).
+
+Executables using a real GPU declare `GPU` in `gtest_program` or
+`m_gtest_program`. They share the `oxygen_gpu` CTest resource lock: within one
+CTest run, only one such executable runs at a time, while CPU tests can run in
+parallel. This does not coordinate separate CTest runs or other applications.
+Mocked graphics tests do not need the lock.
+
+Benchmark targets remain available through their explicit executables/scripts
+but are excluded from CTest. GoogleTest-based benchmarks use `NO_TEST` in
+`gtest_program`. Loader retains four distinct initialization entries because
+each argument combination must exercise singleton first access in a fresh process.
+Bindless generated-header compilation remains a mandatory Core build prerequisite
+and an explicit build target; CTest runs its Python tests without invoking a build.
 
 ## Conan defaults and local narrowing
 
