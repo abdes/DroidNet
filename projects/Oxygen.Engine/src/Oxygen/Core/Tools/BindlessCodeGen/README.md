@@ -120,20 +120,9 @@ Notes:
 
 ### CMake Integration
 
-The build system provides two CMake targets:
-
-**Install the Tool (Editable):**
-
-```powershell
-cmake --build --preset oxygen-ninja-debug --target bindless_codegen_editable_install
-```
-
-This target:
-
-- Installs Python package dependencies from `requirements.txt`
-- Performs an editable install (`pip install -e .`) of the BindlessCodeGen tool
-- Makes the `bindless_codegen` module available to Python in your environment
-- Creates a stamp file to avoid reinstalling when unchanged
+Provision the locked repository environment with `build-tree generate <profile>`
+(or `uv sync --locked` from the DroidNet root). CMake verifies the selected Python
+and tool origins at configure time. Building does not install packages.
 
 **Generate Bindless Outputs (Recommended):**
 
@@ -143,7 +132,6 @@ cmake --build --preset oxygen-ninja-debug --target oxygen-core_bindless_gen
 
 This target:
 
-- Depends on `bindless_codegen_editable_install`
 - Re-runs when the YAML source, its JSON schema, generator code, or other declared inputs change
 - Generates the full output set (C++/HLSL/JSON), including `Generated.Meta.h`
 - Integrates with the build dependency graph
@@ -175,28 +163,15 @@ configuration in environments where the check should be skipped.
 Example (build generation and compile-check via CMake):
 
 ```powershell
-cmake --build --preset=windows-debug --target oxygen-core_bindless_gen
+cmake --build --preset oxygen-ninja-debug --target oxygen-core_bindless_gen
 ```
 
 ## Requirements
 
-- **Python**: 3.8 or newer
-- **Dependencies**: PyYAML (specified in `requirements.txt`)
-
-### Installation Options
-
-1. **Via CMake (Recommended for Development):**
-
-   ```powershell
-   cmake --build --preset=windows-debug --target bindless_codegen_editable_install
-   ```
-
-2. **Manual Installation:**
-
-   ```powershell
-   pip install -r requirements.txt
-   pip install -e .
-   ```
+The repository development interpreter is Python 3.14, selected by the root
+`.python-version`. The package supports Python 3.11+. Runtime dependencies are
+owned by this directory's `pyproject.toml` and resolved in the root `uv.lock`.
+See the repository's `tooling/PYTHON.md` for setup and lock updates.
 
 ## Development and Testing
 
@@ -206,7 +181,6 @@ cmake --build --preset=windows-debug --target oxygen-core_bindless_gen
 BindlessCodeGen/
 ├── CMakeLists.txt               # CMake configuration
 ├── pyproject.toml               # Python package configuration
-├── requirements.txt             # Python dependencies
 ├── README.md                    # This file
 ├── examples/                    # Sample specs/usages (if any)
 ├── src/
@@ -236,7 +210,7 @@ BindlessCodeGen/
 
 ```powershell
 # Run all tests including BindlessCodeGen:
-cmake --build --preset=windows-debug
+cmake --build --preset oxygen-ninja-debug
 ctest --preset=test-windows -C Debug --output-on-failure
 
 # Run only BindlessCodeGen tests:

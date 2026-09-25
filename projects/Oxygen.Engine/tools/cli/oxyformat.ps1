@@ -1,29 +1,23 @@
 #requires -Version 7.3
+
+
 <#
 .SYNOPSIS
-Check or format owned C++ files with clang-format 23.x.
+Run oxyformat with this checkout's locked repository Python environment.
 .DESCRIPTION
-Uses the active virtual environment or Python on PATH. Install tools/oxytools
-once in that interpreter. This launcher does not install packages during runs.
+Provision with uv sync --locked at the repository root or build-tree generate.
+No packages are installed during tool invocation. Caller arguments are preserved.
 #>
 
-if ($env:VIRTUAL_ENV) {
-    $relativePython = if ($IsWindows) { 'Scripts/python.exe' } else { 'bin/python' }
-    $python = Join-Path $env:VIRTUAL_ENV $relativePython
-    if (-not (Test-Path -LiteralPath $python -PathType Leaf)) {
-        Write-Error "The active virtual environment has no interpreter at '$python'."
-        exit 2
-    }
-} else {
-    $command = Get-Command python -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
-    if (-not $command) {
-        Write-Error 'Python 3.10+ is required. Install tools/oxytools in your chosen interpreter.'
-        exit 2
-    }
-    $python = $command.Source
+$toolArgs = @($args)
+. (Join-Path $PSScriptRoot 'BuildSelection.ps1')
+try {
+    $python = Get-OxygenPython
+} catch {
+    Write-Error $_ -ErrorAction Continue
+    exit 2
 }
-
 $PSNativeCommandArgumentPassing = 'Standard'
 $PSNativeCommandUseErrorActionPreference = $false
-& $python (Join-Path $PSScriptRoot '../oxytools/run_oxyformat.py') @args
+& $python (Join-Path $PSScriptRoot '../oxytools/run_oxyformat.py') @toolArgs
 exit $LASTEXITCODE

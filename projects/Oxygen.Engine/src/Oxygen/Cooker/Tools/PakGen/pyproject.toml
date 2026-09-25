@@ -15,14 +15,12 @@ classifiers = [
   "License :: OSI Approved :: BSD License",
   "Operating System :: OS Independent",
 ]
-dependencies = [
-]
+dependencies = ["rich>=13.0.0,<15"]
 
 [project.scripts]
 pakgen = "pakgen.cli:main"
 
 [project.optional-dependencies]
-color = ["rich>=13.0.0"]
 dev = [
   "pytest>=8.0.0",
   "mypy>=1.8.0",

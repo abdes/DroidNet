@@ -744,27 +744,26 @@ class ExecutionTests(Fixture):
         threading.Event().wait(1.6)
         self.assertFalse(marker.exists())
 
-    @unittest.skipUnless(
-        shutil.which("pwsh") and shutil.which("uv"), "PowerShell and uv are required"
-    )
-    def test_powershell_uses_active_or_path_python_and_forwards_arguments(self):
+    @unittest.skipUnless(shutil.which("pwsh"), "PowerShell is required")
+    def test_powershell_uses_owning_repository_python_and_forwards_arguments(self):
         project = Path(__file__).resolve().parents[1]
         launcher = self.root / "tools/cli/oxytidy.ps1"
         launcher.parent.mkdir(parents=True)
-        shutil.copy2(project.parent / "cli/oxytidy.ps1", launcher)
-        isolated = self.root / "tools/oxytools"
-        isolated.mkdir()
-        for name in ("pyproject.toml", "README.md"):
-            shutil.copy2(project / name, isolated / name)
-        self.write("tools/oxytools/src/oxytidy/__init__.py", "")
-        self.write(
-            "tools/oxytools/src/oxytidy/__main__.py",
-            "from .cli import main\nraise SystemExit(main())\n",
-        )
-        self.write(
-            "tools/oxytools/src/oxytidy/cli.py",
-            "import json,sys,os\ndef main():\n print(json.dumps({'args':sys.argv[1:],'cwd':os.getcwd(),'prefix':sys.prefix})); return 7\n",
-        )
+        for name in ("oxytidy.ps1", "BuildSelection.ps1"):
+            shutil.copy2(project.parent / "cli" / name, launcher.parent / name)
+        self.write("pyproject.toml", "[tool.uv.workspace]\nmembers = []\n")
+        self.write("uv.lock", "# Fixture workspace marker\n")
+        owned = self.root / ".venv"
+        foreign = self.root / "foreign"
+        for path in (owned, foreign):
+            venv.EnvBuilder(with_pip=False).create(path)
+        site = owned / ("Lib/site-packages" if os.name == "nt"
+                        else f"lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages")
+        module = site / "oxytidy"
+        module.mkdir(parents=True)
+        (module / "__init__.py").write_text("")
+        (module / "__main__.py").write_text(
+            "import json,sys,os\nprint(json.dumps({'args':sys.argv[1:],'cwd':os.getcwd(),'prefix':sys.prefix}))\nraise SystemExit(7)\n")
         arguments = [
             "src/a.h",
             "--checks=-*,modernize-*",
@@ -778,62 +777,21 @@ class ExecutionTests(Fixture):
             "trailing\\",
             "$literal;not a command",
         ]
-        active = self.root / "active"
-        fallback = self.root / "default-python"
-        for path in (active, fallback):
-            venv.EnvBuilder(with_pip=False).create(path)
-        scripts = "Scripts" if os.name == "nt" else "bin"
-        environment = os.environ.copy()
-        environment.pop("UV_PROJECT_ENVIRONMENT", None)
-        environment["PATH"] = str(fallback / scripts) + os.pathsep + environment["PATH"]
+        environment = {**os.environ, "VIRTUAL_ENV": str(foreign), "UV_OFFLINE": "1"}
         command = ["pwsh", "-NoProfile", "-File", str(launcher), *arguments]
-        for selected in (active, fallback):
-            with self.subTest(selected=selected.name):
-                if selected == active:
-                    environment["VIRTUAL_ENV"] = str(active)
-                else:
-                    environment.pop("VIRTUAL_ENV", None)
-                first = subprocess.run(
-                    command,
-                    cwd=self.root,
-                    env=environment,
-                    capture_output=True,
-                    text=True,
-                    timeout=60,
-                    check=False,
-                )
-                self.assertEqual(first.returncode, 7, first.stderr)
-                self.assertEqual(
-                    json.loads(first.stdout),
-                    {"args": arguments, "cwd": str(self.root), "prefix": str(selected)},
-                )
-                self.assertFalse((isolated / ".venv").exists())
-                self.assertNotIn("VIRTUAL_ENV", first.stderr)
-                second = subprocess.run(
-                    command,
-                    cwd=self.root,
-                    env={**environment, "UV_OFFLINE": "1"},
-                    capture_output=True,
-                    text=True,
-                    timeout=30,
-                    check=False,
-                )
-                self.assertEqual(second.returncode, 7, second.stderr)
-                self.assertEqual(first.stdout, second.stdout)
-                self.assertEqual(second.stderr, "")
-        environment["VIRTUAL_ENV"] = str(self.root / "invalid-active")
-        failed = subprocess.run(
-            command,
-            cwd=self.root,
-            env=environment,
-            capture_output=True,
-            text=True,
-            timeout=15,
-            check=False,
-        )
-        self.assertEqual(failed.returncode, 2)
-        self.assertIn("Analysis did not start", failed.stderr)
-        self.assertEqual(failed.stdout, "")
+        for _ in range(2):
+            result = subprocess.run(command, cwd=self.root, env=environment,
+                                    capture_output=True, text=True, timeout=15, check=False)
+            self.assertEqual(result.returncode, 7, result.stderr)
+            self.assertEqual(json.loads(result.stdout),
+                             {"args": arguments, "cwd": str(self.root), "prefix": str(owned)})
+            self.assertEqual(result.stderr, "")
+        # A foreign active environment is never used as fallback.
+        (self.root / "uv.lock").unlink()
+        result = subprocess.run(command, cwd=self.root, env=environment,
+                                capture_output=True, text=True, timeout=15, check=False)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("No repository Python workspace", result.stderr)
 
     def test_timeout_and_cancel(self):
         result = Runner(0.15).run(

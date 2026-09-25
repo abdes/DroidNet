@@ -22,6 +22,8 @@ class BuildTreeTests(unittest.TestCase):
             target = self.root / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ENGINE / relative, target)
+        with (self.root / "tools/cli/BuildSelection.ps1").open("a", encoding="utf-8") as stream:
+            stream.write("\nfunction Get-OxygenPython { return 'python' }\n")
         self.build = self.root / "out/build-ninja"
         self.build.mkdir(parents=True)
         (self.build / "keep.obj").write_bytes(b"existing compiled object")
@@ -74,9 +76,9 @@ exit $LASTEXITCODE
 """)
         calls = self.calls()
         self.assertEqual([c["tool"] for c in calls], ["cmake", "python", "cmake", "python"])
-        self.assertEqual(calls[0]["args"], ["--preset", "oxygen-ninja-default",
+        self.assertEqual(calls[0]["args"], ["--preset", "oxygen-ninja-default", "-DPython3_EXECUTABLE=python",
                                          "-DOXYGEN_BUILD_TESTS=OFF", "-DCUSTOM:STRING=a b;c"])
-        self.assertEqual(calls[2]["args"], ["--preset", "oxygen-ninja-default"])
+        self.assertEqual(calls[2]["args"], ["--preset", "oxygen-ninja-default", "-DPython3_EXECUTABLE=python"])
         self.assertTrue(all(Path(c["cwd"]) == self.root for c in calls))
         self.assertEqual((self.build / "keep.obj").read_bytes(), b"existing compiled object")
         self.assertEqual((self.sdk / "keep.dll").read_bytes(), b"existing SDK binary")

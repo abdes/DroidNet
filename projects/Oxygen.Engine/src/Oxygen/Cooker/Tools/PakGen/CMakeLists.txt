@@ -59,8 +59,11 @@ function(pakgen_register_specs spec_list)
         ${Python3_EXECUTABLE} -m pakgen.cli build "${_spec}" "${_out_pak}"
         --deterministic --emit-manifest "${_out_manifest}"
       DEPENDS
-        pakgen_editable_install
         "${_spec}"
+        ${_pakgen_sources}
+        "${CMAKE_CURRENT_BINARY_DIR}/pakgen-sources.txt"
+        "${CMAKE_CURRENT_SOURCE_DIR}/pyproject.toml"
+        "${OXYGEN_PYTHON_LOCKFILE}"
       WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
       VERBATIM
     )
@@ -84,52 +87,19 @@ function(pakgen_register_specs spec_list)
   endif()
 endfunction()
 
+file(
+  GLOB_RECURSE _pakgen_sources
+  CONFIGURE_DEPENDS
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/*.py"
+)
+list(JOIN _pakgen_sources "\n" _pakgen_inventory)
+file(
+  GENERATE
+  OUTPUT
+  "${CMAKE_CURRENT_BINARY_DIR}/pakgen-sources.txt"
+  CONTENT "${_pakgen_inventory}\n"
+)
 pakgen_discover_yaml(_pakgen_specs)
 pakgen_register_specs("${_pakgen_specs}")
 
-# -----------------------------------------------------------------------------
-# PakGen Python Tool Installation (Editable)
-# -----------------------------------------------------------------------------
-
-find_package(Python3 COMPONENTS Interpreter REQUIRED)
-set(_pakgen_dir "${CMAKE_CURRENT_SOURCE_DIR}")
-set(_pakgen_stamp "${CMAKE_BINARY_DIR}/pakgen_editable_install.stamp")
-set(_pakgen_pyproject "${_pakgen_dir}/pyproject.toml")
-
-add_custom_command(
-  OUTPUT
-    "${_pakgen_stamp}"
-  COMMAND
-    ${CMAKE_COMMAND} -E echo "[PakGen] Editable install starting"
-  COMMAND
-    ${CMAKE_COMMAND} -E env PIP_DISABLE_PIP_VERSION_CHECK=1
-    ${Python3_EXECUTABLE} -m pip install -r requirements.txt
-  COMMAND
-    ${CMAKE_COMMAND} -E touch "${_pakgen_stamp}"
-  WORKING_DIRECTORY "${_pakgen_dir}"
-  DEPENDS
-    "${_pakgen_pyproject}"
-  COMMENT "Installing PakGen (editable)"
-  VERBATIM
-)
-
-add_custom_target(pakgen_editable_install ALL DEPENDS "${_pakgen_stamp}")
-set_target_properties(
-  pakgen_editable_install
-  PROPERTIES
-    FOLDER
-      "Tools"
-    OUTPUT_NAME
-      "Editable Install of PakGen"
-)
-
-# TODO: Implement deployment install properly for PakGen
-add_custom_target(pakgen_install DEPENDS pakgen_editable_install)
-set_target_properties(
-  pakgen_install
-  PROPERTIES
-    FOLDER
-      "Tools"
-    OUTPUT_NAME
-      "Deployment Install of PakGen"
-)
+# Python tools are provisioned during setup and verified by PythonTools.cmake.

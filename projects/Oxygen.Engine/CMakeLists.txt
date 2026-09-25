@@ -133,6 +133,9 @@ set(OXYGEN_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")
 # ------------------------------------------------------------------------------
 
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/ProjectOptions.cmake")
+if(OXYGEN_BUILD_FULL_ENGINE)
+  include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/PythonTools.cmake")
+endif()
 
 if(OXYGEN_WITH_TRACY)
   add_compile_definitions(OXYGEN_WITH_TRACY=1)

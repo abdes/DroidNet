@@ -12,53 +12,9 @@
 # Dependencies
 # ------------------------------------------------------------------------------
 
-find_package(Python3 COMPONENTS Interpreter REQUIRED)
-
-# ==============================================================================
-# Tool Installation and Build Instructions
-# ==============================================================================
-
+# Python tools are provisioned during setup and verified by PythonTools.cmake.
+# Builds only execute generators; they never install into an interpreter.
 set(_tool_dir "${CMAKE_CURRENT_SOURCE_DIR}")
-set(_stamp "${CMAKE_BINARY_DIR}/bindless_codegen_editable_install.stamp")
-set(_pyproject "${_tool_dir}/pyproject.toml")
-
-# ------------------------------------------------------------------------------
-# Editable Install Target
-# ------------------------------------------------------------------------------
-
-add_custom_command(
-  OUTPUT
-    "${_stamp}"
-  COMMAND
-    ${CMAKE_COMMAND} -E echo "[BindlessCodeGen] Editable install starting"
-  COMMAND
-    ${CMAKE_COMMAND} -E env PIP_DISABLE_PIP_VERSION_CHECK=1
-    ${Python3_EXECUTABLE} -m pip install -r requirements.txt
-  COMMAND
-    ${CMAKE_COMMAND} -E env PIP_DISABLE_PIP_VERSION_CHECK=1
-    ${Python3_EXECUTABLE} -m pip install -e .
-  COMMAND
-    ${CMAKE_COMMAND} -E touch "${_stamp}"
-  WORKING_DIRECTORY "${_tool_dir}"
-  DEPENDS
-    "${_pyproject}"
-  COMMENT "Installing BindlessCodeGen (editable)"
-  VERBATIM
-)
-
-add_custom_target(bindless_codegen_editable_install ALL DEPENDS "${_stamp}")
-set_target_properties(
-  bindless_codegen_editable_install
-  PROPERTIES
-    FOLDER
-      "Tools"
-    OUTPUT_NAME
-      "Editable Install of BindlessCodeGen"
-)
-
-# ------------------------------------------------------------------------------
-# Tests
-# ------------------------------------------------------------------------------
 
 # Compile-only check: ensure the generated ABI and backend helper headers
 # compile when included in a tiny TU. This target is kept under the tool so
@@ -79,7 +35,7 @@ set_target_properties(
 )
 
 # Core/Bindless wires this target to the generated-output target after defining
-# it. That dependency includes the editable install and generation stamp, so
+# it. That dependency includes the generation stamp, so
 # direct compile-check builds also wait for current generated headers.
 
 # Add include path to the Bindless output directory so the generated headers
@@ -111,7 +67,7 @@ if(OXYGEN_BUILD_TESTS)
     WORKING_DIRECTORY "${_tool_dir}"
   )
 
-  # The normal build provisions the tool; CTest DEPENDS cannot name build targets.
+  # Setup provisions pytest; tests consume the same verified interpreter.
   set_tests_properties(
     BindlessCodeGen_UnitTests
     PROPERTIES

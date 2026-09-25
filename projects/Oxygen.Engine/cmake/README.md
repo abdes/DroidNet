@@ -439,6 +439,28 @@ The existing dependency graph is not yet pruned for disabled optional outputs;
 that recipe work remains B07. Source-embedded consumers own their own dependency
 graph and need only the selected modules' dependencies.
 
+## Python build tools
+
+`build-tree generate <profile>` provisions Python tooling through Conan from the
+repository's root `uv.lock`. All local build trees share the checkout's `.venv`;
+`build-tree configure <preset>` and normal builds only verify and consume it.
+The root `.python-version` selects Python 3.14. See the
+[repository Python workflow](../../../tooling/PYTHON.md) for setup and updates.
+
+CMake checks generator imports, environment ownership and dependency freshness.
+It tracks the lock, manifests and interpreter-version request so changes rerun
+that check before generation. Bindless and PakGen targets never install packages.
+Independent Conan source builds receive hashed requirements exported from the
+same lock and provision their own environment without the developer checkout.
+
+Dependency deployment and CMake installation retain their existing roles: Conan
+prepares host dependencies for development; CMake installs Oxygen's declared SDK
+payload and dependency metadata. Ordinary generation preserves existing output.
+To discard stale SDK files, explicitly use `build-tree generate <profile> -Clean`
+and rebuild/install. Cleanup covers the selected build trees and SDK family;
+ordinary, ASan and Tracy deployment locations remain separate. In-place generation
+does not infer which old files it is safe to delete.
+
 ## API documentation
 
 Documentation uses locally installed Doxygen 1.14 or newer and Graphviz `dot`.
@@ -446,7 +468,7 @@ Both `OXYGEN_BUILD_DOCS` and `OXYGEN_WITH_DOXYGEN` must be ON; missing required
 tools are configuration errors only when documentation setup is requested.
 Conan's `docs=True` option allows documentation targets but does not install
 Doxygen/Graphviz or automatically generate/package HTML. The contributor
-`tools/generate-builds.ps1` workflow already sets that recipe option. If your
+`tools/build-tree.ps1 generate <profile>` workflow already sets that recipe option. If your
 current Conan graph has `docs=False`, regenerate it with `docs=True` before
 enabling documentation in CMake.
 

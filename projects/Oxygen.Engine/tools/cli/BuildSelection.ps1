@@ -25,6 +25,19 @@ function Get-OxygenSourceRoot {
     return [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 }
 
+function Get-OxygenPython([string]$SourceRoot = (Get-OxygenSourceRoot)) {
+    for ($directory = [IO.Path]::GetFullPath($SourceRoot); $directory; $directory = [IO.Path]::GetDirectoryName($directory)) {
+        if ((Test-Path -LiteralPath (Join-Path $directory 'uv.lock') -PathType Leaf) -and
+            (Test-Path -LiteralPath (Join-Path $directory 'pyproject.toml') -PathType Leaf)) {
+            $relative = if ($IsWindows) { '.venv/Scripts/python.exe' } else { '.venv/bin/python' }
+            $python = Join-Path $directory $relative
+            if (Test-Path -LiteralPath $python -PathType Leaf) { return $python }
+            throw "Repository Python is missing. Run uv sync --locked in '$directory', or build-tree generate <profile>."
+        }
+    }
+    throw "No repository Python workspace found above '$SourceRoot'."
+}
+
 function Get-OxygenAbsolutePath([string]$Path) {
     return [IO.Path]::GetFullPath($(if ([IO.Path]::IsPathRooted($Path)) { $Path } else { Join-Path $PWD.Path $Path }))
 }

@@ -8,6 +8,8 @@ import os
 import json
 import re
 import subprocess
+import shutil
+import hashlib
 from typing import Any
 from conan import ConanFile  # type: ignore
 from conan.tools.cmake import CMakeToolchain, CMakeConfigDeps  # type: ignore
@@ -105,6 +107,9 @@ class OxygenConan(ConanFile):
         "!cmake-build-*/**",
         "!src/Oxygen/Core/version-info.h",
         "!**/__pycache__/**",
+        "!**/*.egg-info/**",
+        "!**/.pytest_cache/**",
+        "!**/.venv/**",
         "!**/.cooked/**",
         "!**/.cooked.stage-*/**",
         "!**/.cooked.backup-*/**",
@@ -216,6 +221,82 @@ class OxygenConan(ConanFile):
 
     def export_sources(self):
         copy(self, "oxygen-source.json", src=self.export_folder, dst=self.export_sources_folder)
+        workspace = self._python_workspace(Path(self.recipe_folder))
+        if workspace:
+            copy(self, ".python-version", src=workspace, dst=self.export_sources_folder)
+            # Freeze only Oxygen's Python build-tool closure into the source
+            # export. Cache builds must not reach back into the monorepo.
+            destination = Path(self.export_sources_folder) / "cmake" / "python"
+            common = ["uv", "export", "--project", str(workspace), "--locked",
+                      "--no-python-downloads", "--no-default-groups", "--no-emit-workspace",
+                      "--no-header", "--no-annotate"]
+            tools = ["--package", "bindless-codegen", "--package", "oxygen-pakgen", "--extra", "yaml"]
+            for name, selection in (
+                ("build-backends.txt", ["--only-group", "build-tools"]),
+                ("build-requirements.txt", tools),
+                ("test-requirements.txt", tools + ["--extra", "test"]),
+            ):
+                result = subprocess.run(common + selection, capture_output=True, text=True, encoding="utf-8")
+                if result.returncode:
+                    raise ConanInvalidConfiguration(f"Cannot export Python lock: {result.stderr.strip()}")
+                save(self, str(destination / name), result.stdout)
+
+    @staticmethod
+    def _python_workspace(start):
+        for directory in (start, *start.parents):
+            manifest = directory / "pyproject.toml"
+            if (directory / "uv.lock").is_file() and manifest.is_file():
+                if "[tool.uv.workspace]" in manifest.read_text(encoding="utf-8"):
+                    return directory
+        return None
+
+    def _prepare_build_python(self):
+        source = Path(self.source_folder or self.recipe_folder)
+        if not (source / "CMakeLists.txt").is_file():
+            return None  # Dependency/deployment-only use of the recipe.
+        workspace = self._python_workspace(source)
+        uv = shutil.which("uv")
+        if (workspace or self._full_engine) and not uv:
+            raise ConanInvalidConfiguration("uv is required to provision Oxygen's Python build tools.")
+        if workspace:
+            environment = workspace / ".venv"
+            self.output.info("Synchronizing the repository Python environment from uv.lock")
+            subprocess.run([uv, "sync", "--project", str(workspace), "--locked",
+                            "--no-python-downloads", "--no-active"], check=True,
+                           env={**os.environ, "UV_PROJECT_ENVIRONMENT": str(environment)})
+            lockfile = workspace / "uv.lock"
+        elif self._full_engine:
+            # One private environment for this independently exported source
+            # build, not one per configuration in a developer checkout.
+            environment = Path(self.build_folder) / ".venv"
+            interpreter = environment / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+            name = "test-requirements.txt" if self.options.tests else "build-requirements.txt"
+            lockfile = source / "cmake" / "python" / name
+            if not lockfile.is_file():
+                raise ConanInvalidConfiguration(f"Missing exported Python requirements: {lockfile}")
+            if not interpreter.is_file():
+                version_file = source / ".python-version"
+                if not version_file.is_file():
+                    raise ConanInvalidConfiguration(f"Missing exported Python version request: {version_file}")
+                subprocess.run([uv, "venv", "--python", version_file.read_text(encoding="utf-8").strip(), "--no-python-downloads",
+                                str(environment)], check=True)
+            backends = lockfile.with_name("build-backends.txt")
+            subprocess.run([uv, "pip", "sync", "--python", str(interpreter), "--require-hashes",
+                            str(lockfile), str(backends)], check=True)
+            subprocess.run([uv, "pip", "install", "--python", str(interpreter),
+                            "--no-deps", "--no-build-isolation", "--editable",
+                            str(source / "src/Oxygen/Core/Tools/BindlessCodeGen"), "--editable",
+                            str(source / "src/Oxygen/Cooker/Tools/PakGen")], check=True)
+            save(self, str(environment / "oxygen-build-tools.json"), json.dumps({
+                "requirements_sha256": hashlib.sha256(lockfile.read_bytes() + backends.read_bytes()).hexdigest(),
+                "pyprojects": {str(p.relative_to(source)): hashlib.sha256(p.read_bytes()).hexdigest()
+                               for p in (source / "src/Oxygen/Core/Tools/BindlessCodeGen/pyproject.toml",
+                                         source / "src/Oxygen/Cooker/Tools/PakGen/pyproject.toml")},
+            }, indent=2) + "\n")
+        else:
+            return None
+        interpreter = environment / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+        return interpreter.as_posix(), lockfile.as_posix()
 
     def requirements(self):
         self.requires("fmt/12.1.0", transitive_headers=True)
@@ -415,6 +496,7 @@ class OxygenConan(ConanFile):
         if self.package_folder:
             self._require_package_linkage()
         identity_path, identity = self._check_build_identity()
+        python = self._prepare_build_python()
         tc = CMakeToolchain(self)
         tc.absolute_paths = True
         tc.presets_prefix = f"conan-{self._build_variant}"
@@ -434,6 +516,9 @@ class OxygenConan(ConanFile):
         tc.cache_variables["OXYGEN_MODULES"] = modules
         tc.cache_variables["OXYGEN_AWAITER_STATE_CHECKER"] = checker
         tc.cache_variables["CMAKE_INTERMEDIATE_DIR_STRATEGY"] = "SHORT"
+        if python:
+            tc.cache_variables["Python3_EXECUTABLE"] = python[0]
+            tc.variables["OXYGEN_PYTHON_LOCKFILE"] = python[1]
         dxc_tool_dirs = dxc_runtime_dirs = ""
         if "dxc" in self.dependencies.host:
             dxc_tool_dirs = ";".join(Path(p).as_posix() for p in self.dependencies.build["dxc"].cpp_info.bindirs)
@@ -548,8 +633,6 @@ set(OXYGEN_DXC_RUNTIME_BINDIRS [==[{{ dxc_runtime_dirs }}]==])
 
     def _generate_sdk_dependencies(self):
         """Install declared artifacts and rebase Conan's generated target metadata."""
-        import hashlib
-
         config = str(self.settings.build_type)
         packages, directories, libraries = self._sdk_payload()
         identity = "\n".join(f"{name}:{dep.ref}:{dep.package_folder}" for name, dep in sorted(packages.items()))

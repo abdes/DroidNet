@@ -1,0 +1,10 @@
+[project]
+name = "oxygen-engine-tools"
+version = "0.1.0"
+description = "Python development tools owned by Oxygen.Engine"
+requires-python = ">=3.11"
+# Keep formatting consistent with the repository's upstream pre-commit hook.
+dependencies = ["gersemi==0.19.3"]
+
+[tool.uv]
+package = false

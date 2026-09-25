@@ -69,11 +69,11 @@ Then install the package in your environment (developer mode is convenient):
 
 ```pwsh
 cd tooling\scripts
-python -m pip install -e .
+uv sync --locked --project ../..
 ```
 
 - That creates console entry points in your virtualenv or Python install directory so you can run the script directly.
-This creates two commands in your PATH when installed in editable mode:
+  This creates two commands in your PATH when installed in editable mode:
 
 ```pwsh
 get-artifacts --project projects\Mvvm.Generators\src\Mvvm.Generators.csproj --configuration Debug --list
@@ -82,7 +82,7 @@ hello-tooling --name Test
 
 Dependencies
 
-- `tooling/scripts/pyproject.toml` lists `rich` as an optional dependency. Run `pip install -e tooling/scripts` to install in editable mode and get `rich` installed.
+- `tooling/scripts/pyproject.toml` declares the package dependencies. Run `uv sync --locked` at the repository root to provision the shared environment.
 
 Notes
 

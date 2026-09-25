@@ -72,7 +72,7 @@ set(
   "${_gentool_inventory}"
   "${CMAKE_SOURCE_DIR}/.clang-format"
   "${_gentool_dir}/pyproject.toml"
-  "${_gentool_dir}/requirements.txt"
+  "${OXYGEN_PYTHON_LOCKFILE}"
 )
 
 # Local helper invocation for copying generated files (keeps repeated usage DRY)
@@ -154,7 +154,6 @@ add_custom_command(
   COMMAND
     ${CMAKE_COMMAND} -E touch ${_gen_stamp}
   DEPENDS
-    bindless_codegen_editable_install
     ${_bindless_spec_file}
     ${_bindless_schema_file}
     ${_gentool_sensitive_files}
