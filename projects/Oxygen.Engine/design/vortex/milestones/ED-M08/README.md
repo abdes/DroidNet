@@ -14,6 +14,8 @@ need delivery. The [editor execution plan](../../../../../../design/editor/plan/
 owns the eight-slice schedule; its [progress record](../../../../../../design/editor/IMPLEMENTATION_STATUS.md#ed-m08---runtime-parity-and-standalone-validation)
 records the current M08.1 work.
 
+The native [VX-IBL-01 plan](../VX-IBL-01/README.md) owns height-fog-aware captured lighting, both automatic update schedules and its DemoShell integration.
+
 The Vortex contracts are [editor rendering](../../lld/editor-rendering.md) and
 [captured-sky IBL](../../lld/captured-sky-ibl.md). Track implementation gaps as
 [VX-ED-01](../../OPEN_ITEMS.md#p1--current-delivery), [VX-IBL-01](../../OPEN_ITEMS.md#p1--current-delivery). The delivered VTX-M08 baseline

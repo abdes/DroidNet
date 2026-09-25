@@ -1,7 +1,15 @@
 # V0.1 captured-sky image-based lighting
 
-Status: final implementation contract; implementation and rendered qualification
-remain pending.
+Implementation and progress: [VX-IBL-01](../milestones/VX-IBL-01/README.md).
+
+Capture atmosphere and exponential height fog into coherent diffuse/specular
+products. Use immediate updates for first use and authoring, and budgeted
+incremental updates for runtime changes. The editor keeps simple lighting controls.
+
+Read: [source and fog](#2-capture-source-and-coordinates),
+[products and math](#3-products-and-processing),
+[scheduling and lifetime](#4-readiness-invalidation-and-lifetime),
+[qualification](#5-required-qualification).
 
 ## 1. Ownership and scope
 
@@ -28,58 +36,50 @@ diffuse/specular multipliers and reflection participation keep their established
 meaning and defaults. Existing native specified-cubemap support remains a valid
 source adapter feeding the same product/evaluation contract. It is not a fallback
 when captured sky fails. No HDRI picker, local probes, geometry reflections, SSR,
-GI, clouds, new AO algorithm, reflection occlusion, temporal denoiser or continuous
-time-sliced capture feature is introduced by this work.
+GI, clouds, local/volumetric fog capture, new AO algorithm, reflection occlusion
+or temporal denoiser is introduced by this work. Immediate and budgeted
+incremental scheduling are both part of VX-IBL-01.
 
-### 1.1 One capture policy and canonical migration
+### 1.1 Automatic scheduling and canonical migration
 
-CapturedScene has one automatic, change-driven policy: capture on first use and
-whenever its source key changes. An unchanged source reuses its products. There
-is no separate authored `real_time_capture_enabled` mode, no every-frame switch
-and no time-slicing selector. Remove that obsolete bool from the canonical
-SkyLight source schema, packed record, native Scene/model API, importer/loader,
-Inspector reports, Interop, DemoShell settings/VM and example startup parameters.
-Remove its contribution to source hashes and its unavailable reason/branch.
+CapturedScene updates on first use and source-key changes. Unchanged sources
+reuse their products. The renderer selects immediate or incremental execution
+under section 4; there is no authored scheduling mode or time-slicing control.
 
-The old bool had no functioning capture effect: `IblProbePass` rejected captured
-sources and reported a separate deferred state for true on other sources. The
-other references store, transport or inspect it. One-time migration drops either
-old value while preserving useful Source, Enabled, intensity, tint, hemisphere
-and other effective SkyLight values, then recooks through the normal native
-producer. It does not reinterpret old true as continuous capture or false as
-manual capture. A previously unavailable source becomes the implemented canonical
-source behavior; it is not retained as a hidden compatibility mode.
+Remove `real_time_capture_enabled` from the SkyLight schema, packed record,
+native Scene/model API, importer/loader, Interop, DemoShell, Inspector reports
+and example startup settings. Both former values migrate to automatic scheduling,
+preserving Source, Enabled, intensity, tint, hemisphere and other effective values.
+Advance source/packed versions and serializers together, migrate maintained
+recipes/settings and recook before native qualification. Canonical readers
+reject the retired field; the old capture-unavailable branches retire with it.
 
-Version source/packed layouts and update all serializers/size checks together.
-Migrate maintained scene recipes and local demo settings before using them for
-the new native gate. Remove the current Interop forced-true write and native
-examples' setters/startup fields; canonical readers reject retired fields after
-migration. Replace bool round-trip-only tests with first-use, change-driven,
-unchanged-key reuse and rendered diffuse/specular tests. Fog's independently
-named `visible_in_real_time_sky_captures` flag is not this SkyLight mode and is
-not removed by a substring-based migration.
+Authoring intent is transient request metadata from the existing native/editor
+command and dirty-domain path. It is coalesced with the scene snapshot and is
+not serialized. Gameplay changes use the runtime scheduler once a usable product
+exists. Neither intent adds an Inspector control.
 
-Concrete source seams: `Scene/Environment/SkyLight.h:115–121,187`,
-`Data/PakFormat_world.h:466`, `Data/PakFormatSerioLoaders.h:563`,
-`Cooker/Import/Schemas/oxygen.scene-descriptor.schema.json:657–670`,
-`Cooker/Import/Internal/Jobs/SceneDescriptorImportJob.cpp:547–548`,
-`Vortex/Environment/Internal/AtmosphereState.cpp:186,337`,
-`Vortex/Environment/Passes/IblProbePass.cpp:152–157`,
-`Oxygen.Editor.Interop/src/Commands/SetEnvironmentCommand.cpp:157`,
-`Examples/DemoShell/Services/EnvironmentSettingsService`, `SkyboxService`,
-`Examples/RenderScene/main_impl.cpp:402–403` and its startup plumbing.
-`Examples/Async/MainModule.cpp:1123` and `Examples/VortexBasic/MainModule.cpp:750`
-also set the obsolete bool. Preserve historical evidence separately from the
-current source/schema contract.
+Fog's separate `visible_in_real_time_sky_captures` setting remains meaningful:
+it controls height-fog participation in the captured source. Keep its native,
+source/packed, loader and authoring routes intact.
+
+The cutover touches `Scene/Environment/SkyLight.h`, `Data/PakFormat_world.h`,
+`PakFormatSerioLoaders.h`, the scene descriptor schema/importer,
+`Environment/Internal/AtmosphereState.cpp`, `IblProbePass.cpp`, Interop's
+`SetEnvironmentCommand`, DemoShell environment services/VM, RenderScene startup,
+Async and VortexBasic. Replace bool-only round-trip tests with automatic-update,
+source-key reuse and rendered diffuse/specular tests.
 
 ## 2. Capture source and coordinates
 
-CapturedScene here means the authored distant sky/atmosphere. It captures no
-ordinary scene geometry, emissive objects, editor gizmos, display background,
-camera bars, exposure, bloom, tone curve, grading, fog composition or previous
-IBL contribution. This avoids a feedback loop and preserves the display-only
-background contract. Atmosphere-off produces an explicitly ready zero-radiance
-result, not indefinite unavailable state and not a stale previous sky.
+CapturedScene contains authored atmosphere and capture-visible exponential height
+fog. It excludes ordinary geometry, emissive objects, gizmos, display-only
+backgrounds, camera bars, exposure, bloom, grading and previous IBL. Local and
+volumetric fog are separate view-dependent products and remain outside capture.
+
+Atmosphere and height fog have independent enablement. Fog-only capture evaluates
+over zero atmosphere radiance. With neither contributing, publish ready-zero.
+Disabling the SkyLight itself publishes ready-zero immediately.
 
 Both participating Primary/Secondary lights feed the existing shared atmosphere
 integration. Hidden/off sources are absent without reassignment; role-None direct
@@ -133,6 +133,54 @@ Native specified-source yaw remains its independent existing
 setting; captured atmosphere uses its native world directions without an extra
 SkySphere rotation.
 
+### 2.1 Height fog and visible sky
+
+Extract the analytic height-fog integral and inscattering evaluation from
+`Fog.hlsl` into one shared helper with explicit ray origin and direction.
+Capture evaluates a distant ray from the global capture anchor; visible sky uses
+the actual view origin. Reuse both height layers, directional/atmosphere
+inscattering, start/end/cutoff distances and maximum opacity. Preserve the current
+unsupported inscattering-cubemap boundary tracked by VX-FOG-01.
+
+Both visible-sky and captured fog use the same virtual-cube distant-ray
+convention: 90° faces, 0.05 m near plane, infinite reversed-Z projection and
+far-depth epsilon 1e-10. For normalized direction d in the existing cube basis,
+`D = 0.05 / (1e-10 * max(abs(d.x), abs(d.y), abs(d.z)))` metres. Pass origin,
+direction and D separately to the shared helper, avoiding a large world-position
+addition/subtraction. Only origin differs between visible sky and capture.
+Preserve the existing observer-height, XY end-distance, height-compensation,
+start-exclusion and cutoff evaluation order. Test axes, edges,
+corners, both layers and authored distance limits. Consumer-camera projection
+changes do not alter this convention or invalidate captured lighting.
+
+Compose `L = T_fog * L_atmosphere + L_fog` in scene-linear radiance before
+hemisphere replacement, HDR normalization and convolution. Fog ambient input
+comes from atmosphere's distant-sky product, never the IBL being generated.
+Publish effective Primary/Secondary fog-light inputs independently of analytic
+disk visibility and capture disk suppression. Current view data gates
+`atmosphere_light*_disk_luminance_rgb` on `sun_disk_enabled`; the new fog helper
+must not use that display-gated payload as its light-eligibility signal. Preserve
+fog calibration while separating the participating light values from disk masks.
+
+With atmosphere disabled, its ambient LUT contribution is zero. Authored fog
+inscattering and enabled, participating Primary/Secondary directional fog inputs
+remain available; role-None lights are not implicitly reassigned. Fog-only
+capture and visible-sky composition must survive the current atmosphere-off
+early-outs in `SkyPass.cpp` and `Sky.hlsl`. SkyLight enablement gates IBL, not
+the independent visible height-fog effect.
+
+Capture honors fog enablement and `visible_in_real_time_sky_captures`;
+visible-sky composition honors fog enablement and `render_in_main_pass`.
+`visible_in_reflection_captures` keeps its separate reflection-view meaning.
+Apply distant height fog in the visible-sky path before exposure/post-processing.
+Display-only background color remains absent from capture inputs.
+
+The depth-based main fog pass continues skipping far-background pixels, so sky
+receives height fog exactly once. Local/volumetric fog keeps its existing
+far-background exclusion. At the capture anchor, identical source/fog settings
+must agree between visible-sky and capture evaluations after excluding analytic
+disks and display overrides. Other camera heights use their own view-ray origin.
+
 ## 3. Products and processing
 
 These are renderer constants/internal product policies, not new editor controls.
@@ -154,8 +202,9 @@ not silently recook/rescale authored texture assets to the captured default.
 
 Processing order:
 
-1. Resolve a coherent current atmosphere/light/global-anchor snapshot and required LUT
-   generation. Record six-face sky-only capture into private FP32 scratch.
+1. Freeze a coherent atmosphere/light/fog/global-anchor snapshot and its LUT
+   dependencies. Capture all six atmosphere-plus-height-fog faces into private
+   FP32 scratch, either immediately or in scheduled tiles from that snapshot.
 2. Apply hemisphere policy; GPU-reduce maximum RGB. Reject non-finite source
    output visibly. Set `source_radiance_scale = max(1, maximumRGB / 65504)`;
    store radiance divided by this scale in the processed FP16 product.
@@ -170,11 +219,11 @@ Processing order:
    radiance with hemisphere replacement disabled evaluates to unit diffuse light.
 5. Generate every specular mip with the deterministic GGX policy below.
 6. Record final metadata validity after every producer, then publish one coherent
-   generation for GPU-ordered consumption. Source, all mips, SH, metadata and
-   matching BRDF must have guaranteed producer-before-consumer submission and
-   resource transitions. CPU fence completion is a separate qualification fact;
-   it is not required to shade that frame. No diffuse-only success state satisfies
-   this V0.1 contract.
+   generation for GPU-ordered consumption. Every required face/mip, SH, metadata
+   and BRDF dependency must have guaranteed producer-before-consumer submission
+   and transitions. Incremental work stays private until this final step; consumers
+   keep the previous complete generation meanwhile. CPU fence completion remains
+   a separate qualification fact.
 
 All convolution operates in the scaled linear-radiance domain. Apply
 `source_radiance_scale` exactly once during shading, together with SkyLight
@@ -209,6 +258,9 @@ diagnostics can read back metadata asynchronously; ordinary shading needs no
 CPU readback of scale, brightness or validity.
 Any native/embedded qualification capture lease retains this metadata buffer and
 its descriptor with the product textures until its GPU/readback consumers drain.
+Use managed SRV views in `kGlobalSrvDomain` for SH/metadata and
+`kTexturesDomain` for cubes/BRDF. Allocation domain participates in view-cache
+identity; registration/use pins retain the descriptors through completion.
 
 ### 3.1 GGX prefilter
 
@@ -267,72 +319,129 @@ debug isolation may omit a term but cannot satisfy qualification for that term.
 
 ## 4. Readiness, invalidation and lifetime
 
-Use one current key/generation for each scene/source product set. Include:
+### 4.1 Source identity and automatic selection
 
-- Scene activation identity and applicable source kind/resource content identity.
-- Canonical atmospheric scalar/planet state and shared LUT algorithm revision.
-- Both stored slot identities and effective participating direction, colour and
-  compensated illuminance; resolved visibility/participation changes invalidate.
-- Resolved global anchor, hemisphere/yaw policy, selected dimensions/formats and processor
-  revision. Source radiance includes no exposure/post-process/background state.
+Track desired, building and published source keys separately. Each candidate
+freezes scene/device identity, source kind/content identity, atmosphere state and
+LUT revisions, both participating light identities/directions/colors/illuminance,
+capture-visible height-fog parameters and their radiance inputs, global anchor,
+hemisphere/yaw policy, dimensions/formats and processing revision. Specified-cube
+keys use asset/processing inputs rather than unrelated atmosphere/fog state.
 
-Intensity/tint/diffuse/specular multipliers and AffectReflections are evaluation
-state: update bindings without reconvolving. Display background, grading, material
-edits, geometry membership, workspace Hide, camera orientation/FOV/aspect/resize
-do not invalidate a sky-only radiance cube. Camera translation likewise leaves
-the product unchanged. Shadow-map tuning changes
-direct illumination, not the unoccluded atmosphere source.
+Intensity/tint/diffuse/specular multipliers and AffectReflections update evaluation
+bindings without reconvolution. Exposure, grading, display background, geometry,
+materials, workspace Hide and consumer camera movement/resize do not change the
+captured source key. Fog capture visibility and effective radiance changes do.
 
-Schedule the complete capture/convolution chain after current atmosphere LUT
-dependencies in Environment's existing pre-light publication boundary, before
-Stage 9 forward/base shading and Stage 13 indirect apply. Do not wait until
-Stage 15 visible-sky composition to discover an input dependency. Production
-uses the existing graphics queue: LUTs → capture → range reduction → processed
-mips → SH/prefilter → final metadata → surface consumers. Record ordered
-commands with required UAV ordering and final SRV transitions. Command-list
-boundaries are not substitutes for barriers. If an input upload uses another
-queue, insert its ordinary GPU queue dependency before this chain, not a CPU wait.
-Record the whole update for the current frame; no face/mip time slicing is used.
+| Event                                                                                            | Execution                                                  | Visible result                                                                                   |
+| ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| First use, re-enable, scene/device/source-kind replacement, processing-layout change             | Immediate full update                                      | Current complete generation before its surface consumers                                         |
+| Explicit native/editor authoring edit, including a continuous drag                               | Immediate full update; coalesce edits once per scene/frame | Current snapshot in that frame; edits after the snapshot enter the next frame                    |
+| Runtime radiance changes with a usable published generation                                      | Budgeted incremental update                                | Previous complete IBL remains visible until atomic replacement                                   |
+| Unchanged key or evaluation-only edit                                                            | Reuse                                                      | No capture/convolution or steady allocation                                                      |
+| SkyLight disabled; or CapturedScene with neither atmosphere nor capture-visible fog contributing | Immediate ready-zero                                       | No stale illumination; specified-cubemap sources remain independent of atmosphere/fog enablement |
 
-At the frame snapshot boundary, coalesce authoring changes into one desired key
-per scene. Direct lights, atmosphere and IBL for that frame use that coherent
-snapshot. Once the full chain is recorded with guaranteed ordered submission,
-publish its binding set for that frame's consumers, even while the GPU has not
-completed it. They execute after its producers and therefore see the new sky.
-Changes arriving after this snapshot belong to the next frame. This is normal
-frame snapshotting, not silently retaining an old product for a new source key.
+The current visible sky and direct lights follow the current scene snapshot.
+Incremental IBL follows its own published snapshot with bounded age; diagnostics
+expose both revisions. Immediate authoring requires matching current-source IBL.
 
-Distinguish **GPU-ordered availability** from **GPU-completed readiness**.
-Ordinary interactive light edits consume the newest generation in the same
-frame; they do not deliberately render zero or wait for a CPU fence poll.
-Qualification starts frame 0 only after its required generation, uploads and
-metadata validity have completed and been observed. A queued/recorded generation
-alone cannot satisfy that gate. Asynchronous diagnostics/qualification inspect
-the metadata flags; an invalid generation never passes readiness. Disabled or
-no-lighting-sky is explicit ready-zero. Genuinely missing resources, failed
-allocation/recording/submission or invalid processing yields unavailable zero
-with a scoped failure, not an ordinary update phase. Do not substitute an older
-key or a diffuse-only product to conceal that failure.
+### 4.2 Work scheduling and atomic publication
 
-Permit consecutive frames' generations to be GPU-in-flight. Use renderer
-frame-slot ownership and a bounded resource pool; do not block later updates
-until the CPU observes the preceding generation complete. Resource reuse follows
-the normal frame/fence lifecycle. Unchanged keys reuse their product with no
-per-frame allocation/convolution. A private candidate becomes visible only as
-a complete binding set with its guaranteed producer chain. Late completion
-checks scene/device/private-capture-view lifetime and revision; it cannot replace
-a newer published binding. Allocation/submission failure invalidates the affected
-frame rather than certifying an unproduced generation.
+Use Environment's pre-light boundary, before forward/base shading and Stage 13:
+LUTs → capture/fog → range reduction → source mips → SH/prefilter → metadata →
+consumers. Use the existing graphics queue, recorder/submission owner and barriers;
+input uploads from another queue use ordinary GPU dependencies. This is one
+Environment-owned IBL job queue, not a general GPU scheduler or pool framework.
 
-Use renderer queue dependency/fence mechanisms, never a new engine-thread flush,
-CPU wait or per-frame CPU readback. Old resources remain retained until all frames
-using their descriptors drain. Scene/device teardown invalidates product publication
-before releasing resources. Destroying the private capture-job view invalidates
-that job's candidate/completion, not an already published valid product. Ordinary
-consumer-view recreation, resize or destruction releases only its bindings/read
-ownership; it does not invalidate the scene-global product or its source key.
-The global BRDF product has its own renderer/device
-lifetime and is unaffected by source changes.
+Immediate execution records the full chain in that frame. Incremental execution
+partitions capture/convolution into bounded tiles and face/mip work batches.
+Predict batch cost from work size and existing GPU timestamps; admit work within
+the per-frame allowance. Large mips are tiled so one dispatch cannot monopolize
+the allowance. The BRDF lookup is generated once per renderer/device revision.
+
+Keep one building candidate and one latest desired snapshot per scene. Continuous
+runtime edits replace the queued desired snapshot, not the candidate in progress.
+Finish and publish that candidate, then start the latest snapshot by the next
+submitted scene frame. This prevents starvation during continuous sun movement.
+Every pass reads the candidate's frozen inputs, including retained LUT versions;
+a reused atmosphere cache must not overwrite inputs needed by later slices.
+
+Make one scheduling decision per scene/frame after edit coalescing. An immediate
+edit cancels the candidate's eligibility to publish and starts at most one
+replacement generation that frame, using the latest snapshot. Scene/device/source replacement does the same.
+Already-submitted resources retire normally. Submission outcomes commit CPU-side
+publication once; abandoned/failed recording cannot publish a generation.
+
+Only the complete final binding set becomes public: processed cube, all specular
+mips, SH, metadata and matching BRDF. Metadata starts invalid and its final
+producer marks completion. Shaders require its validity bits and matching bound
+revision. Publication can precede GPU completion when ordered submission guarantees
+that consumers execute after all producers. Qualification capture/readback waits
+asynchronously for actual completion before checking the required generation.
+
+Use renderer frame/fence ownership with an IBL-specific admission limit. Reserve
+normal update capacity for one published generation, one candidate, and at most
+`frame::kFramesInFlight` superseded generations awaiting renderer retirement.
+Count canceled submitted candidates in that allowance. A view in an ordinary
+in-flight frame uses this renderer allowance.
+
+Allow at most two additional distinct generations held exclusively by explicit
+offscreen/qualification capture leases per scene; multiple leases of the same
+generation count once. Reserve that allowance at lease admission so captures
+cannot consume normal update capacity. If it is full, return a capture-busy/retry
+result before accepting the capture. Never reclaim a live lease. Count resources,
+descriptors and metadata together; bound bytes using the admitted dimensions and
+formats. Reuse existing retirement primitives, adding admission at the IBL owner.
+Generic texture-pool reuse alone does not establish this bound.
+
+Reuse resources after all readers drain. Genuine allocation or normal-pool
+exhaustion follows the failure rules below rather than adding a CPU wait or
+growing the pool. Scene/device teardown invalidates publication before resource
+release. Consumer-view recreation releases only that view's references.
+
+CPU-known allocation, recording or submission failure in an incremental update
+keeps the previous valid generation bound and records the update failure/source
+age. Exceeding the age bound fails qualification. CPU-known first-use/immediate
+failure is unavailable-zero with an explicit failure.
+
+GPU validation can reject a complete recorded candidate after CPU publication.
+Its consumers output zero for invalid metadata, and asynchronous diagnostics
+record the failed generation; it never satisfies readiness. This is an exceptional
+failure, not the normal incremental-update display path. No GPU fallback-selection
+framework is introduced. Never publish diffuse-only success or let an older
+completion replace a newer published generation.
+
+### 4.3 Performance and latency gates
+
+Qualification uses the existing RTX 3080 / Ryzen 9950X reference, Release, the
+128-face captured-source policy, and a 60-Hz scene workload. These are engineering
+acceptance targets for VX-IBL-01. Keep all formats and sample counts from section 3.
+
+| Measure                                              | Gate                                                                               |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Warm immediate update, additional GPU work p95 / p99 | ≤2.0 / ≤4.0 ms                                                                     |
+| Incremental update work per scene frame, p95 / p99   | ≤0.5 / ≤1.0 ms                                                                     |
+| Incremental candidate completion                     | Within 4 submitted scene frames, including its snapshot frame                      |
+| Published IBL source age during continuous changes   | At most 8 submitted scene frames                                                   |
+| Immediate authoring latency                          | Current-snapshot IBL in the same submitted frame                                   |
+| Stable source                                        | Zero capture/convolution dispatches and zero product-allocation churn after warmup |
+| Sustained source changes                             | Bounded product/descriptor populations; no growth across repeated update cycles    |
+
+Measure age from the candidate's immutable snapshot, not from its publication.
+Under continuous changes, both an update in progress and the next queued update
+contribute to age. When changes stop, publish the final desired key within the
+same 8-frame bound. A non-rendered scene resumes with an immediate current update.
+
+Charge capture-specific LUT work, fog, range reduction, mips, SH, prefilter and
+metadata to the update. Report per-frame interval unions and whole-frame p95/p99
+separately. Use matched static/animated scenes with timestamps enabled; collect
+at least 30 seconds after warmup. Record first-use wall/GPU cost separately,
+including uploads and BRDF initialization. Specified-cube sizes receive functional
+coverage and reported scaling; the timed reference gate above uses 128-face capture.
+
+Incremental results must match an immediate update of the same frozen source
+within the existing image/product tolerances. Scheduling changes work placement,
+not sample counts, radiance, filtering quality or the material model.
 
 ## 5. Required qualification
 
@@ -349,39 +458,53 @@ to make FP16 render intermediates pass. Independent product tests cover:
   and amplitude; forward/deferred agreement without double application.
 - Primary-only, Secondary-only, both, hidden/off/re-enabled and role-None fill.
   Disk exclusion removes neither source's scattering.
-- Atmosphere-off ready-zero, background-colour changes without IBL changes,
-  exposure/grading without product regeneration, and transparent coverage.
+- Atmosphere-only, fog-only, combined and both-disabled sources; ready-zero for
+  disabled lighting; background/exposure/grading changes without regeneration.
+- Height-fog density/layers, altitude, inscattering, distance limits and capture
+  visibility; visible-sky/capture agreement at the anchor; exactly one distant
+  fog application on sky and unchanged opaque fog composition. Fog-only output
+  survives atmosphere-off; disk hiding/suppression preserves directional fog
+  scattering. No volumetric/local-fog capture or new translucent height-fog path.
 - Current-key publication, rapid coalesced edits, late generation, pending
   uploads, source replacement, scene/device lifetimes and clean teardown.
-- Continuous sun edits consume the matching current generation in each rendered
-  frame without deliberate black/stale intervals. Verify ordered producers,
-  barriers, metadata flags, consecutive in-flight generations and capture leases;
-  CPU-observed completion remains a separate qualification gate.
+- Authoring edits, including drags, consume matching current-generation IBL.
+  Runtime animation respects update-cost/completion/source-age gates while reusing
+  only complete generations. Exercise nonstop edits, edit cessation, immediate
+  preemption, failure/retry and out-of-order completion without mixed faces/mips.
+- Ordered producers, barriers, metadata, frozen LUT leases and capture leases;
+  one scene shares products across forward/deferred/offscreen views. Exercise
+  repeated immediate preemption, maximum frames in flight, two externally pinned
+  generations, capture admission rejection, CPU-known failure and GPU-invalid
+  output separately. Measure the
+  section 4.3 gates with both atmosphere lights and height fog enabled.
 - Camera navigation leaves scene-global product identity/radiance unchanged;
   atmosphere anchor/radius changes recompute the defined capture position.
 - Stage 13 pass/product evidence plus absence of Stage 12 ambient draws/flags;
   production loads the normal renderer without qualification instrumentation.
 
-Record actual dimensions, formats, sample policy, product/source/LUT generations,
-range scale, resource readiness and stage use in development evidence. Missing
-specular products or a second atmosphere source cannot be excused by diffuse-only
-images. Fixed native profile visual review remains mandatory.
+Record dimensions, formats, sampling, source/build/published generations, source
+age, range scale, readiness, GPU costs and stage use through existing development
+diagnostics. Native visual review covers dielectric and metallic materials,
+fog/horizon response, sun movement, roughness changes and editor edit latency.
+The milestone plan owns execution state and evidence links.
 
 ## 6. Implementation map
 
-| Existing file/section                                  | Current statement/path                                                          | Required reconciliation                                                                                                 |
-| ------------------------------------------------------ | ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| cubemap-processing.md §§1,4.3,5.1,6.1                  | CapturedScene unavailable; diffuse-only readiness; specular optional            | Keep closed VTX-M08 proof historical; new extension requires full product set for canonical IBL                         |
-| skybox-static-skylight.md §§2.5,6.4,11                 | Static diffuse routed through Lighting; captured/specular deferred              | Retain source/sky policy and evidence; supersede Stage 12 placement and captured/specular deferral                      |
-| indirect-lighting-service.md §§1.3,2.1,5               | Stage 13 reserved; old Services path; optional AO                               | Activate bounded sky diffuse/specular subset; use current family path; no new AO requirement                            |
-| environment-service.md §§2.3,10                        | Stage 13 future/deferred                                                        | Product ownership stays Environment; Stage 13 apply is now mandatory for V0.1                                           |
-| IblProbePass.cpp:164–171                               | Diffuse 0 disables all; CapturedScene unavailable                               | Independent diffuse/specular gates; supported captured source and explicit ready-zero                                   |
-| IblProcessor.cpp:386–423                               | Specular/LUT slots invalid; CPU static-source processing/upload                 | Reuse valid static machinery; add GPU captured processing and complete common publication                               |
-| SceneRenderer.cpp:2052,2187; DeferredLightPass.cpp:905 | Ambient bridge enabled; Stage 13 reserved; `Vortex.Stage12.StaticSkyLight` draw | Remove bridge and activate canonical indirect service                                                                   |
-| Sky.hlsl:329–339                                       | Irradiance/prefilter entry points are empty                                     | Implement actual owned processors/shared radiance helper; catalog registration alone is no evidence                     |
-| ForwardMesh_PS.hlsl:92–145                             | Linear mip mapping, approximate missing-LUT fallback                            | Shared canonical IBL helper and matching producer mapping, complete product gate                                        |
-| SkyLight.h:25                                          | CapturedScene prose includes background                                         | Clarify lighting-sky radiance versus display background with implementation                                             |
-| SkyLight.h / source schema / Interop / DemoShell       | Unsupported real-time-capture bool is stored and sometimes forced true          | Remove canonical field/API/branch; migrate useful source/settings once and recook under the single change-driven policy |
+| Existing file/section                                   | Current statement/path                                                          | Required reconciliation                                                                                            |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| cubemap-processing.md §§1,4.3,5.1,6.1                   | CapturedScene unavailable; diffuse-only readiness; specular optional            | Keep closed VTX-M08 proof historical; new extension requires full product set for canonical IBL                    |
+| skybox-static-skylight.md §§2.5,6.4,11                  | Static diffuse routed through Lighting; captured/specular deferred              | Retain source/sky policy and evidence; supersede Stage 12 placement and captured/specular deferral                 |
+| indirect-lighting-service.md §§1.3,2.1,5                | Stage 13 reserved; old Services path; optional AO                               | Activate bounded sky diffuse/specular subset; use current family path; no new AO requirement                       |
+| environment-service.md §§2.3,10                         | Stage 13 future/deferred                                                        | Product ownership stays Environment; Stage 13 apply is now mandatory for V0.1                                      |
+| IblProbePass.cpp:164–171                                | Diffuse 0 disables all; CapturedScene unavailable                               | Independent diffuse/specular gates; captured atmosphere/fog, automatic scheduling and explicit ready-zero          |
+| IblProcessor.cpp:386–423                                | Specular/LUT slots invalid; CPU static-source processing/upload                 | Reuse valid static machinery; add GPU captured processing and complete common publication                          |
+| SceneRenderer.cpp:2052,2187; DeferredLightPass.cpp:905  | Ambient bridge enabled; Stage 13 reserved; `Vortex.Stage12.StaticSkyLight` draw | Remove bridge and activate canonical indirect service                                                              |
+| Sky.hlsl:329–339                                        | Irradiance/prefilter entry points are empty                                     | Implement actual owned processors/shared radiance helper; catalog registration alone is no evidence                |
+| ForwardMesh_PS.hlsl:92–145                              | Linear mip mapping, approximate missing-LUT fallback                            | Shared canonical IBL helper and matching producer mapping, complete product gate                                   |
+| Fog.hlsl / Sky.hlsl / atmosphere LUT cache              | Main-view fog skips far depth; LUTs follow live views                           | Share distant height-fog evaluation, visible-sky composition and capture-specific immutable LUT snapshots          |
+| Existing authoring commands / environment dirty domains | No IBL scheduling intent or candidate queue                                     | Carry transient authoring intent; bound incremental work, coalesce runtime inputs and publish complete generations |
+| SkyLight.h:25                                           | CapturedScene prose includes background                                         | Clarify lighting-sky radiance versus display background with implementation                                        |
+| SkyLight.h / source schema / Interop / DemoShell        | Unsupported real-time-capture bool is stored and sometimes forced true          | Remove canonical field/API/branch; migrate useful source/settings once and recook under automatic scheduling       |
 
 ## 7. Primary sources and bounded choices
 
@@ -412,12 +535,20 @@ images. Fixed native profile visual review remains mandatory.
   `Graphics/Direct3D12/Test/SubmitOrderedQueueActions_test.cpp` covers submission
   versus completion and ordered queue actions. These existing mechanisms support
   same-frame consumption; their presence is not evidence that IBL is implemented.
-- [Epic Sky Lights](https://dev.epicgames.com/documentation/en-us/unreal-engine/sky-lights-in-unreal-engine):
-  captured diffuse/specular lighting, GPU processing and 128-face default. The
-  current page resolves to 5.8; algorithm details above use the installed 5.7 source.
+- Local UE 5.7 `ReflectionEnvironmentRealTimeCapture.cpp:415,913–949`:
+  full/editor versus time-sliced capture, capture-visible distant height fog and
+  capture-position origin. `ReflectionEnvironmentCapture.cpp:57,1237–1242`
+  supplies the 5 cm near plane and infinite reversed-Z projection;
+  `ReflectionEnvironmentShaders.usf:923–960` uses the explicit fog origin and
+  1e-10 far-depth clamp.
+- Oxygen `Services/Environment/Fog.hlsl:221–283,340–390` and
+  `Scene/Environment/Fog.h`: existing analytic fog, visibility flags and the
+  main-view far-background skip to preserve when moving sky fog into the sky path.
+- [Epic Sky Lights, UE5.7](https://dev.epicgames.com/documentation/en-us/unreal-engine/sky-lights-in-unreal-engine?application_version=5.7):
+  diffuse/specular capture, exponential height fog, GPU time slicing and the
+  128-face default. Algorithm details above use the installed 5.7 source.
 
-128-face capture is a bounded new Oxygen default grounded in the reference, not
-an industry-wide requirement. Qualify this defined default with the listed
-native visual/product checks. No performance number from another engine/hardware
-is claimed for Oxygen. Capture anchor, sky-only scope and atomic update policy are
-Oxygen product decisions, distinct from UE's wider scene-capture capabilities.
+Oxygen uses a fixed global anchor and two automatic execution schedules to keep
+authoring immediate and runtime frame cost bounded. Complete-generation publication
+preserves the same filtering quality in both schedules. The 128-face profile and
+section 4.3 gates define the first qualified operating point.

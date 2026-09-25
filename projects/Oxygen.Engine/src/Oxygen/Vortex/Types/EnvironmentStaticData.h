@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <cstdint>
 
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/Atmosphere.h>
 
@@ -182,6 +183,9 @@ struct alignas(packing::kShaderDataFieldAlignment) GpuSkyLightParams {
   std::uint32_t ibl_generation { 0U };
   std::uint32_t diffuse_sh_slot { kInvalidBindlessIndex };
   std::uint32_t padding { 0U };
+
+  std::uint32_t product_metadata_srv { kInvalidBindlessIndex };
+  std::array<std::uint32_t, 3> metadata_padding {};
 };
 
 struct alignas(packing::kShaderDataFieldAlignment) GpuSkySphereParams {
@@ -253,13 +257,16 @@ static_assert(sizeof(AtmosphereDensityProfileGpu) == 32);
 static_assert(sizeof(GpuFogParams) == 128);
 static_assert(sizeof(GpuVolumetricFogParams) == 96);
 static_assert(sizeof(GpuSkyAtmosphereParams) == 208);
-static_assert(sizeof(GpuSkyLightParams) == 64);
+static_assert(sizeof(GpuSkyLightParams) == 80);
 static_assert(offsetof(GpuSkyLightParams, cubemap_slot) == 32);
 static_assert(offsetof(GpuSkyLightParams, diffuse_sh_slot) == 56);
+static_assert(offsetof(GpuSkyLightParams, product_metadata_srv) == 64);
+static_assert(offsetof(EnvironmentStaticData, sky_sphere) == 512);
+static_assert(offsetof(EnvironmentStaticData, post_process) == 624);
 static_assert(sizeof(GpuSkySphereParams) == 48);
 static_assert(sizeof(GpuVolumetricCloudParams) == 64);
 static_assert(sizeof(GpuPostProcessParams) == 64);
-static_assert(sizeof(EnvironmentStaticData) == 672);
+static_assert(sizeof(EnvironmentStaticData) == 688);
 
 // NOLINTEND(*-magic-numbers)
 

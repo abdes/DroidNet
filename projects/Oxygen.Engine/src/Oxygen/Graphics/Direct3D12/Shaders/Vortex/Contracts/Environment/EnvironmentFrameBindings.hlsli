@@ -20,6 +20,7 @@ struct EnvironmentFrameBindings
         uint irradiance_map_srv;
         uint prefiltered_map_srv;
         uint probe_revision;
+        uint product_metadata_srv;
     };
 
     struct EnvironmentEvaluationParameters
@@ -54,6 +55,7 @@ struct EnvironmentFrameBindings
     EnvironmentProbeBindings probes;
     EnvironmentEvaluationParameters evaluation;
     EnvironmentAmbientBridgeBindings ambient_bridge;
+    uint padding;
 };
 
 static EnvironmentFrameBindings LoadEnvironmentFrameBindings(uint slot)
@@ -75,6 +77,7 @@ static EnvironmentFrameBindings LoadEnvironmentFrameBindings(uint slot)
     invalid_bindings.probes.irradiance_map_srv = K_INVALID_BINDLESS_INDEX;
     invalid_bindings.probes.prefiltered_map_srv = K_INVALID_BINDLESS_INDEX;
     invalid_bindings.probes.probe_revision = 0u;
+    invalid_bindings.probes.product_metadata_srv = K_INVALID_BINDLESS_INDEX;
     invalid_bindings.evaluation.ambient_intensity = 1.0f;
     invalid_bindings.evaluation.average_brightness = 1.0f;
     invalid_bindings.evaluation.blend_fraction = 0.0f;

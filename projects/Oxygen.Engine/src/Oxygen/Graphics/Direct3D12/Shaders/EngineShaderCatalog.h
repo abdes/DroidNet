@@ -424,9 +424,20 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .path="Vortex/Services/Environment/Sky.hlsl",
     .entries=std::array {
       EntryPoint { .type=kVertex, .name="VortexSkyPassVS" },
-      EntryPoint { .type=kPixel, .name="VortexSkyPassPS" },
-      EntryPoint { .type=kCompute, .name="VortexIblIrradianceCS" },
-      EntryPoint { .type=kCompute, .name="VortexIblPrefilterCS" } }
+      EntryPoint { .type=kPixel, .name="VortexSkyPassPS" } }
+  },
+  ShaderFileSpec {
+    .path="Vortex/Services/Environment/IblProcessing.hlsl",
+    .entries=std::array {
+      EntryPoint { .type=kCompute, .name="IblInitializeCS" },
+      EntryPoint { .type=kCompute, .name="IblPrepareCS" },
+      EntryPoint { .type=kCompute, .name="IblRangeCS" },
+      EntryPoint { .type=kCompute, .name="IblNormalizeCS" },
+      EntryPoint { .type=kCompute, .name="IblMipCS" },
+      EntryPoint { .type=kCompute, .name="IblShCS" },
+      EntryPoint { .type=kCompute, .name="IblShReduceCS" },
+      EntryPoint { .type=kCompute, .name="IblPrefilterCS" },
+      EntryPoint { .type=kCompute, .name="IblCompleteCS" } }
   },
   ShaderFileSpec {
     .path="Vortex/Services/Environment/AtmosphereCompose.hlsl",

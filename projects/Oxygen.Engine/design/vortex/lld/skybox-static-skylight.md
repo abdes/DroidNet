@@ -523,7 +523,8 @@ VTX-M08 cannot be marked validated until all of these pass:
 ## 11. Follow-up capabilities
 
 VTX-M08 delivers a visible static cubemap and specified-cubemap diffuse SH.
-Captured-scene and specular IBL are VX-IBL-01. Continuous capture, blending,
+Captured-scene and specular IBL, height fog and both update schedules belong to
+[VX-IBL-01](../milestones/VX-IBL-01/README.md). Cubemap blending,
 SkyLight AO/shadowing, baked integration and broader probes are VX-SKY-01.
 A procedural disk over a static cubemap is VX-SKY-02.
 

@@ -215,6 +215,7 @@ composition and Interop EditorView projection.
 
 [Captured-sky IBL](captured-sky-ibl.md#1-ownership-and-scope) defines
 processing, products, readiness, invalidation and numerical/sample details.
+The [VX-IBL-01 plan](../milestones/VX-IBL-01/README.md) owns delivery of height fog, both automatic update schedules and DemoShell integration.
 EnvironmentLightingService owns environment radiance/products; Stage 13
 IndirectLightingService owns opaque indirect surface evaluation. This activates
 its first real IBL subset, not the entire future GI feature family. Remove the
@@ -222,8 +223,9 @@ Stage-12 ambient/sky diffuse bridge for that capability when Stage 13 is wired;
 never add the same IBL twice. Forward/translucent consumers share the same products
 and BRDF semantics.
 
-Both atmospheric sources affect captured radiance. The display-only clear colour
-and editor Hide never become IBL inputs. With no active lighting sky, publish
+Both atmospheric sources and capture-visible height fog affect captured radiance.
+The display-only clear colour and editor Hide never become IBL inputs. With neither
+atmosphere nor capture-visible fog contributing, publish
 zero contribution rather than stale products or invented ambient colour. Explicit
 sky disks follow the companion capture policy separately from atmospheric
 scattering. Diffuse-only specified-cubemap processing is not captured-sky specular

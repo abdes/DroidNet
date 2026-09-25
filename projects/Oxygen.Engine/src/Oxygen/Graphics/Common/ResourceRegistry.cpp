@@ -494,7 +494,8 @@ auto ResourceRegistry::FindViewNoLock(const NativeResource& resource,
   const auto [first, last] = view_cache_.equal_range(
     CacheKey { .resource = resource, .view_desc_hash = key_hash });
   for (auto it = first; it != last; ++it) {
-    if (query.matches(it->second.view_description, query.description)) {
+    if (query.domain == it->second.domain
+      && query.matches(it->second.view_description, query.description)) {
       return &it->second;
     }
   }
@@ -506,7 +507,8 @@ auto ResourceRegistry::StoreViewNoLock(
 {
   const auto [first, last] = view_cache_.equal_range(key);
   for (auto it = first; it != last; ++it) {
-    if (query.matches(it->second.view_description, query.description)) {
+    if (query.domain == it->second.domain
+      && query.matches(it->second.view_description, query.description)) {
       it->second = std::move(entry);
       return;
     }

@@ -16,6 +16,10 @@
 #include "Vortex/Services/Lighting/ClusterLookup.hlsli"
 #include "Vortex/Contracts/Scene/GBufferHelpers.hlsli"
 #include "Vortex/Shared/BRDFCommon.hlsli"
+#include "Vortex/Contracts/Environment/IblProductMetadata.hlsli"
+#include "Vortex/Contracts/Environment/EnvironmentFrameBindings.hlsli"
+#include "Vortex/Contracts/Environment/EnvironmentStaticData.hlsli"
+#include "Vortex/Services/IndirectLighting/IblEvaluation.hlsli"
 #include "Vortex/Services/Lighting/FiniteEmitter.hlsli"
 #include "Vortex/Services/Shadows/ContactShadow.hlsli"
 #include "Vortex/Contracts/Draw/MaterialShadingConstants.hlsli"
@@ -38,6 +42,25 @@ struct ProbeArguments {
     uint4 decode;
     uint indices_srv;
     uint3 reserved;
+};
+
+struct IblSurfaceProbeInput {
+    GpuSkyLightParams light;
+    float3 normal;
+    float roughness;
+    float3 view;
+    float metallic;
+    float3 base_color;
+    float occlusion;
+    float3 f0;
+    uint brdf_srv;
+};
+
+struct IblReferenceSample {
+    float3 direction;
+    float lod;
+    uint source;
+    uint3 padding;
 };
 
 struct GridLookupProbeInput {
@@ -133,7 +156,48 @@ void CS(uint3 thread : SV_DispatchThreadID) {
     RWByteAddressBuffer output = ResourceDescriptorHeap[args.y];
     uint element = args.w + thread.x;
     uint address = thread.x * args.z * 4;
-    if (g_RecordKind == 26) {
+    if (g_RecordKind == 33) {
+        StructuredBuffer<IblReferenceSample> inputs = ResourceDescriptorHeap[args.x];
+        IblReferenceSample value = inputs[element];
+        TextureCube<float4> source = ResourceDescriptorHeap[value.source];
+        SamplerState linear_clamp = SamplerDescriptorHeap[VORTEX_SAMPLER_LINEAR_CLAMP];
+        output.Store3(address, asuint(source.SampleLevel(linear_clamp, value.direction, value.lod).rgb));
+    } else if (g_RecordKind == 32) {
+        StructuredBuffer<IblSurfaceProbeInput> inputs = ResourceDescriptorHeap[args.x];
+        IblSurfaceProbeInput value = inputs[element];
+        IblSurfaceLighting result = EvaluateSkyIbl(value.light, value.brdf_srv,
+            value.normal, value.view, value.base_color, value.metallic,
+            value.roughness, value.occlusion, value.f0);
+        output.Store3(address, asuint(result.diffuse));
+        output.Store3(address + 12, asuint(result.specular));
+    } else if (g_RecordKind == 27) {
+        StructuredBuffer<IblProductMetadata> inputs = ResourceDescriptorHeap[args.x];
+        IblProductMetadata value = inputs[element];
+        output.Store4(address, uint4(asuint(value.source_radiance_scale),
+            asuint(value.average_brightness), value.processing_flags, value.product_revision));
+        output.Store(address + 16, IsIblProductReady(value, 77u) ? 1u : 0u);
+    } else if (g_RecordKind == 28) {
+        StructuredBuffer<EnvironmentStaticData> inputs = ResourceDescriptorHeap[args.x];
+        EnvironmentStaticData value = inputs[element];
+        output.Store4(address, uint4(value.sky_light.diffuse_sh_slot,
+            value.sky_light.product_metadata_srv, asuint(value.sky_sphere.intensity),
+            asuint(value.post_process.exposure_compensation)));
+    } else if (g_RecordKind == 29) {
+        StructuredBuffer<EnvironmentFrameBindings> inputs = ResourceDescriptorHeap[args.x];
+        EnvironmentFrameBindings value = inputs[element];
+        output.Store3(address, uint3(value.probes.product_metadata_srv,
+            asuint(value.evaluation.ambient_intensity), value.ambient_bridge.flags));
+    } else if (g_RecordKind == 30) {
+        StructuredBuffer<float4> inputs = ResourceDescriptorHeap[args.x];
+        float4 value = inputs[element];
+        output.Store3(address, asuint(float3(IblRoughnessToMip(value.x, uint(value.z)),
+            IblMipToRoughness(uint(value.y), uint(value.z)),
+            EvaluateIblSpecularSplit(2.0.xxx, value.w.xxx, float2(0.75, 0.25)).x)));
+    } else if (g_RecordKind == 31) {
+        StructuredBuffer<float4> inputs = ResourceDescriptorHeap[args.x];
+        float4 value = inputs[element];
+        output.Store2(address, asuint(SampleIblBrdf(asuint(value.z), value.x, value.y)));
+    } else if (g_RecordKind == 26) {
         StructuredBuffer<ContactShadowProbeInput> inputs = ResourceDescriptorHeap[args.x];
         const ContactShadowProbeInput input = inputs[element];
         VortexShadowFrameBindings bindings = MakeInvalidVortexShadowFrameBindings();

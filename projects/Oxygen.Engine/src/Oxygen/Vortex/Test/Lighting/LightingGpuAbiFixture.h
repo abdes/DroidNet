@@ -9,6 +9,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <span>
 #include <string>
@@ -35,6 +36,7 @@ protected:
     std::uint32_t count { 0U };
     ShaderVisibleIndex indices_srv { kInvalidShaderVisibleIndex };
     bool constant_buffer_records { false };
+    std::function<void(graphics::CommandRecorder&)> prepare;
   };
   auto CreateBackend(const SerializedBackendConfig& config,
     const SerializedPathFinderConfig& paths)
@@ -48,8 +50,8 @@ protected:
     -> ShaderVisibleIndex;
   //! Publish a single row of exact packed 32-bit texels for native format
   //! decoding.
-  auto PublishPackedTexture(
-    Format format, std::span<const std::uint32_t> texels, std::uint32_t height = 1U)
+  auto PublishPackedTexture(Format format,
+    std::span<const std::uint32_t> texels, std::uint32_t height = 1U)
     -> ShaderVisibleIndex;
   auto PublishBrdfEnergyTexture() -> ShaderVisibleIndex;
 

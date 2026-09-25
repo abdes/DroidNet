@@ -162,7 +162,7 @@ auto LightingGpuAbiTest::Decode(const DecodeRequest& request)
   -> std::vector<std::uint32_t>
 {
   const auto& [records, stride, record_kind, decoded_words, first_element,
-    count, indices_srv, constant_buffer_records] = request;
+    count, indices_srv, constant_buffer_records, prepare] = request;
   CHECK_GT_F(stride, 0U);
   CHECK_EQ_F(records.size_bytes() % stride, 0U);
   CHECK_LE_F(static_cast<std::uint64_t>(first_element) + count,
@@ -281,6 +281,8 @@ auto LightingGpuAbiTest::Decode(const DecodeRequest& request)
     = GetReadbackManager()->CreateBufferReadback("Lighting ABI result");
   SubmitCommands("Lighting ABI upload/decode/readback",
     [&](CommandRecorder& recorder) -> void {
+      if (prepare)
+        prepare(recorder);
       EnsureTracked(recorder, input, ResourceStates::kGenericRead);
       if (source != input) {
         EnsureTracked(recorder, source, ResourceStates::kGenericRead);
@@ -347,7 +349,8 @@ auto LightingGpuAbiTest::PublishPackedTexture(const Format format,
   CHECK_F(!texels.empty() && height != 0U && texels.size() % height == 0U);
   CHECK_LE_F(texels.size(), std::numeric_limits<std::uint32_t>::max());
   CHECK_F(format == Format::kRGBA8UNorm || format == Format::kRGBA8UNormSRGB
-    || format == Format::kR10G10B10A2UNorm || format == Format::kR32Float);
+    || format == Format::kR10G10B10A2UNorm || format == Format::kR32Float
+    || format == Format::kRG16UNorm);
   auto texture = CreateRegisteredTexture({
     .width = static_cast<std::uint32_t>(texels.size() / height),
     .height = height,

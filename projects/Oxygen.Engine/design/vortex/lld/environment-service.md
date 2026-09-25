@@ -1396,10 +1396,10 @@ The current environment path implements atmosphere, two atmosphere-light slots,
 analytic height/local fog, volumetric fog, publication and DemoShell authoring.
 The remaining extensions have shared tracker entries:
 
-- VX-IBL-01: captured-sky/specular products, Stage 13 and ambient-bridge retirement.
+- [VX-IBL-01](../milestones/VX-IBL-01/README.md): captured atmosphere/height-fog and specular products, immediate/budgeted updates, Stage 13 and ambient-bridge retirement.
 - VX-FOG-01: height-fog inscattering cubemaps.
 - VX-AP-01: reflection/360-view aerial-perspective resources.
-- VX-SKY-01: continuous capture, blending, occlusion/baking and probe extensions.
+- VX-SKY-01: cubemap blending, occlusion/baking and probe extensions.
 - VX-FAMILY-01: volumetric clouds and heterogeneous volumes.
 
 See [OPEN_ITEMS.md](../OPEN_ITEMS.md) for status and next actions.

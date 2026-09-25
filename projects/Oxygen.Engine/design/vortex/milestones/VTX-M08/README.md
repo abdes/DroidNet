@@ -14,7 +14,7 @@ Dependencies: VTX-M07, VTX-M04D environment publication truth, VTX-M05D shadows,
 
 ## Delivered scope
 
-Visual cubemap skybox/background rendering, static specified-cubemap SkyLight diffuse lighting, shader ABI migration, static SkyLight product processing/publication, deferred SH consumption, RenderScene/DemoShell startup plumbing, interaction/lifecycle proof, focused tests, ShaderBake/catalog validation where shader ABI changed, CDB/debug-layer audits, RenderDoc scripted analysis, allocation-churn proof, final `git diff --check`, and manual visual confirmation are recorded in the detailed M08 plan and status ledger. Captured-sky diffuse/specular and specified-cubemap specular lighting are planned under [ED-M08](../../lld/captured-sky-ibl.md); implementation and rendered qualification remain pending. Continuous time-sliced capture, blending, SkyLight occlusion/baking, broader probes, cloud capture and static-skybox sun-disk overlay remain future work.
+Visual cubemap skybox/background rendering, static specified-cubemap SkyLight diffuse lighting, shader ABI migration, static SkyLight product processing/publication, deferred SH consumption, RenderScene/DemoShell startup plumbing, interaction/lifecycle proof, focused tests, ShaderBake/catalog validation where shader ABI changed, CDB/debug-layer audits, RenderDoc scripted analysis, allocation-churn proof, final `git diff --check`, and manual visual confirmation are recorded in the detailed M08 plan and status ledger. Captured-sky diffuse/specular and specified-cubemap specular lighting are planned under [ED-M08](../../lld/captured-sky-ibl.md); implementation and rendered qualification remain pending in [VX-IBL-01](../VX-IBL-01/README.md), including height fog and both automatic update schedules. Cubemap blending, SkyLight occlusion/baking, broader probes, cloud capture and static-skybox sun-disk overlay remain future work.
 
 Status: `validated`
 
@@ -122,7 +122,7 @@ That extension is specified but not implemented or rendered-qualified. Its
 capture policy is automatic and change-driven.
 
 - Captured-scene SkyLight and static-cubemap specular contribution: planned in ED-M08.
-- Continuous time-sliced SkyLight capture: future work outside ED-M08.
+- Automatic immediate/incremental sky-light updates: [VX-IBL-01](../VX-IBL-01/README.md).
 - Cubemap blend transitions / time-of-day blending.
 - SkyLight AO, DFAO, bent-normal occlusion, and cloud AO.
 - Baked/static-lightmap SkyLight integration.

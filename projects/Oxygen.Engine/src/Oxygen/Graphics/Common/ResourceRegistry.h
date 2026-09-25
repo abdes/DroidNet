@@ -22,6 +22,7 @@
 
 #include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
 #include <Oxygen/Graphics/Common/Concepts.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
@@ -141,6 +142,7 @@ class ResourceRegistry {
   struct ViewQuery {
     const void* description;
     bool (*matches)(const std::any&, const void*);
+    std::optional<bindless::DomainToken> domain {};
   };
   template <typename Description>
   static auto QueryView(const Description& description) -> ViewQuery
@@ -189,16 +191,20 @@ public:
     return RetainUse(lease.AllocationOwner());
   }
 
+  //! A supplied domain selects bindless allocation and is part of cache
+  //! identity.
   template <ResourceWithViews Resource>
-  auto AcquireManagedView(
-    const RegistrationLease& lease, const Resource::ViewDescriptionT& desc)
+  auto AcquireManagedView(const RegistrationLease& lease,
+    const Resource::ViewDescriptionT& desc,
+    std::optional<bindless::DomainToken> domain = std::nullopt)
     -> std::expected<ManagedView, RegistrationError>
   {
     using Description = typename Resource::ViewDescriptionT;
+    auto query = QueryView(desc);
+    query.domain = domain;
     return AcquireManagedView(
       lease.AllocationOwner(), Resource::ClassTypeId(),
-      std::hash<Description> {}(desc), desc.view_type, desc.visibility,
-      QueryView(desc),
+      std::hash<Description> {}(desc), desc.view_type, desc.visibility, query,
       [](void* resource, const DescriptorAllocationHandle& handle,
         const void* description) {
         return static_cast<Resource*>(resource)->GetNativeView(
@@ -1471,6 +1477,7 @@ private:
     NativeView view_object; //!< The native object holding the view.
     std::any view_description; //!< The original view description.
     bindless::HeapIndex descriptor_index { kInvalidBindlessHeapIndex };
+    std::optional<bindless::DomainToken> domain {};
   };
 
   OXGN_GFX_NDAPI auto FindViewNoLock(const NativeResource& resource,

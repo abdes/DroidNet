@@ -9,6 +9,7 @@
 #include <limits>
 #include <thread>
 
+#include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
 #include <Oxygen/Graphics/Common/Detail/BaseDescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Detail/FixedDescriptorSegment.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
@@ -111,6 +112,56 @@ protected:
   std::shared_ptr<FakeResource> resource;
   oxygen::bindless::HeapIndex last_view_index { 0 };
 };
+
+NOLINT_TEST_F(
+  ManagedRegistryTest, ManagedViewCacheDistinguishesAllocationDomains)
+{
+  namespace domains = oxygen::bindless::generated;
+  const auto registration = Registry().RegisterManaged(resource);
+  ASSERT_TRUE(registration.has_value());
+  auto description = Description();
+  description.view_type = ResourceViewType::kTexture_SRV;
+  description.visibility = DescriptorVisibility::kShaderVisible;
+  const auto raw
+    = Registry().AcquireManagedView<FakeResource>(*registration, description);
+  const auto texture = Registry().AcquireManagedView<FakeResource>(
+    *registration, description, domains::kTexturesDomain);
+  const auto global = Registry().AcquireManagedView<FakeResource>(
+    *registration, description, domains::kGlobalSrvDomain);
+  ASSERT_TRUE(raw.has_value());
+  ASSERT_TRUE(texture.has_value());
+  ASSERT_TRUE(global.has_value());
+  EXPECT_NE(raw->shader_visible_index, texture->shader_visible_index);
+  EXPECT_NE(raw->shader_visible_index, global->shader_visible_index);
+  EXPECT_NE(texture->shader_visible_index, global->shader_visible_index);
+  EXPECT_EQ(Registry()
+              .AcquireManagedView<FakeResource>(*registration, description)
+              ->shader_visible_index,
+    raw->shader_visible_index);
+  EXPECT_EQ(Registry()
+              .AcquireManagedView<FakeResource>(
+                *registration, description, domains::kTexturesDomain)
+              ->shader_visible_index,
+    texture->shader_visible_index);
+  EXPECT_EQ(Registry()
+              .AcquireManagedView<FakeResource>(
+                *registration, description, domains::kGlobalSrvDomain)
+              ->shader_visible_index,
+    global->shader_visible_index);
+}
+
+NOLINT_TEST_F(ManagedRegistryTest, BindlessManagedViewRejectsCpuOnlyVisibility)
+{
+  const auto registration = Registry().RegisterManaged(resource);
+  ASSERT_TRUE(registration.has_value());
+  EXPECT_FALSE(Registry()
+      .AcquireManagedView<FakeResource>(*registration, Description(),
+        oxygen::bindless::generated::kTexturesDomain)
+      .has_value());
+  EXPECT_TRUE(Registry()
+      .AcquireManagedView<FakeResource>(*registration, Description())
+      .has_value());
+}
 
 NOLINT_TEST_F(
   ManagedRegistryTest, LastOwnerClosesAcquisitionUntilEveryUseRetires)

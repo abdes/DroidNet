@@ -320,17 +320,3 @@ float4 VortexSkyPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
         0u, view_pre_exposure);
     return float4(sky_color, sky_sample.a);
 }
-
-[shader("compute")]
-[numthreads(8, 8, 1)]
-void VortexIblIrradianceCS(uint3 dispatch_id : SV_DispatchThreadID)
-{
-    (void)dispatch_id;
-}
-
-[shader("compute")]
-[numthreads(8, 8, 1)]
-void VortexIblPrefilterCS(uint3 dispatch_id : SV_DispatchThreadID)
-{
-    (void)dispatch_id;
-}

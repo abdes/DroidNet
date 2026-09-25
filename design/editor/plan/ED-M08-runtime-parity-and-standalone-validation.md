@@ -187,6 +187,7 @@ irradiance, roughness-dependent specular products, readiness and invalidation.
 Activate Stage 13 indirect evaluation and retire the Stage 12 ambient bridge.
 Use the scene-global capture anchor and shared producer/consumer filtering rules
 in the IBL contract; camera navigation does not change authored sky lighting.
+The native [VX-IBL-01 plan](../../../projects/Oxygen.Engine/design/vortex/milestones/VX-IBL-01/README.md) delivers height-fog capture, immediate authoring, budgeted runtime updates and DemoShell UI within this rendering work.
 
 Resolve the exact camera and parented pose. Auto derives target aspect with
 unchanged vertical FOV; Fixed preserves ratio/composition with a centred content

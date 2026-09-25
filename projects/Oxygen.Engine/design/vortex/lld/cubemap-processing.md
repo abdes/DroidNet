@@ -603,7 +603,7 @@ republication, and product reuse do not hide churn.
 
 Static specified-cubemap diffuse SH is implemented and recorded under VTX-M08.
 Captured-scene diffuse/specular and specified-cubemap specular products are
-scheduled under VX-IBL-01. Continuous capture, blending, SkyLight AO/bent normals,
+scheduled under [VX-IBL-01](../milestones/VX-IBL-01/README.md), including height fog and both update schedules. Cubemap blending, SkyLight AO/bent normals,
 baked integration, probe arrays and cloud capture remain VX-SKY-01.
 
 [OPEN_ITEMS.md](../OPEN_ITEMS.md) owns their status. These products build on the

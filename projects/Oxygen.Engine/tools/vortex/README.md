@@ -2,6 +2,12 @@
 
 This directory contains Vortex-specific capture analysis and probe scripts.
 
+`AnalyzeRenderDocIblProducts.py` checks the VX-IBL-01 constant-cube producer
+fixture: dispatch order, six faces/eight mips, SH and final metadata.
+`-PassName IblSurface` checks the shared evaluator and BRDF lookup in its
+controlled native material fixture. Capture
+and replay commands live in the [milestone validation](../../design/vortex/milestones/VX-IBL-01/validation.md).
+
 ## Proof Automation Contract
 
 Vortex proof wrappers must fail fast and must not claim proof from a failed

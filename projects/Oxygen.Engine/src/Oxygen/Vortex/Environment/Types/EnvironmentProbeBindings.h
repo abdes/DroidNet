@@ -20,19 +20,22 @@ struct EnvironmentProbeBindings {
   ShaderVisibleIndex irradiance_map_srv { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex prefiltered_map_srv { kInvalidShaderVisibleIndex };
   std::uint32_t probe_revision { 0U };
+  ShaderVisibleIndex product_metadata_srv { kInvalidShaderVisibleIndex };
 };
 
 // NOLINTBEGIN(*-magic-numbers)
 static_assert(std::is_standard_layout_v<EnvironmentProbeBindings>);
 static_assert(sizeof(ShaderVisibleIndex) == 4);
 static_assert(alignof(ShaderVisibleIndex) == 4);
-static_assert(sizeof(EnvironmentProbeBindings) == 20);
+static_assert(sizeof(EnvironmentProbeBindings) == 24);
 static_assert(alignof(EnvironmentProbeBindings) == 4);
 static_assert(offsetof(EnvironmentProbeBindings, environment_map_srv) == 0);
 static_assert(offsetof(EnvironmentProbeBindings, diffuse_sh_srv) == 4);
 static_assert(offsetof(EnvironmentProbeBindings, irradiance_map_srv) == 8);
 static_assert(offsetof(EnvironmentProbeBindings, prefiltered_map_srv) == 12);
 static_assert(offsetof(EnvironmentProbeBindings, probe_revision) == 16);
+
+static_assert(offsetof(EnvironmentProbeBindings, product_metadata_srv) == 20);
 
 // NOLINTEND(*-magic-numbers)
 

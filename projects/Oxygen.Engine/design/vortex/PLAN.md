@@ -12,6 +12,7 @@ See [STATUS.md](STATUS.md) for progress and [OPEN_ITEMS.md](OPEN_ITEMS.md) for p
   the inserted performance, quality, console and widget-automation slices.
 - [ED-M08 native editor extension](milestones/ED-M08/README.md): native authoring,
   captured-sky IBL and editor integration; the editor plan owns its schedule.
+- [VX-IBL-01 captured sky lighting](milestones/VX-IBL-01/README.md): atmosphere/height-fog diffuse and specular IBL, immediate authoring and budgeted runtime updates.
 - [Material sidedness correction](milestones/material-sidedness/README.md).
 - [RenderScene preview sun](milestones/preview-sun/README.md).
 - [Future capabilities](milestones/VTX-FUTURE/README.md).

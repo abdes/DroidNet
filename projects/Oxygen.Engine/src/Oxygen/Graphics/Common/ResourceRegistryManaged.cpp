@@ -324,10 +324,14 @@ auto ResourceRegistry::AcquireManagedView(const RegistrationOwner& owner,
         : kInvalidShaderVisibleIndex;
       return ManagedView { cached->view_object, index };
     }
-    // Preparation is transactional. The existing shadow path uses raw SRV/DSV
-    // allocations in the fixed heaps; sharing preserves that binding contract.
+    if (query.domain && visibility != DescriptorVisibility::kShaderVisible) {
+      return std::unexpected(RegistrationError::kAllocationFailed);
+    }
+    // Allocation domain is part of view identity, including on cache hits.
     auto description = copy(query.description);
-    auto descriptor = allocator.AllocateRaw(view_type, visibility);
+    auto descriptor = query.domain
+      ? allocator.AllocateBindless(*query.domain, view_type)
+      : allocator.AllocateRaw(view_type, visibility);
     if (!descriptor.IsValid()) {
       return std::unexpected(RegistrationError::kAllocationFailed);
     }
@@ -350,7 +354,7 @@ auto ResourceRegistry::AcquireManagedView(const RegistrationOwner& owner,
         throw std::logic_error("Descriptor identity already registered");
       }
       view_cache_.emplace(CacheKey { core->key, hash },
-        ViewCacheEntry { view, std::move(description), index });
+        ViewCacheEntry { view, std::move(description), index, query.domain });
     } catch (...) {
       if (mapped) {
         descriptor_to_resource_.erase(index);

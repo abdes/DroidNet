@@ -1,8 +1,8 @@
 # ED-M08 delivery scope
 
-### ED-M08 — V0.1 canonical authoring and rendering
+## ED-M08 — V0.1 canonical authoring and rendering
 
-**Status:** `planned`; design package ready for implementation.
+Delivery status is owned by the [ED-M08 milestone](README.md).
 
 The [editor ED-M08 plan](../../../../../../design/editor/plan/ED-M08-runtime-parity-and-standalone-validation.md)
 owns the cross-engine/editor sequence and acceptance gates. Implement native
@@ -25,7 +25,7 @@ covers static specified-cubemap diffuse lighting. It does not close the ED-M08
 extension. Preserve ordinary native demo loading, offscreen/composition behavior,
 feature variants and material-sidedness/mirrored-winding correctness.
 
-Broader GI/SSR/reflection probes, continuous time-sliced sky capture, cubemap blend
+Broader GI/SSR/reflection probes, cubemap blend
 transitions, SkyLight occlusion/baking, VSM, geometry virtualization, material
 composition, clouds, heterogeneous volumes, water, hair, distortion and light
 shafts remain separately scoped future work. The ED-M08 IBL subset does not
