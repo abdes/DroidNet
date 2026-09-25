@@ -56,10 +56,8 @@ repos:
         require_serial: true
       - id: oxyformat
         name: Oxygen C++ formatting
-        language: python
-        entry: python projects/Oxygen.Engine/tools/oxytools/run_oxyformat.py --project-root projects/Oxygen.Engine --paths-from-cwd
-        additional_dependencies:
-          ["PyYAML>=6.0.2,<7", "jsonschema>=4.23,<5", "rich>=13.9,<15"]
+        language: system
+        entry: uv run --locked --no-sync --no-active python projects/Oxygen.Engine/tools/oxytools/run_oxyformat.py --project-root projects/Oxygen.Engine --paths-from-cwd
         types: [file]
         files: '(?i)^projects/Oxygen\.Engine/(src/Oxygen|Examples)/.*\.(c|cc|cpp|cxx|h|hh|hpp|hxx|inc|inl|ipp|tpp|ixx|cppm)$'
         stages: [pre-commit]

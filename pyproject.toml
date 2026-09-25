@@ -1,0 +1,50 @@
+[project]
+name = "droidnet"
+version = "0.1.0"
+description = "Shared Python tooling for the DroidNet repository"
+requires-python = ">=3.11"
+dependencies = [
+    "droidnet-tooling-scripts",
+    "bindless-codegen",
+    "oxygen-pakgen[yaml]",
+    "oxygen-tools[codemod]",
+    "oxygen-engine-tools",
+]
+
+[dependency-groups]
+dev = ["bindless-codegen[test]", "oxygen-pakgen[dev]", "pre-commit>=4.5,<5", "ruff>=0.15,<0.16"]
+build-tools = ["setuptools>=77,<83", "wheel"]
+graphics = ["oxygen-atmosphere-tools", "oxygen-vortex-tools[images,numerics]"]
+
+[tool.uv]
+package = false
+required-version = ">=0.12.17"
+default-groups = ["dev", "build-tools", "graphics"]
+
+[tool.uv.workspace]
+members = [
+    "tooling/scripts",
+    "projects/Oxygen.Engine",
+    "projects/Oxygen.Engine/tools/oxytools",
+    "projects/Oxygen.Engine/tools/atmosphere",
+    "projects/Oxygen.Engine/tools/vortex",
+    "projects/Oxygen.Engine/src/Oxygen/Core/Tools/BindlessCodeGen",
+    "projects/Oxygen.Engine/src/Oxygen/Cooker/Tools/PakGen",
+]
+
+[tool.uv.sources]
+droidnet-tooling-scripts = { workspace = true }
+bindless-codegen = { workspace = true }
+oxygen-pakgen = { workspace = true }
+oxygen-tools = { workspace = true }
+oxygen-engine-tools = { workspace = true }
+oxygen-atmosphere-tools = { workspace = true }
+oxygen-vortex-tools = { workspace = true }
+
+# Build editable repository packages in isolation, using the locked backend
+# versions from the build-tools group rather than a second floating resolution.
+[tool.uv.extra-build-dependencies]
+droidnet-tooling-scripts = [{ requirement = "setuptools", match-runtime = true }, { requirement = "wheel", match-runtime = true }]
+bindless-codegen = [{ requirement = "setuptools", match-runtime = true }, { requirement = "wheel", match-runtime = true }]
+oxygen-pakgen = [{ requirement = "setuptools", match-runtime = true }, { requirement = "wheel", match-runtime = true }]
+oxygen-tools = [{ requirement = "setuptools", match-runtime = true }, { requirement = "wheel", match-runtime = true }]

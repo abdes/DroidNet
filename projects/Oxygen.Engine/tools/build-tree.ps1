@@ -76,13 +76,13 @@ try {
 
     $engineRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
     . (Join-Path $PSScriptRoot 'cli/BuildSelection.ps1')
-    $python = if ($IsWindows) { 'python' } else { 'python3' }
     $prepareClangd = Join-Path $engineRoot '.vscode/prepare_clangd.py'
     $null = Get-Command cmake -ErrorAction Stop
 
     function Invoke-TreeConfigure([string]$Preset, [string]$BuildRoot, [string[]]$Definitions = @()) {
+        $python = Get-OxygenPython $engineRoot
         Write-Host "Configuring $Preset..."
-        $cmakeArgs = @('--preset', $Preset) + @($Definitions | ForEach-Object { "-D$_" })
+        $cmakeArgs = @('--preset', $Preset, "-DPython3_EXECUTABLE=$python") + @($Definitions | ForEach-Object { "-D$_" })
         & cmake @cmakeArgs
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         $cache = Get-OxygenCacheValues $BuildRoot
@@ -110,8 +110,8 @@ try {
             Invoke-TreeConfigure $Selection $buildRoot $Define
         } else {
             $null = Get-Command conan -ErrorAction Stop
+            $null = Get-Command uv -ErrorAction Stop
             if ($Generator -ne 'VisualStudio') {
-                $null = Get-Command $python -ErrorAction Stop
                 if (-not (Test-Path -LiteralPath $prepareClangd -PathType Leaf)) { throw "Missing clangd helper: $prepareClangd" }
             }
             # Preserve Conan profile names; resolve file paths against the engine.

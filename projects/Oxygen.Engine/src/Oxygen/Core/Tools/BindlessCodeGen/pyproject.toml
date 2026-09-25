@@ -9,7 +9,11 @@ description = "Bindless binding slots code generator for Oxygen Engine"
 authors = [ {name = "Oxygen Dev"} ]
 readme = "README.md"
 license = { text = "BSD-3-Clause" }
-requires-python = ">=3.8"
+requires-python = ">=3.11"
+dependencies = ["PyYAML>=6.0.2,<7", "jsonschema>=4.23,<5"]
+
+[project.optional-dependencies]
+test = ["pytest>=8,<10"]
 
 [project.scripts]
 bindless_codegen = "bindless_codegen.cli:main"

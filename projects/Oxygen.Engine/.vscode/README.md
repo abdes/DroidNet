@@ -1,8 +1,9 @@
 # VS Code with clangd
 
 Open `Oxygen.Engine` as the VS Code workspace folder. Use CMake Tools and
-vscode-clangd 0.6.0 or newer (command substitutions are required). Python 3 must be
-available as `python` on Windows or `python3` on Linux/macOS. No custom extension
+vscode-clangd 0.6.0 or newer (command substitutions are required). Provision the
+repository `.venv` with `build-tree generate` or root `uv sync --locked`; the task
+uses that interpreter directly rather than the VS Code process's PATH. No custom extension
 or extension installation is performed by this workspace.
 
 The integration was inspected against CMake Tools 1.24.42, including its native

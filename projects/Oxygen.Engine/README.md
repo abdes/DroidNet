@@ -53,27 +53,17 @@ or add a machine-wide DXC PATH entry. For an installed SDK, retain its complete
 `bin` directory. See the [ShaderBake guide](src/Oxygen/Graphics/Direct3D12/Tools/ShaderBake/README.md)
 for cache and compilation commands.
 
-$env:VIRTUAL_ENV_DISABLE_PROMPT = 1
-oh-my-posh init pwsh --config E:\dev\ohmyposh-config.json | Out-String | Invoke-Expression
-function AutoActivateVenv {
-$venvActivate = ".venv\Scripts\Activate"
-if (Test-Path $venvActivate) {
-& $venvActivate
-}
-}
+## Python tools
 
-function Set-Location {
-param ([string]$Path)
-Microsoft.PowerShell.Management\Set-Location -Path $Path
-AutoActivateVenv
-}
+Install Python 3.14 and uv 0.12.17+. From the DroidNet repository root, run
+`uv sync --locked` to prepare this checkout's `.venv`. The normal
+`tools/build-tree.ps1 generate <profile>` workflow also provisions it through
+Conan. All C++ configurations and generators share this environment.
 
-## Python venv
-
-cd dev/projects
-python -m venv .venv
-
-.venv/Scripts/activate
+Configure, builds and developer tools consume the provisioned environment without
+installing packages. See [repository Python tooling](../../tooling/PYTHON.md)
+for dependency ownership, updates and Conan source exports. Automatic activation
+is a personal shell-profile preference; Oxygen does not configure your shell.
 
 ## Pre-commit
 

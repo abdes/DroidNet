@@ -23,6 +23,10 @@ class PresetGenerationTests(unittest.TestCase):
             target = root / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ENGINE / relative, target)
+        # These tests mock external programs; environment ownership is exercised
+        # by the real workspace integration checks.
+        with (root / "tools/cli/BuildSelection.ps1").open("a", encoding="utf-8") as stream:
+            stream.write("\nfunction Get-OxygenPython { return 'python' }\n")
 
     def make_fixture(self, root):
         recipe = ENGINE / "conanfile.py"
@@ -32,7 +36,8 @@ class PresetGenerationTests(unittest.TestCase):
             "module = importlib.util.module_from_spec(spec)\nspec.loader.exec_module(module)\n"
             "class Fixture(module.OxygenConan):\n"
             "    def requirements(self): pass\n"
-            "    def build_requirements(self): pass\n", encoding="utf-8")
+            "    def build_requirements(self): pass\n"
+            "    def _prepare_build_python(self): return None\n", encoding="utf-8")
         (root / "VERSION").write_text("0.1.0\n", encoding="utf-8")
         (root / "CMakeLists.txt").write_text(
             "cmake_minimum_required(VERSION 4.2)\nproject(Fixture NONE)\n", encoding="utf-8")
@@ -151,7 +156,8 @@ class PresetGenerationTests(unittest.TestCase):
                 "module = importlib.util.module_from_spec(spec)\nspec.loader.exec_module(module)\n"
                 "class PolicyFixture(module.OxygenConan):\n"
                 "    def requirements(self):\n        pass\n"
-                "    def build_requirements(self): pass\n", encoding="utf-8",
+                "    def build_requirements(self): pass\n"
+                "    def _prepare_build_python(self): return None\n", encoding="utf-8",
             )
             (root / "VERSION").write_text("0.1.0\n", encoding="utf-8")
             shutil.copyfile(ENGINE / "CMakePresets.json", root / "CMakePresets.json")
@@ -318,7 +324,7 @@ class PresetGenerationTests(unittest.TestCase):
                     preparation_index = records.index(preparations[0])
                     self.assertEqual(records[preparation_index - 1]["tool"], "cmake")
                 self.assertEqual([record["arguments"] for record in records if record["tool"] == "cmake"],
-                                 [["--preset", prefix + tree + "-default"] for tree in trees])
+                                 [["--preset", prefix + tree + "-default", "-DPython3_EXECUTABLE=python"] for tree in trees])
                 installs = [record for record in records if record["tool"] == "conan" and record["arguments"][0] == "install"]
                 self.assertEqual(len(installs), len(trees) * (1 if asan else 3))
                 self.assertTrue(all(f"&:with_tracy={tracy}" in call["arguments"] for call in installs))
@@ -363,7 +369,7 @@ class PresetGenerationTests(unittest.TestCase):
             calls = [json.loads(line) for line in (root / "calls.jsonl").read_text(encoding="utf-8-sig").splitlines()]
             self.assertEqual(len(calls), 2)
             self.assertIn("build_type=Debug", calls[0]["arguments"])
-            self.assertEqual(calls[1]["arguments"], ["--preset", "oxygen-asan-ninja-default"])
+            self.assertEqual(calls[1]["arguments"], ["--preset", "oxygen-asan-ninja-default", "-DPython3_EXECUTABLE=python"])
 
     def test_native_generation_coexists_and_migrates(self):
         with tempfile.TemporaryDirectory(prefix="oxygen-presets-") as directory:
@@ -379,7 +385,8 @@ class PresetGenerationTests(unittest.TestCase):
                 "class PresetFixture(module.OxygenConan):\n"
                 "    def requirements(self):\n"
                 "        pass\n"
-                "    def build_requirements(self): pass\n",
+                "    def build_requirements(self): pass\n"
+                "    def _prepare_build_python(self): return None\n",
                 encoding="utf-8",
             )
             (root / "VERSION").write_text("0.1.0\n", encoding="utf-8")
