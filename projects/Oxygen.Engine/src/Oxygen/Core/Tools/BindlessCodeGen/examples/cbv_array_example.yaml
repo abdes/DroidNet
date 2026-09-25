@@ -1,23 +1,64 @@
-# Example: CBV array parameter mapped to a domain
+# V2 uses a CBV descriptor table; there is no cbv_array_size root-parameter field.
 meta:
-  version: "1.0.0"
-  description: "CBV array example for BindlessCodeGen"
+  version: 2.0.0
+  description: A fixed array of 16 constant-buffer descriptors.
 defaults:
   invalid_index: 4294967295
-domains:
-  - id: cbv_dom
-    name: CBVDomain
-    kind: CBV
-    register: b1
-    space: space0
-    root_table: CBVTable
-    domain_base: 0
-    capacity: 8
-root_signature:
-  - type: cbv
-    name: CBVTable
-    index: 2
-    visibility: ALL
-    shader_register: b1
-    register_space: space0
-    cbv_array_size: 4
+abi:
+  index_spaces:
+    - id: srv_uav_cbv
+  domains:
+    - id: per_draw_cbvs
+      name: PerDrawCBVs
+      index_space: srv_uav_cbv
+      shader_index_base: 0
+      capacity: 16
+      shader_access_class: constant_buffer
+      view_types:
+        - ConstantBuffer
+backends:
+  d3d12:
+    strategy:
+      heaps:
+        - id: CBV_SRV_UAV:gpu
+          type: CBV_SRV_UAV
+          shader_visible: true
+          capacity: 16
+          base_index: 0
+          allow_growth: false
+      tables:
+        - id: PerDrawCBVsTable
+          descriptor_kind: CBV
+          heap: CBV_SRV_UAV:gpu
+          shader_register: b2
+          register_space: space0
+          descriptor_count: 16
+      domain_realizations:
+        - domain: per_draw_cbvs
+          table: PerDrawCBVsTable
+          heap_local_base: 0
+    root_signature:
+      - type: descriptor_table
+        id: PerDrawCBVsTable
+        table: PerDrawCBVsTable
+        index: 0
+        visibility: ALL
+  vulkan:
+    strategy:
+      descriptor_sets:
+        - id: resources
+          set: 0
+      bindings:
+        - id: per_draw_cbvs_binding
+          set: resources
+          binding: 0
+          descriptor_type: UNIFORM_BUFFER
+          descriptor_count: 16
+      domain_realizations:
+        - domain: per_draw_cbvs
+          binding: per_draw_cbvs_binding
+          array_element_base: 0
+    pipeline_layout:
+      - type: descriptor_set
+        id: Resources
+        set_ref: resources

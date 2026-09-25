@@ -1,25 +1,64 @@
-# Sampler table example: dedicated sampler descriptor_table at s0
+# Sampler descriptors use a dedicated D3D12 sampler heap and Vulkan SAMPLER binding.
 meta:
-  version: "1.0.0"
+  version: 2.0.0
+  description: A fixed sampler descriptor array in its own ABI index space.
 defaults:
   invalid_index: 4294967295
-domains:
-  - id: samplers
-    name: Samplers
-    kind: SAMPLER
-    register: s0
-    space: space0
-    root_table: SamplerTable
-    domain_base: 0
-    capacity: 16
-root_signature:
-  - type: descriptor_table
-    name: SamplerTable
-    index: 6
-    visibility: ALL
-    ranges:
-      - range_type: SAMPLER
-        domain: samplers
-        base_shader_register: s0
-        register_space: space0
-        num_descriptors: 16
+abi:
+  index_spaces:
+    - id: sampler
+  domains:
+    - id: samplers
+      name: Samplers
+      index_space: sampler
+      shader_index_base: 0
+      capacity: 16
+      shader_access_class: sampler
+      view_types:
+        - Sampler
+backends:
+  d3d12:
+    strategy:
+      heaps:
+        - id: SAMPLER:gpu
+          type: SAMPLER
+          shader_visible: true
+          capacity: 16
+          base_index: 100000
+          allow_growth: false
+      tables:
+        - id: SamplersTable
+          descriptor_kind: SAMPLER
+          heap: SAMPLER:gpu
+          shader_register: s0
+          register_space: space0
+          descriptor_count: 16
+      domain_realizations:
+        - domain: samplers
+          table: SamplersTable
+          heap_local_base: 0
+    root_signature:
+      - type: descriptor_table
+        id: SamplersTable
+        table: SamplersTable
+        index: 0
+        visibility: ALL
+  vulkan:
+    strategy:
+      descriptor_sets:
+        - id: resources
+          set: 0
+      bindings:
+        - id: samplers_binding
+          set: resources
+          binding: 0
+          descriptor_type: SAMPLER
+          descriptor_count: 16
+      domain_realizations:
+        - domain: samplers
+          binding: samplers_binding
+          array_element_base: 0
+    pipeline_layout:
+      - type: descriptor_set
+        id: Resources
+        set_ref: resources
