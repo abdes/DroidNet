@@ -23,11 +23,6 @@ set_target_properties(
     FOLDER
       "Testing"
 )
-target_compile_options(
-  "Oxygen.Graphics.Common.LinkTest"
-  PRIVATE
-    ${OXYGEN_COMMON_CXX_FLAGS}
-)
 target_link_libraries(
   "Oxygen.Graphics.Common.LinkTest"
   PRIVATE

@@ -24,7 +24,6 @@ set_target_properties(
     FOLDER
       "Testing"
 )
-target_compile_options(${link_test_target} PRIVATE ${OXYGEN_COMMON_CXX_FLAGS})
 target_link_libraries(${link_test_target} PRIVATE oxygen::textwrap)
 add_test(NAME ${link_test_target} COMMAND ${link_test_target})
 
@@ -54,7 +53,6 @@ set_target_properties(
     FOLDER
       "Testing"
 )
-target_compile_options(${fuzz_test_target} PRIVATE ${OXYGEN_COMMON_CXX_FLAGS})
 target_link_libraries(
   ${fuzz_test_target}
   PRIVATE

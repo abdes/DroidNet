@@ -16,7 +16,6 @@ option(
   ${PROJECT_IS_TOP_LEVEL}
 )
 option(OXYGEN_WITH_ASAN "Instrument code with address sanitizer." OFF)
-option(OXYGEN_WITH_COVERAGE "Instrument code to measure coverage." OFF)
 option(OXYGEN_WITH_TRACY "Enable Tracy profiler integration." OFF)
 option(OXYGEN_WITH_DOXYGEN "Create Doxygen API documentation targets." OFF)
 option(OXYGEN_USE_CCACHE "Enable compiler caching using ccache." OFF)
@@ -44,7 +43,6 @@ set(
   ${_oxygen_narrowable_options}
   BUILD_SHARED_LIBS
   OXYGEN_WITH_ASAN
-  OXYGEN_WITH_COVERAGE
   OXYGEN_WITH_TRACY
 )
 foreach(_option IN LISTS _oxygen_graph_options)

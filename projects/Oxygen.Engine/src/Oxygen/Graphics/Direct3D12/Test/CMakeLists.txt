@@ -24,11 +24,6 @@ set_target_properties(
     FOLDER
       "Testing"
 )
-target_compile_options(
-  "Oxygen.Graphics.Direct3D12.LinkTest"
-  PRIVATE
-    ${OXYGEN_COMMON_CXX_FLAGS}
-)
 target_link_libraries(
   "Oxygen.Graphics.Direct3D12.LinkTest"
   PRIVATE

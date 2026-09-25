@@ -31,7 +31,6 @@ set_target_properties(
     FOLDER
       "Testing"
 )
-target_compile_options(${link_test_target} PRIVATE ${OXYGEN_COMMON_CXX_FLAGS})
 target_compile_definitions(
   ${link_test_target}
   PRIVATE
@@ -491,13 +490,6 @@ if(WIN32)
       oxygen::testing
       nlohmann_json::nlohmann_json
   )
-  if(OXYGEN_WITH_COVERAGE)
-    target_compile_options(
-      oxygen-vortex-exposure-test-support
-      PRIVATE
-        "--coverage"
-    )
-  endif()
   gtest_program(
     "Oxygen.Vortex.Exposure.Tests"
     SOURCES

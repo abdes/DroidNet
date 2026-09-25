@@ -56,7 +56,7 @@ class OwnershipTests(CommandTests):
 
     def test_binary_settings_and_package_outputs_are_locked(self):
         for setting in ("BUILD_SHARED_LIBS", "OXYGEN_WITH_TRACY", "OXYGEN_WITH_ASAN",
-                        "OXYGEN_WITH_COVERAGE", "OXYGEN_BUILD_TESTS"):
+                        "OXYGEN_BUILD_TESTS"):
             with self.subTest(setting=setting):
                 result = self.configure_policy(
                     'set(OXYGEN_CONAN_PACKAGE_BUILD ON)\n'
@@ -114,12 +114,18 @@ class ModuleIntegrationTests(CommandTests):
                 "#include <Oxygen/TextWrap/TextWrap.h>\n"
                 "struct Parent { virtual ~Parent() = default; };\n"
                 "struct Child : Parent {};\n"
-                "class ConsumerComponent final : public oxygen::Component {\n"
-                "OXYGEN_COMPONENT(ConsumerComponent)\n};\n"
+                "bool check_component();\n"
                 "int main() { Child child; Parent* ptr = &child;\n"
-                "ConsumerComponent component;\n"
-                "return dynamic_cast<Child*>(ptr) && component.GetTypeId() == "
-                "ConsumerComponent::ClassTypeId() ? 0 : 1; }\n", encoding="utf-8",
+                "return dynamic_cast<Child*>(ptr) && check_component() ? 0 : 1; }\n", encoding="utf-8",
+            )
+            (root / "component.cpp").write_text(
+                '#include <Oxygen/Composition/Component.h>\n'
+                '#include <Oxygen/Composition/ComponentMacros.h>\n'
+                'class ConsumerComponent final : public oxygen::Component {\n'
+                'OXYGEN_COMPONENT(ConsumerComponent)\n};\n'
+                'bool check_component() { ConsumerComponent component;\n'
+                'return component.GetTypeId() == ConsumerComponent::ClassTypeId(); }\n',
+                encoding="utf-8",
             )
             (root / "CMakeLists.txt").write_text(
                 'cmake_minimum_required(VERSION 4.2)\nproject(Parent CXX)\n'
@@ -140,7 +146,9 @@ class ModuleIntegrationTests(CommandTests):
                 'message(FATAL_ERROR "Unselected engine module present")\nendif()\n'
                 'get_target_property(_type oxygen-base TYPE)\n'
                 'if(NOT _type STREQUAL "STATIC_LIBRARY")\nmessage(FATAL_ERROR "Parent linkage ignored")\nendif()\n'
-                'add_executable(parent_probe main.cpp)\n'
+                'add_executable(parent_probe main.cpp component.cpp)\n'
+                'set_source_files_properties(component.cpp PROPERTIES COMPILE_OPTIONS\n'
+                '  "$<$<CXX_COMPILER_ID:MSVC>:/GR->;$<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-fno-rtti>")\n'
                 'target_link_libraries(parent_probe PRIVATE oxygen::base oxygen::composition '
                 'oxygen::oxco oxygen::serio oxygen::clap oxygen::textwrap)\n', encoding="utf-8",
             )

@@ -93,6 +93,51 @@ for applications that need its cross-module registry initialization contract.
 Source-module support does not imply that the existing Conan package metadata or
 native installed exports are complete; those are separate workstream items B06/B07.
 
+## Compiler policy and instrumentation
+
+`CompilerPolicy.cmake` applies private build policy to all compiled targets in
+Oxygen's source and example directories, including auxiliary libraries, tools,
+tests and benchmarks. MSVC uses `/W4`; GCC/Clang use `-Wall -Wextra`. These warning
+levels are mandatory within Oxygen and do not propagate to external consumers.
+Ready modules opt individual targets into warnings-as-errors using native CMake:
+
+```cmake
+set_property(TARGET my_module PROPERTY COMPILE_WARNING_AS_ERROR ON)
+```
+
+Oxygen compiles without native C++ RTTI and retains its own type system. Consumer
+translation units deriving from Oxygen polymorphic classes must also disable
+native RTTI (`/GR-` or `-fno-rtti`). Separate those from code using native RTTI for
+unrelated classes. Linking Oxygen does not automatically disable RTTI throughout
+the consuming application. Public language features and header requirements
+(including Windows `NOMINMAX`) remain explicit usage requirements.
+
+MSVC runtime selection comes from Conan's `CMAKE_MSVC_RUNTIME_LIBRARY`; Oxygen
+does not substitute its own runtime switch. PIC uses `POSITION_INDEPENDENT_CODE`.
+Portable static/object libraries default to PIC unless Conan or the parent has
+set the property through native CMake policy.
+
+The existing ASan profiles and separate Debug build trees remain the workflow.
+ASan compile options are private; static/object libraries carry the sanitizer's
+required link options to their consumers. Oxygen targets disable MSVC runtime
+checks and incremental linking and use embedded debug information for ASan,
+without overwriting unrelated compiler/linker cache entries. GoogleTest discovery
+and CTest share a target launcher that resolves DLLs from the built targets, the
+selected deployment (`Asan` for ASan builds), and the active MSVC compiler directory.
+Tests run from their executable directory, without requiring an ordinary Debug
+installation. An application embedding instrumented modules owns its own
+compatible compiler settings and runtime launch environment.
+
+Coverage instrumentation is no longer part of the build. The former Conan/CMake
+options and Linux coverage profile have been removed.
+
+Native compile/run tests live in `tools/cmake/tests/test_compiler_policy.py`.
+They exercise private warning policy, module-local errors, RTTI isolation, PIC,
+ASan static/shared linking, discovery and deliberate memory-error detection.
+Enable `OXYGEN_RUN_CONAN_GRAPH_INTEGRATION=1` to additionally compare cached Conan
+graphs using `test_conan_instrumentation.py`. Graph identity is checked separately
+from actual compiler/runtime instrumentation.
+
 ## Conan defaults and local narrowing
 
 `conan install` generates the dependency graph, toolchain and presets; it does not
@@ -106,7 +151,7 @@ cmake --preset oxygen-ninja-default -DOXYGEN_BUILD_TESTS=OFF
 
 The next normal preset configure restores the recipe default. `cmake --build`
 uses the last configured state. Enabling outputs the recipe disabled, changing
-shared/static linkage, ASan, coverage or Tracy against the resolved graph, or
+shared/static linkage, ASan or Tracy against the resolved graph, or
 narrowing the contents of a Conan package build is an error. Change recipe options
 and rerun Conan instead. A noncached native Conan toolchain block carries graph
 expectations so changing recipe options cannot leave stale validation facts.

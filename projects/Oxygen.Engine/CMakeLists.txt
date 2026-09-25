@@ -231,189 +231,10 @@ if(
   set(CMAKE_VISIBILITY_INLINES_HIDDEN YES)
 endif()
 
-set(OXYGEN_COMMON_CXX_FLAGS)
-if(OXYGEN_WITH_ASAN)
-  list(APPEND OXYGEN_COMMON_CXX_FLAGS "-fsanitize=address")
-  if(
-    CMAKE_CXX_COMPILER_ID
-      STREQUAL
-      "Clang"
-    OR
-      CMAKE_CXX_COMPILER_ID
-        STREQUAL
-        "AppleClang"
-    OR
-      CMAKE_CXX_COMPILER_ID
-        STREQUAL
-        "GNU"
-  )
-    add_link_options("-fsanitize=address")
-  endif()
-  if(MSVC AND PROJECT_IS_TOP_LEVEL)
-    # ASAN on MSVC does not support incremental linking. We must ensure that
-    # /INCREMENTAL:NO is set in the cache variables so that it's reflected
-    # in the IDE and all link commands correctly.
-    set(
-      CMAKE_MSVC_INCREMENTAL_LINKING
-      OFF
-      CACHE BOOL
-      "Disable incremental linking for ASAN"
-      FORCE
-    )
-    set(
-      CMAKE_MSVC_INCREMENTAL_LINKING_DEBUG
-      OFF
-      CACHE BOOL
-      "Disable incremental linking for ASAN"
-      FORCE
-    )
-    set(
-      CMAKE_MSVC_INCREMENTAL_LINKING_MINSIZEREL
-      OFF
-      CACHE BOOL
-      "Disable incremental linking for ASAN"
-      FORCE
-    )
-    set(
-      CMAKE_MSVC_INCREMENTAL_LINKING_RELEASE
-      OFF
-      CACHE BOOL
-      "Disable incremental linking for ASAN"
-      FORCE
-    )
-    set(
-      CMAKE_MSVC_INCREMENTAL_LINKING_RELWITHDEBINFO
-      OFF
-      CACHE BOOL
-      "Disable incremental linking for ASAN"
-      FORCE
-    )
-    set_property(
-      DIRECTORY
-      PROPERTY
-        MSVC_INCREMENTAL_LINKING
-          OFF
-    )
-    set(
-      CMAKE_EXE_LINKER_FLAGS_DEBUG
-      "/debug /INCREMENTAL:NO"
-      CACHE STRING
-      "Forced ASAN linker flags"
-      FORCE
-    )
-    set(
-      CMAKE_EXE_LINKER_FLAGS_MINSIZEREL
-      "/INCREMENTAL:NO"
-      CACHE STRING
-      "Forced ASAN linker flags"
-      FORCE
-    )
-    set(
-      CMAKE_EXE_LINKER_FLAGS_RELEASE
-      "/INCREMENTAL:NO"
-      CACHE STRING
-      "Forced ASAN linker flags"
-      FORCE
-    )
-    set(
-      CMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO
-      "/debug /INCREMENTAL:NO"
-      CACHE STRING
-      "Forced ASAN linker flags"
-      FORCE
-    )
-    set(
-      CMAKE_MODULE_LINKER_FLAGS_DEBUG
-      "/debug /INCREMENTAL:NO"
-      CACHE STRING
-      "Forced ASAN linker flags"
-      FORCE
-    )
-    set(
-      CMAKE_MODULE_LINKER_FLAGS_MINSIZEREL
-      "/INCREMENTAL:NO"
-      CACHE STRING
-      "Forced ASAN linker flags"
-      FORCE
-    )
-    set(
-      CMAKE_MODULE_LINKER_FLAGS_RELEASE
-      "/INCREMENTAL:NO"
-      CACHE STRING
-      "Forced ASAN linker flags"
-      FORCE
-    )
-    set(
-      CMAKE_MODULE_LINKER_FLAGS_RELWITHDEBINFO
-      "/debug /INCREMENTAL:NO"
-      CACHE STRING
-      "Forced ASAN linker flags"
-      FORCE
-    )
-    set(
-      CMAKE_SHARED_LINKER_FLAGS_DEBUG
-      "/debug /INCREMENTAL:NO"
-      CACHE STRING
-      "Forced ASAN linker flags"
-      FORCE
-    )
-    set(
-      CMAKE_SHARED_LINKER_FLAGS_MINSIZEREL
-      "/INCREMENTAL:NO"
-      CACHE STRING
-      "Forced ASAN linker flags"
-      FORCE
-    )
-    set(
-      CMAKE_SHARED_LINKER_FLAGS_RELEASE
-      "/INCREMENTAL:NO"
-      CACHE STRING
-      "Forced ASAN linker flags"
-      FORCE
-    )
-    set(
-      CMAKE_SHARED_LINKER_FLAGS_RELWITHDEBINFO
-      "/debug /INCREMENTAL:NO"
-      CACHE STRING
-      "Forced ASAN linker flags"
-      FORCE
-    )
-
-    add_link_options(
-      /LARGEADDRESSAWARE
-      /DEBUG
-      /INCREMENTAL:NO # Ensure it is also added to the link command
-    )
-  endif()
-endif()
-# MSVC-specific sanitizer handling will be done at the end of this file to ensure
-# it overrides any flags added by subdirectories or toolchains.
-if(MSVC)
-  # Enable C++ latest features
-  list(
-    APPEND
-    OXYGEN_COMMON_CXX_FLAGS
-    "/Zc:__cplusplus"
-    "/Zc:preprocessor"
-  )
-  list(APPEND OXYGEN_COMMON_CXX_FLAGS "/utf-8") # Set character set to UTF-8
-  list(APPEND OXYGEN_COMMON_CXX_FLAGS "/GR-") # Disable RTTI
-  list(APPEND OXYGEN_COMMON_CXX_FLAGS "/W4") # Warning level 4
-  list(APPEND OXYGEN_COMMON_CXX_FLAGS "/MP") # Multi-processor compilation
-  list(APPEND OXYGEN_COMMON_CXX_FLAGS "/DNOMINMAX") # Always define NOMINMAX for MSVC
-  #  list(APPEND OXYGEN_COMMON_CXX_FLAGS "/WX") # Treat warnings as errors
-else()
-  list(APPEND OXYGEN_COMMON_CXX_FLAGS "-fno-rtti") # Disable RTTI
-  list(APPEND OXYGEN_COMMON_CXX_FLAGS "-fPIC")
-  # Enable all warnings and treat them as errors
-  list(
-    APPEND
-    OXYGEN_COMMON_CXX_FLAGS
-    "-Wall"
-    "-Wextra"
-    "-Werror"
-  )
-endif()
+# Build policy is applied privately to all Oxygen-owned compiled targets below.
+# Modules can opt individual targets into COMPILE_WARNING_AS_ERROR explicitly.
+set(CMAKE_COMPILE_WARNING_AS_ERROR OFF)
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/CompilerPolicy.cmake")
 
 # ---- Speedup build using ccache (needs CPM) ----
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/FasterBuild.cmake")
@@ -421,26 +242,6 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/FasterBuild.cmake")
 # ------------------------------------------------------------------------------
 # Print a summary of the configuration
 # ------------------------------------------------------------------------------
-
-# Detect and report C++ standard support via module
-include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/DetectCxxStandards.cmake")
-
-# Small helper to print support for a standard using a prefix
-function(_report_standard prefix std_name)
-  string(TOUPPER ${prefix} _PREF)
-  set(_supported_var "${_PREF}_${std_name}_SUPPORTED")
-  set(_flag_var "${_PREF}_${std_name}_FLAG")
-  if(${${_supported_var}})
-    message(STATUS "     ${std_name}: supported (${${_flag_var}})")
-  else()
-    message(STATUS "     ${std_name}: NOT supported")
-  endif()
-endfunction()
-
-# This will detect C++ standard support and set variables
-# OXYGEN_CXX20_SUPPORTED, OXYGEN_CXX20_FLAG, OXYGEN_CXX23_SUPPORTED,
-# OXYGEN_CXX23_FLAG when <compiler> supports the respective standard
-detect_cxx_standards(OXYGEN)
 
 message(STATUS "PROJECT `${META_NAME_VERSION}`")
 message(STATUS "")
@@ -457,10 +258,6 @@ message(
   "     C++ compiler: ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}"
 )
 
-_report_standard(OXYGEN CXX20)
-_report_standard(OXYGEN CXX23)
-
-message(STATUS "     Common Compiler flags: ${OXYGEN_COMMON_CXX_FLAGS}")
 message(STATUS "     Common Exe Linker flags: ${CMAKE_EXE_LINKER_FLAGS}")
 message(STATUS "     Build system: ${CMAKE_GENERATOR}")
 message(STATUS "")
@@ -471,7 +268,6 @@ message(STATUS "     Build tests: ${OXYGEN_BUILD_TESTS}")
 message(STATUS "     Build examples: ${OXYGEN_BUILD_EXAMPLES}")
 message(STATUS "     Build documentation: ${OXYGEN_BUILD_DOCS}")
 message(STATUS "     Address sanitizer: ${OXYGEN_WITH_ASAN}")
-message(STATUS "     Code coverage: ${OXYGEN_WITH_COVERAGE}")
 message(STATUS "     Tracy profiler: ${OXYGEN_WITH_TRACY}")
 message(STATUS "     Doxygen: ${OXYGEN_WITH_DOXYGEN}")
 # message(STATUS "     Undefined behavior sanitizer: ${OXYGEN_WITH_UBSAN}")
@@ -514,5 +310,10 @@ endif()
 # Call after sub-modules have been added so that source code files can be
 # properly collected for analysis.
 # ------------------------------------------------------------------------------
+
+oxygen_apply_directory_build_policy("${CMAKE_CURRENT_SOURCE_DIR}/src")
+if(OXYGEN_BUILD_EXAMPLES AND OXYGEN_BUILD_FULL_ENGINE)
+  oxygen_apply_directory_build_policy("${CMAKE_CURRENT_SOURCE_DIR}/Examples")
+endif()
 
 asap_pop_project(${META_PROJECT_NAME})

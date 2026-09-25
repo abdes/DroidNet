@@ -187,7 +187,6 @@ target_sources(
 arrange_target_files_for_ide(${META_MODULE_TARGET})
 
 target_compile_features(${META_MODULE_TARGET} PUBLIC cxx_std_23)
-target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
 target_include_directories(
   ${META_MODULE_TARGET}
   PUBLIC

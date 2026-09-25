@@ -68,6 +68,19 @@ corresponding profile, build type, options and generator; it publishes the same
 Oxygen presets automatically. The CLI helpers prefer Release, ordinary builds,
 then Ninja, and retain that selection through build and launch.
 
+The Windows profiles own the ordinary/ASan Conan package-identity configuration.
+Direct installs and `generate-builds` therefore resolve the same dependency IDs
+for equivalent inputs. The wrapper reads Conan's resolved profile, including
+profile inheritance; it no longer injects a separate sanitizer identity or
+overrides the profile's ASan option. Use the ASan profile rather than setting
+`with_asan=True` against an ordinary dependency graph. The recipe rejects that
+inconsistent combination. Header-only packages can still share their cache entry.
+
+ASan keeps the existing Debug configuration and `out/install/Asan` deployment.
+TinyEXR retains threading but disables OpenMP specifically in ASan builds because
+MSVC does not support that combination. Ordinary TinyEXR options are unchanged.
+The first use of the changed TinyEXR option may require a new dependency binary.
+
 ## Shared settings
 
 | Setting                                              | Root preset                  |

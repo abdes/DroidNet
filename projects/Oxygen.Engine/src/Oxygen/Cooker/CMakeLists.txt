@@ -376,7 +376,6 @@ set_source_files_properties(
       "$<$<CXX_COMPILER_ID:MSVC>:/openmp>$<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-fopenmp>"
 )
 
-target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
 target_compile_options(
   ${META_MODULE_TARGET}
   PRIVATE

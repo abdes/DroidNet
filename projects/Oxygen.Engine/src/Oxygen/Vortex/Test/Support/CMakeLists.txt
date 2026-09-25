@@ -55,17 +55,12 @@ target_sources(
 arrange_target_files_for_ide(${META_MODULE_TARGET})
 
 target_compile_features(${META_MODULE_TARGET} PUBLIC cxx_std_23)
-target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
 target_compile_definitions(
   ${META_MODULE_TARGET}
   PRIVATE
     $<$<PLATFORM_ID:Windows>:WIN32_LEAN_AND_MEAN>
     $<$<PLATFORM_ID:Windows>:NOMINMAX>
 )
-if(OXYGEN_WITH_COVERAGE)
-  target_compile_options(${META_MODULE_TARGET} PRIVATE "--coverage")
-  target_link_options(${META_MODULE_TARGET} INTERFACE "--coverage")
-endif()
 target_link_libraries(
   ${META_MODULE_TARGET}
   PUBLIC

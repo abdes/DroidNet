@@ -52,8 +52,6 @@ target_sources(
     FILES "GraphicsBackendLoader.h" "Detail/PlatformServices.h"
 )
 
-target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
-
 target_link_libraries(
   ${META_MODULE_TARGET}
   PUBLIC

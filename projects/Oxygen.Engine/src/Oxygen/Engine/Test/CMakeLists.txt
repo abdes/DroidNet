@@ -23,11 +23,6 @@ set_target_properties(
     FOLDER
       "Testing"
 )
-target_compile_options(
-  "Oxygen.Engine.LinkTest"
-  PRIVATE
-    ${OXYGEN_COMMON_CXX_FLAGS}
-)
 target_link_libraries(
   "Oxygen.Engine.LinkTest"
   PRIVATE
@@ -44,11 +39,7 @@ m_gtest_program(InputHandler SOURCES "InputHandler_test.cpp")
 m_gtest_program(EngineModule SOURCES "EngineModule_test.cpp")
 m_gtest_program(FrameContext SOURCES "FrameContext_test.cpp")
 m_gtest_program(TimeManager SOURCES "TimeManager_test.cpp")
-m_gtest_program(
-  ScriptingLruEviction
-  SOURCES
-    "Scripting_LruEviction_test.cpp"
-)
+m_gtest_program(ScriptingLruEviction SOURCES "Scripting_LruEviction_test.cpp")
 m_gtest_program(
   ModuleManager
   SOURCES

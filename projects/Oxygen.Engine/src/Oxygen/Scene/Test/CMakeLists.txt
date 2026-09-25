@@ -27,11 +27,6 @@ set_target_properties(
     FOLDER
       "Testing"
 )
-target_compile_options(
-  "Oxygen.Scene.LinkTest"
-  PRIVATE
-    ${OXYGEN_COMMON_CXX_FLAGS}
-)
 target_link_libraries("Oxygen.Scene.LinkTest" PRIVATE oxygen::scene)
 add_test(NAME "Oxygen.Scene Link Test" COMMAND "Oxygen.Scene.LinkTest")
 
@@ -179,11 +174,6 @@ set_target_properties(
     FOLDER
       "Testing"
 )
-target_compile_options(
-  "Oxygen.Scene.Example"
-  PRIVATE
-    ${OXYGEN_COMMON_CXX_FLAGS}
-)
 target_link_libraries(
   "Oxygen.Scene.Example"
   PRIVATE
@@ -199,11 +189,6 @@ set_target_properties(
   PROPERTIES
     FOLDER
       "Testing"
-)
-target_compile_options(
-  "Oxygen.Scene.PrettyPrinter"
-  PRIVATE
-    ${OXYGEN_COMMON_CXX_FLAGS}
 )
 target_link_libraries(
   "Oxygen.Scene.PrettyPrinter"
