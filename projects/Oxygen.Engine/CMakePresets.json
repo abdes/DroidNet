@@ -29,7 +29,7 @@
       "hidden": true,
       "installDir": "${sourceDir}/out/install",
       "environment": {
-        "caexcludepath": "${sourceDir}/third_party;${sourceDir}/out;$env{userprofile}/.cache/CPM"
+        "caexcludepath": "${sourceDir}/third_party;${sourceDir}/out"
       }
     }
   ],

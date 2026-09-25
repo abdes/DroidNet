@@ -384,6 +384,38 @@ each argument combination must exercise singleton first access in a fresh proces
 Bindless generated-header compilation remains a mandatory Core build prerequisite
 and an explicit build target; CTest runs its Python tests without invoking a build.
 
+## Compiler caching
+
+`OXYGEN_USE_CCACHE=ON` selects an installed `ccache` for C/C++ when the corresponding
+`CMAKE_<LANG>_COMPILER_LAUNCHER` is unset. This uses native CMake launchers with
+Ninja and Makefile generators, without downloading a helper or using CPM. Explicit
+launcher values, including an empty value, are preserved. Automatic choices are
+directory variables, not persistent cache overrides, so turning the option OFF
+removes Oxygen's automatic selection on the next configure.
+
+If ccache is unavailable, or the generator does not implement native launchers
+(including Visual Studio), configuration warns and continues normally. B11 does
+not introduce MSBuild cache integration. The configure summary distinguishes
+automatic selection from caller-selected launchers; choosing a launcher does not
+guarantee that every compiler invocation is cacheable.
+
+Oxygen-owned MSVC targets using a recognizable ccache launcher default to embedded
+debug information (`/Z7`) in Debug/RelWithDebInfo. Explicit target/toolchain debug
+formats remain unchanged; ccache cannot cache MSVC `/Zi` or `/ZI` compilations.
+Custom wrapper commands own their compatible settings. Visual Studio's ordinary
+debug settings are unchanged, and the existing mandatory ASan policy still applies.
+
+For build trees created by the previous helper, remove only automatic launcher
+cache entries that it wrote, once:
+
+```powershell
+cmake --preset oxygen-ninja-default -U CMAKE_C_COMPILER_LAUNCHER -U CMAKE_CXX_COMPILER_LAUNCHER
+```
+
+Do not remove entries you deliberately supplied yourself. No automatic migration
+can distinguish those from the previous helper's forced values. Existing ccache
+storage and configuration are independent of this CMake migration.
+
 ## Conan defaults and local narrowing
 
 `conan install` generates the dependency graph, toolchain and presets; it does not
