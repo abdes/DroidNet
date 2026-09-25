@@ -20,6 +20,10 @@ the root file. The recipe refuses to overwrite a user-owned preset file.
 
 ## Select a tree
 
+ASan multi-config trees generate only Debug, matching their provisioned dependency
+graph. This also avoids generating IDE and File API metadata for unused Release
+configurations. Ordinary trees keep their existing configuration selection.
+
 | Tree                         | Configure preset                  | Debug build/test preset         |
 | ---------------------------- | --------------------------------- | ------------------------------- |
 | `out/build-ninja`            | `oxygen-ninja-default`            | `oxygen-ninja-debug`            |
