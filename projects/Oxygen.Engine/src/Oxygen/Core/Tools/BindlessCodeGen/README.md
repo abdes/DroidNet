@@ -125,7 +125,7 @@ The build system provides two CMake targets:
 **Install the Tool (Editable):**
 
 ```powershell
-cmake --build --preset=windows-debug --target bindless_codegen_editable_install
+cmake --build --preset oxygen-ninja-debug --target bindless_codegen_editable_install
 ```
 
 This target:
@@ -138,15 +138,24 @@ This target:
 **Generate Bindless Outputs (Recommended):**
 
 ```powershell
-cmake --build --preset=windows-debug --target oxygen-core_bindless_gen
+cmake --build --preset oxygen-ninja-debug --target oxygen-core_bindless_gen
 ```
 
 This target:
 
 - Depends on `bindless_codegen_editable_install`
-- Re-runs only when the YAML source or tool code changes
+- Re-runs when the YAML source, its JSON schema, generator code, or other declared inputs change
 - Generates the full output set (C++/HLSL/JSON), including `Generated.Meta.h`
 - Integrates with the build dependency graph
+
+Normal Core builds already depend on generation and its compile check; no separate
+regeneration step is required. Generated C++/HLSL/JSON files remain in their existing
+tracked source locations, and unchanged generated content keeps its timestamps.
+
+CMake refreshes a content-based Python source inventory after generator edits,
+additions, or removals. The build rule depends on this stable inventory file so
+Visual Studio does not retain removed Python paths in a loaded custom-build rule.
+This uses native CMake regeneration and works with both Visual Studio and Ninja.
 
 ### Compile-check (header validation)
 

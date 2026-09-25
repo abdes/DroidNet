@@ -55,6 +55,15 @@ target_include_directories(
   PRIVATE
     "${CMAKE_BINARY_DIR}/generated"
 )
+get_target_property(
+  _inspector_schema_targets
+  oxygen-cooker-inspector
+  OXYGEN_JSON_SCHEMA_TARGETS
+)
+add_dependencies(
+  Oxygen.Cooker.InspectorMetadata.Tests
+  ${_inspector_schema_targets}
+)
 
 m_gtest_program(
   AsyncImportCore

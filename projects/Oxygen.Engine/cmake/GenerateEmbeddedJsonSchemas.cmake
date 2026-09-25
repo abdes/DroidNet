@@ -5,7 +5,7 @@
 # ===-----------------------------------------------------------------------===#
 
 # ------------------------------------------------------------------------------
-# Build-time generator backend for embedded JSON schema headers.
+# Generator backend for embedded JSON schema headers.
 # ------------------------------------------------------------------------------
 #
 # This script is intentionally executed with:
@@ -16,7 +16,7 @@
 #
 # Why this script exists (instead of putting all logic in the helper):
 # - the helper runs at CMake configure time (declares build graph/API),
-# - this script runs at build time (generates files from declared inputs),
+# - this script prepares headers during configure and updates them during builds,
 # - this separation preserves proper incremental rebuild behavior and avoids
 #   fragile/huge inline command strings in add_custom_command().
 #
@@ -28,6 +28,7 @@
 #     OXYGEN_JSON_SCHEMA_CHUNK_SIZE    : max chars per raw-literal chunk
 #     OXYGEN_JSON_SCHEMA_NAMES         : list of C++ symbol names
 #     OXYGEN_JSON_SCHEMA_FILES         : list of schema file paths
+#     OXYGEN_JSON_SCHEMA_STAMP         : optional processed-input timestamp
 # - Names/files lists must have equal length and matching indices.
 #
 # Output:
@@ -45,12 +46,58 @@ if(NOT DEFINED INPUT_MANIFEST OR INPUT_MANIFEST STREQUAL "")
 endif()
 # Be defensive against callers that accidentally pass quoted values.
 string(REGEX REPLACE "^\"(.*)\"$" "\\1" INPUT_MANIFEST "${INPUT_MANIFEST}")
-string(REGEX REPLACE "^\\\\\"(.*)\\\\\"$" "\\1" INPUT_MANIFEST "${INPUT_MANIFEST}")
+string(
+  REGEX
+  REPLACE
+  "^\\\\\"(.*)\\\\\"$"
+  "\\1"
+  INPUT_MANIFEST
+  "${INPUT_MANIFEST}"
+)
 if(NOT EXISTS "${INPUT_MANIFEST}")
   message(FATAL_ERROR "Manifest file not found: ${INPUT_MANIFEST}")
 endif()
 
 include("${INPUT_MANIFEST}")
+
+# A stamp records processed inputs even when their new contents produce the same
+# header. Checking the header separately also recovers a deleted output.
+if(
+  DEFINED
+    OXYGEN_JSON_SCHEMA_STAMP
+  AND
+    EXISTS
+      "${OXYGEN_JSON_SCHEMA_STAMP}"
+  AND
+    EXISTS
+      "${OXYGEN_JSON_SCHEMA_OUTPUT_HEADER}"
+)
+  set(_current TRUE)
+  foreach(
+    _input
+    IN
+    ITEMS
+      "${INPUT_MANIFEST}"
+      "${CMAKE_CURRENT_LIST_FILE}"
+      ${OXYGEN_JSON_SCHEMA_FILES}
+  )
+    if(
+      NOT
+        EXISTS
+          "${_input}"
+      OR
+        "${_input}"
+          IS_NEWER_THAN
+          "${OXYGEN_JSON_SCHEMA_STAMP}"
+    )
+      set(_current FALSE)
+      break()
+    endif()
+  endforeach()
+  if(_current)
+    return()
+  endif()
+endif()
 
 if(
   NOT
@@ -87,7 +134,10 @@ if(
 endif()
 
 if(NOT OXYGEN_JSON_SCHEMA_CHUNK_SIZE MATCHES "^[1-9][0-9]*$")
-  message(FATAL_ERROR "OXYGEN_JSON_SCHEMA_CHUNK_SIZE must be a positive integer.")
+  message(
+    FATAL_ERROR
+    "OXYGEN_JSON_SCHEMA_CHUNK_SIZE must be a positive integer."
+  )
 endif()
 
 if(NOT DEFINED OXYGEN_JSON_SCHEMA_NAMES OR NOT DEFINED OXYGEN_JSON_SCHEMA_FILES)
@@ -110,7 +160,13 @@ if(NOT _schema_name_count EQUAL _schema_file_count)
   )
 endif()
 
-function(_oxygen_append_schema_literal_chunks output_file symbol_name schema_text chunk_size)
+function(
+  _oxygen_append_schema_literal_chunks
+  output_file
+  symbol_name
+  schema_text
+  chunk_size
+)
   if(NOT symbol_name MATCHES "^[A-Za-z_][A-Za-z0-9_]*$")
     message(FATAL_ERROR "Invalid schema symbol name: ${symbol_name}")
   endif()
@@ -188,9 +244,17 @@ function(_oxygen_append_schema_literal_chunks output_file symbol_name schema_tex
 endfunction()
 
 get_filename_component(
-  _output_dir "${OXYGEN_JSON_SCHEMA_OUTPUT_HEADER}" DIRECTORY
+  _output_dir
+  "${OXYGEN_JSON_SCHEMA_OUTPUT_HEADER}"
+  DIRECTORY
 )
 file(MAKE_DIRECTORY "${_output_dir}")
+
+# Publish only a complete header, and do not invalidate C++ compilation when
+# regeneration produces identical bytes.
+set(_final_header "${OXYGEN_JSON_SCHEMA_OUTPUT_HEADER}")
+string(RANDOM LENGTH 12 ALPHABET 0123456789abcdef _temporary_id)
+set(OXYGEN_JSON_SCHEMA_OUTPUT_HEADER "${_final_header}.${_temporary_id}.tmp")
 
 file(
   WRITE
@@ -198,11 +262,7 @@ file(
   "// GENERATED FILE - DO NOT EDIT.\n"
 )
 file(APPEND "${OXYGEN_JSON_SCHEMA_OUTPUT_HEADER}" "#pragma once\n\n")
-file(
-  APPEND
-  "${OXYGEN_JSON_SCHEMA_OUTPUT_HEADER}"
-  "#include <string_view>\n\n"
-)
+file(APPEND "${OXYGEN_JSON_SCHEMA_OUTPUT_HEADER}" "#include <string_view>\n\n")
 file(
   APPEND
   "${OXYGEN_JSON_SCHEMA_OUTPUT_HEADER}"
@@ -221,7 +281,8 @@ foreach(_index RANGE 0 ${_schema_last_index})
     get_filename_component(_schema_file_name "${_schema_file}" NAME)
     if(_schema_file_name STREQUAL "import-manifest.schema.json")
       get_filename_component(_schema_file_dir "${_schema_file}" DIRECTORY)
-      set(_schema_file_candidate
+      set(
+        _schema_file_candidate
         "${_schema_file_dir}/oxygen.import-manifest.schema.json"
       )
       if(EXISTS "${_schema_file_candidate}")
@@ -257,3 +318,20 @@ file(
   "${OXYGEN_JSON_SCHEMA_OUTPUT_HEADER}"
   "} // namespace ${OXYGEN_JSON_SCHEMA_NAMESPACE}\n"
 )
+
+set(_unchanged FALSE)
+if(EXISTS "${_final_header}")
+  file(SHA256 "${_final_header}" _old_hash)
+  file(SHA256 "${OXYGEN_JSON_SCHEMA_OUTPUT_HEADER}" _new_hash)
+  if(_old_hash STREQUAL _new_hash)
+    set(_unchanged TRUE)
+  endif()
+endif()
+if(_unchanged)
+  file(REMOVE "${OXYGEN_JSON_SCHEMA_OUTPUT_HEADER}")
+else()
+  file(RENAME "${OXYGEN_JSON_SCHEMA_OUTPUT_HEADER}" "${_final_header}")
+endif()
+if(DEFINED OXYGEN_JSON_SCHEMA_STAMP)
+  file(TOUCH "${OXYGEN_JSON_SCHEMA_STAMP}")
+endif()

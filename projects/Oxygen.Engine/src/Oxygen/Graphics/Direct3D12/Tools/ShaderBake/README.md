@@ -133,7 +133,7 @@ Incremental update:
 ```powershell
 Oxygen.Graphics.Direct3D12.ShaderBake.exe update `
   --workspace-root <repo-root> `
-  --build-root <build-dir>\shaderbake `
+  --build-root <build-dir>\shaderbake\Debug `
   --out <repo-root>\bin\Oxygen\Debug\dev\shaders.bin
 ```
 
@@ -142,7 +142,7 @@ Clean rebuild:
 ```powershell
 Oxygen.Graphics.Direct3D12.ShaderBake.exe rebuild `
   --workspace-root <repo-root> `
-  --build-root <build-dir>\shaderbake `
+  --build-root <build-dir>\shaderbake\Debug `
   --out <repo-root>\bin\Oxygen\Debug\dev\shaders.bin
 ```
 
@@ -160,7 +160,7 @@ Clear intermediates without touching the final archive:
 ```powershell
 Oxygen.Graphics.Direct3D12.ShaderBake.exe clean-cache `
   --workspace-root <repo-root> `
-  --build-root <build-dir>\shaderbake
+  --build-root <build-dir>\shaderbake\Debug
 ```
 
 ## Build-System Integration
@@ -169,14 +169,32 @@ The engine's shader build integrates `ShaderBake` from
 `src/Oxygen/Graphics/Direct3D12/Shaders/CMakeLists.txt` and currently invokes:
 
 ```text
-ShaderBake update --workspace-root <repo-root> --build-root <build-dir>/shaderbake --out <repo-root>/bin/Oxygen/<build-config>/<mode>/shaders.bin
+ShaderBake update --workspace-root <repo-root> --build-root <build-dir>/shaderbake/<configuration> --out <repo-root>/bin/Oxygen/<build-config>/<mode>/shaders.bin
 ```
 
 That split is intentional:
 
-- `--build-root` is generator-local and disposable.
+- `--build-root` is local to the build tree and selected CMake configuration,
+  and is disposable. Debug and Release retain separate cached artifacts.
 - `--out` is the runtime-facing archive location.
 - Working directory is not part of ShaderBake correctness.
+
+CMake runs `update` whenever the Direct3D12 shader target is built. ShaderBake
+checks its recorded inputs, including HLSL includes outside the shader directory;
+an unchanged build performs the check without compiling shaders or repacking the
+archive. This applies to Visual Studio, Ninja Multi-Config, and single-config Ninja.
+
+CMake invocations publishing to the same output directory use a shared file lock
+for the duration of `update`. One invocation waits for the other; C++ compilation
+is not globally serialized. The lock is released when the launcher process exits,
+including on failure. Direct CLI invocations do not participate in this CMake
+lock and should not run against the same output directory concurrently with a build.
+
+The first build in each new configuration cache directory is a cold bake. The old
+`<build-dir>/shaderbake/{state,modules,logs,temp}` directories are no longer used by
+CMake; delete those old subdirectories when you no longer need their cache. Keep
+the new configuration subdirectories. Use the configuration-specific `--build-root`
+shown above when cleaning the active cache.
 
 ## Failure and Diagnostics
 
