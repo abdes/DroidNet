@@ -468,6 +468,60 @@ auto PostProcessSettingsService::BindMainView(const ViewId view_id) -> void
 {
   main_view_id_ = view_id;
 }
+
+auto PostProcessSettingsService::GetAuthoringTarget() const noexcept
+  -> std::optional<PostProcessAuthoringTarget>
+{
+  if (!scene_ || !main_view_id_ || *main_view_id_ == kInvalidViewId) {
+    return std::nullopt;
+  }
+  return PostProcessAuthoringTarget {
+    .main_view_id = *main_view_id_,
+    .scene_revision = scene_revision_,
+  };
+}
+
+auto PostProcessSettingsService::GetSceneMeteringMask() const
+  -> content::ResourceKey
+{
+  EnsureStateLoaded();
+  return scene_defaults_.exposure.metering_mask;
+}
+
+auto PostProcessSettingsService::GetCameraExposure() const
+  -> std::optional<scene::CameraExposure>
+{
+  const auto* camera = ResolveActiveCameraExposure(camera_settings_);
+  return camera ? std::optional { *camera } : std::nullopt;
+}
+
+auto PostProcessSettingsService::TrySetCameraExposure(
+  const scene::CameraExposure& requested) -> bool
+{
+  auto* camera = ResolveActiveCameraExposure(camera_settings_);
+  if (camera == nullptr) {
+    validation_error_ = "Select an active camera.";
+    return false;
+  }
+  for (const auto value :
+    { requested.aperture_f, requested.shutter_rate, requested.iso }) {
+    if (!std::isfinite(value) || value <= 0.0F) {
+      validation_error_ = "Camera exposure values must be finite and positive.";
+      return false;
+    }
+  }
+  EnsureStateLoaded();
+  const auto resolved
+    = scene::ResolveExposureSettings(state_.exposure, requested.GetEv());
+  if (!resolved) {
+    validation_error_ = std::string(scene::to_string(resolved.error()));
+    return false;
+  }
+  *camera = requested;
+  validation_error_.clear();
+  ++epoch_;
+  return true;
+}
 auto PostProcessSettingsService::BindVortexRenderer(
   observer_ptr<vortex::Renderer> renderer) -> void
 {
@@ -864,16 +918,9 @@ auto PostProcessSettingsService::SetCameraExposureFloat(
   EnsureStateLoaded();
   auto next = *camera;
   next.*member = value;
-  const auto resolved
-    = scene::ResolveExposureSettings(state_.exposure, next.GetEv());
-  if (!resolved) {
-    validation_error_ = std::string(scene::to_string(resolved.error()));
+  if (!TrySetCameraExposure(next)) {
     LOG_F(WARNING, "Camera exposure edit rejected: {}", validation_error_);
-    return;
   }
-  *camera = next;
-  validation_error_.clear();
-  ++epoch_;
 }
 
 auto PostProcessSettingsService::SetAutoExposureRange(
@@ -949,9 +996,8 @@ auto PostProcessSettingsService::GetToneMapper() const -> engine::ToneMapper
 auto PostProcessSettingsService::SetToneMapper(const engine::ToneMapper mode)
   -> void
 {
-  if (mode > engine::ToneMapper::kReinhard) {
-    validation_error_ = "Unknown tone mapper.";
-    LOG_F(WARNING, "Tone mapper edit rejected: unknown value");
+  if (!ValidateOutput(mode, GetGamma())) {
+    LOG_F(WARNING, "Tone mapper edit rejected: {}", validation_error_);
     return;
   }
   EnsureStateLoaded();
@@ -971,9 +1017,8 @@ auto PostProcessSettingsService::GetGamma() const -> float
 }
 auto PostProcessSettingsService::SetGamma(const float gamma) -> void
 {
-  if (!std::isfinite(gamma) || gamma < engine::kMinDisplayGamma) {
-    validation_error_ = "Display gamma must be finite and at least 0.001.";
-    LOG_F(WARNING, "Display gamma edit rejected: {}", gamma);
+  if (!ValidateOutput(GetToneMapper(), gamma)) {
+    LOG_F(WARNING, "Display gamma edit rejected: {}", validation_error_);
     return;
   }
   EnsureStateLoaded();
@@ -984,6 +1029,42 @@ auto PostProcessSettingsService::SetGamma(const float gamma) -> void
   validation_error_.clear();
   ++epoch_;
   SyncScenePostProcessState();
+}
+
+auto PostProcessSettingsService::ValidateOutput(
+  const engine::ToneMapper mode, const float gamma) const -> bool
+{
+  if (mode > engine::ToneMapper::kReinhard) {
+    validation_error_ = "Unknown tone mapper.";
+    return false;
+  }
+  if (!std::isfinite(gamma) || gamma < engine::kMinDisplayGamma) {
+    validation_error_ = "Display gamma must be finite and at least 0.001.";
+    return false;
+  }
+  return true;
+}
+
+auto PostProcessSettingsService::TrySetOutputSettings(
+  const engine::ToneMapper mode, const float gamma) -> bool
+{
+  if (!ValidateOutput(mode, gamma)) {
+    return false;
+  }
+  EnsureStateLoaded();
+  state_.tone_mapper = mode;
+  state_.tonemapping_enabled = mode != engine::ToneMapper::kNone;
+  state_.gamma = gamma;
+  if (activation_policy_ == SceneActivationPolicy::kRestorePreferences) {
+    const auto saved = SettingsService::ForDemoApp();
+    saved->SetBool(kTonemappingEnabledKey, state_.tonemapping_enabled);
+    saved->SetFloat(kToneMapperKey, static_cast<float>(mode));
+    saved->SetFloat(kGammaKey, gamma);
+  }
+  validation_error_.clear();
+  ++epoch_;
+  SyncScenePostProcessState();
+  return true;
 }
 
 auto PostProcessSettingsService::ResetToDefaults() -> void
