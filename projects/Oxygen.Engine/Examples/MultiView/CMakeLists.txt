@@ -14,7 +14,6 @@ asap_module_declare(
     [=[
 An example demonstrating the Oxygen engine multi-view rendering capabilities.
 ]=]
-  WITHOUT_VERSION_H
 )
 asap_push_module("${META_MODULE_NAME}")
 
@@ -46,7 +45,6 @@ set_target_properties(
     OUTPUT_NAME
       ${META_MODULE_NAME}
 )
-target_compile_options(${META_MODULE_TARGET} PRIVATE ${OXYGEN_COMMON_CXX_FLAGS})
 target_include_directories(
   ${META_MODULE_TARGET}
   PRIVATE
@@ -69,11 +67,5 @@ target_link_libraries(
 # ==============================================================================
 # Deployment instructions
 # ==============================================================================
-
-oxygen_module_install(
-  EXPORT ${META_MODULE_NAMESPACE}
-  TARGETS
-    ${META_MODULE_TARGET}
-)
 
 asap_pop_module("${META_MODULE_NAME}")

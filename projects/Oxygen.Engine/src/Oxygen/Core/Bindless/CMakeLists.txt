@@ -37,13 +37,42 @@ set(
 
 # Make generation sensitive to tool script changes
 set(_gentool_dir "${CMAKE_SOURCE_DIR}/src/Oxygen/Core/Tools/BindlessCodeGen")
-file(GLOB _gentool_py_scripts "${_gentool_dir}/src/bindless_codegen/*.py")
+file(
+  GLOB _gentool_py_scripts
+  CONFIGURE_DEPENDS
+  "${_gentool_dir}/src/bindless_codegen/*.py"
+)
+# MSBuild can already have loaded the old dependency list when ZERO_CHECK runs.
+# Track Python edits through CMake and expose one stable input to the build rule;
+# this also avoids stale MSBuild inputs when a generator module is removed.
+set_property(
+  DIRECTORY
+  APPEND
+  PROPERTY
+    CMAKE_CONFIGURE_DEPENDS
+      ${_gentool_py_scripts}
+)
+set(_gentool_source_versions "")
+foreach(_script IN LISTS _gentool_py_scripts)
+  file(SHA256 "${_script}" _script_hash)
+  string(APPEND _gentool_source_versions "${_script} ${_script_hash}\n")
+endforeach()
+set(
+  _gentool_inventory
+  "${CMAKE_CURRENT_BINARY_DIR}/bindless_generator_sources.txt"
+)
+file(
+  GENERATE
+  OUTPUT
+  "${_gentool_inventory}"
+  CONTENT "${_gentool_source_versions}"
+)
 set(
   _gentool_sensitive_files
-  ${_gentool_py_scripts}
+  "${_gentool_inventory}"
   "${CMAKE_SOURCE_DIR}/.clang-format"
   "${_gentool_dir}/pyproject.toml"
-  "${_gentool_dir}/requirements.txt"
+  "${OXYGEN_PYTHON_LOCKFILE}"
 )
 
 # Local helper invocation for copying generated files (keeps repeated usage DRY)
@@ -125,8 +154,8 @@ add_custom_command(
   COMMAND
     ${CMAKE_COMMAND} -E touch ${_gen_stamp}
   DEPENDS
-    bindless_codegen_editable_install
     ${_bindless_spec_file}
+    ${_bindless_schema_file}
     ${_gentool_sensitive_files}
   WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
   VERBATIM

@@ -18,7 +18,6 @@ evaluates mappings deterministically during PhaseInput and produces an
 immutable per‑frame ActionSnapshot that the engine publishes into FrameContext
 for FixedSim/Gameplay consumption.
 ]=]
-  WITHOUT_VERSION_H
 )
 asap_push_module("${META_MODULE_NAME}")
 
@@ -90,12 +89,12 @@ target_sources(
 arrange_target_files_for_ide(${META_MODULE_TARGET})
 
 target_compile_features(${META_MODULE_TARGET} PUBLIC cxx_std_23)
-target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
 target_compile_definitions(
   ${META_MODULE_TARGET}
   PRIVATE
     $<$<PLATFORM_ID:Windows>:WIN32_LEAN_AND_MEAN>
     $<$<PLATFORM_ID:Windows>:NOMINMAX>
+  PUBLIC
     $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXGN_NPUT_STATIC>
 )
 

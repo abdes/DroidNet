@@ -11,7 +11,6 @@
 asap_module_declare(
   MODULE_NAME "Oxygen.Engine.EditorInterface"
   DESCRIPTION "Oxygen engine editor API"
-  WITHOUT_VERSION_H
 )
 asap_push_module("${META_MODULE_NAME}")
 
@@ -71,7 +70,6 @@ target_sources(
 
 arrange_target_files_for_ide(${META_MODULE_TARGET})
 
-target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
 target_compile_definitions(
   ${META_MODULE_TARGET}
   PRIVATE

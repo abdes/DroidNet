@@ -1,87 +1,112 @@
-# Native example content
+# Oxygen SDK sample content
 
-The native ImportTool cooks the authored manifests in `scenes/` into the shared
-`.cooked` root. PakTool packages that root into `pak/all.pak` and its catalog
-and manifest. RenderScene can load either the loose root or the PAK.
-Scene descriptors use version 7; older cooked scenes must be recooked.
-Atmosphere sources use explicit per-light slots, and scripted light changes use
-validated whole-candidate updates.
+This directory contains ready-to-run cooked scenes, their editable source files,
+and commands to rebuild them with the SDK's native tools. You do not need an
+Oxygen checkout, Conan, Python or a developer shell to cook and pack this content.
 
-## Cook and package
+The commands below run from the **SDK root**, the directory containing `bin` and
+`RenderScene.cmd`. Paths with spaces are supported. The CMD entry points use
+Windows PowerShell; equivalent `.ps1` entry points are also provided.
 
-From this directory, using tools built in the current engine checkout:
+## Launch first, then experiment
 
 ```powershell
-.\cook_scenes.ps1 -h
-.\pak_content.ps1 -Help
-.\cook_scenes.ps1 -All -NoTUI
-.\pak_content.ps1 -DiagnosticsFile .\pak\all.report.json
+.\RenderScene.cmd
 ```
 
-`cook_scenes.ps1` also supports `-Scene <folder>` and selects an available built
-tool from CMake presets when `-ToolPath` is omitted, preferring
-Release, ordinary builds, then Ninja. `-Preset`, `-BuildTree`, and `-Config` can
-constrain that selection.
-It reads presets without configuring or building the engine. Manifest and
-descriptor validation belongs to the native ImportTool and its current
-schemas; the wrapper does not duplicate schema version checks.
+The first launch selects the Lantern model with an HDR sky. The Library panel
+lets you explore the other shipped scenes. See the
+[RenderScene guide](../RenderScene/README.md) for controls and scene selection.
 
-For a full refresh after a cooked-format change, close applications using the
-content, preserve the previous `.cooked` and `pak` generations in a backup,
-and cook into a clean `.cooked` root before repackaging. Cooking over an old
-root is incremental and does not prove stale outputs were removed. Keep the
-stable PAK source key used by `pak_content.ps1` when rebuilding this content
-line.
+| Sample folder                                        | What to explore                                                         |
+| ---------------------------------------------------- | ----------------------------------------------------------------------- |
+| `sdk-lantern`                                        | A textured glTF model: material response, lighting and texture detail   |
+| `sdk-furniture`                                      | Small FBX furniture samples: table, chair, lamp and plant               |
+| `sdk-materials`                                      | Marble and wood color, normal and roughness maps on procedural geometry |
+| `city-environment-validation`                        | Atmosphere, fog and sunlight over a procedural skyline                  |
+| `emissive`                                           | Emissive materials                                                      |
+| `physics_domains`                                    | Bodies, contacts, joints, character and vehicle demonstrations          |
+| `multi-script`                                       | Scripted scene behavior and input                                       |
+| `point-shadow-validation` / `spot-shadow-validation` | Local-light shadows                                                     |
 
-## Scope of `-All`
+The source assets are intentionally small. Model and texture credits are in
+[ASSET_CREDITS.md](ASSET_CREDITS.md). The archive also includes selected raw FBX,
+glTF, HDR and material inputs for trying the import tools yourself.
 
-The script processes every `scenes/*/import-manifest.json` in name order.
-Currently, 13 manifests contain 140 jobs and produce 16 scene assets:
+## Edit and cook a scene
 
-- bottle-on-box
-- CityEnvironmentValidation
-- CubeScene
-- EmissiveScene
-- InstancingTestScene
-- multi_script_scene
-- physics_domains and physics_domains_vsm_benchmark
-- PointShadowValidation
-- SceneProcCubes
-- backpack and chest
-- SpotShadowValidation
-- VsmBug1LargePlane and VsmBug1LargeThinCube
-- VsmTwoCubes
+Edit a descriptor under `scenes/sdk-materials`, then rebuild that sample:
 
-The jobs include geometry, materials, textures, buffers, scripts, input assets,
-collision shapes, physics materials, and scene sidecars. Shared dependencies
-may occur in several manifests. Distinct authored assets must use distinct
-virtual paths: the instancing scene uses `GeoInstancedCube`, and the physics
-domains scene uses `Physics/Materials/physics_domains_ground.opmat`, so cooking
-them cannot replace the cube or bottle scene's authored defaults.
+```powershell
+.\share\oxygen\Content\cook_scenes.cmd -Scene sdk-materials -NoTUI
+.\bin\Oxygen.Cooker.Inspector.exe validate .\share\oxygen\Content\.cooked
+.\RenderScene.cmd --scene SdkMaterials
+```
 
-The two GLBs in `glb/` belong to the rotating-gltf manifest. The five FBXs in
-`fbx/` and nine standalone images in `images/` are separate native import and
-runtime demonstration inputs; the scene script does not enumerate those
-directories. Texture roles and skybox projection settings are selected by
-their consuming demo or an explicit import recipe. `-All` does not rebuild
-PAKs; run `pak_content.ps1` after cooking.
+Cook every shipped manifest with:
 
-`make_pak.py` accepts PakGen YAML specifications. It is not the native
-manifest-based example-content refresh entry point.
-It uses the Python API under `src/Oxygen/Cooker/Tools/PakGen`; `python make_pak.py
---help` (or `-h`) works without loading PakGen. The PowerShell workflows offer
-`-Help`/`-h` without requiring scene arguments or initialized build trees.
+```powershell
+.\share\oxygen\Content\cook_scenes.cmd -All -NoTUI
+```
 
-Native tools are resolved and invoked by the same shared script library as
-`oxyrun`. The workflows supply target names and argument arrays; they do not
-construct executable locations or bypass the launcher for `-ToolPath` overrides.
+The scripts automatically use the ImportTool in this SDK's `bin` directory.
+They do not search another checkout or choose a different build configuration.
+Manifest sources resolve relative to the manifest; descriptor image/buffer
+sources resolve relative to their descriptor. Keep these relative relationships
+when adding your own files. Use unique asset names and virtual paths for new assets.
 
-## Imported asset names
+Loose cooked output is written to `Content/.cooked`. The native ImportTool
+validates the manifests and descriptors; authoring schemas are installed in
+[`../schemas`](../schemas). Each manifest's `output` determines its output root.
 
-The native import naming service keeps normalized asset spelling and assigns
-numeric suffixes when mesh, material, or scene names collide after ASCII case
-folding. For example, `MetalGrey` and `Metalgrey` remain separate materials
-named `M_MetalGrey` and `M_Metalgrey_1`. This rule applies on every platform
-to prevent case-only storage collisions within an import session on Windows.
-Namespaces and already occupied suffixes participate in collision checks.
-Scene-node display names retain their case-sensitive naming behavior.
+## Build and inspect a PAK
+
+After cooking, package the loose cooked root:
+
+```powershell
+.\share\oxygen\Content\pak_content.cmd
+.\bin\Oxygen.Cooker.PakDump.exe --help
+```
+
+The default outputs under `Content/pak` are `all.pak`, `all.catalog.json` and
+`all.manifest.json`. In RenderScene, use Library to mount the new PAK. Avoid
+simultaneously mounting loose and PAK versions of the same assets when comparing
+changes. Close RenderScene before replacing an archive it has mounted.
+
+The PAK source key identifies this sample content line. Keep it when rebuilding
+the same line; choose a new source key for an independent content package.
+`pak_content.cmd -Help` describes the output-name, source-key and report options.
+
+## Import your own content
+
+RenderScene's import panel accepts FBX, glTF/GLB and images. For repeatable work,
+copy a sample manifest and change its source paths, names and output as needed.
+Use the bundled tools directly for additional workflows:
+
+```powershell
+.\bin\Oxygen.Cooker.ImportTool.exe --help
+.\bin\Oxygen.Cooker.PakTool.exe --help
+.\bin\Oxygen.Cooker.Inspector.exe --help
+```
+
+The cooking script's `-ContentRoot` option selects another directory containing
+`scenes/<name>/import-manifest.json`. `-ToolPath` can select an explicit compatible
+executable; the default uses this SDK. Preset/build-tree switches are for engine
+source checkouts, not installed SDK use.
+
+## Troubleshooting
+
+- **Missing source:** inspect the manifest's relative path and copy all referenced
+  textures, buffers and scripts together with the scene.
+- **Schema validation error:** use the matching schema in this SDK and the native
+  tool's diagnostic. A newer SDK may require recooking old descriptors.
+- **Scene not found:** validate the cooked index and select the intended content
+  source in RenderScene. Successfully cooking a mesh is not the same as creating
+  a scene that references it.
+- **File locked:** close applications using the cooked root or PAK before rebuilding.
+- **Write failure:** this portable SDK currently needs writable content and
+  showcase directories. Keep your modified source files and settings when updating.
+
+The scripts return nonzero exit codes on failure. For a clean recook, preserve
+your inputs and any output you need, then move the previous `.cooked` and `pak`
+directories aside before cooking and packing again.

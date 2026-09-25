@@ -1,0 +1,2 @@
+# Pinned upstream FBX inputs: preserve source bytes and recorded SHA-256 digests.
+fbx/showcase/*.fbx binary

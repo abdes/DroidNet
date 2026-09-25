@@ -1,74 +1,76 @@
-# BindingSlots examples
+# Bindless ABI examples
 
-This folder contains small, focused `BindingSlots` YAML examples for the
-BindlessCodeGen generator. Each example demonstrates a specific layout or
-feature of the schema and the generator's semantic checks.
+Each YAML file is a complete schema-v2 specification with a backend-neutral `abi`
+and explicit D3D12 and Vulkan realizations. These small examples describe resource
+layouts; they do not create GPU resources or exercise a renderer.
 
-## Goals
+| Example                          | What it demonstrates                                                                                  |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `basic_minimal.yaml`             | One texture domain plus a D3D12 scene root CBV and Vulkan uniform-buffer binding.                     |
+| `bindless_basic.yaml`            | A finite texture ABI capacity with an unbounded D3D12 table and variable-count Vulkan binding.        |
+| `cbv_array_example.yaml`         | Sixteen constant-buffer descriptors at D3D12 `b2` and a Vulkan uniform-buffer array.                  |
+| `cbv_array_example_small.yaml`   | A smaller eight-element constant-buffer array at D3D12 `b1`.                                          |
+| `heaps_valid.yaml`               | Separate texture/sampler heaps and independent ABI index spaces.                                      |
+| `multi_domain_range.yaml`        | Disjoint material/texture ranges in one D3D12 SRV table, with separately typed Vulkan bindings.       |
+| `multi_space_srvs.yaml`          | D3D12 `t0` in two register spaces; Vulkan bindings in two descriptor sets.                            |
+| `root_constants_and_tables.yaml` | Four inline 32-bit root constants, a 16-byte Vulkan push-constant range, and a material table.        |
+| `sampler_table.yaml`             | A dedicated sampler heap and a fixed sampler array.                                                   |
+| `uav_example.yaml`               | A bounded array of writable structured-buffer descriptors.                                            |
+| `uav_with_counter.yaml`          | Structured particle UAVs plus a separately addressable raw buffer for an application-managed counter. |
 
-- Provide concise, copy-pasteable examples for common binding patterns
-- Serve as quick unit test inputs for the generator's `dry_run` validation
-- Document how to validate examples locally and in CI
+The v1 fields `cbv_array_size` and `uav_counter_register` are retired. CBV arrays
+are descriptor tables, not arrays of root descriptors. The counter example uses
+an explicit buffer that application/shader code must manage; it does not allocate
+or associate a native D3D12 hidden UAV counter. The generator does not perform
+resource allocation, descriptor writes, barriers or counter initialization.
 
-## Examples included
+Root CBVs and inline constants are backend layout entries, not ABI domains.
+ABI shader-index ranges must be disjoint within an index space. D3D12 heap-local
+ranges and Vulkan binding-local array ranges are validated independently; their
+offsets need not equal the ABI shader-index base.
 
-check).
-range.
-table.
-JSON and header.
-heaps_valid.yaml shows a simple two-heap setup using a unified capacity per heap; the runtime JSON also uses a single 'capacity' per heap (visibility is implied by the :cpu/:gpu suffix in the key).
+## Validate locally
 
-## Validation (local)
-
-1. Activate your Python environment that contains the project dependencies
-   (e.g., `pyyaml`, `jsonschema`).
-
-2. From the `BindlessCodeGen` directory run the examples validator script:
-
-```powershell
-# From the repository root
-cd 'src/Oxygen/Core/Tools/BindlessCodeGen'
-python -m examples.run_validate_examples
-```
-
-Use `-v` to show generator progress/logs (quiet by default):
-
-```powershell
-python -m examples.run_validate_examples -v
-```
-
-Or run the helper directly from the examples folder:
+Provision and activate the repository environment using the
+[tool requirements](../README.md#requirements). From Oxygen.Engine:
 
 ```powershell
-# From the repository root
-cd 'src/Oxygen/Core/Tools/BindlessCodeGen/examples'
-python run_validate_examples.py
+python src/Oxygen/Core/Tools/BindlessCodeGen/examples/run_validate_examples.py
+# Optional generator progress:
+python src/Oxygen/Core/Tools/BindlessCodeGen/examples/run_validate_examples.py -v
 ```
 
-Tip: Output uses colors when the terminal supports it. Set `NO_COLOR=1` to
-disable colors.
+The script uses the provisioned package and the explicit
+[current schema](../../../Meta/Bindless.schema.json). It validates every YAML file
+through the generator's schema and semantic checks, reports all failures, and
+returns nonzero if any example fails or if the schema/example set is missing.
+Dry-run validation writes no generated artifacts. It does not skip unfamiliar
+input based on its top-level keys.
 
-This performs a `dry_run` for each YAML file and reports the first failing
-example (non-zero exit). A successful run prints `All examples validated
-successfully.` and exits 0.
+## Validate through CTest
 
-## Validation (CI / CTest)
-
-The examples folder is wired into the CMake tree and exposes a CTest named
-`BindlessExamplesValidate` when `BUILD_TESTING` is enabled. The test runs the
-`run_validate_examples.py` script and fails if any example does.
-
-To run from your build tree:
+Both `BUILD_TESTING` and `OXYGEN_BUILD_TESTS` must allow Oxygen tests. After
+provisioning and configuring the Ninja tree, run from Oxygen.Engine:
 
 ```powershell
-# From your build directory (after configure)
-ctest --preset=test-windows -C Debug -R BindlessExamplesValidate -V
+ctest --preset oxygen-ninja-debug -R '^BindlessExamplesValidate$' --output-on-failure
 ```
 
-## Contributing
+Visual Studio trees use `oxygen-vs-debug` instead. CTest invokes the same script
+with the configured interpreter; it does not install dependencies or build code.
 
-- Keep examples small and focused: one concept per file.
-- When adding an example that exercises an edge case, include a one-line
-  rationale in the YAML `meta.description` field.
-- If an example intentionally demonstrates invalid input for tests, prefix the
-  filename with `invalid_` and ensure tests expect failure.
+## Generate an example
+
+To inspect actual output without replacing the engine's generated headers:
+
+```powershell
+python -m bindless_codegen.cli --input src/Oxygen/Core/Tools/BindlessCodeGen/examples/bindless_basic.yaml --out-base out/bindless-example/Generated.
+```
+
+Emission requires clang-format. For the real engine ABI, edit
+[Bindless.yaml](../../../Meta/Bindless.yaml) and use the normal generation target
+as described in the [tool guide](../README.md#cmake-integration).
+
+Keep future examples small and focused. Every YAML in this directory must be
+valid; intentionally invalid fixtures belong in unit tests, where failure is
+asserted explicitly.

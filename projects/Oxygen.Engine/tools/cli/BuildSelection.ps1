@@ -20,7 +20,26 @@ param(
 if ($RequestedHelp) { Get-Help $PSCommandPath -Detailed; return }
 
 function Get-OxygenSourceRoot {
+    $sdkRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
+    if (Test-Path -LiteralPath (Join-Path $sdkRoot 'share/oxygen/oxygen-source.json')) { return $sdkRoot }
     return [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
+}
+
+function Get-OxygenPython([string]$SourceRoot = (Get-OxygenSourceRoot)) {
+    for ($directory = [IO.Path]::GetFullPath($SourceRoot); $directory; $directory = [IO.Path]::GetDirectoryName($directory)) {
+        if ((Test-Path -LiteralPath (Join-Path $directory 'uv.lock') -PathType Leaf) -and
+            (Test-Path -LiteralPath (Join-Path $directory 'pyproject.toml') -PathType Leaf)) {
+            $relative = if ($IsWindows) { '.venv/Scripts/python.exe' } else { '.venv/bin/python' }
+            $python = Join-Path $directory $relative
+            if (Test-Path -LiteralPath $python -PathType Leaf) { return $python }
+            throw "Repository Python is missing. Run uv sync --locked in '$directory', or build-tree generate <profile>."
+        }
+    }
+    throw "No repository Python workspace found above '$SourceRoot'."
+}
+
+function Get-OxygenAbsolutePath([string]$Path) {
+    return [IO.Path]::GetFullPath($(if ([IO.Path]::IsPathRooted($Path)) { $Path } else { Join-Path $PWD.Path $Path }))
 }
 
 function Merge-OxygenPresetMap([System.Collections.IDictionary]$Base, [System.Collections.IDictionary]$Overlay) {
@@ -233,7 +252,7 @@ function Resolve-OxygenBuildSelection {
     }
     $request = @("tree='$BuildTree'", "config='$Config'", "preset='$Preset'") -join ', '
     $needed = if ($RequiredExecutables.Count) { " Required executable(s): $($RequiredExecutables -join ', ')." } else { '' }
-    throw "No available preset matches $request.$needed Run cmake --list-presets=build or initialize a tree with tools/generate-builds.ps1."
+    throw "No available preset matches $request.$needed Run cmake --list-presets=build or initialize a tree with tools/build-tree.ps1 generate <profile>."
 }
 
 function Write-OxygenBuildSelection($Selection) {
@@ -322,11 +341,12 @@ function Get-OxygenExecutableArtifact([string]$BuildRoot, [string]$Target, [stri
 }
 
 function Find-OxygenExecutableInDirectory([string]$Directory, [string]$Target) {
+    $windowsHost = [Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT
     $identity = $Target -replace '[._-]', ''
     $files = @(Get-ChildItem -LiteralPath $Directory -File -ErrorAction SilentlyContinue |
         Where-Object {
-            (!$IsWindows -or $_.Extension -in @('.exe', '.cmd', '.bat', '.com')) -and
-            ($(if ($IsWindows) { $_.BaseName } else { $_.Name }) -replace '[._-]', '') -ieq $identity
+            (!$windowsHost -or $_.Extension -in @('.exe', '.cmd', '.bat', '.com')) -and
+            ($(if ($windowsHost) { $_.BaseName } else { $_.Name }) -replace '[._-]', '') -ieq $identity
         })
     if ($files.Count -eq 1) { return $files[0].FullName }
     return $null
@@ -342,13 +362,31 @@ function Resolve-OxygenExecutables {
     $paths = @{}
     $resolved = @{}
     foreach ($target in $Targets) { $resolved[$target] = $target }
+    if (Test-Path -LiteralPath (Join-Path $SourceRoot 'share/oxygen/oxygen-source.json')) {
+        if ($BuildTree -or $Config -or $Preset -or $Sanitized -or $Selection) {
+            throw 'Build selection options apply to source checkouts, not an installed SDK.'
+        }
+        foreach ($target in $Targets) {
+            $path = if ($Overrides[$target]) {
+                Get-OxygenAbsolutePath $Overrides[$target]
+            } else { Find-OxygenExecutableInDirectory (Join-Path $SourceRoot 'bin') $target }
+            if (-not $path -or -not (Test-Path -LiteralPath $path -PathType Leaf)) {
+                throw "Installed SDK executable '$target' is missing from '$SourceRoot/bin'."
+            }
+            $paths[$target] = $path
+        }
+        return [pscustomobject]@{
+            Selection = [pscustomobject]@{ SourceRoot = $SourceRoot; BuildRoot = $null; Config = $null; BuildPreset = $null; RuntimeEnvironment = @{} }
+            Targets = $resolved; Paths = $paths
+        }
+    }
     foreach ($target in $Overrides.Keys) {
         if ($Targets -notcontains $target) { throw "Unknown executable override '$target'." }
         if (-not $Overrides[$target]) { continue }
         if ($Selection -or $BuildTree -or $Config -or $Preset -or $Sanitized) {
             throw 'Explicit executable paths cannot be combined with build selection options.'
         }
-        $path = [IO.Path]::GetFullPath($Overrides[$target], $PWD.Path)
+        $path = Get-OxygenAbsolutePath $Overrides[$target]
         if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Executable not found: $path" }
         $paths[$target] = $path
     }
@@ -406,7 +444,7 @@ function Invoke-OxygenTool {
     }
     $executable = $Context.Paths[$Target]
     if ($LogPath) {
-        $LogPath = [IO.Path]::GetFullPath($LogPath, $PWD.Path)
+        $LogPath = Get-OxygenAbsolutePath $LogPath
         $stage = [IO.Path]::GetFileNameWithoutExtension($LogPath)
         Write-Host "Running ${stage}: $executable; log: $LogPath"
         Invoke-OxygenSelectedExecutable $Context.Selection $executable $Arguments *> $LogPath

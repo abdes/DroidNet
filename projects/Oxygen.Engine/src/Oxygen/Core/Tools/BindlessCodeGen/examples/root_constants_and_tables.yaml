@@ -1,32 +1,75 @@
-# Root constants + descriptor tables example: CBV root constant + SRV descriptor_table
+# D3D12 counts 32-bit values; Vulkan push-constant size is in bytes.
 meta:
-  version: "1.0.0"
-  description: "Root constants and descriptor tables example"
+  version: 2.0.0
+  description: Four inline 32-bit constants plus a material buffer descriptor table.
 defaults:
   invalid_index: 4294967295
-domains:
-  - id: materials
-    name: Materials
-    kind: SRV
-    register: t1
-    space: space0
-    root_table: BindlessSRV
-    domain_base: 1000
-    capacity: 2048
-root_signature:
-  - type: cbv
-    name: FrameConstants
-    index: 0
-    visibility: ALL
-    shader_register: b1
-    register_space: space0
-  - type: descriptor_table
-    name: BindlessSRV
-    index: 1
-    visibility: ALL
-    ranges:
-      - range_type: SRV
-        domain: materials
-        base_shader_register: t1
+abi:
+  index_spaces:
+    - id: srv_uav_cbv
+  domains:
+    - id: materials
+      name: Materials
+      index_space: srv_uav_cbv
+      shader_index_base: 1000
+      capacity: 2048
+      shader_access_class: buffer_srv
+      view_types:
+        - StructuredBuffer_SRV
+backends:
+  d3d12:
+    strategy:
+      heaps:
+        - id: CBV_SRV_UAV:gpu
+          type: CBV_SRV_UAV
+          shader_visible: true
+          capacity: 3048
+          base_index: 0
+          allow_growth: false
+      tables:
+        - id: MaterialsTable
+          descriptor_kind: SRV
+          heap: CBV_SRV_UAV:gpu
+          shader_register: t1
+          register_space: space0
+          unbounded: true
+      domain_realizations:
+        - domain: materials
+          table: MaterialsTable
+          heap_local_base: 1000
+    root_signature:
+      - type: root_constants
+        id: FrameConstants
+        index: 0
+        visibility: ALL
+        shader_register: b1
         register_space: space0
-        num_descriptors: unbounded
+        num_32bit_values: 4
+      - type: descriptor_table
+        id: MaterialsTable
+        table: MaterialsTable
+        index: 1
+        visibility: ALL
+  vulkan:
+    strategy:
+      descriptor_sets:
+        - id: resources
+          set: 0
+      bindings:
+        - id: materials_binding
+          set: resources
+          binding: 0
+          descriptor_type: STORAGE_BUFFER
+          descriptor_count: 2048
+      domain_realizations:
+        - domain: materials
+          binding: materials_binding
+          array_element_base: 0
+    pipeline_layout:
+      - type: descriptor_set
+        id: Resources
+        set_ref: resources
+      - type: push_constants
+        id: FrameConstants
+        size_bytes: 16
+        stages: ALL

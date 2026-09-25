@@ -35,7 +35,7 @@ From `src/Oxygen/Core/Meta/Bindless.yaml`, the tool generates:
 
 ### Example
 
-**YAML Input:**
+**ABI excerpt** (a complete input also declares `meta`, `defaults` and `backends`):
 
 ```yaml
 abi:
@@ -95,14 +95,15 @@ namespace oxygen::bindless::generated {
   `Generated.RootSignature.D3D12.h`, `Generated.PipelineLayout.Vulkan.h`,
   `Generated.Meta.h`, `Generated.Strategy.D3D12.h`
 - **Generated HLSL**: `src/Oxygen/Core/Bindless/Generated.BindlessAbi.hlsl`
-- **Generated JSON**: `src/Oxygen/Core/Meta/Generated.All.json`,
-  `Generated.Strategy.D3D12.json`, `Generated.Strategy.Vulkan.json`
+- **Normalized JSON**: `src/Oxygen/Core/Meta/Generated.All.json`
+- **Backend JSON**: `src/Oxygen/Core/Meta/Generated.Strategy.D3D12.json` and
+  `Generated.Strategy.Vulkan.json`
 
 ## Usage
 
 ### Command Line Interface
 
-Run the packaged CLI from the repository root:
+Run the packaged CLI from Oxygen.Engine with the repository environment active:
 
 ```powershell
 python -m bindless_codegen.cli `
@@ -120,33 +121,30 @@ Notes:
 
 ### CMake Integration
 
-The build system provides two CMake targets:
-
-**Install the Tool (Editable):**
-
-```powershell
-cmake --build --preset=windows-debug --target bindless_codegen_editable_install
-```
-
-This target:
-
-- Installs Python package dependencies from `requirements.txt`
-- Performs an editable install (`pip install -e .`) of the BindlessCodeGen tool
-- Makes the `bindless_codegen` module available to Python in your environment
-- Creates a stamp file to avoid reinstalling when unchanged
+Provision the locked repository environment with `build-tree generate <profile>`
+(or `uv sync --locked` from the DroidNet root). CMake verifies the selected Python
+and tool origins at configure time. Building does not install packages.
 
 **Generate Bindless Outputs (Recommended):**
 
 ```powershell
-cmake --build --preset=windows-debug --target oxygen-core_bindless_gen
+cmake --build --preset oxygen-ninja-debug --target oxygen-core_bindless_gen
 ```
 
 This target:
 
-- Depends on `bindless_codegen_editable_install`
-- Re-runs only when the YAML source or tool code changes
+- Re-runs when the YAML source, its JSON schema, generator code, or other declared inputs change
 - Generates the full output set (C++/HLSL/JSON), including `Generated.Meta.h`
 - Integrates with the build dependency graph
+
+Normal Core builds already depend on generation and its compile check; no separate
+regeneration step is required. Generated C++/HLSL/JSON files remain in their existing
+tracked source locations, and unchanged generated content keeps its timestamps.
+
+CMake refreshes a content-based Python source inventory after generator edits,
+additions, or removals. The build rule depends on this stable inventory file so
+Visual Studio does not retain removed Python paths in a loaded custom-build rule.
+This uses native CMake regeneration and works with both Visual Studio and Ninja.
 
 ### Compile-check (header validation)
 
@@ -160,34 +158,21 @@ headers fails.
 
 If you prefer to run generation without running the compile-check (for a
 one-off quick generation), build only the generated files by
-invoking the Python CLI directly rather than the CMake target, or adjust CMake
-configuration in environments where the check should be skipped.
+invoking the Python CLI directly. The normal CMake generation target always
+retains the mandatory compile check.
 
 Example (build generation and compile-check via CMake):
 
 ```powershell
-cmake --build --preset=windows-debug --target oxygen-core_bindless_gen
+cmake --build --preset oxygen-ninja-debug --target oxygen-core_bindless_gen
 ```
 
 ## Requirements
 
-- **Python**: 3.8 or newer
-- **Dependencies**: PyYAML (specified in `requirements.txt`)
-
-### Installation Options
-
-1. **Via CMake (Recommended for Development):**
-
-   ```powershell
-   cmake --build --preset=windows-debug --target bindless_codegen_editable_install
-   ```
-
-2. **Manual Installation:**
-
-   ```powershell
-   pip install -r requirements.txt
-   pip install -e .
-   ```
+The repository development interpreter is Python 3.14, selected by the root
+`.python-version`. The package supports Python 3.11+. Runtime dependencies are
+owned by this directory's `pyproject.toml` and resolved in the root `uv.lock`.
+See the repository's `tooling/PYTHON.md` for setup and lock updates.
 
 ## Development and Testing
 
@@ -197,7 +182,6 @@ cmake --build --preset=windows-debug --target oxygen-core_bindless_gen
 BindlessCodeGen/
 ├── CMakeLists.txt               # CMake configuration
 ├── pyproject.toml               # Python package configuration
-├── requirements.txt             # Python dependencies
 ├── README.md                    # This file
 ├── examples/                    # Sample specs/usages (if any)
 ├── src/
@@ -226,24 +210,25 @@ BindlessCodeGen/
 **Via CTest (Recommended):**
 
 ```powershell
-# Run all tests including BindlessCodeGen:
-cmake --build --preset=windows-debug
-ctest --preset=test-windows -C Debug --output-on-failure
+# From Oxygen.Engine, build generated headers and the ABI compile check:
+cmake --build --preset oxygen-ninja-debug --target oxygen-core_bindless_gen
 
 # Run only BindlessCodeGen tests:
-ctest --preset=test-windows -C Debug -R BindlessCodeGen_UnitTests --output-on-failure
+ctest --preset oxygen-ninja-debug -R BindlessCodeGen_UnitTests --output-on-failure
 
 # Run only YAML examples validation (CTest target: BindlessExamplesValidate):
-ctest --preset=test-windows -C Debug -R BindlessExamplesValidate --output-on-failure
+ctest --preset oxygen-ninja-debug -R BindlessExamplesValidate --output-on-failure
 
 # Run tests with specific labels:
-ctest --preset=test-windows -C Debug -L "Tools" --output-on-failure
+ctest --preset oxygen-ninja-debug -L "Tools" --output-on-failure
 ```
 
+The [examples guide](examples/README.md) describes all 11 schema-v2 examples,
+including the replacements for retired CBV-array and counter fields.
 The examples validation test runs the Python script at
 `src/Oxygen/Core/Tools/BindlessCodeGen/examples/run_validate_examples.py` to
-validate example YAML specs. If the editable install target exists, it’s set as
-an explicit dependency so the test can import the tool without extra steps.
+validate example YAML specs. Setup provisions the repository environment; CTest
+uses its selected interpreter without installing packages or building targets.
 
 **Direct pytest:**
 
@@ -251,12 +236,13 @@ an explicit dependency so the test can import the tool without extra steps.
 # From the BindlessCodeGen directory with dependencies installed:
 pytest tests/
 
-# Or from the repository root:
-pytest src/Oxygen/Core/Tools/BindlessCodeGen/tests/
+# Or from Oxygen.Engine with the repository environment active:
+python -m pytest src/Oxygen/Core/Tools/BindlessCodeGen/tests/
 ```
 
-The CTest integration automatically ensures the tool is installed before running
-tests and integrates with the project's testing infrastructure.
+Provision with `build-tree generate <profile>` or root `uv sync --locked` before
+configuring and running tests. Both `BUILD_TESTING` and `OXYGEN_BUILD_TESTS` must
+allow Oxygen tests.
 
 ### Editor Setup
 
@@ -346,9 +332,9 @@ Notes:
 {
   "$meta": {
     "source": "projects/Oxygen.Engine/src/Oxygen/Core/Meta/Bindless.yaml",
-    "source_version": "1.0.0",
-    "schema_version": "1.0.0",
-    "tool_version": "1.0.0",
+    "source_version": "2.0.0",
+    "schema_version": "2.0.0",
+    "tool_version": "1.2.2",
     "generated": "YYYY-MM-DD HH:MM:SS",
     "format": "BindlessStrategy.D3D12/1"
   },

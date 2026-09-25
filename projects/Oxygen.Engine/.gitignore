@@ -1,4 +1,10 @@
 ConanPresets-*.json
+!.clangd
+!.vscode/
+.vscode/*
+!.vscode/prepare_clangd.py
+!.vscode/tasks.json
+!.vscode/README.md
 CMakeUserPresets.json
 .omx/
 conductor/

@@ -11,7 +11,6 @@
 asap_module_declare(
   MODULE_NAME "Oxygen.Loader"
   DESCRIPTION "Oxygen dynamic module loader"
-  WITHOUT_VERSION_H
 )
 asap_push_module("${META_MODULE_NAME}")
 
@@ -51,8 +50,6 @@ target_sources(
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
     FILES "GraphicsBackendLoader.h" "Detail/PlatformServices.h"
 )
-
-target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
 
 target_link_libraries(
   ${META_MODULE_TARGET}

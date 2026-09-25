@@ -15,7 +15,6 @@ asap_module_declare(
 A dedicated demo for validating physically based lighting and exposure.
 It provides a minimal reference scene and uses DemoShell for controls.
 ]=]
-  WITHOUT_VERSION_H
 )
 
 asap_push_module("${META_MODULE_NAME}")
@@ -34,17 +33,12 @@ add_library(
   "LightBenchSettingsFile.cpp"
   "LightBenchSettings.h"
 )
-target_compile_options(
-  oxygen-lightbench-scene
-  PRIVATE
-    ${OXYGEN_COMMON_CXX_FLAGS}
-)
 target_include_directories(
   oxygen-lightbench-scene
   PUBLIC
     ${OXYGEN_EXAMPLES_SOURCE_DIR}
 )
-find_package(nlohmann_json_schema_validator REQUIRED)
+find_package(nlohmann_json_schema_validator CONFIG REQUIRED)
 target_link_libraries(
   oxygen-lightbench-scene
   PUBLIC
@@ -84,8 +78,6 @@ set_target_properties(
     OUTPUT_NAME
       ${META_MODULE_NAME}
 )
-
-target_compile_options(${META_MODULE_TARGET} PRIVATE ${OXYGEN_COMMON_CXX_FLAGS})
 
 target_include_directories(
   ${META_MODULE_TARGET}
@@ -150,11 +142,5 @@ endif()
 # ------------------------------------------------------------------------------
 # Deployment instructions
 # ------------------------------------------------------------------------------
-
-oxygen_module_install(
-  EXPORT ${META_MODULE_NAMESPACE}
-  TARGETS
-    ${META_MODULE_TARGET}
-)
 
 asap_pop_module("${META_MODULE_NAME}")

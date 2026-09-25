@@ -1,0 +1,18 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Oxygen: prepare clangd databases",
+      "type": "process",
+      "command": "${workspaceFolder}/../../.venv/bin/python",
+      "windows": { "command": "${workspaceFolder}/../../.venv/Scripts/python.exe" },
+      "args": [
+        "${workspaceFolder}/.vscode/prepare_clangd.py",
+        "--build-dir",
+        "${command:cmake.buildDirectory}"
+      ],
+      "problemMatcher": [],
+      "presentation": { "reveal": "silent", "panel": "dedicated", "clear": true }
+    }
+  ]
+}

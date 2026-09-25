@@ -26,7 +26,6 @@ set_target_properties(
     FOLDER
       "Testing"
 )
-target_compile_options(${link_test_target} PRIVATE ${OXYGEN_COMMON_CXX_FLAGS})
 target_link_libraries(${link_test_target} PRIVATE oxygen::content)
 add_test(NAME ${link_test_target} COMMAND ${link_test_target})
 
@@ -65,10 +64,6 @@ target_compile_definitions(
   "${META_MODULE_NAME}.AssetLoader.Tests"
   PRIVATE
     OXYGEN_CONTENT_TEST_PYTHON_EXECUTABLE="${Python3_EXECUTABLE}"
-)
-add_dependencies(
-  "${META_MODULE_NAME}.AssetLoader.Tests"
-  pakgen_editable_install
 )
 
 m_gtest_program(
@@ -114,10 +109,4 @@ m_gtest_program(
 
 m_gtest_program(LoadersScripting SOURCES "SceneScriptingLoader_test.cpp")
 
-# Ensure the Loaders tests run only after PakGen editable install so the
-# pakgen CLI is available for any dynamic pack builds performed by tests.
-add_dependencies("${META_MODULE_NAME}.Loaders.Tests" pakgen_editable_install)
-add_dependencies(
-  "${META_MODULE_NAME}.LoadersPhysics.Tests"
-  pakgen_editable_install
-)
+# PakGen is provisioned during setup and checked during configuration.

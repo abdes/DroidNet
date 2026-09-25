@@ -1,17 +1,17 @@
 <#
 .SYNOPSIS
-Builds a pak from the Examples/Content loose-cooked root using Oxygen.Cooker.PakTool.
+Packages this Content directory's loose-cooked output with Oxygen PakTool.
 
 .DESCRIPTION
-This script packages `Examples/Content/.cooked` into `Examples/Content/pak`
-using the native `Oxygen.Cooker.PakTool` in the current repo workspace.
+This script packages `.cooked` into `pak`, both beside the script. An installed
+SDK uses its bundled PakTool; a source checkout uses an existing build.
 
 By default it emits:
 - `<BaseName>.pak`
 - `<BaseName>.catalog.json`
 - `<BaseName>.manifest.json`
 
-The default `SourceKey` is the stable UUIDv7 used for the Examples/Content pak
+The default `SourceKey` is the stable UUIDv7 used for the showcase pak
 line and should be reused for subsequent rebuilds and patches unless an
 explicit replacement is intended.
 
@@ -19,10 +19,10 @@ explicit replacement is intended.
 Base filename for emitted artifacts in the pak output directory.
 
 .PARAMETER CookedRoot
-Loose-cooked root to package. Defaults to `Examples/Content/.cooked`.
+Loose-cooked root to package. Defaults to `.cooked` beside this script.
 
 .PARAMETER OutputDir
-Directory for published pak artifacts. Defaults to `Examples/Content/pak`.
+Directory for published pak artifacts. Defaults to `pak` beside this script.
 
 .PARAMETER ContentVersion
 Pak content version passed to PakTool. Defaults to `1`.
@@ -32,8 +32,9 @@ Canonical lowercase UUIDv7 source identity for the pak line.
 
 .PARAMETER ToolPath
 Optional explicit path to `Oxygen.Cooker.PakTool.exe`. If omitted, the script
-selects an available preset with a built PakTool, preferring Release, ordinary
-builds, then Ninja. -BuildTree, -Config and -Preset constrain that selection.
+uses the installed SDK's PakTool. In a source checkout it selects a built PakTool,
+preferring Release, ordinary builds, then Ninja. Build-selection switches apply
+only in a source checkout.
 
 .PARAMETER DiagnosticsFile
 Optional explicit diagnostics report path. If omitted, no diagnostics report is
@@ -68,9 +69,9 @@ Show usage, options and examples without selecting tools or packaging. Alias: -h
 param(
     [string]$BaseName = "all",
 
-    [string]$CookedRoot = (Join-Path $PSScriptRoot ".cooked"),
+    [string]$CookedRoot,
 
-    [string]$OutputDir = (Join-Path $PSScriptRoot "pak"),
+    [string]$OutputDir,
 
     [ValidateRange(0, 65535)]
     [int]$ContentVersion = 1,
@@ -98,14 +99,21 @@ if ($Help) {
 }
 
 $ErrorActionPreference = "Stop"
+if ([string]::IsNullOrWhiteSpace($CookedRoot)) { $CookedRoot = Join-Path $PSScriptRoot '.cooked' }
+if ([string]::IsNullOrWhiteSpace($OutputDir)) { $OutputDir = Join-Path $PSScriptRoot 'pak' }
 
 function Get-FullPath([string]$Path) {
-    return [System.IO.Path]::GetFullPath($Path, $PWD.Path)
+    return [System.IO.Path]::GetFullPath($(if ([IO.Path]::IsPathRooted($Path)) { $Path } else { Join-Path $PWD.Path $Path }))
 }
 
-$RepoRoot = (Get-Item $PSScriptRoot).Parent.Parent.FullName
-
-. (Join-Path $RepoRoot 'tools/cli/BuildSelection.ps1')
+$SdkSupport = Join-Path $PSScriptRoot '../Tools/BuildSelection.ps1'
+if (Test-Path -LiteralPath $SdkSupport) {
+    . $SdkSupport
+    $RepoRoot = Get-OxygenSourceRoot
+} else {
+    $RepoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
+    . (Join-Path $RepoRoot 'tools/cli/BuildSelection.ps1')
+}
 $tools = Resolve-OxygenExecutables -SourceRoot $RepoRoot -Targets 'oxygen-cooker-paktool' -BuildTree $BuildTree -Config $Config -Preset $Preset -Overrides @{ 'oxygen-cooker-paktool' = $ToolPath }
 Write-OxygenExecutableSelection $tools
 

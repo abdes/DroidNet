@@ -415,6 +415,7 @@ FodyWeavers.xsd
 
 # Temporary lock files
 *.lock
+!/uv.lock
 
 # Solution files - We use Visual Studio solution generator
 # https://microsoft.github.io/slngen/

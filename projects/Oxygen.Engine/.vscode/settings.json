@@ -1,4 +1,8 @@
 {
+    "clangd.arguments": [
+        "--compile-commands-dir=${command:cmake.buildDirectory}/clangd/${command:cmake.buildType}"
+    ],
+    "cmake.postConfigureTask": "Oxygen: prepare clangd databases",
     "C_Cpp.clang_format_style": "file",
     "C_Cpp.codeAnalysis.clangTidy.args": [
         "--config-file=${workspaceFolder}/.clang-tidy"
@@ -18,7 +22,7 @@
     "C_Cpp.default.intelliSenseMode": "",
     "C_Cpp.default.cppStandard": "c++23",
     "C_Cpp.default.cStandard": "c17",
-    "C_Cpp.intelliSenseEngine": "default",
+    "C_Cpp.intelliSenseEngine": "disabled",
     "C_Cpp.errorSquiggles": "disabled",
     "[cmake]": {
         "editor.formatOnSave": false,
@@ -30,7 +34,7 @@
     ],
     "C_Cpp.default.browse.databaseFilename": "${workspaceFolder}/.vscode/browse.vc.db",
     "files.exclude": {
-        "**/out": true
+        "**/out": false
     },
     "search.exclude": {
         "**/out": true

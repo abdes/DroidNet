@@ -25,11 +25,6 @@ macro(add_example EXAMPLE_NAME SOURCE_FILE)
       OUTPUT_NAME
         ${EXAMPLE_TARGET_NAME}
   )
-  target_compile_options(
-    ${EXAMPLE_TARGET_NAME}
-    PRIVATE
-      ${OXYGEN_COMMON_CXX_FLAGS}
-  )
   target_link_libraries(${EXAMPLE_TARGET_NAME} PRIVATE oxygen::clap)
   arrange_target_files_for_ide(${EXAMPLE_TARGET_NAME})
 
@@ -39,12 +34,6 @@ macro(add_example EXAMPLE_NAME SOURCE_FILE)
     ${EXAMPLES_TARGETS}
     ${EXAMPLE_TARGET_NAME}
     PARENT_SCOPE
-  )
-
-  oxygen_module_install(
-    EXPORT ${META_MODULE_NAMESPACE}
-    TARGETS
-      ${EXAMPLE_TARGET_NAME}
   )
 endmacro()
 

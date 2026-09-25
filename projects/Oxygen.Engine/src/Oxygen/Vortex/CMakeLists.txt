@@ -11,7 +11,6 @@
 asap_module_declare(
   MODULE_NAME "Oxygen.Vortex"
   DESCRIPTION "Oxygen Vortex rendering layer"
-  WITHOUT_VERSION_H
 )
 asap_push_module("${META_MODULE_NAME}")
 
@@ -73,6 +72,11 @@ set_target_properties(
 
 set(
   OXYGEN_VORTEX_HEADERS
+  "Internal/PerViewStructuredPublisher.h"
+  "Internal/RigidTransformHistoryCache.h"
+  "Lighting/Types/LightGridResources.h"
+  "ScenePrep/Extractors.h"
+  "ScenePrep/Finalizers.h"
   "api_export.h"
   "CompositionView.h"
   "Errors.h"
@@ -288,13 +292,10 @@ set(
   "Internal/BindlessRootBindings.h"
   "Lighting/Internal/SpatialLightGrid.h"
   "Lighting/Internal/SpatialLightGrid.cpp"
-  "Lighting/Types/LightGridResources.h"
   "Internal/PerViewScope.h"
-  "Internal/PerViewStructuredPublisher.h"
   "Internal/PreviousViewHistoryCache.cpp"
   "Internal/PreviousViewHistoryCache.h"
   "Internal/RigidTransformHistoryCache.cpp"
-  "Internal/RigidTransformHistoryCache.h"
   "Internal/RenderContextMaterializer.h"
   "Internal/RenderContextPool.h"
   "Internal/RenderScope.h"
@@ -397,8 +398,6 @@ set(
   "SceneRenderer/Stages/Translucency/TranslucencyMeshProcessor.cpp"
   "SceneRenderer/Stages/Translucency/TranslucencyModule.cpp"
   "SceneRenderer/Stages/InitViews/InitViewsModule.cpp"
-  "ScenePrep/Extractors.h"
-  "ScenePrep/Finalizers.h"
   "ScenePrep/ScenePrepPipeline.cpp"
   "ScenePrep/ScenePrepPipeline.h"
   "SceneRenderer/Internal/FramePlanBuilder.cpp"
@@ -436,12 +435,12 @@ target_sources(
 arrange_target_files_for_ide(${META_MODULE_TARGET})
 
 target_compile_features(${META_MODULE_TARGET} PUBLIC cxx_std_23)
-target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
 target_compile_definitions(
   ${META_MODULE_TARGET}
   PRIVATE
     $<$<PLATFORM_ID:Windows>:WIN32_LEAN_AND_MEAN>
     $<$<PLATFORM_ID:Windows>:NOMINMAX>
+  PUBLIC
     $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXGN_VRTX_STATIC>
 )
 
@@ -471,7 +470,16 @@ target_link_libraries(
 
 if(OXYGEN_BUILD_TESTS)
   add_subdirectory("Test")
-  add_subdirectory("Benchmarks")
+  # GPU benchmark workloads share the GoogleTest exposure fixtures. Keep that
+  # existing opt-in contract; the other modules' CPU benchmarks are independent.
+  if(OXYGEN_BUILD_BENCHMARKS)
+    add_subdirectory("Benchmarks")
+  endif()
+elseif(OXYGEN_BUILD_BENCHMARKS)
+  message(
+    STATUS
+    "Vortex GPU benchmarks require OXYGEN_BUILD_TESTS; standalone CPU benchmarks remain enabled."
+  )
 endif()
 
 # ==============================================================================

@@ -1,0 +1,107 @@
+{
+  "$schema": "../../../../src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json",
+  "version": 1,
+  "max_in_flight_jobs": 1,
+  "output": "../../.cooked",
+  "jobs": [
+    {
+      "id": "SdkMarble_base_color",
+      "type": "texture-descriptor",
+      "source": "./SdkMarble_base_color.texture.json",
+      "name": "SdkMarble_base_color",
+      "content_hashing": true
+    },
+    {
+      "id": "SdkMarble_normal",
+      "type": "texture-descriptor",
+      "source": "./SdkMarble_normal.texture.json",
+      "name": "SdkMarble_normal",
+      "content_hashing": true
+    },
+    {
+      "id": "SdkMarble_roughness",
+      "type": "texture-descriptor",
+      "source": "./SdkMarble_roughness.texture.json",
+      "name": "SdkMarble_roughness",
+      "content_hashing": true
+    },
+    {
+      "id": "SdkMarble",
+      "type": "material-descriptor",
+      "source": "./SdkMarble.material.json",
+      "name": "SdkMarble",
+      "depends_on": [
+        "SdkMarble_base_color",
+        "SdkMarble_normal",
+        "SdkMarble_roughness"
+      ]
+    },
+    {
+      "id": "SdkWood_base_color",
+      "type": "texture-descriptor",
+      "source": "./SdkWood_base_color.texture.json",
+      "name": "SdkWood_base_color",
+      "content_hashing": true
+    },
+    {
+      "id": "SdkWood_normal",
+      "type": "texture-descriptor",
+      "source": "./SdkWood_normal.texture.json",
+      "name": "SdkWood_normal",
+      "content_hashing": true
+    },
+    {
+      "id": "SdkWood_roughness",
+      "type": "texture-descriptor",
+      "source": "./SdkWood_roughness.texture.json",
+      "name": "SdkWood_roughness",
+      "content_hashing": true
+    },
+    {
+      "id": "SdkWood",
+      "type": "material-descriptor",
+      "source": "./SdkWood.material.json",
+      "name": "SdkWood",
+      "depends_on": [
+        "SdkWood_base_color",
+        "SdkWood_normal",
+        "SdkWood_roughness"
+      ]
+    },
+    {
+      "id": "SdkCube",
+      "type": "geometry-descriptor",
+      "source": "./SdkCube.geometry.json",
+      "name": "SdkCube",
+      "depends_on": ["SdkMarble"]
+    },
+    {
+      "id": "SdkCubeB",
+      "type": "geometry-descriptor",
+      "source": "./SdkCubeB.geometry.json",
+      "name": "SdkCubeB",
+      "depends_on": ["SdkWood"]
+    },
+    {
+      "id": "SdkCubeC",
+      "type": "geometry-descriptor",
+      "source": "./SdkCubeC.geometry.json",
+      "name": "SdkCubeC",
+      "depends_on": ["SdkMarble"]
+    },
+    {
+      "id": "SdkCubeD",
+      "type": "geometry-descriptor",
+      "source": "./SdkCubeD.geometry.json",
+      "name": "SdkCubeD",
+      "depends_on": ["SdkWood"]
+    },
+    {
+      "id": "scene",
+      "type": "scene-descriptor",
+      "source": "./SdkMaterials.scene.json",
+      "name": "SdkMaterials",
+      "depends_on": ["SdkCube", "SdkCubeB", "SdkCubeC", "SdkCubeD"]
+    }
+  ]
+}

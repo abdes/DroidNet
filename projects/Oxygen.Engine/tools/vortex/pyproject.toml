@@ -1,0 +1,13 @@
+[project]
+name = "oxygen-vortex-tools"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+images = ["numpy", "Pillow"]
+# Preserve the versions used by the checked-in numerical reference generators.
+numerics = ["python-flint==0.9.0", "mpmath==1.3.0"]
+
+[tool.uv]
+package = false

@@ -19,15 +19,10 @@ find_package(nlohmann_json CONFIG REQUIRED)
 
 add_executable("Oxygen.Graphics.Direct3D12.LinkTest" "Link_test.cpp")
 set_target_properties(
-  "Oxygen.Graphics.Common.LinkTest"
+  "Oxygen.Graphics.Direct3D12.LinkTest"
   PROPERTIES
     FOLDER
       "Testing"
-)
-target_compile_options(
-  "Oxygen.Graphics.Direct3D12.LinkTest"
-  PRIVATE
-    ${OXYGEN_COMMON_CXX_FLAGS}
 )
 target_link_libraries(
   "Oxygen.Graphics.Direct3D12.LinkTest"
@@ -132,7 +127,12 @@ gtest_program(
   DEPS
     oxygen::graphics-common
     oxygen::testing
+    dxc::dxcompiler
 )
+oxygen_stage_dxc_runtime(
+  Oxygen.Graphics.Direct3D12.ShaderBakeDependencies.Tests
+)
+
 gtest_program(
   "Oxygen.Graphics.Direct3D12.ShaderBakeDirtyAnalysis.Tests"
   SOURCES
@@ -197,42 +197,49 @@ m_gtest_program(
 )
 m_gtest_program(
   TextureReadbackIntegration
+  GPU
   SOURCES
     "TextureReadbackIntegration_test.cpp"
     ${D3D12_TEST_FIXTURES}
 )
 m_gtest_program(
   ReadbackSurfaceMapping
+  GPU
   SOURCES
     "ReadbackSurfaceMapping_test.cpp"
     ${D3D12_TEST_FIXTURES}
 )
 m_gtest_program(
   TextureReadbackObject
+  GPU
   SOURCES
     "TextureReadbackObject_test.cpp"
     ${D3D12_TEST_FIXTURES}
 )
 m_gtest_program(
   BufferReadbackIntegration
+  GPU
   SOURCES
     "BufferReadbackIntegration_test.cpp"
     ${D3D12_TEST_FIXTURES}
 )
 m_gtest_program(
   BlockingReadback
+  GPU
   SOURCES
     "BlockingReadback_test.cpp"
     ${D3D12_TEST_FIXTURES}
 )
 m_gtest_program(
   SubmitOrderedQueueActions
+  GPU
   SOURCES
     "SubmitOrderedQueueActions_test.cpp"
     ${D3D12_TEST_FIXTURES}
 )
 m_gtest_program(
   TimestampQueryBackend
+  GPU
   SOURCES
     "TimestampQueryBackend_test.cpp"
     ${D3D12_TEST_FIXTURES}

@@ -1,0 +1,8 @@
+# Default developer deployment. Explicit --prefix and Conan package folders stay flat.
+if(NOT DEFINED CACHE{CMAKE_INSTALL_PREFIX} AND CMAKE_INSTALL_PREFIX STREQUAL "@OXYGEN_DEFAULT_INSTALL_ROOT@")
+  if("@OXYGEN_WITH_ASAN@")
+    set(CMAKE_INSTALL_PREFIX "${CMAKE_INSTALL_PREFIX}/Asan")
+  else()
+    set(CMAKE_INSTALL_PREFIX "${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_CONFIG_NAME}")
+  endif()
+endif()

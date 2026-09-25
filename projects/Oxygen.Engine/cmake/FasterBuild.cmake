@@ -4,38 +4,61 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # ===-----------------------------------------------------------------------===#
 
-if(__faster_build_description)
-  return()
-endif()
-set(__faster_build_description YES)
+include_guard(DIRECTORY)
 
 # ------------------------------------------------------------------------------
 # Reduce build time by using ccache when available
 # ------------------------------------------------------------------------------
-if(NOT OXYGEN_USE_CCACHE)
-  return()
-endif()
-
-find_program(CCACHE_TOOL_PATH ccache)
-if(CCACHE_TOOL_PATH)
-  message(STATUS "Using ccache at (${CCACHE_TOOL_PATH}).")
-
-    include(cmake/CPM.cmake)
-    # see https://github.com/TheLartians/Ccache.cmake enables CCACHE support
-    # through the USE_CCACHE flag possible values are: YES, NO or equivalent
-    set(USE_CCACHE ON)
-    cpmaddpackage("gh:TheLartians/Ccache.cmake@1.2.5")
-  if(MSVC)
-    message(STATUS "Using ccache with MSVC")
-    message(STATUS "Setting MSVC Debug Information Flags to `Embedded`")
-    # Ccache with MSVC does not support /Zi option, which is added by default,
-    # unless we set the CMAKE_MSVC_DEBUG_INFORMATION_FORMAT to Embedded.
-    # https://cmake.org/cmake/help/latest/variable/CMAKE_MSVC_DEBUG_INFORMATION_FORMAT.html
-    set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT "$<$<CONFIG:Debug,RelWithDebInfo>:Embedded>")
-    set(CMAKE_C_COMPILER_LAUNCHER ${CCACHE_TOOL_PATH} CACHE STRING "" FORCE)
-    set(CMAKE_CXX_COMPILER_LAUNCHER ${CCACHE_TOOL_PATH} CACHE STRING "" FORCE)
+set(OXYGEN_CCACHE_STATUS "automatic selection disabled")
+if(OXYGEN_USE_CCACHE)
+  if(NOT CMAKE_GENERATOR MATCHES "Ninja|Makefiles|WMake")
+    set(
+      OXYGEN_CCACHE_STATUS
+      "automatic selection unavailable for ${CMAKE_GENERATOR}"
+    )
+    message(
+      WARNING
+      "OXYGEN_USE_CCACHE: ${CMAKE_GENERATOR} does not support native compiler launchers. "
+      "Continuing without automatic ccache integration."
+    )
+  else()
+    set(_oxygen_cache_languages)
+    foreach(_language IN ITEMS C CXX)
+      # An explicitly empty launcher is also a caller choice. Normal variables
+      # avoid leaving an automatic launcher behind when the option is disabled.
+      if(NOT DEFINED CMAKE_${_language}_COMPILER_LAUNCHER)
+        list(APPEND _oxygen_cache_languages ${_language})
+      endif()
+    endforeach()
+    if(_oxygen_cache_languages)
+      find_program(CCACHE_TOOL_PATH NAMES ccache)
+      if(
+        CCACHE_TOOL_PATH
+        AND
+          EXISTS
+            "${CCACHE_TOOL_PATH}"
+        AND
+          NOT
+            IS_DIRECTORY
+              "${CCACHE_TOOL_PATH}"
+      )
+        foreach(_language IN LISTS _oxygen_cache_languages)
+          set(CMAKE_${_language}_COMPILER_LAUNCHER "${CCACHE_TOOL_PATH}")
+        endforeach()
+        list(JOIN _oxygen_cache_languages "/" _languages)
+        set(
+          OXYGEN_CCACHE_STATUS
+          "automatic ${_languages} launcher: ${CCACHE_TOOL_PATH}"
+        )
+      else()
+        set(OXYGEN_CCACHE_STATUS "unavailable (ccache not found)")
+        message(
+          WARNING
+          "OXYGEN_USE_CCACHE: ccache was not found. Continuing with normal compilation."
+        )
+      endif()
+    else()
+      set(OXYGEN_CCACHE_STATUS "caller-selected launchers preserved")
+    endif()
   endif()
-else()
-  message(STATUS "No ccache tool installed.")
-  set(OXYGEN_USE_CCACHE OFF)
 endif()

@@ -1,0 +1,15 @@
+{
+  "$schema": "../../../../src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json",
+  "version": 1,
+  "max_in_flight_jobs": 1,
+  "output": "../../.cooked",
+  "jobs": [
+    {
+      "id": "lantern",
+      "type": "gltf",
+      "source": "../../models/Lantern.glb",
+      "name": "Lantern",
+      "content_hashing": true
+    }
+  ]
+}

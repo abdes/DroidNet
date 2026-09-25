@@ -24,17 +24,18 @@ monolithic script with a layered, modular architecture focused on **determinism*
 
 ## Installation / Development
 
-PakGen is a Python 3.11+ package (PEP 621). From the `PakGen` directory:
+PakGen's dependencies are declared in its `pyproject.toml` and locked with the
+other repository tools in the root `uv.lock`. Rich is a required CLI dependency;
+YAML support is selected by repository setup. From the DroidNet root:
 
 ```pwsh
-# Editable install with all optional extras (colorized output, YAML, dev tooling)
-pip install -e .[dev,color,yaml]
-
-# Run tests
-pytest -q
+uv sync --locked
+. .venv/Scripts/Activate.ps1
+python -m pytest projects/Oxygen.Engine/src/Oxygen/Cooker/Tools/PakGen/tests -q
 ```
 
-(Within the larger Oxygen Engine repo you may already have a virtual env configured – reuse it.)
+`build-tree generate <profile>` also provisions the environment. Configure and
+build commands never install Python packages. See `tooling/PYTHON.md`.
 
 ---
 

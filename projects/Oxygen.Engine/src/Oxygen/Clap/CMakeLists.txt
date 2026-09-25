@@ -11,7 +11,6 @@
 asap_module_declare(
   MODULE_NAME "Oxygen.Clap"
   DESCRIPTION "Text wrapping and column layout utilities"
-  WITHOUT_VERSION_H
 )
 asap_push_module("${META_MODULE_NAME}")
 
@@ -63,6 +62,8 @@ set(
   "Fluent/OptionBuilder.h"
   "Fluent/OptionValueBuilder.h"
   "Fluent/PositionalOptionBuilder.h"
+  "Internal/Errors.h"
+  "Internal/ValueDescriptor.h"
   "Parser/Context.h"
   "Parser/Events.h"
   "Parser/Parser.h"
@@ -83,9 +84,7 @@ set(
   "Internal/Args.cpp"
   "Internal/Args.h"
   "Internal/Errors.cpp"
-  "Internal/Errors.h"
   "Internal/StyledWrap.h"
-  "Internal/ValueDescriptor.h"
 )
 
 target_sources(
@@ -102,7 +101,6 @@ target_sources(
 arrange_target_files_for_ide(${META_MODULE_TARGET})
 
 target_compile_features(${META_MODULE_TARGET} PUBLIC cxx_std_20)
-target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
 target_compile_definitions(
   ${META_MODULE_TARGET}
   PUBLIC
@@ -150,9 +148,10 @@ if(OXYGEN_BUILD_DOCS AND OXYGEN_WITH_DOXYGEN)
   asap_with_doxygen(
     MODULE_NAME ${META_MODULE_TARGET}
     VERSION ${META_VERSION}
-    TITLE "\"Base\""
-    BRIEF "\"Base infrastructure for Oxygen\""
-    INPUT_PATH "${CMAKE_CURRENT_SOURCE_DIR}"
+    TITLE "\"Clap\""
+    BRIEF "\"Command-line argument parsing for Oxygen\""
+    INPUT_PATH
+      "${CMAKE_CURRENT_SOURCE_DIR}"
   )
 endif()
 

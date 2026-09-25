@@ -11,7 +11,6 @@
 asap_module_declare(
   MODULE_NAME "Oxygen.Examples.DemoShell"
   DESCRIPTION "Reusable demo UI shell for example applications"
-  WITHOUT_VERSION_H
 )
 
 asap_push_module("${META_MODULE_NAME}")
@@ -187,7 +186,6 @@ target_sources(
 )
 
 target_compile_features(${META_MODULE_TARGET} PUBLIC cxx_std_23)
-target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
 target_include_directories(
   ${META_MODULE_TARGET}
   PUBLIC
@@ -198,6 +196,7 @@ target_compile_definitions(
   ${META_MODULE_TARGET}
   PUBLIC
     $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXYGEN_EXAMPLES_DEMOSHELL_STATIC>
+    $<$<BOOL:${OXYGEN_BUILD_UI_TESTS}>:OXYGEN_BUILD_UI_TESTS=1>
 )
 
 target_compile_definitions(

@@ -14,8 +14,7 @@ set(
 )
 asap_module_declare(
   MODULE_NAME "Oxygen.Cooker.PakDump"
-  DESCRIPTION description
-  WITHOUT_VERSION_H
+  DESCRIPTION "${description}"
 )
 asap_push_module("${META_MODULE_NAME}")
 
@@ -64,7 +63,6 @@ set_target_properties(
     OUTPUT_NAME
       ${META_MODULE_NAME}
 )
-target_compile_options(${META_MODULE_TARGET} PRIVATE ${OXYGEN_COMMON_CXX_FLAGS})
 target_include_directories(
   ${META_MODULE_TARGET}
   PRIVATE

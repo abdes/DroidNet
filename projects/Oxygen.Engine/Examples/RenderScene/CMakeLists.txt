@@ -17,7 +17,6 @@ AssetLoader, then renders them with Vortex and Direct3D12. DemoShell provides
 interactive model import, camera, lighting, environment, and diagnostics panels.
 Optional preview sunlight illuminates loaded scenes without directional lights.
 ]=]
-  WITHOUT_VERSION_H
 )
 
 asap_push_module("${META_MODULE_NAME}")
@@ -32,6 +31,8 @@ add_executable(
   "main_impl.cpp"
   "MainModule.h"
   "MainModule.cpp"
+  "RuntimePaths.h"
+  "RuntimePaths.cpp"
 )
 
 set_target_properties(
@@ -42,8 +43,6 @@ set_target_properties(
     OUTPUT_NAME
       ${META_MODULE_NAME}
 )
-
-target_compile_options(${META_MODULE_TARGET} PRIVATE ${OXYGEN_COMMON_CXX_FLAGS})
 
 target_include_directories(
   ${META_MODULE_TARGET}
@@ -90,3 +89,25 @@ oxygen_module_install(
 )
 
 asap_pop_module("${META_MODULE_NAME}")
+
+if(OXYGEN_INSTALL)
+  install(
+    FILES
+      "${CMAKE_CURRENT_SOURCE_DIR}/README.md"
+    DESTINATION "${OXYGEN_INSTALL_DATA}/RenderScene"
+    COMPONENT Oxygen_data
+  )
+  install(
+    FILES
+      "${CMAKE_CURRENT_SOURCE_DIR}/RenderScene.ps1"
+      "${CMAKE_CURRENT_SOURCE_DIR}/RenderScene.cmd"
+    DESTINATION .
+    COMPONENT Oxygen_runtime
+  )
+  install(
+    FILES
+      "${CMAKE_CURRENT_SOURCE_DIR}/reimport-sources.schema.json"
+    DESTINATION "${OXYGEN_INSTALL_SCHEMAS}"
+    COMPONENT Oxygen_data
+  )
+endif()

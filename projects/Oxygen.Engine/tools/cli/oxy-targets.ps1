@@ -20,13 +20,12 @@
     - Explicit tree/config/preset constraints are retained throughout the operation.
     - Sanitized builds are always Debug.
     - These helper scripts *do not* invoke Conan automatically. If a required build root is
-      missing, they will error and instruct the user to run `tools\generate-builds.ps1` or
-      `tools\generate-builds.bat` to initialize the build environment.
+      missing, they will error and instruct the user to run `tools\build-tree.ps1 generate <profile>` to initialize the build environment.
 
 .NOTES
     File Name   : oxy-targets.ps1
     Author      : Oxygen Engine Project
-    Requires    : PowerShell 7.0+, CMake 3.30+, initialized Conan dependencies
+    Requires    : PowerShell 7.0+, CMake 4.2+, initialized Conan dependencies
     Dependencies: CMakePresets.json, CMake File API replies, Conan profiles
 
 .LINK
@@ -400,7 +399,7 @@ function Get-ConanProfile($Config) {
 
 .DESCRIPTION
     This module no longer exposes an internal Conan invocation helper. The
-    project provides `tools\generate-builds.ps1` / `tools\generate-builds.bat`
+    project provides `tools\build-tree.ps1 generate <profile>`
     to initialize the build environments (Conan installs and CMake toolchain
     generation). CLI helpers in this module will not invoke Conan automatically
     and will instead error and instruct the user to run the helper script when
@@ -408,7 +407,7 @@ function Get-ConanProfile($Config) {
 
 .EXAMPLE
     # Initialize build environments (ASan)
-    .\tools\generate-builds.ps1 profiles/windows-msvc-asan.ini
+    .\tools\build-tree.ps1 generate profiles/windows-msvc-asan.ini
 #>
 
 <#

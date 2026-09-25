@@ -4,29 +4,14 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # ===-----------------------------------------------------------------------===#
 
-cmake_minimum_required(VERSION 3.29)
+cmake_minimum_required(VERSION 4.2)
 
 if(POLICY CMP0177)
   cmake_policy(SET CMP0177 NEW)
 endif()
 
 list(PREPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
-# If this project is not the master project, prioritize the master project
-# cmake include dir if it exists.
-if(
-  NOT
-    CMAKE_CURRENT_SOURCE_DIR
-      STREQUAL
-      CMAKE_SOURCE_DIR
-  AND
-    EXISTS
-      "${CMAKE_SOURCE_DIR}/cmake"
-)
-  list(PREPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
-endif()
-# Include the log helpers module early so we can use early for logging the
-# project hierarchy
-include(LogHelpers)
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/LogHelpers.cmake")
 
 set(CMAKE_DEBUG_POSTFIX "-d")
 
@@ -34,16 +19,8 @@ set(CMAKE_DEBUG_POSTFIX "-d")
 # Project description and (meta) information
 # ------------------------------------------------------------------------------
 
-# Get git revision
-include(GetGitRevisionDescription)
-get_git_head_revision(GIT_REFSPEC GIT_SHA1)
-string(SUBSTRING "${GIT_SHA1}" 0 12 GIT_REV)
-if(NOT GIT_SHA1)
-  set(GIT_REV "0")
-endif()
-
 # Meta information about the project
-include(VersionHelpers)
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/SourceProvenance.cmake")
 # gersemi: off
 set(META_PROJECT_NAME        "Oxygen")
 set(META_PROJECT_DESCRIPTION "Oxygen game engine")
@@ -52,44 +29,12 @@ set(META_GITHUB_REPO         "https://github.com/abdes/OxygenEngine")
 set(META_AUTHOR_DOMAIN       "https://github.com/abdes/OxygenEngine")
 set(META_AUTHOR_MAINTAINER   "Abdessattar Sassi")
 asap_version_read() # from `VERSION` file
-set(META_VERSION_REVISION    "${GIT_REV}")
 set(META_VERSION             "${META_VERSION_MAJOR}.${META_VERSION_MINOR}.${META_VERSION_PATCH}")
-set(META_NAME_VERSION        "${META_PROJECT_NAME} v${META_VERSION} (${META_VERSION_REVISION})")
 # gersemi: on
 
 string(MAKE_C_IDENTIFIER ${META_PROJECT_NAME} META_PROJECT_ID)
 string(TOUPPER ${META_PROJECT_ID} META_PROJECT_ID)
 string(TOLOWER ${META_PROJECT_ID} META_PROJECT_ID_LOWER)
-
-# Determine if this is built as a subproject  or if it is the master project.
-if(NOT DEFINED ${META_PROJECT_ID}_IS_MASTER_PROJECT)
-  set(${META_PROJECT_ID}_IS_MASTER_PROJECT OFF)
-  if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
-    set(${META_PROJECT_ID}_IS_MASTER_PROJECT ON)
-  endif()
-endif()
-
-# Push the project on the hierarchy stack after we have determined if it is a
-# master or a sub-project.
-asap_push_project(${META_PROJECT_NAME})
-
-# ------------------------------------------------------------------------------
-# Project Declaration
-# ------------------------------------------------------------------------------
-
-# Generate folders for IDE targets (e.g., VisualStudio solutions)
-set_property(
-  GLOBAL
-  PROPERTY
-    USE_FOLDERS
-      ON
-)
-set(IDE_FOLDER "${META_PROJECT_NAME}")
-
-# Silence redundant toolchain warnings (often caused by IDEs passing the
-# toolchain manually when it is already defined in the CMake preset).
-if(CMAKE_TOOLCHAIN_FILE)
-endif()
 
 # Declare project
 project(
@@ -101,6 +46,31 @@ project(
     C
     CXX
 )
+
+oxygen_read_source_provenance("${CMAKE_CURRENT_SOURCE_DIR}" OXYGEN_SOURCE)
+set(META_VERSION_REVISION "${OXYGEN_SOURCE_REVISION}")
+set(
+  META_NAME_VERSION
+  "${META_PROJECT_NAME} v${META_VERSION} (${OXYGEN_SOURCE_SHORT_REVISION})"
+)
+
+set(OXYGEN_IS_MASTER_PROJECT "${PROJECT_IS_TOP_LEVEL}")
+set(OXYGEN_PROJECT_SOURCE_DIR "${PROJECT_SOURCE_DIR}")
+asap_push_project(${META_PROJECT_NAME})
+set(IDE_FOLDER "${META_PROJECT_NAME}")
+if(PROJECT_IS_TOP_LEVEL)
+  set_property(
+    GLOBAL
+    PROPERTY
+      USE_FOLDERS
+        ON
+  )
+endif()
+
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/ModuleSelection.cmake")
+if(OXYGEN_BUILD_FULL_ENGINE)
+  include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/ToolchainRequirements.cmake")
+endif()
 
 # Publish a complete File API reply even when configured outside an IDE.
 # CMake Tools loads an existing index before configuring; a codemodel-only
@@ -135,40 +105,20 @@ if(CMAKE_GENERATOR MATCHES "^Visual Studio")
   endif()
 endif()
 
-# The default build type provided by CMake is to include no compiler flags for
-# optimization. For some projects you may want to set a default build type so
-# that you do not have to remember to set it.
-
-# TODO: check for multi-config
-# get_property(IS_MULTICONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
-# if (NOT IS_MULTICONFIG AND NOT DEFINED CMAKE_BUILD_TYPE)
-#     set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the type of build.")
-# endif()
-
-if(NOT CMAKE_CONFIGURATION_TYPES)
-  message(STATUS "Setting build type to 'Debug' as none was specified.")
-  set(
-    CMAKE_DEFAULT_CONFIGS
-    Debug
-    CACHE STRING
-    "Choose the type of build."
-    FORCE
-  )
-  set_property(
-    CACHE
-      CMAKE_CONFIGURATION_TYPES
-    PROPERTY
-      STRINGS
-        "Debug"
-        "Release"
-        "RelWithDebInfo"
-  )
+if(PROJECT_IS_TOP_LEVEL)
+  include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/BuildConfiguration.cmake")
 endif()
 
 # Set output directories
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+foreach(_kind RUNTIME LIBRARY ARCHIVE)
+  if(NOT DEFINED CMAKE_${_kind}_OUTPUT_DIRECTORY)
+    if(_kind STREQUAL "ARCHIVE")
+      set(CMAKE_${_kind}_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/lib")
+    else()
+      set(CMAKE_${_kind}_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/bin")
+    endif()
+  endif()
+endforeach()
 
 # Set the source tree root
 set(OXYGEN_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")
@@ -177,158 +127,34 @@ set(OXYGEN_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")
 # Project configuration options
 # ------------------------------------------------------------------------------
 
-# Project options
-# gersemi: off
-set(OPTIONS_LIST
-  BUILD_SHARED_LIBS        "Build shared instead of static libraries." OFF
-  OXYGEN_BUILD_TESTS       "Setup target to build and run tests." ON
-  OXYGEN_BUILD_UI_TESTS    "Instrument demo applications with ImGui Test Engine." OFF
-  OXYGEN_BUILD_EXAMPLES    "Setup target to build the examples." ON
-  OXYGEN_BUILD_DOCS        "Setup target to build the documentation." ON
-  OXYGEN_WITH_ASAN         "Instrument code with address sanitizer" OFF
-  OXYGEN_WITH_COVERAGE     "Instrument code to measure coverage" OFF
-  OXYGEN_WITH_TRACY        "Enable Tracy profiler integration" OFF
-  # OXYGEN_WITH_UBSAN        "Instrument code with undefined behavior sanitizer" OFF
-  # OXYGEN_WITH_TSAN         "Instrument code with thread sanitizer" OFF
-  # OXYGEN_WITH_VALGRIND     "Instrument code with valgrind profilers" OFF
-  OXYGEN_WITH_DOXYGEN      "Create targets for doxygen api docs" OFF
-  # OXYGEN_WITH_SPHINX       "Create targets for sphinx docs" OFF
-  # OXYGEN_WITH_CLANG_FORMAT "Create targets for clang-format" ON
-  # OXYGEN_WITH_CLANG_TIDY   "Create targets for clang-tidy" ON
-  OXYGEN_USE_CCACHE        "Enable caching of compiled artifacts using ccache" OFF
-)
-# gersemi: on
-# Process each option
-
-message(STATUS "PROJECT OPTIONS:")
-list(LENGTH OPTIONS_LIST OPTIONS_LIST_length)
-math(EXPR OPTIONS_LIST_length "${OPTIONS_LIST_length}-1")
-foreach(index RANGE 0 ${OPTIONS_LIST_length} 3)
-  list(GET OPTIONS_LIST ${index} OPTION_NAME)
-  math(EXPR index "${index}+1")
-  list(GET OPTIONS_LIST ${index} OPTION_DESCRIPTION)
-  math(EXPR index "${index}+1")
-  list(GET OPTIONS_LIST ${index} OPTION_DEFAULT)
-
-  if(DEFINED CACHE{${OPTION_NAME}})
-    set(${OPTION_NAME} "$CACHE{${OPTION_NAME}}")
-    message(STATUS ". ${OPTION_NAME}: ${${OPTION_NAME}} - cache")
-  elseif(DEFINED ${OPTION_NAME})
-    set(${OPTION_NAME} "${${OPTION_NAME}}" CACHE BOOL ${OPTION_DESCRIPTION})
-    message(STATUS ". ${OPTION_NAME}: ${${OPTION_NAME}} - toolchain")
-  else()
-    set(${OPTION_NAME} ${OPTION_DEFAULT} CACHE BOOL ${OPTION_DESCRIPTION})
-    message(STATUS ". ${OPTION_NAME}: ${${OPTION_NAME}} - default")
-  endif()
-endforeach()
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/ProjectOptions.cmake")
+if(OXYGEN_BUILD_FULL_ENGINE)
+  include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/PythonTools.cmake")
+endif()
 
 if(OXYGEN_WITH_TRACY)
   add_compile_definitions(OXYGEN_WITH_TRACY=1)
-endif()
-
-# ImGui and every client must agree on this instrumentation ABI. Conan owns
-# the dependency variant; changing only the CMake switch is not sufficient.
-if(
-  (
-    OXYGEN_BUILD_UI_TESTS
-    AND
-      NOT
-        OXYGEN_IMGUI_TEST_ENGINE_AVAILABLE
-  )
-  OR
-    (
-      OXYGEN_IMGUI_TEST_ENGINE_AVAILABLE
-      AND
-        NOT
-          OXYGEN_BUILD_UI_TESTS
-    )
-)
-  message(
-    FATAL_ERROR
-    "UI test option differs from ImGui. Reinstall Conan dependencies with -o ui_tests=True/False to match."
-  )
-endif()
-if(OXYGEN_BUILD_UI_TESTS)
-  if(NOT OXYGEN_BUILD_EXAMPLES)
-    message(FATAL_ERROR "OXYGEN_BUILD_UI_TESTS requires OXYGEN_BUILD_EXAMPLES")
-  endif()
-  add_compile_definitions(
-    OXYGEN_BUILD_UI_TESTS=1
-    IMGUI_ENABLE_TEST_ENGINE=1
-    IMGUI_TEST_ENGINE_ENABLE_COROUTINE_STDTHREAD_IMPL=1
-  )
-endif()
-
-# ------------------------------------------------------------------------------
-# Installation Setup
-# ------------------------------------------------------------------------------
-
-if(NOT DEFINED OXYGEN_CONAN_DEPLOY_DIR)
-  set(OXYGEN_CONAN_DEPLOY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/out/install")
-endif()
-
-if(OXYGEN_WITH_ASAN)
-  set(_OXYGEN_INSTALL_SUBDIR "Asan")
-else()
-  get_property(_IS_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
-  if(_IS_MULTI_CONFIG)
-    # For multi-config generators, keep a shared install base here and resolve
-    # the active configuration into the install prefix at install time.
-    set(_OXYGEN_INSTALL_SUBDIR "")
-  else()
-    set(_OXYGEN_INSTALL_SUBDIR "${CMAKE_BUILD_TYPE}")
-  endif()
-endif()
-
-set(_OXYGEN_INSTALL_PREFIX "${OXYGEN_CONAN_DEPLOY_DIR}")
-if(NOT _OXYGEN_INSTALL_SUBDIR STREQUAL "")
-  set(
-    _OXYGEN_INSTALL_PREFIX
-    "${_OXYGEN_INSTALL_PREFIX}/${_OXYGEN_INSTALL_SUBDIR}"
-  )
-endif()
-
-set(
-  CMAKE_INSTALL_PREFIX
-  "${_OXYGEN_INSTALL_PREFIX}"
-  CACHE PATH
-  "Install path prefix, prepended onto install directories."
-  FORCE
-)
-
-# ------------------------------------------------------------------------------
-# Top level code generation
-# ------------------------------------------------------------------------------
-
-# Generate a clangd configuration file that points to the compilation database
-# in the cmake build directory. We need to do this as the build directory is
-# different for every preset and can be different as well when the user decides
-# to build somewhere else. Currently we cannot configure this properly in vscode
-# settings. See https://github.com/clangd/vscode-clangd/issues/48
-#
-# NOTE: We don't want this to be running when building under Visual Studio. It
-# will create issues with clangd which is only used when we generate for Ninja.
-if(CMAKE_GENERATOR MATCHES "^Ninja")
-  configure_file(.clangd.in ${CMAKE_SOURCE_DIR}/.clangd @ONLY)
 endif()
 
 # ------------------------------------------------------------------------------
 # Testing
 # ------------------------------------------------------------------------------
 
-if(OXYGEN_BUILD_TESTS)
-  include(CTest)
-endif()
+include(CTest)
+# Regenerate this directory's inventory even when test creation is disabled.
+# Otherwise CTest can still execute stale registrations after an ON-to-OFF
+# reconfigure. The two testing options control targets and add_test calls.
+enable_testing()
 
 # ------------------------------------------------------------------------------
-# Documentation - doxygen, sphinx/breathe/exhale
+# Documentation - Doxygen
 # ------------------------------------------------------------------------------
 
 if(OXYGEN_BUILD_DOCS)
   if(OXYGEN_WITH_DOXYGEN)
     # Doxygen
-    set(DOXYGEN_BUILD_DIR "${CMAKE_BINARY_DIR}/dox")
-    include(DoxGeneration)
+    set(DOXYGEN_BUILD_DIR "${PROJECT_BINARY_DIR}/dox")
+    include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/DoxGeneration.cmake")
   endif()
 endif()
 
@@ -337,14 +163,10 @@ endif()
 # ------------------------------------------------------------------------------
 
 # Register general cmake commands
-include(BuildHelpers)
-#include(AsapTargets)
-
-# Override the ${META_PROJECT_ID}_INSTALL option to ON/OFF to respectively force
-# install/no-install behavior for this project. This is particularly useful when
-# this project is used as a sub-project and the user publicly depends on it and
-# wants to have a self-contained install.
-include(Install)
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/BuildHelpers.cmake")
+# OXYGEN_INSTALL controls install rules; embedded modules default to OFF.
+# Install.cmake owns developer SDK destinations and Conan package installation.
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/Install.cmake")
 
 # ------------------------------------------------------------------------------
 # Compiler flags
@@ -363,222 +185,23 @@ if(
   set(CMAKE_VISIBILITY_INLINES_HIDDEN YES)
 endif()
 
-set(OXYGEN_COMMON_CXX_FLAGS)
-if(OXYGEN_WITH_ASAN)
-  list(APPEND OXYGEN_COMMON_CXX_FLAGS "-fsanitize=address")
-  if(
-    CMAKE_CXX_COMPILER_ID
-      STREQUAL
-      "Clang"
-    OR
-      CMAKE_CXX_COMPILER_ID
-        STREQUAL
-        "AppleClang"
-    OR
-      CMAKE_CXX_COMPILER_ID
-        STREQUAL
-        "GNU"
-  )
-    add_link_options("-fsanitize=address")
-  endif()
-  if(MSVC)
-    # ASAN on MSVC does not support incremental linking. We must ensure that
-    # /INCREMENTAL:NO is set in the cache variables so that it's reflected
-    # in the IDE and all link commands correctly.
-    set(
-      CMAKE_MSVC_INCREMENTAL_LINKING
-      OFF
-      CACHE BOOL
-      "Disable incremental linking for ASAN"
-      FORCE
-    )
-    set(
-      CMAKE_MSVC_INCREMENTAL_LINKING_DEBUG
-      OFF
-      CACHE BOOL
-      "Disable incremental linking for ASAN"
-      FORCE
-    )
-    set(
-      CMAKE_MSVC_INCREMENTAL_LINKING_MINSIZEREL
-      OFF
-      CACHE BOOL
-      "Disable incremental linking for ASAN"
-      FORCE
-    )
-    set(
-      CMAKE_MSVC_INCREMENTAL_LINKING_RELEASE
-      OFF
-      CACHE BOOL
-      "Disable incremental linking for ASAN"
-      FORCE
-    )
-    set(
-      CMAKE_MSVC_INCREMENTAL_LINKING_RELWITHDEBINFO
-      OFF
-      CACHE BOOL
-      "Disable incremental linking for ASAN"
-      FORCE
-    )
-    set_property(
-      DIRECTORY
-      PROPERTY
-        MSVC_INCREMENTAL_LINKING
-          OFF
-    )
-    set(
-      CMAKE_EXE_LINKER_FLAGS_DEBUG
-      "/debug /INCREMENTAL:NO"
-      CACHE STRING
-      "Forced ASAN linker flags"
-      FORCE
-    )
-    set(
-      CMAKE_EXE_LINKER_FLAGS_MINSIZEREL
-      "/INCREMENTAL:NO"
-      CACHE STRING
-      "Forced ASAN linker flags"
-      FORCE
-    )
-    set(
-      CMAKE_EXE_LINKER_FLAGS_RELEASE
-      "/INCREMENTAL:NO"
-      CACHE STRING
-      "Forced ASAN linker flags"
-      FORCE
-    )
-    set(
-      CMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO
-      "/debug /INCREMENTAL:NO"
-      CACHE STRING
-      "Forced ASAN linker flags"
-      FORCE
-    )
-    set(
-      CMAKE_MODULE_LINKER_FLAGS_DEBUG
-      "/debug /INCREMENTAL:NO"
-      CACHE STRING
-      "Forced ASAN linker flags"
-      FORCE
-    )
-    set(
-      CMAKE_MODULE_LINKER_FLAGS_MINSIZEREL
-      "/INCREMENTAL:NO"
-      CACHE STRING
-      "Forced ASAN linker flags"
-      FORCE
-    )
-    set(
-      CMAKE_MODULE_LINKER_FLAGS_RELEASE
-      "/INCREMENTAL:NO"
-      CACHE STRING
-      "Forced ASAN linker flags"
-      FORCE
-    )
-    set(
-      CMAKE_MODULE_LINKER_FLAGS_RELWITHDEBINFO
-      "/debug /INCREMENTAL:NO"
-      CACHE STRING
-      "Forced ASAN linker flags"
-      FORCE
-    )
-    set(
-      CMAKE_SHARED_LINKER_FLAGS_DEBUG
-      "/debug /INCREMENTAL:NO"
-      CACHE STRING
-      "Forced ASAN linker flags"
-      FORCE
-    )
-    set(
-      CMAKE_SHARED_LINKER_FLAGS_MINSIZEREL
-      "/INCREMENTAL:NO"
-      CACHE STRING
-      "Forced ASAN linker flags"
-      FORCE
-    )
-    set(
-      CMAKE_SHARED_LINKER_FLAGS_RELEASE
-      "/INCREMENTAL:NO"
-      CACHE STRING
-      "Forced ASAN linker flags"
-      FORCE
-    )
-    set(
-      CMAKE_SHARED_LINKER_FLAGS_RELWITHDEBINFO
-      "/debug /INCREMENTAL:NO"
-      CACHE STRING
-      "Forced ASAN linker flags"
-      FORCE
-    )
+# Build policy is applied privately to all Oxygen-owned compiled targets below.
+# Modules can opt individual targets into COMPILE_WARNING_AS_ERROR explicitly.
+set(CMAKE_COMPILE_WARNING_AS_ERROR OFF)
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/CompilerPolicy.cmake")
 
-    add_link_options(
-      /LARGEADDRESSAWARE
-      /DEBUG
-      /INCREMENTAL:NO # Ensure it is also added to the link command
-    )
-  endif()
-endif()
-# MSVC-specific sanitizer handling will be done at the end of this file to ensure
-# it overrides any flags added by subdirectories or toolchains.
-if(MSVC)
-  # Enable C++ latest features
-  list(
-    APPEND
-    OXYGEN_COMMON_CXX_FLAGS
-    "/Zc:__cplusplus"
-    "/Zc:preprocessor"
-  )
-  list(APPEND OXYGEN_COMMON_CXX_FLAGS "/utf-8") # Set character set to UTF-8
-  list(APPEND OXYGEN_COMMON_CXX_FLAGS "/GR-") # Disable RTTI
-  list(APPEND OXYGEN_COMMON_CXX_FLAGS "/W4") # Warning level 4
-  list(APPEND OXYGEN_COMMON_CXX_FLAGS "/MP") # Multi-processor compilation
-  list(APPEND OXYGEN_COMMON_CXX_FLAGS "/DNOMINMAX") # Always define NOMINMAX for MSVC
-  #  list(APPEND OXYGEN_COMMON_CXX_FLAGS "/WX") # Treat warnings as errors
-else()
-  list(APPEND OXYGEN_COMMON_CXX_FLAGS "-fno-rtti") # Disable RTTI
-  list(APPEND OXYGEN_COMMON_CXX_FLAGS "-fPIC")
-  # Enable all warnings and treat them as errors
-  list(
-    APPEND
-    OXYGEN_COMMON_CXX_FLAGS
-    "-Wall"
-    "-Wextra"
-    "-Werror"
-  )
-endif()
-
-# ---- Speedup build using ccache (needs CPM) ----
-include(cmake/FasterBuild.cmake)
+# ---- Optional native compiler-cache launchers ----
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/FasterBuild.cmake")
 
 # ------------------------------------------------------------------------------
 # Print a summary of the configuration
 # ------------------------------------------------------------------------------
 
-# Detect and report C++ standard support via module
-include(cmake/DetectCxxStandards.cmake)
-
-# Small helper to print support for a standard using a prefix
-function(_report_standard prefix std_name)
-  string(TOUPPER ${prefix} _PREF)
-  set(_supported_var "${_PREF}_${std_name}_SUPPORTED")
-  set(_flag_var "${_PREF}_${std_name}_FLAG")
-  if(${${_supported_var}})
-    message(STATUS "     ${std_name}: supported (${${_flag_var}})")
-  else()
-    message(STATUS "     ${std_name}: NOT supported")
-  endif()
-endfunction()
-
-# This will detect C++ standard support and set variables
-# OXYGEN_CXX20_SUPPORTED, OXYGEN_CXX20_FLAG, OXYGEN_CXX23_SUPPORTED,
-# OXYGEN_CXX23_FLAG when <compiler> supports the respective standard
-detect_cxx_standards(OXYGEN)
-
 message(STATUS "PROJECT `${META_NAME_VERSION}`")
 message(STATUS "")
 message(STATUS "  -- Directories --")
-message(STATUS "     Source directory: ${CMAKE_SOURCE_DIR}")
-message(STATUS "     Build directory: ${CMAKE_BINARY_DIR}")
+message(STATUS "     Source directory: ${PROJECT_SOURCE_DIR}")
+message(STATUS "     Build directory: ${PROJECT_BINARY_DIR}")
 message(STATUS "     Install prefix: ${CMAKE_INSTALL_PREFIX}")
 message(STATUS "")
 message(STATUS "  -- General configuration --")
@@ -589,10 +212,6 @@ message(
   "     C++ compiler: ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}"
 )
 
-_report_standard(OXYGEN CXX20)
-_report_standard(OXYGEN CXX23)
-
-message(STATUS "     Common Compiler flags: ${OXYGEN_COMMON_CXX_FLAGS}")
 message(STATUS "     Common Exe Linker flags: ${CMAKE_EXE_LINKER_FLAGS}")
 message(STATUS "     Build system: ${CMAKE_GENERATOR}")
 message(STATUS "")
@@ -603,16 +222,11 @@ message(STATUS "     Build tests: ${OXYGEN_BUILD_TESTS}")
 message(STATUS "     Build examples: ${OXYGEN_BUILD_EXAMPLES}")
 message(STATUS "     Build documentation: ${OXYGEN_BUILD_DOCS}")
 message(STATUS "     Address sanitizer: ${OXYGEN_WITH_ASAN}")
-message(STATUS "     Code coverage: ${OXYGEN_WITH_COVERAGE}")
 message(STATUS "     Tracy profiler: ${OXYGEN_WITH_TRACY}")
 message(STATUS "     Doxygen: ${OXYGEN_WITH_DOXYGEN}")
-# message(STATUS "     Undefined behavior sanitizer: ${OXYGEN_WITH_UBSAN}")
-# message(STATUS "     Thread sanitizer: ${OXYGEN_WITH_TSAN}")
-# message(STATUS "     Valgrind: ${OXYGEN_WITH_VALGRIND}")
-# message(STATUS "     Sphinx: ${OXYGEN_WITH_SPHINX}")
-# message(STATUS "     Clang format: ${OXYGEN_WITH_CLANG_FORMAT}")
-# message(STATUS "     Clang tidy: ${OXYGEN_WITH_CLANG_TIDY}")
-message(STATUS "     CCache: ${OXYGEN_USE_CCACHE}")
+message(STATUS "     CCache: ${OXYGEN_CCACHE_STATUS}")
+message(STATUS "     Configured C launcher: ${CMAKE_C_COMPILER_LAUNCHER}")
+message(STATUS "     Configured CXX launcher: ${CMAKE_CXX_COMPILER_LAUNCHER}")
 message(STATUS "")
 
 # ------------------------------------------------------------------------------
@@ -621,11 +235,11 @@ message(STATUS "")
 
 # Show the repo .github folder inside the IDE under a virtual folder named
 # ".github".
-file(GLOB_RECURSE _github_files "${CMAKE_SOURCE_DIR}/.github/*")
+file(GLOB_RECURSE _github_files "${PROJECT_SOURCE_DIR}/.github/*")
 
-if(_github_files)
+if(PROJECT_IS_TOP_LEVEL AND _github_files)
   source_group(
-    TREE "${CMAKE_SOURCE_DIR}/.github"
+    TREE "${PROJECT_SOURCE_DIR}/.github"
     PREFIX ".github"
     FILES
       ${_github_files}
@@ -634,17 +248,27 @@ if(_github_files)
   add_custom_target(GitHub SOURCES ${_github_files})
 endif()
 
+if(OXYGEN_BUILD_FULL_ENGINE)
+  include(Dxc)
+endif()
+
 add_subdirectory("src")
 
-if(OXYGEN_BUILD_EXAMPLES)
+if(OXYGEN_BUILD_FULL_ENGINE)
   add_subdirectory("Examples")
 endif()
 
 # ------------------------------------------------------------------------------
-# Code analyzers: clang-tidy, cppcheck, valgrind, sanitizers, etc...
+# Apply compiler policy to Oxygen-owned targets
 #
-# Call after sub-modules have been added so that source code files can be
-# properly collected for analysis.
+# Call after submodules have declared all targets.
 # ------------------------------------------------------------------------------
+
+oxygen_apply_directory_build_policy("${CMAKE_CURRENT_SOURCE_DIR}/src")
+if(OXYGEN_BUILD_FULL_ENGINE)
+  oxygen_apply_directory_build_policy("${CMAKE_CURRENT_SOURCE_DIR}/Examples")
+endif()
+
+oxygen_finalize_install()
 
 asap_pop_project(${META_PROJECT_NAME})

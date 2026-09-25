@@ -11,7 +11,6 @@
 asap_module_declare(
   MODULE_NAME "Oxygen.OxCo"
   DESCRIPTION "C++20 coroutines library"
-  WITHOUT_VERSION_H
 )
 asap_push_module("${META_MODULE_NAME}")
 
@@ -31,6 +30,30 @@ find_package(asio CONFIG REQUIRED)
 
 add_library(${META_MODULE_TARGET} INTERFACE)
 add_library(${META_MODULE_TARGET_ALIAS} ALIAS ${META_MODULE_TARGET})
+
+# Freeze the selected mode in the installed header. A developer may consume a
+# Debug SDK from a differently named application configuration; their headers
+# must still agree with the Oxygen binaries' awaiter layout and behavior.
+set(
+  _checker_enabled
+  "$<OR:$<STREQUAL:${OXYGEN_AWAITER_STATE_CHECKER},ON>,$<AND:$<STREQUAL:${OXYGEN_AWAITER_STATE_CHECKER},AUTO>,$<CONFIG:Debug>>>"
+)
+set(_config_root "${CMAKE_CURRENT_BINARY_DIR}/config/$<CONFIG>")
+set(_config_header "${_config_root}/Oxygen/OxCo/Config.h")
+file(
+  GENERATE
+  OUTPUT
+  "${_config_header}"
+  CONTENT
+    "// Generated Oxygen configuration; use the package's build options.\n#pragma once\n#if ${_checker_enabled}\n#ifndef OXCO_AWAITER_STATE_DEBUG\n#define OXCO_AWAITER_STATE_DEBUG 1\n#endif\n#else\n#ifdef OXCO_AWAITER_STATE_DEBUG\n#error Awaiter checker override conflicts with this Oxygen build\n#endif\n#endif\n"
+)
+target_sources(
+  ${META_MODULE_TARGET}
+  INTERFACE
+    FILE_SET HEADERS
+    BASE_DIRS "${_config_root}"
+    FILES "${_config_header}"
+)
 
 set(
   OXYGEN_OXCO_HEADERS
@@ -117,12 +140,6 @@ set_target_properties(
 )
 
 target_compile_features(${META_MODULE_TARGET} INTERFACE cxx_std_20)
-target_compile_options(
-  ${META_MODULE_TARGET}
-  INTERFACE
-    ${OXYGEN_COMMON_CXX_FLAGS}
-    $<$<CXX_COMPILER_ID:MSVC>:/wd4702> # Unreachable code
-)
 target_compile_definitions(
   ${META_MODULE_TARGET}
   INTERFACE
@@ -137,15 +154,13 @@ target_link_libraries(
     asio::asio
 )
 
-# Header only libraries don't get a Visual Studio project file generated for
-# them. This is a workaround to make sure the header files are visible in the
-# IDE.
-add_custom_target(_${META_MODULE_NAME} SOURCES ${header_files})
+# The native interface target lists its headers directly, so Visual Studio
+# displays them without a separate utility project.
 set_target_properties(
-  _${META_MODULE_NAME}
+  ${META_MODULE_TARGET}
   PROPERTIES
     PROJECT_LABEL
-      ${META_MODULE_NAME}
+      "${META_MODULE_NAME}"
 )
 
 # ------------------------------------------------------------------------------
@@ -154,6 +169,8 @@ set_target_properties(
 
 if(OXYGEN_BUILD_TESTS)
   add_subdirectory("Test")
+endif()
+if(OXYGEN_BUILD_BENCHMARKS)
   add_subdirectory("Benchmarks")
 endif()
 

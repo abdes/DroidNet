@@ -60,11 +60,11 @@ Run the Google Test executable using `oxyrun.ps1`:
 
 The VS Code PowerShell profile provides the `oxy-ui-tests` alias for the runner.
 
-`generate-builds.ps1` enables UI tests by default for development, including
+`build-tree generate` enables UI tests by default for development, including
 optimized Release builds. Configure dependencies and rebuild the applications:
 
 ```powershell
-./tools/generate-builds.ps1 profiles/windows-msvc.ini -Generator Ninja -WithTracy -NoClean
+./tools/build-tree.ps1 generate profiles/windows-msvc.ini -Generator Ninja -WithTracy
 cmake --build out/build-tracy-ninja --config Release --target oxygen-examples-lightbench oxygen-examples-texturedcube --parallel 8
 ./tools/cli/oxy-ui-tests.ps1 -Demo LightBench -BuildTree build-tracy-ninja -Config Release
 ./tools/cli/oxy-ui-tests.ps1 -Demo TexturedCube -BuildTree build-tracy-ninja -Config Release

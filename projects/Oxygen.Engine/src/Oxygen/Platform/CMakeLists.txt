@@ -11,7 +11,6 @@
 asap_module_declare(
   MODULE_NAME "Oxygen.Platform"
   DESCRIPTION "Platform abstraction layer"
-  WITHOUT_VERSION_H
 )
 asap_push_module("${META_MODULE_NAME}")
 
@@ -95,10 +94,11 @@ target_sources(
 
 arrange_target_files_for_ide(${META_MODULE_TARGET})
 
-target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
 target_compile_definitions(
   ${META_MODULE_TARGET}
   PUBLIC
+    $<$<BOOL:${OXYGEN_BUILD_UI_TESTS}>:IMGUI_ENABLE_TEST_ENGINE=1>
+    $<$<BOOL:${OXYGEN_BUILD_UI_TESTS}>:IMGUI_TEST_ENGINE_ENABLE_COROUTINE_STDTHREAD_IMPL=1>
     $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXGN_PLAT_STATIC>
 )
 

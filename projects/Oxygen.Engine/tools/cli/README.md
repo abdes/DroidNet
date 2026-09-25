@@ -3,12 +3,13 @@
 Use the helpers from the intended Oxygen.Engine checkout. They resolve its
 presets from their own location, so invoking them from a subdirectory is safe.
 
-| Command     | Purpose                                  | Prerequisites                                                        |
-| ----------- | ---------------------------------------- | -------------------------------------------------------------------- |
-| `oxybuild`  | Build a CMake target                     | Initialized build tree, CMake 3.30+, configured compiler environment |
-| `oxyrun`    | Build and run an executable target       | Same as `oxybuild`; `-NoBuild` uses an existing executable           |
-| `oxytidy`   | Analyze selected C++ sources and headers | Python 3.10+, uv, LLVM 23.x tools, compilation database              |
-| `oxyformat` | Check or format owned C++ files          | Python 3.10+, shared tools installed, clang-format 23.x              |
+| Command      | Purpose                                                         | Prerequisites                                                                                  |
+| ------------ | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `build-tree` | Generate dependencies/build trees or configure an existing tree | Compiler environment, CMake, Conan and uv for generation; provisioned Python for configuration |
+| `oxybuild`   | Build a CMake target                                            | Initialized build tree, CMake 4.2+, configured compiler environment                            |
+| `oxyrun`     | Build and run an executable target                              | Same as `oxybuild`; `-NoBuild` uses an existing executable                                     |
+| `oxytidy`    | Analyze selected C++ sources and headers                        | Repository Python environment, LLVM 23.x tools, compilation database                           |
+| `oxyformat`  | Check or format owned C++ files                                 | Repository Python environment, clang-format 23.x                                               |
 
 The PowerShell launchers for oxytidy and oxyformat require PowerShell 7.3+.
 `oxy-targets.ps1` contains the shared CMake target-discovery and build helpers;
@@ -16,25 +17,38 @@ it is not a separate command to run.
 
 ## Load the commands
 
-Use the existing engine profile to define all four aliases:
+Use the existing engine profile to define the setup and build/tool aliases:
 
 ```powershell
 . ./.vscode/default-profile.ps1
-Get-Alias oxybuild, oxyrun, oxytidy, oxyformat
+Get-Alias build-tree, oxybuild, oxyrun, oxytidy, oxyformat
 ```
 
-The aliases invoke the scripts in `tools/cli` directly. Alternatively, use a
-script path such as `./tools/cli/oxybuild.ps1 oxygen-base`.
+The aliases use absolute paths into this checkout and work from any directory.
+`build-tree` invokes `tools/build-tree.ps1`; the other aliases invoke scripts in
+`tools/cli`. Alternatively, use a script path such as
+`./tools/cli/oxybuild.ps1 oxygen-base`.
 
-The profile does not select a compiler toolchain or activate a Python environment.
-Start from your configured developer shell and activate your chosen environment
-when needed. See the [shared Python tools setup](../oxytools/README.md).
+```powershell
+build-tree generate profiles/windows-msvc.ini -Generator Ninja
+build-tree configure oxygen-ninja-default
+```
+
+The engine profile defines aliases; your user profile owns compiler setup and
+automatic venv activation. Python tool launchers select this checkout's root
+`.venv` regardless of the caller's active environment. Provision it with root
+`uv sync --locked` or `build-tree generate`; tool invocation never installs packages.
+See the [repository Python workflow](../../../../tooling/PYTHON.md).
 
 ## Build and run
 
-Initialize dependencies separately with `tools/generate-builds.ps1`. The helpers
-never install dependencies. They select only initialized trees declared by the
-project/user CMake presets, then print the selected preset, directory and config.
+Initialize dependencies with `tools/build-tree.ps1 generate <profile>`. Use
+`tools/build-tree.ps1 configure <configure-preset>` for repeatable terminal
+configuration, including automatic clangd preparation for Ninja. It never calls
+Conan or cleans outputs. VS Code continues using its post-configure task. The
+build/run helpers never install dependencies. They select only initialized trees
+declared by the project/user CMake presets, then print the selected preset,
+directory and config.
 
 Without explicit constraints, choices are ranked in this order:
 
@@ -147,9 +161,8 @@ for examples; omitting `-*,` keeps the configured checks enabled.
 
 Both use `.oxytools.json` for ownership and exclusions. Oxytidy excludes tests
 unless `--include-tests` is supplied; oxyformat includes them by default.
-Oxytidy's launcher checks/installs the shared package into the selected Python.
-Oxyformat's launcher uses already installed dependencies and performs no package
-installation during a run. Formatting does not require a build tree.
+Both launchers use the checkout's provisioned Python environment and perform no
+package installation during a run. Formatting does not require a build tree.
 
 `codemod` is an optional installed Python command for rename patches, with no
 PowerShell launcher. See [codemod usage](../oxytools/docs/codemod.md).
@@ -192,8 +205,8 @@ alias definitions into another script.
 - Unexpected target: use its complete CMake target name and the intended
   `-BuildTree`/`-Config`.
 - Missing executable with `-NoBuild`: build that target and configuration first.
-- Missing Python dependency: install the shared package in the interpreter
-  selected by the active environment or PATH.
+- Missing Python dependency: run `uv sync --locked` at the repository root or
+  repeat `build-tree generate <profile>`.
 
 For the scripts' parameter help and shared target resolver:
 

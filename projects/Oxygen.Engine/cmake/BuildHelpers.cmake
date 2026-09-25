@@ -1,318 +1,297 @@
-# ===-----------------------------------------------------------------------===#
-# Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
-# copy at https://opensource.org/licenses/BSD-3-Clause.
+# Distributed under the 3-Clause BSD License. See accompanying file LICENSE.
 # SPDX-License-Identifier: BSD-3-Clause
-# ===-----------------------------------------------------------------------===#
 
-# ------------------------------------------------------------------------------
-# Build Helpers to simplify target creation.
-# ------------------------------------------------------------------------------
+# Definitions only: including this file must not initialize caller-owned state.
+include_guard(GLOBAL)
 
-if(__build_helpers)
-  return()
-endif()
-set(__build_helpers YES)
-
-# We must run the following at "include" time, not at function call time, to
-# find the path to this module rather than the path to a calling list file
-get_filename_component(_build_helpers_dir ${CMAKE_CURRENT_LIST_FILE} PATH)
-
-include(GenerateExportHeader)
-
-# ------------------------------------------------------------------------------
-# Meta information about this module.
-#
-# Of particular importance is the MODULE_NAME, which can be composed of multiple
-# segments separated by '.' or '_'. In such case, these segments will be used
-# as path segments for the `api_export` generated file, and as identifier segments
-# in the corresponding `_API` compiler defines.
-#
-# For example, `Super.Hero.Module` will produce a file that can be included as
-# "super/hero/module/api_export.h" and will provide the export macro as
-# `SUPER_HERO_MODULE_API`.
-#
-# It is a common practice and a recommended one to use a target name for that
-# module with the same name (i.e. Super.Hero.Module).
-# ------------------------------------------------------------------------------
-
+# Declare metadata; callers still create targets with native CMake commands.
+# Oxygen.Graphics.Direct3D12 -> oxygen-graphics-direct3d12 / oxygen::graphics-direct3d12.
 function(asap_module_declare)
-  set(options WITHOUT_VERSION_H)
-  set(
-    oneValueArgs
-    MODULE_NAME
-    MODULE_TARGET_NAME
-    DESCRIPTION
-  )
-  set(multiValueArgs)
-
-  cmake_parse_arguments(
-    x
-    "${options}"
-    "${oneValueArgs}"
-    "${multiValueArgs}"
-    ${ARGN}
-  )
-
-  if(NOT DEFINED x_MODULE_NAME)
-    message(FATAL_ERROR "Module name is required.")
-    return()
+  cmake_parse_arguments(PARSE_ARGV 0 arg "" "MODULE_NAME;DESCRIPTION" "")
+  if(DEFINED arg_UNPARSED_ARGUMENTS OR DEFINED arg_KEYWORDS_MISSING_VALUES)
+    message(
+      FATAL_ERROR
+      "asap_module_declare: invalid arguments: ${arg_UNPARSED_ARGUMENTS}; missing values: ${arg_KEYWORDS_MISSING_VALUES}"
+    )
   endif()
-
-  # Split the module_full_name into a list
-  string(REPLACE "." ";" module_parts ${x_MODULE_NAME})
-
-  # Extract the namespace
-  list(GET module_parts 0 namespace)
-  string(TOLOWER ${namespace} namespace)
-
-  # Extract and process the module_name (remaining parts)
-  list(REMOVE_AT module_parts 0)
-  string(JOIN "." unqualified_module_name ${module_parts})
-  string(TOLOWER ${unqualified_module_name} unqualified_module_name)
-  string(REPLACE "." "-" unqualified_module_name ${unqualified_module_name})
-
-  # Define the module's meta variables
-  set(META_MODULE_NAME "${x_MODULE_NAME}" PARENT_SCOPE)
-  set(META_MODULE_DESCRIPTION "${x_DESCRIPTION}" PARENT_SCOPE)
+  if(
+    NOT
+      DEFINED
+        arg_MODULE_NAME
+    OR
+      NOT
+        arg_MODULE_NAME
+          MATCHES
+          "^[A-Za-z][A-Za-z0-9_-]*(\\.[A-Za-z][A-Za-z0-9_-]*)+$"
+  )
+    message(
+      FATAL_ERROR
+      "asap_module_declare: MODULE_NAME must contain nonempty dotted identifier segments (for example Oxygen.Base)."
+    )
+  endif()
+  string(REPLACE "." ";" parts "${arg_MODULE_NAME}")
+  list(POP_FRONT parts namespace)
+  string(TOLOWER "${namespace}" namespace)
+  list(JOIN parts "-" unqualified)
+  string(TOLOWER "${unqualified}" unqualified)
+  set(target "${namespace}-${unqualified}")
+  set(alias "${namespace}::${unqualified}")
+  if(TARGET "${target}" OR TARGET "${alias}")
+    message(
+      FATAL_ERROR
+      "asap_module_declare: ${arg_MODULE_NAME} conflicts with existing target ${target} or ${alias}."
+    )
+  endif()
+  set(META_MODULE_NAME "${arg_MODULE_NAME}" PARENT_SCOPE)
+  set(META_MODULE_DESCRIPTION "${arg_DESCRIPTION}" PARENT_SCOPE)
   set(META_MODULE_NAMESPACE "${namespace}" PARENT_SCOPE)
-  set(META_MODULE_TARGET "${namespace}-${unqualified_module_name}" PARENT_SCOPE)
-  set(
-    META_MODULE_TARGET_ALIAS
-    "${namespace}::${unqualified_module_name}"
-    PARENT_SCOPE
+  set(META_MODULE_TARGET "${target}" PARENT_SCOPE)
+  set(META_MODULE_TARGET_ALIAS "${alias}" PARENT_SCOPE)
+endfunction()
+
+# This is an advisory inventory, not a generator-expression evaluator. Recognize
+# only a single literal path inside simple guards. Count inactive guarded paths
+# as declared so another platform/configuration is not a forgotten source.
+function(_oxygen_inventory_path entry output)
+  if(entry MATCHES "^\\$<(0|1|BUILD_INTERFACE):([^<>;]+)>$")
+    set(entry "${CMAKE_MATCH_2}")
+  elseif(
+    entry
+      MATCHES
+      "^\\$<\\$<(BOOL|PLATFORM_ID|CONFIG):[^<>;]*>:([^<>;]+)>$"
   )
-
-  # Generate the version.h file for the module
-  if(NOT x_WITHOUT_VERSION_H)
-    set(version_h_in "${_build_helpers_dir}/module_version.h.in")
-    asap_module_name(
-      SEGMENTS ${x_MODULE_NAME}
-      OUTPUT_VARIABLE path_segments
-      TO_LOWER
-    )
-    cmake_path(
-      APPEND
-      ${CMAKE_CURRENT_BINARY_DIR}
-      "include"
-      ${path_segments}
-      "version.h"
-      OUTPUT_VARIABLE version_h_file
-    )
-    configure_file("${version_h_in}" "${version_h_file}")
-  endif()
-
-  # Check if the module has been pushed on top of the hierarchy stack
-  if(NOT ASAP_LOG_PROJECT_HIERARCHY MATCHES "(${META_MODULE_NAME})")
+    set(entry "${CMAKE_MATCH_2}")
+  elseif(entry MATCHES "\\$<")
     message(
       AUTHOR_WARNING
-      "Can't find module `${META_MODULE_NAME}` on the hierarchy stack. "
-      "Please make sure it has been pushed with asap_push_module()."
+      "Oxygen source inventory cannot inspect expression '${entry}'. Inventory is incomplete for this expression; use a literal source path with a supported guard or an explicit EXCLUDE_PATTERNS entry for intentionally uninspected files."
     )
+    set(entry "")
   endif()
-endfunction()
-
-function(asap_module_name)
-  set(
-    options
-    TO_LOWER
-    TO_UPPER
-  )
-  set(
-    oneValueArgs
-    SEGMENTS
-    API_EXPORT_MACRO
-    OUTPUT_VARIABLE
-  )
-  set(multiValueArgs)
-
-  cmake_parse_arguments(
-    x
-    "${options}"
-    "${oneValueArgs}"
-    "${multiValueArgs}"
-    ${ARGN}
-  )
-
-  if(NOT DEFINED x_OUTPUT_VARIABLE)
-    message(
-      FATAL_ERROR
-      "Must specify an `OUTPUT_VARIABLE` to receive the result."
-    )
-    return()
-  endif()
-
-  if(x_SEGMENTS)
-    set(module_name ${x_SEGMENTS})
-  endif()
-  if(x_API_EXPORT_MACRO)
-    set(module_name ${x_API_EXPORT_MACRO})
-  endif()
-  if(NOT DEFINED module_name)
-    message(
-      FATAL_ERROR
-      "Must specify `SEGMENTS` or `EXPORT_MACRO` and provide a module name."
-    )
-    return()
-  endif()
-
-  if(x_TO_LOWER AND x_TO_UPPER)
-    message(
-      FATAL_ERROR
-      "Can only specify either `TO_LOWER` or `TO_UPPER` but not both."
-    )
-    return()
-  endif()
-
-  # Extract words from the identifier expecting it to be using '_' or '.' to
-  # compose a hierarchy of segments
-  string(REGEX MATCHALL "[A-Za-z][^_.]*" words ${module_name})
-
-  # Process each word
-  set(result)
-  foreach(word IN LISTS words)
-    if(x_TO_LOWER)
-      string(TOLOWER "${word}" word)
-    endif()
-    if(x_TO_UPPER)
-      string(TOUPPER "${word}" word)
-    endif()
-    list(APPEND result "${word}")
-  endforeach()
-
-  if(x_API_EXPORT_MACRO)
-    string(JOIN "_" result ${result})
-  endif()
-
-  set(${x_OUTPUT_VARIABLE} "${result}" PARENT_SCOPE)
-endfunction()
-
-function(asap_generate_export_headers target module)
-  asap_module_name(SEGMENTS ${module} OUTPUT_VARIABLE path_segments TO_LOWER)
-  cmake_path(
-    APPEND
-    ${CMAKE_CURRENT_BINARY_DIR}
-    "include"
-    ${path_segments}
-    "api_export.h"
-    OUTPUT_VARIABLE export_file
-  )
-
-  asap_module_name(
-    API_EXPORT_MACRO ${module}
-    OUTPUT_VARIABLE export_base_name
-    TO_UPPER
-  )
-  set(export_macro_name "${export_base_name}_API")
-
-  generate_export_header(
-    ${target}
-    BASE_NAME ${export_base_name}
-    EXPORT_FILE_NAME ${export_file}
-    EXPORT_MACRO_NAME ${export_macro_name}
-  )
+  set(${output} "${entry}" PARENT_SCOPE)
 endfunction()
 
 function(arrange_target_files_for_ide target)
-  set(options)
-  set(oneValueArgs)
-  set(multiValueArgs EXCLUDE_PATTERNS)
-  cmake_parse_arguments(
-    x
-    "${options}"
-    "${oneValueArgs}"
-    "${multiValueArgs}"
-    ${ARGN}
-  )
-
-  get_target_property(_all_sources ${target} SOURCES)
-
-  # Normalize generator expressions in target sources so that files guarded by
-  # platform conditions (e.g. $<$<BOOL:${WIN32}>:path/to/file.cpp>) are treated
-  # as part of the target when checking for "missing" files.
-  set(_all_files "")
-  foreach(file IN LISTS _all_sources)
-    list(APPEND _all_files "${file}")
-
-    # Extract the guarded file path from common genex forms.
-    if(file MATCHES "^\\$<.+:(.+)>$")
-      list(APPEND _all_files "${CMAKE_MATCH_1}")
+  cmake_parse_arguments(PARSE_ARGV 1 arg "" "" "EXCLUDE_PATTERNS")
+  if(DEFINED arg_UNPARSED_ARGUMENTS OR DEFINED arg_KEYWORDS_MISSING_VALUES)
+    message(
+      FATAL_ERROR
+      "arrange_target_files_for_ide: invalid arguments: ${arg_UNPARSED_ARGUMENTS}; missing values: ${arg_KEYWORDS_MISSING_VALUES}"
+    )
+  endif()
+  if(NOT TARGET "${target}")
+    message(
+      FATAL_ERROR
+      "arrange_target_files_for_ide: unknown target '${target}'."
+    )
+  endif()
+  get_target_property(alias "${target}" ALIASED_TARGET)
+  get_target_property(imported "${target}" IMPORTED)
+  if(alias OR imported)
+    message(
+      FATAL_ERROR
+      "arrange_target_files_for_ide requires a locally defined, non-alias target: ${target}."
+    )
+  endif()
+  get_target_property(source_dir "${target}" SOURCE_DIR)
+  get_target_property(binary_dir "${target}" BINARY_DIR)
+  get_target_property(target_type "${target}" TYPE)
+  if(NOT source_dir STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+    message(
+      FATAL_ERROR
+      "arrange_target_files_for_ide must be called in the directory that defines ${target}."
+    )
+  endif()
+  set(entries)
+  foreach(property IN ITEMS SOURCES INTERFACE_SOURCES)
+    get_target_property(value "${target}" "${property}")
+    if(value)
+      list(APPEND entries ${value})
     endif()
   endforeach()
-
-  # Group files for IDE
-  foreach(file IN LISTS _all_files)
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${file}")
-      get_filename_component(file_path "${file}" PATH)
-      if(file_path)
-        string(REPLACE "/" "\\" group_path "${file_path}")
-        source_group("src/${group_path}" FILES "${file}")
-      else()
-        source_group("src" FILES "${file}")
+  # A public/interface HEADERS file set need not also be listed in SOURCES.
+  set(header_sets)
+  foreach(property IN ITEMS HEADER_SETS INTERFACE_HEADER_SETS)
+    get_target_property(value "${target}" "${property}")
+    if(value)
+      list(APPEND header_sets ${value})
+    endif()
+  endforeach()
+  list(REMOVE_DUPLICATES header_sets)
+  foreach(header_set IN LISTS header_sets)
+    get_target_property(value "${target}" "HEADER_SET_${header_set}")
+    if(value)
+      list(APPEND entries ${value})
+    endif()
+  endforeach()
+  list(REMOVE_DUPLICATES entries)
+  # Generated headers may have one file per build configuration. Expand this
+  # known token only in otherwise literal build-tree paths; retain diagnostics
+  # for expressions whose source inventory we cannot determine.
+  set(inventory_entries)
+  foreach(entry IN LISTS entries)
+    string(REPLACE "$<CONFIG>" "" literal_path "${entry}")
+    if(
+      IS_ABSOLUTE
+        "${entry}"
+      AND
+        entry
+          MATCHES
+          "\\$<CONFIG>"
+      AND
+        NOT
+          literal_path
+            MATCHES
+            "\\$<"
+    )
+      cmake_path(IS_PREFIX binary_dir "${literal_path}" NORMALIZE in_binary)
+      if(in_binary AND NOT binary_dir STREQUAL source_dir)
+        if(CMAKE_CONFIGURATION_TYPES)
+          foreach(configuration IN LISTS CMAKE_CONFIGURATION_TYPES)
+            string(
+              REPLACE
+              "$<CONFIG>"
+              "${configuration}"
+              configured_path
+              "${entry}"
+            )
+            list(APPEND inventory_entries "${configured_path}")
+          endforeach()
+        else()
+          string(
+            REPLACE
+            "$<CONFIG>"
+            "${CMAKE_BUILD_TYPE}"
+            configured_path
+            "${entry}"
+          )
+          list(APPEND inventory_entries "${configured_path}")
+        endif()
+        continue()
       endif()
     endif()
+    list(APPEND inventory_entries "${entry}")
   endforeach()
-
-  # Find all .h, .hpp, .c, .cpp files recursively
-  file(
-    GLOB_RECURSE _all_existing_files
-    RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}"
-    "${CMAKE_CURRENT_SOURCE_DIR}/*.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/*.hpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/*.c"
-    "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp"
-  )
-
-  # Print files not in _all_files, excluding Test, Benchmarks, Examples
-  set(_missing_files "")
-  foreach(existing_file IN LISTS _all_existing_files)
-    # Exclude if path contains Test, Benchmarks, Tools or Examples
-    # (case-insensitive)
-    string(TOLOWER "${existing_file}" _lower_file)
-    set(_skip_file FALSE)
-    if(
-      _lower_file
-        MATCHES
-        "test/"
-      OR
-        _lower_file
-          MATCHES
-          "benchmarks/"
-      OR
-        _lower_file
-          MATCHES
-          "examples/"
-      OR
-        _lower_file
-          MATCHES
-          "tools/"
-    )
+  set(declared)
+  set(source_files)
+  set(generated_files)
+  set(external_files)
+  foreach(entry IN LISTS inventory_entries)
+    _oxygen_inventory_path("${entry}" path)
+    if(path STREQUAL "")
       continue()
     endif()
+    get_source_file_property(generated "${path}" GENERATED)
+    if(generated AND NOT IS_ABSOLUTE "${path}")
+      cmake_path(ABSOLUTE_PATH path BASE_DIRECTORY "${binary_dir}" NORMALIZE)
+    else()
+      cmake_path(ABSOLUTE_PATH path BASE_DIRECTORY "${source_dir}" NORMALIZE)
+    endif()
+    # VS treats interface-library sources as generic None items by default.
+    # Represent declared headers explicitly as C++ header items in both the
+    # native project and its filters, without introducing a utility project.
+    if(
+      CMAKE_GENERATOR
+        MATCHES
+        "^Visual Studio"
+      AND
+        target_type
+          STREQUAL
+          "INTERFACE_LIBRARY"
+      AND
+        path
+          MATCHES
+          "\\.(h|hpp)$"
+    )
+      get_source_file_property(vs_tool "${path}" VS_TOOL_OVERRIDE)
+      if(NOT vs_tool)
+        set_source_files_properties(
+          "${path}"
+          PROPERTIES
+            VS_TOOL_OVERRIDE
+              ClInclude
+        )
+      endif()
+    endif()
+    cmake_path(IS_PREFIX source_dir "${path}" NORMALIZE in_source)
+    cmake_path(IS_PREFIX binary_dir "${path}" NORMALIZE in_binary)
+    if(in_binary AND NOT binary_dir STREQUAL source_dir)
+      list(APPEND generated_files "${path}")
+    elseif(in_source)
+      list(APPEND source_files "${path}")
+    else()
+      list(APPEND external_files "${path}")
+    endif()
+    if(CMAKE_HOST_WIN32)
+      string(TOLOWER "${path}" path)
+    endif()
+    list(APPEND declared "${path}")
+  endforeach()
+  if(source_files)
+    source_group(TREE "${source_dir}" PREFIX "src" FILES ${source_files})
+  endif()
+  if(generated_files)
+    source_group(
+      TREE "${binary_dir}"
+      PREFIX "generated"
+      FILES
+        ${generated_files}
+    )
+  endif()
+  if(external_files)
+    source_group("external" FILES ${external_files})
+  endif()
 
-    foreach(_pattern IN LISTS x_EXCLUDE_PATTERNS)
-      string(TOLOWER "${_pattern}" _exclude_pattern)
-      if(_exclude_pattern AND _lower_file MATCHES "${_exclude_pattern}")
-        set(_skip_file TRUE)
+  # Deliberately no CONFIGURE_DEPENDS: inventory runs at configure time, and its
+  # glob must never become the build's source list or a source of build rules.
+  file(
+    GLOB_RECURSE existing_files
+    RELATIVE "${source_dir}"
+    "${source_dir}/*.h"
+    "${source_dir}/*.hpp"
+    "${source_dir}/*.c"
+    "${source_dir}/*.cpp"
+  )
+  set(missing)
+  foreach(file IN LISTS existing_files)
+    string(TOLOWER "${file}" lower_file)
+    if(lower_file MATCHES "(^|/)(test|benchmarks|examples|tools)/")
+      continue()
+    endif()
+    set(skip FALSE)
+    foreach(pattern IN LISTS arg_EXCLUDE_PATTERNS)
+      string(TOLOWER "${pattern}" lower_pattern)
+      if(
+        NOT
+          lower_pattern
+            STREQUAL
+            ""
+        AND
+          lower_file
+            MATCHES
+            "${lower_pattern}"
+      )
+        set(skip TRUE)
         break()
       endif()
     endforeach()
-    if(_skip_file)
+    if(skip)
       continue()
     endif()
-
-    list(FIND _all_files "${existing_file}" _idx)
-    if(_idx EQUAL -1)
-      list(APPEND _missing_files "${existing_file}")
+    set(path "${source_dir}/${file}")
+    cmake_path(NORMAL_PATH path)
+    if(CMAKE_HOST_WIN32)
+      string(TOLOWER "${path}" path)
+    endif()
+    if(NOT path IN_LIST declared)
+      list(APPEND missing "${file}")
     endif()
   endforeach()
-
-  if(_missing_files)
+  if(missing)
+    list(JOIN missing "\n  " missing_text)
     message(
       AUTHOR_WARNING
-      "The following files exist in the source directory but are NOT part of the target '${target}':"
+      "The following files exist in the source directory but are NOT part of the target '${target}':\n  ${missing_text}"
     )
-    foreach(missing_file IN LISTS _missing_files)
-      message(NOTICE "  ${missing_file}")
-    endforeach()
   endif()
 endfunction()

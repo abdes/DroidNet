@@ -8,89 +8,71 @@
 # Shader baking (Task 14): build-time OXSL v1 library
 # ------------------------------------------------------------------------------
 
-# Find all HLSL entrypoints under the shader layout.
-# Note: some entrypoints (e.g. IBL filtering) live outside Passes/.
-file(GLOB_RECURSE HLSL_FILES "${CMAKE_CURRENT_SOURCE_DIR}/*.hlsl")
-
-# Shared include files (HLSL headers)
-file(GLOB_RECURSE HLSLI_FILES "${CMAKE_CURRENT_SOURCE_DIR}/*.hlsli")
-
-set(
-  SHADER_CATALOG_DEPENDENCIES
-  "${CMAKE_CURRENT_SOURCE_DIR}/EngineShaderCatalog.h"
-  "${CMAKE_CURRENT_SOURCE_DIR}/ShaderCatalogBuilder.h"
-)
-
-set(SHADERBAKE_BUILD_ROOT "${CMAKE_BINARY_DIR}/shaderbake")
+set(SHADERBAKE_BUILD_ROOT "${CMAKE_BINARY_DIR}/shaderbake/$<CONFIG>")
 
 # The ShaderBake tool target name (executable)
 set(OXYGEN_D3D12_SHADERBAKE_TARGET "oxygen-graphics-direct3d12-shaderbake")
 
-# Resolve deployed runtime DLL folder per active build configuration.
-# ASan builds use out/install/Asan/bin while non-ASan builds follow $<CONFIG>.
-set(_OXYGEN_IS_ASAN_BUILD OFF)
-if(CMAKE_BINARY_DIR MATCHES "asan")
-  set(_OXYGEN_IS_ASAN_BUILD ON)
-endif()
+set(_OXYGEN_IS_ASAN_BUILD "${OXYGEN_WITH_ASAN}")
 
 set(
   SHADER_LIBRARY_OUTPUT
-  "${CMAKE_SOURCE_DIR}/bin/Oxygen/$<IF:$<OR:$<CONFIG:Debug>,$<BOOL:${_OXYGEN_IS_ASAN_BUILD}>>,Debug,Release>/$<IF:$<OR:$<CONFIG:Debug>,$<BOOL:${_OXYGEN_IS_ASAN_BUILD}>>,dev,production>/shaders.bin"
+  "${OXYGEN_PROJECT_SOURCE_DIR}/bin/Oxygen/$<IF:$<OR:$<CONFIG:Debug>,$<BOOL:${_OXYGEN_IS_ASAN_BUILD}>>,Debug,Release>/$<IF:$<OR:$<CONFIG:Debug>,$<BOOL:${_OXYGEN_IS_ASAN_BUILD}>>,dev,production>/shaders.bin"
 )
 set(
   SHADER_LIBRARY_OUTPUT_DIR
-  "${CMAKE_SOURCE_DIR}/bin/Oxygen/$<IF:$<OR:$<CONFIG:Debug>,$<BOOL:${_OXYGEN_IS_ASAN_BUILD}>>,Debug,Release>/$<IF:$<OR:$<CONFIG:Debug>,$<BOOL:${_OXYGEN_IS_ASAN_BUILD}>>,dev,production>"
+  "${OXYGEN_PROJECT_SOURCE_DIR}/bin/Oxygen/$<IF:$<OR:$<CONFIG:Debug>,$<BOOL:${_OXYGEN_IS_ASAN_BUILD}>>,Debug,Release>/$<IF:$<OR:$<CONFIG:Debug>,$<BOOL:${_OXYGEN_IS_ASAN_BUILD}>>,dev,production>"
 )
 
-set(
-  _OXYGEN_DEPLOY_CONFIG
-  "$<IF:$<BOOL:${_OXYGEN_IS_ASAN_BUILD}>,Asan,$<CONFIG>>"
+include(RuntimeEnvironment)
+oxygen_get_runtime_launcher(
+  ${OXYGEN_D3D12_SHADERBAKE_TARGET}
+  OXYGEN_SHADERBAKE_LAUNCHER
 )
-set(
-  _OXYGEN_DEPLOY_BIN_DIR
-  "$<SHELL_PATH:${CMAKE_SOURCE_DIR}/out/install/${_OXYGEN_DEPLOY_CONFIG}/bin>"
-)
-if(WIN32)
-  # Visual Studio custom build commands are sensitive to ';' list splitting.
-  # Use CMake's env modifier to prepend the runtime DLL folder safely.
-  set(
-    _OXYGEN_SHADERBAKE_ENV_ARGS
-    --modify
-    "PATH=path_list_prepend:${_OXYGEN_DEPLOY_BIN_DIR}"
-  )
-else()
-  set(_OXYGEN_SHADERBAKE_ENV_ARGS "PATH=${_OXYGEN_DEPLOY_BIN_DIR}:$ENV{PATH}")
-endif()
 
-add_custom_command(
+# Resolve the launcher list at generation time so paths containing spaces remain
+# separate arguments on both Ninja and Visual Studio.
+set(_shaderbake_script "${CMAKE_CURRENT_BINARY_DIR}/shaderbake-$<CONFIG>.cmake")
+file(
+  GENERATE
   OUTPUT
-    "${SHADER_LIBRARY_OUTPUT}"
-  COMMAND
-    "${CMAKE_COMMAND}" -E make_directory
-    "$<SHELL_PATH:${SHADER_LIBRARY_OUTPUT_DIR}>"
-  COMMAND
-    "${CMAKE_COMMAND}" -E env ${_OXYGEN_SHADERBAKE_ENV_ARGS}
-    "$<TARGET_FILE:${OXYGEN_D3D12_SHADERBAKE_TARGET}>" update --workspace-root
-    "$<SHELL_PATH:${CMAKE_SOURCE_DIR}>" --build-root
-    "$<SHELL_PATH:${SHADERBAKE_BUILD_ROOT}>" --out
-    "$<SHELL_PATH:${SHADER_LIBRARY_OUTPUT}>" --mode
-    "$<IF:$<OR:$<CONFIG:Debug>,$<BOOL:${_OXYGEN_IS_ASAN_BUILD}>>,dev,production>"
-  WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
-  VERBATIM
-  COMMENT "Baking shaders.bin (OXSL v1) ($<CONFIG> mode)"
-  DEPENDS
-    ${HLSL_FILES}
-    ${HLSLI_FILES}
-    ${SHADER_CATALOG_DEPENDENCIES}
-    ${OXYGEN_D3D12_SHADERBAKE_TARGET}
+  "${_shaderbake_script}"
+  CONTENT
+    "set(OXYGEN_SHADERBAKE_RUNTIME [==[${OXYGEN_SHADERBAKE_LAUNCHER}]==])
+set(OXYGEN_SHADERBAKE_EXECUTABLE [==[$<TARGET_FILE:${OXYGEN_D3D12_SHADERBAKE_TARGET}>]==])
+set(OXYGEN_SHADERBAKE_WORKSPACE [==[${OXYGEN_PROJECT_SOURCE_DIR}]==])
+set(OXYGEN_SHADERBAKE_CACHE [==[${SHADERBAKE_BUILD_ROOT}]==])
+set(OXYGEN_SHADERBAKE_OUTPUT [==[${SHADER_LIBRARY_OUTPUT}]==])
+set(OXYGEN_SHADERBAKE_OUTPUT_DIR [==[${SHADER_LIBRARY_OUTPUT_DIR}]==])
+set(OXYGEN_SHADERBAKE_MODE [==[$<IF:$<OR:$<CONFIG:Debug>,$<BOOL:${_OXYGEN_IS_ASAN_BUILD}>>,dev,production>]==])
+include([==[${OXYGEN_PROJECT_SOURCE_DIR}/cmake/RunShaderBake.cmake]==])
+"
 )
 
+# ShaderBake owns source/include invalidation and missing-artifact recovery.
+# An outer timestamp gate would hide changes to includes outside this directory.
 add_custom_target(
   ${META_MODULE_TARGET}_shaders
   ALL
-  DEPENDS
+  COMMAND
+    "${CMAKE_COMMAND}" -P "${_shaderbake_script}"
+  BYPRODUCTS
     "${SHADER_LIBRARY_OUTPUT}"
+  DEPENDS
+    ${OXYGEN_D3D12_SHADERBAKE_TARGET}
+  WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+  VERBATIM
+  COMMENT "Updating shaders.bin (OXSL v1) ($<CONFIG>)"
 )
 
 # Make the main module target depend on the baked shader library
 add_dependencies(${META_MODULE_TARGET} ${META_MODULE_TARGET}_shaders)
+
+if(OXYGEN_INSTALL)
+  install(
+    FILES
+      "${SHADER_LIBRARY_OUTPUT}"
+    DESTINATION "${OXYGEN_INSTALL_DATA}/shaders"
+    COMPONENT Oxygen_data
+  )
+endif()
