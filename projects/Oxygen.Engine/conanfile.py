@@ -15,7 +15,7 @@ from conan.tools.files import load, copy, save  # type: ignore
 from conan.tools.cmake import cmake_layout, CMake  # type: ignore
 from conan.tools.microsoft import is_msvc_static_runtime, is_msvc  # type: ignore
 from conan.errors import ConanInvalidConfiguration  # type: ignore
-from conan.tools.build import check_min_cppstd  # type: ignore
+from conan.tools.build import check_min_cppstd, cross_building  # type: ignore
 from conan.tools.scm import Version  # type: ignore
 from pathlib import Path
 
@@ -174,6 +174,8 @@ class OxygenConan(ConanFile):
         copy(self, "oxygen-source.json", src=self.export_folder, dst=self.export_sources_folder)
 
     def requirements(self):
+        # ShaderBake links the host API; shader probes execute a build-machine tool.
+        self.requires("dxc/1.9.2607")
         self.requires("fmt/12.1.0")
         self.requires("sdl/3.2.28")
         self.requires("imgui/1.92.5")
@@ -201,6 +203,9 @@ class OxygenConan(ConanFile):
         ref = "benchmark/1.9.4"
         self.test_requires(ref)
         self._test_deps.add(ref.split("/")[0])
+
+    def build_requirements(self):
+        self.tool_requires("dxc/1.9.2607")
 
     def configure(self):
         sanitizer = self.settings.get_safe("sanitizer")
@@ -254,6 +259,8 @@ class OxygenConan(ConanFile):
             self.options["tracy"].shared = self.options.get_safe("shared", False)
 
     def validate(self):
+        if cross_building(self):
+            raise ConanInvalidConfiguration("Full-engine builds require a native Windows x64 build machine.")
         if self.settings.os != "Windows" or self.settings.arch != "x86_64":
             raise ConanInvalidConfiguration(
                 "Oxygen's full-engine build requires Windows x64."
@@ -331,6 +338,10 @@ class OxygenConan(ConanFile):
         tc.cache_variables["OXYGEN_WITH_TRACY"] = bool(self.options.with_tracy)
         expectations = dict(tc.cache_variables)
         package_build = bool(self.package_folder)
+        dxc_tool_dirs = dxc_runtime_dirs = ""
+        if "dxc" in self.dependencies.host:
+            dxc_tool_dirs = ";".join(Path(p).as_posix() for p in self.dependencies.build["dxc"].cpp_info.bindirs)
+            dxc_runtime_dirs = ";".join(Path(p).as_posix() for p in self.dependencies.host["dxc"].cpp_info.bindirs)
 
         class OxygenOptionsBlock:
             # Graph facts must not be cached: every configure reads the current
@@ -340,10 +351,13 @@ class OxygenConan(ConanFile):
 set(OXYGEN_CONAN_EXPECT_{{ name }} {{ 'ON' if value else 'OFF' }})
 {% endfor %}
 set(OXYGEN_CONAN_PACKAGE_BUILD {{ 'ON' if package_build else 'OFF' }})
+set(OXYGEN_DXC_TOOL_BINDIRS [==[{{ dxc_tool_dirs }}]==])
+set(OXYGEN_DXC_RUNTIME_BINDIRS [==[{{ dxc_runtime_dirs }}]==])
 """
 
             def context(self):
-                return {"options": expectations, "package_build": package_build}
+                return {"options": expectations, "package_build": package_build,
+                        "dxc_tool_dirs": dxc_tool_dirs, "dxc_runtime_dirs": dxc_runtime_dirs}
 
         tc.blocks["oxygen_options"] = OxygenOptionsBlock
         # Set OXYGEN_CONAN_DEPLOY_DIR to the base install directory.

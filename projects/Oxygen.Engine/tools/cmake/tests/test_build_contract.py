@@ -149,6 +149,8 @@ class RecipeContractTests(CommandTests):
                     "spec.loader.exec_module(module)\n"
                     "class ContractFixture(module.OxygenConan):\n"
                     "    def requirements(self):\n"
+                    "        pass\n"
+                    "    def build_requirements(self):\n"
                     "        pass\n",
                     encoding="utf-8",
                 )

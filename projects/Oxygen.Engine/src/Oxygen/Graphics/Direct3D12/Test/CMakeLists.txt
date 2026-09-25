@@ -127,7 +127,12 @@ gtest_program(
   DEPS
     oxygen::graphics-common
     oxygen::testing
+    dxc::dxcompiler
 )
+oxygen_stage_dxc_runtime(
+  Oxygen.Graphics.Direct3D12.ShaderBakeDependencies.Tests
+)
+
 gtest_program(
   "Oxygen.Graphics.Direct3D12.ShaderBakeDirtyAnalysis.Tests"
   SOURCES

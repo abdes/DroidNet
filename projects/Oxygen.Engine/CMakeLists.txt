@@ -263,6 +263,10 @@ if(PROJECT_IS_TOP_LEVEL AND _github_files)
   add_custom_target(GitHub SOURCES ${_github_files})
 endif()
 
+if(OXYGEN_BUILD_FULL_ENGINE)
+  include(Dxc)
+endif()
+
 add_subdirectory("src")
 
 if(OXYGEN_BUILD_FULL_ENGINE)
