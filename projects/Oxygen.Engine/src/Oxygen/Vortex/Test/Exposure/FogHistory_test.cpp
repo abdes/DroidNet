@@ -613,6 +613,8 @@ NOLINT_TEST_F(ExposureGpuTest,
     bool use_half {
       true,
     };
+    bool history_used { false };
+    bool discontinuity { false };
     postprocess::ExposurePass::FrameLease frame;
     std::shared_ptr<const Texture> observed;
     std::shared_ptr<const Texture> reference;
@@ -642,6 +644,9 @@ NOLINT_TEST_F(ExposureGpuTest,
         = producer.InspectViewRadianceResources(ctx.current_view.view_id);
       CHECK_NOTNULL_F(resources);
       observed = resources->volumetric_fog;
+      history_used = producer.GetLastViewProductGenerationState()
+                       .volumetric_fog_temporal_history_reprojection_executed;
+      discontinuity = ctx.current_view.history_discontinuity;
       ctx.current_view.hdr_color_format = old_format;
     }
     auto OnPostRenderViewGpu(const ViewRenderGpuContext& hook) -> void override
@@ -853,8 +858,17 @@ NOLINT_TEST_F(ExposureGpuTest,
     if (step == 64U) {
       last_half_error = error;
       last_half_bounds = bounds;
+      EXPECT_NE(storage.completed.flags & 2U, 0U);
+      EXPECT_EQ(storage.completed.flags & 16U, 0U);
     }
     if (step == 65U) {
+      RecordProperty("recovery_history_used", probe->history_used);
+      RecordProperty("recovery_discontinuity", probe->discontinuity);
+      RecordProperty("recovery_observed", observed.back().at(0));
+      RecordProperty("recovery_reference", reference.back().at(0));
+      RecordProperty("recovery_previous_error", last_half_error);
+      EXPECT_TRUE(probe->history_used);
+      EXPECT_FALSE(probe->discontinuity);
       EXPECT_GT(error,
         0.0); // FP32 storage does not erase reused history error.
       EXPECT_GT(bounds.rgb_absolute + bounds.rgb_relative, 0.0F);
