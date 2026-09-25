@@ -90,6 +90,7 @@ target_compile_definitions(
   PRIVATE
     $<$<PLATFORM_ID:Windows>:WIN32_LEAN_AND_MEAN>
     $<$<PLATFORM_ID:Windows>:NOMINMAX>
+  PUBLIC
     $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXGN_CONS_STATIC>
 )
 

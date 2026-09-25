@@ -163,6 +163,7 @@ target_compile_definitions(
   PRIVATE
     $<$<PLATFORM_ID:Windows>:WIN32_LEAN_AND_MEAN>
     $<$<PLATFORM_ID:Windows>:NOMINMAX>
+  PUBLIC
     $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXGN_SCN_STATIC>
 )
 
@@ -183,9 +184,9 @@ target_link_libraries(
 
 if(OXYGEN_BUILD_TESTS)
   add_subdirectory("Test")
-  if(OXYGEN_BUILD_BENCHMARKS)
-    add_subdirectory("Benchmarks")
-  endif()
+endif()
+if(OXYGEN_BUILD_BENCHMARKS)
+  add_subdirectory("Benchmarks")
 endif()
 
 # ------------------------------------------------------------------------------

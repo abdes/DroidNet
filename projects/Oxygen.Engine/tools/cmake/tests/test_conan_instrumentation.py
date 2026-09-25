@@ -17,6 +17,7 @@ class ConanInstrumentationTests(CommandTests):
             CONAN, "graph", "info", str(ENGINE), "-pr:h", str(profile),
             "-pr:b", str(ENGINE / "profiles/windows-msvc.ini"),
             "-s:h", "build_type=Debug", "-s:b", "build_type=Release",
+            "-o", "&:tests=True",
             "--no-remote", "--format=json", *extra,
         ], ENGINE)
         return json.loads(result.stdout)["graph"]
@@ -30,7 +31,7 @@ class ConanInstrumentationTests(CommandTests):
                                  "-c", "tools.cmake.cmaketoolchain:generator=Ninja Multi-Config",
                                  "-c", "tools.cmake.cmakedeps:new=will_break_next")
             host = lambda graph: {node["name"]: node for node in graph["nodes"].values()
-                                  if node["context"] == "host" and node["name"] != "Oxygen"}
+                                  if node["context"] == "host" and node["name"] != "oxygen"}
             graphs[mode] = host(direct)
             self.assertEqual({name: n["package_id"] for name, n in host(direct).items()},
                              {name: n["package_id"] for name, n in host(wrapper).items()})

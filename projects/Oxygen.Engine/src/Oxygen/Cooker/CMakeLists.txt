@@ -384,6 +384,7 @@ target_compile_definitions(
   ${META_MODULE_TARGET}
   PRIVATE
     UFBX_REAL_IS_FLOAT
+  PUBLIC
     $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXGN_COOK_STATIC>
 )
 

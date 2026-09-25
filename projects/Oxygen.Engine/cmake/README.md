@@ -87,7 +87,7 @@ source modules; existing Linux/macOS profiles are not full-engine support claims
 
 Oxygen requires C++23. Keep language requirements on targets through
 `target_compile_features()`; the recipe also validates `compiler.cppstd >= 23`.
-The Windows profiles select `Oxygen/*:compiler.cppstd=23` while retaining C++20
+The Windows profiles select `oxygen/*:compiler.cppstd=23` while retaining C++20
 as their dependency default. Dependencies that erase the standard setting from
 their package identity continue to do so. This avoids changing dependency
 language modes simply to correct Oxygen's own settings.
@@ -117,6 +117,75 @@ tool version. These focused checks do not replace full-engine build/runtime test
 Tool versions used to build dependencies remain dependency-specific. For example,
 a recipe's build-context CMake requirement below version 4 does not lower the
 minimum for configuring Oxygen itself.
+
+## Consume Oxygen through Conan
+
+The Conan reference is `oxygen/0.1.0` (lowercase, as required by Conan).
+The native CMake package remains `Oxygen` and its targets remain `oxygen::...`.
+Update external profiles that still use the former `Oxygen/*` package pattern.
+
+No module selection builds the full engine, including its four core cooker
+tools, ShaderBake, RenderScene, DemoShell, schemas and showcase content. To build
+only reusable modules, set `oxygen/*:modules=OxCo,Clap`, for example. Supported
+names are `Base`, `Composition`, `OxCo`, `Serio`, `TextWrap` and `Clap`.
+Dependencies are added automatically: this example builds Base, OxCo, TextWrap
+and Clap, and requires only fmt, Asio and magic_enum. Order and redundant names
+do not create different package IDs. The former inert `base` and `oxco` Boolean
+options have been replaced by this explicit selection.
+
+`shared=True` is the Conan default. Full-engine packages require shared libraries
+because the showcase dynamically loads its graphics backend DLL. The six reusable
+modules also support `shared=False`. This package restriction does not remove
+static-library development through CMake; a fully static showcase needs a separate
+loader design and is not advertised as a supported SDK configuration.
+
+An application recipe can declare:
+
+```python
+requires = "oxygen/0.1.0"
+default_options = {"oxygen/*:modules": "OxCo,Clap"}
+generators = "CMakeToolchain", "CMakeDeps"
+```
+
+Its CMake project uses the same interface as a native SDK consumer:
+
+```cmake
+find_package(Oxygen CONFIG REQUIRED COMPONENTS OxCo Clap)
+target_link_libraries(my_game PRIVATE oxygen::oxco oxygen::clap)
+```
+
+Use a C++23-capable toolchain. The six reusable modules support Windows, Linux
+and macOS; the full engine retains its Windows x64/MSVC baseline. Ordinary Conan
+consumers need no Oxygen-specific `settings_user.yml`. Dependencies stay in the
+Conan graph; use Conan's run environment for packaged tools. The separately
+assembled `out/install/<Config>` SDK remains the self-contained distribution.
+
+Consumer defaults disable tests, benchmarks, optional examples, documentation
+and optional development tools, including when Conan builds Oxygen from source.
+`tools/generate-builds.ps1` explicitly enables those contributor outputs, retaining
+the repository development workflow. They can also be enabled individually with
+recipe options. CPU benchmarks can be built without unit tests. Vortex's GPU
+benchmark workloads still require both tests and benchmarks because they share
+the GoogleTest exposure fixtures. These development executables are not installed.
+
+`awaitable_state_checker=auto` enables OxCo checking in Debug, including ASan,
+and disables it in Release and RelWithDebInfo. Explicit `True` and `False`
+override the default. The equivalent CMake setting is
+`OXYGEN_AWAITER_STATE_CHECKER=AUTO|ON|OFF`. Conan prevents a CMake override from
+disagreeing with the selected recipe option. A generated `Oxygen/OxCo/Config.h`
+records the built mode, so installed headers remain consistent with the binaries
+even when the consuming application uses a different configuration name. Change
+the build option instead of defining checker macros in individual source files.
+
+The effective checker mode and canonical module closure participate in package
+identity. ASan still requires matching compiler flags and dependency identity
+configuration from the ASan profile; enabling `with_asan` alone is rejected.
+
+Native CMake exports are authoritative. Conan component metadata is derived from
+the configured targets and CMake File API, including actual library names,
+definitions, system libraries and dependency edges. `test_package` compiles and
+runs an external application against the created package, independently of the
+engine's development test suite.
 
 ## Product version and source provenance
 
@@ -383,14 +452,3 @@ Conventions:
 2. Keep module control in module `CMakeLists.txt` by calling `oxygen_embed_json_schemas(...)` there.
 3. Keep generation logic centralized under `cmake/`.
 4. Prefer stable symbol names (`k...Schema`) and canonical schema filenames (`*.schema.json`).
-
-## OxCo awaiter checking
-
-`awaitable_state_checker=auto` enables OxCo checking in Debug, including ASan,
-and disables it in Release and RelWithDebInfo. Explicit `True` and `False`
-override the default. The equivalent CMake setting is
-`OXYGEN_AWAITER_STATE_CHECKER=AUTO|ON|OFF`. Conan prevents a CMake override from
-disagreeing with the selected recipe option. A generated `Oxygen/OxCo/Config.h`
-records the built mode, so installed headers remain consistent with the binaries
-even when the consuming application uses a different configuration name. Change
-the build option instead of defining checker macros in individual source files.

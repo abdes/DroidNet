@@ -23,7 +23,6 @@ option(OXYGEN_WITH_ASAN "Instrument code with address sanitizer." OFF)
 option(OXYGEN_WITH_TRACY "Enable Tracy profiler integration." OFF)
 option(OXYGEN_WITH_DOXYGEN "Create Doxygen API documentation targets." OFF)
 option(OXYGEN_USE_CCACHE "Enable compiler caching using ccache." OFF)
-
 set(
   OXYGEN_AWAITER_STATE_CHECKER
   AUTO
@@ -110,9 +109,28 @@ foreach(_option IN LISTS _oxygen_graph_options)
     )
   endif()
 endforeach()
-if(OXYGEN_CONAN_PACKAGE_BUILD AND NOT OXYGEN_BUILD_FULL_ENGINE)
-  message(
-    FATAL_ERROR
-    "The current Conan recipe packages the full engine; OXYGEN_MODULES cannot narrow a package build."
-  )
+if(DEFINED OXYGEN_CONAN_MODULES)
+  if(OXYGEN_CONAN_PACKAGE_BUILD)
+    if(NOT OXYGEN_ENABLED_MODULES STREQUAL OXYGEN_CONAN_MODULES)
+      message(
+        FATAL_ERROR
+        "The package module selection must match Conan's modules option."
+      )
+    endif()
+  elseif(OXYGEN_CONAN_MODULES)
+    if(OXYGEN_BUILD_FULL_ENGINE)
+      message(
+        FATAL_ERROR
+        "The full engine requires a full Conan graph. Regenerate with modules=full."
+      )
+    endif()
+    foreach(_module IN LISTS OXYGEN_ENABLED_MODULES)
+      if(NOT _module IN_LIST OXYGEN_CONAN_MODULES)
+        message(
+          FATAL_ERROR
+          "Module ${_module} is outside the installed Conan module selection."
+        )
+      endif()
+    endforeach()
+  endif()
 endif()

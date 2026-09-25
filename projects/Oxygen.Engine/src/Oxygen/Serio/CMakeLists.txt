@@ -72,6 +72,7 @@ arrange_target_files_for_ide(${META_MODULE_TARGET})
 target_compile_definitions(
   ${META_MODULE_TARGET}
   PRIVATE
+  PUBLIC
     $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXGN_SERIO_STATIC>
 )
 
