@@ -28,8 +28,7 @@ class ConanInstrumentationTests(CommandTests):
             profile = ENGINE / "profiles" / filename
             direct = self.graph(profile)
             wrapper = self.graph(profile, "-o", "with_tracy=False",
-                                 "-c", "tools.cmake.cmaketoolchain:generator=Ninja Multi-Config",
-                                 "-c", "tools.cmake.cmakedeps:new=will_break_next")
+                                 "-c", "tools.cmake.cmaketoolchain:generator=Ninja Multi-Config")
             host = lambda graph: {node["name"]: node for node in graph["nodes"].values()
                                   if node["context"] == "host" and node["name"] != "oxygen"}
             graphs[mode] = host(direct)

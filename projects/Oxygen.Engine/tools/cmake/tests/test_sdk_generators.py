@@ -1,4 +1,4 @@
-"""Opt-in installed SDK checks for both supported Conan dependency generators."""
+"""Opt-in installed SDK checks for Oxygen's explicit CMakeConfigDeps generator."""
 import os
 from pathlib import Path
 import shutil
@@ -12,12 +12,12 @@ from test_build_contract import CMAKE, CONAN, ENGINE, CommandTests
                      and os.environ.get("OXYGEN_RUN_SDK_GENERATOR_TESTS"),
                      "Requires an MSVC developer shell and OXYGEN_RUN_SDK_GENERATOR_TESTS=1")
 class SdkGeneratorTests(CommandTests):
-    def test_both_generators_export_relocatable_dependencies(self):
-        for modern in (False, True):
-            with self.subTest(generator="CMakeConfigDeps" if modern else "CMakeDeps"):
-                self.check_generator(modern)
+    def test_config_deps_exports_relocatable_dependencies(self):
+        for libdir in ("lib", "lib/native"):
+            with self.subTest(libdir=libdir):
+                self.check_generator(libdir)
 
-    def check_generator(self, modern):
+    def check_generator(self, libdir):
         with tempfile.TemporaryDirectory(prefix="oxygen sdk ") as temporary:
             root = Path(temporary)
             recipe = root / "recipe"
@@ -32,8 +32,6 @@ class SdkGeneratorTests(CommandTests):
                        "-o", "benchmarks=False", "-o", "docs=False",
                        "-c", "tools.cmake.cmaketoolchain:generator=Ninja Multi-Config",
                        "--no-remote", "--build=never"]
-            if modern:
-                command += ["-c", "tools.cmake.cmakedeps:new=will_break_next"]
             deploy = root / "deployed dependencies"
             command += [f"--deployer-folder={deploy.as_posix()}",
                         "--deployer-package=oxygen/" + (ENGINE / "VERSION").read_text().strip()]
@@ -41,7 +39,6 @@ class SdkGeneratorTests(CommandTests):
             self.assertTrue((deploy / "Debug/bin/SDL3.dll").is_file())
             self.assertEqual(list((deploy / "Debug/bin").rglob("*.exe")), [])
             rules = recipe / "out/build-tracy-ninja/generators/oxygen-sdk"
-            libdir = "lib/native" if modern else "lib"
             (root / "CMakeLists.txt").write_text(f'''cmake_minimum_required(VERSION 4.2)
 project(SdkProbe VERSION 1.0.0 LANGUAGES NONE)
 set(CMAKE_INSTALL_LIBDIR "{libdir}")

@@ -22,7 +22,14 @@ endif()
 if(OXYGEN_INSTALL)
   if(PROJECT_IS_TOP_LEVEL AND NOT OXYGEN_CONAN_PACKAGE_BUILD)
     if(NOT DEFINED OXYGEN_CONAN_DEPLOY_DIR)
-      set(OXYGEN_CONAN_DEPLOY_DIR "${OXYGEN_PROJECT_SOURCE_DIR}/out/install")
+      if(OXYGEN_WITH_TRACY)
+        set(
+          OXYGEN_CONAN_DEPLOY_DIR
+          "${OXYGEN_PROJECT_SOURCE_DIR}/out/install-tracy"
+        )
+      else()
+        set(OXYGEN_CONAN_DEPLOY_DIR "${OXYGEN_PROJECT_SOURCE_DIR}/out/install")
+      endif()
     endif()
     if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
       set_property(
