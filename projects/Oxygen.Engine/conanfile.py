@@ -6,10 +6,12 @@
 
 import os
 import json
+import re
+import subprocess
 from typing import Any, cast
 from conan import ConanFile  # type: ignore
 from conan.tools.cmake import CMakeToolchain, CMakeDeps  # type: ignore
-from conan.tools.files import load, copy  # type: ignore
+from conan.tools.files import load, copy, save  # type: ignore
 from conan.tools.cmake import cmake_layout, CMake  # type: ignore
 from conan.tools.microsoft import is_msvc_static_runtime, is_msvc  # type: ignore
 from conan.errors import ConanInvalidConfiguration  # type: ignore
@@ -84,6 +86,7 @@ class OxygenConan(ConanFile):
         "sdl/*:shared": True,
     }
 
+    exports = ("VERSION",)
     exports_sources = (
         "VERSION",
         "AUTHORS",
@@ -99,13 +102,76 @@ class OxygenConan(ConanFile):
         "!out/**",
         "!build/**",
         "!cmake-build-*/**",
+        "!src/Oxygen/Core/version-info.h",
     )
 
     def set_version(self):
         assert (
             self.recipe_folder is not None
         ), "recipe_folder must be set before set_version()"
-        self.version = load(self, Path(self.recipe_folder) / "VERSION").strip()
+        version = self._read_product_version()
+        if self.version is not None and str(self.version) != version:
+            raise ConanInvalidConfiguration("The package version must match Oxygen's VERSION file.")
+        self.version = version
+
+    def _read_product_version(self):
+        version = load(self, Path(self.recipe_folder) / "VERSION").strip()
+        if (not re.fullmatch(r"(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})", version)
+                or any(int(part) > 255 for part in version.split("."))):
+            raise ConanInvalidConfiguration(
+                f"Invalid version '{version}'; expected major.minor.patch, "
+                "with canonical decimal components in 0..255."
+            )
+        return version
+
+    def _source_provenance(self):
+        """Same schema and Git scope as cmake/SourceProvenance.cmake; no build tools required."""
+        root = Path(self.recipe_folder)
+        version = self._read_product_version()
+        capsule = root / "oxygen-source.json"
+        if capsule.is_file():
+            data = json.loads(capsule.read_text(encoding="utf-8"))
+            valid = (isinstance(data, dict) and set(data) == {"schema", "version", "commit", "dirty"}
+                     and type(data["schema"]) in (int, float) and data["schema"] == 1 and data["version"] == version)
+            if valid:
+                commit, dirty = data["commit"], data["dirty"]
+                valid = ((commit is None and dirty is None)
+                         or (isinstance(commit, str) and re.fullmatch(r"(?:[0-9a-f]{40}|[0-9a-f]{64})", commit)
+                             and type(dirty) is bool))
+            if not valid:
+                raise ConanInvalidConfiguration(f"Invalid or mismatched source provenance: {capsule}")
+            return {"schema": 1, "version": version, "commit": commit, "dirty": dirty}
+
+        unknown = {"schema": 1, "version": version, "commit": None, "dirty": None}
+
+        def git(*arguments):
+            result = subprocess.run(
+                ["git", "--no-optional-locks", "-C", str(root), *arguments],
+                capture_output=True, text=True, encoding="utf-8", errors="replace", check=True,
+            )
+            return result.stdout.strip()
+
+        try:
+            git("ls-files", "--error-unmatch", "--", "VERSION", "CMakeLists.txt")
+            if git("rev-parse", "--is-shallow-repository") != "false":
+                return unknown
+            # No shared repository build files outside this directory are consumed.
+            scope = [".", ":(exclude)plans/CMAKE_CONAN_MODERNIZATION_PLAN.md"]
+            commit = git("log", "-1", "--format=%H", "--", *scope)
+            if not re.fullmatch(r"(?:[0-9a-f]{40}|[0-9a-f]{64})", commit):
+                return unknown
+            dirty = bool(git("status", "--porcelain=v1", "--untracked-files=all", "--", *scope))
+        except (OSError, subprocess.CalledProcessError):
+            return unknown
+        return {"schema": 1, "version": version, "commit": commit, "dirty": dirty}
+
+    def export(self):
+        # Export freezes the source identity; local install/generate never does.
+        save(self, Path(self.export_folder) / "oxygen-source.json",
+             json.dumps(self._source_provenance(), indent=2) + "\n")
+
+    def export_sources(self):
+        copy(self, "oxygen-source.json", src=self.export_folder, dst=self.export_sources_folder)
 
     def requirements(self):
         self.requires("fmt/12.1.0")
@@ -406,6 +472,8 @@ set(OXYGEN_CONAN_PACKAGE_BUILD {{ 'ON' if package_build else 'OFF' }})
     def package(self):
         cmake = CMake(self)
         cmake.install()
+        copy(self, "oxygen-source.json", src=self.source_folder,
+             dst=str(Path(self.package_folder) / "share" / "oxygen"))
 
     def _library_name(self, component: str):
         # Split the string into segments
