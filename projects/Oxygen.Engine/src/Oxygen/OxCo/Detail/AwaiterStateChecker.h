@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <Oxygen/OxCo/Config.h>
 #include <Oxygen/OxCo/Coroutine.h>
 
 // ReSharper disable CppMemberFunctionMayBeStatic
@@ -69,7 +70,6 @@ struct AwaiterStateChecker {
 #else // defined(OXCO_AWAITER_STATE_DEBUG)
 #  include <Oxygen/Base/Logging.h>
 #  include <Oxygen/Base/Macros.h>
-#  include <Oxygen/Base/Unreachable.h>
 #  include <Oxygen/OxCo/Detail/ProxyFrame.h>
 
 namespace oxygen::co::detail {
@@ -116,7 +116,7 @@ struct AwaiterStateChecker : ProxyFrame {
       case State::kReady:
       case State::kCancelled:
       case State::kDone:
-        Unreachable();
+        CHECK_F(false, "Invalid awaiter state transition");
       }
       self->real_handle.resume();
     };
@@ -134,7 +134,7 @@ struct AwaiterStateChecker : ProxyFrame {
     // of a short-circuiting boolean expression. If you are, try not; it
     // runs into a terrible gcc bug which half-evaluates the unevaluated:
     // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=112360
-    DCHECK_F(state == State::kCancelled || state == State::kDone
+    CHECK_F(state == State::kCancelled || state == State::kDone
       || state == State::kInitial);
     ForceReset();
   }
@@ -160,7 +160,7 @@ struct AwaiterStateChecker : ProxyFrame {
     case State::kReadyAfterCancel:
       // Redundant readiness check is allowed as long as  we don't
       // backtrack in readiness
-      DCHECK_F(val);
+      CHECK_F(val);
       break;
 
     case State::kRunning:
@@ -168,7 +168,7 @@ struct AwaiterStateChecker : ProxyFrame {
     case State::kReady:
     case State::kCancelled:
     case State::kDone:
-      Unreachable();
+      CHECK_F(false, "Invalid awaiter state transition");
     }
     return val;
   }
@@ -193,20 +193,20 @@ struct AwaiterStateChecker : ProxyFrame {
     case State::kReady:
     case State::kCancelled:
     case State::kDone:
-      Unreachable();
+      CHECK_F(false, "Invalid awaiter state transition");
     }
     return val;
   }
   void AboutToSetExecutor() noexcept
   {
-    DCHECK_F(state == State::kNotReady || state == State::kCancelPending
+    CHECK_F(state == State::kNotReady || state == State::kCancelPending
       || state == State::kReadyImmediately || state == State::kInitial
       || state == State::kInitialCxlPend);
     has_executor = true;
   }
   [[nodiscard]] auto AboutToSuspend(const Handle h) noexcept
   {
-    DCHECK_F(has_executor);
+    CHECK_F(has_executor);
     switch (state) {
     case State::kNotReady:
       state = State::kRunning;
@@ -224,7 +224,7 @@ struct AwaiterStateChecker : ProxyFrame {
     case State::kReady:
     case State::kCancelled:
     case State::kDone:
-      Unreachable();
+      CHECK_F(false, "Invalid awaiter state transition");
     }
     real_handle = h;
     this->LinkTo(h);
@@ -232,34 +232,35 @@ struct AwaiterStateChecker : ProxyFrame {
   }
   void SuspendThrew() const noexcept
   {
-    DCHECK_F(state == State::kRunning || state == State::kCancelling);
+    CHECK_F(state == State::kRunning || state == State::kCancelling);
     state = State::kDone;
   }
 
   [[nodiscard]] auto AboutToCancel([[maybe_unused]] const Handle h) noexcept
   {
-    DCHECK_F(state == State::kRunning);
-    DCHECK_EQ_F(real_handle, h);
+    CHECK_F(state == State::kRunning);
+    CHECK_F(real_handle == h);
     state = State::kCancelling;
     return this->ToHandle();
   }
   [[nodiscard]] auto CancelReturned(auto val) noexcept
   {
     if (val) {
-      DCHECK_EQ_F(state, State::kCancelling);
+      CHECK_F(state == State::kCancelling);
       state = State::kCancelled;
     }
     return val;
   }
   [[nodiscard]] auto MustResumeReturned(auto val) const noexcept
   {
-    DCHECK_EQ_F(state, State::kReadyAfterCancel);
+    CHECK_F(state == State::kReadyAfterCancel,
+      "await_must_resume called in state {}", static_cast<unsigned>(state));
     state = val ? State::kReady : State::kCancelled;
     return val;
   }
   void AboutToResume() const noexcept
   {
-    DCHECK_F(state == State::kReadyImmediately || state == State::kReady);
+    CHECK_F(state == State::kReadyImmediately || state == State::kReady);
     state = State::kDone;
   }
 };

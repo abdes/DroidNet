@@ -53,7 +53,7 @@ class OxygenConan(ConanFile):
         # Options
         "shared": [True, False],
         "fPIC": [True, False],
-        "awaitable_state_checker": [True, False],
+        "awaitable_state_checker": [True, False, "auto"],
         "with_asan": [True, False],
         "with_tracy": [True, False],
         # Optional components:
@@ -69,7 +69,7 @@ class OxygenConan(ConanFile):
     default_options = {
         "shared": False,
         "fPIC": True,
-        "awaitable_state_checker": True,
+        "awaitable_state_checker": "auto",
         "with_asan": False,
         "with_tracy": False,
         # Optional components:
@@ -104,6 +104,14 @@ class OxygenConan(ConanFile):
         "!cmake-build-*/**",
         "!src/Oxygen/Core/version-info.h",
     )
+
+    @staticmethod
+    def _checker_enabled(value, build_type):
+        return str(build_type) == "Debug" if str(value) == "auto" else str(value) == "True"
+
+    def package_id(self):
+        self.info.options.awaitable_state_checker = self._checker_enabled(
+            self.info.options.awaitable_state_checker, self.info.settings.build_type)
 
     def set_version(self):
         assert (
@@ -338,6 +346,8 @@ class OxygenConan(ConanFile):
         tc.cache_variables["OXYGEN_WITH_TRACY"] = bool(self.options.with_tracy)
         expectations = dict(tc.cache_variables)
         package_build = bool(self.package_folder)
+        checker = {"auto": "AUTO", "True": "ON", "False": "OFF"}[str(self.options.awaitable_state_checker)]
+        tc.cache_variables["OXYGEN_AWAITER_STATE_CHECKER"] = checker
         dxc_tool_dirs = dxc_runtime_dirs = ""
         if "dxc" in self.dependencies.host:
             dxc_tool_dirs = ";".join(Path(p).as_posix() for p in self.dependencies.build["dxc"].cpp_info.bindirs)
@@ -351,13 +361,14 @@ class OxygenConan(ConanFile):
 set(OXYGEN_CONAN_EXPECT_{{ name }} {{ 'ON' if value else 'OFF' }})
 {% endfor %}
 set(OXYGEN_CONAN_PACKAGE_BUILD {{ 'ON' if package_build else 'OFF' }})
+set(OXYGEN_CONAN_AWAITER_STATE_CHECKER {{ checker }})
 set(OXYGEN_DXC_TOOL_BINDIRS [==[{{ dxc_tool_dirs }}]==])
 set(OXYGEN_DXC_RUNTIME_BINDIRS [==[{{ dxc_runtime_dirs }}]==])
 """
 
             def context(self):
                 return {"options": expectations, "package_build": package_build,
-                        "dxc_tool_dirs": dxc_tool_dirs, "dxc_runtime_dirs": dxc_runtime_dirs}
+                        "dxc_tool_dirs": dxc_tool_dirs, "dxc_runtime_dirs": dxc_runtime_dirs, "checker": checker}
 
         tc.blocks["oxygen_options"] = OxygenOptionsBlock
         # Set OXYGEN_CONAN_DEPLOY_DIR to the base install directory.

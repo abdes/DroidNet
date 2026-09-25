@@ -4,13 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/OxCo/Detail/MuxHelper.h>
-
-#include <Oxygen/Testing/GTest.h>
-#include <gmock/gmock.h>
-
 #include "Utils/MockAwaitable.h"
 #include "Utils/MockMux.h"
+#include <gmock/gmock.h>
+
+#include <Oxygen/OxCo/Detail/MuxHelper.h>
+#include <Oxygen/Testing/GTest.h>
 
 using namespace oxygen::co;
 using namespace oxygen::co::detail;
@@ -27,7 +26,13 @@ class TestMuxHelper : public MuxHelper<MockMux, MockAwaitable> {
 public:
   using MuxHelper::GetState;
   using MuxHelper::InState;
-  using MuxHelper::MuxHelper;
+  explicit TestMuxHelper(MockAwaitable&& awaitable)
+    : MuxHelper(std::move(awaitable))
+  {
+    // Model the parent mux's executor setup, even for an awaiter that does not
+    // implement await_set_executor itself.
+    SetExecutor(nullptr);
+  }
 };
 
 class BaseFixture : public ::testing::Test {
@@ -180,6 +185,11 @@ NOLINT_TEST_F(CancellationBeforeStart, EarlyCancellationFails)
   const bool cancelled = helper.Cancel();
   EXPECT_FALSE(cancelled);
   EXPECT_TRUE(helper.InState(TestMuxHelper::State::kCancellationPending));
+
+  // A failed cancellation does not permit destroying the unfinished awaiter.
+  EXPECT_CALL(*awaitable.Mock(), await_must_resume()).WillOnce(Return(false));
+  EXPECT_CALL(*mux.Mock(), Invoke(IsNull())).WillOnce(Return());
+  helper.ReportImmediateResult();
 }
 
 // 3. Starting After Cancellation Pending:
@@ -360,14 +370,14 @@ NOLINT_TEST_F(CancellationAfterRunning, CancellationPendingUntilResume)
 {
   MockAwaitable awaitable;
   MockMux mux;
+  Handle continuation;
 
   // Simulate await_ready() returning false
   EXPECT_CALL(*awaitable.Mock(), await_ready()).WillOnce(Return(false));
   // Expect await_suspend() to be called
-  EXPECT_CALL(*awaitable.Mock(), await_suspend(_))
-    .WillOnce([](std::coroutine_handle<>) {
-      // Simulate awaitable resumes later
-    });
+  EXPECT_CALL(*awaitable.Mock(), await_suspend(_)).WillOnce([&](Handle handle) {
+    continuation = handle;
+  });
 
   // Simulate await_cancel() returning false (cancellation pending)
   EXPECT_CALL(*awaitable.Mock(), await_cancel(_)).WillOnce(Return(false));
@@ -381,6 +391,12 @@ NOLINT_TEST_F(CancellationAfterRunning, CancellationPendingUntilResume)
   const bool cancelled = helper.Cancel();
   EXPECT_FALSE(cancelled);
   EXPECT_TRUE(helper.InState(TestMuxHelper::State::kCancelling));
+
+  // Finish the pending operation before destroying its awaiter.
+  EXPECT_CALL(*awaitable.Mock(), await_must_resume()).WillOnce(Return(false));
+  EXPECT_CALL(*mux.Mock(), Invoke(IsNull())).WillOnce(Return());
+  continuation.resume();
+  EXPECT_TRUE(helper.InState(TestMuxHelper::State::kCancelled));
 }
 
 // 5. Awaitable Resumes After Cancellation Pending:
@@ -396,14 +412,14 @@ NOLINT_TEST_F(CancellationPendingAwaitableResumes, MustNotResume)
 {
   MockAwaitable awaitable;
   MockMux mux;
+  Handle continuation;
 
   // Simulate await_ready() returning false
   EXPECT_CALL(*awaitable.Mock(), await_ready()).WillOnce(Return(false));
   // Expect await_suspend() to be called
-  EXPECT_CALL(*awaitable.Mock(), await_suspend(_))
-    .WillOnce([](std::coroutine_handle<>) {
-      // Simulate awaitable resumes later
-    });
+  EXPECT_CALL(*awaitable.Mock(), await_suspend(_)).WillOnce([&](Handle handle) {
+    continuation = handle;
+  });
 
   // Simulate await_cancel() returning false (cancellation pending)
   EXPECT_CALL(*awaitable.Mock(), await_cancel(_)).WillOnce(Return(false));
@@ -421,8 +437,8 @@ NOLINT_TEST_F(CancellationPendingAwaitableResumes, MustNotResume)
   helper.Cancel();
   EXPECT_TRUE(helper.InState(TestMuxHelper::State::kCancelling));
 
-  // Simulate awaitable resumes and invokes
-  helper.resume_fn(&helper);
+  // Resume the actual continuation, including the checker proxy when enabled.
+  continuation.resume();
   EXPECT_TRUE(helper.InState(TestMuxHelper::State::kCancelled));
   EXPECT_FALSE(helper.IsReady()); // does not call await_ready()
 }
@@ -442,14 +458,14 @@ NOLINT_TEST_F(CancellationPendingAwaitableResumes, MustResume)
 {
   MockAwaitable awaitable;
   MockMux mux;
+  Handle continuation;
 
   // Simulate await_ready() returning false
   EXPECT_CALL(*awaitable.Mock(), await_ready()).WillOnce(Return(false));
   // Expect await_suspend() to be called
-  EXPECT_CALL(*awaitable.Mock(), await_suspend(_))
-    .WillOnce([](std::coroutine_handle<>) {
-      // Simulate awaitable resumes later
-    });
+  EXPECT_CALL(*awaitable.Mock(), await_suspend(_)).WillOnce([&](Handle handle) {
+    continuation = handle;
+  });
 
   // Simulate await_cancel() returning false (cancellation pending)
   EXPECT_CALL(*awaitable.Mock(), await_cancel(_)).WillOnce(Return(false));
@@ -469,8 +485,8 @@ NOLINT_TEST_F(CancellationPendingAwaitableResumes, MustResume)
   helper.Cancel();
   EXPECT_TRUE(helper.InState(TestMuxHelper::State::kCancelling));
 
-  // Simulate awaitable resumes and invokes
-  helper.resume_fn(&helper);
+  // Resume the actual continuation, including the checker proxy when enabled.
+  continuation.resume();
   EXPECT_TRUE(helper.InState(TestMuxHelper::State::kSucceeded));
   EXPECT_TRUE(helper.IsReady());
   EXPECT_EQ(45, std::move(helper).Result());
@@ -490,14 +506,14 @@ NOLINT_TEST_F(CancellationPendingAwaitableResumes, AwaitResumeThrows)
 {
   MockAwaitable awaitable;
   MockMux mux;
+  Handle continuation;
 
   // Simulate await_ready() returning false
   EXPECT_CALL(*awaitable.Mock(), await_ready()).WillOnce(Return(false));
   // Expect await_suspend() to be called
-  EXPECT_CALL(*awaitable.Mock(), await_suspend(_))
-    .WillOnce([](std::coroutine_handle<>) {
-      // Simulate awaitable resumes later
-    });
+  EXPECT_CALL(*awaitable.Mock(), await_suspend(_)).WillOnce([&](Handle handle) {
+    continuation = handle;
+  });
 
   // Simulate await_cancel() returning false (cancellation pending)
   EXPECT_CALL(*awaitable.Mock(), await_cancel(_)).WillOnce(Return(false));
@@ -520,8 +536,8 @@ NOLINT_TEST_F(CancellationPendingAwaitableResumes, AwaitResumeThrows)
   helper.Cancel();
   EXPECT_TRUE(helper.InState(TestMuxHelper::State::kCancelling));
 
-  // Simulate awaitable resumes and invokes
-  helper.resume_fn(&helper);
+  // Resume the actual continuation, including the checker proxy when enabled.
+  continuation.resume();
   EXPECT_TRUE(helper.InState(TestMuxHelper::State::kFailed));
   EXPECT_TRUE(helper.IsReady()); // does not call await_ready()
 }
@@ -539,6 +555,9 @@ NOLINT_TEST_F(ReportImmediateResult, CancellationPendingMustNotResume)
   MockAwaitable awaitable;
   MockMux mux;
 
+  // Immediate reporting requires the awaitable to have reported readiness.
+  EXPECT_CALL(*awaitable.Mock(), await_ready()).WillOnce(Return(true));
+
   // Simulate early cancellation failure
   EXPECT_CALL(*awaitable.Mock(), await_early_cancel()).WillOnce(Return(false));
 
@@ -550,6 +569,8 @@ NOLINT_TEST_F(ReportImmediateResult, CancellationPendingMustNotResume)
 
   TestMuxHelper helper(std::move(awaitable));
   helper.Bind(mux);
+
+  EXPECT_TRUE(helper.IsReady());
 
   // Cancel before starting
   helper.Cancel();

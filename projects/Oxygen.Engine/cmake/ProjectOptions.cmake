@@ -24,6 +24,39 @@ option(OXYGEN_WITH_TRACY "Enable Tracy profiler integration." OFF)
 option(OXYGEN_WITH_DOXYGEN "Create Doxygen API documentation targets." OFF)
 option(OXYGEN_USE_CCACHE "Enable compiler caching using ccache." OFF)
 
+set(
+  OXYGEN_AWAITER_STATE_CHECKER
+  AUTO
+  CACHE STRING
+  "OxCo awaiter checking: AUTO enables Debug; ON or OFF overrides all configurations."
+)
+set_property(
+  CACHE
+    OXYGEN_AWAITER_STATE_CHECKER
+  PROPERTY
+    STRINGS
+      AUTO
+      ON
+      OFF
+)
+if(NOT OXYGEN_AWAITER_STATE_CHECKER MATCHES "^(AUTO|ON|OFF)$")
+  message(FATAL_ERROR "OXYGEN_AWAITER_STATE_CHECKER must be AUTO, ON or OFF.")
+endif()
+if(
+  DEFINED
+    OXYGEN_CONAN_AWAITER_STATE_CHECKER
+  AND
+    NOT
+      OXYGEN_AWAITER_STATE_CHECKER
+        STREQUAL
+        OXYGEN_CONAN_AWAITER_STATE_CHECKER
+)
+  message(
+    FATAL_ERROR
+    "Awaiter checking conflicts with Conan. Regenerate dependencies with the requested awaitable_state_checker option."
+  )
+endif()
+
 if(NOT PROJECT_IS_TOP_LEVEL AND OXYGEN_USE_CCACHE)
   message(
     FATAL_ERROR
