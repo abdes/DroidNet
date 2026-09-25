@@ -4,7 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Oxygen/Base/logging.h"
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -14,7 +13,18 @@
 #include <string>
 #include <vector>
 
+#include <Oxygen/Base/logging.h>
+
 #define GLM_ENABLE_EXPERIMENTAL
+#include "Async/AsyncDemoPanel.h"
+#include "Async/AsyncDemoSettingsService.h"
+#include "Async/AsyncDemoVm.h"
+#include "Async/MainModule.h"
+#include "DemoShell/DemoShell.h"
+#include "DemoShell/Runtime/DemoAppContext.h"
+#include "DemoShell/Services/DefaultSceneLighting.h"
+#include "DemoShell/UI/CameraRigController.h"
+#include "DemoShell/UI/DroneCameraController.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -49,16 +59,6 @@
 #include <Oxygen/Scene/Types/RenderablePolicies.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/SceneCameraViewResolver.h>
-
-#include "Async/AsyncDemoPanel.h"
-#include "Async/AsyncDemoSettingsService.h"
-#include "Async/AsyncDemoVm.h"
-#include "Async/MainModule.h"
-#include "DemoShell/DemoShell.h"
-#include "DemoShell/Runtime/DemoAppContext.h"
-#include "DemoShell/Services/DefaultSceneLighting.h"
-#include "DemoShell/UI/CameraRigController.h"
-#include "DemoShell/UI/DroneCameraController.h"
 
 using WindowProps = oxygen::platform::window::Properties;
 using WindowEvent = oxygen::platform::window::Event;
@@ -1118,7 +1118,6 @@ auto MainModule::EnsureExampleEnvironment(scene::Scene& scene) -> void
   sky_light.SetTintRgb({ 1.0F, 1.0F, 1.0F });
   sky_light.SetDiffuseIntensity(1.0F);
   sky_light.SetSpecularIntensity(1.0F);
-  sky_light.SetRealTimeCaptureEnabled(true);
   sky_light.SetLowerHemisphereColor({ 0.02F, 0.02F, 0.03F });
   sky_light.SetVolumetricScatteringIntensity(1.0F);
   sky_light.SetAffectReflections(true);

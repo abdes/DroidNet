@@ -7,6 +7,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 
 #include <Oxygen/Core/Types/Atmosphere.h>
 #include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
@@ -53,7 +54,7 @@ namespace environment {
       frame::SequenceNumber sequence, frame::Slot slot) -> void;
     [[nodiscard]] OXGN_VRTX_API auto Record(RenderContext& ctx,
       const internal::StableAtmosphereState& stable_state,
-      internal::AtmosphereLutCache& cache) -> RecordState;
+      internal::AtmosphereLutCache& cache, bool capture = false) -> RecordState;
 
   private:
     struct alignas(16) PassConstants {
@@ -103,7 +104,7 @@ namespace environment {
     static_assert(sizeof(PassConstants) == 272U);
 
     Renderer& renderer_;
-    upload::TransientStructuredBuffer pass_constants_buffer_;
+    std::shared_ptr<upload::TransientStructuredBuffer> pass_constants_buffer_;
   };
 
 } // namespace environment

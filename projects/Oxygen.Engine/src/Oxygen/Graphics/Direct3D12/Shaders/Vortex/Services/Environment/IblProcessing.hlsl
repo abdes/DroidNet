@@ -9,6 +9,9 @@
 #include "Vortex/Contracts/Environment/IblProductMetadata.hlsli"
 #include "Vortex/Contracts/Definitions/SceneDefinitions.hlsli"
 #include "Vortex/Shared/IblSampling.hlsli"
+#include "Vortex/Services/Environment/HeightFog.hlsli"
+#include "Vortex/Services/Environment/SkyRadiance.hlsli"
+#include "Vortex/Contracts/View/HdrIntervalMath.hlsli"
 
 cbuffer RootConstants : register(b2, space0)
 {
@@ -32,8 +35,29 @@ struct IblWork
     uint hemisphere_enabled;
     float4 lower_hemisphere;
     float source_rotation;
-    float3 padding;
+    uint capture_srv;
+    uint processed_half_srv;
+    uint specular_half_srv;
 };
+
+struct IblSkySnapshot
+{
+    EnvironmentStaticData environment;
+    EnvironmentViewData view;
+    float3 origin;
+    float padding;
+};
+
+static float3 CaptureSkyRadiance(uint snapshot_srv, float3 direction)
+{
+    StructuredBuffer<IblSkySnapshot> snapshots = ResourceDescriptorHeap[snapshot_srv];
+    IblSkySnapshot source = snapshots[0];
+    // Dedicated unit-exposure sky LUT, shared fog integral, no analytic disks,
+    // prior IBL, display background, local fog or volumetric fog.
+    float3 atmosphere = SampleSkyViewRadiance(source.environment, source.view, direction).rgb;
+    float4 fog = EvaluateSkyHeightFog(source.environment, source.view, source.origin, direction, true);
+    return atmosphere * fog.a + fog.rgb;
+}
 
 static IblWork Work()
 {
@@ -48,11 +72,13 @@ void IblInitializeCS()
 {
     IblWork w = Work();
     RWStructuredBuffer<IblProductMetadata> metadata = ResourceDescriptorHeap[w.metadata_uav];
-    IblProductMetadata value;
+    IblProductMetadata value = (IblProductMetadata)0;
     value.source_radiance_scale = 1.0;
     value.average_brightness = 0.0;
     value.processing_flags = 0u;
     value.product_revision = w.revision;
+    value.processed_half_srv = w.processed_half_srv;
+    value.specular_half_srv = w.specular_half_srv;
     metadata[0] = value;
 }
 
@@ -69,12 +95,9 @@ static void ReduceSum(uint lane, uint terms)
 }
 
 // Source adapter and range reduction share the same post-hemisphere FP32 values.
-[numthreads(8, 8, 1)]
-void IblPrepareCS(uint3 id : SV_DispatchThreadID, uint3 group : SV_GroupID,
-    uint lane : SV_GroupIndex)
+static void PrepareSource(uint3 id, uint3 group, uint lane, bool captured_sky)
 {
     IblWork w = Work();
-    TextureCube<float4> source = ResourceDescriptorHeap[w.source_srv];
     RWTexture2DArray<float4> output = ResourceDescriptorHeap[w.output_uav];
     RWStructuredBuffer<float4> partials = ResourceDescriptorHeap[w.partials_uav];
     SamplerState linear_clamp = SamplerDescriptorHeap[VORTEX_SAMPLER_LINEAR_CLAMP];
@@ -83,11 +106,17 @@ void IblPrepareCS(uint3 id : SV_DispatchThreadID, uint3 group : SV_GroupID,
     if (all(id.xy < w.output_size)) {
         float3 cube_direction = IblCubeDirection(id.z, (float2(id.xy) + 0.5) / w.output_size);
         float3 world = OxygenDirFromCubemapSamplingDir(cube_direction);
-        float sine, cosine;
-        sincos(w.source_rotation, sine, cosine);
-        float3 rotated = float3(cosine * world.x - sine * world.y,
-            sine * world.x + cosine * world.y, world.z);
-        float3 radiance = source.SampleLevel(linear_clamp, CubemapSamplingDirFromOxygenWS(rotated), 0.0).rgb;
+        float3 radiance;
+        if (captured_sky) {
+            radiance = CaptureSkyRadiance(w.capture_srv, world);
+        } else {
+            TextureCube<float4> source = ResourceDescriptorHeap[w.source_srv];
+            float sine, cosine;
+            sincos(w.source_rotation, sine, cosine);
+            float3 rotated = float3(cosine * world.x - sine * world.y,
+                sine * world.x + cosine * world.y, world.z);
+            radiance = source.SampleLevel(linear_clamp, CubemapSamplingDirFromOxygenWS(rotated), 0.0).rgb;
+        }
         if (w.hemisphere_enabled != 0u && world.z < 0.0)
             radiance = lerp(radiance, w.lower_hemisphere.rgb, w.lower_hemisphere.a);
         valid = all(isfinite(radiance)) && all(radiance >= 0.0) ? 1.0 : 0.0;
@@ -110,6 +139,20 @@ void IblPrepareCS(uint3 id : SV_DispatchThreadID, uint3 group : SV_GroupID,
     }
 }
 
+[numthreads(8, 8, 1)]
+void IblPrepareCS(uint3 id : SV_DispatchThreadID, uint3 group : SV_GroupID,
+    uint lane : SV_GroupIndex)
+{
+    PrepareSource(id, group, lane, false);
+}
+
+[numthreads(8, 8, 1)]
+void IblCapturePrepareCS(uint3 id : SV_DispatchThreadID, uint3 group : SV_GroupID,
+    uint lane : SV_GroupIndex)
+{
+    PrepareSource(id, group, lane, true);
+}
+
 [numthreads(1, 1, 1)]
 void IblRangeCS()
 {
@@ -122,7 +165,7 @@ void IblRangeCS()
         maximum = max(maximum, partials[i].x);
         valid = min(valid, partials[i].y);
     }
-    IblProductMetadata value;
+    IblProductMetadata value = metadata[0];
     value.source_radiance_scale = max(1.0, maximum / 65504.0);
     value.average_brightness = 0.0;
     value.processing_flags = valid > 0.0 ? kIblProductFinite : 0u;
@@ -236,9 +279,145 @@ void IblPrefilterCS(uint3 id : SV_DispatchThreadID)
         InterlockedAnd(metadata[0].processing_flags, ~kIblProductFinite);
         radiance = 0.0.xxx;
     }
-    // Positive normalized filtering is a convex combination of FP16 source
-    // texels. Roundoff can exceed their maximum by a few FP32 ulps.
+    // Normalized positive filtering is a convex combination of source texels.
+    // Roundoff can exceed their normalized maximum by a few FP32 ulps.
     output[id] = float4(min(radiance, 65504.0), 1.0);
+}
+
+[numthreads(8, 8, 1)]
+void IblNarrowCS(uint3 id : SV_DispatchThreadID)
+{
+    IblWork w = Work();
+    if (any(id.xy >= w.output_size)) return;
+    RWTexture2DArray<float4> source = ResourceDescriptorHeap[w.input_uav];
+    RWTexture2DArray<float4> output = ResourceDescriptorHeap[w.output_uav];
+    // Narrow only the finished canonical products. These half texels never
+    // feed SH, mip generation or GGX convolution.
+    output[id] = HdrRoundToHalf(source[id]);
+}
+
+// Qualification reads the actual stored chains; native filtering is qualified
+// separately against FP32. A rejected half certificate leaves FP32 available.
+static uint PrecisionTileCount(uint source_size)
+{
+    uint count = 0u;
+    for (uint size = source_size; size > 0u; size >>= 1u) {
+        uint groups = (size + 7u) / 8u;
+        count += 2u * groups * groups * 6u;
+    }
+    return count;
+}
+
+static void ReducePrecisionMinimum(uint lane)
+{
+    GroupMemoryBarrierWithGroupSync();
+    for (uint offset = 32u; offset > 0u; offset >>= 1u) {
+        if (lane < offset) {
+            Shared[0][lane] = min(Shared[0][lane], Shared[0][lane + offset]);
+        }
+        GroupMemoryBarrierWithGroupSync();
+    }
+}
+
+static float HalfTexelGain(float3 reference_min, float3 reference_max,
+    float3 half_min, float3 half_max, float source_scale);
+
+[numthreads(8, 8, 1)]
+void IblPrecisionRangeCS(uint3 group : SV_GroupID, uint lane : SV_GroupIndex)
+{
+    IblWork w = Work();
+    uint tile = group.y * 65535u + group.x;
+    if (tile >= PrecisionTileCount(w.source_size)) return;
+    // The half-work records alternate processed/specular at each mip. Every
+    // group reads one record and writes one disjoint gain/validity partial.
+    uint local_tile = tile;
+    uint record = g_WorkIndex;
+    uint groups = (w.output_size + 7u) / 8u;
+    StructuredBuffer<IblWork> work = ResourceDescriptorHeap[g_Constants];
+    while (local_tile >= groups * groups * 6u) {
+        local_tile -= groups * groups * 6u;
+        w = work[++record];
+        groups = (w.output_size + 7u) / 8u;
+    }
+    uint face = local_tile / (groups * groups);
+    uint2 tile_xy = uint2(local_tile % groups, (local_tile / groups) % groups);
+    uint3 id = uint3(tile_xy * 8u + uint2(lane % 8u, lane / 8u), face);
+    RWTexture2DArray<float4> canonical = ResourceDescriptorHeap[NonUniformResourceIndex(w.input_uav)];
+    RWTexture2DArray<float4> half_product = ResourceDescriptorHeap[NonUniformResourceIndex(w.output_uav)];
+    RWStructuredBuffer<float4> partials = ResourceDescriptorHeap[w.partials_uav];
+    RWStructuredBuffer<IblProductMetadata> metadata = ResourceDescriptorHeap[w.metadata_uav];
+    Shared[0][lane] = float4(asfloat(0x7f7fffffu), 1.0, 0.0, 0.0);
+    if (all(id.xy < w.output_size)) {
+        float4 reference = canonical[id];
+        float4 narrowed = half_product[id];
+        bool valid = HdrFiniteNonnegative(reference.r) && HdrFiniteNonnegative(reference.g)
+            && HdrFiniteNonnegative(reference.b) && reference.a == 1.0
+            && HdrFiniteNonnegative(narrowed.r) && HdrFiniteNonnegative(narrowed.g)
+            && HdrFiniteNonnegative(narrowed.b) && narrowed.a == 1.0;
+        if (!valid) reference = narrowed = 0.0.xxxx;
+        float3 reference_low, reference_high, half_low, half_high;
+        [unroll] for (uint channel = 0u; channel < 3u; ++channel) {
+            // Texture filtering may flush FP32 subnormals. Enclose both the
+            // stored value and zero, widening maxima before any arithmetic.
+            reference_low[channel] = (asuint(reference[channel]) & 0x7fffffffu) < 0x00800000u
+                ? 0.0 : reference[channel];
+            half_low[channel] = (asuint(narrowed[channel]) & 0x7fffffffu) < 0x00800000u
+                ? 0.0 : narrowed[channel];
+            reference_high[channel] = HdrUpperOperand(reference[channel]);
+            half_high[channel] = HdrUpperOperand(narrowed[channel]);
+        }
+        float gain = valid ? HalfTexelGain(reference_low, reference_high,
+            half_low, half_high, metadata[0].source_radiance_scale) : 0.0;
+        Shared[0][lane] = float4(gain, valid ? 1.0 : 0.0, 0.0, 0.0);
+    }
+    ReducePrecisionMinimum(lane);
+    if (lane == 0u) partials[tile] = Shared[0][0];
+}
+
+[numthreads(64, 1, 1)]
+void IblPrecisionReduceCS(uint lane : SV_GroupIndex)
+{
+    IblWork w = Work();
+    RWStructuredBuffer<float4> partials = ResourceDescriptorHeap[w.partials_uav];
+    Shared[0][lane] = float4(asfloat(0x7f7fffffu), 1.0, 0.0, 0.0);
+    uint tile_count = PrecisionTileCount(w.source_size);
+    for (uint tile = lane; tile < tile_count; tile += 64u) {
+        Shared[0][lane] = min(Shared[0][lane], partials[tile]);
+    }
+    ReducePrecisionMinimum(lane);
+    if (lane != 0u) return;
+    // All lanes have finished reading. Reuse the final certificate location even
+    // when it overlaps the now-dead precision partials.
+    uint offset = w.partial_count * 10u;
+    partials[offset] = Shared[0][0];
+}
+
+static float HalfTexelGain(float3 reference_min, float3 reference_max,
+    float3 half_min, float3 half_max, float source_scale)
+{
+    // Gain excludes source scale. The frozen display envelope is 2^32.
+    const float absolute_budget = HdrBoundDown(1.0e-5 / 4294967296.0);
+    float gain = asfloat(0x7f7fffffu);
+    bool ev_safe = true;
+    for (uint channel = 0u; channel < 3u; ++channel) {
+        float error = max(HdrUpperDifference(reference_max[channel], half_min[channel]),
+            HdrUpperDifference(half_max[channel], reference_min[channel]));
+        float relative_allowance = HdrBoundDown(reference_min[channel] * HdrBoundDown(0.0025));
+        float excess = HdrUpperDifference(error, relative_allowance);
+        if (excess > 0.0)
+            gain = min(gain, HdrBoundDown(absolute_budget / HdrUpperProduct(excess, source_scale)));
+        // These constants lie strictly inside 2^(+/-1/1024). Independent
+        // per-channel enclosures remain valid under any nonnegative tint.
+        ev_safe = ev_safe
+            && half_min[channel] >= HdrBoundUp(reference_max[channel] * 0.9993234)
+            && half_max[channel] <= HdrBoundDown(reference_min[channel] * 1.0006771);
+    }
+    if (!ev_safe) {
+        float maximum = max(reference_max.r, max(reference_max.g, reference_max.b));
+        if (maximum > 0.0)
+            gain = min(gain, HdrBoundDown(absolute_budget / HdrUpperProduct(maximum, source_scale)));
+    }
+    return gain;
 }
 
 [numthreads(1, 1, 1)]
@@ -246,5 +425,12 @@ void IblCompleteCS()
 {
     IblWork w = Work();
     RWStructuredBuffer<IblProductMetadata> metadata = ResourceDescriptorHeap[w.metadata_uav];
+    RWStructuredBuffer<float4> partials = ResourceDescriptorHeap[w.partials_uav];
+    uint offset = w.partial_count * 10u;
+    float2 certificate = partials[offset].xy;
+    if (certificate.y == 1.0 && HdrFiniteNonnegative(certificate.x)) {
+        metadata[0].maximum_half_gain = certificate.x;
+        metadata[0].precision_flags = kIblHalfCertificateComplete;
+    }
     metadata[0].processing_flags |= kIblProductComplete;
 }

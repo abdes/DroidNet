@@ -43,6 +43,7 @@ if(WIN32)
       "ExposureBenchmarkFixture.cpp"
       "ExposureBenchmarkFixture.h"
       "ExposureKernel_bench.cpp"
+      "IblUpdate_bench.cpp"
       "ExposureOverhead_bench.cpp"
       "ExposurePerformance_bench.cpp"
     DEPS

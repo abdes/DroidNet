@@ -1,5 +1,5 @@
 {
-  "version": 7,
+  "version": 8,
   "name": "physics_domains",
   "nodes": [
     {
@@ -473,7 +473,6 @@
       "tint_rgb": [1.0, 1.0, 1.0],
       "diffuse_intensity": 1.0,
       "specular_intensity": 1.0,
-      "real_time_capture_enabled": true,
       "lower_hemisphere_color": [0.0, 0.0, 0.0],
       "volumetric_scattering_intensity": 1.0,
       "affect_reflections": true

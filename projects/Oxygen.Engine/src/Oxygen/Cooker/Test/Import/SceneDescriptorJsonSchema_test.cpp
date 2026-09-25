@@ -114,7 +114,7 @@ NOLINT_TEST(SceneDescriptorJsonSchemaTest, NodeFlagSourceModesAreCanonical)
   const auto schema = LoadJsonFile(SchemaFile(FindRepoRoot()));
   ASSERT_TRUE(schema.has_value());
   auto document
-    = json::parse(R"({"version":7,"name":"Flags","nodes":[{"flags":{}}]})");
+    = json::parse(R"({"version":8,"name":"Flags","nodes":[{"flags":{}}]})");
   for (const auto& visibility : { "inherit", "shown", "hidden" }) {
     for (const auto& shadow : { "inherit", "on", "off" }) {
       document["nodes"][0]["flags"]
@@ -147,7 +147,7 @@ NOLINT_TEST(SceneDescriptorJsonSchemaTest, AcceptsCanonicalDocument)
 
   const auto doc = json::parse(R"({
     "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.scene-descriptor.schema.json",
-    "version": 7,
+    "version": 8,
     "name": "DemoScene",
     "nodes": [
       { "name": "Root", "transform": { "translation": [0, 0, 0] } },
@@ -186,7 +186,7 @@ NOLINT_TEST(SceneDescriptorJsonSchemaTest, RejectsUnknownNestedFields)
   ASSERT_TRUE(schema.has_value());
 
   const auto doc = json::parse(R"({
-    "version": 7,
+    "version": 8,
     "name": "BadScene",
     "nodes": [ { "name": "Root", "unknown_field": true } ]
   })");
@@ -203,7 +203,7 @@ NOLINT_TEST(SceneDescriptorJsonSchemaTest, AcceptsDirectionalShadowTuningFields)
   ASSERT_TRUE(schema.has_value());
 
   const auto doc = json::parse(R"({
-    "version": 7,
+    "version": 8,
     "name": "TunedScene",
     "nodes": [
       { "name": "Root" }
@@ -237,7 +237,7 @@ NOLINT_TEST(SceneDescriptorJsonSchemaTest, AcceptsV3EnvironmentAndLocalFogShape)
   ASSERT_TRUE(schema.has_value());
 
   const auto doc = json::parse(R"({
-    "version": 7,
+    "version": 8,
     "name": "FogScene",
     "nodes": [
       { "name": "Root" },
@@ -319,7 +319,6 @@ NOLINT_TEST(SceneDescriptorJsonSchemaTest, AcceptsV3EnvironmentAndLocalFogShape)
         "tint_rgb": [1.0, 1.0, 1.0],
         "diffuse_intensity": 1.0,
         "specular_intensity": 1.0,
-        "real_time_capture_enabled": true,
         "source_cubemap_angle_radians": 0.25,
         "lower_hemisphere_color": [0.1, 0.1, 0.2],
         "lower_hemisphere_is_solid_color": true,
@@ -372,7 +371,7 @@ NOLINT_TEST(
   const auto base = json::parse(
     R"JSON(
 {
-  "version": 7,
+  "version": 8,
   "name": "Environment",
   "nodes": [
     {
@@ -440,3 +439,29 @@ NOLINT_TEST(
 }
 
 } // namespace
+
+NOLINT_TEST(
+  SceneDescriptorJsonSchemaTest, SceneV8RejectsRetiredCaptureModeAndOldVersion)
+{
+  const auto schema = LoadJsonFile(SchemaFile(FindRepoRoot()));
+  ASSERT_TRUE(schema.has_value());
+  const auto canonical = json::parse(R"({
+    "version": 8, "name": "AutomaticSky", "nodes": [{}],
+    "environment": { "sky_light": {
+      "enabled": true, "source": 0, "intensity": 2.5,
+      "tint_rgb": [0.2, 0.4, 0.8], "diffuse_intensity": 0.5,
+      "specular_intensity": 1.5, "lower_hemisphere_color": [0.1, 0.2, 0.3],
+      "volumetric_scattering_intensity": 0.25, "affect_reflections": true
+    } }
+  })");
+  std::string errors;
+  EXPECT_TRUE(ValidateSchema(*schema, canonical, errors)) << errors;
+  for (const bool value : { false, true }) {
+    auto retired = canonical;
+    retired["environment"]["sky_light"]["real_time_capture_enabled"] = value;
+    EXPECT_FALSE(ValidateSchema(*schema, retired, errors));
+  }
+  auto previous = canonical;
+  previous["version"] = 7;
+  EXPECT_FALSE(ValidateSchema(*schema, previous, errors));
+}

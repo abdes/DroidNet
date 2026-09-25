@@ -11,7 +11,8 @@
 #include "Vortex/Contracts/View/ViewConstants.hlsli"
 
 #include "Vortex/Contracts/Scene/SceneTextures.hlsli"
-#include "Vortex/Services/Environment/AtmosphereParityCommon.hlsli"
+#include "Vortex/Services/Environment/SkyRadiance.hlsli"
+#include "Vortex/Services/Environment/HeightFog.hlsli"
 #include "Vortex/Services/Environment/ParityTransmittance.hlsli"
 #include "Vortex/Services/Environment/AtmosphereUeMirrorCommon.hlsli"
 #include "Vortex/Shared/FullscreenTriangle.hlsli"
@@ -74,62 +75,6 @@ static const uint kEnvironmentViewFlagReflectionCapture = 1u << 1u;
 static inline bool IsReflectionCaptureView(EnvironmentViewData environment_view)
 {
     return (environment_view.flags & kEnvironmentViewFlagReflectionCapture) != 0u;
-}
-
-static inline float2 ResolveSkyViewUvFromLocalDirection(
-    EnvironmentStaticData env_data,
-    EnvironmentViewData environment_view,
-    float3 view_direction_local,
-    out float view_height,
-    out float bottom_radius,
-    out float top_radius)
-{
-    view_height = environment_view.sky_planet_translated_world_center_km_and_view_height_km.w;
-    bottom_radius = env_data.atmosphere.planet_radius_km;
-    top_radius = env_data.atmosphere.planet_radius_km + env_data.atmosphere.atmosphere_height_km;
-
-    const float view_zenith_cos_angle = view_direction_local.z;
-    const bool intersect_ground = RaySphereIntersectNearest(
-        float3(0.0f, 0.0f, view_height),
-        view_direction_local,
-        bottom_radius) >= 0.0f;
-    const float2 sky_view_lut_inv_size = float2(
-        env_data.atmosphere.sky_view_lut_width > 0.0f
-            ? rcp(env_data.atmosphere.sky_view_lut_width)
-            : 0.0f,
-        env_data.atmosphere.sky_view_lut_height > 0.0f
-            ? rcp(env_data.atmosphere.sky_view_lut_height)
-            : 0.0f);
-    const float2 sky_view_lut_size = float2(
-        env_data.atmosphere.sky_view_lut_width,
-        env_data.atmosphere.sky_view_lut_height);
-    return SkyViewLutParamsToUv(
-        intersect_ground,
-        view_zenith_cos_angle,
-        view_direction_local,
-        view_height,
-        bottom_radius,
-        sky_view_lut_size,
-        sky_view_lut_inv_size);
-}
-
-static inline float2 ResolveSkyViewUv(
-    EnvironmentStaticData env_data,
-    EnvironmentViewData environment_view,
-    float3 view_direction,
-    out float3 view_direction_local,
-    out float view_height,
-    out float bottom_radius,
-    out float top_radius)
-{
-    view_direction_local = ApplySkyViewLutReferential(environment_view, view_direction);
-    return ResolveSkyViewUvFromLocalDirection(
-        env_data,
-        environment_view,
-        view_direction_local,
-        view_height,
-        bottom_radius,
-        top_radius);
 }
 
 static float3 GetAtmosphereTransmittance(
@@ -196,6 +141,12 @@ float4 VortexSkyPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
     }
 
     const float3 view_direction = ReconstructViewDirection(input.uv);
+    const EnvironmentViewData environment_view = LoadResolvedEnvironmentViewData();
+    const float4 height_fog = EvaluateSkyHeightFog(env_data, environment_view,
+        camera_position, view_direction, false);
+    if (IsSkyHeightFogEnabled(env_data.fog, environment_view, false))
+        RecordHdrConsumerInput(height_fog.rgb, HDR_INPUT_HEIGHT_FOG, HDR_CONSUMER_SKY_HEIGHT_FOG);
+    const float view_pre_exposure = GetPreExposure();
     if (env_data.sky_sphere.enabled != 0u)
     {
         float3 sky_color = 0.0f.xxx;
@@ -227,49 +178,31 @@ float4 VortexSkyPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
             * max(env_data.sky_sphere.intensity, 0.0f);
         CheckHdrStoreRange(float4(sky_color, 1.0), 7u,
             LoadViewFrameBindings(bindless_view_frame_bindings_slot).exposure_status_uav, 0u, 1.0);
-        return float4(max(sky_color, 0.0f.xxx) * GetPreExposure(), 1.0f);
+        sky_color = (max(sky_color, 0.0.xxx) * height_fog.a + height_fog.rgb) * view_pre_exposure;
+        CheckHdrStoreRange(float4(sky_color, 1.0), 7u,
+            LoadViewFrameBindings(bindless_view_frame_bindings_slot).exposure_status_uav, 0u, view_pre_exposure);
+        return float4(sky_color, 1.0);
     }
 
-    if (env_data.atmosphere.sky_view_lut_slot == K_INVALID_BINDLESS_INDEX)
+    if (env_data.atmosphere.enabled == 0u
+        || !BX_IN_TEXTURES(env_data.atmosphere.sky_view_lut_slot)
+        || !IsAtmosphereRenderedInMain(environment_view))
     {
-        discard;
+        if (!IsSkyHeightFogEnabled(env_data.fog, environment_view, false)) discard;
+        // Existing coverage composition places the display-only background
+        // behind this fog without admitting that background to sky lighting.
+        const float3 fog_color = height_fog.rgb * view_pre_exposure;
+        CheckHdrStoreRange(float4(fog_color, 1.0), 7u,
+            LoadViewFrameBindings(bindless_view_frame_bindings_slot).exposure_status_uav, 0u, view_pre_exposure);
+        return float4(fog_color, 1.0 - height_fog.a);
     }
 
-    const EnvironmentViewData environment_view = LoadResolvedEnvironmentViewData();
-    if (!IsAtmosphereRenderedInMain(environment_view))
-    {
-        discard;
-    }
-    float3 view_direction_local = 0.0f.xxx;
-    float view_height = 0.0f;
-    float bottom_radius = 0.0f;
-    float top_radius = 0.0f;
-    const float2 uv = ResolveSkyViewUv(
-        env_data,
-        environment_view,
-        view_direction,
-        view_direction_local,
-        view_height,
-        bottom_radius,
-        top_radius);
-
-    Texture2D<float4> sky_view_lut = ResourceDescriptorHeap[env_data.atmosphere.sky_view_lut_slot];
-    // UE5.7 samples the sky-view LUT with bilinear clamp. Even though sky-view
-    // azimuth is conceptually circular, keeping the shared clamp sampler here
-    // avoids drifting away from the LUT contract used by the rest of the
-    // atmosphere pipeline.
-    SamplerState linear_sampler
-        = SamplerDescriptorHeap[kAtmosphereLinearClampSampler];
-    const float view_pre_exposure = GetPreExposure();
+    const float view_height = environment_view.sky_planet_translated_world_center_km_and_view_height_km.w;
+    const float3 view_direction_local = ApplySkyViewLutReferential(environment_view, view_direction);
     RecordHdrConsumerUsage(HDR_CONSUMER_SKY,
         environment_view.sky_luminance_factor_height_fog_contribution.xyz);
-    const float4 sky_sample = sky_view_lut.SampleLevel(linear_sampler, uv, 0.0f);
-    float3 sky_color = sky_sample.rgb
-        * environment_view.sky_luminance_factor_height_fog_contribution.xyz;
-    CheckHdrStoreRange(float4(sky_color, sky_sample.a), 7u,
-        LoadViewFrameBindings(bindless_view_frame_bindings_slot).exposure_status_uav,
-        0u, view_pre_exposure);
-    sky_color = max(sky_color, 0.0f.xxx);
+    const float4 sky_sample = SampleSkyViewRadiance(env_data, environment_view, view_direction);
+    float3 sky_color = max(sky_sample.rgb, 0.0.xxx);
 
     const float3 planet_center_to_camera = float3(0.0f, 0.0f, view_height);
     const bool reflection_capture_view = IsReflectionCaptureView(environment_view);
@@ -315,8 +248,9 @@ float4 VortexSkyPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
         sky_color += disk_luminance_pre_exposed;
     }
 
-    CheckHdrStoreRange(float4(sky_color, sky_sample.a), 7u,
+    sky_color = sky_color * height_fog.a + height_fog.rgb * view_pre_exposure;
+    CheckHdrStoreRange(float4(sky_color, 1.0), 7u,
         LoadViewFrameBindings(bindless_view_frame_bindings_slot).exposure_status_uav,
         0u, view_pre_exposure);
-    return float4(sky_color, sky_sample.a);
+    return float4(sky_color, 1.0);
 }

@@ -9,6 +9,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -559,6 +560,7 @@ NOLINT_TEST_F(AssetLoaderSceneTest,
       EXPECT_EQ(directional.size(), 1U);
       if (directional.size() == 1U) {
         EXPECT_EQ(directional[0].node_index, 1U);
+        EXPECT_EQ(directional[0].atmosphere_light_slot, 1U);
         EXPECT_EQ(directional[0].split_mode, 1U);
         EXPECT_FLOAT_EQ(directional[0].max_shadow_distance, 200.0F);
         EXPECT_FLOAT_EQ(directional[0].transition_fraction, 0.1F);
@@ -579,10 +581,10 @@ NOLINT_TEST_F(AssetLoaderSceneTest,
       EXPECT_TRUE(scene->HasEnvironmentBlock());
       const auto* env_header = scene->GetEnvironmentBlockHeader();
       EXPECT_NE(env_header, nullptr);
-      EXPECT_EQ(env_header->systems_count, 2U);
+      EXPECT_EQ(env_header->systems_count, 3U);
 
       const auto env_records = scene->GetEnvironmentSystemRecords();
-      EXPECT_EQ(env_records.size(), 2U);
+      EXPECT_EQ(env_records.size(), 3U);
 
       uint32_t expected_byte_size = static_cast<uint32_t>(
         sizeof(oxygen::data::pak::world::SceneEnvironmentBlockHeader));
@@ -602,6 +604,22 @@ NOLINT_TEST_F(AssetLoaderSceneTest,
               EnvironmentComponentType::kSkyAtmosphere));
         EXPECT_EQ(sky->header.record_size,
           sizeof(oxygen::data::pak::world::SkyAtmosphereEnvironmentRecord));
+      }
+
+      const auto sky_light = scene->TryGetSkyLightEnvironment();
+      EXPECT_TRUE(sky_light.has_value());
+      if (sky_light) {
+        EXPECT_EQ(sky_light->header.record_size, 88U);
+        EXPECT_EQ(sky_light->source, 0U);
+        EXPECT_FLOAT_EQ(sky_light->intensity, 3.25F);
+        EXPECT_FLOAT_EQ(sky_light->diffuse_intensity, 0.5F);
+        EXPECT_FLOAT_EQ(sky_light->specular_intensity, 1.5F);
+        EXPECT_FLOAT_EQ(sky_light->lower_hemisphere_color[0], 0.125F);
+        EXPECT_FLOAT_EQ(sky_light->volumetric_scattering_intensity, 0.75F);
+        EXPECT_EQ(sky_light->affect_reflections, 0U);
+        EXPECT_FLOAT_EQ(sky_light->source_cubemap_angle_radians, 1.25F);
+        EXPECT_EQ(sky_light->lower_hemisphere_is_solid_color, 0U);
+        EXPECT_FLOAT_EQ(sky_light->lower_hemisphere_blend_alpha, 0.375F);
       }
 
       const auto ppv = scene->TryGetPostProcessVolumeEnvironment();
@@ -804,3 +822,54 @@ NOLINT_TEST_F(AssetLoaderSceneTest, LoadAssetLooseCookedSceneLoads)
 }
 
 } // namespace
+
+NOLINT_TEST(
+  SceneVersionMigrationTest, PackedSceneV7IsRejectedBeforeDecodingRecords)
+{
+  oxygen::data::pak::world::SceneAssetDesc descriptor {};
+  descriptor.header.version = 7U;
+  auto bytes = std::vector<std::byte>(sizeof(descriptor));
+  std::memcpy(bytes.data(), &descriptor, sizeof(descriptor));
+  try {
+    const auto scene = oxygen::data::SceneAsset { oxygen::data::AssetKey {},
+      std::move(bytes) };
+    FAIL() << "Retired scene version was accepted";
+  } catch (const std::runtime_error& error) {
+    EXPECT_THAT(
+      error.what(), ::testing::HasSubstr("unsupported descriptor version"));
+  }
+}
+
+NOLINT_TEST(
+  SceneVersionMigrationTest, CurrentSceneRejectsRetiredSkyLightRecordSize)
+{
+  namespace world = oxygen::data::pak::world;
+  world::SceneAssetDesc descriptor {};
+  descriptor.header.version = world::kSceneAssetVersion;
+  descriptor.nodes = { sizeof(descriptor), 1U, sizeof(world::NodeRecord) };
+  descriptor.scene_strings.offset
+    = sizeof(descriptor) + sizeof(world::NodeRecord);
+  descriptor.scene_strings.size = 1U;
+  const auto environment_offset = descriptor.scene_strings.offset + 1U;
+  world::SceneEnvironmentBlockHeader environment {};
+  environment.byte_size = sizeof(environment) + 92U;
+  environment.systems_count = 1U;
+  world::SkyLightEnvironmentRecord retired {};
+  retired.header.record_size = 92U;
+  auto bytes
+    = std::vector<std::byte>(environment_offset + environment.byte_size);
+  std::memcpy(bytes.data(), &descriptor, sizeof(descriptor));
+  const world::NodeRecord node {};
+  std::memcpy(bytes.data() + descriptor.nodes.offset, &node, sizeof(node));
+  std::memcpy(
+    bytes.data() + environment_offset, &environment, sizeof(environment));
+  std::memcpy(bytes.data() + environment_offset + sizeof(environment), &retired,
+    sizeof(retired));
+  try {
+    const auto scene = oxygen::data::SceneAsset { oxygen::data::AssetKey {},
+      std::move(bytes) };
+    FAIL() << "Retired SkyLight record was accepted";
+  } catch (const std::runtime_error& error) {
+    EXPECT_THAT(error.what(), ::testing::HasSubstr("environment record"));
+  }
+}

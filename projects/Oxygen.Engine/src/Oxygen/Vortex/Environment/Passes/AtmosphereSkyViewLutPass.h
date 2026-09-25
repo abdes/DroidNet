@@ -12,6 +12,7 @@
 
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Graphics/Common/Registration.h>
 #include <Oxygen/Vortex/Types/EnvironmentViewData.h>
 #include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
 #include <Oxygen/Vortex/api_export.h>
@@ -76,7 +77,23 @@ namespace environment {
       const internal::StableAtmosphereState& stable_state,
       const internal::AtmosphereLutCache& cache) -> RecordState;
 
+    //! Writes a scene-linear LUT to caller-owned managed storage at the
+    //! supplied capture referential, independent of the current camera/view.
+    [[nodiscard]] OXGN_VRTX_API auto RecordCapture(RenderContext& ctx,
+      graphics::CommandRecorder& recorder, const EnvironmentViewData& view_data,
+      const internal::StableAtmosphereState& stable_state,
+      const internal::AtmosphereLutCache& cache,
+      const std::shared_ptr<graphics::Texture>& target,
+      const graphics::RegistrationLease& registration) -> RecordState;
+
   private:
+    auto RecordToTarget(RenderContext& ctx, graphics::CommandRecorder& recorder,
+      const EnvironmentViewData& view_data,
+      const internal::StableAtmosphereState& stable_state,
+      const internal::AtmosphereLutCache& cache,
+      const std::shared_ptr<graphics::Texture>& texture,
+      ShaderVisibleIndex sky_view_srv, ShaderVisibleIndex sky_view_uav,
+      bool capture) -> RecordState;
     friend struct ::oxygen::vortex::testing::RendererPublicationProbe;
     struct alignas(16) OutputHeader {
       std::uint32_t output_texture_uav { 0U };
@@ -156,7 +173,7 @@ namespace environment {
     };
 
     Renderer& renderer_;
-    upload::TransientStructuredBuffer pass_constants_buffer_;
+    std::shared_ptr<upload::TransientStructuredBuffer> pass_constants_buffer_;
     std::unique_ptr<::oxygen::vortex::internal::RetainedTexturePool>
       output_pool_;
     std::vector<std::shared_ptr<graphics::Texture>> live_textures_;

@@ -61,6 +61,63 @@ namespace {
     }
   }
 
+  NOLINT_TEST_F(LightingGpuAbiTest, IblPrecisionMetadataDecodesAdjacentRecords)
+  {
+    auto records = std::array<IblProductMetadata, 2> {};
+    records[1].maximum_half_gain = 0.125F;
+    records[1].precision_flags = environment::kIblHalfCertificateComplete;
+    records[1].processed_half_srv = 0x12345678U;
+    records[1].specular_half_srv = 0x87654321U;
+    EXPECT_EQ(Decode({ .records = std::as_bytes(std::span(records)),
+                .stride = sizeof(IblProductMetadata),
+                .record_kind = 36U,
+                .decoded_words = 4U,
+                .first_element = 1U,
+                .count = 1U }),
+      (std::vector<std::uint32_t> { std::bit_cast<std::uint32_t>(0.125F),
+        environment::kIblHalfCertificateComplete, 0x12345678U, 0x87654321U }));
+  }
+
+  NOLINT_TEST_F(
+    LightingGpuAbiTest, IblHalfSelectionRejectsUnqualifiedAndNonfiniteGains)
+  {
+    struct Input {
+      IblProductMetadata metadata;
+      std::array<float, 3> gain { 1.0F, 1.0F, 1.0F };
+      std::uint32_t revision { 77U };
+    };
+    static_assert(sizeof(Input) == 48U);
+    constexpr auto half_srv = bindless::generated::kTexturesShaderIndexBase;
+    auto valid = Input { .metadata
+      = { 4.0F, 1.0F, 3U, 77U, 1.0F, environment::kIblHalfCertificateComplete,
+        half_srv, half_srv } };
+    auto inputs = std::array<Input, 12> {};
+    inputs.fill(valid);
+    inputs[1].metadata.precision_flags = 0U;
+    inputs[2].metadata.precision_flags = 3U;
+    inputs[3].revision = 78U;
+    inputs[4].metadata.specular_half_srv = kInvalidBindlessIndex;
+    inputs[5].metadata.maximum_half_gain
+      = std::numeric_limits<float>::quiet_NaN();
+    inputs[6].gain[1] = std::numeric_limits<float>::infinity();
+    inputs[7].gain[2] = -1.0F;
+    inputs[8].gain[0] = std::bit_cast<float>(0x3f800001U);
+    inputs[9].metadata.maximum_half_gain = 0.0F;
+    inputs[9].gain = { 0.0F, -0.0F, 0.0F };
+    inputs[10] = inputs[9];
+    inputs[10].gain[0] = std::bit_cast<float>(1U);
+    inputs[11].metadata.processing_flags = environment::kIblProductFinite;
+    const auto result = Decode({ .records = std::as_bytes(std::span(inputs)),
+      .stride = sizeof(Input),
+      .record_kind = 38U,
+      .decoded_words = 1U,
+      .count = static_cast<std::uint32_t>(inputs.size()) });
+    for (auto i = 0U; i < inputs.size(); ++i) {
+      SCOPED_TRACE(i);
+      EXPECT_EQ(result[i], i == 0U || i == 9U ? half_srv : 123U);
+    }
+  }
+
   NOLINT_TEST_F(LightingGpuAbiTest, IblEnvironmentAbiDecodesAdjacentRecords)
   {
     auto records = std::array<EnvironmentStaticData, 2> {};
@@ -82,8 +139,8 @@ namespace {
 
     auto bindings = std::array<EnvironmentFrameBindings, 2> {};
     bindings[1].probes.product_metadata_srv = ShaderVisibleIndex { 123U };
-    bindings[1].evaluation.ambient_intensity = 4.0F;
-    bindings[1].ambient_bridge.flags = 0x80000001U;
+    bindings[1].brdf_lut_srv = ShaderVisibleIndex { 456U };
+    bindings[1].padding = 0x80000001U;
     EXPECT_EQ(Decode({
                 .records = std::as_bytes(std::span(bindings)),
                 .stride = sizeof(EnvironmentFrameBindings),
@@ -92,8 +149,7 @@ namespace {
                 .first_element = 1U,
                 .count = 1U,
               }),
-      (std::vector<std::uint32_t> {
-        123U, std::bit_cast<std::uint32_t>(4.0F), 0x80000001U }));
+      (std::vector<std::uint32_t> { 123U, 456U, 0x80000001U }));
   }
 
   NOLINT_TEST_F(LightingGpuAbiTest, IblRoughnessMappingAndNearBlackMetalFresnel)

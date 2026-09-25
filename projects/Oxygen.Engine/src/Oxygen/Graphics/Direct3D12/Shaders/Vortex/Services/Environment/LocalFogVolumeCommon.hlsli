@@ -494,7 +494,7 @@ static inline float3 EvaluateLocalFogVolumeInScattering(
             float3(0.0f, 0.0f, 1.0f),
             -ray_dir_world,
             saturate(abs(instance.phase_g))));
-        const float3 sky_lighting = EvaluateStaticSkyLightDiffuseSh(
+        const float3 sky_lighting = EvaluateSkyDiffuseIrradiance(
             env_data, sky_direction);
         in_scattering += sky_lighting
             * env_data.sky_light.tint_rgb

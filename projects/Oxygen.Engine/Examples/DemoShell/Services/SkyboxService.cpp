@@ -9,6 +9,8 @@
 #include <filesystem>
 #include <string>
 
+#include "DemoShell/Services/SkyboxService.h"
+
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Cooker/Import/TextureImporter.h>
 #include <Oxygen/Cooker/Import/TexturePackingPolicy.h>
@@ -17,8 +19,6 @@
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyLight.h>
 #include <Oxygen/Scene/Environment/SkySphere.h>
-
-#include "DemoShell/Services/SkyboxService.h"
 
 namespace oxygen::examples {
 namespace {
@@ -346,7 +346,6 @@ auto SkyboxService::ApplyToScene(const SkyLightParams& params) -> void
       sky_light.SetIntensityMul(params.intensity_mul);
       sky_light.SetDiffuseIntensity(params.diffuse_intensity);
       sky_light.SetSpecularIntensity(params.specular_intensity);
-      sky_light.SetRealTimeCaptureEnabled(params.real_time_capture_enabled);
       sky_light.SetTintRgb(params.tint_rgb);
     }
 
@@ -377,7 +376,6 @@ auto SkyboxService::ApplyToScene(const SkyLightParams& params) -> void
       sky_light->SetIntensityMul(params.intensity_mul);
       sky_light->SetDiffuseIntensity(params.diffuse_intensity);
       sky_light->SetSpecularIntensity(params.specular_intensity);
-      sky_light->SetRealTimeCaptureEnabled(params.real_time_capture_enabled);
       sky_light->SetTintRgb(params.tint_rgb);
     }
   }
@@ -425,7 +423,6 @@ auto SkyboxService::UpdateSkyLightParams(const SkyLightParams& params) -> void
     sky_light->SetIntensityMul(params.intensity_mul);
     sky_light->SetDiffuseIntensity(params.diffuse_intensity);
     sky_light->SetSpecularIntensity(params.specular_intensity);
-    sky_light->SetRealTimeCaptureEnabled(params.real_time_capture_enabled);
     sky_light->SetTintRgb(params.tint_rgb);
   }
 }

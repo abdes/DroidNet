@@ -507,6 +507,7 @@ if(WIN32)
       "Exposure/Fp32Only_test.cpp"
       "Exposure/Fp32Reference_test.cpp"
       "Exposure/FrameDomain_test.cpp"
+      "Exposure/IblSurface_test.cpp"
       "Exposure/LightingRadiance_test.cpp"
       "Exposure/LocalFog_test.cpp"
       "Exposure/Masks_test.cpp"

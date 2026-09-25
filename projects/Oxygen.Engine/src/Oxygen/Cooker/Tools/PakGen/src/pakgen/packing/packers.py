@@ -605,6 +605,8 @@ def _pack_volumetric_clouds_environment_record(spec: Dict[str, Any]) -> bytes:
 
 
 def _pack_sky_light_environment_record(spec: Dict[str, Any]) -> bytes:
+    if "real_time_capture_enabled" in spec:
+        raise PakError("E_FIELD", "SkyLight real_time_capture_enabled was retired in scene v8; migrate and re-cook")
     enabled = _u32_bool(spec.get("enabled"), 1)
     source = int(spec.get("source", 0) or 0)
     cubemap = _asset_key_bytes(spec.get("cubemap_asset"))
@@ -612,9 +614,6 @@ def _pack_sky_light_environment_record(spec: Dict[str, Any]) -> bytes:
     tint = _vec3(spec.get("tint_rgb", [1.0, 1.0, 1.0]), [1.0, 1.0, 1.0])
     diffuse = _f(spec.get("diffuse_intensity"), 1.0)
     specular = _f(spec.get("specular_intensity"), 1.0)
-    real_time_capture_enabled = _u32_bool(
-        spec.get("real_time_capture_enabled"), 0
-    )
     source_cubemap_angle_radians = _f(
         spec.get("source_cubemap_angle_radians"), 0.0
     )
@@ -633,7 +632,7 @@ def _pack_sky_light_environment_record(spec: Dict[str, Any]) -> bytes:
     )
     affect_reflections = _u32_bool(spec.get("affect_reflections"), 1)
 
-    record_size = 92
+    record_size = 88
     out = (
         _pack_env_record_header(_ENV_SYSTEM_SKY_LIGHT, record_size)
         + struct.pack("<I", int(enabled))
@@ -643,7 +642,6 @@ def _pack_sky_light_environment_record(spec: Dict[str, Any]) -> bytes:
         + struct.pack("<3f", *tint)
         + struct.pack("<f", diffuse)
         + struct.pack("<f", specular)
-        + struct.pack("<I", int(real_time_capture_enabled))
         + struct.pack("<3f", *lower_hemisphere_color)
         + struct.pack("<f", volumetric_scattering_intensity)
         + struct.pack("<I", int(affect_reflections))

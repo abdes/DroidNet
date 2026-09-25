@@ -138,7 +138,7 @@ def test_build_pak_with_scene_asset(tmp_path: Path):
     assert seen_scene
 
     scene_desc = _extract_scene_descriptor(data)
-    assert scene_desc[65] == 6
+    assert scene_desc[65] == 8
 
     tables = _extract_scene_component_tables(scene_desc)
     assert len(tables) == 1
@@ -164,7 +164,7 @@ def test_build_pak_with_current_environment_and_local_fog_scene_asset(tmp_path: 
                 "type": "scene",
                 "name": "SceneEnvironmentV3",
                 "asset_key": "33" * 16,
-                "version": 6,
+                "version": 8,
                 "nodes": [
                     {"name": "Root", "parent": None},
                     {"name": "FogNode", "parent": 0},
@@ -219,7 +219,6 @@ def test_build_pak_with_current_environment_and_local_fog_scene_asset(tmp_path: 
                         "tint_rgb": [0.8, 0.9, 1.0],
                         "diffuse_intensity": 1.1,
                         "specular_intensity": 1.2,
-                        "real_time_capture_enabled": True,
                         "source_cubemap_angle_radians": 0.75,
                         "lower_hemisphere_color": [0.1, 0.2, 0.3],
                         "lower_hemisphere_is_solid_color": False,
@@ -253,11 +252,11 @@ def test_build_pak_with_current_environment_and_local_fog_scene_asset(tmp_path: 
     build_pak(BuildOptions(input_spec=spec_path, output_path=out_path))
     scene_desc = _extract_scene_descriptor(out_path.read_bytes())
 
-    assert scene_desc[65] == 6
+    assert scene_desc[65] == 8
     assert b"LFOG" in scene_desc
 
 
-@pytest.mark.parametrize("version", [0, 1, 2, 3, 4, 5, 7])
+@pytest.mark.parametrize("version", [0, 1, 2, 3, 4, 5, 6, 7])
 def test_scene_validation_rejects_non_current_scene_asset_version(version):
     spec = {
         "source_identity": "01a0a760-49b9-725c-b553-6b790ce19442",

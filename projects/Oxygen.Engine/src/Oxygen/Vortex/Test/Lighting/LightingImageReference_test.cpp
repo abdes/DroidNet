@@ -276,8 +276,7 @@ namespace {
             ->GetLastDeferredLightingState();
       EXPECT_EQ(state.point_light_count, 4U);
       EXPECT_EQ(state.punctual_point_light_draw_count, 2U);
-      EXPECT_LE(state.pipeline_bind_count,
-        state.directional_draw_count + state.static_sky_light_draw_count + 2U);
+      EXPECT_LE(state.pipeline_bind_count, state.directional_draw_count + 2U);
     };
     for (const bool reverse : { false, true }) {
       const auto radii = std::array { 0.0F, 0.5F, 1.0e-6F, 0.0F };

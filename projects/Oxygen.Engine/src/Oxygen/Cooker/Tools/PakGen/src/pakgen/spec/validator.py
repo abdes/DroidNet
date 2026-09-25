@@ -1306,6 +1306,12 @@ def _semantic_phase(spec: Dict[str, Any]) -> List[ValidationErrorRecord]:
                 f"scenes[{si}].environment",
             )
 
+        if isinstance(environment, dict):
+            sky_light = environment.get("sky_light")
+            if isinstance(sky_light, dict) and "real_time_capture_enabled" in sky_light:
+                _err(errors, "E_FIELD", "SkyLight real_time_capture_enabled was retired in scene v8; migrate and re-cook",
+                     f"scenes[{si}].environment.sky_light.real_time_capture_enabled")
+
         local_fog_volumes = s.get("local_fog_volumes", []) or []
         if not isinstance(local_fog_volumes, list):
             _err(

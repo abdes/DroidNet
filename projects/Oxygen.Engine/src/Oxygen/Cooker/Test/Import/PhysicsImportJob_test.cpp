@@ -67,7 +67,7 @@ namespace {
     request.loose_cooked_layout.virtual_mount_root = "/.cooked";
     request.scene_descriptor = ImportRequest::SceneDescriptorPayload {
       .normalized_descriptor_json
-      = R"({"version":6,"name":"DemoScene","nodes":[{"name":"Root"}]})",
+      = R"({"version":8,"name":"DemoScene","nodes":[{"name":"Root"}]})",
     };
     return request;
   }

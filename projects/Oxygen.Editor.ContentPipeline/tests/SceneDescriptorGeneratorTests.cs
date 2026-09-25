@@ -115,7 +115,7 @@ public sealed partial class SceneDescriptorGeneratorTests
 
         using var document = JsonDocument.Parse(await File.ReadAllTextAsync(result.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false));
         var root = document.RootElement;
-        _ = root.GetProperty("version").GetInt32().Should().Be(7);
+        _ = root.GetProperty("version").GetInt32().Should().Be(8);
         _ = root.GetProperty("name").GetString().Should().Be("Main");
         _ = root.GetProperty("renderables")[0].GetProperty("geometry_ref").GetString()
             .Should().Be("/Content/Geometry/Engine_Generated_BasicShapes_Cube.ogeo");
@@ -183,8 +183,8 @@ public sealed partial class SceneDescriptorGeneratorTests
         _ = result.Diagnostics.Should().BeEmpty();
         using var document = JsonDocument.Parse(await File.ReadAllTextAsync(result.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false));
         var root = document.RootElement;
-        _ = root.GetProperty("$schema").GetString().Should().Be("oxygen.scene-descriptor.v7");
-        _ = root.GetProperty("version").GetInt32().Should().Be(7);
+        _ = root.GetProperty("$schema").GetString().Should().Be("oxygen.scene-descriptor.v8");
+        _ = root.GetProperty("version").GetInt32().Should().Be(8);
         var nodes = root.GetProperty("nodes");
         _ = nodes.GetArrayLength().Should().Be(2);
         _ = nodes[1].GetProperty("parent").GetInt32().Should().Be(0);

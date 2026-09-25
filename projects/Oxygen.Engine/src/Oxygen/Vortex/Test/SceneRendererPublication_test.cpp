@@ -1896,8 +1896,8 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
     first_current);
 }
 
-NOLINT_TEST_F(SceneRendererPublicationTest,
-  Stage15RunsThroughEnvironmentLightingServiceAndKeepsAmbientBridgeOptIn)
+NOLINT_TEST_F(
+  SceneRendererPublicationTest, Stage15RunsThroughEnvironmentLightingService)
 {
   auto scene_renderer = SceneRenderer(*renderer_, *graphics_,
     SceneTexturesConfig {
@@ -1988,9 +1988,7 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
     scene_renderer.GetPublishedViewFrameBindings().environment_frame_slot);
   EXPECT_GE(
     graphics_->draw_log_.draws.size(), environment_state.total_draw_count);
-  EXPECT_FALSE(environment_state.ambient_bridge_published);
-  EXPECT_EQ(environment_state.ambient_bridge_irradiance_srv,
-    oxygen::kInvalidShaderVisibleIndex);
+  EXPECT_EQ(environment_state.indirect_draw_count, 0U);
 
   const auto has_pipeline
     = [this](const std::string_view pipeline_name,
@@ -2023,7 +2021,7 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
   };
 
   EXPECT_TRUE(has_pipeline("Vortex.Environment.Sky",
-    "Vortex/Services/Environment/Sky.hlsl", "VortexSkyPassPS", false));
+    "Vortex/Services/Environment/Sky.hlsl", "VortexSkyPassPS", true));
   EXPECT_TRUE(has_pipeline("Vortex.Environment.Atmosphere",
     "Vortex/Services/Environment/AtmosphereCompose.hlsl",
     "VortexAtmosphereComposePS", true));
@@ -2075,6 +2073,8 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
     oxygen::observer_ptr {
       framebuffer.get(),
     });
+  render_context.frame_sequence = frame_context.GetFrameSequenceNumber();
+  render_context.frame_slot = frame_context.GetFrameSlot();
   auto composition_view = CompositionView {};
   composition_view.id = view_id;
   composition_view.with_atmosphere = true;

@@ -92,6 +92,7 @@ gtest_program(
     "PhotometryGpu_test.cpp"
     "BrdfGpu_test.cpp"
     "IblProductsGpu_test.cpp"
+    "HeightFogGpu_test.cpp"
     "IblConvolutionGpu_test.cpp"
     "Reference/GgxEnergyLookup.h"
     "FiniteEmitterGpu_test.cpp"

@@ -431,7 +431,6 @@ namespace {
       Vec3 { source.tint_rgb[0], source.tint_rgb[1], source.tint_rgb[2] });
     target.SetDiffuseIntensity(source.diffuse_intensity);
     target.SetSpecularIntensity(source.specular_intensity);
-    target.SetRealTimeCaptureEnabled(source.real_time_capture_enabled != 0U);
     target.SetSourceCubemapAngleRadians(source.source_cubemap_angle_radians);
     target.SetLowerHemisphereColor({
       source.lower_hemisphere_color[0],
@@ -581,8 +580,7 @@ namespace {
     = "env.sky_light.intensity_mul";
   constexpr std::string_view kSkyLightDiffuseKey = "env.sky_light.diffuse";
   constexpr std::string_view kSkyLightSpecularKey = "env.sky_light.specular";
-  constexpr std::string_view kSkyLightRealTimeCaptureKey
-    = "env.sky_light.real_time_capture_enabled";
+
   constexpr std::string_view kSkyLightLowerHemisphereColorKey
     = "env.sky_light.lower_hemisphere_color";
   constexpr std::string_view kSkyLightVolumetricScatteringIntensityKey
@@ -707,7 +705,7 @@ namespace {
     = "env.settings.schema_version";
   constexpr std::string_view kEnvironmentCustomStatePresentKey
     = "env.settings.custom_state_present";
-  constexpr float kCurrentSettingsSchemaVersion = 5.0F;
+  constexpr float kCurrentSettingsSchemaVersion = 6.0F;
   constexpr int kPresetUseScene = -2;
   constexpr int kPresetCustom = -1;
   constexpr std::uint32_t kFogDirtyMask = (1u << 2u) | (1u << 3u);
@@ -1999,22 +1997,6 @@ auto EnvironmentSettingsService::SetSkyLightSpecular(float value) -> void
     return;
   }
   sky_light_specular_ = value;
-  MarkDirty(ToMask(DirtyDomain::kSkyLight));
-}
-
-auto EnvironmentSettingsService::GetSkyLightRealTimeCaptureEnabled() const
-  -> bool
-{
-  return sky_light_real_time_capture_enabled_;
-}
-
-auto EnvironmentSettingsService::SetSkyLightRealTimeCaptureEnabled(
-  const bool enabled) -> void
-{
-  if (sky_light_real_time_capture_enabled_ == enabled) {
-    return;
-  }
-  sky_light_real_time_capture_enabled_ = enabled;
   MarkDirty(ToMask(DirtyDomain::kSkyLight));
 }
 
@@ -3524,7 +3506,6 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
     light->SetIntensityMul(sky_light_intensity_mul_);
     light->SetDiffuseIntensity(sky_light_diffuse_);
     light->SetSpecularIntensity(sky_light_specular_);
-    light->SetRealTimeCaptureEnabled(sky_light_real_time_capture_enabled_);
     light->SetSourceCubemapAngleRadians(
       sky_light_source_cubemap_angle_radians_);
     light->SetLowerHemisphereColor(sky_light_lower_hemisphere_color_);
@@ -3676,7 +3657,6 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
     sky_light_intensity_mul_ = light->GetIntensityMul();
     sky_light_diffuse_ = light->GetDiffuseIntensity();
     sky_light_specular_ = light->GetSpecularIntensity();
-    sky_light_real_time_capture_enabled_ = light->GetRealTimeCaptureEnabled();
     sky_light_source_cubemap_angle_radians_
       = light->GetSourceCubemapAngleRadians();
     sky_light_lower_hemisphere_color_ = light->GetLowerHemisphereColor();
@@ -4087,6 +4067,23 @@ auto EnvironmentSettingsService::LoadSettings(const bool custom_only) -> void
   const float loaded_schema_version
     = settings->GetFloat(kEnvironmentSettingsSchemaVersionKey).value_or(1.0F);
 
+  constexpr std::string_view retired_capture_key
+    = "env.sky_light.real_time_capture_enabled";
+  if (settings->Contains(retired_capture_key)) {
+    if (loaded_schema_version >= kCurrentSettingsSchemaVersion) {
+      throw std::runtime_error(
+        "Environment settings v6 do not accept real_time_capture_enabled");
+    }
+    settings->Remove(retired_capture_key);
+    // Persist only this migration. Saving the environment state here would
+    // overwrite stored custom controls while a built-in/scene profile is
+    // active.
+    if (loaded_schema_version == 5.0F)
+      settings->SetFloat(
+        kEnvironmentSettingsSchemaVersionKey, kCurrentSettingsSchemaVersion);
+    settings->Save();
+  }
+
   auto load_bool = [&](std::string_view key, bool& out) -> bool {
     if (const auto value = settings->GetBool(key)) {
       out = *value;
@@ -4261,8 +4258,7 @@ auto EnvironmentSettingsService::LoadSettings(const bool custom_only) -> void
       |= load_float(kSkyLightIntensityMulKey, sky_light_intensity_mul_);
     any_loaded |= load_float(kSkyLightDiffuseKey, sky_light_diffuse_);
     any_loaded |= load_float(kSkyLightSpecularKey, sky_light_specular_);
-    any_loaded |= load_bool(
-      kSkyLightRealTimeCaptureKey, sky_light_real_time_capture_enabled_);
+
     any_loaded |= load_vec3(
       kSkyLightLowerHemisphereColorKey, sky_light_lower_hemisphere_color_);
     any_loaded |= load_float(kSkyLightVolumetricScatteringIntensityKey,
@@ -4535,7 +4531,6 @@ auto EnvironmentSettingsService::SaveSettings() const -> void
   save_float(kSkyLightIntensityMulKey, sky_light_intensity_mul_);
   save_float(kSkyLightDiffuseKey, sky_light_diffuse_);
   save_float(kSkyLightSpecularKey, sky_light_specular_);
-  save_bool(kSkyLightRealTimeCaptureKey, sky_light_real_time_capture_enabled_);
   save_vec3(
     kSkyLightLowerHemisphereColorKey, sky_light_lower_hemisphere_color_);
   save_float(kSkyLightVolumetricScatteringIntensityKey,

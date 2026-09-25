@@ -75,7 +75,6 @@ public:
   float startup_sky_light_intensity_mul { 1.0F };
   float startup_sky_light_diffuse { 1.0F };
   float startup_sky_light_specular { 1.0F };
-  bool startup_sky_light_real_time_capture_enabled { false };
   glm::vec3 startup_sky_light_tint { 1.0F, 1.0F, 1.0F };
   bool startup_sky_light_lifecycle_proof_enabled { false };
   std::uint32_t startup_sky_light_lifecycle_disable_frame { 0U };

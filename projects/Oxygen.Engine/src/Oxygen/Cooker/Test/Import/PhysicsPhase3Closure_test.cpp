@@ -256,7 +256,7 @@ namespace {
       });
     }
     const auto descriptor = json {
-      { "version", 7 },
+      { "version", 8 },
       { "name", scene_name },
       { "nodes", std::move(nodes) },
     };

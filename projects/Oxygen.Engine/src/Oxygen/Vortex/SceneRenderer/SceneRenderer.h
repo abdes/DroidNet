@@ -22,7 +22,6 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Scene/Light/DirectionalLightResolver.h>
 #include <Oxygen/Vortex/CompositionView.h>
-#include <Oxygen/Vortex/Environment/Types/EnvironmentAmbientBridgeBindings.h>
 #include <Oxygen/Vortex/Lighting/Types/FrameLightingInputs.h>
 #include <Oxygen/Vortex/Lighting/Types/LightingPreparationFailure.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
@@ -71,6 +70,7 @@ class PostProcessService;
 struct ExposureSourceLoss;
 class GroundGridPass;
 class EnvironmentLightingService;
+class IndirectLightingService;
 class ScreenHzbModule;
 class OcclusionModule;
 class TranslucencyModule;
@@ -88,7 +88,6 @@ public:
     bool used_outside_volume_local_lights { false };
     bool used_camera_inside_local_lights { false };
     bool used_non_perspective_local_lights { false };
-    bool consumed_static_sky_light_product { false };
     std::uint32_t consumed_scene_depth_srv {
       SceneTextureBindings::kInvalidIndex,
     };
@@ -102,7 +101,6 @@ public:
       SceneTextureBindings::kInvalidIndex,
     };
     std::uint32_t directional_light_count { 0U };
-    std::uint32_t static_sky_light_draw_count { 0U };
     std::uint32_t point_light_count { 0U };
     std::uint32_t spot_light_count { 0U };
     std::uint32_t local_light_count { 0U };
@@ -307,6 +305,7 @@ private:
   std::unique_ptr<LightingService> lighting_;
   std::unique_ptr<ShadowService> shadows_;
   std::unique_ptr<EnvironmentLightingService> environment_;
+  std::unique_ptr<IndirectLightingService> indirect_;
   std::unique_ptr<GroundGridPass> ground_grid_pass_;
   std::unique_ptr<PostProcessService> post_process_;
 };

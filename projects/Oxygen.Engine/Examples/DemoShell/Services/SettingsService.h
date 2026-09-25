@@ -91,6 +91,9 @@ public:
   //! Sets a boolean stored under the given key.
   auto SetBool(std::string_view key, bool value) -> void;
 
+  //! Checks key presence independently of its stored JSON type.
+  [[nodiscard]] auto Contains(std::string_view key) const -> bool;
+
   //! Removes a stored key if it exists.
   auto Remove(std::string_view key) -> bool;
 

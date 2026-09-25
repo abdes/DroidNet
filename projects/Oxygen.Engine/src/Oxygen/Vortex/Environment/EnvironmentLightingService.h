@@ -62,6 +62,7 @@ namespace environment {
     class AtmosphereLightState;
     class AtmosphereLutCache;
     class IblProcessor;
+    struct IblGpuProducts;
     class LocalFogVolumeState;
   }
 } // namespace environment
@@ -97,7 +98,6 @@ public:
     std::uint32_t published_view_count { 0U };
     std::uint32_t published_environment_view_count { 0U };
     std::uint32_t published_environment_view_products_count { 0U };
-    std::uint32_t ambient_bridge_view_count { 0U };
     std::uint32_t probe_revision { 0U };
     bool sky_light_authored_enabled { false };
     bool sky_light_ibl_valid { false };
@@ -284,13 +284,12 @@ public:
     ShaderVisibleIndex environment_static_slot,
     ShaderVisibleIndex environment_view_slot,
     ShaderVisibleIndex environment_view_products_slot,
-    const environment::EnvironmentViewProducts& view_products,
-    bool enable_ambient_bridge) const -> EnvironmentFrameBindings;
+    const environment::EnvironmentViewProducts& view_products) const
+    -> EnvironmentFrameBindings;
   OXGN_VRTX_API auto PublishEnvironmentBindings(RenderContext& ctx,
     graphics::CommandRecorder& recorder,
     ShaderVisibleIndex environment_static_slot = kInvalidShaderVisibleIndex,
     ShaderVisibleIndex environment_view_slot = kInvalidShaderVisibleIndex,
-    bool enable_ambient_bridge = false,
     const SceneTextures* scene_textures = nullptr) -> ShaderVisibleIndex;
   OXGN_VRTX_API auto RenderSkyAndFog(RenderContext& ctx,
     graphics::CommandRecorder& recorder, const SceneTextures& scene_textures)
@@ -353,6 +352,7 @@ private:
     EnvironmentViewData view_data {};
     environment::EnvironmentViewProducts view_products {};
     ViewRadianceResources radiance;
+    std::shared_ptr<const environment::internal::IblGpuProducts> ibl;
   };
 
   auto EnsurePublishResources() -> bool;
@@ -410,7 +410,7 @@ private:
   std::unique_ptr<environment::AtmosphereCameraAerialPerspectivePass>
     camera_aerial_perspective_pass_;
   std::unique_ptr<environment::VolumetricFogPass> volumetric_fog_pass_;
-  std::unique_ptr<resources::TextureBinder> sky_texture_binder_;
+  std::shared_ptr<resources::TextureBinder> sky_texture_binder_;
   environment::VolumetricFogPass::RecordState pending_volumetric_fog_state_ {};
   environment::LocalFogVolumeTiledCullingPass::RecordState
     pending_local_fog_culling_state_ {};

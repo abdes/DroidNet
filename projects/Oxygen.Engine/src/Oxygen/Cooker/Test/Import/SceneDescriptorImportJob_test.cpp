@@ -170,7 +170,7 @@ namespace {
       = oxygen::Finally([&service] { service.Stop(); });
     const auto root = MakeTempCookedRoot("mask_reference");
     constexpr auto kDescriptor
-      = R"({"version":7,"name":"MaskScene","nodes":[{}],
+      = R"({"version":8,"name":"MaskScene","nodes":[{}],
       "environment":{"post_process_volume":{"auto_exposure_metering_mask":"/.cooked/Textures/Meter.otex"}}})";
     WriteMeteringMaskSidecar(root, Format::kRGBA8UNorm, 4U);
     const auto success = SubmitAndWait(service, MakeRequest(root, kDescriptor));
@@ -212,7 +212,7 @@ namespace {
     [[maybe_unused]] const auto stop
       = oxygen::Finally([&service] { service.Stop(); });
     const auto report = SubmitAndWait(service, MakeRequest(root, R"({
-      "version": 7, "name": "Physical", "nodes": [{}, {}, {}, {}],
+      "version": 8, "name": "Physical", "nodes": [{}, {}, {}, {}],
       "cameras": {
         "perspective": [
           {"node":0,"aperture_f":2.8,"shutter_rate":250,"iso":400},
@@ -264,7 +264,7 @@ namespace {
                { { "metered_ev", 0 }, { "compensation_ev", 2 } } } } },
            { { "exposure_compensation_ev", 10000 } } }) {
       auto document = nlohmann::json::parse(
-        R"({"version":7,"name":"Invalid","nodes":[{}]})");
+        R"({"version":8,"name":"Invalid","nodes":[{}]})");
       document["environment"]["post_process_volume"] = invalid;
       SCOPED_TRACE(document.dump());
       const auto report
@@ -286,7 +286,7 @@ namespace {
     [[maybe_unused]] const auto stop
       = oxygen::Finally([&service] { service.Stop(); });
     const auto report = SubmitAndWait(service, MakeRequest(root, R"({
-      "version": 7,
+      "version": 8,
       "name": "Flags",
       "nodes": [
         {"name":"HiddenRoot", "flags":{
@@ -344,7 +344,7 @@ namespace {
     auto service = AsyncImportService {};
     const auto stop_service = oxygen::Finally([&service] { service.Stop(); });
     const auto descriptor
-      = R"({"version":7,"name":"Scene","nodes":[{"name":"Mesh"}],
+      = R"({"version":8,"name":"Scene","nodes":[{"name":"Mesh"}],
       "renderables":[{"node":0,"geometry_ref":"/Art/Geometry/Mesh.ogeo"}]})";
     for (const auto own_wins : { false, true }) {
       auto request = MakeRequest(output, descriptor);
@@ -379,7 +379,7 @@ namespace {
     auto service = AsyncImportService {};
     const auto stop_service = oxygen::Finally([&service] { service.Stop(); });
     const auto descriptor
-      = R"({"version":7,"name":"Scene","nodes":[{"name":"Mesh"}],
+      = R"({"version":8,"name":"Scene","nodes":[{"name":"Mesh"}],
       "renderables":[{"node":0,"geometry_ref":"/Art/Geometry/Mesh.ogeo"}]})";
     for (const auto own_wins : { true, false }) {
       auto request = MakeRequest(output, descriptor);
@@ -415,7 +415,7 @@ namespace {
     auto service = AsyncImportService {};
     const auto stop_service = oxygen::Finally([&service] { service.Stop(); });
     auto request = MakeRequest(
-      output, R"({"version":7,"name":"Scene","nodes":[{"name":"Mesh"}],
+      output, R"({"version":8,"name":"Scene","nodes":[{"name":"Mesh"}],
       "renderables":[{"node":0,"geometry_ref":"/Art/Geometry/Mesh.ogeo"}]})");
     request.cooked_context_roots = { library };
     const auto report = SubmitAndWait(service, std::move(request));
@@ -441,7 +441,7 @@ namespace {
     });
 
     const auto report = SubmitAndWait(service, MakeRequest(cooked_root, R"({
-      "version": 7,
+      "version": 8,
       "name": "DemoScene",
       "nodes": [
         { "name": "Root" },
@@ -497,7 +497,7 @@ namespace {
     });
 
     const auto report = SubmitAndWait(service, MakeRequest(cooked_root, R"({
-      "version": 7,
+      "version": 8,
       "name": "DemoScene",
       "nodes": [
         { "name": "Root" },
@@ -527,7 +527,7 @@ namespace {
     });
 
     const auto report = SubmitAndWait(service, MakeRequest(cooked_root, R"({
-      "version": 7,
+      "version": 8,
       "name": "DirectionalTuning",
       "nodes": [
         { "name": "Root" },
@@ -585,9 +585,12 @@ namespace {
     EXPECT_EQ(directional[0].common.shadow.resolution_hint, 3U);
     EXPECT_EQ(directional[0].atmosphere_light_slot, 2U);
     EXPECT_EQ(directional[0].use_per_pixel_atmosphere_transmittance, 1U);
-    EXPECT_FLOAT_EQ(directional[0].atmosphere_disk_luminance_scale_rgb[0], 0.5F);
-    EXPECT_FLOAT_EQ(directional[0].atmosphere_disk_luminance_scale_rgb[1], 1.0F);
-    EXPECT_FLOAT_EQ(directional[0].atmosphere_disk_luminance_scale_rgb[2], 2.0F);
+    EXPECT_FLOAT_EQ(
+      directional[0].atmosphere_disk_luminance_scale_rgb[0], 0.5F);
+    EXPECT_FLOAT_EQ(
+      directional[0].atmosphere_disk_luminance_scale_rgb[1], 1.0F);
+    EXPECT_FLOAT_EQ(
+      directional[0].atmosphere_disk_luminance_scale_rgb[2], 2.0F);
     EXPECT_FLOAT_EQ(directional[0].angular_size_radians, 0.02F);
     EXPECT_FLOAT_EQ(directional[0].intensity_lux, 10000.0F);
     EXPECT_EQ(directional[0].split_mode, 1U);
@@ -606,24 +609,44 @@ namespace {
     ASSERT_EQ(descriptor.component_table_count, 1U);
     SceneComponentTableDesc table {};
     std::memcpy(&table,
-      scene_bytes.data() + descriptor.component_table_directory_offset, sizeof(table));
+      scene_bytes.data() + descriptor.component_table_directory_offset,
+      sizeof(table));
     for (unsigned malformed = 0U; malformed < 8U; ++malformed) {
       SCOPED_TRACE(malformed);
       auto record = directional[0];
       switch (malformed) {
-      case 0: record.common.affects_world = 2U; break;
-      case 1: record.common.shadow.contact_shadows = 2U; break;
-      case 2: record.common.shadow.resolution_hint = 4U; break;
-      case 3: record.atmosphere_light_slot = 3U; break;
-      case 4: record.use_per_pixel_atmosphere_transmittance = 2U; break;
-      case 5: record.intensity_lux = std::numeric_limits<float>::infinity(); break;
-      case 6: record.cascade_distances[1] = record.cascade_distances[0]; break;
-      default: record.atmosphere_disk_luminance_scale_rgb[1] = -1.0F; break;
+      case 0:
+        record.common.affects_world = 2U;
+        break;
+      case 1:
+        record.common.shadow.contact_shadows = 2U;
+        break;
+      case 2:
+        record.common.shadow.resolution_hint = 4U;
+        break;
+      case 3:
+        record.atmosphere_light_slot = 3U;
+        break;
+      case 4:
+        record.use_per_pixel_atmosphere_transmittance = 2U;
+        break;
+      case 5:
+        record.intensity_lux = std::numeric_limits<float>::infinity();
+        break;
+      case 6:
+        record.cascade_distances[1] = record.cascade_distances[0];
+        break;
+      default:
+        record.atmosphere_disk_luminance_scale_rgb[1] = -1.0F;
+        break;
       }
       auto malformed_bytes = scene_bytes;
-      std::memcpy(malformed_bytes.data() + table.table.offset, &record, sizeof(record));
-      EXPECT_THROW(static_cast<void>(oxygen::data::SceneAsset(
-        oxygen::data::AssetKey {}, std::span<const std::byte>(malformed_bytes))), std::exception);
+      std::memcpy(
+        malformed_bytes.data() + table.table.offset, &record, sizeof(record));
+      EXPECT_THROW(
+        static_cast<void>(oxygen::data::SceneAsset(oxygen::data::AssetKey {},
+          std::span<const std::byte>(malformed_bytes))),
+        std::exception);
     }
 
     service.Stop();
@@ -662,7 +685,7 @@ namespace {
     });
 
     const auto report = SubmitAndWait(service, MakeRequest(cooked_root, R"({
-      "version": 7,
+      "version": 8,
       "name": "EnvironmentScene",
       "nodes": [
         { "name": "Root" },
@@ -718,7 +741,6 @@ namespace {
           "tint_rgb": [0.8, 0.9, 1.0],
           "diffuse_intensity": 1.1,
           "specular_intensity": 1.2,
-          "real_time_capture_enabled": true,
           "source_cubemap_angle_radians": 0.75,
           "lower_hemisphere_color": [0.1, 0.2, 0.3],
           "lower_hemisphere_is_solid_color": false,
@@ -769,7 +791,6 @@ namespace {
 
     const auto sky_light = scene.TryGetSkyLightEnvironment();
     ASSERT_TRUE(sky_light.has_value());
-    EXPECT_EQ(sky_light->real_time_capture_enabled, 1U);
     EXPECT_FLOAT_EQ(sky_light->source_cubemap_angle_radians, 0.75F);
     EXPECT_EQ(sky_light->lower_hemisphere_is_solid_color, 0U);
     EXPECT_FLOAT_EQ(sky_light->lower_hemisphere_blend_alpha, 0.35F);
@@ -795,7 +816,7 @@ namespace {
     auto document = nlohmann::json::parse(
       R"JSON(
 {
-  "version": 7,
+  "version": 8,
   "name": "Environment",
   "nodes": [
     {

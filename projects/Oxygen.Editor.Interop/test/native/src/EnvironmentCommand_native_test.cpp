@@ -72,7 +72,6 @@ struct EnvironmentSnapshot {
 
   bool sky_light_exists = false;
   bool sky_light_enabled = false;
-  bool sky_light_realtime_capture = false;
   bool sky_light_affects_reflections = false;
 
   bool post_exists = false;
@@ -218,8 +217,7 @@ auto ReadEnvironmentSnapshot(oxygen::scene::Scene& scene) -> EnvironmentSnapshot
   snapshot.sky_light_exists = sky_light != nullptr;
   if (sky_light) {
     snapshot.sky_light_enabled = sky_light->IsEnabled();
-    snapshot.sky_light_realtime_capture
-      = sky_light->GetRealTimeCaptureEnabled();
+
     snapshot.sky_light_affects_reflections = sky_light->GetAffectReflections();
   }
 
@@ -764,7 +762,6 @@ public:
 
     Assert::IsTrue(snapshot.sky_light_exists);
     Assert::IsTrue(snapshot.sky_light_enabled);
-    Assert::IsTrue(snapshot.sky_light_realtime_capture);
     Assert::IsTrue(snapshot.sky_light_affects_reflections);
 
     Assert::IsTrue(snapshot.post_exists);
@@ -816,7 +813,6 @@ public:
     Assert::IsFalse(snapshot.sky_exists);
     Assert::IsTrue(snapshot.sky_light_exists);
     Assert::IsTrue(snapshot.sky_light_enabled);
-    Assert::IsTrue(snapshot.sky_light_realtime_capture);
     Assert::IsTrue(snapshot.post_exists);
     Assert::AreEqual(static_cast<int>(oxygen::engine::ExposureMode::kManual),
       snapshot.exposure_mode);

@@ -12,8 +12,6 @@
 
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Constants.h>
-#include <Oxygen/Vortex/Environment/Types/EnvironmentAmbientBridgeBindings.h>
-#include <Oxygen/Vortex/Environment/Types/EnvironmentEvaluationParameters.h>
 #include <Oxygen/Vortex/Environment/Types/EnvironmentProbeBindings.h>
 
 namespace oxygen::vortex {
@@ -54,13 +52,12 @@ struct alignas(packing::kShaderDataFieldAlignment) EnvironmentFrameBindings {
     kInvalidShaderVisibleIndex
   };
   EnvironmentProbeBindings probes {};
-  EnvironmentEvaluationParameters evaluation {};
-  EnvironmentAmbientBridgeBindings ambient_bridge {};
+  ShaderVisibleIndex brdf_lut_srv { kInvalidShaderVisibleIndex };
   std::uint32_t padding { 0U };
 };
 
 // NOLINTBEGIN(*-magic-numbers)
-static_assert(sizeof(EnvironmentFrameBindings) == 112);
+static_assert(sizeof(EnvironmentFrameBindings) == 80);
 static_assert(
   alignof(EnvironmentFrameBindings) == packing::kShaderDataFieldAlignment);
 static_assert(sizeof(EnvironmentFrameBindings) % 16 == 0);
@@ -81,9 +78,7 @@ static_assert(offsetof(EnvironmentFrameBindings, sky_view_lut_srv) == 40);
 static_assert(
   offsetof(EnvironmentFrameBindings, camera_aerial_perspective_srv) == 44);
 static_assert(offsetof(EnvironmentFrameBindings, probes) == 48);
-static_assert(offsetof(EnvironmentFrameBindings, evaluation) == 72);
-static_assert(offsetof(EnvironmentFrameBindings, ambient_bridge) == 88);
-static_assert(offsetof(EnvironmentFrameBindings, padding) == 108);
+static_assert(offsetof(EnvironmentFrameBindings, padding) == 76);
 // NOLINTEND(*-magic-numbers)
 
 } // namespace oxygen::vortex

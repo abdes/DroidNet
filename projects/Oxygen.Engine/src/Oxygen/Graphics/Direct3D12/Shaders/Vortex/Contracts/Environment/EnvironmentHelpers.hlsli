@@ -11,6 +11,7 @@
 #include "Vortex/Contracts/Environment/EnvironmentFrameBindings.hlsli"
 #include "Vortex/Contracts/View/ViewConstants.hlsli"
 #include "Vortex/Contracts/Environment/EnvironmentStaticData.hlsli"
+#include "Vortex/Contracts/Environment/IblProductMetadata.hlsli"
 #include "Vortex/Contracts/View/ViewFrameBindings.hlsli"
 
 /**
@@ -111,13 +112,17 @@ static float3 EvaluatePackedSkyDiffuseSh(StructuredBuffer<float4> sh, float3 nor
     return max(0.0f.xxx, intermediate0 + intermediate1 + intermediate2);
 }
 
-static inline float3 EvaluateStaticSkyLightDiffuseSh(EnvironmentStaticData env_data, float3 normal_ws)
+static inline float3 EvaluateSkyDiffuseIrradiance(EnvironmentStaticData env_data, float3 normal_ws)
 {
     if (env_data.sky_light.enabled == 0u
         || env_data.sky_light.diffuse_sh_slot == K_INVALID_BINDLESS_INDEX
         || !BX_IN_GLOBAL_SRV(env_data.sky_light.diffuse_sh_slot)) return 0.0.xxx;
     StructuredBuffer<float4> sh = ResourceDescriptorHeap[env_data.sky_light.diffuse_sh_slot];
-    return EvaluatePackedSkyDiffuseSh(sh, normal_ws);
+    if (!BX_IN_GLOBAL_SRV(env_data.sky_light.product_metadata_srv)) return 0.0.xxx;
+    StructuredBuffer<IblProductMetadata> metadata = ResourceDescriptorHeap[env_data.sky_light.product_metadata_srv];
+    const IblProductMetadata product = metadata[0];
+    if (!IsIblProductReady(product, env_data.sky_light.ibl_generation)) return 0.0.xxx;
+    return EvaluatePackedSkyDiffuseSh(sh, normal_ws) * product.source_radiance_scale;
 }
 
 #endif // OXYGEN_D3D12_SHADERS_RENDERER_ENVIRONMENTHELPERS_HLSLI

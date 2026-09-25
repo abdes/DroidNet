@@ -109,10 +109,10 @@ def test_inspector_rejects_obsolete_scene_descriptor(tmp_path):
     info = inspect_pak(golden)
     scene = next(entry for entry in info["directory_entries"] if entry["asset_type"] == 3)
     data = bytearray(golden.read_bytes())
-    data[scene["desc_offset"] + 65] = 5
+    data[scene["desc_offset"] + 65] = 7
     obsolete = tmp_path / "obsolete-scene.pak"
     obsolete.write_bytes(data)
-    with pytest.raises(ValueError, match="requires descriptor version 7"):
+    with pytest.raises(ValueError, match="requires descriptor version 8"):
         inspect_pak(obsolete)
 
 
@@ -131,7 +131,7 @@ def test_file_build_rejects_retired_spec_version(tmp_path):
     assert not (tmp_path / "old.pak").exists()
 
 
-@pytest.mark.parametrize("asset_type, version", [("material", 2), ("geometry", 1), ("scene", 7)])
+@pytest.mark.parametrize("asset_type, version", [("material", 2), ("geometry", 1), ("scene", 8)])
 def test_asset_headers_emit_only_current_descriptor_versions(asset_type, version):
     from pakgen.packing.packers import pack_asset_header
 

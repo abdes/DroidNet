@@ -63,12 +63,9 @@ struct EnvironmentLightingState {
   bool fog_executed { false };
   std::uint32_t fog_draw_count { 0U };
   std::uint32_t total_draw_count { 0U };
-  bool ambient_bridge_published { false };
+  std::uint32_t indirect_draw_count { 0U };
   std::uint32_t probe_revision { 0U };
   ShaderVisibleIndex published_environment_frame_slot {
-    kInvalidShaderVisibleIndex
-  };
-  ShaderVisibleIndex ambient_bridge_irradiance_srv {
     kInvalidShaderVisibleIndex
   };
 };

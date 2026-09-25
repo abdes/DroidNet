@@ -10,6 +10,7 @@
 
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereLightState.h>
 #include <Oxygen/Vortex/Environment/Types/EnvironmentViewProducts.h>
+#include <Oxygen/Vortex/api_export.h>
 
 namespace oxygen::scene {
 class Scene;
@@ -24,6 +25,10 @@ struct StableAtmosphereState {
   std::uint64_t light_revision { 0U };
   std::uint64_t stable_revision { 0U };
 };
+
+//! Capture input identity, excluding surface gains and view-only visibility.
+[[nodiscard]] OXGN_VRTX_API auto HashSkyCaptureInputs(
+  const StableAtmosphereState& state) -> std::uint64_t;
 
 class AtmosphereState {
 public:

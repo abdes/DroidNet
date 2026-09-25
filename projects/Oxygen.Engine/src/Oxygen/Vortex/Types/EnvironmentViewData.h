@@ -17,9 +17,11 @@
 
 namespace oxygen::vortex {
 
+inline constexpr std::uint32_t kEnvironmentViewFlagHeightFog = 1U << 2U;
+
 //! Environment-owned per-view atmosphere context and controls.
 struct alignas(packing::kShaderDataFieldAlignment) EnvironmentViewData {
-  static constexpr size_t kSize = 272;
+  static constexpr size_t kSize = 304;
 
   uint32_t flags { 0U };
   uint32_t transform_mode { 0U };
@@ -122,8 +124,14 @@ struct alignas(packing::kShaderDataFieldAlignment) EnvironmentViewData {
     3.0F,
     1.0F / 3.0F,
   };
+  glm::vec4 height_fog_light0_illuminance_enabled { 0.0F };
+  glm::vec4 height_fog_light1_illuminance_enabled { 0.0F };
 };
 
+static_assert(
+  offsetof(EnvironmentViewData, height_fog_light0_illuminance_enabled) == 272);
+static_assert(
+  offsetof(EnvironmentViewData, height_fog_light1_illuminance_enabled) == 288);
 static_assert(sizeof(EnvironmentViewData) == EnvironmentViewData::kSize);
 static_assert(
   alignof(EnvironmentViewData) == packing::kShaderDataFieldAlignment);

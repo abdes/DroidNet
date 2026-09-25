@@ -89,6 +89,7 @@
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereState.h>
 #include <Oxygen/Vortex/Environment/SceneBackground.h>
 #include <Oxygen/Vortex/Environment/Types/AtmosphereLightModel.h>
+#include <Oxygen/Vortex/IndirectLighting/IndirectLightingService.h>
 #include <Oxygen/Vortex/Internal/PerViewScope.h>
 #include <Oxygen/Vortex/Internal/RetainedTexturePool.h>
 #include <Oxygen/Vortex/Lighting/LightingService.h>
@@ -1391,6 +1392,7 @@ SceneRenderer::SceneRenderer(Renderer& renderer, Graphics& gfx,
   }
   if (renderer_.HasCapability(RendererCapabilityFamily::kEnvironmentLighting)) {
     environment_ = std::make_unique<EnvironmentLightingService>(renderer_);
+    indirect_ = std::make_unique<IndirectLightingService>(renderer_);
   }
   if (renderer_.HasCapability(RendererCapabilityFamily::kDeferredShading)) {
     ground_grid_pass_ = std::make_unique<GroundGridPass>(renderer_);
@@ -2317,12 +2319,10 @@ auto SceneRenderer::RenderCurrentView(
       INFO, "Lighting recovered for view {}", ctx.current_view.view_id.get());
   }
   if (environment_ != nullptr && wants_environment) {
-    const auto enable_static_sky_light_ambient_bridge
-      = shading_mode == ShadingMode::kDeferred;
     published_view_frame_bindings_.environment_frame_slot
       = environment_->PublishEnvironmentBindings(ctx, recorder,
         kInvalidShaderVisibleIndex, kInvalidShaderVisibleIndex,
-        enable_static_sky_light_ambient_bridge, &scene_textures);
+        &scene_textures);
     environment_lighting_state_.published_environment_frame_slot
       = published_view_frame_bindings_.environment_frame_slot;
     environment_lighting_state_.owned_by_environment_service = true;
@@ -2332,10 +2332,6 @@ auto SceneRenderer::RenderCurrentView(
       environment_lighting_state_.published_bindings
         = environment_lighting_state_.published_environment_frame_slot
         != kInvalidShaderVisibleIndex;
-      environment_lighting_state_.ambient_bridge_published
-        = environment_bindings->ambient_bridge.flags != 0U;
-      environment_lighting_state_.ambient_bridge_irradiance_srv
-        = environment_bindings->ambient_bridge.irradiance_map_srv;
       environment_lighting_state_.probe_revision
         = environment_bindings->probes.probe_revision;
     }
@@ -2468,7 +2464,25 @@ auto SceneRenderer::RenderCurrentView(
         : std::initializer_list<std::string> {},
     });
 
-  // Stage 13: reserved - IndirectLightingService
+  // Stage 13: deferred surface indirect lighting. Forward surfaces already
+  // consumed the same products in Stage 9 and are not shaded a second time.
+  bool indirect_executed = false;
+  if (indirect_ && environment_ && wants_scene_lighting
+    && !rendered_debug_visualization && !wireframe_only
+    && !IsNonIblDebugMode(ctx.shader_debug_mode)
+    && shading_mode == ShadingMode::kDeferred && base_pass_published) {
+    if (const auto* bindings
+      = environment_->InspectBindings(ctx.current_view.view_id))
+      indirect_executed
+        = indirect_->Record(ctx, recorder, scene_textures, *bindings);
+  }
+  environment_lighting_state_.indirect_draw_count = indirect_executed ? 1U : 0U;
+  RecordDiagnosticsPass(renderer_,
+    DiagnosticsPassRecord { .name = "Vortex.Stage13.IndirectLighting",
+      .kind = DiagnosticsPassKind::kGraphics,
+      .executed = indirect_executed,
+      .inputs = { "Vortex.GBuffer", "Vortex.EnvironmentFrameBindings" },
+      .outputs = { "Vortex.SceneColor" } });
 
   // Stage 14: reserved - EnvironmentLightingService volumetrics
 
@@ -3551,8 +3565,7 @@ auto SceneRenderer::RenderDeferredLighting(RenderContext& ctx,
     : std::span<const std::shared_ptr<graphics::Texture>> {};
   if (!lighting_->RenderDeferredLighting(ctx, recorder, scene_textures,
         frame_light_selection_, shadow_bindings, directional_shadow_surfaces,
-        spot_shadow_surfaces, point_shadow_surfaces,
-        environment_lighting_state_.ambient_bridge_published)) {
+        spot_shadow_surfaces, point_shadow_surfaces)) {
     return false;
   }
   const auto& lighting_state = lighting_->GetLastDeferredLightingState();
@@ -3581,12 +3594,8 @@ auto SceneRenderer::RenderDeferredLighting(RenderContext& ctx,
     = lighting_state.used_camera_inside_local_lights;
   deferred_lighting_state_.used_non_perspective_local_lights
     = lighting_state.used_non_perspective_local_lights;
-  deferred_lighting_state_.consumed_static_sky_light_product
-    = lighting_state.consumed_static_sky_light_product;
   deferred_lighting_state_.accumulated_into_scene_color
     = lighting_state.accumulated_into_scene_color;
-  deferred_lighting_state_.static_sky_light_draw_count
-    = lighting_state.static_sky_light_draw_count;
   deferred_lighting_state_.consumed_directional_shadow_product
     = lighting_state.consumed_directional_shadow_product;
   deferred_lighting_state_.directional_shadow_vsm_active

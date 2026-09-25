@@ -156,7 +156,6 @@ auto ApplySkyLight(oxygen::scene::SceneEnvironment& environment) -> void
   sky_light->SetTintRgb({ 1.0F, 1.0F, 1.0F });
   sky_light->SetDiffuseIntensity(1.0F);
   sky_light->SetSpecularIntensity(1.0F);
-  sky_light->SetRealTimeCaptureEnabled(true);
   sky_light->SetLowerHemisphereColor({ 0.02F, 0.02F, 0.03F });
   sky_light->SetVolumetricScatteringIntensity(1.0F);
   sky_light->SetAffectReflections(true);

@@ -289,8 +289,7 @@ public:
 
   [[nodiscard]] virtual auto GetSkyLightSpecular() const -> float;
   virtual auto SetSkyLightSpecular(float value) -> void;
-  [[nodiscard]] virtual auto GetSkyLightRealTimeCaptureEnabled() const -> bool;
-  virtual auto SetSkyLightRealTimeCaptureEnabled(bool enabled) -> void;
+
   [[nodiscard]] virtual auto GetSkyLightLowerHemisphereColor() const
     -> glm::vec3;
   virtual auto SetSkyLightLowerHemisphereColor(const glm::vec3& value) -> void;
@@ -711,7 +710,6 @@ private:
   float sky_light_intensity_mul_ { 1.0F };
   float sky_light_diffuse_ { 1.0F };
   float sky_light_specular_ { 1.0F };
-  bool sky_light_real_time_capture_enabled_ { false };
   float sky_light_source_cubemap_angle_radians_ { 0.0F };
   glm::vec3 sky_light_lower_hemisphere_color_ { 0.0F, 0.0F, 0.0F };
   bool sky_light_lower_hemisphere_is_solid_color_ { true };

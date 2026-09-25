@@ -352,6 +352,8 @@ public:
 
     OXGN_VRTX_API auto SetWithAtmosphere(bool enabled)
       -> OffscreenSceneViewInput&;
+    OXGN_VRTX_API auto SetWithHeightFog(bool enabled)
+      -> OffscreenSceneViewInput&;
     OXGN_VRTX_API auto SetClearColor(const graphics::Color& clear_color)
       -> OffscreenSceneViewInput&;
     OXGN_VRTX_API auto SetForceWireframe(bool enabled)

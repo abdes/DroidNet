@@ -9,13 +9,12 @@
 #include <filesystem>
 #include <string_view>
 
+#include "DemoShell/Services/FileBrowserService.h"
+#include "DemoShell/UI/EnvironmentVm.h"
 #include <glm/vec3.hpp>
 
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
-
-#include "DemoShell/Services/FileBrowserService.h"
-#include "DemoShell/UI/EnvironmentVm.h"
 
 namespace oxygen::examples::ui {
 
@@ -1236,17 +1235,6 @@ auto EnvironmentVm::SetSkyLightSpecular(float value) -> void
 {
   PrepareForManualOverride();
   service_->SetSkyLightSpecular(value);
-}
-
-auto EnvironmentVm::GetSkyLightRealTimeCaptureEnabled() const -> bool
-{
-  return service_->GetSkyLightRealTimeCaptureEnabled();
-}
-
-auto EnvironmentVm::SetSkyLightRealTimeCaptureEnabled(bool enabled) -> void
-{
-  PrepareForManualOverride();
-  service_->SetSkyLightRealTimeCaptureEnabled(enabled);
 }
 
 auto EnvironmentVm::GetSkyLightLowerHemisphereColor() const -> glm::vec3

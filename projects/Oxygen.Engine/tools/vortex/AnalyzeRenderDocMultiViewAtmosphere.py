@@ -46,7 +46,7 @@ def build_report(controller, report, capture_path, report_path):
             controller.SetFrameEvent(draw.event_id, True)
             reads = [x.descriptor for x in controller.GetPipelineState().GetReadOnlyResources(rd.ShaderStage.Pixel, True)]
             volumes = [x for x in reads if "AtmosphereCameraAerialPerspective" in names.get(str(x.resource), "")]
-            view_data = [x for x in reads if x.elementByteSize == 272]
+            view_data = [x for x in reads if x.elementByteSize == 304]
             if draw in opaque_forward:
                 inline_opaque_ap += len(volumes)
             if draw not in opaque_forward and (len(volumes) != 1 or len(view_data) != 1):

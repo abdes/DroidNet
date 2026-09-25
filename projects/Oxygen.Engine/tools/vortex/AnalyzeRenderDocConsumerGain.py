@@ -23,7 +23,7 @@ def build_report(controller, report, capture_path, report_path):
             controller.SetFrameEvent(action.event_id, True)
             reads = [x.descriptor for x in controller.GetPipelineState().GetReadOnlyResources(rd.ShaderStage.Pixel, True)]
             volume = [x for x in reads if "AtmosphereCameraAerialPerspective" in names.get(str(x.resource), "")]
-            data = [x for x in reads if x.elementByteSize == 272]
+            data = [x for x in reads if x.elementByteSize == 304]
             if len(volume) != 1 or len(data) != 1:
                 raise RuntimeError("Missing actual AP consumer bindings")
             d = data[0]

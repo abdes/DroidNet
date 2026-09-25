@@ -1,5 +1,5 @@
 {
-  "version": 7,
+  "version": 8,
   "name": "CityEnvironmentValidation",
   "nodes": [
     {
@@ -6710,7 +6710,6 @@
       "tint_rgb": [0.86, 0.92, 1.0],
       "diffuse_intensity": 0.8,
       "specular_intensity": 0.45,
-      "real_time_capture_enabled": true,
       "lower_hemisphere_color": [0.018, 0.02, 0.024],
       "volumetric_scattering_intensity": 1.0,
       "affect_reflections": true

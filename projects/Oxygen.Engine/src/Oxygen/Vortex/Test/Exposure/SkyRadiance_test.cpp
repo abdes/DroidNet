@@ -33,6 +33,8 @@
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
+#include <Oxygen/Scene/Environment/Background.h>
+#include <Oxygen/Scene/Environment/Fog.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkySphere.h>
@@ -41,10 +43,13 @@
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereLutCache.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereState.h>
+#include <Oxygen/Vortex/Environment/Internal/AtmosphereView.h>
+#include <Oxygen/Vortex/Environment/Internal/CapturedSkySource.h>
 #include <Oxygen/Vortex/Environment/Passes/AtmosphereMultiScatteringLutPass.h>
 #include <Oxygen/Vortex/Environment/Passes/AtmosphereSkyViewLutPass.h>
 #include <Oxygen/Vortex/Environment/Passes/AtmosphereTransmittanceLutPass.h>
 #include <Oxygen/Vortex/Environment/Passes/DistantSkyLightLutPass.h>
+#include <Oxygen/Vortex/Environment/Types/IblProductMetadata.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
 #include <Oxygen/Vortex/RenderContext.h>
@@ -914,6 +919,408 @@ NOLINT_TEST_F(ExposureGpuTest, ThinScatteringIntegralHasContinuousVacuumLimit)
     EXPECT_NEAR(output.at(i).at(1), radiance, (radiance * 2e-5) + 0x1p-120);
   }
   RecordProperty("continuous_integral_cases", inputs.size());
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, FogOnlySkyComposesOnceAndPreservesDisplayBackgroundCoverage)
+{
+  pass_.reset();
+  renderer_->OnShutdown();
+  auto config = RendererConfig {};
+  config.upload_queue_key = QueueKeyFor().get();
+  renderer_ = std::make_unique<Renderer>(GetGraphicsShared(), config,
+    RendererCapabilityFamily::kScenePreparation
+      | RendererCapabilityFamily::kDeferredShading
+      | RendererCapabilityFamily::kLightingData
+      | RendererCapabilityFamily::kEnvironmentLighting
+      | RendererCapabilityFamily::kFinalOutputComposition);
+  auto scene = std::make_shared<scene::Scene>("Fog-only sky", 4U);
+  scene->SetEnvironment(std::make_unique<scene::SceneEnvironment>());
+  auto& fog = scene->GetEnvironment()->AddSystem<scene::environment::Fog>();
+  fog.SetEnabled(true);
+  fog.SetEnableHeightFog(true);
+  fog.SetEnableVolumetricFog(false);
+  fog.SetFogDensity(0.01F);
+  fog.SetHeightFalloffPerMeter(0.0F);
+  fog.SetMaxOpacity(0.5F);
+  fog.SetFogInscatteringLuminance({ 0.2F, 0.4F, 0.6F });
+  auto& background
+    = scene->GetEnvironment()->AddSystem<scene::environment::Background>();
+  background.SetColorRgb({ 0.1F, 0.2F, 0.3F });
+  auto& post = scene->GetEnvironment()
+                 ->AddSystem<scene::environment::PostProcessVolume>();
+  auto settings = scene::ExposureSettings {};
+  settings.mode = engine::ExposureMode::kManual;
+  settings.key = 12.5F;
+  settings.manual_ev = 0.0F;
+  post.SetExposureSettings(settings);
+  post.SetToneMapper(engine::ToneMapper::kNone);
+  post.SetDisplayGamma(1.0F);
+  post.SetBloomIntensity(0.0F);
+  auto camera = scene->CreateNode("Camera");
+  auto lens = std::make_unique<scene::PerspectiveCamera>();
+  auto view = View {};
+  view.viewport = { .width = 4.0F, .height = 4.0F };
+  lens->SetViewport(view.viewport);
+  ASSERT_TRUE(camera.AttachCamera(std::move(lens)));
+  auto output = CreateRegisteredTexture({ .width = 4U,
+    .height = 4U,
+    .format = Format::kRGBA32Float,
+    .is_shader_resource = true,
+    .is_render_target = true,
+    .initial_state = ResourceStates::kCommon });
+  auto framebuffer = Backend().CreateFramebuffer(
+    FramebufferDesc {}.AddColorAttachment(output));
+  const auto capture = BeginOptionalCapture();
+  unsigned sequence = 0U;
+  for (const float ev : { 0.0F, 2.0F }) {
+    settings.manual_ev = ev;
+    post.SetExposureSettings(settings);
+    for (const bool display_background : { false, true }) {
+      background.SetEnabled(display_background);
+      for (const bool main_pass : { true, false }) {
+        fog.SetRenderInMainPass(main_pass);
+        fog.SetVisibleInRealTimeSkyCaptures(false);
+        scene->Update();
+        ++sequence;
+        auto input = Renderer::OffscreenSceneViewInput::FromCamera(
+          "Fog-only sky", ViewId { 8120U }, view, camera);
+        input.SetViewStateHandle(CompositionView::ViewStateHandle { 8120U });
+        input.SetWithAtmosphere(false).SetWithHeightFog(true);
+        auto facade = renderer_->ForOffscreenScene();
+        facade.SetFrameSession(
+          { .frame_slot = frame::Slot { (sequence - 1U) % 3U },
+            .frame_sequence = frame::SequenceNumber { sequence },
+            .delta_time_seconds = 0.0F });
+        facade.SetSceneSource({ .scene = observer_ptr { scene.get() } });
+        facade.SetOutputTarget(
+          { .framebuffer = observer_ptr { framebuffer.get() } });
+        facade.SetViewIntent(input);
+        auto session = facade.Finalize();
+        ASSERT_TRUE(session.has_value());
+        ASSERT_TRUE(session->ExecuteNow());
+        auto* owner
+          = vortex::testing::RendererPublicationProbe::GetSceneRenderer(
+            *renderer_);
+        const auto& product
+          = owner->GetSceneTextureExtracts().resolved_scene_color;
+        ASSERT_TRUE(product.valid);
+        ASSERT_NE(product.exposure, nullptr);
+        const auto domain = Read<FrameExposureData>(
+          *product.exposure->buffer, ResourceStates::kShaderResource);
+        const auto pixels = ReadFloatTexture(*product.texture, true);
+        const auto expected = std::array { 0.1F, 0.2F, 0.3F };
+        for (const auto& pixel : pixels) {
+          for (auto c = 0U; c < 3U; ++c)
+            EXPECT_NEAR(pixel[c],
+              main_pass ? expected[c] * domain.pre_exposure : 0.0F, 0.0005F);
+          if (display_background)
+            EXPECT_NEAR(pixel[3], main_pass ? 0.5F : 0.0F, 1.0e-5F);
+        }
+        // Pixel (1, 0) has zero display dither. Background is authored in
+        // display-linear space and must remain independent of camera exposure.
+        const auto display = ReadFloatTexture(*output);
+        const auto srgb_to_linear = [](const float value) {
+          return value <= 0.04045F ? value / 12.92F
+                                   : std::pow((value + 0.055F) / 1.055F, 2.4F);
+        };
+        const auto linear_to_srgb = [](const float value) {
+          return value <= 0.0031308F
+            ? 12.92F * value
+            : 1.055F * std::pow(value, 1.0F / 2.4F) - 0.055F;
+        };
+        for (auto c = 0U; c < 3U; ++c) {
+          const float coverage = main_pass ? 0.5F : 0.0F;
+          const float fog_display = 2.0F * expected[c] * std::exp2(-ev);
+          const float composed = display_background
+            ? linear_to_srgb(coverage * srgb_to_linear(fog_display)
+                + (1.0F - coverage) * expected[c])
+            : coverage * fog_display;
+          EXPECT_NEAR(display.at(1).at(c), composed, 0.0005F)
+            << "EV=" << ev << " background=" << display_background
+            << " main_pass=" << main_pass;
+        }
+      }
+    }
+  }
+  if (capture)
+    EXPECT_TRUE(capture->EndCapture());
+  FlushBackend();
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, CapturedAtmosphereUsesGlobalAnchorAndIgnoresViewExposure)
+{
+  namespace env = environment::internal;
+  pass_.reset();
+  renderer_->OnShutdown();
+  auto config = RendererConfig {};
+  config.upload_queue_key = QueueKeyFor().get();
+  renderer_ = std::make_unique<Renderer>(GetGraphicsShared(), config,
+    kPhase1DefaultRuntimeCapabilityFamilies
+      | RendererCapabilityFamily::kEnvironmentLighting);
+  auto source = std::make_unique<env::CapturedSkySource>(*renderer_);
+  auto processor = env::IblGpuProcessor(Backend());
+  auto brdf_owner = env::IblBrdfResources(Backend());
+  const auto brdf = brdf_owner.Prepare();
+  ASSERT_TRUE(brdf.has_value());
+  auto state = env::StableAtmosphereState {};
+  state.atmosphere_revision = 1U;
+  auto& atmosphere = state.view_products.atmosphere;
+  atmosphere.enabled = true;
+  atmosphere.sun_disk_enabled = true;
+  state.view_products.atmosphere_light_count = 2U;
+  for (unsigned i = 0U; i < 2U; ++i) {
+    auto& light = state.view_products.atmosphere_lights[i];
+    light.direction_to_light_ws
+      = glm::normalize(glm::vec3(i == 0U ? 1.0F : -1.0F, 0.0F, 1.0F));
+    light.illuminance_rgb_lux = glm::vec3(1000.0F);
+    light.disk_luminance_scale_rgb = glm::vec3(1.0F);
+  }
+  ctx_.current_view.with_atmosphere = false;
+  ctx_.current_view.view_id = kInvalidViewId;
+  ctx_.view_constants.reset();
+  ctx_.frame_sequence = frame::SequenceNumber { 1U };
+  ctx_.frame_slot = frame::Slot { 0U };
+  FailureBackend().fail_recorder_name
+    = "EnvironmentLightingService AtmosphereTransmittanceLut";
+  const auto failed
+    = source->Process(ctx_, state, {}, processor, *brdf, {}, 999U);
+  FailureBackend().fail_recorder_name.clear();
+  ASSERT_FALSE(failed.has_value());
+  EXPECT_EQ(failed.error(), env::IblProcessError::kRecordingFailed);
+  EXPECT_EQ(processor.GetStats().storage_creations, 0U);
+  unsigned sequence = 0U;
+  const auto produce = [&](bool first, bool second) {
+    ctx_.frame_sequence = frame::SequenceNumber { ++sequence };
+    ctx_.frame_slot = frame::Slot { (sequence - 1U) % 3U };
+    state.light_revision = sequence;
+    state.view_products.atmosphere_lights[0].enabled = first;
+    state.view_products.atmosphere_lights[1].enabled = second;
+    const auto products = source->Process(ctx_, state, {}, processor, *brdf,
+      { .face_size = 128U, .lower_hemisphere_solid_color = false }, sequence);
+    CHECK_F(products.has_value());
+    return *products;
+  };
+  const auto primary = produce(true, false);
+  const auto secondary = produce(false, true);
+  const auto capture = BeginOptionalCapture();
+  const auto combined = produce(true, true);
+  if (capture)
+    EXPECT_TRUE(capture->EndCapture());
+  const auto read_sh = [&](const auto& product) {
+    const auto metadata = Read<environment::IblProductMetadata>(
+      *product->metadata, ResourceStates::kShaderResource);
+    EXPECT_EQ(metadata.processing_flags, 3U);
+    EXPECT_GT(metadata.average_brightness, 0.0F);
+    EXPECT_FLOAT_EQ(metadata.source_radiance_scale, 1.0F);
+    return Read<std::array<glm::vec4, 8>>(
+      *product->diffuse_sh, ResourceStates::kShaderResource);
+  };
+  const auto sh0 = read_sh(primary);
+  const auto sh1 = read_sh(secondary);
+  const auto sh_sum = read_sh(combined);
+  // Atmospheric transport and SH are linear in incident illuminance. Both
+  // native slots must contribute without a role-None fallback or disk energy.
+  for (unsigned row = 0U; row < 8U; ++row)
+    for (unsigned c = 0U; c < (row == 6U ? 3U : 4U); ++c) {
+      const float expected = sh0[row][c] + sh1[row][c];
+      EXPECT_NEAR(
+        sh_sum[row][c], expected, 0.002F * std::max(1.0F, std::abs(expected)));
+    }
+
+  auto bindings = ViewFrameBindings {};
+  bindings.frame_exposure_slot = PublishFixtureData(FrameExposureData {
+    .pre_exposure = 0.125F, .one_over_pre_exposure = 8.0F });
+  auto view = ViewConstants::GpuData {};
+  view.camera_position = { 1234.0F, -5678.0F, 9000.0F };
+  view.view_matrix = glm::mat4(2.0F);
+  view.projection_matrix = glm::mat4(3.0F);
+  view.view_frame_bindings_bslot
+    = BindlessViewFrameBindingsSlot { PublishFixtureData(bindings) };
+  auto camera_buffer
+    = CreateUploadBuffer(SizeBytes { 256U }, BufferUsage::kConstant);
+  camera_buffer->Update(&view, sizeof(view), 0U);
+  ctx_.view_constants = camera_buffer;
+  ctx_.current_view.view_id = ViewId { 999U };
+  ctx_.current_view.with_atmosphere = true;
+  ctx_.current_view.hdr_color_format = Format::kRGBA16Float;
+  atmosphere.sun_disk_enabled = false;
+  const auto changed_view = produce(true, true);
+  EXPECT_EQ(read_sh(changed_view), sh_sum);
+  EXPECT_EQ(ReadFloatTexture(*changed_view->processed_cube, true),
+    ReadFloatTexture(*combined->processed_cube, true));
+  auto fog = GpuFogParams {};
+  fog.flags = kGpuFogFlagEnabled | kGpuFogFlagHeightFogEnabled
+    | kGpuFogFlagVisibleInRealTimeSkyCaptures;
+  fog.primary_density = 0.01F;
+  fog.min_transmittance = 0.5F;
+  fog.max_opacity = 0.5F;
+  fog.fog_inscattering_luminance_rgb = { 0.2F, 0.4F, 0.6F };
+  fog.sky_atmosphere_ambient_contribution_color_scale_rgb = {};
+  ctx_.frame_sequence = frame::SequenceNumber { ++sequence };
+  ctx_.frame_slot = frame::Slot { (sequence - 1U) % 3U };
+  const auto fogged = source->Process(ctx_, state, fog, processor, *brdf,
+    { .face_size = 128U, .lower_hemisphere_solid_color = false }, sequence);
+  ASSERT_TRUE(fogged.has_value());
+  const auto clear_pixels = ReadFloatTexture(*combined->processed_cube, true);
+  const auto fog_pixels = ReadFloatTexture(*(*fogged)->processed_cube, true);
+  ASSERT_EQ(clear_pixels.size(), fog_pixels.size());
+  for (std::size_t i = 0U; i < clear_pixels.size(); ++i)
+    for (unsigned c = 0U; c < 3U; ++c) {
+      const auto expected
+        = 0.5F * (clear_pixels[i][c] + fog.fog_inscattering_luminance_rgb[c]);
+      EXPECT_NEAR(
+        fog_pixels[i][c], expected, 0.002F * std::max(1.0F, expected));
+    }
+  // Submit once more, then release the source without a readback or queue
+  // wait. LUT constants/descriptors must survive their CPU pass owners.
+  ctx_.frame_sequence = frame::SequenceNumber { ++sequence };
+  ctx_.frame_slot = frame::Slot { (sequence - 1U) % 3U };
+  state.light_revision = sequence;
+  state.view_products.atmosphere_lights[0].illuminance_rgb_lux *= 2.0F;
+  state.view_products.atmosphere_lights[1].illuminance_rgb_lux *= 2.0F;
+  auto final = source->Process(ctx_, state, {}, processor, *brdf,
+    { .face_size = 128U, .lower_hemisphere_solid_color = false }, sequence);
+  ASSERT_TRUE(final.has_value());
+  source.reset();
+  const auto final_sh = read_sh(*final);
+  for (unsigned row = 0U; row < 8U; ++row)
+    for (unsigned c = 0U; c < (row == 6U ? 3U : 4U); ++c)
+      EXPECT_NEAR(final_sh[row][c], 2.0F * sh_sum[row][c],
+        0.002F * std::max(1.0F, std::abs(2.0F * sh_sum[row][c])));
+  EXPECT_EQ(read_sh(primary), sh0);
+  EXPECT_EQ(read_sh(secondary), sh1);
+  ctx_.view_constants.reset();
+  FlushBackend();
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, CaptureSkyLutMatchesVisibleSkyAtAnchorAcrossExposureDomains)
+{
+  namespace env = environment::internal;
+  pass_.reset();
+  renderer_->OnShutdown();
+  auto config = RendererConfig {};
+  config.upload_queue_key = QueueKeyFor().get();
+  renderer_ = std::make_unique<Renderer>(GetGraphicsShared(), config,
+    kPhase1DefaultRuntimeCapabilityFamilies
+      | RendererCapabilityFamily::kEnvironmentLighting);
+  ctx_.current_view.with_atmosphere = true;
+  ctx_.current_view.hdr_color_format = Format::kRGBA32Float;
+  auto cache = env::AtmosphereLutCache(*renderer_);
+  auto transmittance = environment::AtmosphereTransmittanceLutPass(*renderer_);
+  auto multiple = environment::AtmosphereMultiScatteringLutPass(*renderer_);
+  auto sky = environment::AtmosphereSkyViewLutPass(*renderer_);
+  auto state = env::StableAtmosphereState {};
+  state.atmosphere_revision = 1U;
+  state.view_products.atmosphere.enabled = true;
+  state.view_products.atmosphere_light_count = 1U;
+  auto& light = state.view_products.atmosphere_lights[0];
+  light.enabled = true;
+  light.direction_to_light_ws = glm::normalize(glm::vec3(1.0F, 0.0F, 1.0F));
+  light.illuminance_rgb_lux = glm::vec3(1000.0F);
+  cache.RefreshForState(state);
+  const auto& quality = cache.GetState().internal_parameters;
+  const auto anchor
+    = env::ResolveSkyCaptureOrigin(state.view_products.atmosphere);
+  const auto view
+    = env::BuildAtmosphereViewData(state, quality, anchor, true, true);
+  auto captured = Backend().CreateTexture({ .width = quality.sky_view_width,
+    .height = quality.sky_view_height,
+    .format = Format::kRGBA32Float,
+    .texture_type = TextureType::kTexture2D,
+    .debug_name = "Capture parity reference",
+    .is_shader_resource = true,
+    .is_uav = true,
+    .initial_state = ResourceStates::kCommon });
+  auto registration = Backend().GetResourceRegistry().RegisterManaged(captured);
+  ASSERT_TRUE(registration.has_value());
+  unsigned sequence = 0U;
+  for (const float pre_exposure : { 0.125F, 8.0F }) {
+    ctx_.frame_sequence = frame::SequenceNumber { ++sequence };
+    ctx_.frame_slot = frame::Slot { (sequence - 1U) % 3U };
+    cache.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
+    transmittance.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
+    multiple.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
+    sky.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
+    auto bindings = ViewFrameBindings {};
+    bindings.frame_exposure_slot
+      = PublishFixtureData(FrameExposureData { .pre_exposure = pre_exposure,
+        .one_over_pre_exposure = 1.0F / pre_exposure });
+    auto data = ViewConstants::GpuData {};
+    data.view_frame_bindings_bslot
+      = BindlessViewFrameBindingsSlot { PublishFixtureData(bindings) };
+    auto camera_buffer
+      = CreateUploadBuffer(SizeBytes { 256U }, BufferUsage::kConstant);
+    camera_buffer->Update(&data, sizeof(data), 0U);
+    ctx_.view_constants = camera_buffer;
+    if (cache.NeedsTransmittanceBuild())
+      ASSERT_TRUE(transmittance.Record(ctx_, state, cache).executed);
+    if (cache.NeedsMultiScatteringBuild())
+      ASSERT_TRUE(multiple.Record(ctx_, state, cache).executed);
+    const auto visible = SubmitCommands(
+      "Sky LUT parity", [&](graphics::CommandRecorder& recorder) {
+        return sky.Record(ctx_, recorder, view, state, cache);
+      });
+    ASSERT_TRUE(visible.executed);
+    const auto capture = SubmitCommands(
+      "Capture LUT parity", [&](graphics::CommandRecorder& recorder) {
+        return sky.RecordCapture(
+          ctx_, recorder, view, state, cache, captured, *registration);
+      });
+    ASSERT_TRUE(capture.executed);
+    const auto a = ReadFloatTexture(*visible.texture);
+    const auto b = ReadFloatTexture(*capture.texture);
+    ASSERT_EQ(a.size(), b.size());
+    for (std::size_t i = 0U; i < a.size(); ++i)
+      for (unsigned c = 0U; c < 4U; ++c) {
+        const float expected = b[i][c] * (c == 3U ? 1.0F : pre_exposure);
+        EXPECT_NEAR(
+          a[i][c], expected, std::max(1.0e-7F, std::abs(expected) * 2.0e-5F));
+      }
+  }
+  ctx_.view_constants.reset();
+  FlushBackend();
+}
+
+NOLINT_TEST(
+  AtmosphereCaptureCoordinates, AllAuthoredPlanetModesUseTheSameNativeFrame)
+{
+  namespace env = environment::internal;
+  auto state = env::StableAtmosphereState {};
+  auto& atmosphere = state.view_products.atmosphere;
+  atmosphere.planet_radius_m = 1000.0F;
+  atmosphere.planet_anchor_position_ws = { 10.0F, 20.0F, 30.0F };
+  for (const auto mode :
+    { environment::AtmosphereTransformMode::kPlanetTopAtAbsoluteWorldOrigin,
+      environment::AtmosphereTransformMode::kPlanetTopAtComponentTransform,
+      environment::AtmosphereTransformMode::
+        kPlanetCenterAtComponentTransform }) {
+    atmosphere.transform_mode = mode;
+    const auto origin = env::ResolveSkyCaptureOrigin(atmosphere);
+    const auto expected = mode
+        == environment::AtmosphereTransformMode::kPlanetTopAtAbsoluteWorldOrigin
+      ? glm::vec3(0.0F, 0.0F, 1.0F)
+      : glm::vec3(10.0F, 20.0F,
+          mode
+              == environment::AtmosphereTransformMode::
+                kPlanetTopAtComponentTransform
+            ? 31.0F
+            : 1031.0F);
+    EXPECT_EQ(origin, expected);
+    const auto view
+      = env::BuildAtmosphereViewData(state, {}, origin, true, true);
+    EXPECT_EQ(glm::vec3(view.sky_view_lut_referential_row2),
+      glm::vec3(0.0F, 0.0F, 1.0F));
+    EXPECT_FLOAT_EQ(
+      view.sky_planet_translated_world_center_km_and_view_height_km.w, 1.001F);
+    EXPECT_NEAR(
+      glm::dot(glm::cross(glm::vec3(view.sky_view_lut_referential_row0),
+                 glm::vec3(view.sky_view_lut_referential_row1)),
+        glm::vec3(view.sky_view_lut_referential_row2)),
+      1.0F, 1.0e-6F);
+  }
 }
 
 } // namespace oxygen::vortex::testing::exposure

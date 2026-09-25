@@ -49,7 +49,7 @@ inline constexpr uint32_t kSceneNodeFlags_Known = kSceneNodeFlags_Inheritable
 //!
 //! @note Scene descriptors include a trailing SceneEnvironment block (empty
 //! allowed).
-inline constexpr uint8_t kSceneAssetVersion = 7;
+inline constexpr uint8_t kSceneAssetVersion = 8;
 //! Index type for scene node tables.
 using SceneNodeIndexT = uint32_t;
 
@@ -494,7 +494,6 @@ struct SkyLightEnvironmentRecord {
 
   float diffuse_intensity = 1.0F;
   float specular_intensity = 1.0F;
-  uint32_t real_time_capture_enabled = 0;
   float lower_hemisphere_color[3] = { 0.0F, 0.0F, 0.0F };
   float volumetric_scattering_intensity = 1.0F;
   uint32_t affect_reflections = 1;
@@ -504,7 +503,7 @@ struct SkyLightEnvironmentRecord {
   float lower_hemisphere_blend_alpha = 1.0F;
 };
 #pragma pack(pop)
-static_assert(sizeof(SkyLightEnvironmentRecord) == 92);
+static_assert(sizeof(SkyLightEnvironmentRecord) == 88);
 
 //! Packed SkySphere environment record.
 #pragma pack(push, 1)
@@ -853,15 +852,19 @@ static_assert(offsetof(SpotLightRecord, source_radius) == 50);
 static_assert(offsetof(SpotLightRecord, luminous_flux_lm) == 54);
 static_assert(offsetof(DirectionalLightRecord, angular_size_radians) == 38);
 static_assert(offsetof(DirectionalLightRecord, atmosphere_light_slot) == 42);
-static_assert(offsetof(DirectionalLightRecord, use_per_pixel_atmosphere_transmittance) == 43);
-static_assert(offsetof(DirectionalLightRecord, atmosphere_disk_luminance_scale_rgb) == 44);
+static_assert(
+  offsetof(DirectionalLightRecord, use_per_pixel_atmosphere_transmittance)
+  == 43);
+static_assert(
+  offsetof(DirectionalLightRecord, atmosphere_disk_luminance_scale_rgb) == 44);
 static_assert(offsetof(DirectionalLightRecord, cascade_count) == 56);
 static_assert(offsetof(DirectionalLightRecord, cascade_distances) == 60);
 static_assert(offsetof(DirectionalLightRecord, distribution_exponent) == 76);
 static_assert(offsetof(DirectionalLightRecord, split_mode) == 80);
 static_assert(offsetof(DirectionalLightRecord, max_shadow_distance) == 81);
 static_assert(offsetof(DirectionalLightRecord, transition_fraction) == 85);
-static_assert(offsetof(DirectionalLightRecord, distance_fadeout_fraction) == 89);
+static_assert(
+  offsetof(DirectionalLightRecord, distance_fadeout_fraction) == 89);
 static_assert(offsetof(DirectionalLightRecord, intensity_lux) == 93);
 
 } // namespace oxygen::data::pak::world

@@ -431,13 +431,23 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
     .entries=std::array {
       EntryPoint { .type=kCompute, .name="IblInitializeCS" },
       EntryPoint { .type=kCompute, .name="IblPrepareCS" },
+      EntryPoint { .type=kCompute, .name="IblCapturePrepareCS" },
       EntryPoint { .type=kCompute, .name="IblRangeCS" },
       EntryPoint { .type=kCompute, .name="IblNormalizeCS" },
       EntryPoint { .type=kCompute, .name="IblMipCS" },
       EntryPoint { .type=kCompute, .name="IblShCS" },
       EntryPoint { .type=kCompute, .name="IblShReduceCS" },
       EntryPoint { .type=kCompute, .name="IblPrefilterCS" },
+      EntryPoint { .type=kCompute, .name="IblNarrowCS" },
+      EntryPoint { .type=kCompute, .name="IblPrecisionRangeCS" },
+      EntryPoint { .type=kCompute, .name="IblPrecisionReduceCS" },
       EntryPoint { .type=kCompute, .name="IblCompleteCS" } }
+  },
+  ShaderFileSpec {
+    .path="Vortex/Services/IndirectLighting/DeferredIbl.hlsl",
+    .entries=std::array {
+      EntryPoint { .type=kVertex, .name="DeferredIblVS" },
+      EntryPoint { .type=kPixel, .name="DeferredIblPS" } }
   },
   ShaderFileSpec {
     .path="Vortex/Services/Environment/AtmosphereCompose.hlsl",
@@ -463,7 +473,8 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
   ShaderFileSpec {
     .path="Vortex/Services/Environment/AtmosphereSkyViewLut.hlsl",
     .entries=std::array {
-      EntryPoint { .type=kCompute, .name="VortexAtmosphereSkyViewLutCS" } }
+      EntryPoint { .type=kCompute, .name="VortexAtmosphereSkyViewLutCS" },
+      EntryPoint { .type=kCompute, .name="VortexAtmosphereCaptureSkyViewLutCS" } }
   },
   ShaderFileSpec {
     .path="Vortex/Services/Environment/AtmosphereCameraAerialPerspective.hlsl",

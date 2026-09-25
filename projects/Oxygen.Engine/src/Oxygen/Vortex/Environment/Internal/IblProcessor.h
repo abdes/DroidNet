@@ -8,12 +8,17 @@
 
 #include <memory>
 
+#include <Oxygen/Vortex/Environment/Internal/IblGpuProcessor.h>
 #include <Oxygen/Vortex/Environment/Types/EnvironmentProbeState.h>
 #include <Oxygen/Vortex/Environment/Types/SkyLightEnvironmentModel.h>
 #include <Oxygen/Vortex/api_export.h>
 
 namespace oxygen::vortex {
 class Renderer;
+struct RenderContext;
+namespace resources {
+  class TextureBinder;
+}
 }
 
 namespace oxygen::data {
@@ -25,6 +30,8 @@ namespace oxygen::vortex::environment {
 class IblProbePass;
 
 namespace internal {
+
+  struct StableAtmosphereState;
 
   class IblProcessor {
   public:
@@ -45,20 +52,18 @@ namespace internal {
     [[nodiscard]] OXGN_VRTX_API auto RefreshPersistentProbes(
       const EnvironmentProbeState& current_state,
       bool environment_source_changed) -> RefreshState;
-    [[nodiscard]] OXGN_VRTX_API auto RefreshStaticSkyLightProducts(
-      const EnvironmentProbeState& current_state,
-      const SkyLightEnvironmentModel& sky_light) -> RefreshState;
-    [[nodiscard]] OXGN_VRTX_API auto RefreshStaticSkyLightProducts(
-      const EnvironmentProbeState& current_state,
-      const SkyLightEnvironmentModel& sky_light,
-      const data::TextureResource* source_cubemap) -> RefreshState;
+    [[nodiscard]] OXGN_VRTX_API auto RefreshSkyLightProducts(
+      const EnvironmentProbeState& current, RenderContext& ctx,
+      const StableAtmosphereState& stable, const GpuFogParams& fog,
+      const std::shared_ptr<resources::TextureBinder>& binder) -> RefreshState;
+    [[nodiscard]] OXGN_VRTX_API auto GetPublishedProducts() const
+      -> std::shared_ptr<const IblGpuProducts>;
 
   private:
-    struct StaticSkyLightProductCache;
+    struct Cache;
 
     Renderer& renderer_;
-    std::unique_ptr<IblProbePass> probe_pass_;
-    std::unique_ptr<StaticSkyLightProductCache> static_sky_light_cache_;
+    std::unique_ptr<Cache> cache_;
   };
 
 } // namespace internal

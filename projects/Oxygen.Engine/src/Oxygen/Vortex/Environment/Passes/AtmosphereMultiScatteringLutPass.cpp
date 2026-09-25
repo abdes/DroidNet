@@ -16,6 +16,7 @@
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
+#include <Oxygen/Graphics/Common/CommandRecording.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
@@ -136,11 +137,12 @@ namespace {
 AtmosphereMultiScatteringLutPass::AtmosphereMultiScatteringLutPass(
   Renderer& renderer)
   : renderer_(renderer)
-  , pass_constants_buffer_(observer_ptr { renderer.GetGraphics().get() },
+  , pass_constants_buffer_(std::make_shared<upload::TransientStructuredBuffer>(
+      observer_ptr { renderer.GetGraphics().get() },
       renderer.GetStagingProvider(),
       static_cast<std::uint32_t>(sizeof(PassConstants)),
       observer_ptr { &renderer.GetInlineTransfersCoordinator() },
-      "Environment.AtmosphereMultiScatteringLut.PassConstants")
+      "Environment.AtmosphereMultiScatteringLut.PassConstants"))
 {
 }
 
@@ -149,16 +151,16 @@ AtmosphereMultiScatteringLutPass::~AtmosphereMultiScatteringLutPass() = default;
 auto AtmosphereMultiScatteringLutPass::OnFrameStart(
   const frame::SequenceNumber sequence, const frame::Slot slot) -> void
 {
-  pass_constants_buffer_.OnFrameStart(sequence, slot);
+  pass_constants_buffer_->OnFrameStart(sequence, slot);
 }
 
 auto AtmosphereMultiScatteringLutPass::Record(RenderContext& ctx,
   const internal::StableAtmosphereState& stable_state,
-  internal::AtmosphereLutCache& cache) -> RecordState
+  internal::AtmosphereLutCache& cache, const bool capture) -> RecordState
 {
   auto state = RecordState {
-    .requested = ctx.current_view.view_id != kInvalidViewId
-      && ctx.current_view.with_atmosphere
+    .requested = (capture || ctx.current_view.view_id != kInvalidViewId)
+      && (capture || ctx.current_view.with_atmosphere)
       && stable_state.view_products.atmosphere.enabled
       && cache.NeedsMultiScatteringBuild(),
   };
@@ -244,19 +246,22 @@ auto AtmosphereMultiScatteringLutPass::Record(RenderContext& ctx,
       atmosphere.ozone_density_profile.layers[1].constant_term,
     },
   };
-  auto constants_alloc = pass_constants_buffer_.Allocate(1U);
+  auto constants_alloc = pass_constants_buffer_->Allocate(1U);
   if (!constants_alloc.has_value()
     || !constants_alloc->TryWriteObject(constants)) {
     return state;
   }
 
   const auto queue_key = gfx->QueueKeyFor(graphics::QueueRole::kGraphics);
-  auto recorder = gfx->AcquireCommandRecorder(
-    queue_key, "EnvironmentLightingService AtmosphereMultiScatteringLut");
+  auto recorder = gfx->AcquireCommandRecorder(queue_key,
+    "EnvironmentLightingService AtmosphereMultiScatteringLut",
+    graphics::SubmissionPolicy::kExplicit);
   if (!recorder) {
     return state;
   }
   renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(*recorder);
+  if (capture)
+    recorder->RetainOpaqueUse(pass_constants_buffer_, 0x49424c434f4e5354ULL);
 
   const auto& texture = *cache.GetMultiScatteringTexture();
   TrackTextureFromKnownOrInitial(*recorder, texture);
@@ -272,18 +277,24 @@ auto AtmosphereMultiScatteringLutPass::Record(RenderContext& ctx,
     static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
     constants_alloc->srv.get(), 1U);
 
-  graphics::GpuEventScope pass_scope(*recorder,
-    "Vortex.Environment.AtmosphereMultiScatteringLut",
-    profiling::ProfileGranularity::kTelemetry,
-    profiling::ProfileCategory::kPass);
   const auto dispatch_x
     = (constants.output_width + (kThreadGroupSize - 1U)) / kThreadGroupSize;
   const auto dispatch_y
     = (constants.output_height + (kThreadGroupSize - 1U)) / kThreadGroupSize;
-  recorder->Dispatch(dispatch_x, dispatch_y, 1U);
-  recorder->RequireResourceStateFinal(
-    texture, graphics::ResourceStates::kShaderResource);
+  {
+    graphics::GpuEventScope pass_scope(*recorder,
+      "Vortex.Environment.AtmosphereMultiScatteringLut",
+      profiling::ProfileGranularity::kTelemetry,
+      profiling::ProfileCategory::kPass);
 
+    recorder->Dispatch(dispatch_x, dispatch_y, 1U);
+    recorder->RequireResourceStateFinal(
+      texture, graphics::ResourceStates::kShaderResource);
+  }
+  const auto submission = recorder.SubmitWithReceipt();
+  if (submission.outcome != graphics::SubmissionOutcome::kSubmitted
+    || !submission.receipt)
+    return state;
   cache.MarkMultiScatteringValid();
   state.executed = true;
   state.multi_scattering_lut_srv = cache.GetState().multi_scattering_lut_srv;

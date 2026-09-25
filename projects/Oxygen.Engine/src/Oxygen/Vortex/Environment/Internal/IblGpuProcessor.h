@@ -13,10 +13,13 @@
 #include <vector>
 
 #include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Registration.h>
 #include <Oxygen/Graphics/Common/Submission.h>
 #include <Oxygen/Nexus/IndexReuse.h>
+#include <Oxygen/Vortex/Types/EnvironmentStaticData.h>
+#include <Oxygen/Vortex/Types/EnvironmentViewData.h>
 #include <Oxygen/Vortex/api_export.h>
 
 namespace oxygen {
@@ -27,6 +30,10 @@ class Texture;
 class Buffer;
 class CommandRecorder;
 class ResourceRegistry;
+}
+
+namespace oxygen::vortex {
+class Renderer;
 }
 
 namespace oxygen::vortex::environment::internal {
@@ -72,6 +79,18 @@ struct IblProcessSettings {
   float lower_hemisphere_blend_alpha { 1.0F };
 };
 
+//! Scene-global source. ProcessSky copies unit-exposure LUTs into its admitted
+//! slot before capture; subsequent source writes must follow that submission.
+//! A cross-queue producer supplies its receipt. Atmosphere-off needs no LUTs.
+struct IblSkySource {
+  EnvironmentStaticData environment;
+  EnvironmentViewData view;
+  std::array<float, 3> origin {};
+  std::shared_ptr<const graphics::Texture> sky_view;
+  std::shared_ptr<const graphics::Buffer> distant_sky;
+  graphics::CompletionReceipt producer;
+};
+
 //! Immutable submitted products. Each graphics-queue reader calls Attach to
 //! retain generation contents, descriptors and allocations through completion.
 struct IblGenerationOwner;
@@ -80,6 +99,8 @@ struct IblGpuProducts {
   std::shared_ptr<const IblBrdfProduct> brdf;
   std::shared_ptr<graphics::Texture> processed_cube;
   std::shared_ptr<graphics::Texture> specular_cube;
+  std::shared_ptr<graphics::Texture> processed_half_cube;
+  std::shared_ptr<graphics::Texture> specular_half_cube;
   std::shared_ptr<graphics::Buffer> diffuse_sh;
   std::shared_ptr<graphics::Buffer> metadata;
   ShaderVisibleIndex processed_srv { kInvalidShaderVisibleIndex };
@@ -114,6 +135,9 @@ public:
 
   OXGN_VRTX_API explicit IblGpuProcessor(
     Graphics& graphics, std::uint32_t capacity = kMaximumSlots);
+  //! Production owner also supplies the existing GPU timeline collector.
+  OXGN_VRTX_API explicit IblGpuProcessor(
+    Renderer& renderer, std::uint32_t capacity = kMaximumSlots);
   OXGN_VRTX_API ~IblGpuProcessor();
   IblGpuProcessor(const IblGpuProcessor&) = delete;
   auto operator=(const IblGpuProcessor&) -> IblGpuProcessor& = delete;
@@ -128,10 +152,30 @@ public:
     const IblProcessSettings& settings, std::uint32_t revision,
     graphics::CompletionReceipt source_producer = {})
     -> std::expected<std::shared_ptr<const IblGpuProducts>, IblProcessError>;
+  [[nodiscard]] OXGN_VRTX_API auto ProcessSky(const IblSkySource& source,
+    const std::shared_ptr<const IblBrdfProduct>& brdf,
+    const IblProcessSettings& settings, std::uint32_t revision)
+    -> std::expected<std::shared_ptr<const IblGpuProducts>, IblProcessError>;
+  //! Consumes an immutable resident texture lease (e.g. TextureBinder). The
+  //! owner retains the supplied SRV and texture through source processing.
+  [[nodiscard]] OXGN_VRTX_API auto ProcessCubeView(
+    const std::shared_ptr<const graphics::Texture>& source,
+    ShaderVisibleIndex srv, std::shared_ptr<const void> owner,
+    const std::shared_ptr<const IblBrdfProduct>& brdf,
+    const IblProcessSettings& settings, std::uint32_t revision)
+    -> std::expected<std::shared_ptr<const IblGpuProducts>, IblProcessError>;
   OXGN_VRTX_API auto Close() noexcept -> void;
   [[nodiscard]] OXGN_VRTX_API auto GetStats() const -> Stats;
 
 private:
+  auto ProcessSource(const std::shared_ptr<const graphics::Texture>& source,
+    const graphics::RegistrationLease& source_registration,
+    const std::shared_ptr<const IblBrdfProduct>& brdf,
+    const IblProcessSettings& settings, std::uint32_t revision,
+    graphics::CompletionReceipt source_producer, const IblSkySource* sky,
+    ShaderVisibleIndex resident_srv = kInvalidShaderVisibleIndex,
+    std::shared_ptr<const void> resident_owner = {})
+    -> std::expected<std::shared_ptr<const IblGpuProducts>, IblProcessError>;
   struct Impl;
   std::unique_ptr<Impl> impl_;
 };

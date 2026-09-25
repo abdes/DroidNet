@@ -54,6 +54,19 @@ Advance source/packed versions and serializers together, migrate maintained
 recipes/settings and recook before native qualification. Canonical readers
 reject the retired field; the old capture-unavailable branches retire with it.
 
+Scene source/packed version **8** removes the four-byte scheduling field;
+`SkyLightEnvironmentRecord` is **88 bytes**. Use
+[`MigrateSceneV8.py`](../../../tools/content/MigrateSceneV8.py) on v7 source
+JSON, then recook with the current ImportTool. The migration changes the version, its versioned schema identifier when present,
+and the retired field. The editor descriptor generator emits the same v8
+schema. PakGen's outer PAK recipe version remains 7.
+
+DemoShell environment settings **v6** omit the field. Loading v5 removes either
+boolean value and persists the v6 marker without rewriting saved custom controls,
+including when a built-in or scene profile is active. Earlier settings keep their
+marker until existing migrations complete. A v6-or-newer settings file containing
+the retired key is rejected.
+
 Authoring intent is transient request metadata from the existing native/editor
 command and dirty-domain path. It is coalesced with the scene snapshot and is
 not serialized. Gameplay changes use the runtime scheduler once a usable product
@@ -123,6 +136,13 @@ capture anchor/referential; do not reuse a camera-position-dependent LUT as if
 its source key were global. Changes to these internal settings invalidate the
 corresponding products.
 
+The capture source reuses the atmosphere LUT builders at unit exposure and the
+shared native tangent frame. Its working LUTs feed a copy into the admitted IBL
+slot: that slot owns the frozen sky-view and distant-light inputs through
+processing. Subsequent source edits can reuse working storage without changing
+the candidate. Capture submissions retain their LUT constant descriptors through
+GPU completion, including source teardown. Include these copies in update costs.
+
 Use the existing native cube face basis and `CubemapSamplingDirFromOxygenWS`
 conversion for every source, integration and sampling pass. Preserve +Z world up;
 do not invent a second face-order or yaw convention. Apply the existing lower
@@ -161,6 +181,11 @@ disk visibility and capture disk suppression. Current view data gates
 `atmosphere_light*_disk_luminance_rgb` on `sun_disk_enabled`; the new fog helper
 must not use that display-gated payload as its light-eligibility signal. Preserve
 fog calibration while separating the participating light values from disk masks.
+`EnvironmentViewData` appends two fog illuminance/enable rows (304 bytes total).
+The CPU preserves the established finite-disk calibration; a zero-angle
+participating light supplies its authored illuminance. Sky-only fog writes
+premultiplied coverage so the existing display-background composition remains
+exposure-independent.
 
 With atmosphere disabled, its ambient LUT contribution is zero. Authored fog
 inscattering and enabled, participating Primary/Secondary directional fog inputs
@@ -186,19 +211,75 @@ disks and display overrides. Other camera heights use their own view-ray origin.
 These are renderer constants/internal product policies, not new editor controls.
 Changing the processing revision invalidates products and qualification evidence.
 
-| Product             | Concrete contract                                                                                  | Basis                                                                           |
-| ------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| Captured source     | 128×128×6, scene-linear RGBA32Float scratch, alpha 1                                               | 128 is UE's documented default; FP32 scratch prevents premature HDR clipping    |
-| Processed cube      | 128×128×6 RGBA16Float, all 8 mips down to 1×1                                                      | Existing Oxygen processed format/scale contract; source mip chain for filtering |
-| Diffuse SH          | Structured buffer of 8 float4; existing three-band packing in entries 0–6, average brightness in 7 | Current `StaticSkyLightProcessor` and shader evaluator                          |
-| Specular cube       | 128×128×6 RGBA16Float, all 8 mips, GGX prefiltered                                                 | Same orientation/range scale as processed cube                                  |
-| BRDF lookup         | 128×32 RG16Unorm, one mip, 128 deterministic samples/texel, renderer-lifetime cache                | UE 5.7 `SystemTextures.cpp` native baseline; no scene dependency                |
-| Generation metadata | One 16-byte structured element: float32 source scale/brightness, uint32 processing flags/revision  | GPU-produced scaling/validity without a CPU readback dependency                 |
+| Product             | Concrete contract                                                                                        | Basis                                                                           |
+| ------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Captured source     | 128×128×6, scene-linear RGBA32Float scratch, alpha 1                                                     | 128 is UE's documented default; FP32 scratch prevents premature HDR clipping    |
+| Processed cube      | 128×128×6 canonical RGBA32Float plus qualified RGBA16Float; all 8 mips                                   | Existing Oxygen processed format/scale contract; source mip chain for filtering |
+| Diffuse SH          | Structured buffer of 8 float4; existing three-band packing in entries 0–6, average brightness in 7       | Current `StaticSkyLightProcessor` and shader evaluator                          |
+| Specular cube       | 128×128×6 canonical RGBA32Float plus qualified RGBA16Float; all 8 GGX mips                               | Same orientation/range scale as processed cube                                  |
+| BRDF lookup         | 128×32 RG16Unorm, one mip, 128 deterministic samples/texel, renderer-lifetime cache                      | UE 5.7 `SystemTextures.cpp` native baseline; no scene dependency                |
+| Generation metadata | One generation record: source scale/brightness, processing flags/revision and half-precision certificate | GPU-produced scaling/validity without a CPU readback dependency                 |
 
 Specified-cubemap sources retain existing resolved source size/power-of-two
 selection and HDR source identity. Their specular product has the same face size
 and complete mip count as their processed source. Record actual dimensions; do
 not silently recook/rescale authored texture assets to the captured default.
+
+### HDR precision
+
+Preserve automatic FP32 promotion. Convolution and SH use canonical FP32
+intermediates. Each immutable generation retains the canonical processed and
+specular cubes alongside qualified FP16 representations. FP16 is a storage and
+sampling choice, not a limit on source radiance or authored intensity.
+
+A GPU certificate covers the actual stored processed and specular chains.
+Preserve the half-storage limits: 0.25% relative RGB
+error plus 1e-5 after the supported 2^32 display-gain envelope; positive luminance
+must survive within 1/1024 stop unless below the amplified absolute budget.
+Require finite values and the existing alpha bound. Make the certificate valid
+under arbitrary allowed nonnegative channel weights, including later tint and
+material/BRDF amplification; an untinted luminance check is insufficient.
+
+Qualify native FP16 filtering against the canonical FP32 sampler on supported
+GPU configurations over the specular LODs reachable through the production
+roughness mapping: 0.25% relative RGB error plus the same amplified absolute
+budget, and at most **2/1024 stop** for visible positive luminance. The **1/1024
+stop** guard above applies to stored texels. Exercise ordinary atmosphere/fog,
+directional and high-contrast sources, seams/corners, integer/fractional LODs,
+roughness and amplified tiny channels. These native comparisons qualify sampler
+behavior; they are not a universal sampler-error proof. Keep hardware filtering.
+They compare the combined storage/filtering result; do not add the two budgets.
+Processed-cube consumers use canonical FP32. Processed-half sampling and
+unreachable specular LODs remain characterized but unqualified; new consumers or
+roughness-mapping changes must qualify those domains before enabling FP16 there.
+Strict storage certification still covers every texel of both complete chains.
+
+The shared evaluator selects FP16 only when the certificate covers the current
+intensity, tint, lobe and material gains. Unknown or failed half qualification
+selects valid FP32 without making lighting unavailable. Gain edits change neither
+the source key nor convolution: both representations remain available in the
+same published generation. Never reconstruct FP32 from already-lossy FP16.
+
+Reuse the existing HDR interval/rounding helpers and submission ownership. Keep
+qualification and selection within Environment and the common evaluator; no
+precision scheduler or blocking CPU readback is needed. Charge both complete
+cube chains in both formats, scratch, frozen LUTs, reductions and retained slots
+to the existing timing and memory gates.
+
+Compare each stored half texel to its canonical texel. Subtract the guaranteed
+`0.0025*reference` relative allowance from its absolute error before calculating
+the absolute-budget gain limit. Require every channel to preserve its positive
+value within 1/1024 stop; otherwise cap the whole texel's gain using its largest
+canonical channel, keeping the amplified texel below the absolute budget.
+Scale bounds to scene units once. Round error bounds and required consumer gain
+upward, and permitted gain limits downward. Include possible FP32 subnormal
+flushing and require finite nonnegative RGB with alpha exactly one.
+
+Scan all faces and mips into disjoint tile partials in one batch and reduce the
+minimum permitted gain once, reusing completed SH scratch. Normal varied skies
+use FP16 when this storage certificate permits it. The shared evaluator includes
+the actual BRDF response in the gain test and marks a material-dependent
+descriptor index nonuniform. SH remains FP32 for both selections.
 
 Processing order:
 
@@ -207,18 +288,21 @@ Processing order:
    FP32 scratch, either immediately or in scheduled tiles from that snapshot.
 2. Apply hemisphere policy; GPU-reduce maximum RGB. Reject non-finite source
    output visibly. Set `source_radiance_scale = max(1, maximumRGB / 65504)`;
-   store radiance divided by this scale in the processed FP16 product.
+   store radiance divided by this scale in the canonical FP32 processed product.
 3. Generate all processed cube mips with the established face orientation and
    deterministic four-child box reduction. Filtering samples through TextureCube
    seamless direction lookup. Qualify cube edges, poles and energy; a failing
    seam is an implementation defect, not permission to change expected images.
-4. Integrate diffuse SH from every mip-zero texel with the current exact texel
+4. Integrate diffuse SH from every canonical FP32 mip-zero texel with the current exact texel
    solid-angle weights and fixed reduction order. Preserve the native three-band
    normalization/packing: evaluator output is diffuse irradiance divided by pi,
    so multiply by diffuse albedo once without another pi division. Constant unit
    radiance with hemisphere replacement disabled evaluates to unit diffuse light.
-5. Generate every specular mip with the deterministic GGX policy below.
-6. Record final metadata validity after every producer, then publish one coherent
+5. Generate every canonical FP32 specular mip with the deterministic GGX policy below.
+6. Produce the FP16 representations from the completed canonical chains and
+   generate their stored-texel precision certificate. Failed half
+   qualification leaves canonical FP32 lighting available.
+7. Record final metadata validity after every producer, then publish one coherent
    generation for GPU-ordered consumption. Every required face/mip, SH, metadata
    and BRDF dependency must have guaranteed producer-before-consumer submission
    and transitions. Incremental work stays private until this final step; consumers
@@ -232,15 +316,20 @@ brightness remain scaled; never expand both the buffer and its consumer.
 The shared IBL helper reads source scale from generation metadata, not a CPU
 copy of the GPU reduction. CPU-authored `radiance_scale` carries the existing
 SkyLight intensity multiplier; shader evaluation multiplies it by metadata's
-source scale once. Static cubemap processing uploads its known scale into the
-same metadata representation. All consumers, including existing fog SH users,
+source scale once. Both source adapters produce scale in the same GPU metadata representation. All consumers, including existing fog SH users,
 must use that single conversion contract.
 The existing average-brightness metadata is solid-angle-weighted mean RGB, not
 exposure histogram luminance; it does not alter exposure or normalize lighting.
 
-The metadata element is exactly `{ float source_radiance_scale;
-float average_brightness; uint processing_flags; uint product_revision; }`.
-Bit 0 means finite source/convolution output; bit 1 means every required product
+The metadata element is 32 bytes: `{ float source_radiance_scale;
+float average_brightness; uint processing_flags; uint product_revision;
+float maximum_half_gain; uint precision_flags; uint processed_half_srv;
+uint specular_half_srv; }`. The first 16 bytes retain the canonical-product ABI.
+Precision flag bit 0 means the half certificate is complete; other precision
+bits are zero. A missing/failed certificate selects the canonical FP32 views.
+The gain bound uses scene units; evaluator selection must not apply source scale
+again when comparing authored/material gains.
+In `processing_flags`, bit 0 means finite source/convolution output; bit 1 means every required product
 was written; all other bits are zero. The final producer writes bit 1 only after
 the complete dependency chain. Shaders require both bits and equality with the
 bound nonzero revision before sampling. Initialize candidate flags to zero;

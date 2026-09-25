@@ -126,6 +126,15 @@ struct RendererPublicationProbe {
     products.sky_light = model;
     return service.BuildEnvironmentStaticData(ctx, products);
   }
+  static auto PublishedIblProducts(SceneRenderer& renderer, ViewId view)
+    -> std::shared_ptr<const environment::internal::IblGpuProducts>
+  {
+    if (!renderer.environment_)
+      return {};
+    const auto& views = renderer.environment_->published_views_;
+    const auto found = views.find(view);
+    return found == views.end() ? nullptr : found->second.ibl;
+  }
   static auto FogHistory(SceneRenderer& renderer, ViewId view)
     -> std::pair<std::shared_ptr<graphics::Texture>,
       postprocess::ExposurePass::FrameLease>

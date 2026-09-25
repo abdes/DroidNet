@@ -22,7 +22,7 @@ historical.
 | N    | `Scene/Light/{LightCommon,DirectionalLight,PointLight,SpotLight}.h` and SceneNode edit APIs                                            | Native values and complete-candidate light validation                                                 |
 | S    | `Scripting/Bindings/Packs/Scene/SceneNodeLightBindings.cpp`                                                                            | Explicit slot/transmittance/RGB accessors and validated edits                                         |
 | J    | `Cooker/Import/Schemas/oxygen.scene-descriptor.schema.json` and SceneDescriptorImportJob                                               | Canonical source names, domains and strict version                                                    |
-| P    | `Data/PakFormat_world.h`                                                                                                               | Scene version 7; common 34, directional 97, point 50 and spot 58 bytes, enforced by static assertions |
+| P    | `Data/PakFormat_world.h`                                                                                                               | Scene version 8; common 34, directional 97, point 50 and spot 58 bytes, enforced by static assertions |
 | L    | `Examples/DemoShell/Services/SceneLoaderService.cpp`                                                                                   | Hydrates explicit atmosphere slot, transmittance and RGB scale                                        |
 | E    | `Oxygen.Editor.World/Components/DirectionalLightComponent.cs` and inspector commands                                                   | Stored slot/transmittance/RGB values and live authoring                                               |
 | I    | `Oxygen.Editor.Runtime/Engine/RuntimeAttachDirectionalLight.cs` and `Oxygen.Editor.Interop/Commands/DirectionalLightPropertyApplier.h` | Owned transport values and native property application                                                |
@@ -123,7 +123,7 @@ fields LP07-LP11 apply to every directional independently, not atmosphere slot 0
 
 ## Owning test and cutover map
 
-### Canonical ingress and packed scene v7
+### Canonical ingress and packed scene v8
 
 Use one validated whole-candidate scene operation for attach/replace and live
 light edits. Preserve native unique ownership and the existing SceneNode light
@@ -134,8 +134,8 @@ stored atmosphere-slot conflicts. A failed batch changes no property, identity,
 revision, undo/redo state or accepted scene. Keep these descriptors/results
 C++20-compatible and renderer-private headers out of the SDK boundary.
 
-The current source and packed format is **scene version 7**, with the existing scene descriptor/header envelope and
-component table routing. Reject version 6, old record sizes and removed source
+The current source and packed format is **scene version 8**, with the existing scene descriptor/header envelope and
+component table routing. Reject earlier scene versions, old record sizes and removed source
 keys; recook/repack all affected fixtures and dependent sidecars instead of
 adding a runtime compatibility reader. One current version is authoritative in
 schemas, native loaders/writers, Python tools and managed source generation.

@@ -188,7 +188,6 @@ namespace {
     model.tint_rgb = sky_light->GetTintRgb();
     model.diffuse_intensity = sky_light->GetDiffuseIntensity();
     model.specular_intensity = sky_light->GetSpecularIntensity();
-    model.real_time_capture_enabled = sky_light->GetRealTimeCaptureEnabled();
     model.source_cubemap_angle_radians
       = sky_light->GetSourceCubemapAngleRadians();
     model.lower_hemisphere_color = sky_light->GetLowerHemisphereColor();
@@ -338,8 +337,6 @@ namespace {
     seed = HashCombineU64(seed, FloatBits(model.tint_rgb.z));
     seed = HashCombineU64(seed, FloatBits(model.diffuse_intensity));
     seed = HashCombineU64(seed, FloatBits(model.specular_intensity));
-    seed = HashCombineU64(
-      seed, static_cast<std::uint64_t>(model.real_time_capture_enabled));
     seed = HashCombineU64(seed, FloatBits(model.source_cubemap_angle_radians));
     seed = HashCombineU64(seed, FloatBits(model.lower_hemisphere_color.x));
     seed = HashCombineU64(seed, FloatBits(model.lower_hemisphere_color.y));
@@ -379,6 +376,33 @@ namespace {
   }
 
 } // namespace
+
+auto HashSkyCaptureInputs(const StableAtmosphereState& state) -> std::uint64_t
+{
+  auto atmosphere = state.view_products.atmosphere;
+  atmosphere.sun_disk_enabled = false;
+  atmosphere.render_in_main_pass = true;
+  atmosphere.holdout = false;
+  auto fog = state.view_products.height_fog;
+  fog.render_in_main_pass = true;
+  fog.visible_in_reflection_captures = true;
+  fog.enable_volumetric_fog = false;
+  fog.holdout = false;
+  auto hash
+    = HashCombineU64(HashAtmosphereModel(atmosphere), HashHeightFogModel(fog));
+  for (const auto& light : state.view_products.atmosphere_lights) {
+    hash = HashCombineU64(hash, light.enabled);
+    if (!light.enabled)
+      continue;
+    for (unsigned c = 0; c < 3; ++c) {
+      hash = HashCombineU64(hash, FloatBits(light.direction_to_light_ws[c]));
+      hash = HashCombineU64(hash, FloatBits(light.illuminance_rgb_lux[c]));
+      hash = HashCombineU64(hash, FloatBits(light.disk_luminance_scale_rgb[c]));
+    }
+    hash = HashCombineU64(hash, FloatBits(light.angular_size_radians));
+  }
+  return hash;
+}
 
 auto AtmosphereState::Update(const scene::Scene& scene_ref,
   const ResolvedAtmosphereLightState& light_state) -> bool

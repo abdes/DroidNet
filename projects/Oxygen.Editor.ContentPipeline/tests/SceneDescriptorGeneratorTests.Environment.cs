@@ -94,7 +94,7 @@ public sealed partial class SceneDescriptorGeneratorTests
                 var result = await generator.GenerateAsync(savedScene, scope, this.TestContext.CancellationToken).ConfigureAwait(false);
                 _ = result.Diagnostics.Should().BeEmpty();
                 using var document = JsonDocument.Parse(await File.ReadAllTextAsync(result.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false));
-                _ = document.RootElement.GetProperty("version").GetInt32().Should().Be(7);
+                _ = document.RootElement.GetProperty("version").GetInt32().Should().Be(8);
                 var environment = document.RootElement.GetProperty("environment");
                 _ = environment.GetProperty("sky_atmosphere").GetProperty("enabled").GetBoolean().Should().BeFalse();
                 var post = environment.GetProperty("post_process_volume");

@@ -151,7 +151,8 @@ static float4 SceneComposeCertificate(SceneCompositionConstants pass,
         fog.zw = SceneTransmittanceArithmetic(fog.zw);
         valid = valid && SceneBoundValid(fog.xy) && SceneBoundValid(fog.zw)
             && HdrFiniteNonnegative(height_maximum) && HdrFiniteNonnegative(product_maximum.z);
-        // Sky pixels are excluded by the fog/deferred-AP consumers. Height
+        // Depth-fog consumers exclude sky pixels; sky-only analytic fog uses
+        // its separate usage bit and never samples the volume. Height
         // scattering and the opaque/AP background share volume attenuation.
         const float background_maximum = HdrUpperSum(opaque_maximum,
             HdrUpperProduct(product_maximum.y, pass.ap_gain));
@@ -159,7 +160,8 @@ static float4 SceneComposeCertificate(SceneCompositionConstants pass,
         rgb = SceneBoundSum(fog.xy, SceneBoundAttenuate(rgb, fog.zw, attenuated_maximum));
         coverage.y = HdrUpperSum(coverage.y, HdrUpperSum(fog.z, fog.w));
     }
-    // The visible sky is a disjoint branch. A later nonnegative local-fog
+    // The visible sky is a disjoint branch. Its shared analytic fog attenuates
+    // sky-product error by T <= 1 and adds common FP32 scattering. A later nonnegative local-fog
     // contribution cannot amplify the absolute error already in the image.
     if ((usage & 16u) != 0u) {
         rgb = SceneBoundUnion(rgb, SceneBoundGain(sky.xy, sky_gain));

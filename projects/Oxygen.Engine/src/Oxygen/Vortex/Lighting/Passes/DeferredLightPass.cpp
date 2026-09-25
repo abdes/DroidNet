@@ -74,7 +74,6 @@ namespace {
     kDirectional = 0U,
     kPoint = 1U,
     kSpot = 2U,
-    kStaticSkyLight = 3U,
   };
 
   enum class DeferredLocalLightDrawMode : std::uint8_t {
@@ -104,8 +103,7 @@ namespace {
 
   auto PipelineIndex(const DeferredLightDraw& draw) -> std::size_t
   {
-    if (draw.kind == DeferredLightKind::kDirectional
-      || draw.kind == DeferredLightKind::kStaticSkyLight) {
+    if (draw.kind == DeferredLightKind::kDirectional) {
       return 0U;
     }
     return 1U
@@ -117,11 +115,7 @@ namespace {
 
   auto DrawOrderBucket(const DeferredLightDraw& draw) -> std::size_t
   {
-    // Keep directional lighting first and sky last. Only local additive
-    // contributions are regrouped; preserve their order within each bucket.
-    return draw.kind == DeferredLightKind::kStaticSkyLight
-      ? kPipelineCount
-      : PipelineIndex(draw);
+    return PipelineIndex(draw);
   }
 
   auto RangeTypeToViewType(const bindless_d3d12::RangeType type)
@@ -385,20 +379,6 @@ namespace {
     return mode == ShaderDebugMode::kIblOnly;
   }
 
-  [[nodiscard]] auto ShouldDrawStaticSkyLightDiffuse(const ShaderDebugMode mode)
-    -> bool
-  {
-    using enum ShaderDebugMode;
-    switch (mode) {
-    case kDisabled:
-    case kIblOnly:
-    case kDirectPlusIbl:
-      return true;
-    default:
-      return false;
-    }
-  }
-
   auto BuildDirectionalFramebuffer(const SceneTextures& scene_textures)
     -> graphics::FramebufferDesc
   {
@@ -629,8 +609,8 @@ auto DeferredLightPass::Record(RenderContext& ctx,
   std::span<const std::shared_ptr<graphics::Texture>>
     directional_shadow_surfaces,
   std::span<const std::shared_ptr<graphics::Texture>> spot_shadow_surfaces,
-  std::span<const std::shared_ptr<graphics::Texture>> point_shadow_surfaces,
-  const bool static_sky_light_available) -> ExecutionState
+  std::span<const std::shared_ptr<graphics::Texture>> point_shadow_surfaces)
+  -> ExecutionState
 {
   // Cache the owning label; steady-state scope entry needs no label allocation.
   static const auto kProfile = profiling::CpuProfileScopeDesc {
@@ -642,10 +622,7 @@ auto DeferredLightPass::Record(RenderContext& ctx,
   if (ctx.view_constants == nullptr) {
     return state;
   }
-  const auto wants_static_sky_light = static_sky_light_available
-    && ShouldDrawStaticSkyLightDiffuse(ctx.shader_debug_mode);
-  if (packets.directional.empty() && packets.local_lights.empty()
-    && !wants_static_sky_light) {
+  if (packets.directional.empty() && packets.local_lights.empty()) {
     return state;
   }
   if (shadow_data != nullptr && !shadow_data->cascades.empty()) {
@@ -775,14 +752,6 @@ auto DeferredLightPass::Record(RenderContext& ctx,
       }
     }
   }
-  if (wants_static_sky_light) {
-    draws.push_back(DeferredLightDraw {
-      .kind = DeferredLightKind::kStaticSkyLight,
-      .geometry_vertex_count = 3U,
-    });
-    ++state.static_sky_light_draw_count;
-    state.consumed_static_sky_light_product = true;
-  }
   state.local_light_count = state.point_light_count + state.spot_light_count;
   state.consumed_packets = !draws.empty();
   state.used_service_owned_geometry = state.local_light_count > 0U;
@@ -791,8 +760,7 @@ auto DeferredLightPass::Record(RenderContext& ctx,
   }
 
   for (auto& draw : draws) {
-    if (draw.kind == DeferredLightKind::kDirectional
-      || draw.kind == DeferredLightKind::kStaticSkyLight) {
+    if (draw.kind == DeferredLightKind::kDirectional) {
       continue;
     }
     draw.draw_mode = ResolveLocalLightDrawMode(ctx, draw);
@@ -859,11 +827,6 @@ auto DeferredLightPass::Record(RenderContext& ctx,
     },
     profiling::GpuProfileScopeDesc {
       .label = "Vortex.Stage12.SpotLight",
-      .granularity = profiling::ProfileGranularity::kDiagnostic,
-      .category = profiling::ProfileCategory::kPass,
-    },
-    profiling::GpuProfileScopeDesc {
-      .label = "Vortex.Stage12.StaticSkyLight",
       .granularity = profiling::ProfileGranularity::kDiagnostic,
       .category = profiling::ProfileCategory::kPass,
     },
@@ -977,8 +940,7 @@ auto DeferredLightPass::Record(RenderContext& ctx,
     graphics::GpuEventScope light_scope(
       recorder, kLightProfiles[static_cast<std::size_t>(draw.kind)]);
 
-    if (draw.kind == DeferredLightKind::kDirectional
-      || draw.kind == DeferredLightKind::kStaticSkyLight) {
+    if (draw.kind == DeferredLightKind::kDirectional) {
       bind_framebuffer(*directional_framebuffer_);
       bind_pipeline(draw);
       bind_draw_constants(pass_index);

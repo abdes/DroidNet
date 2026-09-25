@@ -19,6 +19,7 @@
 #include <memory>
 #include <numbers>
 #include <span>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -76,8 +77,8 @@ namespace {
   }
 
   // Independent face basis in hardware cube space, converted to Oxygen +Z up.
-  auto Direction(std::uint32_t face, std::uint32_t x, std::uint32_t y,
-    std::uint32_t size) -> glm::vec3
+  auto DirectionAt(std::uint32_t face, float x, float y, std::uint32_t size)
+    -> glm::vec3
   {
     constexpr auto centers = std::array { glm::vec3 { 1, 0, 0 },
       glm::vec3 { -1, 0, 0 }, glm::vec3 { 0, 1, 0 }, glm::vec3 { 0, -1, 0 },
@@ -94,6 +95,12 @@ namespace {
     const auto inverse_length
       = 1.0F / std::sqrt(p.x * p.x + p.y * p.y + p.z * p.z);
     return glm::vec3 { p.x, -p.z, p.y } * inverse_length;
+  }
+
+  auto Direction(std::uint32_t face, std::uint32_t x, std::uint32_t y,
+    std::uint32_t size) -> glm::vec3
+  {
+    return DirectionAt(face, float(x), float(y), size);
   }
 
   struct ReferenceSample {
@@ -261,6 +268,32 @@ namespace {
       return result;
     }
 
+    auto BrdfResponse(const SurfaceInput& input) -> std::array<float, 2>
+    {
+      const auto lookup_input = std::array<float, 4> { 1.0F, input.roughness,
+        std::bit_cast<float>(input.brdf_srv), 0.0F };
+      const auto lut
+        = Decode({ .records = std::as_bytes(std::span(lookup_input)),
+          .stride = 16U,
+          .record_kind = 31U,
+          .decoded_words = 2U,
+          .count = 1U });
+      return { std::bit_cast<float>(lut[0]), std::bit_cast<float>(lut[1]) };
+    }
+
+    auto SelectedSpecular(const IblGpuProducts& products,
+      std::span<const SurfaceInput> inputs) -> std::vector<std::uint32_t>
+    {
+      return Decode({ .records = std::as_bytes(inputs),
+        .stride = sizeof(SurfaceInput),
+        .record_kind = 37U,
+        .decoded_words = 1U,
+        .count = static_cast<std::uint32_t>(inputs.size()),
+        .prepare = [&](graphics::CommandRecorder& recorder) {
+          CHECK_F(products.Attach(recorder, Backend().GetResourceRegistry()));
+        } });
+    }
+
     auto Reference(const IblGpuProducts& products, const ReferencePlan& plan)
       -> glm::dvec3
     {
@@ -381,8 +414,17 @@ namespace {
       auto mapped = readback->MapNow();
       CHECK_F(mapped.has_value());
       auto pixels = std::vector<Pixel>(size * size);
+      const bool half_storage
+        = texture.GetDescriptor().format == Format::kRGBA16Float;
       for (auto y = 0U; y < size; ++y) {
         for (auto x = 0U; x < size; ++x) {
+          if (!half_storage) {
+            std::memcpy(pixels[y * size + x].data(),
+              mapped->Data() + y * mapped->Layout().row_pitch.get()
+                + x * sizeof(Pixel),
+              sizeof(Pixel));
+            continue;
+          }
           auto half = std::array<std::uint16_t, 4> {};
           std::memcpy(half.data(),
             mapped->Data() + y * mapped->Layout().row_pitch.get() + x * 8U, 8U);
@@ -394,6 +436,390 @@ namespace {
       return pixels;
     }
   };
+
+  NOLINT_TEST_F(
+    IblConvolutionGpuTest, HalfMirrorsNarrowCompletedCanonicalChains)
+  {
+    const auto source = MakeSource(16U, [](auto face, auto x, auto y) {
+      return Pixel { 0.001337F * (1U + face + x), 0.212345F * (1U + y),
+        0x1p-30F * (1U + x + y), 1.0F };
+    });
+    const auto built
+      = Processor().Process(source.texture, source.registration, PrepareBrdf(),
+        { .face_size = 16U, .lower_hemisphere_solid_color = false }, 93U);
+    ASSERT_TRUE(built.has_value());
+    const auto& products = **built;
+    const auto metadata = ReadBuffer<environment::IblProductMetadata>(
+      products, *products.metadata);
+    EXPECT_EQ(metadata.processing_flags, 3U);
+    EXPECT_NE(metadata.processed_half_srv, kInvalidBindlessIndex);
+    EXPECT_NE(metadata.specular_half_srv, kInvalidBindlessIndex);
+    const auto pairs = std::array { std::pair { products.processed_cube,
+                                      products.processed_half_cube },
+      std::pair { products.specular_cube, products.specular_half_cube } };
+    for (const auto& [canonical, half] : pairs) {
+      ASSERT_EQ(canonical->GetDescriptor().format, Format::kRGBA32Float);
+      ASSERT_EQ(half->GetDescriptor().format, Format::kRGBA16Float);
+      for (auto mip = 0U; mip <= products.maximum_mip; ++mip) {
+        for (auto face = 0U; face < 6U; ++face) {
+          const auto reference = ReadFace(products, *canonical, face, mip);
+          const auto narrowed = ReadFace(products, *half, face, mip);
+          ASSERT_EQ(reference.size(), narrowed.size());
+          for (auto i = 0U; i < reference.size(); ++i) {
+            for (auto c = 0U; c < 4U; ++c) {
+              EXPECT_EQ(
+                narrowed[i][c], data::HalfFloat { reference[i][c] }.ToFloat());
+            }
+            EXPECT_GT(reference[i][2], 0.0F);
+            EXPECT_EQ(narrowed[i][2], 0.0F);
+          }
+        }
+      }
+    }
+  }
+
+  NOLINT_TEST_F(
+    IblConvolutionGpuTest, PrecisionAdmissionCoversSmallAndLargeSpecifiedCubes)
+  {
+    // Tiny mips have partial thread groups. The 512-face chain also crosses
+    // the precision scan's 65,535-group dispatch-row boundary.
+    for (const auto size : { 1U, 4U, 512U }) {
+      SCOPED_TRACE(size);
+      const auto source = MakeSource(size, [](auto, auto, auto) {
+        return Pixel { 1.0003F, 0.5001F, 0.25003F, 1.0F };
+      });
+      const auto built = Processor().Process(source.texture,
+        source.registration, PrepareBrdf(),
+        { .face_size = size, .lower_hemisphere_solid_color = false },
+        1000U + size);
+      ASSERT_TRUE(built.has_value());
+      const auto& products = **built;
+      const auto metadata = ReadBuffer<environment::IblProductMetadata>(
+        products, *products.metadata);
+      EXPECT_EQ(metadata.processing_flags, 3U);
+      EXPECT_EQ(metadata.product_revision, 1000U + size);
+      EXPECT_EQ(
+        metadata.precision_flags, environment::kIblHalfCertificateComplete);
+      EXPECT_GT(metadata.maximum_half_gain, 0x1p32F);
+      auto input = Surface(products);
+      input.roughness = 1.0F;
+      const auto inputs = std::array { input };
+      EXPECT_EQ(
+        SelectedSpecular(products, inputs)[0], metadata.specular_half_srv);
+      for (auto face = 0U; face < 6U; ++face) {
+        const auto final_mip = ReadFace(
+          products, *products.specular_half_cube, face, products.maximum_mip);
+        ASSERT_EQ(final_mip.size(), 1U);
+        EXPECT_EQ(final_mip[0], (Pixel { 1.0F, 0.5F, 0.25F, 1.0F }));
+      }
+    }
+  }
+
+  NOLINT_TEST_F(
+    IblConvolutionGpuTest, NativeHalfFilteringMatchesSurfaceSamplingDomain)
+  {
+    // Sample both stored representations directly. This measures native
+    // filtering; it does not override the production admission certificate.
+    auto directions = std::vector<std::array<float, 3>> {};
+    for (auto face = 0U; face < 6U; ++face)
+      for (auto y = 0U; y < 16U; ++y)
+        for (auto x = 0U; x < 16U; ++x) {
+          const auto n = Direction(face, x, y, 16U);
+          directions.push_back({ n.x, n.z, -n.y });
+        }
+    constexpr auto edge = std::array { -1.00001F, -1.0F, -0.99999F, -0.999F,
+      -0.5F, 0.0F, 0.5F, 0.999F, 0.99999F, 1.0F, 1.00001F };
+    for (auto axis = 0U; axis < 3U; ++axis)
+      for (const auto sign : { -1.0F, 1.0F })
+        for (const auto u : edge)
+          for (const auto v : edge) {
+            auto direction = std::array<float, 3> {};
+            direction[axis] = sign;
+            direction[(axis + 1U) % 3U] = u;
+            direction[(axis + 2U) % 3U] = v;
+            directions.push_back(direction);
+          }
+    constexpr auto phases = std::array { -0x1p-9F, 0.0F, 0x1p-9F,
+      0.5F - 0x1p-9F, 0.5F, 0.5F + 0x1p-9F, 1.0F - 0x1p-9F, 1.0F + 0x1p-9F };
+    for (auto face = 0U; face < 6U; ++face)
+      for (const auto x : { 0U, 63U, 127U })
+        for (const auto y : { 0U, 63U, 127U })
+          for (const auto u : phases)
+            for (const auto v : phases) {
+              const auto n
+                = DirectionAt(face, float(x) + u, float(y) + v, 128U);
+              directions.push_back({ n.x, n.z, -n.y });
+            }
+    auto lods = std::vector<float> { 7.0F };
+    for (auto mip = 0U; mip < 7U; ++mip)
+      for (const auto fraction :
+        { 0.0F, 0x1p-9F, 0x1p-8F, 0.5F, 1.0F - 0x1p-8F, 1.0F - 0x1p-9F })
+        lods.push_back(float(mip) + fraction);
+
+    auto maximum_rgb_error = 0.0;
+    auto maximum_ev_error = 0.0;
+    auto consumer_maximum_rgb_error = 0.0;
+    auto consumer_maximum_ev_error = 0.0;
+    auto consumer_comparisons = std::uint64_t {};
+    auto comparisons = std::uint64_t {};
+    for (const bool checker : { false, true }) {
+      const auto source = MakeSource(128U, [&](auto face, auto x, auto y) {
+        if (checker) {
+          const float value = ((x + y + face) & 1U) != 0U ? 1000.3F : 0.1337F;
+          return Pixel { value, value * 0.713F, value * 0.317F, 1.0F };
+        }
+        const auto n = Direction(face, x, y, 128U);
+        if (n.z < 0.0F)
+          return Pixel { 0.0317F, 0.0413F, 0.0171F, 1.0F };
+        const auto sun = 1000.0F
+          * std::pow(
+            std::max(0.0F, glm::dot(n, glm::normalize(glm::vec3 { 1, 2, 3 }))),
+            64.0F);
+        return Pixel { 4.1F + 16.3F * n.z * n.z + sun,
+          7.3F + 24.1F * n.z * n.z + 0.6F * sun,
+          12.7F + 40.3F * n.z * n.z + 0.2F * sun, 1.0F };
+      });
+      const auto built = Processor().Process(source.texture,
+        source.registration, PrepareBrdf(),
+        { .face_size = 128U, .lower_hemisphere_solid_color = false },
+        checker ? 2002U : 2001U);
+      ASSERT_TRUE(built.has_value());
+      const auto& products = **built;
+      const auto metadata = ReadBuffer<environment::IblProductMetadata>(
+        products, *products.metadata);
+      ASSERT_GT(metadata.maximum_half_gain, 1.0F);
+      const auto surface = std::array { Surface(products) };
+      EXPECT_EQ(
+        SelectedSpecular(products, surface)[0], metadata.specular_half_srv);
+      const auto mapping_input = std::array<float, 4> { 1.0F, 0.0F,
+        float(products.maximum_mip), 0.04F };
+      const auto mapping
+        = Decode({ .records = std::as_bytes(std::span(mapping_input)),
+          .stride = 16U,
+          .record_kind = 30U,
+          .decoded_words = 3U,
+          .count = 1U });
+      const auto maximum_consumer_lod = std::bit_cast<float>(mapping[0]);
+      for (const auto descriptors : { std::array { products.processed_srv.get(),
+                                        metadata.processed_half_srv },
+             std::array {
+               products.specular_srv.get(), metadata.specular_half_srv } }) {
+        auto samples = std::vector<ReferenceSample> {};
+        samples.reserve(directions.size() * lods.size() * 2U);
+        for (const auto& direction : directions)
+          for (const auto lod : lods)
+            for (const auto descriptor : descriptors)
+              samples.push_back({ direction, lod, descriptor });
+        auto words = std::vector<std::uint32_t> {};
+        words.reserve(samples.size() * 3U);
+        // The probe has one thread per group. Keep both representations in
+        // the same batch while respecting D3D12's per-dimension group limit.
+        constexpr auto kBatchRecords = 65534U;
+        for (std::size_t first = 0U; first < samples.size();
+          first += kBatchRecords) {
+          const auto batch = std::span(samples).subspan(first,
+            std::min(std::size_t(kBatchRecords), samples.size() - first));
+          const auto decoded = Decode({ .records = std::as_bytes(batch),
+            .stride = sizeof(ReferenceSample),
+            .record_kind = 33U,
+            .decoded_words = 3U,
+            .count = static_cast<std::uint32_t>(batch.size()),
+            .prepare = [&](graphics::CommandRecorder& recorder) {
+              CHECK_F(
+                products.Attach(recorder, Backend().GetResourceRegistry()));
+            } });
+          words.insert(words.end(), decoded.begin(), decoded.end());
+        }
+        auto chain_rgb_error = 0.0;
+        auto chain_ev_error = 0.0;
+        auto consumer_ev_error = 0.0;
+        auto failed_ev_pairs = std::uint64_t {};
+        auto worst_sample = ReferenceSample {};
+        auto worst_channel = 0U;
+        auto worst_values = std::array<double, 2> {};
+        for (auto index = 0U; index < words.size(); index += 6U)
+          for (auto channel = 0U; channel < 3U; ++channel) {
+            const double reference
+              = std::bit_cast<float>(words[index + channel]);
+            const double narrowed
+              = std::bit_cast<float>(words[index + channel + 3U]);
+            ASSERT_GT(reference, 0.0);
+            ASSERT_GT(narrowed, 0.0);
+            ASSERT_TRUE(std::isfinite(reference) && std::isfinite(narrowed));
+            maximum_rgb_error = std::max(
+              maximum_rgb_error, std::abs(narrowed - reference) / reference);
+            maximum_ev_error = std::max(
+              maximum_ev_error, std::abs(std::log2(narrowed / reference)));
+            chain_rgb_error = std::max(
+              chain_rgb_error, std::abs(narrowed - reference) / reference);
+            const auto ev_error = std::abs(std::log2(narrowed / reference));
+            const auto sampled_lod = samples[index / 3U].lod;
+            if (descriptors[0] == products.specular_srv.get()
+              && sampled_lod <= maximum_consumer_lod) {
+              consumer_ev_error = std::max(consumer_ev_error, ev_error);
+              consumer_maximum_ev_error
+                = std::max(consumer_maximum_ev_error, ev_error);
+              consumer_maximum_rgb_error = std::max(consumer_maximum_rgb_error,
+                std::abs(narrowed - reference) / reference);
+              ++consumer_comparisons;
+            }
+            if (ev_error > 1.0 / 1024.0)
+              ++failed_ev_pairs;
+            if (ev_error > chain_ev_error) {
+              chain_ev_error = ev_error;
+              worst_sample = samples[index / 3U];
+              worst_channel = channel;
+              worst_values = { reference, narrowed };
+            }
+            ++comparisons;
+          }
+        const auto prefix = std::string(checker ? "checker_" : "sky_")
+          + (descriptors[0] == products.processed_srv.get() ? "processed_"
+                                                            : "specular_");
+        RecordProperty(
+          prefix + "max_relative_rgb", std::to_string(chain_rgb_error));
+        RecordProperty(prefix + "max_ev", std::to_string(chain_ev_error));
+        RecordProperty(
+          prefix + "consumer_max_ev", std::to_string(consumer_ev_error));
+        RecordProperty(
+          prefix + "pairs_above_1_1024_stop", std::to_string(failed_ev_pairs));
+        RecordProperty(prefix + "worst_lod", std::to_string(worst_sample.lod));
+        RecordProperty(prefix + "worst_direction",
+          std::to_string(worst_sample.direction[0]) + ","
+            + std::to_string(worst_sample.direction[1]) + ","
+            + std::to_string(worst_sample.direction[2]));
+        RecordProperty(prefix + "worst_channel", std::to_string(worst_channel));
+        RecordProperty(
+          prefix + "worst_reference", std::to_string(worst_values[0]));
+        RecordProperty(prefix + "worst_half", std::to_string(worst_values[1]));
+        RecordProperty(prefix + "worst_direction_bits",
+          std::to_string(
+            std::bit_cast<std::uint32_t>(worst_sample.direction[0]))
+            + ","
+            + std::to_string(
+              std::bit_cast<std::uint32_t>(worst_sample.direction[1]))
+            + ","
+            + std::to_string(
+              std::bit_cast<std::uint32_t>(worst_sample.direction[2])));
+        RecordProperty(prefix + "worst_lod_bits",
+          std::to_string(std::bit_cast<std::uint32_t>(worst_sample.lod)));
+        RecordProperty(prefix + "worst_reference_bits",
+          std::to_string(std::bit_cast<std::uint32_t>(float(worst_values[0]))));
+        RecordProperty(prefix + "worst_half_bits",
+          std::to_string(std::bit_cast<std::uint32_t>(float(worst_values[1]))));
+      }
+    }
+    // Broader samples remain diagnostic evidence. Production samples only the
+    // prefiltered cube, over its roughness mapping's reachable LOD interval.
+    EXPECT_GT(consumer_comparisons, 0U);
+    EXPECT_LE(consumer_maximum_rgb_error, 0.0025);
+    EXPECT_LE(consumer_maximum_ev_error, 2.0 / 1024.0);
+    RecordProperty(
+      "qualified_scalar_pairs", std::to_string(consumer_comparisons));
+    RecordProperty("qualified_max_relative_rgb_error",
+      std::to_string(consumer_maximum_rgb_error));
+    RecordProperty(
+      "qualified_max_ev_error", std::to_string(consumer_maximum_ev_error));
+    RecordProperty(
+      "native_half_filter_scalar_pairs", std::to_string(comparisons));
+    RecordProperty("native_half_filter_max_relative_rgb_error",
+      std::to_string(maximum_rgb_error));
+    RecordProperty(
+      "native_half_filter_max_ev_error", std::to_string(maximum_ev_error));
+  }
+
+  NOLINT_TEST_F(
+    IblConvolutionGpuTest, QualifiedConstantUsesHalfForActualSurfaceEvaluation)
+  {
+    const auto source = MakeSource(16U, [](auto, auto, auto) {
+      return Pixel { 1.0003F, 0.5001F, 0.25003F, 1.0F };
+    });
+    const auto built
+      = Processor().Process(source.texture, source.registration, PrepareBrdf(),
+        { .face_size = 16U, .lower_hemisphere_solid_color = false }, 94U);
+    ASSERT_TRUE(built.has_value());
+    const auto& products = **built;
+    const auto metadata = ReadBuffer<environment::IblProductMetadata>(
+      products, *products.metadata);
+    EXPECT_EQ(
+      metadata.precision_flags, environment::kIblHalfCertificateComplete);
+    EXPECT_GT(metadata.maximum_half_gain, 0x1p32F);
+    auto input = Surface(products);
+    input.f0 = { 1.0F, 1.0F, 1.0F };
+    input.metallic = 1.0F;
+    const auto inputs = std::array { input };
+    EXPECT_EQ(
+      SelectedSpecular(products, inputs)[0], metadata.specular_half_srv);
+    auto invalid = std::array<SurfaceInput, 5> {};
+    invalid.fill(input);
+    const auto infinity = std::numeric_limits<float>::infinity();
+    for (auto& value : invalid)
+      value.light.tint_rgb = { 0.0F, 0.0F, 0.0F };
+    invalid[0].light.radiance_scale = infinity;
+    invalid[1].f0 = { 0.0F, 0.0F, 0.0F };
+    invalid[1].light.tint_rgb = { infinity, 0.0F, 0.0F };
+    invalid[2].f0 = { infinity, 0.0F, 0.0F };
+    invalid[3].light.specular_intensity = infinity;
+    invalid[4].light.radiance_scale = -1.0F;
+    for (const auto descriptor : SelectedSpecular(products, invalid))
+      EXPECT_EQ(descriptor, products.specular_srv.get());
+    const auto shaded = Shade(products, inputs)[0];
+    const auto response = BrdfResponse(input);
+    const auto brdf = response[0] + response[1];
+    EXPECT_NEAR(shaded[3], 1.0F * brdf, 2.0e-6F);
+    EXPECT_NEAR(shaded[4], 0.5F * brdf, 2.0e-6F);
+    EXPECT_NEAR(shaded[5], 0.25F * brdf, 2.0e-6F);
+  }
+
+  NOLINT_TEST_F(
+    IblConvolutionGpuTest, IntensityTintAndLobeEditsPromoteWithoutRecapture)
+  {
+    const auto source = MakeSource(16U, [](auto, auto, auto) {
+      return Pixel { 0x1p-50F, 0x1p-50F, 0x1p-50F, 1.0F };
+    });
+    const auto built
+      = Processor().Process(source.texture, source.registration, PrepareBrdf(),
+        { .face_size = 16U, .lower_hemisphere_solid_color = false }, 95U);
+    ASSERT_TRUE(built.has_value());
+    const auto& products = **built;
+    const auto metadata = ReadBuffer<environment::IblProductMetadata>(
+      products, *products.metadata);
+    EXPECT_EQ(
+      metadata.precision_flags, environment::kIblHalfCertificateComplete);
+    EXPECT_GT(metadata.maximum_half_gain, 1.0F);
+    EXPECT_LT(metadata.maximum_half_gain, 4.0F);
+    auto low = Surface(products);
+    low.f0 = { 1.0F, 1.0F, 1.0F };
+    low.metallic = 1.0F;
+    auto intensity = low;
+    intensity.light.radiance_scale = 0x1p50F;
+    auto tint = low;
+    tint.light.tint_rgb = { 0x1p50F, 0.0F, 0.0F };
+    auto lobe = low;
+    lobe.light.specular_intensity = 0x1p50F;
+    auto material = low;
+    material.f0 = { 0x1p50F, 0x1p50F, 0x1p50F };
+    const auto inputs
+      = std::array { low, intensity, tint, lobe, low, material };
+    const auto storage = Processor().GetStats().storage_creations;
+    const auto selected = SelectedSpecular(products, inputs);
+    EXPECT_EQ(selected,
+      (std::vector<std::uint32_t> { metadata.specular_half_srv,
+        products.specular_srv.get(), products.specular_srv.get(),
+        products.specular_srv.get(), metadata.specular_half_srv,
+        products.specular_srv.get() }));
+    const auto shaded = Shade(products, inputs);
+    EXPECT_EQ(shaded[0][3], 0.0F);
+    const auto response = BrdfResponse(low);
+    EXPECT_NEAR(shaded[1][3], response[0] + response[1], 2.0e-6F);
+    EXPECT_NEAR(shaded[5][3], response[0], 2.0e-6F);
+    EXPECT_NEAR(shaded[2][3], shaded[1][3], 1.0e-6F);
+    EXPECT_EQ(shaded[2][4], 0.0F);
+    EXPECT_NEAR(shaded[3][3], shaded[1][3], 1.0e-6F);
+    EXPECT_EQ(shaded[4][3], 0.0F);
+    EXPECT_EQ(Processor().GetStats().storage_creations, storage);
+    EXPECT_EQ(products.revision, 95U);
+  }
 
   NOLINT_TEST_F(IblConvolutionGpuTest, ConstantCubePreservesEveryFaceAndMip)
   {
@@ -435,6 +861,208 @@ namespace {
         }
       }
     }
+  }
+
+  NOLINT_TEST_F(IblConvolutionGpuTest,
+    FullPrecisionProductsPreserveWideAndAmplifiedTinyRadiance)
+  {
+    unsigned revision = 300U;
+    for (const bool wide : { false, true }) {
+      const Pixel color = wide ? Pixel { 0x1p30F, 0x1p-24F, 0.5F, 1.0F }
+                               : Pixel { 0x1p-50F, 0x1p-50F, 0x1p-50F, 1.0F };
+      const auto source
+        = MakeSource(16U, [&](auto, auto, auto) { return color; });
+      const auto result = Processor().Process(source.texture,
+        source.registration, PrepareBrdf(),
+        { .face_size = 16U, .lower_hemisphere_solid_color = false },
+        ++revision);
+      ASSERT_TRUE(result.has_value());
+      const auto& products = **result;
+      const auto metadata = ReadBuffer<environment::IblProductMetadata>(
+        products, *products.metadata);
+      EXPECT_EQ(metadata.processing_flags, 3U);
+      const double gain = wide ? 1.0 : 0x1p50;
+      for (const auto& texture :
+        { products.processed_cube, products.specular_cube }) {
+        ASSERT_EQ(texture->GetDescriptor().format, Format::kRGBA32Float);
+        for (unsigned face = 0U; face < 6U; ++face)
+          for (unsigned mip = 0U; mip <= products.maximum_mip; ++mip) {
+            const auto pixels = ReadFace(products, *texture, face, mip);
+            for (const auto& pixel : pixels)
+              for (unsigned c = 0U; c < 3U; ++c) {
+                const double expected = color[c] * gain;
+                EXPECT_NEAR(static_cast<double>(pixel[c])
+                    * metadata.source_radiance_scale * gain,
+                  expected, std::abs(expected) * 2.0e-5);
+              }
+          }
+      }
+    }
+  }
+
+  NOLINT_TEST_F(IblConvolutionGpuTest,
+    CapturedFogProducesCompleteHdrProductsWithoutAtmosphere)
+  {
+    auto source = environment::internal::IblSkySource {};
+    source.origin = { 0.0F, 0.0F, 1.0F };
+    auto& fog = source.environment.fog;
+    fog.primary_density = 0.01F;
+    fog.primary_height_falloff = 0.0F;
+    fog.min_transmittance = 0.25F;
+    fog.max_opacity = 0.75F;
+    fog.fog_inscattering_luminance_rgb = { 1.0e8F, 2.0e6F, 8.0F };
+    // Display-only systems deliberately carry values that must never enter
+    // captured lighting. Atmosphere-off capture owns no LUT resources.
+    source.environment.sky_sphere.enabled = 1U;
+    source.environment.sky_sphere.solid_color_rgb = { 100.0F, 200.0F, 300.0F };
+    source.environment.sky_light.enabled = 1U;
+    unsigned revision = 200U;
+    for (const bool main_pass : { false, true }) {
+      for (const bool capture_visible : { true, false }) {
+        fog.flags = kGpuFogFlagEnabled | kGpuFogFlagHeightFogEnabled
+          | (main_pass ? kGpuFogFlagRenderInMainPass : 0U)
+          | (capture_visible ? kGpuFogFlagVisibleInRealTimeSkyCaptures : 0U);
+        if (!main_pass && capture_visible)
+          BeginCapture();
+        const auto products = Processor().ProcessSky(source, PrepareBrdf(),
+          { .face_size = 128U, .lower_hemisphere_solid_color = false },
+          ++revision);
+        ASSERT_TRUE(products.has_value());
+        if (!main_pass && capture_visible)
+          EndCapture();
+        const auto metadata = ReadBuffer<environment::IblProductMetadata>(
+          **products, *(*products)->metadata);
+        EXPECT_EQ(metadata.processing_flags, 3U);
+        EXPECT_EQ(metadata.product_revision, revision);
+        const auto expected = std::array { capture_visible ? 7.5e7F : 0.0F,
+          capture_visible ? 1.5e6F : 0.0F, capture_visible ? 6.0F : 0.0F };
+        EXPECT_NEAR(metadata.source_radiance_scale,
+          std::max(1.0F, expected[0] / 65504.0F), 0.001F);
+        for (const auto& texture :
+          { (*products)->processed_cube, (*products)->specular_cube }) {
+          for (unsigned mip = 0U; mip <= (*products)->maximum_mip; ++mip) {
+            for (unsigned face = 0U; face < 6U; ++face) {
+              SCOPED_TRACE(::testing::Message()
+                << texture->GetDescriptor().debug_name << " face=" << face
+                << " mip=" << mip);
+              const auto pixels = ReadFace(**products, *texture, face, mip);
+              for (const auto& pixel : pixels)
+                for (unsigned c = 0U; c < 3U; ++c) {
+                  const float normalized
+                    = expected[c] / metadata.source_radiance_scale;
+                  // Source storage, native filtering and output storage round
+                  // in binary16. Bound the combined error in that domain;
+                  // a percentage of scene radiance ignores its ULP spacing.
+                  const float ulp = normalized == 0.0F
+                    ? 0.0F
+                    : std::ldexp(
+                        1.0F, std::max(-24, std::ilogb(normalized) - 10));
+                  ASSERT_NEAR(pixel[c], normalized, 2.0F * ulp);
+                }
+            }
+          }
+        }
+        const auto sh = ReadBuffer<std::array<glm::vec4, 8>>(
+          **products, *(*products)->diffuse_sh);
+        const auto diffuse
+          = environment::internal::EvaluatePackedStaticSkyLightDiffuseSh(
+              sh, { 0, 0, 1 })
+          * metadata.source_radiance_scale;
+        for (unsigned c = 0U; c < 3U; ++c)
+          EXPECT_NEAR(
+            diffuse[c], expected[c], std::max(0.001F, expected[c] * 0.001F));
+      }
+    }
+  }
+
+  NOLINT_TEST_F(
+    IblConvolutionGpuTest, CapturedSkyRequiresLutsAndRejectsSourceRotation)
+  {
+    auto source = environment::internal::IblSkySource {};
+    const auto brdf = PrepareBrdf();
+    source.environment.atmosphere.enabled = 1U;
+    const auto missing
+      = Processor().ProcessSky(source, brdf, { .face_size = 16U }, 210U);
+    ASSERT_FALSE(missing.has_value());
+    EXPECT_EQ(
+      missing.error(), environment::internal::IblProcessError::kInvalidSource);
+    source.environment.atmosphere.enabled = 0U;
+    const auto rotated = Processor().ProcessSky(source, brdf,
+      { .face_size = 16U, .source_rotation_radians = 0.5F }, 211U);
+    ASSERT_FALSE(rotated.has_value());
+    EXPECT_EQ(
+      rotated.error(), environment::internal::IblProcessError::kInvalidSource);
+    EXPECT_EQ(Processor().GetStats().storage_creations, 0U);
+  }
+
+  NOLINT_TEST_F(IblConvolutionGpuTest,
+    AbsentCapturedSourcesStayZeroWithColoredLowerHemisphere)
+  {
+    auto source = environment::internal::IblSkySource {};
+    source.environment.fog.primary_density = 0.01F;
+    source.environment.fog.flags = kGpuFogFlagEnabled
+      | kGpuFogFlagHeightFogEnabled | kGpuFogFlagRenderInMainPass;
+    const auto products = Processor().ProcessSky(source, PrepareBrdf(),
+      { .face_size = 16U, .lower_hemisphere_color = { 10.0F, 20.0F, 30.0F } },
+      215U);
+    ASSERT_TRUE(products.has_value());
+    const auto metadata = ReadBuffer<environment::IblProductMetadata>(
+      **products, *(*products)->metadata);
+    EXPECT_EQ(metadata.processing_flags, 3U);
+    EXPECT_FLOAT_EQ(metadata.average_brightness, 0.0F);
+    for (unsigned face = 0U; face < 6U; ++face) {
+      for (const auto& texture :
+        { (*products)->processed_cube, (*products)->specular_cube }) {
+        const auto pixels = ReadFace(**products, *texture, face, 0U);
+        for (const auto& pixel : pixels)
+          EXPECT_EQ(pixel, (Pixel { 0.0F, 0.0F, 0.0F, 1.0F }));
+      }
+    }
+  }
+
+  NOLINT_TEST_F(
+    IblConvolutionGpuTest, CapturedFogSnapshotsRemainIndependentUntilRetired)
+  {
+    processor_ = std::make_unique<IblGpuProcessor>(Backend(), 2U);
+    auto source = environment::internal::IblSkySource {};
+    source.origin = { 0.0F, 0.0F, 1.0F };
+    source.environment.fog.flags = kGpuFogFlagEnabled
+      | kGpuFogFlagHeightFogEnabled | kGpuFogFlagVisibleInRealTimeSkyCaptures;
+    source.environment.fog.primary_density = 0.01F;
+    source.environment.fog.fog_inscattering_luminance_rgb
+      = { 1.0F, 2.0F, 3.0F };
+    const auto settings = IblProcessSettings { .face_size = 16U,
+      .lower_hemisphere_solid_color = false };
+    auto first = Processor().ProcessSky(source, PrepareBrdf(), settings, 220U);
+    ASSERT_TRUE(first.has_value());
+    source.environment.fog.fog_inscattering_luminance_rgb
+      = { 4.0F, 5.0F, 6.0F };
+    auto second = Processor().ProcessSky(source, PrepareBrdf(), settings, 221U);
+    ASSERT_TRUE(second.has_value());
+    source.environment.fog.fog_inscattering_luminance_rgb = {};
+    const auto busy
+      = Processor().ProcessSky(source, PrepareBrdf(), settings, 222U);
+    ASSERT_FALSE(busy.has_value());
+    EXPECT_EQ(busy.error(), environment::internal::IblProcessError::kPoolBusy);
+    EXPECT_NE((*first)->slot.index, (*second)->slot.index);
+    const auto first_pixel
+      = ReadFace(**first, *(*first)->processed_cube, 0U, 0U).front();
+    const auto second_pixel
+      = ReadFace(**second, *(*second)->processed_cube, 0U, 0U).front();
+    for (unsigned c = 0U; c < 3U; ++c) {
+      EXPECT_FLOAT_EQ(first_pixel[c], static_cast<float>(c + 1U));
+      EXPECT_FLOAT_EQ(second_pixel[c], static_cast<float>(c + 4U));
+    }
+    first->reset();
+    second->reset();
+    WaitForQueueIdle();
+    const auto next
+      = Processor().ProcessSky(source, PrepareBrdf(), settings, 223U);
+    ASSERT_TRUE(next.has_value());
+    EXPECT_EQ(Processor().GetStats().storage_creations, 2U);
+    const auto zero
+      = ReadFace(**next, *(*next)->processed_cube, 0U, 0U).front();
+    EXPECT_EQ(zero, (Pixel { 0.0F, 0.0F, 0.0F, 1.0F }));
   }
 
   NOLINT_TEST_F(
@@ -586,8 +1214,9 @@ namespace {
     ASSERT_TRUE(static_cast<bool>(recording));
     ASSERT_TRUE(products->Attach(*recording, Backend().GetResourceRegistry()));
     recording->FlushBarriers();
-    ASSERT_TRUE(
-      readback->EnqueueCopy(*recording, *products->metadata, { 0U, 16U })
+    ASSERT_TRUE(readback
+        ->EnqueueCopy(*recording, *products->metadata,
+          { 0U, sizeof(environment::IblProductMetadata) })
         .has_value());
     products.reset();
     source.registration = {};

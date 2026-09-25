@@ -112,15 +112,6 @@ public:
     return specular_intensity_;
   }
 
-  auto SetRealTimeCaptureEnabled(const bool enabled) noexcept -> void
-  {
-    real_time_capture_enabled_ = enabled;
-  }
-  [[nodiscard]] auto GetRealTimeCaptureEnabled() const noexcept -> bool
-  {
-    return real_time_capture_enabled_;
-  }
-
   auto SetSourceCubemapAngleRadians(const float radians) noexcept -> void
   {
     source_cubemap_angle_radians_ = radians;
@@ -184,7 +175,6 @@ private:
 
   float diffuse_intensity_ = 1.0F;
   float specular_intensity_ = 1.0F;
-  bool real_time_capture_enabled_ = false;
   float source_cubemap_angle_radians_ = 0.0F;
   Vec3 lower_hemisphere_color_ { 0.0F, 0.0F, 0.0F };
   bool lower_hemisphere_is_solid_color_ = true;

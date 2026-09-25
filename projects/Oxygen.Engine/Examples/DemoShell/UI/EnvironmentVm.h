@@ -12,15 +12,14 @@
 #include <string_view>
 #include <utility>
 
+#include "DemoShell/Services/EnvironmentSettingsService.h"
+#include "DemoShell/Services/FileBrowserService.h"
+#include "DemoShell/Services/PostProcessSettingsService.h"
 #include <glm/vec3.hpp>
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Core/Types/Atmosphere.h>
-
-#include "DemoShell/Services/EnvironmentSettingsService.h"
-#include "DemoShell/Services/FileBrowserService.h"
-#include "DemoShell/Services/PostProcessSettingsService.h"
 
 namespace oxygen::examples::ui {
 
@@ -176,8 +175,7 @@ public:
   auto SetSkyLightDiffuse(float value) -> void;
   [[nodiscard]] auto GetSkyLightSpecular() const -> float;
   auto SetSkyLightSpecular(float value) -> void;
-  [[nodiscard]] auto GetSkyLightRealTimeCaptureEnabled() const -> bool;
-  auto SetSkyLightRealTimeCaptureEnabled(bool enabled) -> void;
+
   [[nodiscard]] auto GetSkyLightLowerHemisphereColor() const -> glm::vec3;
   auto SetSkyLightLowerHemisphereColor(const glm::vec3& value) -> void;
   [[nodiscard]] auto GetSkyLightVolumetricScatteringIntensity() const -> float;

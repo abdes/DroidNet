@@ -23,6 +23,7 @@
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
+#include <Oxygen/Scene/Environment/Fog.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/SkySphere.h>
@@ -187,7 +188,12 @@ namespace {
       .depth_write_enable = false,
       .depth_func = graphics::CompareOp::kEqual,
     })
-    .SetBlendState({})
+    .SetBlendState({ graphics::BlendTargetDesc {
+      .blend_enable = true, .src_blend = graphics::BlendFactor::kOne,
+      .dest_blend = graphics::BlendFactor::kInvSrcAlpha,
+      .blend_op = graphics::BlendOp::kAdd, .src_blend_alpha = graphics::BlendFactor::kOne,
+      .dest_blend_alpha = graphics::BlendFactor::kInvSrcAlpha,
+      .blend_op_alpha = graphics::BlendOp::kAdd, .write_mask = graphics::ColorWriteMask::kAll } })
     .SetFramebufferLayout(graphics::FramebufferLayoutDesc {
       .color_target_formats = {
         scene_textures.GetSceneColor().GetDescriptor().format,
@@ -219,6 +225,15 @@ namespace {
         && ctx.current_view.with_atmosphere;
     }();
     if (atmosphere_active) {
+      return true;
+    }
+    if (const auto fog = env->TryGetSystem<scene::environment::Fog>(); fog
+      && fog->IsEnabled() && fog->GetEnableHeightFog()
+      && fog->GetRenderInMainPass() && ctx.current_view.with_height_fog
+      && fog->GetMaxOpacity() > 0.0F
+      && (fog->GetFogDensity() > 0.0F || fog->GetSecondFogDensity() > 0.0F)
+      && (!ctx.current_view.is_reflection_capture
+        || fog->GetVisibleInReflectionCaptures())) {
       return true;
     }
     if (ResolveSceneBackground(ctx).has_value()) {

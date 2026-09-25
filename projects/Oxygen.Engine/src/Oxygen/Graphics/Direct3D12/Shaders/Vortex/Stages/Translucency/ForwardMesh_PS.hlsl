@@ -11,6 +11,7 @@
 #include "Vortex/Contracts/Draw/DrawHelpers.hlsli"
 #include "Vortex/Contracts/Draw/DrawMetadata.hlsli"
 #include "Vortex/Contracts/Environment/EnvironmentHelpers.hlsli"
+#include "Vortex/Services/IndirectLighting/IblEvaluation.hlsli"
 #include "Vortex/Contracts/Lighting/LightingHelpers.hlsli"
 #include "Vortex/Shared/MaskedAlphaTest.hlsli"
 #include "Vortex/Contracts/Draw/MaterialShadingConstants.hlsli"
@@ -87,38 +88,12 @@ static float3 ComputeForwardIblTerm(ForwardEnvironmentState env_state,
     return 0.0.xxx;
   }
 
-  const float3 V = surf.V;
-  const float3 N = surf.N;
-  const float3 cube_R = CubemapSamplingDirFromOxygenWS(reflect(-V, N));
-
-  float3 ibl_diffuse = EvaluateStaticSkyLightDiffuseSh(env_state.data, N)
-    * env_state.data.sky_light.tint_rgb
-    * env_state.data.sky_light.radiance_scale
-    * env_state.data.sky_light.diffuse_intensity;
-  float3 ibl_specular = 0.0.xxx;
-
-  if (env_state.data.sky_light.prefilter_map_slot != K_INVALID_BINDLESS_INDEX
-    && BX_IN_TEXTURES(env_state.data.sky_light.prefilter_map_slot)) {
-    TextureCube<float4> pref_map
-      = ResourceDescriptorHeap[env_state.data.sky_light.prefilter_map_slot];
-    ibl_specular
-      = pref_map
-          .SampleLevel(linear_sampler, cube_R,
-            (float)env_state.data.sky_light.prefilter_max_mip * surf.roughness)
-          .rgb
-      * env_state.data.sky_light.tint_rgb
-      * env_state.data.sky_light.radiance_scale
-      * env_state.data.sky_light.specular_intensity;
-  }
-
-  const GgxIntegratedLobes response = EvaluateGgxIntegratedLobes(NdotV, F0,
-    base_rgb * (1.0 - surf.metalness), surf.roughness,
-    LoadResolvedLightingFrameBindings());
-  const float3 ibl_spec_term = ibl_specular * response.specular;
-  const float3 diffuse = ibl_diffuse * response.diffuse;
-  RecordForwardHdrSource(ibl_spec_term);
-  RecordForwardHdrSource(diffuse);
-  return ibl_spec_term + diffuse;
+  const IblSurfaceLighting lighting = EvaluateSkyIbl(env_state.data.sky_light,
+    ResolveIblBrdfSlot(), surf.N, surf.V, base_rgb, surf.metalness,
+    surf.roughness, surf.ao, F0);
+  RecordForwardHdrSource(lighting.diffuse);
+  RecordForwardHdrSource(lighting.specular);
+  return lighting.diffuse + lighting.specular;
 }
 
 static ForwardLightingTerms ComputeForwardLightingTerms(VSOutput input,

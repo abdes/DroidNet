@@ -52,7 +52,9 @@
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Environment/EnvironmentLightingService.h>
+#include <Oxygen/Vortex/Environment/Internal/AtmosphereState.h>
 #include <Oxygen/Vortex/Environment/Internal/IblProcessor.h>
+#include <Oxygen/Vortex/Environment/Types/IblProductMetadata.h>
 #include <Oxygen/Vortex/Environment/Types/SkyLightEnvironmentModel.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
@@ -61,6 +63,7 @@
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/RendererTag.h>
+#include <Oxygen/Vortex/Resources/TextureBinder.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestEngine.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestGraphics.h>
@@ -583,9 +586,24 @@ NOLINT_TEST_F(
   WaitForQueueIdle();
 }
 
-NOLINT_TEST_F(ExposureGpuTest,
-  StaticSkyUploadKeepsHalfAndFloatStorageCoherentAcrossFacesAndMips)
+NOLINT_TEST_F(
+  ExposureGpuTest, SpecifiedSkyRetainsCanonicalRadianceAcrossFacesAndMips)
 {
+  owned_asset_loader_ = std::make_unique<vortex::testing::FakeAssetLoader>();
+  owned_test_engine_
+    = std::make_unique<::testing::NiceMock<ExposureTestEngine>>();
+  ON_CALL(*owned_test_engine_, GetAssetLoader())
+    .WillByDefault(::testing::Return(
+      observer_ptr<content::IAssetLoader> { owned_asset_loader_.get() }));
+  ASSERT_TRUE(renderer_->OnAttached(
+    observer_ptr<IAsyncEngine> { owned_test_engine_.get() }));
+  auto binder = std::make_shared<resources::TextureBinder>(
+    observer_ptr { renderer_->GetGraphics().get() },
+    observer_ptr { &renderer_->GetStagingProvider() },
+    observer_ptr { &renderer_->GetUploadCoordinator() },
+    observer_ptr<content::IAssetLoader> { owned_asset_loader_.get() });
+  binder->OnFrameStart();
+
   for (const bool wide : {
          false,
          true,
@@ -635,24 +653,33 @@ NOLINT_TEST_F(ExposureGpuTest,
       wide ? 502U : 501U,
     };
     model.lower_hemisphere_is_solid_color = false;
+    owned_asset_loader_->SetTexture(model.cubemap_resource,
+      std::make_shared<data::TextureResource>(std::move(source)));
     auto processor = environment::internal::IblProcessor(*renderer_);
-    const auto first
-      = processor.RefreshStaticSkyLightProducts({}, model, &source);
-    auto texture = FailureBackend().processed_sky.lock();
-    ASSERT_NE(texture, nullptr);
-    ASSERT_EQ(texture->GetDescriptor().format,
-      wide ? Format::kRGBA32Float : Format::kRGBA16Float);
-    ASSERT_EQ(texture->GetDescriptor().mip_levels, 2U);
-    WaitForQueueIdle();
-    renderer_->GetUploadCoordinator().OnFrameStart(
-      vortex::internal::RendererTagFactory::Get(),
-      frame::Slot {
-        wide ? 1U : 0U,
-      });
-    const auto ready = processor.RefreshStaticSkyLightProducts(
-      first.probe_state, model, &source);
+    auto stable = environment::internal::StableAtmosphereState {};
+    stable.view_products.sky_light = model;
+    auto ready
+      = processor.RefreshSkyLightProducts({}, ctx_, stable, {}, binder);
+    for (unsigned attempt = 0; !ready.probe_state.valid && attempt < 4;
+      ++attempt) {
+      WaitForQueueIdle();
+      renderer_->GetUploadCoordinator().OnFrameStart(
+        vortex::internal::RendererTagFactory::Get(),
+        frame::Slot { (attempt + 1U) % 3U });
+      binder->OnFrameStart();
+      ready = processor.RefreshSkyLightProducts(
+        ready.probe_state, ctx_, stable, {}, binder);
+    }
     ASSERT_TRUE(ready.probe_state.valid);
-    const auto scale = ready.probe_state.static_sky_light.source_radiance_scale;
+    const auto products = processor.GetPublishedProducts();
+    ASSERT_NE(products, nullptr);
+    auto texture = products->processed_cube;
+    ASSERT_EQ(texture->GetDescriptor().mip_levels, 2U);
+    ASSERT_TRUE(products->specular_srv.IsValid());
+    const auto metadata = Read<environment::IblProductMetadata>(
+      *products->metadata, ResourceStates::kShaderResource);
+    EXPECT_EQ(metadata.processing_flags, 3U);
+    const auto scale = metadata.source_radiance_scale;
     for (unsigned face = 0U; face < 6U; ++face) {
       for (unsigned mip = 0U; mip < 2U; ++mip) {
         auto readback
@@ -674,7 +701,7 @@ NOLINT_TEST_F(ExposureGpuTest,
           FAIL() << "Expected mapped to contain a value";
         }
         Pixel pixel {};
-        if (wide) {
+        if (texture->GetDescriptor().format == Format::kRGBA32Float) {
           std::memcpy(pixel.data(), mapped->Data(), sizeof(pixel));
         } else {
           std::array<std::uint16_t, 4U> packed {};
@@ -693,13 +720,38 @@ NOLINT_TEST_F(ExposureGpuTest,
         EXPECT_EQ(pixel.at(3), 1.0F);
       }
     }
+    stable.view_products.sky_light.cubemap_resource
+      = content::ResourceKey { 991U };
+    const auto pending = processor.RefreshSkyLightProducts(
+      ready.probe_state, ctx_, stable, {}, binder);
+    EXPECT_FALSE(pending.probe_state.valid);
+    EXPECT_EQ(pending.probe_state.probes.environment_map_srv,
+      kInvalidShaderVisibleIndex);
+    EXPECT_EQ(pending.probe_state.probes.product_metadata_srv,
+      kInvalidShaderVisibleIndex);
+    EXPECT_EQ(processor.GetPublishedProducts(), products);
     FlushBackend();
   }
 }
 
 NOLINT_TEST_F(ExposureGpuTest,
-  StaticSkyIntensityEditPromotesBeforePublishingAmplifiedHalfLoss)
+  SpecifiedSkyIntensityEditsPreserveCanonicalRadianceWithoutRecapture)
 {
+  owned_asset_loader_ = std::make_unique<vortex::testing::FakeAssetLoader>();
+  owned_test_engine_
+    = std::make_unique<::testing::NiceMock<ExposureTestEngine>>();
+  ON_CALL(*owned_test_engine_, GetAssetLoader())
+    .WillByDefault(::testing::Return(
+      observer_ptr<content::IAssetLoader> { owned_asset_loader_.get() }));
+  ASSERT_TRUE(renderer_->OnAttached(
+    observer_ptr<IAsyncEngine> { owned_test_engine_.get() }));
+  auto binder = std::make_shared<resources::TextureBinder>(
+    observer_ptr { renderer_->GetGraphics().get() },
+    observer_ptr { &renderer_->GetStagingProvider() },
+    observer_ptr { &renderer_->GetUploadCoordinator() },
+    observer_ptr<content::IAssetLoader> { owned_asset_loader_.get() });
+  binder->OnFrameStart();
+
   data::pak::core::TextureResourceDesc desc {};
   desc.texture_type = static_cast<std::uint8_t>(TextureType::kTextureCube);
   desc.width = desc.height = desc.depth = 1U;
@@ -741,52 +793,38 @@ NOLINT_TEST_F(ExposureGpuTest,
     511U,
   };
   model.lower_hemisphere_is_solid_color = false;
+  owned_asset_loader_->SetTexture(model.cubemap_resource,
+    std::make_shared<data::TextureResource>(std::move(source)));
   auto processor = environment::internal::IblProcessor(*renderer_);
-  auto state
-    = processor.RefreshStaticSkyLightProducts({}, model, &source).probe_state;
-  auto half = FailureBackend().processed_sky.lock();
-  ASSERT_NE(half, nullptr);
-  EXPECT_EQ(half->GetDescriptor().format, Format::kRGBA16Float);
-  WaitForQueueIdle();
-  renderer_->GetUploadCoordinator().OnFrameStart(
-    vortex::internal::RendererTagFactory::Get(),
-    frame::Slot {
-      0U,
-    });
-  state = processor.RefreshStaticSkyLightProducts(state, model, &source)
-            .probe_state;
+  auto stable = environment::internal::StableAtmosphereState {};
+  const auto refresh = [&](const EnvironmentProbeState& previous) {
+    stable.view_products.sky_light = model;
+    return processor.RefreshSkyLightProducts(
+      previous, ctx_, stable, {}, binder);
+  };
+  auto ready = refresh({});
+  for (unsigned attempt = 0; !ready.probe_state.valid && attempt < 4;
+    ++attempt) {
+    WaitForQueueIdle();
+    renderer_->GetUploadCoordinator().OnFrameStart(
+      vortex::internal::RendererTagFactory::Get(),
+      frame::Slot { (attempt + 1U) % 3U });
+    binder->OnFrameStart();
+    ready = refresh(ready.probe_state);
+  }
+  auto state = ready.probe_state;
   ASSERT_TRUE(state.valid);
-  const auto original_key = state.static_sky_light.key;
-  const auto original_revision = state.static_sky_light.product_revision;
+  const auto original = processor.GetPublishedProducts();
   model.intensity_mul = 2.0F;
-  const auto harmless
-    = processor.RefreshStaticSkyLightProducts(state, model, &source);
-  EXPECT_FALSE(harmless.refreshed);
-  EXPECT_EQ(
-    harmless.probe_state.static_sky_light.product_revision, original_revision);
-  EXPECT_EQ(FailureBackend().processed_sky.lock(), half);
+  EXPECT_FALSE(refresh(state).refreshed);
   model.intensity_mul = 0x1p50F;
-  const auto pending = processor.RefreshStaticSkyLightProducts(
-    harmless.probe_state, model, &source);
-  EXPECT_FALSE(pending.probe_state.valid);
-  EXPECT_EQ(pending.probe_state.static_sky_light.processed_cubemap_srv,
-    kInvalidShaderVisibleIndex);
-  auto full = FailureBackend().processed_sky.lock();
-  ASSERT_NE(full, nullptr);
-  EXPECT_NE(full, half);
-  EXPECT_EQ(full->GetDescriptor().format, Format::kRGBA32Float);
-  WaitForQueueIdle();
-  renderer_->GetUploadCoordinator().OnFrameStart(
-    vortex::internal::RendererTagFactory::Get(),
-    frame::Slot {
-      1U,
-    });
-  state = processor
-            .RefreshStaticSkyLightProducts(pending.probe_state, model, &source)
-            .probe_state;
-  ASSERT_TRUE(state.valid);
-  EXPECT_EQ(state.static_sky_light.key, original_key);
-  EXPECT_GT(state.static_sky_light.product_revision, original_revision);
+  const auto amplified = refresh(state);
+  EXPECT_TRUE(amplified.probe_state.valid);
+  EXPECT_FALSE(amplified.refreshed);
+  EXPECT_EQ(processor.GetPublishedProducts(), original);
+  auto full = original->processed_cube;
+  ASSERT_EQ(full->GetDescriptor().format, Format::kRGBA32Float);
+  state = amplified.probe_state;
   auto service = EnvironmentLightingService(*renderer_);
   const auto published
     = vortex::testing::RendererPublicationProbe::BuildStaticSkyPublication(
@@ -812,12 +850,11 @@ NOLINT_TEST_F(ExposureGpuTest,
     EXPECT_EQ(actual.at(channel) * published.sky_light.radiance_scale, 1.0F);
   }
   model.intensity_mul = 1.0F;
-  const auto dimmed
-    = processor.RefreshStaticSkyLightProducts(state, model, &source);
+  const auto dimmed = refresh(state);
   EXPECT_FALSE(dimmed.refreshed);
   EXPECT_EQ(dimmed.probe_state.static_sky_light.product_revision,
     state.static_sky_light.product_revision);
-  EXPECT_EQ(FailureBackend().processed_sky.lock(), full);
+  EXPECT_EQ(processor.GetPublishedProducts(), original);
   FlushBackend();
 }
 

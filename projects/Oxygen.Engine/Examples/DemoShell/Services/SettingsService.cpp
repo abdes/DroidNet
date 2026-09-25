@@ -313,6 +313,13 @@ auto SettingsService::SetBool(std::string_view key, bool value) -> void
   dirty_ = true;
 }
 
+auto SettingsService::Contains(std::string_view key) const -> bool
+{
+  std::shared_lock lock(mutex_);
+  CHECK_F(loaded_, "SettingsService: settings not loaded");
+  return FindNode(key) != nullptr;
+}
+
 auto SettingsService::Remove(std::string_view key) -> bool
 {
   std::unique_lock lock(mutex_);

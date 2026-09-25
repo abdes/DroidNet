@@ -11,7 +11,7 @@ It is intentionally written to align with existing Scene architecture and philos
 - **Typed facades** (like `SceneNode::Transform` / `SceneNode::Renderable`) to keep the `SceneNode` API surface small and stable.
 - **Camera-style attachments** where appropriate (lights mirror the Camera `Attach/Detach/Replace/GetAs<T>` API for consistency).
 
-Status: Historical Scene-light development notes, reconciled with the EX07 target. Current authored domains, strict scene-v7 records and mutation rules are owned by [the property contract](../../../../design/vortex/lld/lighting-properties.md); physical evaluation is owned by [the PBR specification](../../../../design/renderer-core/physically-based-rendering.md). Historical checklists below are not proof of current EX07 implementation.
+Status: Historical Scene-light development notes, reconciled with the EX07 target. Current authored domains, strict scene-v8 records and mutation rules are owned by [the property contract](../../../../design/vortex/lld/lighting-properties.md); physical evaluation is owned by [the PBR specification](../../../../design/renderer-core/physically-based-rendering.md). Historical checklists below are not proof of current EX07 implementation.
 
 ---
 

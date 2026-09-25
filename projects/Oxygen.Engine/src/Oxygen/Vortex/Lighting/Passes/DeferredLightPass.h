@@ -49,9 +49,7 @@ namespace lighting {
       bool used_outside_volume_local_lights { false };
       bool used_camera_inside_local_lights { false };
       bool used_non_perspective_local_lights { false };
-      bool consumed_static_sky_light_product { false };
       std::uint32_t directional_draw_count { 0U };
-      std::uint32_t static_sky_light_draw_count { 0U };
       std::uint32_t point_light_count { 0U };
       std::uint32_t spot_light_count { 0U };
       std::uint32_t local_light_count { 0U };
@@ -86,8 +84,8 @@ namespace lighting {
       std::span<const std::shared_ptr<graphics::Texture>>
         directional_shadow_surfaces,
       std::span<const std::shared_ptr<graphics::Texture>> spot_shadow_surfaces,
-      std::span<const std::shared_ptr<graphics::Texture>> point_shadow_surfaces,
-      bool static_sky_light_available) -> ExecutionState;
+      std::span<const std::shared_ptr<graphics::Texture>> point_shadow_surfaces)
+      -> ExecutionState;
 
   private:
     Renderer& renderer_;

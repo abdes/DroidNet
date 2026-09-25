@@ -4,13 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Scene/Environment/Fog.h>
 #include <Oxygen/Scene/Environment/LocalFogVolume.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/SkyLight.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::scene::testing {
 
@@ -149,7 +148,6 @@ NOLINT_TEST(
 NOLINT_TEST(EnvironmentComponentsTest, SkyLightExposesWidenedAuthoredFields)
 {
   auto sky_light = environment::SkyLight {};
-  sky_light.SetRealTimeCaptureEnabled(true);
   sky_light.SetSourceCubemapAngleRadians(0.75F);
   sky_light.SetLowerHemisphereColor({ 0.1F, 0.2F, 0.3F });
   sky_light.SetLowerHemisphereIsSolidColor(false);
@@ -157,7 +155,6 @@ NOLINT_TEST(EnvironmentComponentsTest, SkyLightExposesWidenedAuthoredFields)
   sky_light.SetVolumetricScatteringIntensity(0.4F);
   sky_light.SetAffectReflections(false);
 
-  EXPECT_TRUE(sky_light.GetRealTimeCaptureEnabled());
   EXPECT_FLOAT_EQ(sky_light.GetSourceCubemapAngleRadians(), 0.75F);
   EXPECT_EQ(sky_light.GetLowerHemisphereColor(), Vec3(0.1F, 0.2F, 0.3F));
   EXPECT_FALSE(sky_light.GetLowerHemisphereIsSolidColor());
@@ -176,8 +173,7 @@ NOLINT_TEST(EnvironmentComponentsTest,
 
   EXPECT_EQ(light.GetAtmosphereLightSlot(), AtmosphereLightSlot::kSecondary);
   EXPECT_TRUE(light.GetUsePerPixelAtmosphereTransmittance());
-  EXPECT_EQ(
-    light.GetAtmosphereDiskLuminanceScale(), Vec3(1.2F, 0.9F, 0.8F));
+  EXPECT_EQ(light.GetAtmosphereDiskLuminanceScale(), Vec3(1.2F, 0.9F, 0.8F));
 }
 
 } // namespace oxygen::scene::testing

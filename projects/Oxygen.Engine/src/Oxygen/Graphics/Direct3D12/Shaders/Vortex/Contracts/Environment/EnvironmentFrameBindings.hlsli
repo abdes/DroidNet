@@ -23,23 +23,6 @@ struct EnvironmentFrameBindings
         uint product_metadata_srv;
     };
 
-    struct EnvironmentEvaluationParameters
-    {
-        float ambient_intensity;
-        float average_brightness;
-        float blend_fraction;
-        uint evaluation_flags;
-    };
-
-    struct EnvironmentAmbientBridgeBindings
-    {
-        uint irradiance_map_srv;
-        float ambient_intensity;
-        float average_brightness;
-        float blend_fraction;
-        uint flags;
-    };
-
     uint environment_static_slot;
     uint environment_view_slot;
     uint atmosphere_model_slot;
@@ -53,8 +36,7 @@ struct EnvironmentFrameBindings
     uint sky_view_lut_srv;
     uint camera_aerial_perspective_srv;
     EnvironmentProbeBindings probes;
-    EnvironmentEvaluationParameters evaluation;
-    EnvironmentAmbientBridgeBindings ambient_bridge;
+    uint brdf_lut_srv;
     uint padding;
 };
 
@@ -78,15 +60,7 @@ static EnvironmentFrameBindings LoadEnvironmentFrameBindings(uint slot)
     invalid_bindings.probes.prefiltered_map_srv = K_INVALID_BINDLESS_INDEX;
     invalid_bindings.probes.probe_revision = 0u;
     invalid_bindings.probes.product_metadata_srv = K_INVALID_BINDLESS_INDEX;
-    invalid_bindings.evaluation.ambient_intensity = 1.0f;
-    invalid_bindings.evaluation.average_brightness = 1.0f;
-    invalid_bindings.evaluation.blend_fraction = 0.0f;
-    invalid_bindings.evaluation.evaluation_flags = 0u;
-    invalid_bindings.ambient_bridge.irradiance_map_srv = K_INVALID_BINDLESS_INDEX;
-    invalid_bindings.ambient_bridge.ambient_intensity = 1.0f;
-    invalid_bindings.ambient_bridge.average_brightness = 1.0f;
-    invalid_bindings.ambient_bridge.blend_fraction = 0.0f;
-    invalid_bindings.ambient_bridge.flags = 0u;
+    invalid_bindings.brdf_lut_srv = K_INVALID_BINDLESS_INDEX;
 
     if (slot == K_INVALID_BINDLESS_INDEX || !BX_IN_GLOBAL_SRV(slot)) {
         return invalid_bindings;

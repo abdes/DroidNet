@@ -15,6 +15,11 @@
 #include <string>
 #include <vector>
 
+#include "DemoShell/Runtime/AppWindow.h"
+#include "DemoShell/Runtime/DemoAppContext.h"
+#include "DemoShell/Services/DefaultSceneLighting.h"
+#include "VortexBasic/MainModule.h"
+#include "VortexBasic/NormalMapValidationTexture.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -54,12 +59,6 @@
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/SceneCameraViewResolver.h>
 #include <Oxygen/Vortex/Types/CompositingTask.h>
-
-#include "DemoShell/Runtime/AppWindow.h"
-#include "DemoShell/Runtime/DemoAppContext.h"
-#include "DemoShell/Services/DefaultSceneLighting.h"
-#include "VortexBasic/MainModule.h"
-#include "VortexBasic/NormalMapValidationTexture.h"
 
 using oxygen::ViewPort;
 using oxygen::data::Vertex;
@@ -757,7 +756,6 @@ auto MainModule::EnsureScene() -> void
     sky_light->SetTintRgb({ 1.0F, 1.0F, 1.0F });
     sky_light->SetDiffuseIntensity(1.0F);
     sky_light->SetSpecularIntensity(1.0F);
-    sky_light->SetRealTimeCaptureEnabled(true);
     sky_light->SetLowerHemisphereColor({ 0.02F, 0.02F, 0.03F });
     sky_light->SetVolumetricScatteringIntensity(
       app_.vortex_sky_light_volumetric_scattering_intensity);
@@ -1050,7 +1048,7 @@ auto MainModule::BuildSidednessScene() -> void
   light->Common().shadow.bias = kDefaultDemoSunShadowBias;
   light->Common().color_rgb = { 1.0F, 1.0F, 1.0F };
   light->SetIntensityLux(100000.0F);
-    light->SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kPrimary);
+  light->SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kPrimary);
   light->SetUsePerPixelAtmosphereTransmittance(false);
   CHECK_F(directional_light_node_.AttachLight(std::move(light)));
   directional_light_node_.GetTransform().SetLocalRotation(

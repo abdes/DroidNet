@@ -135,15 +135,14 @@ prefilter mip chain; use a shared BRDF integration LUT.
 
 **Source modes**:
 
-- `kCapturedScene`: capture the active sky/background into a cubemap for IBL.
+- `kCapturedScene`: capture atmosphere and participating analytic height fog into a cubemap for IBL.
 - `kSpecifiedCubemap`: use the authored cubemap asset.
 
 Extended authoring also covers:
 
-- real-time capture enable
 - lower-hemisphere color
 - volumetric scattering intensity
-- reflection / GI participation flags
+- reflection participation and separate diffuse/specular multipliers
 
 ### Directional Light Atmosphere Roles
 

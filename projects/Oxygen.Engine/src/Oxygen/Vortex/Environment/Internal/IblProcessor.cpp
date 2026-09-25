@@ -5,512 +5,182 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <array>
-#include <cstddef>
-#include <cstdint>
-#include <memory>
-#include <optional>
-#include <span>
+#include <bit>
+#include <cmath>
 #include <tuple>
 #include <utility>
-#include <vector>
 
-#include <glm/ext/vector_float4.hpp>
-
-#include <Oxygen/Content/IAssetLoader.h>
-#include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
-#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
-#include <Oxygen/Data/HalfFloat.h>
-#include <Oxygen/Data/TextureResource.h>
-#include <Oxygen/Graphics/Common/Buffer.h>
-#include <Oxygen/Graphics/Common/DescriptorAllocator.h>
-#include <Oxygen/Graphics/Common/Graphics.h>
-#include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Texture.h>
-#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
-#include <Oxygen/Graphics/Common/Types/ResourceAccessMode.h>
-#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
-#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
+#include <Oxygen/Vortex/Environment/Internal/AtmosphereState.h>
+#include <Oxygen/Vortex/Environment/Internal/CapturedSkySource.h>
 #include <Oxygen/Vortex/Environment/Internal/IblProcessor.h>
-#include <Oxygen/Vortex/Environment/Internal/ResourceRetirement.h>
-#include <Oxygen/Vortex/Environment/Internal/StaticSkyLightProcessor.h>
 #include <Oxygen/Vortex/Environment/Passes/IblProbePass.h>
-#include <Oxygen/Vortex/Environment/Types/EnvironmentProbeState.h>
-#include <Oxygen/Vortex/Environment/Types/SkyLightEnvironmentModel.h>
-#include <Oxygen/Vortex/Environment/Types/StaticSkyLightProducts.h>
 #include <Oxygen/Vortex/Renderer.h>
-#include <Oxygen/Vortex/Upload/Types.h>
-#include <Oxygen/Vortex/Upload/UploadCoordinator.h>
-#include <Oxygen/Vortex/Upload/UploadHelpers.h>
+#include <Oxygen/Vortex/Resources/TextureBinder.h>
 
 namespace oxygen::vortex::environment::internal {
 
 namespace {
-
-  [[nodiscard]] auto MipFaceSize(const std::uint32_t base_face_size,
-    const std::uint32_t mip) noexcept -> std::uint32_t
+  auto MakePublishedState(const IblGpuProducts& product,
+    const StaticSkyLightProductKey& key, const bool enabled)
+    -> EnvironmentProbeState
   {
-    return (std::max)(1U, base_face_size >> mip);
+    auto result = EnvironmentProbeState {};
+    result.probes = { .environment_map_srv = product.processed_srv,
+      .diffuse_sh_srv = product.diffuse_sh_srv,
+      .prefiltered_map_srv = product.specular_srv,
+      .probe_revision = product.revision,
+      .product_metadata_srv = product.metadata_srv };
+    result.static_sky_light = { .key = key,
+      .processed_cubemap_srv = product.processed_srv,
+      .diffuse_irradiance_sh_srv = product.diffuse_sh_srv,
+      .prefiltered_cubemap_srv = product.specular_srv,
+      .processed_cubemap_max_mip = product.maximum_mip,
+      .prefiltered_cubemap_max_mip = product.maximum_mip,
+      .product_revision = product.revision,
+      .status = enabled ? StaticSkyLightProductStatus::kValidCurrentKey
+                        : StaticSkyLightProductStatus::kDisabled };
+    result.valid = true;
+    result.flags = kEnvironmentProbeStateFlagResourcesValid;
+    return result;
   }
-
-  [[nodiscard]] auto FaceMipElementCount(const std::uint32_t base_face_size,
-    const std::uint32_t mip_count) noexcept -> std::size_t
-  {
-    auto total = std::size_t { 0U };
-    for (std::uint32_t mip = 0U; mip < mip_count; ++mip) {
-      const auto mip_size
-        = static_cast<std::size_t>(MipFaceSize(base_face_size, mip));
-      total += mip_size * mip_size;
-    }
-    return total;
-  }
-
-  [[nodiscard]] auto ProcessedMipOffset(const std::uint32_t face,
-    const std::uint32_t mip, const std::uint32_t base_face_size,
-    const std::uint32_t mip_count) noexcept -> std::size_t
-  {
-    auto offset = static_cast<std::size_t>(face)
-      * FaceMipElementCount(base_face_size, mip_count);
-    for (std::uint32_t current_mip = 0U; current_mip < mip; ++current_mip) {
-      const auto mip_size
-        = static_cast<std::size_t>(MipFaceSize(base_face_size, current_mip));
-      offset += mip_size * mip_size;
-    }
-    return offset;
-  }
-
-  auto EncodeRgba16(const std::span<const glm::vec4> rgba)
-    -> std::vector<std::uint16_t>
-  {
-    std::vector<std::uint16_t> encoded;
-    encoded.resize(rgba.size() * 4U);
-    for (std::size_t index = 0U; index < rgba.size(); ++index) {
-      encoded[index * 4U + 0U] = data::HalfFloat { rgba[index].r }.get();
-      encoded[index * 4U + 1U] = data::HalfFloat { rgba[index].g }.get();
-      encoded[index * 4U + 2U] = data::HalfFloat { rgba[index].b }.get();
-      encoded[index * 4U + 3U] = data::HalfFloat { rgba[index].a }.get();
-    }
-    return encoded;
-  }
-
 } // namespace
 
-struct IblProcessor::StaticSkyLightProductCache {
-  StaticSkyLightProductKey key {};
-  StaticSkyLightProducts products {};
-  std::shared_ptr<graphics::Texture> processed_cubemap;
-  std::shared_ptr<graphics::Buffer> diffuse_sh_buffer;
-  std::optional<upload::UploadTicket> processed_cubemap_upload;
-  std::optional<upload::UploadTicket> diffuse_sh_upload;
-  bool has_submitted_current_key { false };
-  double half_storage_gain_limit { 0.0 };
-  Format processed_format { Format::kRGBA16Float };
+struct IblProcessor::Cache {
+  std::unique_ptr<IblGpuProcessor> processor;
+  std::unique_ptr<IblBrdfResources> brdf;
+  std::unique_ptr<CapturedSkySource> captured;
+  std::shared_ptr<const IblGpuProducts> published;
+  StaticSkyLightProductKey key;
+  std::uint32_t revision {};
 };
 
 IblProcessor::IblProcessor(Renderer& renderer)
   : renderer_(renderer)
-  , probe_pass_(std::make_unique<environment::IblProbePass>())
-  , static_sky_light_cache_(std::make_unique<StaticSkyLightProductCache>())
+  , cache_(std::make_unique<Cache>())
 {
 }
-
 IblProcessor::~IblProcessor() = default;
 
 auto IblProcessor::RefreshPersistentProbes(
-  const EnvironmentProbeState& current_state,
-  const bool environment_source_changed) -> RefreshState
+  const EnvironmentProbeState& current, const bool changed) -> RefreshState
 {
-  std::ignore = renderer_;
-  const auto refreshed
-    = probe_pass_->Refresh(current_state, environment_source_changed);
-  return {
-    .requested = refreshed.requested,
-    .refreshed = refreshed.refreshed,
-    .probe_state = refreshed.probe_state,
+  const auto result = IblProbePass {}.Refresh(current, changed);
+  return { result.requested, result.refreshed, result.probe_state };
+}
+
+auto IblProcessor::GetPublishedProducts() const
+  -> std::shared_ptr<const IblGpuProducts>
+{
+  return cache_->published;
+}
+
+auto IblProcessor::RefreshSkyLightProducts(const EnvironmentProbeState& current,
+  RenderContext& ctx, const StableAtmosphereState& stable,
+  const GpuFogParams& fog,
+  const std::shared_ptr<resources::TextureBinder>& binder) -> RefreshState
+{
+  auto& cache = *cache_;
+  const auto& light = stable.view_products.sky_light;
+  auto next = EnvironmentProbeState {};
+  next.probes.probe_revision = current.probes.probe_revision;
+  const auto unavailable = [&](const StaticSkyLightUnavailableReason reason) {
+    next.static_sky_light.status = StaticSkyLightProductStatus::kUnavailable;
+    next.static_sky_light.unavailable_reason = reason;
+    next.flags = kEnvironmentProbeStateFlagUnavailable;
+    return RefreshState { true, false, next };
   };
-}
-
-auto IblProcessor::RefreshStaticSkyLightProducts(
-  const EnvironmentProbeState& current_state,
-  const SkyLightEnvironmentModel& sky_light) -> RefreshState
-{
-  auto source_cubemap = std::shared_ptr<data::TextureResource> {};
-  if (sky_light.enabled && sky_light.source == kSkyLightSourceSpecifiedCubemap
-    && sky_light.cubemap_resource.get() != 0U) {
-    if (const auto asset_loader = renderer_.GetAssetLoader();
-      asset_loader != nullptr) {
-      source_cubemap = asset_loader->GetTexture(sky_light.cubemap_resource);
-      if (source_cubemap == nullptr) {
-        asset_loader->StartLoadTexture(sky_light.cubemap_resource,
-          [](std::shared_ptr<data::TextureResource>) -> void { });
-        source_cubemap = asset_loader->GetTexture(sky_light.cubemap_resource);
-      }
+  auto key = StaticSkyLightProductKey {
+    .source_cubemap = light.cubemap_resource,
+    .source_revision = light.enabled ? HashSkyCaptureInputs(stable) : 0U,
+    .output_face_size = 128U,
+    .source_format_class = light.enabled ? light.source : 0xFFFFFFFFU,
+    .source_rotation_radians
+    = light.enabled && light.source == kSkyLightSourceSpecifiedCubemap
+      ? light.source_cubemap_angle_radians
+      : 0.0F,
+    .lower_hemisphere_solid_color = light.lower_hemisphere_is_solid_color,
+    .lower_hemisphere_color = light.lower_hemisphere_color,
+    .lower_hemisphere_blend_alpha = light.lower_hemisphere_blend_alpha,
+  };
+  if (!light.enabled)
+    key = { .output_face_size = 128U, .source_format_class = 0xFFFFFFFFU };
+  struct ResidentOwner {
+    std::shared_ptr<resources::TextureBinder> binder;
+    std::shared_ptr<const resources::TextureBinder::ReadyTexture> texture;
+  };
+  std::shared_ptr<const resources::TextureBinder::ReadyTexture> resident;
+  if (light.enabled && light.source == kSkyLightSourceSpecifiedCubemap) {
+    if (light.cubemap_resource.get() == 0U)
+      return unavailable(StaticSkyLightUnavailableReason::kMissingCubemap);
+    if (!binder)
+      return unavailable(
+        StaticSkyLightUnavailableReason::kResourceResolveFailed);
+    std::ignore = binder->GetOrAllocate(light.cubemap_resource);
+    resident = binder->AcquireReadyTexture(light.cubemap_resource);
+    if (!resident)
+      return unavailable(binder->HasResourceFailed(light.cubemap_resource)
+          ? StaticSkyLightUnavailableReason::kResourceResolveFailed
+          : StaticSkyLightUnavailableReason::kGpuProductsPending);
+    const auto& source_desc = resident->texture->GetDescriptor();
+    if (source_desc.texture_type != TextureType::kTextureCube
+      || source_desc.array_size != 6U)
+      return unavailable(StaticSkyLightUnavailableReason::kNotTextureCube);
+    switch (source_desc.format) {
+    case Format::kRGBA16Float:
+    case Format::kRGBA32Float:
+    case Format::kBC6HFloatU:
+    case Format::kBC6HFloatS:
+    case Format::kR11G11B10Float:
+    case Format::kR9G9B9E5Float:
+      break;
+    default:
+      return unavailable(StaticSkyLightUnavailableReason::kUnsupportedFormat);
     }
+    key.source_revision = binder->GetContentRevision(resident->srv);
+    key.output_face_size = std::bit_floor(source_desc.width);
   }
-
-  return RefreshStaticSkyLightProducts(
-    current_state, sky_light, source_cubemap.get());
-}
-
-auto IblProcessor::RefreshStaticSkyLightProducts(
-  const EnvironmentProbeState& current_state,
-  const SkyLightEnvironmentModel& sky_light,
-  const data::TextureResource* source_cubemap) -> RefreshState
-{
-  auto refreshed = probe_pass_->RefreshStaticSkyLight(
-    current_state, sky_light, source_cubemap);
-  auto& state = refreshed.probe_state;
-  auto& cache = *static_sky_light_cache_;
-
-  if (state.static_sky_light.unavailable_reason
-      != StaticSkyLightUnavailableReason::kGpuProductsPending
-    || source_cubemap == nullptr) {
-    if (const auto gfx = renderer_.GetGraphics(); gfx != nullptr) {
-      RetireEnvironmentResource(*gfx, cache.processed_cubemap);
-      RetireEnvironmentResource(*gfx, cache.diffuse_sh_buffer);
+  const bool changed = !cache.published || cache.key != key;
+  if (changed) {
+    auto graphics = renderer_.GetGraphics();
+    if (!graphics)
+      return unavailable(StaticSkyLightUnavailableReason::kProcessingFailed);
+    if (!cache.processor) {
+      cache.processor = std::make_unique<IblGpuProcessor>(renderer_);
+      cache.brdf = std::make_unique<IblBrdfResources>(*graphics);
+      cache.captured = std::make_unique<CapturedSkySource>(renderer_);
     }
-    cache = StaticSkyLightProductCache {};
-    return {
-      .requested = refreshed.requested,
-      .refreshed = refreshed.refreshed,
-      .probe_state = state,
+    const auto brdf = cache.brdf->Prepare();
+    if (!brdf)
+      return unavailable(StaticSkyLightUnavailableReason::kProcessingFailed);
+    const auto settings = IblProcessSettings {
+      .face_size = key.output_face_size,
+      .source_rotation_radians = key.source_rotation_radians,
+      .lower_hemisphere_solid_color = key.lower_hemisphere_solid_color,
+      .lower_hemisphere_color = { key.lower_hemisphere_color.x,
+        key.lower_hemisphere_color.y, key.lower_hemisphere_color.z },
+      .lower_hemisphere_blend_alpha = key.lower_hemisphere_blend_alpha,
     };
-  }
-
-  const auto key = state.static_sky_light.key;
-  const bool precision_upgrade = cache.has_submitted_current_key
-    && cache.key == key && cache.processed_format == Format::kRGBA16Float
-    && static_cast<double>(sky_light.intensity_mul)
-      > cache.half_storage_gain_limit;
-  const auto key_changed
-    = !cache.has_submitted_current_key || cache.key != key || precision_upgrade;
-  if (key_changed) {
-    if (const auto gfx = renderer_.GetGraphics(); gfx != nullptr) {
-      RetireEnvironmentResource(*gfx, cache.processed_cubemap);
-      RetireEnvironmentResource(*gfx, cache.diffuse_sh_buffer);
+    const auto revision
+      = cache.revision == UINT32_MAX ? 1U : cache.revision + 1U;
+    const auto result = !light.enabled
+      ? cache.processor->ProcessSky({}, *brdf, settings, revision)
+      : resident
+      ? cache.processor->ProcessCubeView(resident->texture, resident->srv,
+          std::make_shared<ResidentOwner>(ResidentOwner { binder, resident }),
+          *brdf, settings, revision)
+      : cache.captured->Process(
+          ctx, stable, fog, *cache.processor, *brdf, settings, revision);
+    if (!result) {
+      return unavailable(StaticSkyLightUnavailableReason::kProcessingFailed);
     }
-    cache = StaticSkyLightProductCache {};
+    cache.published = *result;
     cache.key = key;
-
-    const auto cpu_products = ProcessStaticSkyLightCubemapCpu(
-      *source_cubemap, sky_light, key.output_face_size);
-    if (!cpu_products.has_value()) {
-      state.static_sky_light.unavailable_reason
-        = StaticSkyLightUnavailableReason::kProcessingFailed;
-      return {
-        .requested = true,
-        .refreshed = true,
-        .probe_state = state,
-      };
-    }
-    auto gfx = renderer_.GetGraphics();
-    if (gfx == nullptr) {
-      state.static_sky_light.unavailable_reason
-        = StaticSkyLightUnavailableReason::kProcessingFailed;
-      return {
-        .requested = true,
-        .refreshed = true,
-        .probe_state = state,
-      };
-    }
-
-    const auto face_size = cpu_products->output_face_size;
-    const auto mip_count = cpu_products->mip_count;
-    auto processed_cubemap = gfx->CreateTexture({
-      .width = face_size,
-      .height = face_size,
-      .depth = 1U,
-      .array_size = 6U,
-      .mip_levels = mip_count,
-      .sample_count = 1U,
-      .sample_quality = 0U,
-      .format = cpu_products->processed_format,
-      .texture_type = TextureType::kTextureCube,
-      .debug_name = "Vortex.StaticSkyLight.ProcessedCubemap",
-      .is_shader_resource = true,
-      .is_render_target = false,
-      .is_uav = false,
-      .is_typeless = false,
-      .is_shading_rate_surface = false,
-      .clear_value = {},
-      .use_clear_value = false,
-      .initial_state = graphics::ResourceStates::kCommon,
-      .cpu_access = graphics::ResourceAccessMode::kImmutable,
-    });
-    if (processed_cubemap == nullptr) {
-      state.static_sky_light.unavailable_reason
-        = StaticSkyLightUnavailableReason::kProcessingFailed;
-      return {
-        .requested = true,
-        .refreshed = true,
-        .probe_state = state,
-      };
-    }
-    processed_cubemap->SetName("Vortex.StaticSkyLight.ProcessedCubemap");
-
-    static_assert(sizeof(glm::vec4) == sizeof(float) * 4U);
-    const bool use_half
-      = cpu_products->processed_format == Format::kRGBA16Float;
-    auto encoded_rgba16 = use_half ? EncodeRgba16(cpu_products->processed_rgba)
-                                   : std::vector<std::uint16_t> {};
-    const auto bytes_per_pixel
-      = use_half ? sizeof(std::uint16_t) * 4U : sizeof(glm::vec4);
-    const auto* encoded_bytes = use_half
-      ? reinterpret_cast<const std::byte*>(encoded_rgba16.data())
-      : reinterpret_cast<const std::byte*>(cpu_products->processed_rgba.data());
-    auto dst_subresources = std::vector<upload::UploadSubresource> {};
-    auto src_view = upload::UploadTextureSourceView {};
-    dst_subresources.reserve(6U * mip_count);
-    src_view.subresources.reserve(6U * mip_count);
-    for (std::uint32_t face = 0U; face < 6U; ++face) {
-      for (std::uint32_t mip = 0U; mip < mip_count; ++mip) {
-        const auto mip_size = MipFaceSize(face_size, mip);
-        const auto element_offset
-          = ProcessedMipOffset(face, mip, face_size, mip_count);
-        const auto element_count
-          = static_cast<std::size_t>(mip_size) * mip_size;
-        const auto* bytes = encoded_bytes + element_offset * bytes_per_pixel;
-        const auto byte_count = element_count * bytes_per_pixel;
-        dst_subresources.push_back({
-          .mip = mip,
-          .array_slice = face,
-          .x = 0U,
-          .y = 0U,
-          .z = 0U,
-          .width = 0U,
-          .height = 0U,
-          .depth = 0U,
-        });
-        src_view.subresources.push_back({
-          .bytes = std::span<const std::byte>(bytes, byte_count),
-          .row_pitch = static_cast<std::uint32_t>(mip_size * bytes_per_pixel),
-          .slice_pitch = static_cast<std::uint32_t>(byte_count),
-        });
-      }
-    }
-
-    auto texture_upload = upload::UploadRequest {
-      .kind = upload::UploadKind::kTexture2D,
-      .debug_name = "Vortex.StaticSkyLight.ProcessedCubemap.Upload",
-      .desc = upload::UploadTextureDesc {
-        .dst = processed_cubemap,
-        .width = face_size,
-        .height = face_size,
-        .depth = 1U,
-        .format = cpu_products->processed_format,
-      },
-      .subresources = std::move(dst_subresources),
-      .data = std::move(src_view),
-    };
-    auto texture_ticket = renderer_.GetUploadCoordinator().Submit(
-      texture_upload, renderer_.GetStagingProvider());
-    if (!texture_ticket.has_value()) {
-      state.static_sky_light.unavailable_reason
-        = StaticSkyLightUnavailableReason::kProcessingFailed;
-      return {
-        .requested = true,
-        .refreshed = true,
-        .probe_state = state,
-      };
-    }
-
-    auto& registry = gfx->GetResourceRegistry();
-    registry.Register(processed_cubemap);
-    auto texture_srv_handle = gfx->GetDescriptorAllocator().AllocateBindless(
-      bindless::generated::kTexturesDomain,
-      graphics::ResourceViewType::kTexture_SRV);
-    if (!texture_srv_handle.IsValid()) {
-      state.static_sky_light.unavailable_reason
-        = StaticSkyLightUnavailableReason::kProcessingFailed;
-      return {
-        .requested = true,
-        .refreshed = true,
-        .probe_state = state,
-      };
-    }
-    const auto processed_cubemap_srv
-      = gfx->GetDescriptorAllocator().GetShaderVisibleIndex(texture_srv_handle);
-    registry.RegisterView(*processed_cubemap, std::move(texture_srv_handle),
-      graphics::TextureViewDescription {
-        .view_type = graphics::ResourceViewType::kTexture_SRV,
-        .visibility = graphics::DescriptorVisibility::kShaderVisible,
-        .format = cpu_products->processed_format,
-        .dimension = TextureType::kTextureCube,
-        .sub_resources = graphics::TextureSubResourceSet::EntireTexture(),
-        .is_read_only_dsv = false,
-      });
-
-    auto diffuse_sh_buffer = std::shared_ptr<graphics::Buffer> {};
-    auto diffuse_sh_srv = ShaderVisibleIndex { kInvalidShaderVisibleIndex };
-    const auto diffuse_sh_bytes = static_cast<std::uint64_t>(
-      cpu_products->diffuse_irradiance_sh.size() * sizeof(glm::vec4));
-    const auto buffer_result = upload::internal::EnsureBufferAndSrv(*gfx,
-      diffuse_sh_buffer, diffuse_sh_srv, diffuse_sh_bytes, sizeof(glm::vec4),
-      "Vortex.StaticSkyLight.DiffuseIrradianceSH");
-    if (!buffer_result.has_value()) {
-      state.static_sky_light.unavailable_reason
-        = StaticSkyLightUnavailableReason::kProcessingFailed;
-      return {
-        .requested = true,
-        .refreshed = true,
-        .probe_state = state,
-      };
-    }
-
-    const auto sh_bytes = std::as_bytes(
-      std::span<const glm::vec4, kStaticSkyLightDiffuseShElementCount>(
-        cpu_products->diffuse_irradiance_sh));
-    auto sh_upload = upload::UploadRequest {
-      .kind = upload::UploadKind::kBuffer,
-      .debug_name = "Vortex.StaticSkyLight.DiffuseIrradianceSH.Upload",
-      .desc = upload::UploadBufferDesc {
-        .dst = diffuse_sh_buffer,
-        .size_bytes = sh_bytes.size_bytes(),
-        .dst_offset = 0U,
-      },
-      .data = upload::UploadDataView { .bytes = sh_bytes },
-    };
-    auto sh_ticket = renderer_.GetUploadCoordinator().Submit(
-      sh_upload, renderer_.GetStagingProvider());
-    if (!sh_ticket.has_value()) {
-      state.static_sky_light.unavailable_reason
-        = StaticSkyLightUnavailableReason::kProcessingFailed;
-      return {
-        .requested = true,
-        .refreshed = true,
-        .probe_state = state,
-      };
-    }
-
-    // TODO(ED-M08, exposure): when publishing prefiltered/BRDF products,
-    // qualify their source range before narrowing, preserve canonical radiance
-    // scale, and apply the consumer view's P exactly once. Current IBL is
-    // diffuse SH. Scope: design/vortex/lld/captured-sky-ibl.md and
-    // design/vortex/lld/scene-textures.md (HDR products 3, 13 and 16).
-    // Feature dependency: https://github.com/abdes/DroidNet/issues/13
-    cache.products = StaticSkyLightProducts {
-      .key = key,
-      .source_cubemap_srv = kInvalidShaderVisibleIndex,
-      .processed_cubemap_srv = processed_cubemap_srv,
-      .diffuse_irradiance_sh_srv = diffuse_sh_srv,
-      .prefiltered_cubemap_srv = kInvalidShaderVisibleIndex,
-      .processed_cubemap_max_mip = mip_count - 1U,
-      .prefiltered_cubemap_max_mip = 0U,
-      .product_revision = current_state.static_sky_light.product_revision + 1U,
-      .source_radiance_scale = cpu_products->source_radiance_scale,
-      .average_brightness = cpu_products->average_brightness,
-      .status = StaticSkyLightProductStatus::kUnavailable,
-      .unavailable_reason
-      = StaticSkyLightUnavailableReason::kGpuProductsPending,
-    };
-    cache.half_storage_gain_limit = cpu_products->half_storage_gain_limit;
-    cache.processed_format = cpu_products->processed_format;
-    cache.processed_cubemap = std::move(processed_cubemap);
-    cache.diffuse_sh_buffer = std::move(diffuse_sh_buffer);
-    cache.processed_cubemap_upload = *texture_ticket;
-    cache.diffuse_sh_upload = *sh_ticket;
-    cache.has_submitted_current_key = true;
-    refreshed.requested = true;
-    refreshed.refreshed = true;
+    cache.revision = revision;
   }
-
-  const auto cache_has_valid_products = !key_changed
-    && cache.products.status == StaticSkyLightProductStatus::kValidCurrentKey
-    && cache.products.processed_cubemap_srv.IsValid()
-    && cache.products.diffuse_irradiance_sh_srv.IsValid()
-    && cache.products.product_revision != 0U;
-  if (cache_has_valid_products) {
-    state.static_sky_light = cache.products;
-    state.probes.environment_map_srv
-      = state.static_sky_light.processed_cubemap_srv;
-    state.probes.diffuse_sh_srv
-      = state.static_sky_light.diffuse_irradiance_sh_srv;
-    state.probes.irradiance_map_srv = kInvalidShaderVisibleIndex;
-    state.probes.prefiltered_map_srv = kInvalidShaderVisibleIndex;
-    state.probes.probe_revision = cache.products.product_revision;
-    state.valid = true;
-    state.flags = kEnvironmentProbeStateFlagResourcesValid;
-    return {
-      .requested = false,
-      .refreshed = false,
-      .probe_state = state,
-    };
-  }
-
-  auto uploads_complete = false;
-  if (cache.processed_cubemap_upload.has_value()
-    && cache.diffuse_sh_upload.has_value()) {
-    auto& uploader = renderer_.GetUploadCoordinator();
-    const auto cubemap_complete
-      = uploader.IsComplete(*cache.processed_cubemap_upload);
-    const auto sh_complete = uploader.IsComplete(*cache.diffuse_sh_upload);
-    uploads_complete = cubemap_complete.has_value() && sh_complete.has_value()
-      && *cubemap_complete && *sh_complete;
-  }
-
-  if (!uploads_complete) {
-    state.static_sky_light = cache.products;
-    state.static_sky_light.status
-      = StaticSkyLightProductStatus::kRegeneratingCurrentKey;
-    state.static_sky_light.unavailable_reason
-      = StaticSkyLightUnavailableReason::kNone;
-    state.static_sky_light.processed_cubemap_srv = kInvalidShaderVisibleIndex;
-    state.static_sky_light.diffuse_irradiance_sh_srv
-      = kInvalidShaderVisibleIndex;
-    state.static_sky_light.processed_cubemap_max_mip = 0U;
-    state.valid = false;
-    state.flags = kEnvironmentProbeStateFlagUnavailable;
-    return {
-      .requested = refreshed.requested,
-      .refreshed = refreshed.refreshed,
-      .probe_state = state,
-    };
-  }
-
-  state.static_sky_light = cache.products;
-  state.static_sky_light.status = StaticSkyLightProductStatus::kValidCurrentKey;
-  state.static_sky_light.unavailable_reason
-    = StaticSkyLightUnavailableReason::kNone;
-  state.probes.environment_map_srv
-    = state.static_sky_light.processed_cubemap_srv;
-  state.probes.diffuse_sh_srv
-    = state.static_sky_light.diffuse_irradiance_sh_srv;
-  state.probes.irradiance_map_srv = kInvalidShaderVisibleIndex;
-  state.probes.prefiltered_map_srv = kInvalidShaderVisibleIndex;
-  state.valid = true;
-  state.flags = kEnvironmentProbeStateFlagResourcesValid;
-
-  const auto products_changed = !current_state.valid
-    || current_state.static_sky_light.key != state.static_sky_light.key
-    || current_state.static_sky_light.processed_cubemap_srv
-      != state.static_sky_light.processed_cubemap_srv
-    || current_state.static_sky_light.diffuse_irradiance_sh_srv
-      != state.static_sky_light.diffuse_irradiance_sh_srv
-    || current_state.static_sky_light.processed_cubemap_max_mip
-      != state.static_sky_light.processed_cubemap_max_mip;
-  if (products_changed) {
-    state.probes.probe_revision += 1U;
-    state.static_sky_light.product_revision = state.probes.probe_revision;
-    refreshed.requested = true;
-    refreshed.refreshed = true;
-  } else {
-    state.probes.probe_revision = current_state.probes.probe_revision;
-    state.static_sky_light.product_revision
-      = current_state.static_sky_light.product_revision;
-    refreshed.requested = false;
-    refreshed.refreshed = false;
-  }
-  cache.products = state.static_sky_light;
-  cache.processed_cubemap_upload.reset();
-  cache.diffuse_sh_upload.reset();
-
-  return {
-    .requested = refreshed.requested,
-    .refreshed = refreshed.refreshed,
-    .probe_state = state,
-  };
+  next = MakePublishedState(*cache.published, key, light.enabled);
+  return { changed, changed, next };
 }
-
 } // namespace oxygen::vortex::environment::internal

@@ -1,4 +1,4 @@
-"""Golden scene-v6 environment record layouts, independent of the writer helpers."""
+"""Golden scene-v8 environment record layouts, independent of the writer helpers."""
 
 import struct
 
@@ -49,7 +49,7 @@ def test_complete_environment_record_layout(tone, exposure, metering):
             }
         }
     )
-    assert SCENE_ASSET_VERSION_CURRENT == 6
+    assert SCENE_ASSET_VERSION_CURRENT == 8
     assert struct.unpack_from("<II", data) == (176, 2)
     assert struct.unpack_from("<III", data, 8) == (5, 144, 1)
     assert struct.unpack_from("<II", data, 20) == (tone, exposure)
@@ -76,3 +76,32 @@ def test_complete_environment_record_layout(tone, exposure, metering):
     assert struct.unpack_from("<I", data, 80)[0] == metering
     assert struct.unpack_from("<III", data, 152) == (6, 24, 1)
     assert struct.unpack_from("<3f", data, 164) == pytest.approx((0.05, 0.25, 0.75))
+
+
+@pytest.mark.parametrize("retired_value", [False, True, None, "true"])
+def test_sky_light_v8_rejects_retired_capture_field(retired_value):
+    from pakgen.packing.errors import PakError
+    from pakgen.packing.packers import _pack_sky_light_environment_record
+
+    with pytest.raises(PakError, match="real_time_capture_enabled was retired"):
+        _pack_sky_light_environment_record({"real_time_capture_enabled": retired_value})
+
+
+def test_sky_light_v8_wire_preserves_values_after_removed_boolean():
+    from pakgen.packing.packers import _pack_sky_light_environment_record
+
+    data = _pack_sky_light_environment_record({
+        "source": 1, "intensity": 3.25, "tint_rgb": [0.2, 0.4, 0.8],
+        "diffuse_intensity": 0.5, "specular_intensity": 1.5,
+        "lower_hemisphere_color": [0.125, 0.25, 0.5],
+        "volumetric_scattering_intensity": 0.75, "affect_reflections": False,
+        "source_cubemap_angle_radians": 1.25,
+        "lower_hemisphere_is_solid_color": False, "lower_hemisphere_blend_alpha": 0.375,
+    })
+    assert len(data) == 88
+    assert struct.unpack_from("<II", data) == (3, 88)
+    assert struct.unpack_from("<I", data, 12)[0] == 1
+    assert struct.unpack_from("<f", data, 32)[0] == 3.25
+    assert struct.unpack_from("<2f", data, 48) == (0.5, 1.5)
+    assert struct.unpack_from("<3f", data, 56) == (0.125, 0.25, 0.5)
+    assert struct.unpack_from("<fIfIf", data, 68) == (0.75, 0, 1.25, 0, 0.375)

@@ -2030,21 +2030,26 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
           profiling::Var("label", FormatCompositingTaskScopeLabel(task))));
 
       const auto source_view = task.type == CompositingTaskType::kCopy
-        ? task.copy.source_view_id : task.type == CompositingTaskType::kBlend
-          ? task.blend.source_view_id : kInvalidViewId;
+        ? task.copy.source_view_id
+        : task.type == CompositingTaskType::kBlend ? task.blend.source_view_id
+                                                   : kInvalidViewId;
       const auto status = source_view != kInvalidViewId
-        ? scene_renderer.InspectViewRenderStatus(source_view) : std::nullopt;
+        ? scene_renderer.InspectViewRenderStatus(source_view)
+        : std::nullopt;
       compositing_pass_config_->failed_view = status
         && status->frame_sequence == comp_context.frame_sequence
         && status->state == ViewRenderState::kFailed;
       compositing_pass_config_->lighting_frame_slot = status
-        && status->frame_sequence == comp_context.frame_sequence
-        && status->state == ViewRenderState::kSubmitted && !status->output_checks_lighting
-        ? scene_renderer.ResolveViewLightingFrameSlot(source_view) : kInvalidShaderVisibleIndex;
+          && status->frame_sequence == comp_context.frame_sequence
+          && status->state == ViewRenderState::kSubmitted
+          && !status->output_checks_lighting
+        ? scene_renderer.ResolveViewLightingFrameSlot(source_view)
+        : kInvalidShaderVisibleIndex;
       if (compositing_pass_config_->failed_view) {
         compositing_pass_config_->source_texture.reset();
-        compositing_pass_config_->viewport = task.type == CompositingTaskType::kCopy
-          ? task.copy.viewport : task.blend.viewport;
+        compositing_pass_config_->viewport
+          = task.type == CompositingTaskType::kCopy ? task.copy.viewport
+                                                    : task.blend.viewport;
         compositing_pass_config_->alpha = 1.0F;
         co_await compositing_pass_->PrepareResources(comp_context, recorder);
         co_await compositing_pass_->Execute(comp_context, recorder);
@@ -2061,7 +2066,8 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
         TrackCompositionSourceTexture(
           gfx->GetResourceRegistry(), recorder, *source);
         if (compositing_pass_config_->lighting_frame_slot.IsValid()
-          || source->GetDescriptor().format != backbuffer.GetDescriptor().format) {
+          || source->GetDescriptor().format
+            != backbuffer.GetDescriptor().format) {
           compositing_pass_config_->source_texture = source;
           compositing_pass_config_->viewport = task.copy.viewport;
           compositing_pass_config_->alpha = 1.0F;
@@ -3148,7 +3154,8 @@ auto Renderer::GetUploadCoordinator() -> upload::UploadCoordinator&
 auto Renderer::InspectViewRenderStatus(ViewId view_id) const
   -> std::optional<ViewRenderStatus>
 {
-  return scene_renderer_ ? scene_renderer_->InspectViewRenderStatus(view_id) : std::nullopt;
+  return scene_renderer_ ? scene_renderer_->InspectViewRenderStatus(view_id)
+                         : std::nullopt;
 }
 
 auto Renderer::GetAssetLoader() const noexcept
@@ -3464,6 +3471,8 @@ auto Renderer::BeginStandaloneFrameExecution(const FrameSessionInput& session)
   CHECK_F(std::isfinite(session.delta_time_seconds)
       && session.delta_time_seconds >= 0.0F,
     "Delta time must be finite and nonnegative");
+  const bool frame_already_started = frame_slot_ == session.frame_slot
+    && frame_seq_num_ == session.frame_sequence.get();
   frame_slot_ = session.frame_slot;
   frame_seq_num_ = session.frame_sequence.get();
   last_frame_dt_seconds_ = session.delta_time_seconds;
@@ -3471,7 +3480,9 @@ auto Renderer::BeginStandaloneFrameExecution(const FrameSessionInput& session)
     frame_seq_num_, observer_ptr<const scene::Scene> { session.scene.get() });
 
   const auto tag = internal::RendererTagFactory::Get();
-  if (uploader_) {
+  // Offscreen work can run inside the current frame. Recycling its upload
+  // slot twice erases tickets submitted by frame-start resource binders.
+  if (uploader_ && !frame_already_started) {
     uploader_->OnFrameStart(tag, frame_slot_);
   }
   if (inline_transfers_) {
@@ -4004,6 +4015,13 @@ auto Renderer::OffscreenSceneViewInput::SetWithAtmosphere(const bool enabled)
   -> OffscreenSceneViewInput&
 {
   composition_view_.with_atmosphere = enabled;
+  return *this;
+}
+
+auto Renderer::OffscreenSceneViewInput::SetWithHeightFog(const bool enabled)
+  -> OffscreenSceneViewInput&
+{
+  composition_view_.with_height_fog = enabled;
   return *this;
 }
 

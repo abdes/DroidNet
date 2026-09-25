@@ -582,7 +582,6 @@ inline auto Load(AnyReader& reader,
   }
   CHECK_RESULT(reader.ReadInto(r.diffuse_intensity));
   CHECK_RESULT(reader.ReadInto(r.specular_intensity));
-  CHECK_RESULT(reader.ReadInto(r.real_time_capture_enabled));
   for (auto& v : r.lower_hemisphere_color) {
     CHECK_RESULT(reader.ReadInto(v));
   }

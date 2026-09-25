@@ -274,7 +274,7 @@
     },
     "settings": {
       "custom_state_present": true,
-      "schema_version": 5.0
+      "schema_version": 6.0
     },
     "sky_light": {
       "affect_reflections": true,
@@ -286,7 +286,6 @@
         "y": 0.019999999552965164,
         "z": 0.024000000208616257
       },
-      "real_time_capture_enabled": true,
       "source": 0.0,
       "specular": 0.44999998807907104,
       "tint": {

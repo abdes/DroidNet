@@ -17,7 +17,6 @@ cbuffer RootConstants : register(b2, space0)
     uint g_PassConstantsIndex;
 }
 
-static const uint DEFERRED_LIGHT_TYPE_STATIC_SKY_LIGHT = 3u;
 
 [shader("vertex")]
 VortexFullscreenTriangleOutput DeferredLightDirectionalVS(uint vertex_id : SV_VertexID)
@@ -43,12 +42,6 @@ float4 DeferredLightDirectionalPS(VortexFullscreenTriangleOutput input) : SV_Tar
         ReconstructDeferredWorldPosition(input.uv, scene_depth);
     const DeferredLightingSurfaceData surface = LoadDeferredLightingSurface(
         input.uv, world_position, camera_position, bindings);
-    if (light_constants.light_type == DEFERRED_LIGHT_TYPE_STATIC_SKY_LIGHT) {
-        const float3 diffuse = EvaluateDeferredStaticSkyLightDiffuse(surface);
-        RecordHdrSceneSource(diffuse, 3u);
-        return float4(diffuse * GetPreExposure(), 0.0f);
-    }
-
 #if defined(DEBUG_IBL_ONLY)
     return 0.0f.xxxx;
 #endif

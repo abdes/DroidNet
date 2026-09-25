@@ -9,6 +9,8 @@
 
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
 
+static const uint ENVIRONMENT_VIEW_FLAG_HEIGHT_FOG = 1u << 2u;
+
 struct EnvironmentViewData
 {
     uint flags;
@@ -34,6 +36,8 @@ struct EnvironmentViewData
     float4 sky_aerial_luminance_aerial_start_depth_km;
     float4 trace_sample_scale_transmittance_min_light_elevation_holdout_mainpass;
     float4 camera_aerial_volume_depth_params;
+    float4 height_fog_light0_illuminance_enabled;
+    float4 height_fog_light1_illuminance_enabled;
 };
 
 

@@ -13,6 +13,12 @@
 
 #include "Vortex/Shared/IblSampling.hlsli"
 
+static uint ResolveIblBrdfSlot()
+{
+    const ViewFrameBindings view = LoadViewFrameBindings(bindless_view_frame_bindings_slot);
+    return LoadEnvironmentFrameBindings(view.environment_frame_slot).brdf_lut_srv;
+}
+
 static float3 EvaluateIblSpecularSplit(float3 filtered_radiance,
     float3 f0, float2 integrated_brdf)
 {
@@ -26,6 +32,29 @@ static float2 SampleIblBrdf(uint descriptor, float normal_dot_view, float roughn
     SamplerState linear_clamp = SamplerDescriptorHeap[VORTEX_SAMPLER_LINEAR_CLAMP];
     return lookup.SampleLevel(linear_clamp,
         float2(saturate(normal_dot_view), saturate(roughness)), 0.0);
+}
+
+static uint SelectIblSpecularSrv(GpuSkyLightParams light,
+    IblProductMetadata generation, float3 f0, float2 integrated_brdf)
+{
+    if (!HdrFiniteNonnegative(light.radiance_scale)
+        || !HdrFiniteNonnegative(light.specular_intensity)
+        || !HdrFiniteNonnegative(integrated_brdf.x)
+        || !HdrFiniteNonnegative(integrated_brdf.y)) return light.prefilter_map_slot;
+    const float f90 = saturate(50.0 * f0.g);
+    float3 gain;
+    [unroll] for (uint channel = 0u; channel < 3u; ++channel) {
+        // Validate operands before multiplying: an exact zero bound must not
+        // conceal a NaN/Inf in the ordinary surface-lighting expression.
+        if (!HdrFiniteNonnegative(f0[channel])
+            || !HdrFiniteNonnegative(light.tint_rgb[channel])) return light.prefilter_map_slot;
+        const float material = HdrUpperSum(HdrUpperProduct(f0[channel], integrated_brdf.x),
+            HdrUpperProduct(f90, integrated_brdf.y));
+        gain[channel] = HdrUpperProduct(HdrUpperProduct(light.radiance_scale,
+            light.specular_intensity), HdrUpperProduct(light.tint_rgb[channel], material));
+    }
+    return SelectIblCubeSrv(generation, light.ibl_generation,
+        light.prefilter_map_slot, generation.specular_half_srv, gain);
 }
 
 struct IblSurfaceLighting
@@ -61,13 +90,15 @@ static IblSurfaceLighting EvaluateSkyIbl(GpuSkyLightParams light, uint brdf_srv,
             * gain * light.diffuse_intensity;
     }
     if (light.specular_intensity > 0.0) {
-        TextureCube<float4> prefiltered = ResourceDescriptorHeap[light.prefilter_map_slot];
+        const float2 integrated_brdf = SampleIblBrdf(brdf_srv, dot(n, v), roughness);
+        const uint descriptor = SelectIblSpecularSrv(light, generation, f0, integrated_brdf);
+        TextureCube<float4> prefiltered = ResourceDescriptorHeap[NonUniformResourceIndex(descriptor)];
         SamplerState linear_clamp = SamplerDescriptorHeap[VORTEX_SAMPLER_LINEAR_CLAMP];
         const float mip = IblRoughnessToMip(saturate(roughness), light.prefilter_max_mip);
         const float3 reflection = CubemapSamplingDirFromOxygenWS(reflect(-v, n));
         const float3 filtered = prefiltered.SampleLevel(linear_clamp, reflection, mip).rgb;
         result.specular = EvaluateIblSpecularSplit(filtered, f0,
-            SampleIblBrdf(brdf_srv, dot(n, v), roughness)) * gain * light.specular_intensity;
+            integrated_brdf) * gain * light.specular_intensity;
     }
     return result;
 }

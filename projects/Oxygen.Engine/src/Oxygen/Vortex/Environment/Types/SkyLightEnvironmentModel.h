@@ -23,7 +23,6 @@ struct SkyLightEnvironmentModel {
   glm::vec3 tint_rgb { 1.0F, 1.0F, 1.0F };
   float diffuse_intensity { 1.0F };
   float specular_intensity { 1.0F };
-  bool real_time_capture_enabled { false };
   float source_cubemap_angle_radians { 0.0F };
   glm::vec3 lower_hemisphere_color { 0.0F, 0.0F, 0.0F };
   bool lower_hemisphere_is_solid_color { true };

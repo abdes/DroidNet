@@ -148,8 +148,8 @@ auto LightingService::RenderDeferredLighting(RenderContext& ctx,
   std::span<const std::shared_ptr<graphics::Texture>>
     directional_shadow_surfaces,
   std::span<const std::shared_ptr<graphics::Texture>> spot_shadow_surfaces,
-  std::span<const std::shared_ptr<graphics::Texture>> point_shadow_surfaces,
-  const bool static_sky_light_available) -> bool
+  std::span<const std::shared_ptr<graphics::Texture>> point_shadow_surfaces)
+  -> bool
 {
   if (!prepared_lighting_
     || prepared_lighting_->selection_epoch != frame_light_set.selection_epoch) {
@@ -162,7 +162,7 @@ auto LightingService::RenderDeferredLighting(RenderContext& ctx,
   try {
     pass_state = deferred_pass_->Record(ctx, recorder, scene_textures, packets,
       shadow_data, directional_shadow_surfaces, spot_shadow_surfaces,
-      point_shadow_surfaces, static_sky_light_available);
+      point_shadow_surfaces);
   } catch (const std::exception&) {
     last_deferred_lighting_state_ = {};
     return false;
@@ -181,10 +181,7 @@ auto LightingService::RenderDeferredLighting(RenderContext& ctx,
     = pass_state.used_camera_inside_local_lights,
     .used_non_perspective_local_lights
     = pass_state.used_non_perspective_local_lights,
-    .consumed_static_sky_light_product
-    = pass_state.consumed_static_sky_light_product,
     .directional_draw_count = pass_state.directional_draw_count,
-    .static_sky_light_draw_count = pass_state.static_sky_light_draw_count,
     .point_light_count = pass_state.point_light_count,
     .spot_light_count = pass_state.spot_light_count,
     .local_light_count = pass_state.local_light_count,

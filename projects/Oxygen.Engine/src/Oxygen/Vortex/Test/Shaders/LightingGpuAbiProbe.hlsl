@@ -20,6 +20,7 @@
 #include "Vortex/Contracts/Environment/EnvironmentFrameBindings.hlsli"
 #include "Vortex/Contracts/Environment/EnvironmentStaticData.hlsli"
 #include "Vortex/Services/IndirectLighting/IblEvaluation.hlsli"
+#include "Vortex/Services/Environment/HeightFog.hlsli"
 #include "Vortex/Services/Lighting/FiniteEmitter.hlsli"
 #include "Vortex/Services/Shadows/ContactShadow.hlsli"
 #include "Vortex/Contracts/Draw/MaterialShadingConstants.hlsli"
@@ -56,11 +57,26 @@ struct IblSurfaceProbeInput {
     uint brdf_srv;
 };
 
+struct IblPrecisionSelectionInput {
+    IblProductMetadata metadata;
+    float3 gain;
+    uint revision;
+};
+
 struct IblReferenceSample {
     float3 direction;
     float lod;
     uint source;
     uint3 padding;
+};
+
+struct HeightFogProbeInput {
+    EnvironmentStaticData environment;
+    EnvironmentViewData view;
+    float3 origin;
+    float distance;
+    float3 direction;
+    uint mode;
 };
 
 struct GridLookupProbeInput {
@@ -156,10 +172,22 @@ void CS(uint3 thread : SV_DispatchThreadID) {
     RWByteAddressBuffer output = ResourceDescriptorHeap[args.y];
     uint element = args.w + thread.x;
     uint address = thread.x * args.z * 4;
-    if (g_RecordKind == 33) {
+    if (g_RecordKind == 34) {
+        StructuredBuffer<HeightFogProbeInput> inputs = ResourceDescriptorHeap[args.x];
+        HeightFogProbeInput value = inputs[element];
+        float distance = value.mode == 2u ? value.distance : HeightFogDistantRayDistance(value.direction);
+        float4 fog = value.mode == 2u
+            ? EvaluateExponentialHeightFog(value.environment.fog, value.environment, value.view,
+                value.origin, value.direction, distance)
+            : EvaluateSkyHeightFog(value.environment, value.view, value.origin, value.direction, value.mode == 1u);
+        output.Store4(address, asuint(fog));
+        output.Store4(address + 16, asuint(float4(distance,
+            value.view.height_fog_light0_illuminance_enabled.w,
+            value.view.height_fog_light1_illuminance_enabled.w, 0.0)));
+    } else if (g_RecordKind == 33) {
         StructuredBuffer<IblReferenceSample> inputs = ResourceDescriptorHeap[args.x];
         IblReferenceSample value = inputs[element];
-        TextureCube<float4> source = ResourceDescriptorHeap[value.source];
+        TextureCube<float4> source = ResourceDescriptorHeap[NonUniformResourceIndex(value.source)];
         SamplerState linear_clamp = SamplerDescriptorHeap[VORTEX_SAMPLER_LINEAR_CLAMP];
         output.Store3(address, asuint(source.SampleLevel(linear_clamp, value.direction, value.lod).rgb));
     } else if (g_RecordKind == 32) {
@@ -170,6 +198,23 @@ void CS(uint3 thread : SV_DispatchThreadID) {
             value.roughness, value.occlusion, value.f0);
         output.Store3(address, asuint(result.diffuse));
         output.Store3(address + 12, asuint(result.specular));
+    } else if (g_RecordKind == 38) {
+        StructuredBuffer<IblPrecisionSelectionInput> inputs = ResourceDescriptorHeap[args.x];
+        IblPrecisionSelectionInput value = inputs[element];
+        output.Store(address, SelectIblCubeSrv(value.metadata, value.revision,
+            123u, value.metadata.specular_half_srv, value.gain));
+    } else if (g_RecordKind == 37) {
+        StructuredBuffer<IblSurfaceProbeInput> inputs = ResourceDescriptorHeap[args.x];
+        IblSurfaceProbeInput value = inputs[element];
+        StructuredBuffer<IblProductMetadata> metadata = ResourceDescriptorHeap[value.light.product_metadata_srv];
+        float nv = dot(normalize(value.normal), normalize(value.view));
+        output.Store(address, SelectIblSpecularSrv(value.light, metadata[0], value.f0,
+            SampleIblBrdf(value.brdf_srv, nv, value.roughness)));
+    } else if (g_RecordKind == 36) {
+        StructuredBuffer<IblProductMetadata> inputs = ResourceDescriptorHeap[args.x];
+        IblProductMetadata value = inputs[element];
+        output.Store4(address, uint4(asuint(value.maximum_half_gain), value.precision_flags,
+            value.processed_half_srv, value.specular_half_srv));
     } else if (g_RecordKind == 27) {
         StructuredBuffer<IblProductMetadata> inputs = ResourceDescriptorHeap[args.x];
         IblProductMetadata value = inputs[element];
@@ -186,7 +231,7 @@ void CS(uint3 thread : SV_DispatchThreadID) {
         StructuredBuffer<EnvironmentFrameBindings> inputs = ResourceDescriptorHeap[args.x];
         EnvironmentFrameBindings value = inputs[element];
         output.Store3(address, uint3(value.probes.product_metadata_srv,
-            asuint(value.evaluation.ambient_intensity), value.ambient_bridge.flags));
+            value.brdf_lut_srv, value.padding));
     } else if (g_RecordKind == 30) {
         StructuredBuffer<float4> inputs = ResourceDescriptorHeap[args.x];
         float4 value = inputs[element];

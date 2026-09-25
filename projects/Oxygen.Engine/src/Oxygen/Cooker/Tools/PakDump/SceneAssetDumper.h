@@ -237,10 +237,14 @@ public:
         const auto& rec = lights[i];
 
         std::cout << "      [" << i << "] node=" << rec.node_index << "\n";
-        PrintUtils::Field("Atmosphere Slot", static_cast<int>(rec.atmosphere_light_slot), 10);
-        PrintUtils::Field("Per-pixel Transmittance", rec.use_per_pixel_atmosphere_transmittance != 0U, 10);
+        PrintUtils::Field(
+          "Atmosphere Slot", static_cast<int>(rec.atmosphere_light_slot), 10);
+        PrintUtils::Field("Per-pixel Transmittance",
+          rec.use_per_pixel_atmosphere_transmittance != 0U, 10);
         PrintUtils::Field("Disk Luminance Scale",
-          asset_dump_helpers::FormatVec3(rec.atmosphere_disk_luminance_scale_rgb), 10);
+          asset_dump_helpers::FormatVec3(
+            rec.atmosphere_disk_luminance_scale_rgb),
+          10);
         PrintUtils::Field("Cascade Count", rec.cascade_count, 10);
         PrintUtils::Field(
           "Split Mode", static_cast<uint32_t>(rec.split_mode), 10);
@@ -664,8 +668,7 @@ public:
           "Tint", asset_dump_helpers::FormatVec3(rec->tint_rgb), 10);
         PrintUtils::Field("Diffuse Intensity", rec->diffuse_intensity, 10);
         PrintUtils::Field("Specular Intensity", rec->specular_intensity, 10);
-        PrintUtils::Field(
-          "Real-Time Capture", rec->real_time_capture_enabled != 0U, 10);
+
         PrintUtils::Field(
           "Source Cubemap Angle", rec->source_cubemap_angle_radians, 10);
         PrintUtils::Field("Lower Hemisphere Color",

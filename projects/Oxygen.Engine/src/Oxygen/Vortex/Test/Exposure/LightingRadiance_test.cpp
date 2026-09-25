@@ -18,11 +18,13 @@
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Scene/Environment/Fog.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyLight.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
@@ -596,19 +598,9 @@ NOLINT_TEST_F(ExposureLightingGpuTest, StaticSkyDiffusePreservesSupportedRange)
             ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, ev));
             const auto pixels = ReadFloatTexture(*probe->color);
             ASSERT_EQ(pixels.size(), 1U);
-            const double diffuse_response
-              = EvaluateRoughWhiteResponse(0.04).diffuse_environment;
-            const bool forward_shader
-              = forward || domain == data::MaterialDomain::kAlphaBlended;
-            const double input_error = forward_shader
-              ? 0.0
-              : std::max(
-                  std::abs(EvaluateRoughWhiteResponse(0.04 - (0.04 / 255.0))
-                             .diffuse_environment
-                    - diffuse_response),
-                  std::abs(EvaluateRoughWhiteResponse(0.04 + (0.04 / 255.0))
-                             .diffuse_environment
-                    - diffuse_response));
+            // SH is irradiance/pi; indirect diffuse applies albedo once.
+            const double diffuse_response = 1.0;
+            const double input_error = 0.0;
             for (unsigned channel = 0; channel < 3; ++channel) {
               const double expected
                 = static_cast<double>(source_color.at(channel)) * multiplier
@@ -638,6 +630,57 @@ NOLINT_TEST_F(ExposureLightingGpuTest, StaticSkyDiffusePreservesSupportedRange)
     }
   }
   RecordProperty("static_sky_endpoint_cases", cases);
+}
+
+NOLINT_TEST_F(ExposureLightingGpuTest,
+  EnabledSkyLightsLitSurfacesButLeavesUnlitMaterialsUnchanged)
+{
+  auto& sky
+    = scene->GetEnvironment()->AddSystem<scene::environment::SkyLight>();
+  sky.SetEnabled(true);
+  sky.SetLowerHemisphereIsSolidColor(false);
+  auto& fog = scene->GetEnvironment()->AddSystem<scene::environment::Fog>();
+  fog.SetEnabled(true);
+  fog.SetEnableHeightFog(true);
+  fog.SetFogDensity(0.01F);
+  fog.SetHeightFalloffPerMeter(0.0F);
+  fog.SetFogInscatteringLuminance(glm::vec3(1000.0F));
+  fog.SetRenderInMainPass(false);
+  fog.SetVisibleInRealTimeSkyCaptures(true);
+  const Pixel expected { 0.25F, 0.5F, 0.75F, 1.0F };
+  for (const bool forward : { false, true }) {
+    for (const bool unlit : { false, true }) {
+      auto material = data::pak::render::MaterialAssetDesc {};
+      material.flags = data::pak::render::kMaterialFlag_NoTextureSampling
+        | data::pak::render::kMaterialFlag_DoubleSided
+        | (unlit ? data::pak::render::kMaterialFlag_Unlit : 0U);
+      for (unsigned c = 0U; c < 4U; ++c)
+        material.base_color[c] = expected[c];
+      material.roughness = data::Unorm16 { 1.0F };
+      material.ambient_occlusion = data::Unorm16 { 1.0F };
+      material.normal_scale = 1.0F;
+      mesh_node.GetRenderable().SetMaterialOverride(0U, 0U,
+        std::make_shared<data::MaterialAsset>(
+          data::AssetKey::FromVirtualPath(
+            "/Test/IBL/Unlit-" + std::to_string(++material_sequence) + ".omat"),
+          material, std::vector<data::ShaderReference> {}));
+      Pixel baseline {};
+      if (unlit) {
+        sky.SetEnabled(false);
+        ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0.0F));
+        baseline = ReadFloatTexture(*probe->color).at(0);
+        sky.SetEnabled(true);
+      }
+      ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0.0F));
+      const auto pixel = ReadFloatTexture(*probe->color).at(0);
+      for (unsigned c = 0U; c < 3U; ++c) {
+        if (unlit)
+          EXPECT_NEAR(pixel[c], baseline[c], 1.0e-5F);
+        else
+          EXPECT_GT(pixel[c], expected[c] * 2.0F);
+      }
+    }
+  }
 }
 
 } // namespace oxygen::vortex::testing::exposure

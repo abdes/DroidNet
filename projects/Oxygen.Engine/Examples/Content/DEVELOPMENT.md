@@ -9,7 +9,11 @@ referenced work, not a certification of a newly installed SDK.
 The native ImportTool cooks the authored manifests in `scenes/` into the shared
 `.cooked` root. PakTool packages that root into `pak/all.pak` and its catalog
 and manifest. RenderScene can load either the loose root or the PAK.
-Scene descriptors use version 7; older cooked scenes must be recooked.
+Scene descriptors use version 8; older cooked scenes must be recooked.
+For v7 source JSON, run `python tools/content/MigrateSceneV8.py old.scene.json new.scene.json`
+from the engine root. This removes the obsolete SkyLight scheduling boolean and
+preserves the remaining authored values. ImportTool rejects older source versions
+and the retired field.
 Atmosphere sources use explicit per-light slots, and scripted light changes use
 validated whole-candidate updates.
 

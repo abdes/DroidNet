@@ -29,7 +29,9 @@ struct DeferredLightingSurfaceData
     float metallic;
     float specular;
     float roughness;
+    float perceptual_roughness;
     float ambient_occlusion;
+    uint shading_model;
     bool receives_shadows;
 };
 
@@ -70,32 +72,13 @@ static inline DeferredLightingSurfaceData LoadDeferredLightingSurface(
             inverse_view_projection_matrix, is_orthographic, reverse_z);
     surface.metallic = saturate(gbuffer.metallic);
     surface.specular = saturate(gbuffer.specular);
-    surface.roughness = max(saturate(gbuffer.roughness), kVortexDeferredMinRoughness);
+    surface.perceptual_roughness = saturate(gbuffer.roughness);
+    surface.roughness = max(surface.perceptual_roughness, kVortexDeferredMinRoughness);
     surface.ambient_occlusion = saturate(gbuffer.ambient_occlusion);
+    surface.shading_model = gbuffer.shading_model;
     surface.specular_f0 = ComputeMetallicF0(
         surface.base_color, surface.metallic, surface.specular);
     return surface;
-}
-
-static inline float3 EvaluateDeferredStaticSkyLightDiffuse(
-    DeferredLightingSurfaceData surface)
-{
-    EnvironmentStaticData env_data = (EnvironmentStaticData)0;
-    if (!LoadEnvironmentStaticData(env_data)
-        || env_data.sky_light.enabled == 0u) {
-        return 0.0f.xxx;
-    }
-
-    const float3 sky_diffuse = EvaluateStaticSkyLightDiffuseSh(
-                                   env_data, surface.world_normal)
-        * env_data.sky_light.tint_rgb
-        * env_data.sky_light.radiance_scale
-        * env_data.sky_light.diffuse_intensity;
-    const GgxIntegratedLobes response = EvaluateGgxIntegratedLobes(
-        saturate(dot(surface.world_normal, surface.view_direction)), surface.specular_f0,
-        surface.base_color * (1.0 - surface.metallic), surface.roughness,
-        LoadResolvedLightingFrameBindings());
-    return sky_diffuse * response.diffuse;
 }
 
 #endif // OXYGEN_D3D12_SHADERS_VORTEX_SERVICES_LIGHTING_DEFERREDSHADINGCOMMON_HLSLI

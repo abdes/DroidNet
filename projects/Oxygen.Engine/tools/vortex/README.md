@@ -8,6 +8,12 @@ fixture: dispatch order, six faces/eight mips, SH and final metadata.
 controlled native material fixture. Capture
 and replay commands live in the [milestone validation](../../design/vortex/milestones/VX-IBL-01/validation.md).
 
+`SummarizeIblUpdate.py <run-directory>` checks matching CPU/GPU sample windows
+and reports the interval union for atmosphere LUTs plus IBL processing from
+`IblUpdateBenchmark.DISABLED_CapturedSunUpdates`. It reuses the existing timing
+statistics helpers. This isolated workload diagnoses update cost; the milestone's
+matched scene runs own performance acceptance.
+
 ## Proof Automation Contract
 
 Vortex proof wrappers must fail fast and must not claim proof from a failed

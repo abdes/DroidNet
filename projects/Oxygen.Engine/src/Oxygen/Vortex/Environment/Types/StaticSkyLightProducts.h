@@ -38,8 +38,6 @@ enum class StaticSkyLightProductStatus : std::uint8_t {
 
 enum class StaticSkyLightUnavailableReason : std::uint8_t {
   kNone,
-  kCapturedSceneDeferred,
-  kRealTimeCaptureDeferred,
   kMissingCubemap,
   kResourceResolveFailed,
   kNotTextureCube,

@@ -16,6 +16,7 @@ static const uint HDR_INPUT_HEIGHT_FOG = 1u;
 static const uint HDR_CONSUMER_SKY = 16u;
 static const uint HDR_CONSUMER_OPAQUE_AP = 32u;
 static const uint HDR_CONSUMER_TRANSLUCENT_AP = 64u;
+static const uint HDR_CONSUMER_SKY_HEIGHT_FOG = 256u;
 
 static void RecordHdrSceneSource(float3 scene_rgb, uint product)
 {
@@ -45,7 +46,7 @@ static void RecordHdrConsumerUsage(uint usage, float3 sky_gain = 1.0.xxx)
 
 // Reduce once per active wave. Helper lanes do not contribute UAV writes.
 // The owning pass transitions and retains this frame's existing status buffer.
-static void RecordHdrConsumerInput(float3 scene_rgb, uint input_kind)
+static void RecordHdrConsumerInput(float3 scene_rgb, uint input_kind, uint usage_override = 0u)
 {
     const ViewFrameBindings bindings = LoadViewFrameBindings(bindless_view_frame_bindings_slot);
     if (bindings.exposure_status_uav == K_INVALID_BINDLESS_INDEX) return;
@@ -60,8 +61,9 @@ static void RecordHdrConsumerInput(float3 scene_rgb, uint input_kind)
     }
     const bool valid = HdrFiniteNonnegative(scene_rgb.x)
         && HdrFiniteNonnegative(scene_rgb.y) && HdrFiniteNonnegative(scene_rgb.z);
-    const uint observed = 1u << input_kind;
-    const uint flags = WaveActiveBitOr(observed | (valid ? 0u : observed << 2u));
+    const uint observed = usage_override != 0u ? usage_override : 1u << input_kind;
+    const uint invalid = 1u << (input_kind + 2u);
+    const uint flags = WaveActiveBitOr(observed | (valid ? 0u : invalid));
     const uint3 magnitude = asuint(scene_rgb) & 0x7fffffffu.xxx;
     const uint peak = WaveActiveMax(valid ? max(magnitude.x, max(magnitude.y, magnitude.z)) : 0u);
     const uint range_failure = WaveActiveBitOr(

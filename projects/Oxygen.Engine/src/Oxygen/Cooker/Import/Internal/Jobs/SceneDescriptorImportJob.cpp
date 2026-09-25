@@ -555,8 +555,7 @@ namespace {
       = source.value("diffuse_intensity", record.diffuse_intensity);
     record.specular_intensity
       = source.value("specular_intensity", record.specular_intensity);
-    record.real_time_capture_enabled
-      = source.value("real_time_capture_enabled", false) ? 1U : 0U;
+
     record.source_cubemap_angle_radians = source.value(
       "source_cubemap_angle_radians", record.source_cubemap_angle_radians);
     CopyFloatArray(
@@ -1166,13 +1165,18 @@ namespace {
             light.angular_size_radians
               = light_doc.at("angular_size_radians").get<float>();
           }
-          light.atmosphere_light_slot = light_doc.value("atmosphere_light_slot", uint8_t { 0U });
-          light.use_per_pixel_atmosphere_transmittance = light_doc.value(
-            "use_per_pixel_atmosphere_transmittance", false) ? 1U : 0U;
+          light.atmosphere_light_slot
+            = light_doc.value("atmosphere_light_slot", uint8_t { 0U });
+          light.use_per_pixel_atmosphere_transmittance
+            = light_doc.value("use_per_pixel_atmosphere_transmittance", false)
+            ? 1U
+            : 0U;
           if (light_doc.contains("atmosphere_disk_luminance_scale_rgb")) {
             for (std::size_t channel = 0U; channel < 3U; ++channel) {
               light.atmosphere_disk_luminance_scale_rgb[channel]
-                = light_doc.at("atmosphere_disk_luminance_scale_rgb").at(channel).get<float>();
+                = light_doc.at("atmosphere_disk_luminance_scale_rgb")
+                    .at(channel)
+                    .get<float>();
             }
           }
           if (light_doc.contains("cascade_count")) {

@@ -9,7 +9,7 @@
     },
     "version": {
       "type": "integer",
-      "const": 7
+      "const": 8
     },
     "name": {
       "$ref": "#/definitions/identifier"
@@ -323,12 +323,12 @@
         "bias": {
           "type": "number",
           "minimum": 0,
-          "maximum": 3.4028234663852886e+38
+          "maximum": 3.4028234663852886e38
         },
         "normal_bias": {
           "type": "number",
           "minimum": 0,
-          "maximum": 3.4028234663852886e+38
+          "maximum": 3.4028234663852886e38
         },
         "contact_shadows": {
           "type": "boolean"
@@ -353,8 +353,8 @@
           "maxItems": 3,
           "items": {
             "type": "number",
-            "minimum": -3.4028234663852886e+38,
-            "maximum": 3.4028234663852886e+38
+            "minimum": -3.4028234663852886e38,
+            "maximum": 3.4028234663852886e38
           }
         },
         "casts_shadows": {
@@ -362,7 +362,7 @@
         },
         "exposure_compensation_ev": {
           "type": "number",
-          "maximum": 3.4028234663852886e+38
+          "maximum": 3.4028234663852886e38
         },
         "shadow": {
           "$ref": "#/definitions/light_shadow"
@@ -372,9 +372,7 @@
     "directional_light": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "node"
-      ],
+      "required": ["node"],
       "properties": {
         "node": {
           "type": "integer",
@@ -401,14 +399,14 @@
         "max_shadow_distance": {
           "type": "number",
           "exclusiveMinimum": 0.0,
-          "maximum": 3.4028234663852886e+38
+          "maximum": 3.4028234663852886e38
         },
         "cascade_distances": {
           "type": "array",
           "items": {
             "type": "number",
-            "minimum": -3.4028234663852886e+38,
-            "maximum": 3.4028234663852886e+38
+            "minimum": -3.4028234663852886e38,
+            "maximum": 3.4028234663852886e38
           },
           "minItems": 4,
           "maxItems": 4
@@ -416,7 +414,7 @@
         "distribution_exponent": {
           "type": "number",
           "minimum": 1,
-          "maximum": 3.4028234663852886e+38
+          "maximum": 3.4028234663852886e38
         },
         "transition_fraction": {
           "type": "number",
@@ -431,15 +429,11 @@
         "intensity_lux": {
           "type": "number",
           "minimum": 0.0,
-          "maximum": 3.4028234663852886e+38
+          "maximum": 3.4028234663852886e38
         },
         "atmosphere_light_slot": {
           "type": "integer",
-          "enum": [
-            0,
-            1,
-            2
-          ]
+          "enum": [0, 1, 2]
         },
         "use_per_pixel_atmosphere_transmittance": {
           "type": "boolean"
@@ -450,8 +444,8 @@
           "maxItems": 3,
           "items": {
             "type": "number",
-            "minimum": -3.4028234663852886e+38,
-            "maximum": 3.4028234663852886e+38
+            "minimum": -3.4028234663852886e38,
+            "maximum": 3.4028234663852886e38
           }
         }
       }
@@ -459,9 +453,7 @@
     "point_light": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "node"
-      ],
+      "required": ["node"],
       "properties": {
         "node": {
           "type": "integer",
@@ -473,26 +465,24 @@
         "range": {
           "type": "number",
           "minimum": 0.0,
-          "maximum": 3.4028234663852886e+38
+          "maximum": 3.4028234663852886e38
         },
         "source_radius": {
           "type": "number",
           "minimum": 0.0,
-          "maximum": 3.4028234663852886e+38
+          "maximum": 3.4028234663852886e38
         },
         "luminous_flux_lm": {
           "type": "number",
           "minimum": 0.0,
-          "maximum": 3.4028234663852886e+38
+          "maximum": 3.4028234663852886e38
         }
       }
     },
     "spot_light": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "node"
-      ],
+      "required": ["node"],
       "properties": {
         "node": {
           "type": "integer",
@@ -504,7 +494,7 @@
         "range": {
           "type": "number",
           "minimum": 0.0,
-          "maximum": 3.4028234663852886e+38
+          "maximum": 3.4028234663852886e38
         },
         "inner_cone_angle_radians": {
           "type": "number",
@@ -519,12 +509,12 @@
         "source_radius": {
           "type": "number",
           "minimum": 0.0,
-          "maximum": 3.4028234663852886e+38
+          "maximum": 3.4028234663852886e38
         },
         "luminous_flux_lm": {
           "type": "number",
           "minimum": 0.0,
-          "maximum": 3.4028234663852886e+38
+          "maximum": 3.4028234663852886e38
         }
       }
     },
@@ -850,7 +840,6 @@
         "tint_rgb",
         "diffuse_intensity",
         "specular_intensity",
-        "real_time_capture_enabled",
         "lower_hemisphere_color",
         "volumetric_scattering_intensity",
         "affect_reflections"
@@ -880,9 +869,6 @@
         "specular_intensity": {
           "type": "number",
           "minimum": 0.0
-        },
-        "real_time_capture_enabled": {
-          "type": "boolean"
         },
         "source_cubemap_angle_radians": {
           "type": "number"

@@ -170,12 +170,12 @@ static VortexSingleScatteringResult IntegrateSkyLight(
     AtmosphereSkyViewLutPassConstants pass,
     float3 ray_origin,
     float3 ray_direction,
-    float ray_length)
+    float ray_length,
+    float output_pre_exposure)
 {
     Texture2D<float4> multi_scat_lut = ResourceDescriptorHeap[PassMultiScatteringLutSrv(pass)];
     SamplerState linear_sampler
         = SamplerDescriptorHeap[kAtmosphereLinearClampSampler];
-    const float output_pre_exposure = GetPreExposure();
     VortexSamplingSetup sampling = (VortexSamplingSetup)0;
     sampling.VariableSampleCount = true;
     sampling.SampleCountIni = 0.0f;
@@ -211,9 +211,7 @@ static VortexSingleScatteringResult IntegrateSkyLight(
         ray_length);
 }
 
-[shader("compute")]
-[numthreads(8, 8, 1)]
-void VortexAtmosphereSkyViewLutCS(uint3 dispatch_id : SV_DispatchThreadID)
+static void GenerateSkyViewLut(uint3 dispatch_id, float pre_exposure, bool capture)
 {
     if (g_PassConstantsIndex == K_INVALID_BINDLESS_INDEX)
     {
@@ -271,18 +269,33 @@ void VortexAtmosphereSkyViewLutCS(uint3 dispatch_id : SV_DispatchThreadID)
         pass,
         ray_origin,
         ray_direction,
-        9000000.0f);
+        9000000.0f,
+        pre_exposure);
     const float transmittance = dot(
         scattering.Transmittance,
         float3(1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f));
     CheckHdrStoreRange(float4(scattering.L, transmittance), 5u,
         pass.dispatch_header.exposure_status_uav, pass.dispatch_header.exposure_fp16_store,
-        GetPreExposure());
+        pre_exposure);
     const float4 output_value = float4(max(scattering.L, 0.0f.xxx), saturate(transmittance));
-    if (!IsFp32OnlyExposure()) {
+    if (!capture && !IsFp32OnlyExposure()) {
         RecordHdrStoreBounds(output_value, output_value, output_value, GetOneOverPreExposure(),
             5u, pass.dispatch_header.exposure_status_uav, pass.dispatch_header.exposure_fp16_store);
     }
     output_texture[dispatch_id.xy] = pass.dispatch_header.exposure_fp16_store != 0u
         ? HdrRoundToHalf(output_value) : output_value;
+}
+
+[shader("compute")]
+[numthreads(8, 8, 1)]
+void VortexAtmosphereSkyViewLutCS(uint3 dispatch_id : SV_DispatchThreadID)
+{
+    GenerateSkyViewLut(dispatch_id, GetPreExposure(), false);
+}
+
+[shader("compute")]
+[numthreads(8, 8, 1)]
+void VortexAtmosphereCaptureSkyViewLutCS(uint3 dispatch_id : SV_DispatchThreadID)
+{
+    GenerateSkyViewLut(dispatch_id, 1.0, true);
 }

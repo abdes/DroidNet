@@ -137,14 +137,16 @@ namespace {
     recorder.BeginTrackingResourceState(texture, initial, true);
   }
 
-  auto BuildPipelineDesc() -> graphics::ComputePipelineDesc
+  auto BuildPipelineDesc(const bool capture = false)
+    -> graphics::ComputePipelineDesc
   {
     auto root_bindings = BuildVortexRootBindings();
     return graphics::ComputePipelineDesc::Builder {}
       .SetComputeShader(graphics::ShaderRequest {
         .stage = ShaderType::kCompute,
         .source_path = "Vortex/Services/Environment/AtmosphereSkyViewLut.hlsl",
-        .entry_point = "VortexAtmosphereSkyViewLutCS",
+        .entry_point = capture ? "VortexAtmosphereCaptureSkyViewLutCS"
+                               : "VortexAtmosphereSkyViewLutCS",
       })
       .SetRootBindings(std::span<const graphics::RootBindingItem>(
         root_bindings.data(), root_bindings.size()))
@@ -199,11 +201,12 @@ namespace {
 
 AtmosphereSkyViewLutPass::AtmosphereSkyViewLutPass(Renderer& renderer)
   : renderer_(renderer)
-  , pass_constants_buffer_(observer_ptr { renderer.GetGraphics().get() },
+  , pass_constants_buffer_(std::make_shared<upload::TransientStructuredBuffer>(
+      observer_ptr { renderer.GetGraphics().get() },
       renderer.GetStagingProvider(),
       static_cast<std::uint32_t>(sizeof(PassConstants)),
       observer_ptr { &renderer.GetInlineTransfersCoordinator() },
-      "Environment.AtmosphereSkyViewLut.PassConstants")
+      "Environment.AtmosphereSkyViewLut.PassConstants"))
 {
 }
 
@@ -222,7 +225,7 @@ auto AtmosphereSkyViewLutPass::OnFrameStart(
   if (output_pool_) {
     output_pool_->OnFrameStart(sequence);
   }
-  pass_constants_buffer_.OnFrameStart(sequence, slot);
+  pass_constants_buffer_->OnFrameStart(sequence, slot);
 }
 
 auto AtmosphereSkyViewLutPass::RemoveViewState(const ViewId view_id) -> void
@@ -330,6 +333,62 @@ auto AtmosphereSkyViewLutPass::Record(RenderContext& ctx,
     MakeTextureViewDesc(graphics::ResourceViewType::kTexture_UAV,
       texture->GetDescriptor().format));
 
+  state = RecordToTarget(ctx, recorder, view_data, stable_state, cache, texture,
+    sky_view_srv, sky_view_uav, false);
+  if (state.executed) {
+    live_textures_.push_back(texture);
+    texture_committed = true;
+  }
+  return state;
+}
+
+auto AtmosphereSkyViewLutPass::RecordCapture(RenderContext& ctx,
+  graphics::CommandRecorder& recorder, const EnvironmentViewData& view_data,
+  const internal::StableAtmosphereState& stable_state,
+  const internal::AtmosphereLutCache& cache,
+  const std::shared_ptr<graphics::Texture>& target,
+  const graphics::RegistrationLease& registration) -> RecordState
+{
+  const auto& state = cache.GetState();
+  auto gfx = renderer_.GetGraphics();
+  if (!gfx || !target || !registration
+    || !stable_state.view_products.atmosphere.enabled
+    || !state.transmittance_lut_valid || !state.multi_scattering_lut_valid)
+    return {};
+  const auto& desc = target->GetDescriptor();
+  auto& registry = gfx->GetResourceRegistry();
+  if (desc.format != Format::kRGBA32Float
+    || desc.texture_type != TextureType::kTexture2D
+    || desc.width != state.internal_parameters.sky_view_width
+    || desc.height != state.internal_parameters.sky_view_height || !desc.is_uav
+    || !desc.is_shader_resource
+    || registry.InspectManagedIdentity(*target) != registration.Identity())
+    return {};
+  const auto srv = registry.AcquireManagedView<graphics::Texture>(registration,
+    MakeTextureViewDesc(graphics::ResourceViewType::kTexture_SRV, desc.format),
+    bindless::generated::kTexturesDomain);
+  const auto uav = registry.AcquireManagedView<graphics::Texture>(registration,
+    MakeTextureViewDesc(graphics::ResourceViewType::kTexture_UAV, desc.format));
+  if (!srv || !uav || !recorder.RetainRegistration(registry, registration))
+    return {};
+  return RecordToTarget(ctx, recorder, view_data, stable_state, cache, target,
+    srv->shader_visible_index, uav->shader_visible_index, true);
+}
+
+auto AtmosphereSkyViewLutPass::RecordToTarget(RenderContext& ctx,
+  graphics::CommandRecorder& recorder, const EnvironmentViewData& view_data,
+  const internal::StableAtmosphereState& stable_state,
+  const internal::AtmosphereLutCache& cache,
+  const std::shared_ptr<graphics::Texture>& texture,
+  const ShaderVisibleIndex sky_view_srv, const ShaderVisibleIndex sky_view_uav,
+  const bool capture) -> RecordState
+{
+  auto state = RecordState { .requested = true };
+  if (capture)
+    recorder.RetainOpaqueUse(pass_constants_buffer_, 0x49424c434f4e5354ULL);
+  const auto& cache_state = cache.GetState();
+  const auto width = texture->GetDescriptor().width;
+  const auto height = texture->GetDescriptor().height;
   const auto& atmosphere = stable_state.view_products.atmosphere;
   static_assert(offsetof(PassConstants, dispatch_header)
       + offsetof(DispatchHeader, exposure_status_uav)
@@ -339,7 +398,7 @@ auto AtmosphereSkyViewLutPass::Record(RenderContext& ctx,
     == 44U);
   auto constants = PassConstants {};
   constants.dispatch_header.exposure_status_uav
-    = ctx.current_view.frame_exposure
+    = !capture && ctx.current_view.frame_exposure
     ? ctx.current_view.frame_exposure->current_state->status_uav_index.get()
     : kInvalidShaderVisibleIndex.get();
   constants.dispatch_header.exposure_fp16_store
@@ -443,13 +502,13 @@ auto AtmosphereSkyViewLutPass::Record(RenderContext& ctx,
     constants.light1_illuminance_rgb,
     stable_state.view_products.atmosphere_lights[1]);
 
-  auto constants_alloc = pass_constants_buffer_.Allocate(1U);
+  auto constants_alloc = pass_constants_buffer_->Allocate(1U);
   if (!constants_alloc.has_value()
     || !constants_alloc->TryWriteObject(constants)) {
     return state;
   }
 
-  if (ctx.current_view.frame_exposure) {
+  if (!capture && ctx.current_view.frame_exposure) {
     const auto& status
       = *ctx.current_view.frame_exposure->current_state->status_buffer;
     if (!recorder.IsResourceTracked(status)
@@ -465,10 +524,11 @@ auto AtmosphereSkyViewLutPass::Record(RenderContext& ctx,
     *texture, graphics::ResourceStates::kUnorderedAccess);
   recorder.FlushBarriers();
 
-  recorder.SetPipelineState(BuildPipelineDesc());
-  recorder.SetComputeRootConstantBufferView(
-    static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants),
-    ctx.view_constants->GetGPUVirtualAddress());
+  recorder.SetPipelineState(BuildPipelineDesc(capture));
+  if (!capture)
+    recorder.SetComputeRootConstantBufferView(
+      static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants),
+      ctx.view_constants->GetGPUVirtualAddress());
   recorder.SetComputeRoot32BitConstant(
     static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants), 0U,
     0U);
@@ -490,8 +550,6 @@ auto AtmosphereSkyViewLutPass::Record(RenderContext& ctx,
       *texture, graphics::ResourceStates::kShaderResource);
   }
 
-  live_textures_.push_back(texture);
-  texture_committed = true;
   state.executed = true;
   state.texture = texture;
   state.sky_view_lut_srv = sky_view_srv;
