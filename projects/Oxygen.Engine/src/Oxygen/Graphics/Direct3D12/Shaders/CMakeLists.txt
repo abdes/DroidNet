@@ -26,12 +26,7 @@ set(SHADERBAKE_BUILD_ROOT "${CMAKE_BINARY_DIR}/shaderbake")
 # The ShaderBake tool target name (executable)
 set(OXYGEN_D3D12_SHADERBAKE_TARGET "oxygen-graphics-direct3d12-shaderbake")
 
-# Resolve deployed runtime DLL folder per active build configuration.
-# ASan builds use out/install/Asan/bin while non-ASan builds follow $<CONFIG>.
-set(_OXYGEN_IS_ASAN_BUILD OFF)
-if(CMAKE_BINARY_DIR MATCHES "asan")
-  set(_OXYGEN_IS_ASAN_BUILD ON)
-endif()
+set(_OXYGEN_IS_ASAN_BUILD "${OXYGEN_WITH_ASAN}")
 
 set(
   SHADER_LIBRARY_OUTPUT
@@ -42,25 +37,11 @@ set(
   "${CMAKE_SOURCE_DIR}/bin/Oxygen/$<IF:$<OR:$<CONFIG:Debug>,$<BOOL:${_OXYGEN_IS_ASAN_BUILD}>>,Debug,Release>/$<IF:$<OR:$<CONFIG:Debug>,$<BOOL:${_OXYGEN_IS_ASAN_BUILD}>>,dev,production>"
 )
 
-set(
-  _OXYGEN_DEPLOY_CONFIG
-  "$<IF:$<BOOL:${_OXYGEN_IS_ASAN_BUILD}>,Asan,$<CONFIG>>"
+include(RuntimeEnvironment)
+oxygen_get_runtime_launcher(
+  ${OXYGEN_D3D12_SHADERBAKE_TARGET}
+  OXYGEN_SHADERBAKE_LAUNCHER
 )
-set(
-  _OXYGEN_DEPLOY_BIN_DIR
-  "$<SHELL_PATH:${CMAKE_SOURCE_DIR}/out/install/${_OXYGEN_DEPLOY_CONFIG}/bin>"
-)
-if(WIN32)
-  # Visual Studio custom build commands are sensitive to ';' list splitting.
-  # Use CMake's env modifier to prepend the runtime DLL folder safely.
-  set(
-    _OXYGEN_SHADERBAKE_ENV_ARGS
-    --modify
-    "PATH=path_list_prepend:${_OXYGEN_DEPLOY_BIN_DIR}"
-  )
-else()
-  set(_OXYGEN_SHADERBAKE_ENV_ARGS "PATH=${_OXYGEN_DEPLOY_BIN_DIR}:$ENV{PATH}")
-endif()
 
 add_custom_command(
   OUTPUT
@@ -69,13 +50,14 @@ add_custom_command(
     "${CMAKE_COMMAND}" -E make_directory
     "$<SHELL_PATH:${SHADER_LIBRARY_OUTPUT_DIR}>"
   COMMAND
-    "${CMAKE_COMMAND}" -E env ${_OXYGEN_SHADERBAKE_ENV_ARGS}
+    "${OXYGEN_SHADERBAKE_LAUNCHER}"
     "$<TARGET_FILE:${OXYGEN_D3D12_SHADERBAKE_TARGET}>" update --workspace-root
     "$<SHELL_PATH:${CMAKE_SOURCE_DIR}>" --build-root
     "$<SHELL_PATH:${SHADERBAKE_BUILD_ROOT}>" --out
     "$<SHELL_PATH:${SHADER_LIBRARY_OUTPUT}>" --mode
     "$<IF:$<OR:$<CONFIG:Debug>,$<BOOL:${_OXYGEN_IS_ASAN_BUILD}>>,dev,production>"
   WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+  COMMAND_EXPAND_LISTS
   VERBATIM
   COMMENT "Baking shaders.bin (OXSL v1) ($<CONFIG> mode)"
   DEPENDS

@@ -198,15 +198,18 @@ That split is intentional:
 
 `ShaderBake` depends on the DXC toolchain and runtime DLLs.
 
-The repository expects the DXC package layout under:
+Conan provides the pinned `dxc/1.9.2607` distribution. The CMake target links
+`dxc::dxcompiler` and stages the host package's `dxcompiler.dll` and `dxil.dll`
+beside ShaderBake. DXIL validation needs the latter DLL at runtime, but does not
+require linking a separate `dxil` import library.
 
-- `packages/DXC/inc`
-- `packages/DXC/lib/<arch>`
-- `packages/DXC/bin/<arch>/dxcompiler.dll`
-- `packages/DXC/bin/<arch>/dxil.dll`
+The three shader-probe targets use the compiler executable from Conan's build
+context. Regenerate the selected tree's Conan toolchain when changing the DXC
+requirement. CMake does not fall back to an ambient DXC installation.
 
-The CMake target copies `dxcompiler.dll` and `dxil.dll` beside the executable
-after build and fails configure early if the expected package files are missing.
+ShaderBake's existing action keys include the loaded DXCompiler DLL's file
+version. A compiler change invalidates cached compilation results even when the
+shader source and request identity are unchanged.
 
 ## Related Documentation
 
