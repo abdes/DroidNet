@@ -92,7 +92,7 @@ class OxygenConan(ConanFile):
         "LICENSE",
         "CMakeLists.txt",
         "CMakePresets.json",
-        ".clangd.in",
+        ".clangd",
         "cmake/**",
         "src/**",
         "Examples/**",
@@ -249,7 +249,29 @@ class OxygenConan(ConanFile):
         # generated presets. Leave Conan's per-tree files entirely native.
         tc.user_presets_path = False
 
-        self._set_cmake_defs(tc.variables)
+        # Preset configuration deliberately reapplies all recipe defaults.
+        # Keep graph expectations separate from overridable local build choices.
+        self._set_cmake_defs(tc.cache_variables)
+        tc.cache_variables["OXYGEN_WITH_ASAN"] = self._with_asan
+        tc.cache_variables["OXYGEN_WITH_COVERAGE"] = bool(self.options.with_coverage)
+        tc.cache_variables["OXYGEN_WITH_TRACY"] = bool(self.options.with_tracy)
+        expectations = dict(tc.cache_variables)
+        package_build = bool(self.package_folder)
+
+        class OxygenOptionsBlock:
+            # Graph facts must not be cached: every configure reads the current
+            # install's expectations, even after recipe options have changed.
+            template = """
+{% for name, value in options.items() %}
+set(OXYGEN_CONAN_EXPECT_{{ name }} {{ 'ON' if value else 'OFF' }})
+{% endfor %}
+set(OXYGEN_CONAN_PACKAGE_BUILD {{ 'ON' if package_build else 'OFF' }})
+"""
+
+            def context(self):
+                return {"options": expectations, "package_build": package_build}
+
+        tc.blocks["oxygen_options"] = OxygenOptionsBlock
         if is_msvc(self):
             tc.variables["USE_MSVC_RUNTIME_LIBRARY_DLL"] = (
                 not is_msvc_static_runtime(self)
@@ -264,18 +286,6 @@ class OxygenConan(ConanFile):
         tc.variables["OXYGEN_CONAN_DEPLOY_DIR"] = install_base.replace(
             "\\", "/"
         )
-
-        enable_asan = self._with_asan
-        tc.variables["OXYGEN_WITH_ASAN"] = "ON" if enable_asan else "OFF"
-        tc.cache_variables["OXYGEN_WITH_ASAN"] = tc.variables["OXYGEN_WITH_ASAN"]
-
-        if self.options.with_coverage:
-            tc.cache_variables["OXYGEN_WITH_COVERAGE"] = "ON"
-
-        # Propagate Tracy option to CMake
-        enable_tracy = self.options.get_safe("with_tracy", False)
-        tc.variables["OXYGEN_WITH_TRACY"] = "ON" if enable_tracy else "OFF"
-        tc.cache_variables["OXYGEN_WITH_TRACY"] = tc.variables["OXYGEN_WITH_TRACY"]
 
         self._reset_legacy_presets(tc.presets_prefix)
         tc.generate()
@@ -374,12 +384,12 @@ class OxygenConan(ConanFile):
         )
 
     def _set_cmake_defs(self, defs):
-        defs["OXYGEN_BUILD_TOOLS"] = self.options.tools
-        defs["OXYGEN_BUILD_EXAMPLES"] = self.options.examples
-        defs["OXYGEN_BUILD_TESTS"] = self.options.tests
-        defs["OXYGEN_BUILD_BENCHMARKS"] = self.options.benchmarks
-        defs["OXYGEN_BUILD_DOCS"] = self.options.docs
-        defs["BUILD_SHARED_LIBS"] = self.options.shared
+        defs["OXYGEN_BUILD_TOOLS"] = bool(self.options.tools)
+        defs["OXYGEN_BUILD_EXAMPLES"] = bool(self.options.examples)
+        defs["OXYGEN_BUILD_TESTS"] = bool(self.options.tests)
+        defs["OXYGEN_BUILD_BENCHMARKS"] = bool(self.options.benchmarks)
+        defs["OXYGEN_BUILD_DOCS"] = bool(self.options.docs)
+        defs["BUILD_SHARED_LIBS"] = bool(self.options.shared)
 
     def build(self):
         cmake = CMake(self)

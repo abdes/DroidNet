@@ -117,12 +117,6 @@ set_target_properties(
 )
 
 target_compile_features(${META_MODULE_TARGET} INTERFACE cxx_std_20)
-target_compile_options(
-  ${META_MODULE_TARGET}
-  INTERFACE
-    ${OXYGEN_COMMON_CXX_FLAGS}
-    $<$<CXX_COMPILER_ID:MSVC>:/wd4702> # Unreachable code
-)
 target_compile_definitions(
   ${META_MODULE_TARGET}
   INTERFACE
@@ -154,7 +148,9 @@ set_target_properties(
 
 if(OXYGEN_BUILD_TESTS)
   add_subdirectory("Test")
-  add_subdirectory("Benchmarks")
+  if(OXYGEN_BUILD_BENCHMARKS)
+    add_subdirectory("Benchmarks")
+  endif()
 endif()
 
 # ------------------------------------------------------------------------------

@@ -6,6 +6,10 @@ The full engine requires CMake 4.2+, Conan 2.32+, and Windows x64 with MSVC 19.5
 (Visual Studio 2026) and C++23. See the [build contract](cmake/README.md#full-engine-build-contract) for
 supported generators, configuration behavior, and focused validation commands.
 
+Reusable module selection and embedding are described in the
+[CMake helper notes](cmake/README.md#selecting-reusable-modules).
+For configuration-aware clangd setup, see the [VS Code workflow](.vscode/README.md).
+
 ## Install latest VC Redistributable Package
 
 **Optimized version crashes on Mutex machinery in the STL.**

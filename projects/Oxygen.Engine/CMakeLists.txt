@@ -11,22 +11,7 @@ if(POLICY CMP0177)
 endif()
 
 list(PREPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
-# If this project is not the master project, prioritize the master project
-# cmake include dir if it exists.
-if(
-  NOT
-    CMAKE_CURRENT_SOURCE_DIR
-      STREQUAL
-      CMAKE_SOURCE_DIR
-  AND
-    EXISTS
-      "${CMAKE_SOURCE_DIR}/cmake"
-)
-  list(PREPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
-endif()
-# Include the log helpers module early so we can use early for logging the
-# project hierarchy
-include(LogHelpers)
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/LogHelpers.cmake")
 
 set(CMAKE_DEBUG_POSTFIX "-d")
 
@@ -35,7 +20,7 @@ set(CMAKE_DEBUG_POSTFIX "-d")
 # ------------------------------------------------------------------------------
 
 # Get git revision
-include(GetGitRevisionDescription)
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/GetGitRevisionDescription.cmake")
 get_git_head_revision(GIT_REFSPEC GIT_SHA1)
 string(SUBSTRING "${GIT_SHA1}" 0 12 GIT_REV)
 if(NOT GIT_SHA1)
@@ -43,7 +28,7 @@ if(NOT GIT_SHA1)
 endif()
 
 # Meta information about the project
-include(VersionHelpers)
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/VersionHelpers.cmake")
 # gersemi: off
 set(META_PROJECT_NAME        "Oxygen")
 set(META_PROJECT_DESCRIPTION "Oxygen game engine")
@@ -61,31 +46,6 @@ string(MAKE_C_IDENTIFIER ${META_PROJECT_NAME} META_PROJECT_ID)
 string(TOUPPER ${META_PROJECT_ID} META_PROJECT_ID)
 string(TOLOWER ${META_PROJECT_ID} META_PROJECT_ID_LOWER)
 
-# Determine if this is built as a subproject  or if it is the master project.
-if(NOT DEFINED ${META_PROJECT_ID}_IS_MASTER_PROJECT)
-  set(${META_PROJECT_ID}_IS_MASTER_PROJECT OFF)
-  if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
-    set(${META_PROJECT_ID}_IS_MASTER_PROJECT ON)
-  endif()
-endif()
-
-# Push the project on the hierarchy stack after we have determined if it is a
-# master or a sub-project.
-asap_push_project(${META_PROJECT_NAME})
-
-# ------------------------------------------------------------------------------
-# Project Declaration
-# ------------------------------------------------------------------------------
-
-# Generate folders for IDE targets (e.g., VisualStudio solutions)
-set_property(
-  GLOBAL
-  PROPERTY
-    USE_FOLDERS
-      ON
-)
-set(IDE_FOLDER "${META_PROJECT_NAME}")
-
 # Silence redundant toolchain warnings (often caused by IDEs passing the
 # toolchain manually when it is already defined in the CMake preset).
 if(CMAKE_TOOLCHAIN_FILE)
@@ -102,7 +62,23 @@ project(
     CXX
 )
 
-include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/ToolchainRequirements.cmake")
+set(OXYGEN_IS_MASTER_PROJECT "${PROJECT_IS_TOP_LEVEL}")
+set(OXYGEN_PROJECT_SOURCE_DIR "${PROJECT_SOURCE_DIR}")
+asap_push_project(${META_PROJECT_NAME})
+set(IDE_FOLDER "${META_PROJECT_NAME}")
+if(PROJECT_IS_TOP_LEVEL)
+  set_property(
+    GLOBAL
+    PROPERTY
+      USE_FOLDERS
+        ON
+  )
+endif()
+
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/ModuleSelection.cmake")
+if(OXYGEN_BUILD_FULL_ENGINE)
+  include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/ToolchainRequirements.cmake")
+endif()
 
 # Publish a complete File API reply even when configured outside an IDE.
 # CMake Tools loads an existing index before configuring; a codemodel-only
@@ -137,12 +113,20 @@ if(CMAKE_GENERATOR MATCHES "^Visual Studio")
   endif()
 endif()
 
-include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/BuildConfiguration.cmake")
+if(PROJECT_IS_TOP_LEVEL)
+  include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/BuildConfiguration.cmake")
+endif()
 
 # Set output directories
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+foreach(_kind RUNTIME LIBRARY ARCHIVE)
+  if(NOT DEFINED CMAKE_${_kind}_OUTPUT_DIRECTORY)
+    if(_kind STREQUAL "ARCHIVE")
+      set(CMAKE_${_kind}_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/lib")
+    else()
+      set(CMAKE_${_kind}_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/bin")
+    endif()
+  endif()
+endforeach()
 
 # Set the source tree root
 set(OXYGEN_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")
@@ -151,49 +135,7 @@ set(OXYGEN_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")
 # Project configuration options
 # ------------------------------------------------------------------------------
 
-# Project options
-# gersemi: off
-set(OPTIONS_LIST
-  BUILD_SHARED_LIBS        "Build shared instead of static libraries." OFF
-  OXYGEN_BUILD_TESTS       "Setup target to build and run tests." ON
-  OXYGEN_BUILD_EXAMPLES    "Setup target to build the examples." ON
-  OXYGEN_BUILD_DOCS        "Setup target to build the documentation." ON
-  OXYGEN_WITH_ASAN         "Instrument code with address sanitizer" OFF
-  OXYGEN_WITH_COVERAGE     "Instrument code to measure coverage" OFF
-  OXYGEN_WITH_TRACY        "Enable Tracy profiler integration" OFF
-  # OXYGEN_WITH_UBSAN        "Instrument code with undefined behavior sanitizer" OFF
-  # OXYGEN_WITH_TSAN         "Instrument code with thread sanitizer" OFF
-  # OXYGEN_WITH_VALGRIND     "Instrument code with valgrind profilers" OFF
-  OXYGEN_WITH_DOXYGEN      "Create targets for doxygen api docs" OFF
-  # OXYGEN_WITH_SPHINX       "Create targets for sphinx docs" OFF
-  # OXYGEN_WITH_CLANG_FORMAT "Create targets for clang-format" ON
-  # OXYGEN_WITH_CLANG_TIDY   "Create targets for clang-tidy" ON
-  OXYGEN_USE_CCACHE        "Enable caching of compiled artifacts using ccache" OFF
-)
-# gersemi: on
-# Process each option
-
-message(STATUS "PROJECT OPTIONS:")
-list(LENGTH OPTIONS_LIST OPTIONS_LIST_length)
-math(EXPR OPTIONS_LIST_length "${OPTIONS_LIST_length}-1")
-foreach(index RANGE 0 ${OPTIONS_LIST_length} 3)
-  list(GET OPTIONS_LIST ${index} OPTION_NAME)
-  math(EXPR index "${index}+1")
-  list(GET OPTIONS_LIST ${index} OPTION_DESCRIPTION)
-  math(EXPR index "${index}+1")
-  list(GET OPTIONS_LIST ${index} OPTION_DEFAULT)
-
-  if(DEFINED CACHE{${OPTION_NAME}})
-    set(${OPTION_NAME} "$CACHE{${OPTION_NAME}}")
-    message(STATUS ". ${OPTION_NAME}: ${${OPTION_NAME}} - cache")
-  elseif(DEFINED ${OPTION_NAME})
-    set(${OPTION_NAME} "${${OPTION_NAME}}" CACHE BOOL ${OPTION_DESCRIPTION})
-    message(STATUS ". ${OPTION_NAME}: ${${OPTION_NAME}} - toolchain")
-  else()
-    set(${OPTION_NAME} ${OPTION_DEFAULT} CACHE BOOL ${OPTION_DESCRIPTION})
-    message(STATUS ". ${OPTION_NAME}: ${${OPTION_NAME}} - default")
-  endif()
-endforeach()
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/ProjectOptions.cmake")
 
 if(OXYGEN_WITH_TRACY)
   add_compile_definitions(OXYGEN_WITH_TRACY=1)
@@ -203,53 +145,39 @@ endif()
 # Installation Setup
 # ------------------------------------------------------------------------------
 
-if(NOT DEFINED OXYGEN_CONAN_DEPLOY_DIR)
-  set(OXYGEN_CONAN_DEPLOY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/out/install")
-endif()
-
-if(OXYGEN_WITH_ASAN)
-  set(_OXYGEN_INSTALL_SUBDIR "Asan")
-else()
-  get_property(_IS_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
-  if(_IS_MULTI_CONFIG)
-    # For multi-config generators, keep a shared install base here and resolve
-    # the active configuration into the install prefix at install time.
-    set(_OXYGEN_INSTALL_SUBDIR "")
-  else()
-    set(_OXYGEN_INSTALL_SUBDIR "${CMAKE_BUILD_TYPE}")
+if(PROJECT_IS_TOP_LEVEL AND OXYGEN_BUILD_FULL_ENGINE)
+  if(NOT DEFINED OXYGEN_CONAN_DEPLOY_DIR)
+    set(OXYGEN_CONAN_DEPLOY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/out/install")
   endif()
-endif()
 
-set(_OXYGEN_INSTALL_PREFIX "${OXYGEN_CONAN_DEPLOY_DIR}")
-if(NOT _OXYGEN_INSTALL_SUBDIR STREQUAL "")
+  if(OXYGEN_WITH_ASAN)
+    set(_OXYGEN_INSTALL_SUBDIR "Asan")
+  else()
+    get_property(_IS_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+    if(_IS_MULTI_CONFIG)
+      # For multi-config generators, keep a shared install base here and resolve
+      # the active configuration into the install prefix at install time.
+      set(_OXYGEN_INSTALL_SUBDIR "")
+    else()
+      set(_OXYGEN_INSTALL_SUBDIR "${CMAKE_BUILD_TYPE}")
+    endif()
+  endif()
+
+  set(_OXYGEN_INSTALL_PREFIX "${OXYGEN_CONAN_DEPLOY_DIR}")
+  if(NOT _OXYGEN_INSTALL_SUBDIR STREQUAL "")
+    set(
+      _OXYGEN_INSTALL_PREFIX
+      "${_OXYGEN_INSTALL_PREFIX}/${_OXYGEN_INSTALL_SUBDIR}"
+    )
+  endif()
+
   set(
-    _OXYGEN_INSTALL_PREFIX
-    "${_OXYGEN_INSTALL_PREFIX}/${_OXYGEN_INSTALL_SUBDIR}"
+    CMAKE_INSTALL_PREFIX
+    "${_OXYGEN_INSTALL_PREFIX}"
+    CACHE PATH
+    "Install path prefix, prepended onto install directories."
+    FORCE
   )
-endif()
-
-set(
-  CMAKE_INSTALL_PREFIX
-  "${_OXYGEN_INSTALL_PREFIX}"
-  CACHE PATH
-  "Install path prefix, prepended onto install directories."
-  FORCE
-)
-
-# ------------------------------------------------------------------------------
-# Top level code generation
-# ------------------------------------------------------------------------------
-
-# Generate a clangd configuration file that points to the compilation database
-# in the cmake build directory. We need to do this as the build directory is
-# different for every preset and can be different as well when the user decides
-# to build somewhere else. Currently we cannot configure this properly in vscode
-# settings. See https://github.com/clangd/vscode-clangd/issues/48
-#
-# NOTE: We don't want this to be running when building under Visual Studio. It
-# will create issues with clangd which is only used when we generate for Ninja.
-if(CMAKE_GENERATOR MATCHES "^Ninja")
-  configure_file(.clangd.in ${CMAKE_SOURCE_DIR}/.clangd @ONLY)
 endif()
 
 # ------------------------------------------------------------------------------
@@ -267,8 +195,8 @@ endif()
 if(OXYGEN_BUILD_DOCS)
   if(OXYGEN_WITH_DOXYGEN)
     # Doxygen
-    set(DOXYGEN_BUILD_DIR "${CMAKE_BINARY_DIR}/dox")
-    include(DoxGeneration)
+    set(DOXYGEN_BUILD_DIR "${PROJECT_BINARY_DIR}/dox")
+    include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/DoxGeneration.cmake")
   endif()
 endif()
 
@@ -277,14 +205,14 @@ endif()
 # ------------------------------------------------------------------------------
 
 # Register general cmake commands
-include(BuildHelpers)
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/BuildHelpers.cmake")
 #include(AsapTargets)
 
 # Override the ${META_PROJECT_ID}_INSTALL option to ON/OFF to respectively force
 # install/no-install behavior for this project. This is particularly useful when
 # this project is used as a sub-project and the user publicly depends on it and
 # wants to have a self-contained install.
-include(Install)
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/Install.cmake")
 
 # ------------------------------------------------------------------------------
 # Compiler flags
@@ -321,7 +249,7 @@ if(OXYGEN_WITH_ASAN)
   )
     add_link_options("-fsanitize=address")
   endif()
-  if(MSVC)
+  if(MSVC AND PROJECT_IS_TOP_LEVEL)
     # ASAN on MSVC does not support incremental linking. We must ensure that
     # /INCREMENTAL:NO is set in the cache variables so that it's reflected
     # in the IDE and all link commands correctly.
@@ -488,14 +416,14 @@ else()
 endif()
 
 # ---- Speedup build using ccache (needs CPM) ----
-include(cmake/FasterBuild.cmake)
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/FasterBuild.cmake")
 
 # ------------------------------------------------------------------------------
 # Print a summary of the configuration
 # ------------------------------------------------------------------------------
 
 # Detect and report C++ standard support via module
-include(cmake/DetectCxxStandards.cmake)
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/DetectCxxStandards.cmake")
 
 # Small helper to print support for a standard using a prefix
 function(_report_standard prefix std_name)
@@ -517,8 +445,8 @@ detect_cxx_standards(OXYGEN)
 message(STATUS "PROJECT `${META_NAME_VERSION}`")
 message(STATUS "")
 message(STATUS "  -- Directories --")
-message(STATUS "     Source directory: ${CMAKE_SOURCE_DIR}")
-message(STATUS "     Build directory: ${CMAKE_BINARY_DIR}")
+message(STATUS "     Source directory: ${PROJECT_SOURCE_DIR}")
+message(STATUS "     Build directory: ${PROJECT_BINARY_DIR}")
 message(STATUS "     Install prefix: ${CMAKE_INSTALL_PREFIX}")
 message(STATUS "")
 message(STATUS "  -- General configuration --")
@@ -561,11 +489,11 @@ message(STATUS "")
 
 # Show the repo .github folder inside the IDE under a virtual folder named
 # ".github".
-file(GLOB_RECURSE _github_files "${CMAKE_SOURCE_DIR}/.github/*")
+file(GLOB_RECURSE _github_files "${PROJECT_SOURCE_DIR}/.github/*")
 
-if(_github_files)
+if(PROJECT_IS_TOP_LEVEL AND _github_files)
   source_group(
-    TREE "${CMAKE_SOURCE_DIR}/.github"
+    TREE "${PROJECT_SOURCE_DIR}/.github"
     PREFIX ".github"
     FILES
       ${_github_files}
@@ -576,7 +504,7 @@ endif()
 
 add_subdirectory("src")
 
-if(OXYGEN_BUILD_EXAMPLES)
+if(OXYGEN_BUILD_EXAMPLES AND OXYGEN_BUILD_FULL_ENGINE)
   add_subdirectory("Examples")
 endif()
 

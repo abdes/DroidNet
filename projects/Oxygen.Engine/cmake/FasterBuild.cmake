@@ -20,18 +20,21 @@ find_program(CCACHE_TOOL_PATH ccache)
 if(CCACHE_TOOL_PATH)
   message(STATUS "Using ccache at (${CCACHE_TOOL_PATH}).")
 
-    include(cmake/CPM.cmake)
-    # see https://github.com/TheLartians/Ccache.cmake enables CCACHE support
-    # through the USE_CCACHE flag possible values are: YES, NO or equivalent
-    set(USE_CCACHE ON)
-    cpmaddpackage("gh:TheLartians/Ccache.cmake@1.2.5")
+  include("${CMAKE_CURRENT_LIST_DIR}/CPM.cmake")
+  # see https://github.com/TheLartians/Ccache.cmake enables CCACHE support
+  # through the USE_CCACHE flag possible values are: YES, NO or equivalent
+  set(USE_CCACHE ON)
+  CPMAddPackage("gh:TheLartians/Ccache.cmake@1.2.5")
   if(MSVC)
     message(STATUS "Using ccache with MSVC")
     message(STATUS "Setting MSVC Debug Information Flags to `Embedded`")
     # Ccache with MSVC does not support /Zi option, which is added by default,
     # unless we set the CMAKE_MSVC_DEBUG_INFORMATION_FORMAT to Embedded.
     # https://cmake.org/cmake/help/latest/variable/CMAKE_MSVC_DEBUG_INFORMATION_FORMAT.html
-    set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT "$<$<CONFIG:Debug,RelWithDebInfo>:Embedded>")
+    set(
+      CMAKE_MSVC_DEBUG_INFORMATION_FORMAT
+      "$<$<CONFIG:Debug,RelWithDebInfo>:Embedded>"
+    )
     set(CMAKE_C_COMPILER_LAUNCHER ${CCACHE_TOOL_PATH} CACHE STRING "" FORCE)
     set(CMAKE_CXX_COMPILER_LAUNCHER ${CCACHE_TOOL_PATH} CACHE STRING "" FORCE)
   endif()

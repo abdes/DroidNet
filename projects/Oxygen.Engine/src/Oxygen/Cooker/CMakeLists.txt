@@ -412,7 +412,7 @@ target_link_libraries(
 # Tools
 # ------------------------------------------------------------------------------
 
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Tools")
+if(OXYGEN_BUILD_TOOLS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Tools")
   add_subdirectory("Tools")
 endif()
 

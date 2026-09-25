@@ -18,6 +18,50 @@ POWERSHELL = shutil.which("pwsh")
 
 @unittest.skipUnless(CONAN and CMAKE, "Conan and CMake are required")
 class PresetGenerationTests(unittest.TestCase):
+    def test_local_narrowing_resets_on_normal_preset_configure(self):
+        with tempfile.TemporaryDirectory(prefix="oxygen-policy-") as directory:
+            root = Path(directory)
+            recipe = ENGINE / "conanfile.py"
+            (root / "conanfile.py").write_text(
+                "import importlib.util\n"
+                f"spec = importlib.util.spec_from_file_location('oxygen_recipe', {str(recipe)!r})\n"
+                "module = importlib.util.module_from_spec(spec)\nspec.loader.exec_module(module)\n"
+                "class PolicyFixture(module.OxygenConan):\n"
+                "    def requirements(self):\n        pass\n", encoding="utf-8",
+            )
+            (root / "VERSION").write_text("0.1.0\n", encoding="utf-8")
+            shutil.copyfile(ENGINE / "CMakePresets.json", root / "CMakePresets.json")
+            (root / "CMakeLists.txt").write_text(
+                "cmake_minimum_required(VERSION 4.2)\nproject(Policy NONE)\n"
+                "set(OXYGEN_BUILD_FULL_ENGINE TRUE)\n"
+                f'include("{ENGINE.as_posix()}/cmake/ProjectOptions.cmake")\n'
+                'file(WRITE "${CMAKE_BINARY_DIR}/policy.txt" "${OXYGEN_BUILD_TESTS}")\n',
+                encoding="utf-8",
+            )
+            self.install(root, "Ninja Multi-Config", False, False, "Release")
+            configure = [CMAKE, "--preset", "oxygen-ninja-default"]
+            self.run_command(configure + ["-DOXYGEN_BUILD_TESTS=OFF"], root)
+            state = root / "out/build-ninja/policy.txt"
+            self.assertEqual(state.read_text(), "OFF")
+            self.run_command(configure, root)
+            self.assertEqual(state.read_text(), "ON")
+            result = subprocess.run(configure + ["-DBUILD_SHARED_LIBS=OFF"], cwd=root,
+                                    capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("conflicts with the Conan configuration", result.stderr)
+            profile = ENGINE / "profiles/windows-msvc.ini"
+            self.run_command([
+                CONAN, "install", str(root), "--no-remote", "--build=never",
+                f"-pr:h={profile}", f"-pr:b={profile}", "-s", "build_type=Release",
+                "-o", "tests=False", "-c", "tools.cmake.cmaketoolchain:generator=Ninja Multi-Config",
+            ], root)
+            self.run_command(configure, root)
+            self.assertEqual(state.read_text(), "OFF")
+            result = subprocess.run(configure + ["-DOXYGEN_BUILD_TESTS=ON"], cwd=root,
+                                    capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("conflicts with the Conan configuration", result.stderr)
+
     @unittest.skipUnless(POWERSHELL, "PowerShell is required")
     def test_project_file_api_repairs_codemodel_only_trees(self):
         source = (ENGINE / "CMakeLists.txt").read_text(encoding="utf-8")
