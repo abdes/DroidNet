@@ -11,6 +11,7 @@
       "hidden": true,
       "cacheVariables": {
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "CMAKE_INTERMEDIATE_DIR_STRATEGY": "SHORT",
         "OXYGEN_USE_CCACHE": "ON"
       }
     },

@@ -67,7 +67,7 @@ else()
     BRIEF
     INPUT_PATH
   )
-    if(EXISTS "${CMAKE_SOURCE_DIR}/doxygen/Doxyfile.in")
+    if(EXISTS "${OXYGEN_PROJECT_SOURCE_DIR}/doxygen/Doxyfile.in")
       set(DOXY_OUTPUT_DIR "${DOXYGEN_BUILD_DIR}/${MODULE_NAME}")
       set(DOXY_MODULE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
       set(DOXY_MODULE_NAME "${MODULE_NAME}")
@@ -89,14 +89,14 @@ else()
         file(MAKE_DIRECTORY "${DOXY_OUTPUT_DIR}")
       endif()
       configure_file(
-        "${CMAKE_SOURCE_DIR}/doxygen/Doxyfile.in"
+        "${OXYGEN_PROJECT_SOURCE_DIR}/doxygen/Doxyfile.in"
         "${CMAKE_CURRENT_SOURCE_DIR}/Doxyfile"
         @ONLY
       )
     else()
       message(
         STATUS
-        "WARNING: The '${CMAKE_SOURCE_DIR}/doxygen/Doxyfile.in' file does not exist!"
+        "WARNING: The '${OXYGEN_PROJECT_SOURCE_DIR}/doxygen/Doxyfile.in' file does not exist!"
       )
     endif()
   endfunction()

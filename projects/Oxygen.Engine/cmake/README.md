@@ -47,6 +47,75 @@ Tool versions used to build dependencies remain dependency-specific. For example
 a recipe's build-context CMake requirement below version 4 does not lower the
 minimum for configuring Oxygen itself.
 
+## Selecting reusable modules
+
+The reusable set is `Base`, `Composition`, `OxCo`, `Serio`, `TextWrap`, and `Clap`.
+These modules support Windows, Linux and macOS; the full-engine Windows/MSVC
+restriction is applied only when building the full engine. Public target compile
+features determine module language requirements (currently C++23 through Base).
+CMake 4.2 remains the common infrastructure minimum.
+
+Validation of this infrastructure change covers Windows module builds and Linux
+configuration. Linux C++ compilation has existing source portability blockers;
+macOS execution has not been exercised. Those limits do not change the intended
+three-platform module contract.
+
+A standalone configure without `OXYGEN_MODULES` builds the full engine. An
+embedded configure must select modules explicitly:
+
+```cmake
+# The parent's Conan graph supplies fmt (header-only), Asio and/or magic_enum
+# as required by the selected modules. Oxygen does not run Conan itself.
+set(OXYGEN_MODULES Clap OxCo)
+add_subdirectory(external/Oxygen.Engine oxygen)
+target_link_libraries(my_app PRIVATE oxygen::clap oxygen::oxco)
+```
+
+This selects Clap, OxCo, TextWrap and Base. It does not configure graphics,
+physics, ShaderBake, or unrelated engine modules. The other five modules require Base;
+Clap additionally requires TextWrap. Unknown names fail configuration.
+Consumers can select an equivalent module-only standalone build with
+`-DOXYGEN_MODULES="Clap;OxCo"`.
+
+Embedded tests, examples, docs, optional tools, benchmarks and installation default
+off. Parent normal variables override cache defaults using native `option()`
+semantics. Oxygen preserves the parent's install prefix, global IDE folder policy,
+build configuration and explicitly provided output directories. Otherwise its
+outputs default inside its own binary subtree. Its private helpers cannot be
+shadowed by a parent's same-named helper files. `OXYGEN_PROJECT_SOURCE_DIR` names
+the engine project root; `OXYGEN_SOURCE_DIR` continues to name its `src` directory.
+Compiler caching for embedded modules is configured by the parent through
+`CMAKE_C_COMPILER_LAUNCHER`/`CMAKE_CXX_COMPILER_LAUNCHER`; `OXYGEN_USE_CCACHE`
+is a standalone option and is rejected when embedded.
+
+Composition's existing `oxygen::cs-init` target remains available in static builds
+for applications that need its cross-module registry initialization contract.
+Source-module support does not imply that the existing Conan package metadata or
+native installed exports are complete; those are separate workstream items B06/B07.
+
+## Conan defaults and local narrowing
+
+`conan install` generates the dependency graph, toolchain and presets; it does not
+configure CMake. A normal `cmake --preset oxygen-...` reapplies explicit recipe
+defaults, including OFF values. A local configure may explicitly disable
+provisioned tests/examples/docs/optional tools/benchmarks:
+
+```powershell
+cmake --preset oxygen-ninja-default -DOXYGEN_BUILD_TESTS=OFF
+```
+
+The next normal preset configure restores the recipe default. `cmake --build`
+uses the last configured state. Enabling outputs the recipe disabled, changing
+shared/static linkage, ASan, coverage or Tracy against the resolved graph, or
+narrowing the contents of a Conan package build is an error. Change recipe options
+and rerun Conan instead. A noncached native Conan toolchain block carries graph
+expectations so changing recipe options cannot leave stale validation facts.
+
+Mandatory code-generation tools remain required even with `OXYGEN_BUILD_TOOLS=OFF`.
+The existing dependency graph is not yet pruned for disabled optional outputs;
+that recipe work remains B07. Source-embedded consumers own their own dependency
+graph and need only the selected modules' dependencies.
+
 ## Embedded JSON Schemas
 
 Use `cmake/JsonSchemaHelpers.cmake` to embed JSON schema files into generated C++ headers at build time.

@@ -111,7 +111,8 @@ macro(_setup_install_dirs)
     set(OXYGEN_INSTALL_SCHEMAS "schemas")
   else()
     cmake_path(
-      APPEND OXYGEN_INSTALL_DATA
+      APPEND
+      OXYGEN_INSTALL_DATA
       "schemas"
       OUTPUT_VARIABLE OXYGEN_INSTALL_SCHEMAS
     )
@@ -120,12 +121,10 @@ macro(_setup_install_dirs)
 endmacro()
 
 if(${META_PROJECT_ID}_INSTALL)
-  _oxygen_emit_multi_config_install_prefix_hook()
-  _setup_install_dirs()
-
-  if(NOT ${META_PROJECT_ID}_IS_MASTER_PROJECT)
-    return()
+  if(PROJECT_IS_TOP_LEVEL AND OXYGEN_BUILD_FULL_ENGINE)
+    _oxygen_emit_multi_config_install_prefix_hook()
   endif()
+  _setup_install_dirs()
 
   set(runtime "${META_PROJECT_NAME}_runtime")
   set(dev "${META_PROJECT_NAME}_dev")
@@ -134,9 +133,16 @@ if(${META_PROJECT_ID}_INSTALL)
   set(docs "${META_PROJECT_NAME}_docs")
 
   # Install the project meta files
-  install(FILES AUTHORS DESTINATION ${OXYGEN_INSTALL_MISC} COMPONENT ${meta})
-  install(FILES LICENSE DESTINATION ${OXYGEN_INSTALL_MISC} COMPONENT ${meta})
-  install(FILES README.md DESTINATION ${OXYGEN_INSTALL_MISC} COMPONENT ${meta})
+  if(PROJECT_IS_TOP_LEVEL)
+    install(FILES AUTHORS DESTINATION ${OXYGEN_INSTALL_MISC} COMPONENT ${meta})
+    install(FILES LICENSE DESTINATION ${OXYGEN_INSTALL_MISC} COMPONENT ${meta})
+    install(
+      FILES
+        README.md
+      DESTINATION ${OXYGEN_INSTALL_MISC}
+      COMPONENT ${meta}
+    )
+  endif()
 
   # # Install master docs
   # string(MAKE_C_IDENTIFIER ${META_PROJECT_NAME} project_id)
@@ -195,7 +201,8 @@ function(oxygen_module_install)
     ARCHIVE
       DESTINATION ${OXYGEN_INSTALL_LIB}
       COMPONENT ${mod_dev}
-    FILE_SET HEADERS
+    FILE_SET
+    HEADERS
       DESTINATION ${OXYGEN_INSTALL_INCLUDE}/${x_INCLUDE_PREFIX}
       COMPONENT ${mod_dev}
   )
@@ -222,7 +229,8 @@ function(oxygen_module_install)
     ARCHIVE
       DESTINATION ${OXYGEN_INSTALL_LIB}
       COMPONENT ${dev}
-    FILE_SET HEADERS
+    FILE_SET
+    HEADERS
       DESTINATION ${OXYGEN_INSTALL_INCLUDE}/${x_INCLUDE_PREFIX}
       COMPONENT ${dev}
   )

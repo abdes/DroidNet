@@ -1,0 +1,83 @@
+# Distributed under the 3-Clause BSD License. See accompanying file LICENSE.
+# SPDX-License-Identifier: BSD-3-Clause
+
+option(BUILD_SHARED_LIBS "Build shared instead of static libraries." OFF)
+option(OXYGEN_BUILD_TESTS "Build Oxygen tests." ${PROJECT_IS_TOP_LEVEL})
+option(OXYGEN_BUILD_EXAMPLES "Build Oxygen examples." ${PROJECT_IS_TOP_LEVEL})
+option(OXYGEN_BUILD_DOCS "Enable Oxygen documentation." ${PROJECT_IS_TOP_LEVEL})
+option(
+  OXYGEN_BUILD_TOOLS
+  "Build optional Oxygen tools."
+  ${PROJECT_IS_TOP_LEVEL}
+)
+option(
+  OXYGEN_BUILD_BENCHMARKS
+  "Build Oxygen benchmarks."
+  ${PROJECT_IS_TOP_LEVEL}
+)
+option(OXYGEN_WITH_ASAN "Instrument code with address sanitizer." OFF)
+option(OXYGEN_WITH_COVERAGE "Instrument code to measure coverage." OFF)
+option(OXYGEN_WITH_TRACY "Enable Tracy profiler integration." OFF)
+option(OXYGEN_WITH_DOXYGEN "Create Doxygen API documentation targets." OFF)
+option(OXYGEN_USE_CCACHE "Enable compiler caching using ccache." OFF)
+
+if(NOT PROJECT_IS_TOP_LEVEL AND OXYGEN_USE_CCACHE)
+  message(
+    FATAL_ERROR
+    "OXYGEN_USE_CCACHE configures standalone builds. For embedded modules, "
+    "set CMAKE_C_COMPILER_LAUNCHER and CMAKE_CXX_COMPILER_LAUNCHER in the parent project."
+  )
+endif()
+
+# Conan emits defaults in presets, and immutable graph expectations in its
+# toolchain. Never replace a caller's normal variable with a stale cache value.
+set(
+  _oxygen_narrowable_options
+  OXYGEN_BUILD_TESTS
+  OXYGEN_BUILD_EXAMPLES
+  OXYGEN_BUILD_DOCS
+  OXYGEN_BUILD_TOOLS
+  OXYGEN_BUILD_BENCHMARKS
+)
+set(
+  _oxygen_graph_options
+  ${_oxygen_narrowable_options}
+  BUILD_SHARED_LIBS
+  OXYGEN_WITH_ASAN
+  OXYGEN_WITH_COVERAGE
+  OXYGEN_WITH_TRACY
+)
+foreach(_option IN LISTS _oxygen_graph_options)
+  set(_expected "OXYGEN_CONAN_EXPECT_${_option}")
+  if(NOT DEFINED ${_expected})
+    continue()
+  endif()
+  if((${_option} AND NOT ${_expected}) OR (NOT ${_option} AND ${_expected}))
+    if(
+      NOT
+        OXYGEN_CONAN_PACKAGE_BUILD
+      AND
+        _option
+          IN_LIST
+          _oxygen_narrowable_options
+      AND
+        NOT
+          ${_option}
+    )
+      continue()
+    endif()
+    message(
+      FATAL_ERROR
+      "${_option}=${${_option}} conflicts with the Conan configuration (${${_expected}}). "
+      "Configure with the current Conan/Oxygen preset, or regenerate dependencies "
+      "with matching recipe options. Only disabling "
+      "provisioned optional outputs is allowed in local builds."
+    )
+  endif()
+endforeach()
+if(OXYGEN_CONAN_PACKAGE_BUILD AND NOT OXYGEN_BUILD_FULL_ENGINE)
+  message(
+    FATAL_ERROR
+    "The current Conan recipe packages the full engine; OXYGEN_MODULES cannot narrow a package build."
+  )
+endif()
