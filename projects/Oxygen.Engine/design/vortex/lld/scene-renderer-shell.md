@@ -4,21 +4,6 @@
 **Deliverables:** D.2 (SceneRenderBuilder), D.3 (SceneRenderer shell dispatch)
 **Status:** `ready`
 
-## Mandatory Vortex Rule
-
-- For Vortex planning and implementation, `Oxygen.Renderer` is legacy dead
-  code. It is not production, not a reference implementation, not a fallback,
-  and not a simplification path for any Vortex task.
-- Every Vortex task must be designed and implemented as a new Vortex-native
-  system that targets maximum parity with UE5.7, grounded in
-  `F:\Epic Games\UE_5.7\Engine\Source\Runtime` and
-  `F:\Epic Games\UE_5.7\Engine\Shaders`.
-- No Vortex task may be marked complete until its parity gate is closed with
-  explicit evidence against the relevant UE5.7 source and shader references.
-- If maximum parity cannot yet be achieved, the task remains incomplete until
-  explicit human approval records the accepted gap and the reason the parity
-  gate cannot close.
-
 ## 1. Scope and Context
 
 ### 1.1 What This System Is
@@ -362,9 +347,9 @@ render-context materialization, publication helpers, and composition planning.
 ### 3.3.1 Preserving the Per-View Shading-Mode Seam
 
 The architecture and DESIGN contract require `ShadingMode` selection to be
-per `CompositionView`, not renderer-global. Phase 2 does not implement mixed-
-mode multi-view execution yet, but it must preserve the seam where that view
-intent enters the scene renderer.
+per `CompositionView`, not renderer-global. Mixed deferred/forward views now execute through the per-view mode seam,
+qualified by M06A/M06B. ResolveShadingModeForCurrentView reads the current view
+and uses the bootstrap default only when no view mode is supplied.
 
 Phase-2 rule:
 
@@ -373,8 +358,7 @@ Phase-2 rule:
   effective mode from the current view's composition intent
 - when no current view has been materialized yet, the shell falls back to the
   default mode selected at bootstrap
-- full per-view mixed-mode execution remains deferred to the later multi-view
-  validation work; the seam itself must already exist in Phase 2
+- mixed-mode multi-view qualification is recorded under M06A/M06B
 
 Illustrative helper:
 

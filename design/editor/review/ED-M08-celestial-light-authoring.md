@@ -14,12 +14,12 @@ stores no competing Sun pointer. Redundant `IsSunLight`/Contributes authoring
 state is removed through canonical migration, not kept as another assignment
 path. Ordinary light participation remains the independent Affects Scene gate.
 
-| Scene | Assignment | Required behavior |
-| --- | --- | --- |
-| One sun | Sun→Primary | Sun illuminates geometry and atmosphere when participating |
-| Two suns | SunOne→Primary; SunTwo→Secondary | Both contribute simultaneously with independent direction, colour, lux, source angle and shadows |
-| Sun and moon | Sun→Primary; Moon→Secondary | Both can contribute at twilight; disabling Sun leaves Moon in Secondary |
-| Directional fill | Fill→None | Ordinary illumination/shadows without atmospheric disk/scattering contribution |
+| Scene            | Assignment                       | Required behavior                                                                                |
+| ---------------- | -------------------------------- | ------------------------------------------------------------------------------------------------ |
+| One sun          | Sun→Primary                      | Sun illuminates geometry and atmosphere when participating                                       |
+| Two suns         | SunOne→Primary; SunTwo→Secondary | Both contribute simultaneously with independent direction, colour, lux, source angle and shadows |
+| Sun and moon     | Sun→Primary; Moon→Secondary      | Both can contribute at twilight; disabling Sun leaves Moon in Secondary                          |
+| Directional fill | Fill→None                        | Ordinary illumination/shadows without atmospheric disk/scattering contribution                   |
 
 ## 2. Validation and lifetime
 
@@ -86,7 +86,7 @@ Migrate useful explicit slots and unambiguous old role combinations. Conflicting
 or unrepresentable assignments require repair rather than collapsing two bodies
 to one. No legacy resolver or cosmetic Primary/Secondary renaming is added.
 Source-local deferred notes follow the
-[engine capability record](../../../projects/Oxygen.Engine/design/vortex/plan/editor-v01-deferred-capabilities.md).
+[engine capability record](../../../projects/Oxygen.Engine/design/vortex/milestones/ED-M08/deferred-capabilities.md).
 
 ## 5. Eliminated alternatives and industry basis
 

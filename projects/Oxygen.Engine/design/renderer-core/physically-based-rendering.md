@@ -1,7 +1,7 @@
 # Physically based rendering in Oxygen
 
 Updated: 2026-09-22. Mathematical specification; implementation and acceptance
-are tracked in the [exposure delivery plan](../vortex/plan/exposure-and-lightbench-correction.md).
+are tracked in the [exposure delivery plan](../vortex/milestones/exposure/README.md).
 
 ## Units and working color
 
@@ -166,7 +166,7 @@ in [2^-24,2^32], positive displayed/latent gain in [2^-32,2^32], P in
 Validate resulting gain over curve segments and bounded EV intervals; validate
 seeds separately. These are coupled gain bounds, not independent clamps on
 EV/key/compensation. The
-[checkpoint](../vortex/plan/exposure-contract-checkpoint.md) records the adopted
+[checkpoint](../vortex/milestones/exposure/EX01/validation.md) records the adopted
 format-retention policy. This is a specified domain; native qualification is
 required before it can be reported as tested support.
 
@@ -330,7 +330,7 @@ from 8.427 to 2.901 ms; frame time fell from 13.098 to 7.804 ms. These are combi
 results, not isolated savings attributed to individual table rows. The native
 90-material matrix measured maximum energy/indirect discrepancy of 0.7032%; this
 does not bound the separate finite-emitter approximation differences.
-[Measurement and image evidence](../vortex/IMPLEMENTATION_STATUS.md#34-slice-7-work-items)
+[Measurement and image evidence](../vortex/milestones/exposure/EX07/README.md#stages-and-ownership)
 records the controlled recipe, reference comparisons and settled-exposure capture.
 
 ## Qualification

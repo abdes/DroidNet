@@ -164,7 +164,7 @@ auto IblProbePass::RefreshStaticSkyLight(
     // TODO(ED-M08, exposure): capture canonical scene radiance independently of
     // the consuming view's P/S, retain its source scale and qualify narrowing
     // before publishing. Owner:
-    // design/vortex/plan/editor-v01-captured-sky-ibl.md; feature dependency:
+    // design/vortex/lld/captured-sky-ibl.md; feature dependency:
     // https://github.com/abdes/DroidNet/issues/14
     MarkStaticSkyLightUnavailable(
       next_state, StaticSkyLightUnavailableReason::kCapturedSceneDeferred);

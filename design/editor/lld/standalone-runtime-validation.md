@@ -100,17 +100,17 @@ A capability being reusable does not justify shipping its instrumentation.
 Paths in this table are relative to the repository root. These are development
 targets, excluded from the default solution/CMake build and every package.
 
-| Owner/path | Concrete responsibility |
-| --- | --- |
-| `projects/Oxygen.Engine/tools/validation/Schemas/` | Canonical versioned JSON schemas and valid/rejection examples shared by native and managed tests. |
-| `projects/Oxygen.Engine/tools/validation/Protocol/` | Native schema-backed readers, bounded semantic validation and evidence writers. |
-| `projects/Oxygen.Engine/tools/validation/Driver/` | `Oxygen.Tools.EditorValidation.Native` executable: exact content loading, controlled native view, check execution and exit. |
-| `projects/Oxygen.Engine/tools/validation/Capture/` | `Oxygen.Tools.EditorValidation.Capture` development module/bridge: session registry, native observation, completed-frame capture, GPU exposure readback and checkpoint scheduling. The driver and embedded test host use the same implementation. |
-| `tests/EditorValidation/Oxygen.Editor.Validation.csproj` | Managed preparation, independent expected-state oracle, schema resources/DTOs, process ownership, comparison, fixtures and developer results. |
-| `projects/Oxygen.Editor.WorldEditor/tests/UI/Oxygen.Editor.WorldEditor.UI.Tests.csproj` | Existing WinUI test host, with an opt-in reference to the managed validation project; composes real editor services and the development delivery/capture gate. |
-| Production ContentPipeline/WorldEditor/Runtime/Interop | Actual authoring, saved snapshots, cook/publication, mutation, loading and view responsibilities. No M08 orchestration or production reference to development contracts. |
-| Production Scene/Content/Engine/Vortex/Graphics | Actual scene/loading/rendering/readback behavior. Production changes require an independent runtime responsibility. |
-| DemoShell/RenderScene | Ordinary consumers. The driver calls DemoShell's existing scene-loading library and Content APIs with exact inputs; it does not duplicate the loader or launch normal RenderScene with a validation mode. |
+| Owner/path                                                                              | Concrete responsibility                                                                                                                                                                                                                           |
+| --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `projects/Oxygen.Engine/tools/validation/Schemas/`                                      | Canonical versioned JSON schemas and valid/rejection examples shared by native and managed tests.                                                                                                                                                 |
+| `projects/Oxygen.Engine/tools/validation/Protocol/`                                     | Native schema-backed readers, bounded semantic validation and evidence writers.                                                                                                                                                                   |
+| `projects/Oxygen.Engine/tools/validation/Driver/`                                       | `Oxygen.Tools.EditorValidation.Native` executable: exact content loading, controlled native view, check execution and exit.                                                                                                                       |
+| `projects/Oxygen.Engine/tools/validation/Capture/`                                      | `Oxygen.Tools.EditorValidation.Capture` development module/bridge: session registry, native observation, completed-frame capture, GPU exposure readback and checkpoint scheduling. The driver and embedded test host use the same implementation. |
+| `tests/EditorValidation/Oxygen.Editor.Validation.csproj`                                | Managed preparation, independent expected-state oracle, schema resources/DTOs, process ownership, comparison, fixtures and developer results.                                                                                                     |
+| `projects/Oxygen.Editor.WorldEditor/tests/UI/Oxygen.Editor.WorldEditor.UI.Tests.csproj` | Existing WinUI test host, with an opt-in reference to the managed validation project; composes real editor services and the development delivery/capture gate.                                                                                    |
+| Production ContentPipeline/WorldEditor/Runtime/Interop                                  | Actual authoring, saved snapshots, cook/publication, mutation, loading and view responsibilities. No M08 orchestration or production reference to development contracts.                                                                          |
+| Production Scene/Content/Engine/Vortex/Graphics                                         | Actual scene/loading/rendering/readback behavior. Production changes require an independent runtime responsibility.                                                                                                                               |
+| DemoShell/RenderScene                                                                   | Ordinary consumers. The driver calls DemoShell's existing scene-loading library and Content APIs with exact inputs; it does not duplicate the loader or launch normal RenderScene with a validation mode.                                         |
 
 Enable the native target with CMake `OXYGEN_BUILD_EDITOR_VALIDATION=ON` (default
 `OFF`) and the managed test-host reference with MSBuild
@@ -302,21 +302,21 @@ Every artifact carries `protocol_version: 1`, `artifact_version: 1`, a snake_cas
 native/managed ordinal numbers. Normalize UUIDs to lowercase `D` format and
 SHA-256 hashes to lowercase hexadecimal when writing; reject malformed values.
 
-| Required field | Type and contract |
-| --- | --- |
-| `protocol_version`, `artifact_version`, `artifact_kind` | Integers 1, 1 and `request`; reject unknown versions before loading content. |
-| `operation_id`, `project_id`, `publication_id` | UUIDs; publication ID identifies the committed receipt, supplemented by its hash and per-product proofs. |
-| `publication_receipt_hash`, `input_identity` | SHA-256 identities of the verified publication and selected saved input set. |
-| `project_root` | Canonical absolute project root; it is not the evidence directory. |
-| `build` | Configuration, protocol/schema versions and separate cooking-producer, embedded runtime and standalone/capture artifact inventories/fingerprints. Product schema versions carry their actual positive version numbers; they are not forced to protocol version 1. |
-| `roots_manifest_path`, `roots_fingerprint` | Immutable `roots-manifest.json` and SHA-256 of its exact bytes. Its `roots` array supplies supported kinds, canonical absolute paths, mount identities and protected file manifests/hashes in mount order. |
-| `scene_virtual_path`, `scene_asset_key` | Exact path AND key; both resolve to the same winning cooked scene. |
-| `identity_map_path`, `identity_map_hash` | Immutable GUID/index and URI/key/winning-source map. No expected numeric property values. |
-| `expected_state_path`, `expected_state_hash` | Managed comparison input from saved sources and separately labelled library baselines. Native code may verify its hash, but never apply or echo its values. |
-| `profile_path`, `profile_hash` | Immutable `profile.json` and SHA-256 of its exact bytes. It supplies explicit camera GUID/index, authored Auto/Fixed aspect policy, target pixels/encoding/content mapping, timestep, seed, checkpoints, history reset and effective render-policy requirements. |
-| `artifact_directory` | Absolute operation-owned directory outside authored content. |
-| `evidence_root` | Canonical absolute root selected by the managed runner; `artifact_directory` must equal this root joined with `operation_id`. |
-| `cancel_event_name` | `Local\Oxygen.EdM08.<operation-id>`; parent-owned Windows manual-reset event used by the standalone child. Embedded cancellation uses the private ABI. |
+| Required field                                          | Type and contract                                                                                                                                                                                                                                                 |
+| ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `protocol_version`, `artifact_version`, `artifact_kind` | Integers 1, 1 and `request`; reject unknown versions before loading content.                                                                                                                                                                                      |
+| `operation_id`, `project_id`, `publication_id`          | UUIDs; publication ID identifies the committed receipt, supplemented by its hash and per-product proofs.                                                                                                                                                          |
+| `publication_receipt_hash`, `input_identity`            | SHA-256 identities of the verified publication and selected saved input set.                                                                                                                                                                                      |
+| `project_root`                                          | Canonical absolute project root; it is not the evidence directory.                                                                                                                                                                                                |
+| `build`                                                 | Configuration, protocol/schema versions and separate cooking-producer, embedded runtime and standalone/capture artifact inventories/fingerprints. Product schema versions carry their actual positive version numbers; they are not forced to protocol version 1. |
+| `roots_manifest_path`, `roots_fingerprint`              | Immutable `roots-manifest.json` and SHA-256 of its exact bytes. Its `roots` array supplies supported kinds, canonical absolute paths, mount identities and protected file manifests/hashes in mount order.                                                        |
+| `scene_virtual_path`, `scene_asset_key`                 | Exact path AND key; both resolve to the same winning cooked scene.                                                                                                                                                                                                |
+| `identity_map_path`, `identity_map_hash`                | Immutable GUID/index and URI/key/winning-source map. No expected numeric property values.                                                                                                                                                                         |
+| `expected_state_path`, `expected_state_hash`            | Managed comparison input from saved sources and separately labelled library baselines. Native code may verify its hash, but never apply or echo its values.                                                                                                       |
+| `profile_path`, `profile_hash`                          | Immutable `profile.json` and SHA-256 of its exact bytes. It supplies explicit camera GUID/index, authored Auto/Fixed aspect policy, target pixels/encoding/content mapping, timestep, seed, checkpoints, history reset and effective render-policy requirements.  |
+| `artifact_directory`                                    | Absolute operation-owned directory outside authored content.                                                                                                                                                                                                      |
+| `evidence_root`                                         | Canonical absolute root selected by the managed runner; `artifact_directory` must equal this root joined with `operation_id`.                                                                                                                                     |
+| `cancel_event_name`                                     | `Local\Oxygen.EdM08.<operation-id>`; parent-owned Windows manual-reset event used by the standalone child. Embedded cancellation uses the private ABI.                                                                                                            |
 
 The managed writer creates `roots-manifest.json` (`artifact_kind: roots_manifest`)
 and `profile.json` (`artifact_kind: profile`) as UTF-8 without a BOM, closes them,
@@ -533,7 +533,7 @@ A Moon use case means directional moonlight and an analytic disk. It does not
 claim lunar textures, phases or orbit simulation. More than two atmospheric
 sources and sky-only authoring are post-V0.1 scope; Affects Scene continues to
 gate all light contribution. Deferred work is tracked under the owning engine
-[capability record](../../../projects/Oxygen.Engine/design/vortex/plan/editor-v01-deferred-capabilities.md),
+[capability record](../../../projects/Oxygen.Engine/design/vortex/milestones/ED-M08/deferred-capabilities.md),
 with source-local comments added as the corresponding engine code is modified.
 
 Captured-sky lighting supplies both diffuse and specular image-based lighting.
@@ -1018,61 +1018,61 @@ preference or background validation scheduler is added.
 ## 12. Validation Gates
 
 - [ ] Per-light None/Primary/Secondary assignments, uniqueness across hidden/off
-  occupants, no promotion, conflict-aware migration and exact source round trips
-  pass. Existing native enum/API names remain canonical.
+      occupants, no promotion, conflict-aware migration and exact source round trips
+      pass. Existing native enum/API names remain canonical.
 - [ ] Both atmospheric sources simultaneously illuminate and cast requested
-  shadows in surface paths/applicable fog, contribute to atmosphere/captured-sky
-  diffuse/specular lighting, and invalidate products independently. Secondary-only
-  and ordinary role-None directional operation pass without substitutions.
+      shadows in surface paths/applicable fog, contribute to atmosphere/captured-sky
+      diffuse/specular lighting, and invalidate products independently. Secondary-only
+      and ordinary role-None directional operation pass without substitutions.
 - [ ] Approved visibility modes/defaults, local overrides, hierarchy propagation
-  and useful-content migration pass Save/cook/native/editor qualification.
+      and useful-content migration pass Save/cook/native/editor qualification.
 - [ ] Light participation, geometry casting, light shadowing and GPU receiver
-  opt-out have independent rendered effects; hidden camera nodes remain usable.
+      opt-out have independent rendered effects; hidden camera nodes remain usable.
 - [ ] Editor-only Hide preserves illumination/caster eligibility and child
-  choices without source, dirty/history or cook changes. Controlled capture
-  ignores workspace masks and safely restores the current editing view.
+      choices without source, dirty/history or cook changes. Controlled capture
+      ignores workspace masks and safely restores the current editing view.
 - [ ] Visibility/hierarchy changes invalidate cached directional membership and
-  affected lighting products; authored Hidden and off-screen shadow casters are
-  correctly distinguished. Excluded blended casting/hidden-shadow modes are
-  not exposed as authoring features.
+      affected lighting products; authored Hidden and off-screen shadow casters are
+      correctly distinguished. Excluded blended casting/hidden-shadow modes are
+      not exposed as authoring features.
 - [ ] Exact project/root/path/key/camera request succeeds without example content,
-  restored state, name matching or synthetic content.
+      restored state, name matching or synthetic content.
 - [ ] Request/build/schema/root/file mismatches fail before affected native use.
 - [ ] Per-product expected state stays correct after partial/no-op cook and
-  deliberate library priority changes; unavailable source is labelled honestly.
+      deliberate library priority changes; unavailable source is labelled honestly.
 - [ ] The final V0.1 scope is covered; every required
-  field passes saved/embedded/standalone semantic comparison.
+      field passes saved/embedded/standalone semantic comparison.
 - [ ] Controlled static and Auto/field image cases pass unchanged tolerances,
-  with observed GPU exposure and actual completed-frame identities.
+      with observed GPU exposure and actual completed-frame identities.
 - [ ] Editing/Undo/hierarchy/asset changes during capture cannot contaminate
-  its saved revision; release converges to current state.
+      its saved revision; release converges to current state.
 - [ ] Cancel/fault/activation/close/resize/restart and late callbacks cannot
-  restore stale state or leak scene/view/GPU/reader ownership.
+      restore stale state or leak scene/view/GPU/reader ownership.
 - [ ] Concurrent saves/cooks/mount changes wait/resume safely without exception
-  polling, hidden save/cook or modifying automatic-cooking preferences.
+      polling, hidden save/cook or modifying automatic-cooking preferences.
 - [ ] Development entry, real authoring/Save/Cook UI recovery, camera choice and
-  readable per-run results pass development tests and joint user review.
+      readable per-run results pass development tests and joint user review.
 - [ ] Normal Debug/Release editor and RenderScene project references, resources,
-  initializers, binaries, packages and SDK/install outputs contain zero
-  development-validation dependencies or payloads. Canonical product workflows
-  remain usable without development tooling; legacy behavior is not preserved
-  merely for compatibility.
+      initializers, binaries, packages and SDK/install outputs contain zero
+      development-validation dependencies or payloads. Canonical product workflows
+      remain usable without development tooling; legacy behavior is not preserved
+      merely for compatibility.
 - [ ] M02's outstanding single-viewport evidence and the exact M08 build/
-  publication/fixture/profile artifact set are recorded before M08 closes.
+      publication/fixture/profile artifact set are recorded before M08 closes.
 
 M08 owns these implementation and proof obligations. M09 viewport tools and
 M10's complete release/GPU performance qualification remain separate.
 
 ## 13. Design Rationale And Eliminated Alternatives
 
-| Alternative | Reason for elimination |
-| --- | --- |
-| Ship a Validate command, protocol or shared production schema package | Qualification is a development workflow; this would add a production dependency without an independent authoring/runtime responsibility. |
-| Add a validation flag to normal RenderScene | Demo restoration, scene selection and camera conveniences are different from an exact controlled check. A private driver calls the same loader without changing the ordinary example's contract. |
-| Copy loading, projection, exposure or rendering algorithms into the harness | A matching duplicate can conceal a defect in the actual product path. Both hosts execute the real production algorithms and share only development observation/capture code. |
+| Alternative                                                                            | Reason for elimination                                                                                                                                                                            |
+| -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Ship a Validate command, protocol or shared production schema package                  | Qualification is a development workflow; this would add a production dependency without an independent authoring/runtime responsibility.                                                          |
+| Add a validation flag to normal RenderScene                                            | Demo restoration, scene selection and camera conveniences are different from an exact controlled check. A private driver calls the same loader without changing the ordinary example's contract.  |
+| Copy loading, projection, exposure or rendering algorithms into the harness            | A matching duplicate can conceal a defect in the actual product path. Both hosts execute the real production algorithms and share only development observation/capture code.                      |
 | Treat a cook receipt, cooked values or live runtime values as the full authored oracle | Partial publications and source-less libraries have different provenance. Saved source supplies authored expectations; verified library inspection supplies explicitly labelled cooked baselines. |
-| Accept matching images alone | Two wrong or empty renders can match. Independent required semantics, non-default visible cases and source identity must also pass. |
-| Use command acceptance, startup frame counts or elapsed sleeps as capture completion | None proves that the requested resources/profile produced the measured frame. Readiness, completed scene-frame identity, GPU fence and closed artifacts are required. |
-| Pause authoring or hold the publication/rendering pause for embedded capture | Authoring must continue and the captured view must render. A bounded development delivery gate preserves pending revisions while the real renderer advances. |
-| Resume by replaying every queued mutation or restoring the old snapshot | Either can apply stale state after activation changes. A fresh coherent current projection covers pending revisions, followed by later valid work. |
-| Relax tolerances, resize/align images or mask failed content | These change the measured contract. Fix the rendering/data path and retain the original images and exact numerical gates. |
+| Accept matching images alone                                                           | Two wrong or empty renders can match. Independent required semantics, non-default visible cases and source identity must also pass.                                                               |
+| Use command acceptance, startup frame counts or elapsed sleeps as capture completion   | None proves that the requested resources/profile produced the measured frame. Readiness, completed scene-frame identity, GPU fence and closed artifacts are required.                             |
+| Pause authoring or hold the publication/rendering pause for embedded capture           | Authoring must continue and the captured view must render. A bounded development delivery gate preserves pending revisions while the real renderer advances.                                      |
+| Resume by replaying every queued mutation or restoring the old snapshot                | Either can apply stale state after activation changes. A fresh coherent current projection covers pending revisions, followed by later valid work.                                                |
+| Relax tolerances, resize/align images or mask failed content                           | These change the measured contract. Fix the rendering/data path and retain the original images and exact numerical gates.                                                                         |

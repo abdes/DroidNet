@@ -3,21 +3,6 @@
 **Phase:** 3 — Deferred Core enabling support
 **Status:** `ready`
 
-## Mandatory Vortex Rule
-
-- For Vortex planning and implementation, `Oxygen.Renderer` is legacy dead
-  code. It is not production, not a reference implementation, not a fallback,
-  and not a simplification path for any Vortex task.
-- Every Vortex task must be designed and implemented as a new Vortex-native
-  system that targets maximum parity with UE5.7, grounded in
-  `F:\Epic Games\UE_5.7\Engine\Source\Runtime` and
-  `F:\Epic Games\UE_5.7\Engine\Shaders`.
-- No Vortex task may be marked complete until its parity gate is closed with
-  explicit evidence against the relevant UE5.7 source and shader references.
-- If maximum parity cannot yet be achieved, the task remains incomplete until
-  explicit human approval records the accepted gap and the reason the parity
-  gate cannot close.
-
 ## 1. Scope and Context
 
 This document defines the runtime producer architecture required for Vortex to
@@ -172,14 +157,19 @@ class RuntimeMotionProducerModule final : public engine::EngineModule {
 - nominal morph mesh type
 - material asset flags, UV transforms, shader references
 
-### 3.3 Missing Runtime Producers
+### 3.3 Runtime coverage
 
-- no skeleton runtime / pose owner
-- no animation runtime
-- no morph/deformation runtime
-- no renderer-facing deformation bridge
-- no runtime WPO producer contract
-- no soft-body mesh deformation output path
+InitViews publishes current/previous material WPO and motion-vector status,
+backed by `DeformationHistoryCache`. Rigid transform and camera history also
+exist. The old statement that no runtime WPO bridge exists is obsolete.
+
+Skinned and morph publication arrays are explicitly empty. The renderer has no
+live skinned/morph history maps; those producers, their runtime ownership and
+the matching vertex ABI remain [VX-MOTION-01](../OPEN_ITEMS.md).
+Soft-body deformation output is also outside the current producer set.
+
+The following producer-family sections specify both implemented contracts and
+the skinned/morph extension. They are not an inventory of shipping producers.
 
 ## 4. Producer Families
 

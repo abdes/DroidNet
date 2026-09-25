@@ -8,33 +8,18 @@ the data-flow model that span multiple subsystems. Per-subsystem and per-stage
 low-level designs live in individual LLD documents under [`lld/`](lld/README.md).
 
 It assumes the stable conceptual model defined in
-[ARCHITECTURE.md](./ARCHITECTURE.md).
+[ARCHITECTURE.md](ARCHITECTURE.md).
 
 Related documents:
 
-| Document                                               | Purpose                                    |
-| ------------------------------------------------------ | ------------------------------------------ |
-| [PRD.md](./PRD.md)                                     | Product requirements                       |
-| [ARCHITECTURE.md](./ARCHITECTURE.md)                   | Stable conceptual architecture             |
-| [PLAN.md](./PLAN.md)                                   | Phased execution plan                      |
-| [PROJECT-LAYOUT.md](./PROJECT-LAYOUT.md)               | Authoritative file placement               |
-| [IMPLEMENTATION_STATUS.md](./IMPLEMENTATION_STATUS.md) | Tracker                                    |
-| [lld/README.md](lld/README.md)                         | LLD package index and reserved future LLDs |
-
-## Mandatory Vortex Rule
-
-- For Vortex planning and implementation, Vortex requirements are defined by
-  this design set, the Vortex architecture package, and the UE5.7 parity
-  target.
-- Every Vortex task must be designed and implemented as a new Vortex-native
-  system that targets maximum parity with UE5.7, grounded in
-  `F:\Epic Games\UE_5.7\Engine\Source\Runtime` and
-  `F:\Epic Games\UE_5.7\Engine\Shaders`.
-- No Vortex task may be marked complete until its parity gate is closed with
-  explicit evidence against the relevant UE5.7 source and shader references.
-- If maximum parity cannot yet be achieved, the task remains incomplete until
-  explicit human approval records the accepted gap and the reason the parity
-  gate cannot close.
+| Document                               | Purpose                                    |
+| -------------------------------------- | ------------------------------------------ |
+| [PRD.md](PRD.md)                       | Product requirements                       |
+| [ARCHITECTURE.md](ARCHITECTURE.md)     | Stable conceptual architecture             |
+| [PLAN.md](PLAN.md)                     | Phased execution plan                      |
+| [PROJECT-LAYOUT.md](PROJECT-LAYOUT.md) | Authoritative file placement               |
+| [Milestone roadmap](PLAN.md)           | Tracker                                    |
+| [lld/README.md](lld/README.md)         | LLD package index and reserved future LLDs |
 
 ## 1. Design Summary
 
@@ -307,16 +292,16 @@ EngineShaderCatalog registration table.
 
 ### 11.1 Data Product Dependencies
 
-| Consumer                           | Products Consumed                                                                                                                                                    | Producer                                                                                                                                                                                                                                                                                                                                                            |
-| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Occlusion / HZB                    | SceneDepth                                                                                                                                                           | Depth prepass                                                                                                                                                                                                                                                                                                                                                       |
-| Shadow depth                       | Light list, view data                                                                                                                                                | LightingService, InitViews                                                                                                                                                                                                                                                                                                                                          |
-| Base pass                          | Shadow maps (optional)                                                                                                                                               | ShadowService                                                                                                                                                                                                                                                                                                                                                       |
-| Deferred lighting                  | GBufferNormal/Material/BaseColor/CustomData, SceneDepth, shadow data, and only an explicitly documented ambient-bridge subset when that Phase 4 exception is enabled | Base pass, ShadowService, EnvironmentLightingService (ambient bridge only), future IndirectLightingService for canonical indirect environment evaluation                                                                                                                                                                                                            |
-| SkyLight diffuse/specular lighting | VTX-M08 static diffuse baseline; ED-M08 extension planned                                                                                                            | EnvironmentLightingService owns generation/publication. The [V0.1 IBL contract](plan/editor-v01-captured-sky-ibl.md) activates Stage 13 indirect evaluation for captured-sky and specified-cubemap diffuse/specular products and removes the Stage 12 ambient bridge. Forward surfaces share the same evaluation helper; no duplicate diffuse contribution remains. |
-| Translucency                       | SceneColor, SceneDepth, forward light data                                                                                                                           | Prior stages, LightingService                                                                                                                                                                                                                                                                                                                                       |
-| Post-process                       | SceneColor, SceneDepth, Velocity                                                                                                                                     | Prior stages                                                                                                                                                                                                                                                                                                                                                        |
-| Diagnostics                        | Any SceneTextures product                                                                                                                                            | Prior stages                                                                                                                                                                                                                                                                                                                                                        |
+| Consumer                           | Products Consumed                                                                                                                                                    | Producer                                                                                                                                                                                                                                                                                                                                                |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Occlusion / HZB                    | SceneDepth                                                                                                                                                           | Depth prepass                                                                                                                                                                                                                                                                                                                                           |
+| Shadow depth                       | Light list, view data                                                                                                                                                | LightingService, InitViews                                                                                                                                                                                                                                                                                                                              |
+| Base pass                          | Shadow maps (optional)                                                                                                                                               | ShadowService                                                                                                                                                                                                                                                                                                                                           |
+| Deferred lighting                  | GBufferNormal/Material/BaseColor/CustomData, SceneDepth, shadow data, and only an explicitly documented ambient-bridge subset when that Phase 4 exception is enabled | Base pass, ShadowService, EnvironmentLightingService (ambient bridge only), future IndirectLightingService for canonical indirect environment evaluation                                                                                                                                                                                                |
+| SkyLight diffuse/specular lighting | VTX-M08 static diffuse baseline; ED-M08 extension planned                                                                                                            | EnvironmentLightingService owns generation/publication. The [V0.1 IBL contract](lld/captured-sky-ibl.md) activates Stage 13 indirect evaluation for captured-sky and specified-cubemap diffuse/specular products and removes the Stage 12 ambient bridge. Forward surfaces share the same evaluation helper; no duplicate diffuse contribution remains. |
+| Translucency                       | SceneColor, SceneDepth, forward light data                                                                                                                           | Prior stages, LightingService                                                                                                                                                                                                                                                                                                                           |
+| Post-process                       | SceneColor, SceneDepth, Velocity                                                                                                                                     | Prior stages                                                                                                                                                                                                                                                                                                                                            |
+| Diagnostics                        | Any SceneTextures product                                                                                                                                            | Prior stages                                                                                                                                                                                                                                                                                                                                            |
 
 ### 11.2 Data Flow Rules
 
@@ -396,7 +381,7 @@ The Vortex design is shaped around:
   retained with bounded Vortex adaptation
 - shader modules organized by subsystem, mirroring UE5 ownership boundaries
 
-All per-subsystem and per-stage designs are captured in the 18 LLD documents
-under [`lld/`](lld/README.md). See [PLAN.md](./PLAN.md) for phased execution
-and [IMPLEMENTATION_STATUS.md](./IMPLEMENTATION_STATUS.md) for progress
+Subsystem and stage designs are documented
+under [`lld/`](lld/README.md). See [PLAN.md](PLAN.md) for phased execution
+and [Milestone roadmap](PLAN.md) for progress
 tracking.

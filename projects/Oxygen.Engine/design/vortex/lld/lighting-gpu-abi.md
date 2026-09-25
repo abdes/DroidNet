@@ -1,7 +1,7 @@
 # Lighting GPU ABI
 
 Current execution and qualification status lives only in
-[tracker section 3.4](../IMPLEMENTATION_STATUS.md#34-slice-7-work-items). This companion to
+[tracker section 3.4](../milestones/exposure/EX07/README.md#stages-and-ownership). This companion to
 [LightingService](lighting-service.md#2-canonical-data-and-interfaces) specifies
 CPU/HLSL wire layouts for production lighting model 2.
 
@@ -403,7 +403,7 @@ Projected spots retain linear reversed depth and apply authored depth bias once
 in the depth pass. Cube-local records use unbiased projected reversed-Z depth
 and hardware comparison, with authored depth bias applied once at the receiver.
 Do not mix these encodings or bias owners. The
-[EX07E04 contract](../plan/EX07E-point-pcf-contract.md) specifies the conversion,
+[EX07E04 contract](point-shadow-filtering.md) specifies the conversion,
 units, normal displacement and quality mapping; implementation is tested, while
 new baseline visual acceptance remains open.
 

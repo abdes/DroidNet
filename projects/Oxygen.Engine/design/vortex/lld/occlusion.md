@@ -4,21 +4,6 @@
 **Deliverable:** D.16
 **Status:** `in_progress`
 
-## Mandatory Vortex Rule
-
-- For Vortex planning and implementation, `Oxygen.Renderer` is legacy dead
-  code. It is not production, not a reference implementation, not a fallback,
-  and not a simplification path for any Vortex task.
-- Every Vortex task must be designed and implemented as a new Vortex-native
-  system that targets maximum parity with UE5.7, grounded in
-  `F:\Epic Games\UE_5.7\Engine\Source\Runtime` and
-  `F:\Epic Games\UE_5.7\Engine\Shaders`.
-- No Vortex task may be marked complete until its parity gate is closed with
-  explicit evidence against the relevant UE5.7 source and shader references.
-- If maximum parity cannot yet be achieved, the task remains incomplete until
-  explicit human approval records the accepted gap and the reason the parity
-  gate cannot close.
-
 ## 1. Scope And Context
 
 ### 1.1 What This Covers
@@ -338,7 +323,7 @@ M05B cannot be marked `validated` until all gates are satisfied:
    a controlled scene while preserving visible geometry.
 6. D3D12 debug-layer/CDB validation records no relevant warnings or errors for
    the occlusion path.
-7. `IMPLEMENTATION_STATUS.md` records one concise VTX-M05B ledger row with
+7. `milestone README` records one concise VTX-M05B ledger row with
    implementation files/areas, validation artifacts, and no hidden residual
    gap.
 
@@ -352,11 +337,12 @@ M05B cannot be marked `validated` until all gates are satisfied:
   design/plan are updated before implementation claims.
 - No generic visibility framework outside the prepared-scene contract.
 
-## 9. Open Questions
+## 9. Remaining design work
 
-1. Whether shadow command consumers can share the first visibility mask without
-   breaking light-view-specific culling. If not, M05B closes with base/deferred
-   consumers and records shadow-specific occlusion as a later light-view task.
-2. Whether candidate bounds should upgrade from bounding spheres to full AABB
-   extents once the prepared-scene payload exposes stable per-draw boxes. The
-   first implementation may conservatively derive extents from spheres.
+`OcclusionModule` builds GPU candidates from world-space bounding spheres.
+Full AABB candidates are a later precision/performance option (VX-OCC-02).
+Shadow consumers need light-view visibility; sharing camera-view results still
+requires a separate correctness decision (VX-OCC-01).
+
+Both items are tracked in [OPEN_ITEMS.md](../OPEN_ITEMS.md). The implemented
+HZB/readback path and conservative fallback remain the M05B baseline.

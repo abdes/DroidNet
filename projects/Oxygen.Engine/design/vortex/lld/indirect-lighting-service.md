@@ -6,7 +6,7 @@
 
 ## Current V0.1 activation
 
-[Captured-sky IBL](../plan/editor-v01-captured-sky-ibl.md) defines the first
+[Captured-sky IBL](captured-sky-ibl.md) defines the first
 activation: complete diffuse/specular environment evaluation and simultaneous
 Stage12 ambient-bridge retirement. It fixes current family placement under
 `src/Oxygen/Vortex/IndirectLighting/`, product contracts, shared forward/deferred
@@ -15,21 +15,6 @@ GI and optional AO ownership; it does not require those extra families for this
 bounded activation. Its future-only status and old `Services/` directory layout
 are superseded. No runtime bridge or parallel indirect path remains after
 Stage13 activates.
-
-## Mandatory Vortex Rule
-
-- For Vortex planning and implementation, `Oxygen.Renderer` is legacy dead
-  code. It is not production, not a reference implementation, not a fallback,
-  and not a simplification path for any Vortex task.
-- Every Vortex task must be designed and implemented as a new Vortex-native
-  system that targets maximum parity with UE5.7, grounded in
-  `F:\Epic Games\UE_5.7\Engine\Source\Runtime` and
-  `F:\Epic Games\UE_5.7\Engine\Shaders`.
-- No Vortex task may be marked complete until its parity gate is closed with
-  explicit evidence against the relevant UE5.7 source and shader references.
-- If maximum parity cannot yet be achieved, the task remains incomplete until
-  explicit human approval records the accepted gap and the reason the parity
-  gate cannot close.
 
 ## 1. Scope and Context
 

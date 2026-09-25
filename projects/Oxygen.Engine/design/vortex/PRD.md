@@ -9,22 +9,10 @@ implementation sequencing.
 
 Related:
 
-- [ARCHITECTURE.md](./ARCHITECTURE.md)
-- [DESIGN.md](./DESIGN.md)
-- [PLAN.md](./PLAN.md)
-- [PROJECT-LAYOUT.md](./PROJECT-LAYOUT.md)
-
-## Mandatory Vortex Rule
-
-- Every Vortex task must be designed and implemented as a new Vortex-native
-  system that targets maximum parity with UE5.7, grounded in
-  `F:\Epic Games\UE_5.7\Engine\Source\Runtime` and
-  `F:\Epic Games\UE_5.7\Engine\Shaders`.
-- No Vortex task may be marked complete until its parity gate is closed with
-  explicit evidence against the relevant UE5.7 source and shader references.
-- If maximum parity cannot yet be achieved, the task remains incomplete until
-  explicit human approval records the accepted gap and the reason the parity
-  gate cannot close.
+- [ARCHITECTURE.md](ARCHITECTURE.md)
+- [DESIGN.md](DESIGN.md)
+- [PLAN.md](PLAN.md)
+- [PROJECT-LAYOUT.md](PROJECT-LAYOUT.md)
 
 ## 1. Problem Statement
 

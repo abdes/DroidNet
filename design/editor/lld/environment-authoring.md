@@ -100,7 +100,7 @@ current unavailable path and specified-cubemap diffuse-only products are
 implementation gaps, not acceptable substitutes. Neither a stored Enabled flag
 nor two visible sky disks proves captured lighting.
 
-The engine [captured-sky IBL contract](../../../projects/Oxygen.Engine/design/vortex/plan/editor-v01-captured-sky-ibl.md)
+The engine [captured-sky IBL contract](../../../projects/Oxygen.Engine/design/vortex/lld/captured-sky-ibl.md)
 defines the scene-global anchor, processing products, filtering, publication and
 Stage 13 ownership. Camera navigation leaves this shared lighting unchanged;
 the authored atmosphere and contributing light state determine its radiance.
@@ -158,7 +158,7 @@ Expected conversion examples are independently authored for qualification.
 
 ### Exposure extension and persistence layout
 
-The [exposure implementation package](../../../projects/Oxygen.Engine/design/vortex/plan/exposure-and-lightbench-correction.md)
+The [exposure implementation package](../../../projects/Oxygen.Engine/design/vortex/milestones/exposure/README.md)
 extends the existing adapters; it does not introduce another editor exposure
 model. Native ManualCamera remains available to games; the existing editor
 Manual/Auto presentation remains unchanged. Use one canonical native validator
@@ -362,7 +362,7 @@ Required engine work includes complete two-directional surface/shadow processing
 captured-sky diffuse/specular processing, receiver and grading effects, and cache
 invalidation. They are not deferred because source storage already exists.
 Deferred boundaries are recorded in the owning
-[engine capability record](../../../projects/Oxygen.Engine/design/vortex/plan/editor-v01-deferred-capabilities.md).
+[engine capability record](../../../projects/Oxygen.Engine/design/vortex/milestones/ED-M08/deferred-capabilities.md).
 When relevant engine code is modified, add its linked TODO(post-v0.1, ID) beside
 the deferred boundary; do not annotate unrelated untouched files wholesale.
 

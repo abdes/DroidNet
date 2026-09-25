@@ -1,8 +1,8 @@
 # LightBench calibration demo
 
 Status: EX08–EX10 validated (2026-09-25); structured commit delivery was authorized after user review.
-See [closeout and acceptance](../vortex/plan/EX10-completion.md).
-The [delivery plan](../vortex/plan/exposure-and-lightbench-correction.md) owns
+See [closeout and acceptance](../vortex/milestones/exposure/EX10/validation.md).
+The [delivery plan](../vortex/milestones/exposure/README.md) owns
 sequence and gates; [PBR](physically-based-rendering.md) owns equations and frozen
 budgets. This document owns the demo behavior. EX01–EX07 remain closed.
 

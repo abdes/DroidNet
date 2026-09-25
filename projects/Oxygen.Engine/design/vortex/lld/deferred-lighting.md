@@ -4,21 +4,6 @@
 **Deliverable:** D.6
 **Status:** Implemented; broader EX07 qualification is tracked in the implementation plan.
 
-## Mandatory Vortex Rule
-
-- For Vortex planning and implementation, `Oxygen.Renderer` is legacy dead
-  code. It is not production, not a reference implementation, not a fallback,
-  and not a simplification path for any Vortex task.
-- Every Vortex task must be designed and implemented as a new Vortex-native
-  system that targets maximum parity with UE5.7, grounded in
-  `F:\Epic Games\UE_5.7\Engine\Source\Runtime` and
-  `F:\Epic Games\UE_5.7\Engine\Shaders`.
-- No Vortex task may be marked complete until its parity gate is closed with
-  explicit evidence against the relevant UE5.7 source and shader references.
-- If maximum parity cannot yet be achieved, the task remains incomplete until
-  explicit human approval records the accepted gap and the reason the parity
-  gate cannot close.
-
 ## Exposure-package integration
 
 [LightingService](lighting-service.md) owns stage-12 deferred lighting, using the
@@ -89,12 +74,12 @@ The exact interface and lifetimes are defined by the
 
 ### 3.1 Rendering approach
 
-| Source | Geometry | Draw policy |
-| --- | --- | --- |
-| Directional array | Procedural fullscreen triangle | One draw per view; one shared surface/BRDF preparation and a loop over sources |
-| Point | Persistent sphere proxy | One bounded-volume draw per light |
-| Ordinary spot | Persistent cone proxy | One bounded-volume draw per light, regardless of source radius |
-| 90-degree soft spot | Persistent sphere proxy | One bounded-volume draw; center-cone shader still rejects the back hemisphere |
+| Source              | Geometry                       | Draw policy                                                                    |
+| ------------------- | ------------------------------ | ------------------------------------------------------------------------------ |
+| Directional array   | Procedural fullscreen triangle | One draw per view; one shared surface/BRDF preparation and a loop over sources |
+| Point               | Persistent sphere proxy        | One bounded-volume draw per light                                              |
+| Ordinary spot       | Persistent cone proxy          | One bounded-volume draw per light, regardless of source radius                 |
+| 90-degree soft spot | Persistent sphere proxy        | One bounded-volume draw; center-cone shader still rejects the back hemisphere  |
 
 ### 3.2 Local-light volume modes
 
@@ -214,14 +199,14 @@ parameters; their exact layout is in the
 
 ### 5.4 Shader entrypoints
 
-| Entrypoint | Responsibility |
-| --- | --- |
-| `DeferredLightDirectionalVS` | Procedural fullscreen triangle |
-| `DeferredLightDirectionalPS` | Directional-array shading or static-sky diffuse |
-| `DeferredLightPointVS` | Load and transform stored sphere proxy vertices |
-| `DeferredLightPointPS` | Shared analytic point-source shading |
-| `DeferredLightSpotVS` | Load and transform stored cone/sphere proxy vertices |
-| `DeferredLightSpotPS` | Shared analytic spot-source shading and center-cone attenuation |
+| Entrypoint                   | Responsibility                                                  |
+| ---------------------------- | --------------------------------------------------------------- |
+| `DeferredLightDirectionalVS` | Procedural fullscreen triangle                                  |
+| `DeferredLightDirectionalPS` | Directional-array shading or static-sky diffuse                 |
+| `DeferredLightPointVS`       | Load and transform stored sphere proxy vertices                 |
+| `DeferredLightPointPS`       | Shared analytic point-source shading                            |
+| `DeferredLightSpotVS`        | Load and transform stored cone/sphere proxy vertices            |
+| `DeferredLightSpotPS`        | Shared analytic spot-source shading and center-cone attenuation |
 
 ## 6. Light Volume Geometry
 
@@ -317,13 +302,13 @@ stage 12 is skipped.
 
 ### 9.1 GPU resources
 
-| Resource | Lifetime and ownership |
-| --- | --- |
-| Sphere/cone structured buffers and SRVs | Persistent, service-owned through DeferredLightPass; lazy initialization |
-| Draw constants and CBVs | Per frame/draw; retained through GPU completion |
-| Directional/local PSOs | Cached, keyed by formats, depth convention, volume mode and shader variants |
-| Framebuffers | Rebuilt when referenced scene attachments change |
-| Energy LUT | One immutable 32x32 RG32F texture shared across views through LightingService publication |
+| Resource                                | Lifetime and ownership                                                                    |
+| --------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Sphere/cone structured buffers and SRVs | Persistent, service-owned through DeferredLightPass; lazy initialization                  |
+| Draw constants and CBVs                 | Per frame/draw; retained through GPU completion                                           |
+| Directional/local PSOs                  | Cached, keyed by formats, depth convention, volume mode and shader variants               |
+| Framebuffers                            | Rebuilt when referenced scene attachments change                                          |
+| Energy LUT                              | One immutable 32x32 RG32F texture shared across views through LightingService publication |
 
 ### 9.2 Performance considerations
 
@@ -335,7 +320,7 @@ Local draw/submission and shaded-overlap cost still scale with relevant lights.
 
 The [PBR rationale](../../renderer-core/physically-based-rendering.md#design-tradeoffs-and-rejected-alternatives)
 explains the approximation and LUT choices. The
-[EX07 plan](../plan/EX07-lighting-correctness-and-scalability.md) owns measured
+[EX07 plan](../milestones/exposure/EX07/README.md) owns measured
 culling/submission improvements and many-light qualification. A tiled/clustered
 deferred replacement requires profiling evidence and a revised service/ABI design.
 

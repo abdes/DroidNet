@@ -2,7 +2,7 @@
 
 **Phase:** 4C - Migration-Critical Services
 **Deliverable:** D.11
-**Status:** Indexed directional/local shadows, hardware cube PCF and compatible local-map sharing implemented and qualified. [EX07F](../plan/EX07F-acceptance-report.md) is closed, including user-confirmed editor interaction.
+**Status:** Indexed directional/local shadows, hardware cube PCF and compatible local-map sharing implemented and qualified. [EX07F](../milestones/exposure/EX07/EX07F/validation.md) is closed, including manually verified editor interaction.
 
 ## V0.1 Production Extension
 
@@ -14,7 +14,7 @@ regardless of source radius; 90-degree soft spots use the existing cube techniqu
 Requested maps for enabled, contributing lights cannot silently become absent.
 Both forward/translucent and deferred consumers belong to EX07 qualification.
 
-The [EX07 shadow-memory audit](../plan/EX07-shadow-memory-review.md) selects D32
+The [EX07 shadow-memory audit](../milestones/exposure/EX07/EX07E/shadow-memory.md) selects D32
 for conventional CSM/local targets while preserving FP32 depth, reversed-Z,
 bias and PCF. Migrate views, PSOs and depth-only clears together; scene/custom
 stencil and independently owned VSM products are not changed. Compatible local
@@ -32,10 +32,10 @@ The user visually approved the conventional-shadow changes on 2026-09-24.
 Per-light caster dependencies and projected-quality behavior are specified in
 [the local-shadow contract](shadow-local-lights.md#ex07-production-contract).
 
-[Editor V0.1 rendering](../plan/editor-v01-rendering-contract.md#4-conventional-shadows-and-receiver-control)
+[Editor V0.1 rendering](editor-rendering.md#4-conventional-shadows-and-receiver-control)
 extends this baseline with explicitly indexed per-light directional CSMs, GPU
 receiver eligibility and the conditional dedicated
-[ContactShadowCasterDepth product](../plan/editor-v01-rendering-contract.md#5-contactshadowcasterdepth-and-contact-attenuation).
+[ContactShadowCasterDepth product](editor-rendering.md#5-contactshadowcasterdepth-and-contact-attenuation).
 The exact contact algorithm is linked there. Projected-spot/CSM bias and 3x3 PCF contracts remain; cube-local filtering uses
 the approved hardware-PCF contract below. Atmosphere disk diameter adds no
 PCSS/finite-source effect.
@@ -55,27 +55,12 @@ The depth SRV belongs to the generated bindless texture domain, matching the
 shader's domain guard. A retained texture reuses its registered SRV.
 
 The shared contact shader implements the fixed 0.25 m/16-sample profile in the
-[editor rendering contract](../plan/editor-v01-rendering-contract.md#5-contactshadowcasterdepth-and-contact-attenuation).
+[editor rendering contract](editor-rendering.md#5-contactshadowcasterdepth-and-contact-attenuation).
 It uses geometric-normal bias, metric depth thickness, exact start-depth rejection
 and edge/end fading. Forward and deferred consumers multiply its result with
 conventional visibility once, after the receiver gate. Required allocation or
 submission failure rejects the affected shadow publication. The screen-space
 supplement retains conventional maps for off-screen and hidden-depth coverage.
-
-## Mandatory Vortex Rule
-
-- For Vortex planning and implementation, `Oxygen.Renderer` is legacy dead
-  code. It is not production, not a reference implementation, not a fallback,
-  and not a simplification path for any Vortex task.
-- Every Vortex task must be designed and implemented as a new Vortex-native
-  system that targets maximum parity with UE5.7, grounded in
-  `F:\Epic Games\UE_5.7\Engine\Source\Runtime` and
-  `F:\Epic Games\UE_5.7\Engine\Shaders`.
-- No Vortex task may be marked complete until its parity gate is closed with
-  explicit evidence against the relevant UE5.7 source and shader references.
-- If maximum parity cannot yet be achieved, the task remains incomplete until
-  explicit human approval records the accepted gap and the reason the parity
-  gate cannot close.
 
 ## 1. Scope and Context
 
@@ -128,9 +113,9 @@ The published directional shadow product is consumed later by:
 - [ARCHITECTURE.md](../ARCHITECTURE.md) Section 8 - subsystem service ownership
 - [ARCHITECTURE.md](../ARCHITECTURE.md) Section 6.2 - Stage 8 ownership
 - [PLAN.md](../PLAN.md) Section 6 - Phase 4C directional-first scope
-- [shadow-local-lights.md](./shadow-local-lights.md) - VTX-M05D local-light
+- [shadow-local-lights.md](shadow-local-lights.md) - VTX-M05D local-light
   conventional shadow expansion after the CSM parity/stability gate
-- [../plan/VTX-M05D-conventional-shadow-parity.md](../plan/VTX-M05D-conventional-shadow-parity.md)
+- [../plan/VTX-M05D-conventional-shadow-parity.md](../milestones/VTX-M05D/README.md)
   - detailed M05D execution plan
 
 ## 1.4 VTX-M05D Directional CSM Parity Gate
@@ -319,7 +304,7 @@ parity. Changing the projected-spot calibration or fixed 3x3 filter requires
 explicit quality evidence and an authored-behavior decision; copying UE constants
 into this different depth representation is not a valid conversion.
 
-**EX07E04 cube migration (implemented and visually accepted):** the user approved
+**EX07E04 cube migration (implemented and visually accepted):** the review approved
 UE-aligned hardware PCF and Low/Medium/High/Ultra comparison counts of 1/5/29/29.
 Cube-local maps (points and hemispherical spots) now use a cube-array SRV and
 unbiased reversed-Z raster depth. The existing depth pass's `CUBE_SHADOW`
@@ -327,10 +312,10 @@ permutation omits caster bias and pixel depth override; masked coverage remains.
 Receiver-to-light sampling and the producer's six RH face bases share the native
 cube-addressing convention. Authored normal displacement is applied once; clip
 depth bias is applied only during comparison, divided by clip W. The cube record
-remains 448 bytes, with `pcf_sample_count` at offset 440 and reserved padding at 444. The [implementation contract](../plan/EX07E-point-pcf-contract.md) records
+remains 448 bytes, with `pcf_sample_count` at offset 440 and reserved padding at 444. The [implementation contract](point-shadow-filtering.md) records
 projection/bias units, UE source evidence and qualification requirements. This
 filter/encoding change has an explicitly accepted quality/cost tradeoff; see the
-[final measurements](../plan/EX07E-shadow-sharing-results.md).
+[final measurements](../milestones/exposure/EX07/EX07E/validation.md).
 
 ### Compatible local-map ownership
 
@@ -359,7 +344,7 @@ frame-ring descriptors. Last-view removal cannot recycle a slot still used by
 another view or GPU submission. Budget accounting retains native charges through
 closing resources and diagnostic references. `InspectLocalSharing` reports
 unique/spare/closing bytes, aliases, versions and cache decisions; these are not
-whole-process heap totals. See the [qualified lifecycle and memory results](../plan/EX07E-shadow-sharing-results.md).
+whole-process heap totals. See the [qualified lifecycle and memory results](../milestones/exposure/EX07/EX07E/validation.md).
 
 ### 2.4 Directional-Light Authority
 
@@ -418,9 +403,9 @@ interim shape is not the long-lived Phase 4 contract.
 | `ShadowFrameBindings`                               | Forward surface shading (Stage 9), `TranslucencyModule` (Stage 18) | Same canonical publication through `ViewFrameBindings` |
 | CPU inspection view of `DirectionalShadowFrameData` | Tests / diagnostics                                                | `InspectShadowData(ViewId)` only                       |
 
-Phase 4C publishes **directional** shadow data only. Local-light conventional
-shadow bindings remain future work and are not exposed through the Phase 4C
-payload.
+The original Phase 4C payload was directional-only. Current indexed shadow
+publications include directional, spot and point families and are consumed by
+deferred, forward and translucent paths; see the canonical EX07 ABI above.
 
 ### 3.3 Execution Flow
 
@@ -586,12 +571,12 @@ Requires `kShadowing`.
 4. **RenderDoc:** inspect conventional shadow backing resources and verify
    Stage-8 ordering relative to Stage 12.
 
-## 8. Open Questions
+## 8. Follow-ups
 
-None for the Phase 4C baseline.
+Directional, spot and point conventional shadows are implemented. M05D records
+their original qualification; EX07 adds local-map caching, cross-view sharing
+and forward/translucent consumers. Spot/point shadows are no longer pending.
 
-The intentionally deferred work already has named later owners:
-
-- spot-light / point-light conventional shadows ->
-  [shadow-local-lights.md](./shadow-local-lights.md)
-- VSM activation -> later `ShadowService` expansion
+VSM remains a future strategy (VX-SHADOW-01). Layered one-pass point cubemaps
+remain an optimization decision (VX-SHADOW-02). See
+[OPEN_ITEMS.md](../OPEN_ITEMS.md) and the [local-light contract](shadow-local-lights.md).

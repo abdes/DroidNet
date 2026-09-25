@@ -4,21 +4,6 @@
 **Deliverable:** D.5
 **Status:** `ready`
 
-## Mandatory Vortex Rule
-
-- For Vortex planning and implementation, `Oxygen.Renderer` is legacy dead
-  code. It is not production, not a reference implementation, not a fallback,
-  and not a simplification path for any Vortex task.
-- Every Vortex task must be designed and implemented as a new Vortex-native
-  system that targets maximum parity with UE5.7, grounded in
-  `F:\Epic Games\UE_5.7\Engine\Source\Runtime` and
-  `F:\Epic Games\UE_5.7\Engine\Shaders`.
-- No Vortex task may be marked complete until its parity gate is closed with
-  explicit evidence against the relevant UE5.7 source and shader references.
-- If maximum parity cannot yet be achieved, the task remains incomplete until
-  explicit human approval records the accepted gap and the reason the parity
-  gate cannot close.
-
 ## 1. Scope and Context
 
 ### 1.1 What This Covers
@@ -31,16 +16,17 @@
 - the active desktop deferred opaque-velocity policy
 - truthful masked/deformed/skinned/WPO-capable velocity production
 
-Phase 3 implements deferred mode only. Forward mode remains a future extension.
+The original Phase 3 delivery was deferred-only. The current base pass also
+supports solid forward rendering, qualified by M06B and subsequent exposure work.
 
 ### 1.2 Stage Position
 
-| Position                | Stage                                                                       | Notes                                    |
-| ----------------------- | --------------------------------------------------------------------------- | ---------------------------------------- |
-| Predecessor             | Stage 3 (DepthPrepass) — depth-only under the active opaque-velocity policy |                                          |
-| Predecessors (reserved) | Stages 4-8 (occlusion, light grid, shadows — stubs)                         |                                          |
-| **This**                | **Stage 9 — BasePass**                                                      | GBuffer MRT + opaque velocity production |
-| Successor               | Stage 10 (RebuildSceneTextures) — state transition                          |                                          |
+| Position     | Stage                                                                         | Notes                                    |
+| ------------ | ----------------------------------------------------------------------------- | ---------------------------------------- |
+| Predecessor  | Stage 3 (DepthPrepass) — depth-only under the active opaque-velocity policy   |                                          |
+| Predecessors | Stages 5/6/8: HZB/occlusion, lighting and shadows; stages 4/7 remain reserved |                                          |
+| **This**     | **Stage 9 — BasePass**                                                        | GBuffer MRT + opaque velocity production |
+| Successor    | Stage 10 (RebuildSceneTextures) — state transition                            |                                          |
 
 ### 1.3 Architectural Authority
 
@@ -86,8 +72,7 @@ This module must preserve the following invariants from
   `RebuildWithGBuffers()` and then refreshes routing/publication state
 - the active desktop deferred opaque-velocity policy is stage-9 base-pass
   velocity
-- no bool-only completion claim is allowed; velocity publication must be
-  output-backed
+- publish velocity validity only with the corresponding output resource
 
 ## 2. Ownership Model
 
@@ -276,8 +261,8 @@ Required per-draw truth:
 - `kUsesTemporalResponsiveness`
 - `kUsesMotionVectorWorldOffset`
 
-If a draw lacks the required previous-frame input for a declared producer class,
-the implementation is incomplete and must not claim parity.
+Each declared producer class requires its corresponding previous-frame input.
+Missing history follows the producer-specific invalidation/fallback policy.
 
 ### 3.4 View Constants
 
@@ -396,20 +381,19 @@ BasePassModule::Execute(ctx, scene_textures)
   └─ publish BasePassExecutionResult
 ```
 
-### 5.3 Previous-Frame Producer Rules
+### 5.3 Previous-frame producer coverage
 
-To claim UE5.7-grade parity for opaque velocity, stage 9 must support:
+The current path carries rigid transforms, material WPO and motion-vector
+status histories; masked draws apply alpha clipping before writing velocity.
+InitViews leaves skinned and morph publication arrays empty. Their runtime
+producers, histories and vertex inputs are incomplete under
+[VX-MOTION-01](../OPEN_ITEMS.md).
 
-1. rigid transform delta
-2. skinned deformation delta
-3. morph/deformation delta
-4. current and previous WPO
-5. masked alpha-clip before velocity write
-6. material temporal-responsiveness / pixel-animation velocity encoding if the
-   material contract exposes those semantics
-
-If any of these producer classes are missing, docs/tests must keep the item
-open. This LLD does not authorize scope-narrowing by omission.
+Complete deformation velocity requires current and previous rigid, skinned,
+morph and WPO positions, plus the material's temporal-responsiveness/pixel-animation
+encoding. VTX-M02's recorded validation covers the current producer set; it does
+not establish skinned/morph rendering. The shader contracts below include those
+planned inputs so the extension has a defined integration point.
 
 ## 6. Shader Contract
 

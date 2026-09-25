@@ -462,7 +462,7 @@ Historical preview-sun verification on 2026-09-15 passed with original-source
 in `CubeScene`, and persisted opt-out in `EmissiveScene`. RGB's Debug/hash-verified
 dependency load took about 57 seconds; capture after the loaded-scene publication,
 not merely after startup. See the
-[validation record](../../design/vortex/plan/renderscene-preview-sun.md) for scope.
+[validation record](../../design/vortex/milestones/preview-sun/README.md) for scope.
 Those captures cover the earlier default-on, missing-directional policy; they do
 not qualify the current opt-in/profile UI. The current workflow is validated
 separately: Debug/Release builds, 97 focused tests, 18 native scenario checks,
