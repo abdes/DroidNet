@@ -1,43 +1,99 @@
-# Multi-space SRV example: SRV domains split across register spaces
+# ABI ranges stay unique; register spaces and Vulkan sets belong to backend realizations.
 meta:
-  version: "1.0.0"
+  version: 2.0.0
+  description: Two texture tables use t0 in distinct D3D12 register spaces.
 defaults:
   invalid_index: 4294967295
-domains:
-  - id: textures_space0
-    name: Textures_s0
-    kind: SRV
-    register: t0
-    space: space0
-    root_table: BindlessSRV
-    domain_base: 0
-    capacity: 1024
-  - id: textures_space1
-    name: Textures_s1
-    kind: SRV
-    register: t0
-    space: space1
-    root_table: BindlessSRVSpace1
-    domain_base: 0
-    capacity: 512
-root_signature:
-  - type: descriptor_table
-    name: BindlessSRV
-    index: 0
-    visibility: ALL
-    ranges:
-      - range_type: SRV
-        domain: textures_space0
-        base_shader_register: t0
-        register_space: space0
-        num_descriptors: unbounded
-  - type: descriptor_table
-    name: BindlessSRVSpace1
-    index: 1
-    visibility: ALL
-    ranges:
-      - range_type: SRV
-        domain: textures_space1
-        base_shader_register: t0
-        register_space: space1
-        num_descriptors: unbounded
+abi:
+  index_spaces:
+    - id: srv_uav_cbv
+  domains:
+    - id: textures_space0
+      name: TexturesS0
+      index_space: srv_uav_cbv
+      shader_index_base: 0
+      capacity: 1024
+      shader_access_class: texture_srv
+      view_types:
+        - Texture_SRV
+    - id: textures_space1
+      name: TexturesS1
+      index_space: srv_uav_cbv
+      shader_index_base: 1024
+      capacity: 512
+      shader_access_class: texture_srv
+      view_types:
+        - Texture_SRV
+backends:
+  d3d12:
+    strategy:
+      heaps:
+        - id: CBV_SRV_UAV:gpu
+          type: CBV_SRV_UAV
+          shader_visible: true
+          capacity: 1536
+          base_index: 0
+          allow_growth: false
+      tables:
+        - id: TexturesS0Table
+          descriptor_kind: SRV
+          heap: CBV_SRV_UAV:gpu
+          shader_register: t0
+          register_space: space0
+          unbounded: true
+        - id: TexturesS1Table
+          descriptor_kind: SRV
+          heap: CBV_SRV_UAV:gpu
+          shader_register: t0
+          register_space: space1
+          unbounded: true
+      domain_realizations:
+        - domain: textures_space0
+          table: TexturesS0Table
+          heap_local_base: 0
+        - domain: textures_space1
+          table: TexturesS1Table
+          heap_local_base: 1024
+    root_signature:
+      - type: descriptor_table
+        id: TexturesS0Table
+        table: TexturesS0Table
+        index: 0
+        visibility: ALL
+      - type: descriptor_table
+        id: TexturesS1Table
+        table: TexturesS1Table
+        index: 1
+        visibility: ALL
+  vulkan:
+    strategy:
+      descriptor_sets:
+        - id: resources
+          set: 0
+        - id: secondary
+          set: 1
+      bindings:
+        - id: textures_space0_binding
+          set: resources
+          binding: 0
+          descriptor_type: SAMPLED_IMAGE
+          descriptor_count: 1024
+        - id: textures_space1_binding
+          set: secondary
+          binding: 0
+          descriptor_type: SAMPLED_IMAGE
+          descriptor_count: 512
+      domain_realizations:
+        - domain: textures_space0
+          binding: textures_space0_binding
+          array_element_base: 0
+        - domain: textures_space1
+          binding: textures_space1_binding
+          array_element_base: 0
+    pipeline_layout:
+      - type: descriptor_set
+        id: Resources
+        set_ref: resources
+      - type: descriptor_set
+        id: Secondary
+        set_ref: secondary
