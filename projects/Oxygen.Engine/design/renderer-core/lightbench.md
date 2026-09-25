@@ -1,6 +1,7 @@
 # LightBench calibration demo
 
-Status: revised scope approved 2026-09-25; implementation not resumed.
+Status: EX08–EX10 validated (2026-09-25); structured commit delivery was authorized after user review.
+See [closeout and acceptance](../vortex/plan/EX10-completion.md).
 The [delivery plan](../vortex/plan/exposure-and-lightbench-correction.md) owns
 sequence and gates; [PBR](physically-based-rendering.md) owns equations and frozen
 budgets. This document owns the demo behavior. EX01–EX07 remain closed.
@@ -15,7 +16,7 @@ arbitrary edited frames in the running application.
 | ------ | ------------------------------------------------------------------------------------------------------- |
 | EX08   | Calibrated Neutral Reference; complete reset; explicit local save/load; focused native test and README. |
 | EX08.1 | Existing console drives validated settings/transitions and local preset/reset operations.               |
-| EX08.2 | Deferred ImGui Test Engine integration; user owns UI acceptance.                                        |
+| EX08.2 | ImGui interaction automation reactivated after EX09; user retains final acceptance.                     |
 | EX09A  | Point/spot calibration presets with relevant controls and useful geometry cues.                         |
 | EX09B  | Fixed exposure controls on the reference scene; exact numerical cases stay in native tests.             |
 | EX09C  | Simple bright/dark transition and reset; lifecycle/timing matrices stay in native tests.                |
@@ -80,8 +81,9 @@ actionable message. Update the shipped indoor settings to the supported local
 format, with no universal recipe schema or legacy reader. Preserve user-owned
 files. Never serialize runtime resource slots, GPU history or view handles.
 
-Show **Reference** versus **Modified** configuration. This is not a numerical
-Pass/Fail verdict. Existing asynchronous settings/resource status must remain
+Indicate defaults with the normal preset-container border and modified inputs
+with an amber border. Keep popup borders neutral and omit redundant status
+badges. This is not a numerical Pass/Fail verdict. Existing asynchronous settings/resource status must remain
 truthful; a pending mask is not accepted, and settings status is not measured GPU
 luminance or same-frame consumed gain.
 
@@ -95,8 +97,12 @@ No GPU-state writes, parallel persistence path or measurement commands.
 
 The agent owns automated unit/native correctness tests. The user owns UI checks.
 When ready, launch the demo and provide numbered actions and expected outcomes.
-Record OK/NOK and reasons; fix failures and retest only affected checks. ImGui
-Test Engine integration is explicitly deferred and does not block this package.
+Record OK/NOK and reasons; fix failures and retest only affected checks.
+The reactivated Test Engine suite is now qualified in Debug/Release inside the
+real applications. It covers widget workflows; native tests retain numerical,
+schema, file-failure and lifetime contracts. The development generator enables
+UI tests by default, including Release. Final-release builds explicitly use
+`-UiTests:$false` and rebuild with instrumentation excluded.
 
 ## Independent measurement
 

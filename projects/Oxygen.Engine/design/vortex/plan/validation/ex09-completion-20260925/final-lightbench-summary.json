@@ -1,0 +1,139 @@
+{
+  "status": "native_qualified_user_acceptance_pending",
+  "default_minimum_width_m": 8.0,
+  "default_minimum_height_m": 3.75,
+  "apparent_object_size_ratio": 0.8,
+  "viewport": "full-window",
+  "panels": "original translucent overlays",
+  "debug_tests": 17,
+  "debug_failures": 0,
+  "release_qualified_distinct_cases": 17,
+  "release_evidence": {
+    "LightBenchReference.ExposureIsDerivedFromIndependentMaterialResponse": {
+      "passed": true,
+      "record": "ex09-zoom-release"
+    },
+    "LightBenchReferenceTest.CanonicalCardsMatchProductionLightingAndOutput": {
+      "passed": true,
+      "record": "ex09-zoom-release"
+    },
+    "LightBenchReferenceTest.DirectionalEnableTogglePublishesAndChangesRendering": {
+      "passed": true,
+      "record": "ex09-zoom-release"
+    },
+    "LightBenchAutoExposureTest.SavedFullSceneAutoTargetRemainsStableAndConverges": {
+      "passed": true,
+      "record": "ex09-zoom-release"
+    },
+    "LightBenchAutoExposureTest.PointPresetPreservesFixedExposureAndDistanceFalloff": {
+      "passed": true,
+      "record": "ex09-zoom-release"
+    },
+    "LightBenchAutoExposureTest.SpotPresetHasBrightCenterAndFiniteConeFootprint": {
+      "passed": true,
+      "record": "ex09-zoom-probe-release"
+    },
+    "LightBenchAutoExposureTest.SpotPresetFullFootprintMatchesIndependentFalloff": {
+      "passed": true,
+      "record": "ex09-zoom-release"
+    },
+    "LightBenchAutoExposureTest.IndoorOutdoorAndAdaptationPresetsConvergeWithoutWhiteSubjects": {
+      "passed": true,
+      "record": "ex09-zoom-release"
+    },
+    "LightBenchAutoExposureTest.AutoPresetLightStepsPreserveHistoryAndAdaptBothWays": {
+      "passed": true,
+      "record": "ex09-zoom-release"
+    },
+    "LightBenchSettings.ModifiedSettingsRoundTripAndResetAllInputs": {
+      "passed": true,
+      "record": "ex09-zoom-release"
+    },
+    "LightBenchSettings.RejectsMalformedAndCoupledInvalidSettings": {
+      "passed": true,
+      "record": "ex09-zoom-release"
+    },
+    "LightBenchSettings.ShippedIndoorSettingsMatchCompletePreset": {
+      "passed": true,
+      "record": "ex09-zoom-release"
+    },
+    "LightBenchSettings.CompletePresetsValidateRoundTripAndReset": {
+      "passed": true,
+      "record": "ex09-zoom-release"
+    },
+    "LightBenchSettings.ViewingPresetsLightGroundAndUseExplicitDisplaySettings": {
+      "passed": true,
+      "record": "ex09-zoom-release"
+    },
+    "LightBenchSettingsFile.ReplacesCompleteFileAndRejectsInvalidSave": {
+      "passed": true,
+      "record": "ex09-zoom-release"
+    },
+    "LightBenchSettingsFile.RejectsMissingMalformedAndOversizedFiles": {
+      "passed": true,
+      "record": "ex09-zoom-release"
+    },
+    "LightBenchSettingsFile.FailedReplacementPreservesPreviousFileAndCanRetry": {
+      "passed": true,
+      "record": "ex09-zoom-release"
+    }
+  },
+  "results": {
+    "ex09-overlay-settings-debug": {
+      "tests": 8,
+      "failures": 0,
+      "timestamp": "2026-09-25T11:20:51Z",
+      "json_sha256": "49f7d767bb8dd77b8505035439c5f7d52f9f21b3c4f772ac86326f571556e138",
+      "log_sha256": "aba1601611a7d39453fa3407880dd3a1c662eb3eee3cf70b566ca677cb10760e"
+    },
+    "ex09-overlay-settings-release": {
+      "tests": 8,
+      "failures": 0,
+      "timestamp": "2026-09-25T11:20:08Z",
+      "json_sha256": "8e169cb8e0441fe2d745f6721b82d1831704b627e307dc719eb1542c0460d633",
+      "log_sha256": "a92682ecfd5381b91d949cc261cedbf143809a3fdf289ed8d225061b25ec1d6d"
+    },
+    "ex09-zoom-release": {
+      "tests": 17,
+      "failures": 1,
+      "timestamp": "2026-09-25T11:24:04Z",
+      "json_sha256": "cf46c7b8b66e762a045289186dc329c9fe0b583da0b4a91654a12ec3fdab1e12",
+      "log_sha256": "d63f9a47cfab32299f57d561688f932ae7d369a02a0be7515df53bf547720aca"
+    },
+    "ex09-zoom-probe-release": {
+      "tests": 1,
+      "failures": 0,
+      "timestamp": "2026-09-25T11:24:52Z",
+      "json_sha256": "14f091060997ca095511ced6c23684d4d2c66b8e7e3f0c21cbf666af85408eb7",
+      "log_sha256": "6ec3878f4ce8ab2a892be3b90c858ef7f6982039b9cf15e91f1bc1917570b283"
+    },
+    "ex09-zoom-debug": {
+      "tests": 17,
+      "failures": 0,
+      "timestamp": "2026-09-25T11:25:50Z",
+      "json_sha256": "49f32f92bad208b880ca3f6a559c15c17afb828984f30064b4c6d719f2071e4c",
+      "log_sha256": "fd9e93c9bd65fc7a7af95e358a38b85d0c39c9435a9be20826758a5ea032139f"
+    }
+  },
+  "note": "Initial wider-framing run passed 16 cases; the old percentage-based outside-cone probe moved off the receiver. The corrected probe is 2 m from its center and passes without changing tolerances. The original failed attempt is retained. The earlier panel-width workaround is rejected and removed.",
+  "source_sha256": {
+    "Examples/LightBench/demo_settings.json": "c3810b0531efca875b3abe77358b856e57a989b9b1ccf5ab6fe73d41a8d315d9",
+    "Examples/LightBench/demo_settings_indoor.json": "36d365c62a21ec4705009148cf03ec0f966c556bb0183f390d6fa136e0492d5e",
+    "Examples/LightBench/lightbench-settings.schema.json": "df04beaa233f91b419cd91e5136c5d82ae7666aecfaabfd15f0f968991043ba1",
+    "Examples/LightBench/LightBenchPanel.cpp": "32c4bf554ce856d057767ae38f0198a2b38b9402e405d9220029702eb4bb49f2",
+    "Examples/LightBench/LightBenchPanel.h": "7700ec2917cb1612f58794b554058534f43fe0d2d24a3914f20da4515cb52c9e",
+    "Examples/LightBench/LightBenchSettings.cpp": "e74eac2d98ea0a255dcefb514a3940e666b043056e361d57777ff6cda9f77539",
+    "Examples/LightBench/LightBenchSettings.h": "c7892b0924363483183e22023716546c7163d5d8b9085d0f5305076691579ef7",
+    "Examples/LightBench/LightBenchSettingsFile.cpp": "56829daaec5ff3810adbb7c376011f54230ce505bc056812a95002b1887b70f2",
+    "Examples/LightBench/LightScene.cpp": "20839f5d20d8cc1c08f7dea90f341c08d746d7b83ab359386f4b10a0db062614",
+    "Examples/LightBench/LightScene.h": "9e9d8d71c7249ccc5e6b96fabcb0b150054509f90901ba20948f7b60ae0cb313",
+    "Examples/LightBench/MainModule.cpp": "9ec503a00ba5b1f0cb79f7e5662a6886dc3d78bda170ef5f319f0fcdc839bd75",
+    "Examples/LightBench/MainModule.h": "839ec7f220d127f7bd972ee7b9fee15bfed60f4011fff9790268cd5a7b1a148a",
+    "Examples/LightBench/main_impl.cpp": "d8e7fbd6e32d22b7d3af276f96526f794dd4b9b193d499a8a3807a5cde89f140",
+    "Examples/LightBench/ReferenceScene.h": "b8ec1ccf13ae15ca94a2889860adddc729073fee78e0e87c588989afb430a248",
+    "Examples/LightBench/Test/Reference_test.cpp": "5f47c4ca8bc48d5f30eb95c114d05402c04a17e3e55fbc2406f345f3f9ba024e",
+    "Examples/LightBench/Test/SettingsFile_test.cpp": "d89554b805bfc18ac8dbba1f2f220a7702f4b839e5c25250976bde76b1f53b3d",
+    "Examples/LightBench/Test/Settings_test.cpp": "4db093b34d3d7fe984fb22930b3697b1761fbc2d52b4dbfe526b92b0c9d8393f",
+    "Examples/LightBench/Test/Data/auto-full-scene.json": "7de2ab6617e5b5bf9c7999f1a3f041ed62af92267cfe75abcd6dffa41f0ffb8e"
+  }
+}

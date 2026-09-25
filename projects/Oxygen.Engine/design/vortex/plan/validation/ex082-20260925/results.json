@@ -1,0 +1,455 @@
+{
+  "date": "2026-09-25",
+  "base_commit": "fa94bbae32478d75a703221ee4e6e79af96e3ff7",
+  "committed": false,
+  "ui_runs": [
+    {
+      "demo": "LightBench",
+      "configuration": "Debug",
+      "passed": 6,
+      "cases": [
+        "preset_reset",
+        "numeric_commit_cancel",
+        "mode_curve_output",
+        "authored_mask_toggle",
+        "save_load_and_panel_return",
+        "console_preset_and_settings"
+      ],
+      "run": {
+        "exitCode": 0,
+        "startedUtc": "2026-09-25T09:31:35.7847512Z",
+        "timedOut": false,
+        "buildTree": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-tracy-ninja",
+        "configuration": "Debug",
+        "executable": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-tracy-ninja\\bin\\Debug\\Oxygen.Examples.LightBench.exe",
+        "sha256": "B1CF8DDB0B4038D62DA548D4AB8C51B35FDE5F1B3DCDB8ACEAFB74EC58924E47",
+        "filter": "",
+        "processId": 60368,
+        "finishedUtc": "2026-09-25T09:31:50.3253931Z"
+      },
+      "records": [
+        {
+          "path": "LightBench-Debug/results.xml.gz",
+          "uncompressed_sha256": "ab5fda311975f160e429ab694fa00400e4a1520a2c2484d5b6eae96247f12816"
+        },
+        {
+          "path": "LightBench-Debug/run.json.gz",
+          "uncompressed_sha256": "e7fcd9654a5300f6cc616fe4416e5b5887f3df710dfaad86329e8d8ad52b324a"
+        },
+        {
+          "path": "LightBench-Debug/summary.txt.gz",
+          "uncompressed_sha256": "d5474e5cb6c9648132e32df03ded4ee25c808ee09b8a639b2bea3ebae04285ae"
+        },
+        {
+          "path": "LightBench-Debug/stdout.log.gz",
+          "uncompressed_sha256": "e006b0e2f287f727d372c6f420f77d976f99c07e2e70f2a247cbc0677784311a"
+        },
+        {
+          "path": "LightBench-Debug/stderr.log.gz",
+          "uncompressed_sha256": "3fffe1e9b8a85bd1c7e9a065d0b772a8d555b31dea71ae5e67231fed4fde2ba0"
+        }
+      ]
+    },
+    {
+      "demo": "TexturedCube",
+      "configuration": "Debug",
+      "passed": 1,
+      "cases": [
+        "assignment_panel_return"
+      ],
+      "run": {
+        "exitCode": 0,
+        "startedUtc": "2026-09-25T09:31:50.4500751Z",
+        "timedOut": false,
+        "buildTree": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-tracy-ninja",
+        "configuration": "Debug",
+        "executable": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-tracy-ninja\\bin\\Debug\\Oxygen.Examples.TexturedCube.exe",
+        "sha256": "EE1F70AC0339706E3BB3E0D3CD2439192109DB3A9D5EE0C23ECCE7FAE9B7907F",
+        "filter": "",
+        "processId": 4004,
+        "finishedUtc": "2026-09-25T09:31:58.3490955Z"
+      },
+      "records": [
+        {
+          "path": "TexturedCube-Debug/results.xml.gz",
+          "uncompressed_sha256": "47be79aeaa242d7073581b656b262cfe0852853bd0a704e7ca0a365ef3a0fa10"
+        },
+        {
+          "path": "TexturedCube-Debug/run.json.gz",
+          "uncompressed_sha256": "a84061cd0c4bfd2a592dcc49c4b30822edf02ff5f051e42e3be90e49b48b1e47"
+        },
+        {
+          "path": "TexturedCube-Debug/summary.txt.gz",
+          "uncompressed_sha256": "3e9cc86c4bf1f2f03a6f18cf06041f79aab9d2b3a9b9fd4c8e729c57fb60087e"
+        },
+        {
+          "path": "TexturedCube-Debug/stdout.log.gz",
+          "uncompressed_sha256": "6fb05c30f330d74478e87d878527d09844d7d31721b400d2e58bc0349db06f50"
+        },
+        {
+          "path": "TexturedCube-Debug/stderr.log.gz",
+          "uncompressed_sha256": "e2f498b58dc679745572fc97690f7fc122c919f3332c312af32fa1deaaa30353"
+        }
+      ]
+    },
+    {
+      "demo": "LightBench",
+      "configuration": "Release",
+      "passed": 6,
+      "cases": [
+        "preset_reset",
+        "numeric_commit_cancel",
+        "mode_curve_output",
+        "authored_mask_toggle",
+        "save_load_and_panel_return",
+        "console_preset_and_settings"
+      ],
+      "run": {
+        "exitCode": 0,
+        "startedUtc": "2026-09-25T09:31:58.4615671Z",
+        "timedOut": false,
+        "buildTree": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-tracy-ninja",
+        "configuration": "Release",
+        "executable": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-tracy-ninja\\bin\\Release\\Oxygen.Examples.LightBench.exe",
+        "sha256": "40DABFC2ACE590D6A12393551DFF69BED7219C8237BD124D6C870238CCB8217F",
+        "filter": "",
+        "processId": 33168,
+        "finishedUtc": "2026-09-25T09:32:11.5615740Z"
+      },
+      "records": [
+        {
+          "path": "LightBench-Release/results.xml.gz",
+          "uncompressed_sha256": "f5efe37475193a83de7b5a6375e3f81b96a53e40861dcaf5a7b615a120711fa9"
+        },
+        {
+          "path": "LightBench-Release/run.json.gz",
+          "uncompressed_sha256": "cfad8845c3b5d4b351da9acb7f420dfd148de62909b30eb8b83c70d74cb8ff90"
+        },
+        {
+          "path": "LightBench-Release/summary.txt.gz",
+          "uncompressed_sha256": "d5474e5cb6c9648132e32df03ded4ee25c808ee09b8a639b2bea3ebae04285ae"
+        },
+        {
+          "path": "LightBench-Release/stdout.log.gz",
+          "uncompressed_sha256": "0e5911a457a1329951bca000763b835e1b84cff343433b1be09bfada69926873"
+        },
+        {
+          "path": "LightBench-Release/stderr.log.gz",
+          "uncompressed_sha256": "fe8519393290ce065b54dce9cf45f9a1e2dcd2ffe08cf20e61bf0585de630eb2"
+        }
+      ]
+    },
+    {
+      "demo": "TexturedCube",
+      "configuration": "Release",
+      "passed": 1,
+      "cases": [
+        "assignment_panel_return"
+      ],
+      "run": {
+        "exitCode": 0,
+        "startedUtc": "2026-09-25T09:32:11.6652756Z",
+        "timedOut": false,
+        "buildTree": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-tracy-ninja",
+        "configuration": "Release",
+        "executable": "H:\\projects\\DroidNet\\projects\\Oxygen.Engine\\out\\build-tracy-ninja\\bin\\Release\\Oxygen.Examples.TexturedCube.exe",
+        "sha256": "D2D08D8E009244D96FAB346C2B4A473D73275BC75FCA895A39324BFF7728A520",
+        "filter": "",
+        "processId": 7484,
+        "finishedUtc": "2026-09-25T09:32:14.8991339Z"
+      },
+      "records": [
+        {
+          "path": "TexturedCube-Release/results.xml.gz",
+          "uncompressed_sha256": "62b0e0c7f845b900a757c76d95b40bcb6fb3b9088903939ba45f50d0d3d66bcb"
+        },
+        {
+          "path": "TexturedCube-Release/run.json.gz",
+          "uncompressed_sha256": "40d39fbff153373b6046257e05d914f2bcd68d88cb6eb659e0ef1109fe929a80"
+        },
+        {
+          "path": "TexturedCube-Release/summary.txt.gz",
+          "uncompressed_sha256": "3e9cc86c4bf1f2f03a6f18cf06041f79aab9d2b3a9b9fd4c8e729c57fb60087e"
+        },
+        {
+          "path": "TexturedCube-Release/stdout.log.gz",
+          "uncompressed_sha256": "48f0999c1c326e6869052a5cd1c008f7c168ccae1b2e7310e7951e650ca959c1"
+        },
+        {
+          "path": "TexturedCube-Release/stderr.log.gz",
+          "uncompressed_sha256": "0ab960c204f91ee25e7ba14b4657acd3e7212115565687da488a559900521564"
+        }
+      ]
+    }
+  ],
+  "migrated_cpu_checks": [
+    {
+      "configuration": "Debug",
+      "passed": 7,
+      "results": {
+        "path": "cpu/ex082-migrated-cpu-Debug.json.gz",
+        "uncompressed_sha256": "842f79348683b132dad8dbcad075885e9a57842d2e8c233f53b492e8c13d8c05"
+      },
+      "log": {
+        "path": "cpu/ex082-migrated-cpu-Debug.log.gz",
+        "uncompressed_sha256": "78bc5385bcea079188eee24fdded7e4ac0df66233dc1abaf9a0a84fa0aa42a6d"
+      }
+    },
+    {
+      "configuration": "Release",
+      "passed": 7,
+      "results": {
+        "path": "cpu/ex082-migrated-cpu-Release.json.gz",
+        "uncompressed_sha256": "fb8051133c01de20fef30d1cea16cc69015ecb6c3b31bbfec2ce0562e986747a"
+      },
+      "log": {
+        "path": "cpu/ex082-migrated-cpu-Release.log.gz",
+        "uncompressed_sha256": "9708b35846befa7d26f7514689949db04080d98fa0f81c058958765d0dbbf6a3"
+      }
+    }
+  ],
+  "build_isolation": [
+    {
+      "tree": "build-ninja",
+      "option": "OFF",
+      "test_sources_and_defines_absent": true,
+      "test_session_marker_absent_from_binaries": true,
+      "ordinary_binary_sha256": {
+        "Debug/LightBench": "17dec79357b3a2f49c1b4069e46074de89d986fec36d16925ae5513261737d7f",
+        "Debug/TexturedCube": "e4646e6e828dbe7b83c46b19b2257e80cc2bad3e1261be504074ca0047180bb6",
+        "Release/LightBench": "3ae14724b17e670120a29057356f305b662760dbc43b55f90447b66666c67489",
+        "Release/TexturedCube": "89a810e90e4c2c81793b3a271af8c47ec6ca645a6761b13ec38029f30bf330cd"
+      }
+    },
+    {
+      "tree": "build-tracy-ninja",
+      "option": "OFF",
+      "test_sources_and_defines_absent": true,
+      "test_session_marker_absent_from_binaries": true,
+      "ordinary_binary_sha256": {
+        "Debug/LightBench": "081a0c3b3b17f834257acd5f55e94cebbac3c2505eb63247feaae5cd149042e1",
+        "Debug/TexturedCube": "0c9f0f1f711fe60ff933d0f2e65cafd559847aa8cc63fef390ea960a29410b3c",
+        "Release/LightBench": "416a91c81f488a1f5ca89eae684ba0ca203ce682186130432e27c661db99ca52",
+        "Release/TexturedCube": "33ed962f1eb1e7b7d2bc92d3ca176561128ddc6d0da55e8372328cbc44e6817c"
+      }
+    }
+  ],
+  "build_and_tool_records": [
+    {
+      "path": "builds/ex082-qualified-build-Debug.log.gz",
+      "uncompressed_sha256": "7540b9a9f477434aa5975879293347c5eb4275e961f225f2ce52771deca6e832"
+    },
+    {
+      "path": "builds/ex082-qualified-build-Release.log.gz",
+      "uncompressed_sha256": "966fa1513067405e9a987bbda003cf38fdf491a66289a3724d88cdedd3cdeec7"
+    },
+    {
+      "path": "builds/ex082-ordinary-build-Debug.log.gz",
+      "uncompressed_sha256": "46b10f50a4f73a2777bd7d6beee9583f3af91eeb4d6bdb04dd7128be6b3d7dab"
+    },
+    {
+      "path": "builds/ex082-ordinary-build-Release.log.gz",
+      "uncompressed_sha256": "1779a25623335ff196c54f7066d224cfb9f557e71f127fa4d9a2cfdaec7537c1"
+    },
+    {
+      "path": "builds/ex082-restored-build-Debug.log.gz",
+      "uncompressed_sha256": "10864f43b5df6d06a9a37c63800d018026a106a5faa3eb03bec0d36a06120092"
+    },
+    {
+      "path": "builds/ex082-restored-build-Release.log.gz",
+      "uncompressed_sha256": "63b96bf68a7f73154e0dedb561819f73da07a2ce6e7f66779fc8fe1c14ac017a"
+    },
+    {
+      "path": "builds/ex082-restore-configure.log.gz",
+      "uncompressed_sha256": "f43cea043dea571e19383007632444d87ec2d29591dc24d4148c25ca45d8ba7a"
+    },
+    {
+      "path": "builds/ex082-tidy-qualified.log.gz",
+      "uncompressed_sha256": "565ad3180b5e88c073dd51de1bd8daa7e86c2e65bf35ec5f9216f613165212af"
+    },
+    {
+      "path": "builds/ex082-preset-tests-final.log.gz",
+      "uncompressed_sha256": "f0957cb7897a9968330a8b900907520c3504ebd62b051cf05861f8a40f56e282"
+    },
+    {
+      "path": "builds/ex082-normal-guard.json.gz",
+      "uncompressed_sha256": "db3cc904405894524f48ca02f9ef401f4348cc18525ea99a275334948c8f69ba"
+    }
+  ],
+  "source_sha256": {
+    "CMakeLists.txt": "407798e4c04639c080414700a340b98e2496d888be8002f57f4d653d13dbf88e",
+    "Examples/DemoShell/CMakeLists.txt": "1ebc7d9d1f15683757360b3815cceb8766e2726e736e3ae88ef48706b7f43b02",
+    "Examples/DemoShell/Runtime/DemoModuleBase.cpp": "f5803e3b97d12eea919f7add5c95d76a18675ba5eb275986db555dc5226433a2",
+    "Examples/DemoShell/Runtime/DemoModuleBase.h": "6e3c5e83d8d47e72a534fd7251efa82543b1d7814bf8899a8aa17c2ee211ad8a",
+    "Examples/DemoShell/Test/UiTestAssets.cpp": "ccd31fa6971a17b5e59c69f3ddcb21ae916727073bdc8ea7ee5dab6a0669824d",
+    "Examples/DemoShell/Test/UiTestAssets.h": "afdbe18310111759b1ebd8ea03f5b6116f7d18249a446acc72bbb596cbf4b227",
+    "Examples/DemoShell/Test/UiTestSession.cpp": "5c31fd0950838ea92dcc20d1197c57873e141d39c3c6ead855d2c372746606c9",
+    "Examples/DemoShell/Test/UiTestSession.h": "c6fbed4a4ddd70f4c676375022f27fc85c7b6b283af798eded51130324bc04de",
+    "Examples/LightBench/CMakeLists.txt": "19a8a2ab40d5f74d8b821fb0b2ae61a9324dcf2c7ea75c8a20ffb6e3b5558bcc",
+    "Examples/LightBench/MainModule.cpp": "1df04c37e5717c0423e798e5c4689464613202be65d8308a533af22956679241",
+    "Examples/LightBench/MainModule.h": "0f82b50f537f9f39f601afdc8ee1d27d541585f965de0773e8be16dee25049c1",
+    "Examples/LightBench/Test/ConsoleBindings_test.cpp": "90f294a14f2c4b2927e4fa374f9421dda6be5ef3ac0fce59a9a1ad85cc52fce9",
+    "Examples/LightBench/Test/Settings_test.cpp": "e4bb020da0df61ab0212d87e7dce5a1508e9e555b850fbdfb2b1f532ebfad095",
+    "Examples/LightBench/Test/Widgets_ui.cpp": "605056d2c4f687390760d1d2e4163a9819f625b873217f11145edc5817b313d4",
+    "Examples/LightBench/main_impl.cpp": "8766fc462d2129524f3ddf851ebea65c3f6c98ef5159024d1e0065dedb75a516",
+    "Examples/TexturedCube/CMakeLists.txt": "151611626d23a3363dba32e567ba612e387848899699892dd1319af24e68dda7",
+    "Examples/TexturedCube/MainModule.cpp": "a2e85039e4c4d9cd792099a86d59882107e50a72972e5b414ba080645d7f1ff8",
+    "Examples/TexturedCube/MainModule.h": "dfad1ac8cc4b4a1a5148007fd351de448315b65448ea7121936625883b79be16",
+    "Examples/TexturedCube/Test/Widgets_ui.cpp": "14c83b9b709be124237fbf89306c0b26862dae759b93e00fc137ab4cb7af4661",
+    "Examples/TexturedCube/main_impl.cpp": "ff58f7a7483363aa418a298495a2b4fa3061874b6bfce099be72e70363691fcd",
+    "conanfile.py": "7844604f07eb1f988ca63a3494c79d2c5cfb54960bc62e07bb84508225827ef8",
+    "tools/cli/oxy-ui-tests.ps1": "ce661705b03eb4dfca66f39436a5f202c87c67b3d32d63075196a57f0f7c53b3",
+    "tools/generate-builds.ps1": "8b00648cb864d803284b36261de3b83e5ed40dd378dee99db10b0cb9d7f78142"
+  },
+  "development_attempts": [
+    {
+      "attempt": "ex082-lightbench-01",
+      "records": [
+        {
+          "path": "development/ex082-lightbench-01/results.xml.gz",
+          "uncompressed_sha256": "20aca1d6d77df4735a556a433f329cec29430ea2423191e99271a43f9c2a90d6"
+        },
+        {
+          "path": "development/ex082-lightbench-01/run.json.gz",
+          "uncompressed_sha256": "c8bd5a5e274b6d39919fae10d323e68cb9aff8146725132dc32b4cd66faf4e78"
+        },
+        {
+          "path": "development/ex082-lightbench-01/saved-settings.json.gz",
+          "uncompressed_sha256": "762fd8de25f568b18bc7b4cec0697873603f4dfcc18b26c1eb847da368e973b1"
+        },
+        {
+          "path": "development/ex082-lightbench-01/stderr.log.gz",
+          "uncompressed_sha256": "1c84e287a6eba3db9060b2aeb07681f48eccdd02111916335636554f63da7d4d"
+        },
+        {
+          "path": "development/ex082-lightbench-01/stdout.log.gz",
+          "uncompressed_sha256": "0d5fb5100cf2f34060f61d350ebb3191b8a1cd7b00cf4ba347029e2e554d6572"
+        },
+        {
+          "path": "development/ex082-lightbench-01/summary.txt.gz",
+          "uncompressed_sha256": "7c167a51062a6353c45d5482c27c1d096002c25a42c26524dd4cf9f02aa7341d"
+        }
+      ]
+    },
+    {
+      "attempt": "ex082-mode-02",
+      "records": [
+        {
+          "path": "development/ex082-mode-02/results.xml.gz",
+          "uncompressed_sha256": "a823d0137d2f123c74a4133eb9a95a85c7f550d797f39b9de5813b4634aefd30"
+        },
+        {
+          "path": "development/ex082-mode-02/run.json.gz",
+          "uncompressed_sha256": "b63a58af66c3d183a5dd5be3b8ed858cf2a9a45cab849198c2afbfcffc467cb1"
+        },
+        {
+          "path": "development/ex082-mode-02/stderr.log.gz",
+          "uncompressed_sha256": "852e395103c87c5f1a4d9bcc1d287f1df446ec6d8e44867997bde1094ba59c14"
+        },
+        {
+          "path": "development/ex082-mode-02/stdout.log.gz",
+          "uncompressed_sha256": "ef56dbec489f76f528ad47d993d8f91353322425570b39f72688e21a84c5e6b0"
+        },
+        {
+          "path": "development/ex082-mode-02/summary.txt.gz",
+          "uncompressed_sha256": "02c42106a6a14a9c3fb9f899d4bb1173bac24f67e83e1aec2fd12dd527e1bd4d"
+        }
+      ]
+    },
+    {
+      "attempt": "ex082-mode-03",
+      "records": [
+        {
+          "path": "development/ex082-mode-03/results.xml.gz",
+          "uncompressed_sha256": "16b5682d8067e536308f7c098a35861438df04a9703386a94def74ef36c5116e"
+        },
+        {
+          "path": "development/ex082-mode-03/run.json.gz",
+          "uncompressed_sha256": "af65bfee2a370da001df4940a655f091b775bff941ebfef6f2da3344805ab4fe"
+        },
+        {
+          "path": "development/ex082-mode-03/stderr.log.gz",
+          "uncompressed_sha256": "c3b159ea1cb57bbfc2c1b04e15d0897483f8a2f0b3486edd0ec01de4d0ceccac"
+        },
+        {
+          "path": "development/ex082-mode-03/stdout.log.gz",
+          "uncompressed_sha256": "ca629d09c4c8e45413cf5f41a26bfbb1c6bae125a3a9ef5bb8c8263b3665ce88"
+        },
+        {
+          "path": "development/ex082-mode-03/summary.txt.gz",
+          "uncompressed_sha256": "34d654f51d2a348b61199dd6323714fc2951657bd488254be52eef006216030c"
+        }
+      ]
+    },
+    {
+      "attempt": "ex082-lightbench-06",
+      "records": [
+        {
+          "path": "development/ex082-lightbench-06/run.json.gz",
+          "uncompressed_sha256": "6b5d22efaf4943afe3e8da99731847019f3d932b893dead52bafcf361259d923"
+        },
+        {
+          "path": "development/ex082-lightbench-06/stderr.log.gz",
+          "uncompressed_sha256": "a2198de0fcd15b420680cb6c9510c8548a2dee09cc0402974e07899f2fbfe6ac"
+        },
+        {
+          "path": "development/ex082-lightbench-06/stdout.log.gz",
+          "uncompressed_sha256": "91b4b3835e8cd3e90e14b02c2aaf3e48a045e74a80e3a8ce6120d6cfdadf7296"
+        }
+      ]
+    },
+    {
+      "attempt": "ex082-mask-07",
+      "records": [
+        {
+          "path": "development/ex082-mask-07/results.xml.gz",
+          "uncompressed_sha256": "a05c0e573ed70646d99314abd78a878945437547cd249de9e91802916a91963b"
+        },
+        {
+          "path": "development/ex082-mask-07/run.json.gz",
+          "uncompressed_sha256": "189cc2c07306365ede89a47a851af5da1f2551c4b21041d9bcefb4ef45b5afb6"
+        },
+        {
+          "path": "development/ex082-mask-07/stderr.log.gz",
+          "uncompressed_sha256": "ad48336431efa8f4c9fc129dad53e0be5a67f7a9e35d3591dfb1d008d7516c2a"
+        },
+        {
+          "path": "development/ex082-mask-07/stdout.log.gz",
+          "uncompressed_sha256": "e09f85abc60571043a72f44a5443b4f83b10873af21b0aa76b6982bd4c918bab"
+        },
+        {
+          "path": "development/ex082-mask-07/summary.txt.gz",
+          "uncompressed_sha256": "34d654f51d2a348b61199dd6323714fc2951657bd488254be52eef006216030c"
+        }
+      ]
+    },
+    {
+      "attempt": "ex082-reviewed-Debug-LightBench",
+      "records": [
+        {
+          "path": "development/ex082-reviewed-Debug-LightBench/results.xml.gz",
+          "uncompressed_sha256": "e931f813909686f723fb11df9ac630d084dcdbc8ac54dc837abd79967b4fb986"
+        },
+        {
+          "path": "development/ex082-reviewed-Debug-LightBench/run.json.gz",
+          "uncompressed_sha256": "a9f80fa30b4af997bf3893e37c7744c9470c06bff0e9be9b047ad08070bf7ee8"
+        },
+        {
+          "path": "development/ex082-reviewed-Debug-LightBench/stderr.log.gz",
+          "uncompressed_sha256": "8b132bf36fb600ad9f5c9d21ecd6279367b8f484bb14571482014e2a329fb1a4"
+        },
+        {
+          "path": "development/ex082-reviewed-Debug-LightBench/stdout.log.gz",
+          "uncompressed_sha256": "3de48d4939d385fb21dbf11b01bcca095a09c275edc2c02b3206c9ecc99c672a"
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "UI runs used the explicitly instrumented Tracy Ninja tree; these are not timing baselines.",
+    "Both Ninja trees were restored/built with UI instrumentation off before packaging.",
+    "Runner UTC timestamps are authoritative; upstream JUnit uses its monotonic timer as an epoch.",
+    "The session capture comment was clarified after qualification; executable source behavior is unchanged.",
+    "The nine numerical LightBench reference cases were not migrated or rerun."
+  ]
+}

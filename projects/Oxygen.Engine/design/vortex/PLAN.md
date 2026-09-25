@@ -83,22 +83,23 @@ EX06 closed current-format persistence across engine/tooling/editor/examples,
 the public C++20 boundary, DemoShell UX and configuration isolation. Further
 optimization beyond the accepted EX051 CPU cost remains a later milestone.
 
-**Remaining delivery (scope reduction approved 2026-09-25):**
+**Completed delivery (2026-09-25, reduced scope):**
 
-| Order  | Observable result                                                                                                    |
-| ------ | -------------------------------------------------------------------------------------------------------------------- |
-| EX08   | Calibrated Neutral Reference, complete local reset/save/load, focused native reference check and user UI acceptance. |
-| EX08.1 | Existing console drives validated settings/transitions; ordinary commands remain available in Release.               |
-| EX09A  | Useful point/spot presets and controls, crediting applicable EX07 numerical proof.                                   |
-| EX09B  | Fixed exposure controls on the reference scene and existing/focused native checks.                                   |
-| EX09C  | Simple bright/dark transition/reset; timing/lifecycle matrices remain native tests.                                  |
-| EX09D  | Applicable existing HDR evidence and focused gap repair; no new experiment UI.                                       |
-| EX09E  | Existing MultiView controls/proofs and remaining operational acceptance.                                             |
-| EX10   | Affected final checks, user acceptance, durable evidence summary and working instructions.                           |
+| Order  | Observable result                                                                                                            |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| EX08   | Calibrated Neutral Reference, complete local reset/save/load, focused native reference check and user UI acceptance.         |
+| EX08.1 | Existing console drives validated settings/transitions; ordinary commands remain available in Release.                       |
+| EX09A  | Useful point/spot presets and controls, crediting applicable EX07 numerical proof.                                           |
+| EX09B  | Fixed exposure controls on the reference scene and existing/focused native checks.                                           |
+| EX09C  | Simple bright/dark transition/reset; timing/lifecycle matrices remain native tests.                                          |
+| EX09D  | Applicable existing HDR evidence and focused gap repair; no new experiment UI.                                               |
+| EX09E  | Existing MultiView controls/proofs and remaining operational acceptance.                                                     |
+| EX08.2 | Development-enabled real-app widget automation, appropriate test migration, Debug/Release qualification and build isolation. |
+| EX10   | Affected final checks, user acceptance, durable evidence summary and working instructions.                                   |
 
-EX08.2 ImGui Test Engine integration is deferred, not a dependency. The user owns
-UI checks; the agent launches the demo and supplies numbered actions/expected
-results when ready. The universal experiment controller, runtime measurements,
+EX09, the reactivated EX08.2 and EX10 are complete; retained EX08.1 console work
+is also complete. Native/widget qualification and final user UI acceptance are
+recorded in [EX10 closeout](plan/EX10-completion.md). Structured commit delivery was authorized after user review. The universal experiment controller, runtime measurements,
 instrumented tonemap variants, seven experiment UIs and new runner/report schema
 are removed from scope, not completed. See [the approved decision](plan/EX08-execution.md).
 
@@ -122,7 +123,9 @@ with the [durable baseline register](plan/EX07D-baseline-report.md) committed in
 user visual/numeric acceptance and evidence commit `b8f1376e1`;
 F and overall EX07 are closed (2026-09-25), including final user editor approval.** See the [F acceptance report](plan/EX07F-acceptance-report.md)
 and [C validation record](plan/EX07C-completion-report.md). No benchmark rerun or
-EX07 engine implementation remains. EX08 reduced scope is approved; code implementation has not resumed.
+EX07 engine implementation remains. EX08–EX10 are validated, including final
+user acceptance. See [EX08 validation](plan/EX08-validation.md) and
+[package closeout](plan/EX10-completion.md). Structured commits are authorized after user review.
 
 Retain the accepted FP32/P=1 production policy; varying P/FP16 qualification stays
 explicit diagnostic coverage. Reuse valid EX05 MultiView and EX06 authoring evidence;

@@ -1,0 +1,16 @@
+{
+  "tests_passed": 26,
+  "coverage": [
+    "default UiTests=True across development configurations",
+    "explicit True and False propagation",
+    "Ninja and Visual Studio selection with Tracy/ASan coverage",
+    "SDK deployment retained in both modes"
+  ],
+  "engine_build_trees_modified": false,
+  "binaries_rebuilt": false,
+  "committed": false,
+  "source_sha256": {
+    "tools\\generate-builds.ps1": "23f0c244e3b61bb766267a6e44a8391bafd3f63111f20b8a4b4de50e2fcc6091",
+    "tools\\presets\\tests\\test_generation.py": "1d1849f7b4328524f64cedbea33849fd1eb3405f52066a97165389eb84d36b33"
+  }
+}

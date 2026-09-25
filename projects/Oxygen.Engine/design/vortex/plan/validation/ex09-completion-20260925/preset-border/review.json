@@ -1,0 +1,23 @@
+{
+  "configuration": "Release",
+  "build_tree": "out/build-ninja",
+  "tracy": false,
+  "default_state": "borderless, no status text",
+  "modified_state": "2px Spectrum Static Orange400 outline, no status text",
+  "verified": [
+    "all preset options remain visible",
+    "changing 2m to 1m adds amber border",
+    "Reset restores 2m and removes border",
+    "camera sidebar stays active; viewport unchanged"
+  ],
+  "source_sha256": "64d23d10e8726f8bf3f0d054f0b1dbb00be931b094a2f8aa2c07150f43ec59e9",
+  "executable_sha256": "dbcda49cad77dd2d1308bc5af9a5bb8045b86104dba68c2a94dec9f2ebfc6d29",
+  "screenshots_sha256": {
+    "02-preset-menu.png": "8b443500e9274b84b2cf23a6e91ec10f82346b62f76e7d1c8b43fe97e2de5e4e",
+    "03-camera-panel.png": "409e8490f910c9f67c3005b86891e6259820ca8fcb867f210e00194b1477668a",
+    "04-dim-selected.png": "8e0e8a7336c4036d09dcf4d27676c048d6cf9ed2d4848f1ab3ede8a102e42871",
+    "05-reset.png": "7b475795d359f4aa32c0dd53113e33343327478ddcb447411f988c1bd6361035",
+    "06-point-selected.png": "781fb082dfec2813874d60992419532ca71dc8fba43980ac6feb4c09819eaec0",
+    "point-falloff.png": "2b5d5c6b08796fbb35abf0af80c4bf29c51ccfa0f6b2160d9804f6752390bd2b"
+  }
+}

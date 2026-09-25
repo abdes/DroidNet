@@ -1,0 +1,12 @@
+{
+  "preset": "auto-adaptation",
+  "pid": 4080,
+  "window": 28119196,
+  "extent": [
+    1920,
+    1080
+  ],
+  "settle_seconds": 18,
+  "method": "native visible client-area screenshot",
+  "path": "design\\vortex\\plan\\validation\\ex09-presets-20260925\\screens\\auto-adaptation.png"
+}

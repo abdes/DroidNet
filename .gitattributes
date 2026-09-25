@@ -19,6 +19,14 @@ projects/Oxygen.Engine/design/vortex/plan/baselines/ex07e-20260924/cpu-submissio
 projects/Oxygen.Engine/design/vortex/plan/baselines/ex07e-20260924/point-hardware-pcf/** -text -diff
 projects/Oxygen.Engine/design/vortex/plan/baselines/ex07e-20260925/cross-view-sharing/** -text -diff
 
+# Preserve qualification records and the captured scene input byte-for-byte.
+projects/Oxygen.Engine/design/vortex/plan/validation/ex08-20260925/** -text -diff
+projects/Oxygen.Engine/design/vortex/plan/validation/ex081-20260925/** -text -diff
+projects/Oxygen.Engine/design/vortex/plan/validation/ex082-20260925/** -text -diff
+projects/Oxygen.Engine/design/vortex/plan/validation/ex09-completion-20260925/** -text -diff
+projects/Oxygen.Engine/design/vortex/plan/validation/ex09-presets-20260925/** -text -diff
+projects/Oxygen.Engine/Examples/LightBench/Test/Data/auto-full-scene.json -text -diff
+
 ###############################
 # Git Large File System (LFS) #
 ###############################

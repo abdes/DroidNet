@@ -3,7 +3,7 @@ default_install_hook_types:
   - commit-msg
 
 # Immutable capture records and saved-scene fixtures retain their recorded bytes.
-exclude: '^projects/Oxygen\.Engine/(design/vortex/plan/baselines/(ex07e-20260924/(cpu-submission|point-hardware-pcf)|ex07e-20260925/cross-view-sharing)/|Examples/LightBench/Test/Data/)'
+exclude: '^projects/Oxygen\.Engine/(design/vortex/plan/(baselines/(ex07e-20260924/(cpu-submission|point-hardware-pcf)|ex07e-20260925/cross-view-sharing)/|validation/(ex08|ex081|ex082|ex09-completion|ex09-presets)-20260925/)|Examples/LightBench/Test/Data/)'
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks

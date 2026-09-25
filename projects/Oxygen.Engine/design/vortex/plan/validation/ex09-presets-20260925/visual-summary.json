@@ -1,0 +1,56 @@
+{
+  "status": "agent_screenshot_review_complete_interaction_acceptance_and_source_review_pending",
+  "build_tree": "out/build-ninja",
+  "tracy": false,
+  "focused_tests": {
+    "lightbench-ex09-visual-fixes-release": {
+      "tests": 7,
+      "failures": 0,
+      "timestamp": "2026-09-25T04:18:48Z",
+      "json_sha256": "f884e25657fd1ad0b2891082e4bd80c9aff4f3052a4af18fe50c64d9019c43a1",
+      "log_sha256": "4492b1ab290dc48595b6cfbb1f3d15d9699ff1eae7a8c7feab9be74a7622d4e1"
+    },
+    "lightbench-ex09-shadow-release": {
+      "tests": 6,
+      "failures": 0,
+      "timestamp": "2026-09-25T04:24:28Z",
+      "json_sha256": "2c5e3c335547c9d82200f4c08bef4befd0df311a449938716bca5bb26af8c8e9",
+      "log_sha256": "c5396f4aeb70a2de028ba3f32387ef3fdf593c9551e96d3f7b9142ef4ebe1587"
+    },
+    "lightbench-ex09-visual-debug": {
+      "tests": 7,
+      "failures": 0,
+      "timestamp": "2026-09-25T04:27:29Z",
+      "json_sha256": "ff8e8340e231e163bf81cbbe1523fefb6a779a596cef84f2b93e60e8e31a6875",
+      "log_sha256": "0200c3d26d817220d994dce1612b3c3fe0f94542f10ecb0e48ed94a69c0e8877"
+    }
+  },
+  "source_sha256": {
+    "Examples/LightBench/demo_settings.json": "9911cab452566e36cc4b489fee0f97918b29eae7c48930fc02ad1b889f2c9d04",
+    "Examples/LightBench/demo_settings_indoor.json": "07f422f803b556de1c2d5f45e154a8b4dd95055c61fa551fe0f835198e00824f",
+    "Examples/LightBench/lightbench-settings.schema.json": "df04beaa233f91b419cd91e5136c5d82ae7666aecfaabfd15f0f968991043ba1",
+    "Examples/LightBench/LightBenchPanel.cpp": "5e5294a5b491edbaa4291bf4c2c035c8d79c9612793480b5442a9d98215c2223",
+    "Examples/LightBench/LightBenchPanel.h": "7700ec2917cb1612f58794b554058534f43fe0d2d24a3914f20da4515cb52c9e",
+    "Examples/LightBench/LightBenchSettings.cpp": "aabf4392a4c3604311059adeae8cc03a12c44091c1cf227e50dd6103d9d5865f",
+    "Examples/LightBench/LightBenchSettings.h": "5c8d1355ef30ffcb53c44261ef3e42ae1ecf6b4e3a0e1a20240aa44ff9263933",
+    "Examples/LightBench/LightScene.cpp": "20839f5d20d8cc1c08f7dea90f341c08d746d7b83ab359386f4b10a0db062614",
+    "Examples/LightBench/LightScene.h": "9e9d8d71c7249ccc5e6b96fabcb0b150054509f90901ba20948f7b60ae0cb313",
+    "Examples/LightBench/MainModule.cpp": "4f79bee0d4480d7f9a1ebed8a13db314a6253b2160e1b5dbc594b52554596365",
+    "Examples/LightBench/MainModule.h": "839ec7f220d127f7bd972ee7b9fee15bfed60f4011fff9790268cd5a7b1a148a",
+    "Examples/LightBench/main_impl.cpp": "688522d91297771e47e8ef0c6dca5426f2c8c2b1dd5c261a7938f3e94524fd85",
+    "Examples/LightBench/ReferenceScene.h": "82c4b2f65888d9974ff72e56356ee55483a35042465f582e6f4bdfaf14f1b8a5",
+    "Examples/LightBench/Test/Reference_test.cpp": "6771526100f3f6d3bf6ae6003da24f0b34d528961e27be5f36ca4afecc9faa6b",
+    "Examples/LightBench/Test/Settings_test.cpp": "4db093b34d3d7fe984fb22930b3697b1761fbc2d52b4dbfe526b92b0c9d8393f",
+    "Examples/LightBench/Test/Data/auto-full-scene.json": "7de2ab6617e5b5bf9c7999f1a3f041ed62af92267cfe75abcd6dffa41f0ffb8e"
+  },
+  "screenshots_sha256": {
+    "auto-adaptation.png": "3888c0a242e91633b221fc335146cd4f5df3729c061e6c87a57ec2e2722e240f",
+    "indoor.png": "b4267d40c2283c4fdc1f70f20877aa88c8915e1d73e42cc69e108096d15e98b4",
+    "material-lighting.png": "e85964e32d2709ebaa90eef93ff6302862aba63678f18668bc8e849ef9b0f93b",
+    "neutral-reference.png": "38cc8ead96c5bc2cf82be1e03e255722eeb53c3371bfa935a193cb7303c8f218",
+    "outdoor-daylight.png": "cb149938e1349478e179449470fb18a507a5d175b9e75b3bc43ac7831e10784a",
+    "point-falloff.png": "4b7ae9f083366733c4ecc7a0de4146be892bf2f52271e9797b5b30b1f1c94392",
+    "spot-cone.png": "332fd8434657c2cad894891179e586276ba2bb1abdbd720dbbff709d2e9a7fd1"
+  },
+  "release_executable_sha256": "edb42ee131ca15f860e913db056b27ebfff95e931241073f966497b6661abb30"
+}

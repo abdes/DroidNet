@@ -1,0 +1,17 @@
+{
+  "camera.png": {
+    "scene_region_x_min": 700,
+    "scene_region_byte_identical": true,
+    "sha256": "6c67213ff2eca41c5ffcf02c58f7dbd152539bb4ed55dd2053f978d3da572ff4"
+  },
+  "post-process.png": {
+    "scene_region_x_min": 700,
+    "scene_region_byte_identical": true,
+    "sha256": "13ca2c195a0b387c91766d85261990ed07b05fe9f0bb550f18aee37049ed922b"
+  },
+  "lightbench-return.png": {
+    "scene_region_x_min": 700,
+    "scene_region_byte_identical": true,
+    "sha256": "392f5ee19aba2dab3819a56aac2ad90ae3865444c975c9c73649770982f558a9"
+  }
+}

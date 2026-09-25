@@ -23,8 +23,30 @@ cmake --build out\build-ninja --config Debug --target oxygen-examples-multiview 
 ## Running
 
 ```powershell
-out\build-ninja\bin\Debug\Oxygen.Examples.MultiView.exe
+./tools/cli/oxyrun.ps1 oxygen-examples-multiview -BuildTree build-ninja -Config Release -- --resolution 1600x900 --fps 60
 ```
+
+Run from the engine directory. `oxyrun` selects the matching runtime DLLs and
+shader catalog; use `-Config Debug` for Debug or `-NoBuild` before `--` to reuse a
+completed build. Both are configurations of the existing non-Tracy Ninja tree.
+
+For the exposure comparison, add `--exposure-proof independent
+--pip-wireframe false` after `--`. PiP has +2 EV compensation. Replace
+`independent` with `shared` to borrow Main's exposure instead. Sharing uses the
+**previous completed owner frame**, so an owner change reaches the borrower one
+owner-frame later; it is not a same-frame copy or the borrower's own metering.
+
+The existing bounded interaction sequence can be run with:
+
+```powershell
+./tools/cli/oxyrun.ps1 oxygen-examples-multiview -BuildTree build-ninja -Config Release -- --exposure-proof interactions --pip-wireframe false --resolution 1600x900 --frames 144 --fps 30
+```
+
+Add `--offscreen-proof-layout true` to exercise the visible offscreen products.
+The sequence performs the events in the table below and exits normally.
+For manual camera and panel edits use the ordinary demo
+without `--exposure-proof`: proof recipes deliberately own their cameras and
+settings, so ordinary edits cannot replace their controlled inputs.
 
 Common validation-oriented options:
 
@@ -168,9 +190,9 @@ checks 60 steady-state frames for scene-texture allocation churn.
 For exposure captures, `tools/vortex/AnalyzeRenderDocMultiViewExposure.py`
 exports the composite and each mapped view, reads its GPU P/S/target/meter state,
 and compares opaque probes against an independent tone-curve oracle. Run it with
-the existing `tools/shadows/Invoke-RenderDocUiAnalysis.ps1` runner. Its arithmetic
-verdict is separate from lighting, temporal and visual acceptance; inspect every
-pane and the reported nonzero scene probes. The analyzer exports the full-frame
+the existing `tools/shadows/Invoke-RenderDocUiAnalysis.ps1` runner. Inspect the
+exported panes and nonzero scene probes alongside the numerical report.
+The analyzer exports the full-frame
 composite before seeking backward through bindless draws, and the capture's
 native thumbnail provides a separate presentation reference.
 
@@ -241,9 +263,7 @@ point/spot switches above. Analyze each capture with
 `-PassName ForwardLocalBoth`, `ForwardLocalPoint`, `ForwardLocalSpot`, or
 `ForwardLocalNone` respectively. The audit checks the typed 80-byte local record and 96-byte lighting header,
 canonical light count/kinds/flags, consumed grid ranges/indices, and nonzero
-forward SceneColor. The disabled case requires zero scene radiance. These are
-binding/contribution checks; calibrated forward/deferred brightness and shadow
-parity require their own acceptance cases.
+forward SceneColor. The disabled case requires zero scene radiance.
 
 For default-layout deferred local-light coverage, capture a normal run with both
 lights enabled and analyze it with
@@ -344,8 +364,9 @@ with paused poses and emissive cards on the lit shader path. AP starts at
 zero distance, uses scattering strength 0.01 and an authored 1000-lux sun.
 The proof disables the standard point/spot lights and replaces the sample meshes
 with cards facing -Y. Both cameras are in front (-Y); the sun is behind (+Y),
-so visible card normals have nonpositive N·L. No authored specular-factor switch
-is used to claim isolation. The background card stays opaque throughout.
+so visible card normals have nonpositive N·L. This placement isolates direct
+illumination with unchanged specular material parameters. The background card
+stays opaque throughout.
 DemoShell uses the existing scene-authored environment mode for this scenario,
 so its override profile cannot replace the proof sun or atmosphere settings.
 The complete initial recipe is staged before scene publication, including the
@@ -375,20 +396,18 @@ per view/phase. On AP-affected geometry, fewer than 1% of mapped pixels may be
 near-white in all RGB channels (codes >=250), and at least 5% must retain a
 channel spread above eight codes. These readability checks supplement the raw
 float comparison and native image inspection.
-The grid is a diagnostic overlay using opaque depth; it may cross forward cards
-that do not write depth. The raw scene comparison precedes that overlay and does
-not claim identical final grid occlusion between material domains.
+The grid reads opaque depth, so it can cross forward cards that omit depth
+writes. Scene comparisons use the pre-grid images.
 
 ### Canonical shadow record capture
 
-For the EX07A shadow-header checkpoint, capture the existing `--exposure-proof
+To inspect shadow headers, capture the existing `--exposure-proof
 consumer-visual --visual-fog clear --pip-wireframe false` recipe after startup.
 Run `tools/vortex/AnalyzeRenderDocShadowRecords.py` through
 `tools/shadows/Invoke-RenderDocUiAnalysis.ps1`. The analyzer verifies the
 112-byte shadow header, separate record strides/counts, matching lighting and
 shadow generations/status, and source identities/descriptors consumed by
-both views' directional, point and spot draws. It does not certify physical
-response, complete source coverage or resource lifetime.
+both views' directional, point and spot draws.
 
 ### Three directional sources
 
@@ -406,6 +425,5 @@ source's shadow family and resolution.
 For forward coverage, combine it with `--offscreen-proof-layout true
 --pip-wireframe false` and use `AnalyzeRenderDocDirectionalArrayForward.py`.
 The lower preview is deferred and the lower capture view is forward. Both must
-stay lit across frames; the same-frame descriptor-lifetime regression and live
-Release confirmation are recorded in
-[the EX07A flicker report](../../design/vortex/plan/EX07A-offscreen-flicker-validation.md).
+stay lit across frames. The analyzer checks the descriptors used by the
+same-frame forward light draws.

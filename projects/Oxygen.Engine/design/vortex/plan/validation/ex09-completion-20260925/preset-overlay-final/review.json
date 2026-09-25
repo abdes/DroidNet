@@ -1,0 +1,38 @@
+{
+  "build_tree": "out/build-ninja",
+  "configuration": "Release",
+  "tracy": false,
+  "client_extent": [
+    1920,
+    1080
+  ],
+  "preset_bar_bounds_xywh": [
+    755,
+    23,
+    410,
+    117
+  ],
+  "exit_code": 0,
+  "source_sha256": {
+    "Examples/LightBench/LightBenchPanel.cpp": "f0cc2a46bccc2392f0549f9d302dc49d25c74f18b3d1a8785782470031b2f0d5",
+    "Examples/LightBench/LightBenchPanel.h": "adbcd627775d0ba049026907f7f61aa72bed8410a8d4cd19a305e4735d50a30a",
+    "Examples/LightBench/MainModule.cpp": "879c787b47b87e1134b98c94feafd6fb34bcf424bc51e63317cec04b40720bd4"
+  },
+  "executable_sha256": "d721d79274a014a0215eb5cc7b229409ad33bf26d71c7518aaf9777064d0ecfe",
+  "screenshots_sha256": {
+    "02-preset-menu.png": "93536ecc8ea9f2080b721adb2f3427b608eebb4aa5316dca97907c2ab654c3c1",
+    "03-camera-panel.png": "ccb342ae470806cc86014155361f691fedd91e7ac528aea1ce234f5205e2be3e",
+    "04-dim-selected.png": "c0442dc20f773bd6b969d4670d1dc0f1fbd0d4abb81aaf292e22e8b8c7677125",
+    "05-reset.png": "c33a5acff0385f32a35470e522ac678f19ffd6322543e9201bad31f13f877cac",
+    "06-point-selected.png": "9cafed118754ee2c912e13c5ec3f0a007c7af7ea84a06f43bdfab70d9ad22e71",
+    "point-falloff.png": "d1e91d2135303dee9526b10f5da03c87bed1428eade61b019e3b167d596a8293"
+  },
+  "inspected_states": [
+    "initial Point Falloff / 2 m / Defaults",
+    "all seven preset options without scrollbar",
+    "Camera sidebar with preset bar still available",
+    "1 m / Modified / selected state retained under hover",
+    "Reset returns to 2 m / Defaults"
+  ],
+  "note": "04-dim-selected.png is the reusable capture step filename; in this Point Falloff run it records the 1 m button. Presentation and mouse actions were inspected; complete keyboard UI automation remains EX08.2."
+}

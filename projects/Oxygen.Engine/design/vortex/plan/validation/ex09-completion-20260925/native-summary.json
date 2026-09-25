@@ -1,0 +1,991 @@
+{
+  "build_tree": "out/build-ninja",
+  "tracy": false,
+  "debug_final_suite": {
+    "tests": 230,
+    "failures": 0
+  },
+  "release_qualified_distinct_cases": 230,
+  "release_is_union_of_full_run_and_affected_repairs": true,
+  "results": {
+    "ex09-exposure-release": {
+      "tests": 230,
+      "failures": 6,
+      "timestamp": "2026-09-25T10:50:16Z",
+      "json_sha256": "b53d2f868e598ee91f103c940e738bd087e7caa50dc9cec6bbb0309c702bbdca",
+      "log_sha256": "1bfb6dfea2119c7699e31fd9ca5697bf3af5fc0fca322ba256f89fd28d87fd62"
+    },
+    "ex09-exposure-repair-release": {
+      "tests": 6,
+      "failures": 2,
+      "timestamp": "2026-09-25T10:55:37Z",
+      "json_sha256": "41eee6d77d1e34c096ae3c04effda6f35288226642229c1816a89f1531e0aadd",
+      "log_sha256": "02174399f0cb7a0f8e5e1d55e1820a31fa6b7578dfed6708d7dd1b314ddc07c5"
+    },
+    "ex09-fog-repair-release": {
+      "tests": 9,
+      "failures": 0,
+      "timestamp": "2026-09-25T10:58:23Z",
+      "json_sha256": "d04d0b3a6fb23f1e5a50bb4f0d49b4b0881bf5d4728b2f56da5774fcb7badf36",
+      "log_sha256": "3cfcb9b3f527425dcfa9c00c6939bb6cc8cd4913d41144a355cf52c808a94906"
+    },
+    "ex09-fog-affected-release": {
+      "tests": 14,
+      "failures": 0,
+      "timestamp": "2026-09-25T11:06:20Z",
+      "json_sha256": "a6b7bafe85b965cb7b65cadf1e9dc6ac60f231c3f078e4dd3f55601b2c72f46a",
+      "log_sha256": "16759db59f971a2d337027b919274496f10f467893605ff93507b3cdd4c7c1a7"
+    },
+    "ex09-exposure-debug": {
+      "tests": 230,
+      "failures": 0,
+      "timestamp": "2026-09-25T11:01:04Z",
+      "json_sha256": "619b22db50580172137ed648feb816a5d094c7f52603985dfd96497a68fcafe5",
+      "log_sha256": "5a2f7ad4bc0a7ba6235ee4b9e7aa24e3a38033988ef09981c1ae323d1daf6f2b"
+    },
+    "ex09-files-final-release": {
+      "tests": 3,
+      "failures": 0,
+      "timestamp": "2026-09-25T11:06:34Z",
+      "json_sha256": "1f721658641ec899f33ae6deb6ba72e7e0f3681d3a14dba0de56fe63c13dca55",
+      "log_sha256": "6049af2d16b08d318672a69c7556886cc704930f03ac88228e572284557db6ed"
+    }
+  },
+  "release_case_evidence": {
+    "ExposureGpuTest.ZeroTargetRestoresImmediatelyFromLastValidMeter": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.ZeroSpeedAndPauseFreezeOrdinaryAdaptation": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.HybridCrossingMatchesElapsedTimeAcrossFrameSchedules": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.HugeFiniteSpeedAndDistanceDoNotOverflowTheExponent": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.TinySpeedTimesHugeDeltaRetainsFiniteLinearTravel": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.LongAndIrregularHybridStepsRemainEquivalent": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.OrdinaryAutoCurveInterpolatesAtRawMeterEv": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.OrdinaryAutoCurveClampsBothAuthoredEndpoints": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.CurveInputIgnoresEvClampAndAdaptedHistory": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.BrighteningUsesSpeedDownAcrossFrameSchedules": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.ZeroTargetContinuesLatentAdaptationAndUpdatesLastValidMeter": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.LockedCurveUsesBoundInsteadOfRawMeteredEv": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.SubnormalCurveCoordinatesInterpolateAtExactZeroMeterEv": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.PublicPausedFrameSessionFreezesGpuAdaptation": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.CheckedSceneColorConversionUsesCurrentScaleAndRejectsTheWholeImage": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.TonemapSelectsCheckedHalfOrOriginalFloatWithoutChangingExposure": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.RecycledPoisonedHalfRejectsConversionAndUsesOriginalFloat": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.CheckedConversionWaitsForInitialMeteringMaskPolicy": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.SceneDisplayAdmissionChecksGammaAndBackground": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.ComposedSceneAdmissionUsesCandidateAndCoverageIntervals": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.ComposedCoverageRequiresValidOpaqueDepth": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.CompositionConstantsSurviveLaterSubmission": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.NativeExposureTimelineRecordsMeteringScopes": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.QueuedHzbBuildsKeepTheirOwnDepthPyramids": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.RemovedViewsRetireFogHistoryAndExposureLeases": {
+      "passed": true,
+      "record": "ex09-fog-affected-release"
+    },
+    "ExposureGpuTest.StatelessFogViewsRetainNoPersistentHistory": {
+      "passed": true,
+      "record": "ex09-fog-affected-release"
+    },
+    "ExposureGpuTest.NonTemporalFogOutputsRetireWithoutPersistentHistory": {
+      "passed": true,
+      "record": "ex09-fog-affected-release"
+    },
+    "ExposureGpuTest.SameFrameOffscreenEnvironmentDescriptorsSurviveQueuedViews": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.FilterGradientsEncloseReferenceNeighborsAndRetry": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.FilterGradientsRejectInvalidIntervalsAndPreserveTinyGaps": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.HardwareFilterEnclosuresRetainFormatAndHistoryError": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.SceneFogHistoryRescalesRgbWithoutScalingTransmittance": {
+      "passed": true,
+      "record": "ex09-fog-affected-release"
+    },
+    "ExposureGpuTest.HeightFogInputPeakUsesSceneUnitsAndRejectsNonfiniteInput": {
+      "passed": true,
+      "record": "ex09-fog-affected-release"
+    },
+    "ExposureGpuTest.FogCompositionClampsViewportAndDepthEdges": {
+      "passed": true,
+      "record": "ex09-fog-affected-release"
+    },
+    "ExposureGpuTest.DeferredApPreservesInscatterAtLowAndZeroOpacity": {
+      "passed": true,
+      "record": "ex09-fog-affected-release"
+    },
+    "ExposureGpuTest.FogShadowsFollowAtmosphereSourceIdentity": {
+      "passed": true,
+      "record": "ex09-fog-affected-release"
+    },
+    "ExposureGpuTest.FogHistoryClampsEdgesAndRejectsOutsideCoordinates": {
+      "passed": true,
+      "record": "ex09-fog-affected-release"
+    },
+    "ExposureGpuTest.FogStableCellsPreserveHistoryAndHomogeneousMedia": {
+      "passed": true,
+      "record": "ex09-fog-affected-release"
+    },
+    "ExposureGpuTest.FogErrorBoundsContainRepeatedHalfHistoryAndSurviveFloatRecovery": {
+      "passed": true,
+      "record": "ex09-fog-affected-release"
+    },
+    "ExposureGpuTest.Fp32ReferencePreservesQualifiedCandidateAndExposureHistory": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.Fp32ReferenceRequiresValidCandidateAndHonorsUnitFallbacks": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.FrameResolvePinsManualGainAndDistinctInFlightRecords": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.FrameResolveUsesGpuPriorGainAndPositiveLatentAfterZero": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.BorrowedUninitializedPublicationCannotAuthorizeHalfDomain": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.FrameResolveBorrowsPriorRootAndTagsRootFallback": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.FrameResolveSeedsWithoutAcknowledgingAndRetriesRecordingFailure": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.FrameResolvePinsQualifiedCandidateAndRejectsIneligibleCandidate": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.FrameResolvePreservesOperationalEndpointsAndCameraGain": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.FrameDomainSolvesReservedStateAndAppliesManualRatio": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.FrameDomainMetersWithGpuReciprocalAndPreservesZeroAndDisabled": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.FrameDomainDiscardedSeedKeepsPriorHistoryAndPendingRequest": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.FrameDomainSharedConsumerUsesOwnerGainAndItsOwnNumericalDomain": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.FrameDomainDiscardedZeroTargetKeepsPriorHistory": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.FrameDomainDiscardedSourceLossRetainsLastSubmittedBorrow": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.FrameDomainAbortedRecordingSkipsTonemap": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.LocalFogInjectionMatchesMixedMediumIntegral": {
+      "passed": true,
+      "record": "ex09-fog-affected-release"
+    },
+    "ExposureGpuTest.AuthoredLocalFogPreservesRadiometryThroughUpload": {
+      "passed": true,
+      "record": "ex09-fog-affected-release"
+    },
+    "ExposureGpuTest.UnavailableMaskPreventsMeterInitializationButNotLockedSolve": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.CookedMaskUploadAndResidentLeaseReachProductionHistogram": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.SetConfigLoadsMasksAndRetainsAcceptedReplacementAtomically": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.LockedServiceGainReachesTonemapDespitePendingOrFailedMask": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.LateMaskRemovalCannotEnableMeteringForCapturedFrame": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.MaterialTexturesPreserveTypedLinearRadianceInScenePaths": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.StaticSkyUploadKeepsHalfAndFloatStorageCoherentAcrossFacesAndMips": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.StaticSkyIntensityEditPromotesBeforePublishingAmplifiedHalfLoss": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.ConservedTwoBinMassAndIndependentMeter": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.MaximumGridMassRemainsBounded": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.DarkValidAndZeroMaskInvalidRemainDistinct": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.NonfiniteSamplesAreRejectedAndNeverBlack": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.TinyPercentileIntervalRetainsItsContainingBin": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.FractionalPercentileBoundariesMatchIndependentCdf": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.DarkInfluenceDoesNotAttenuatePositiveBinZeroMass": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.BilinearMaskUsesOnlyClampedLinearRed": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.CoverageUnpremultipliesAndScalesMassOnlyWithBackground": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.ProfilesAndZeroRadiusUseNormalizedContentCoordinates": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.ContentRectangleExcludesOutputBars": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.SceneReferredMeterIsInvariantToInputPreExposure": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.NarrowPercentilesStraddleLargeIntegerCdfBoundary": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.EightKOutputStillUsesAtMost512SquaredSamples": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.MovingEdgeHasBoundedGridSamplingError": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.SingleBrightPixelRecordsSamplingAliasingWithoutAreaAveraging": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.NarrowCdfBoundariesRetainIntegerAndFractionalProductBits": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.DarkCountersSeparateBlackPositiveBelowWindowAndNegative": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.AllNonfiniteInputKeepsAutoEvZeroFallbackIndependentOfManualEv": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.Fp16EligibilityRequiresStableCompleteFramesAndPreservesExposure": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.Fp16EligibilityBelongsToEachBorrowingImage": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.Fp16EligibilityExcludesStatelessAndDiagnosticFrames": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.CompletedPrecisionAdmissionTracksViewSettingsLayoutAndDiagnostics": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.PrecisionStatusRetriesTransportWithoutEarlyAdmission": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.FailedPrecisionRecordingCannotAdmitAnOlderDeferredCertificate": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.DiscardedSolveRestartsPrecisionWithoutRejectingSuccessfulReuse": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.OpaqueApErrorInvalidatesWhenInputCaptureChanges": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.OpaqueApErrorUsesInputPeakAndActualGain": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.ProspectiveProductBoundsIncludeRetainedErrorAndSelectedScale": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.ProducerMaximumReuseMatchesCompleteScan": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.ProducerMaximumReuseFallsBackForUnprovenRecords": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.ProducerChecksPreserveOrderedFailuresAndCounts": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.CurrentScaleProducerChecksKeepOrderedFailures": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.ProducerChecksKeepDivergentLaneFailures": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.ProducerStoreBoundsMatchSerialUnsignedMax": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.PreEnvironmentRangePreservesStatusAndViewIsolation": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.PreEnvironmentRangePreservesSignedTinyInputs": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.PreEnvironmentRangeReportsNonfiniteInput": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.FinalSceneRangePreservesOpaqueCertificateAndValidHistory": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.ProducerDomainDistinguishesFloatRangeFromHalfHeadroom": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.FinalSceneRangeFailureInvalidatesAdmissionAndAllowsFreshRetry": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.FailedLightingHoldsExposureMarksOutputAndRecovers": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.ProducerRangeFailureSurvivesSolveAndPreventsAutoAdaptation": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.Fp32SceneColorPreservesWideRangeRadianceAndCoverage": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.SceneExposurePreparationFailurePreservesOutputAndRetriesStandalone": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.SceneExposurePreparationFailurePreservesOutputAndRetriesInsideFrame": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.LateExposureFailureAfterSuccessfulSiblingPreservesStandaloneOutput": {
+      "passed": true,
+      "record": "ex09-fog-repair-release"
+    },
+    "ExposureGpuTest.LateExposureFailureAfterSuccessfulSiblingPreservesInsideFrameOutput": {
+      "passed": true,
+      "record": "ex09-fog-repair-release"
+    },
+    "ExposureGpuTest.PreparedSceneExposureIsSolvedOnceAndPinnedAcrossResolvedColorConsumption": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.CombinedSceneRangePreservesSeedRetryInvalidMeterAndRetainedState": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.UnavailableRecordingDoesNotFabricateCurrentViewResult": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.SharedConsumersUsePriorOwnerStateInBothRenderOrders": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.SharedSourceResetBecomesVisibleOnTheNextFrame": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.SharedBootstrapUsesSourceModeBoundsAndSeed": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.SharedConsumerTransitionIsRejectedAfterGpuCompletion": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.RegisteredInactiveSourceBootstrapsConsumersWithoutConsumingItsSeed": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.SharingDiscardsDormantMeterHistoryAndExplicitDetachRemeters": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.InactiveSharingConsumerRequestStaysRejectedAfterDetach": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.AutoDetachRemetersAtZeroDeltaWithOneImplicitGeneration": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.ExplicitDetachPolicyOverridesDefaultRemeter": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.FixedModeDetachAppliesAuthoredGainWithoutAnAutoRejection": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.DiagnosticDetachDefersTheImplicitEventUntilNormalRendering": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.ReusedLifetimeCannotConsumeOldOwnOrSharedPriorState": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.CanceledDetachDoesNotIssueAnImplicitGeneration": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.OffscreenFacadeResolvesSharedRootDespitePublishedIdCollision": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.OffscreenFacadeSharesRootInsideFrame": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.SceneSkyRadianceIsInvariantToNumericalDomainAndPreservesHighRange": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.DistantSkyRadiancePreservesLinearRange": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.CanonicalAtmosphereStoresPreserveAmplifiedSmallTransfers": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.CanonicalAtmosphereProducersRetainTinyIlluminatedSignals": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.ThinMediaArithmeticPreservesAmplifiedRequiredSignals": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.SkyProducerPreservesThinBrightScattering": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.ThinScatteringIntegralHasContinuousVacuumLimit": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.RemovedSourcePreservesOneFrameThenAdaptsIndependently": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.RemovedZeroSourcePreservesBlackOnlyForContinuityFrame": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.RemovedNeverRenderedSourceUsesCapturedFallbackAcrossChain": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.DiagnosticSiblingCannotReplayAnotherConsumersSourceLoss": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.RemovedSourceHonorsLocalFixedZeroAndExplicitPolicies": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.RemovedSourceUsesLastSelectedFallbackAfterConsumerCopyFailure": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.PriorStateLeaseRemainsImmutableAcrossLaterSolves": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.TwoViewsInitializeIndependentlyWithoutWaitingBetweenSubmissions": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.BackloggedStatusAcknowledgesLatestSubmissionWithoutRenderingOwnerAgain": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.DeferredOldAcknowledgementCannotConsumeNewUnsubmittedIntent": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.PublicHandleReplacementRetiresHistoryRequestsAndMaskOwnership": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.ThreeFramesInFlightKeepDistinctExposureRecordsAndUploads": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.SuitabilitySelectsGpuCandidateWithTwoStopMargin": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.SuitabilityRejectsRequiredFortySixStopSignal": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.SuitabilityAccountsForConsumerRgbAmplification": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.SuitabilityIgnoresBelowBudgetComponentsButRespectsDisplayedGain": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.SuitabilityUsesMeterMaskAndCoverageWeights": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.SuitabilityRetainsProducerAndHistoryError": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.SuitabilityRgbGainLeavesTransmissionUnscaledAndAvoidsCombinedGainOverflow": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.SuitabilityRejectsNonfiniteAndMissingRequiredProducts": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.SuitabilityChecksVolumeRgbAndTransmittance": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.SuitabilitySharesDiscardedDarkAndSyntheticFallbackSemantics": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.SuitabilityIgnoresCoverageMassChangesAfterDarkDiscard": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.ExternalBloomUsesFrameDomainAndHonorsDisable": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.FrameDomainToneCurvesRemainFiniteAtMaximumSceneTimesGain": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.FrameDomainToneCurvesPreserveOrdinaryNeutralResponse": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.QuickToneBoundsCoverColorAndCoverageBoxes": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.ToneBoundsEncloseSignedTinyArithmetic": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.ConsumerArithmeticContainsAttenuationAndRounding": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.ManualCameraAndDisabledWriteUnifiedGpuState": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.ManualToAutoPreservesGainForTransitionFrameThenAdapts": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.SeedUsesRequestedEvAndDuplicateGenerationDoesNotReapply": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.RemeterRemainsPendingWithoutInputAndAppliesAtZeroDelta": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.RejectedManualSeedDoesNotReactivateOnLaterAutoEntry": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.StatelessAutoSolvesEachInvocationWithoutAdaptation": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.SceneAndDirectSettingsUseIdenticalGainsAndRates": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.DiagnosticUnitStatePreservesAutoHistoryAndPendingSeed": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.DiagnosticUnitStateDoesNotOverwriteManualHistory": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.ServiceDiagnosticFramesDoNotAcknowledgePendingTransition": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.CompletedOldGenerationCannotConsumeNewerQueuedTransition": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.TransitionQueuedAfterFrameCaptureWaitsForNextFrame": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.RetiredViewAcknowledgementCannotApplyToReusedHandle": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.PreserveHoldsOnlyItsEventFrame": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.SeedOutsideLockedRangeOwnsOnlyItsEventFrame": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.ServiceManualConsumesExactGpuGain": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.CompletedUnsupportedSeedRejectsWithoutChangingGain": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.LateModeChangeCannotAlterCapturedTransitionSemantics": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.InactiveInvalidRequestsCannotReactivateAfterSettingsChange": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.InactiveModeValidationCannotRejectAnObservedSubmission": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.InactiveDiagnosticOwnerPreservesPendingRequest": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.CameraCutRemetersOnceAndInvalidatesOnlyItsCameraHistory": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.ExplicitSeedOverridesCameraCutDefaultPolicy": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.BorrowingCameraCutPreservesRootExposureWithoutRequestingReset": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.WorldReplacementRemetersButOrdinaryImageChangesAdapt": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.DiagnosticFramesDeferCameraCutUntilNormalExposureResumes": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.RegisteredDebugOverrideControlsCameraCutsIndependentlyOfGlobalMode": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.LateCameraCutWaitsForNextCaptureAndRecoveryRemeters": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureGpuTest.PublishingADifferentCameraTriggersTheDefaultCutPolicy": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureLightingGpuTest.ProductionPrecisionRemainsFp32WithoutAdmission": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureLightingGpuTest.PrecisionControlChangeRejectsOldAcknowledgementAndPreservesSeed": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureLightingGpuTest.Fp32OnlySwitchPreservesGainAndEventsWithoutAdmission": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureLightingGpuTest.Fp32OnlyFixedModesAndZeroTarget": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureLightingGpuTest.Fp32OnlySharedLifecycleForward": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureLightingGpuTest.Fp32OnlySharedLifecycleDeferred": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureLightingGpuTest.Fp32OnlyKeepsTemporalRenderingAndCurrentRangeProtection": {
+      "passed": true,
+      "record": "ex09-fog-affected-release"
+    },
+    "ExposureLightingGpuTest.Fp32ReferenceSwitchPreservesSceneExposureAndHistory": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureLightingGpuTest.DirectLightRadiancePreservesSupportedRange": {
+      "passed": true,
+      "record": "ex09-fog-repair-release"
+    },
+    "ExposureLightingGpuTest.SourceFailureSurvivesPositiveLightingAndPreservesAutoHistory": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureLightingGpuTest.EmissiveFailureRespectsFinishedDepthAndMaskHoles": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureLightingGpuTest.StaticSkyDiffusePreservesSupportedRange": {
+      "passed": true,
+      "record": "ex09-fog-repair-release"
+    },
+    "ExposureLightingGpuTest.QueuedDepthAliasesRetainSnapshotAcrossViewResizeAndRetirement": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureLightingGpuTest.QueuedHdrConsumersRetainMixedFormatsAcrossViewRetirement": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureLightingGpuTest.SceneLifecycleHdrStartupCutsSeedsAndPause": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureLightingGpuTest.SceneLifecycleModesPhysicalCameraZeroTargetAndLockedRange": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureLightingGpuTest.OffscreenLifetimeReleasePreservesReadersAndFreshReuse": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureLightingGpuTest.PublishedSceneIdleBoundaryAndRecreation": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureLightingGpuTest.ReplacedSceneRemetersUnlessExplicitPreserveOverrides": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureLightingGpuTest.OffscreenExposureOverridePreservesSceneIntent": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureLightingGpuTest.StatelessSceneAutoRemetersEveryInvocation": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureLightingGpuTest.SceneDeviceRecoveryRejectsPriorEligibility": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureLightingGpuTest.ExposureStatusReadbacksReuseWithinViewLifetimeAndInvalidateOnRecovery": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureLightingGpuTest.SceneDelayedStatusCannotAuthorizeStalePrecision": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureLightingGpuTest.ProductionAdmissionRejectsCurrentAtmosphereLayoutChanges": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureLightingGpuTest.ProductionAdmissionInvalidatesBorrowerOnSourceChange": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureLightingGpuTest.ProductionAdmissionPinsCandidateAndRetainsFallback": {
+      "passed": true,
+      "record": "ex09-fog-repair-release"
+    },
+    "ExposureLightingGpuTest.SharedSceneLifecycleForward": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureLightingGpuTest.SharedSceneLifecycleDeferred": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureLightingGpuTest.ProductionWideRangeRetainsAdaptationAndQualifiesSharedViewsIndependently": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureLightingGpuTest.ProductionRecoveryRetainsHistoryAndResetsOnlyAutoOwner": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureLightingGpuTest.ProductionConversionRecoveryHonorsNewerExplicitTransition": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureLightingGpuTest.MixedPrecisionFamilyAuxiliaryHandoffUsesMappedProducerOutput": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    },
+    "ExposureLightingGpuTest.SplitSceneAndCompositeTargetsPreserveAuxiliaryMappedOutput": {
+      "passed": true,
+      "record": "ex09-exposure-release"
+    }
+  },
+  "source_sha256": {
+    "src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Environment/VolumetricFog.hlsl": "5ed3e58c7cd459f7e2a9cadfd9fbdab7fe884265b95969411f7ca2da10a31aee",
+    "src/Oxygen/Vortex/Test/Exposure/LightingRadiance_test.cpp": "2a308c3bd2c5a62cda84f82c06ec9d65e78e28e78fbb268898e0a86847c16ca8",
+    "src/Oxygen/Vortex/Test/Exposure/FogHistory_test.cpp": "cc89c65e9a2544f2c99caf80af3a1a7cbb534be7f48b42828e8d552ea780ef26",
+    "src/Oxygen/Vortex/Test/Exposure/ScenePrecision_test.cpp": "efe12a525422a2c406cc8a0266e5dc4d207f319a1f423c05a6cb31f8ef31b7a1",
+    "src/Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixtureLifecycle.cpp": "7872af2b8a7c85ecf6dd4b80b46f1fc17cde1c3bb9eb7b91af280a71d8d0869d",
+    "src/Oxygen/Vortex/Test/Exposure/Fixtures/ExposureLightingFixture.cpp": "36413a98181d3183c51a54ef5e389b4e2380dfd91e0724574f8b73e1e0a7d4e6",
+    "src/Oxygen/Vortex/Test/Exposure/Fixtures/ExposureLightingFixture.h": "5e6dc65732fae4f3adf4f35eff67d82f61340aae673923fbb83607e93ff5e9e5"
+  },
+  "binary_sha256": {
+    "out/build-ninja/bin/Debug/Oxygen.Vortex.Exposure.Tests.exe": "cda1a2677bef026c4b9885c07b52dc1c92bfc0b00ac96de697dcfacd034ae21d",
+    "out/build-ninja/bin/Release/Oxygen.Vortex.Exposure.Tests.exe": "4dc3f69265037bba010401d56b275e50d6fba7a88cc1a5acff21813bcee3926e",
+    "bin/Oxygen/Release/production/shaders.bin": "a37ae8760053c683a931ca86c8981ef2bd33ad81cca0a7075ad06ca268514028",
+    "bin/Oxygen/Debug/dev/shaders.bin": "4be64fbb9d7ba65941d032a0da1c642dd1e1180db6c59df1a90635b013e8259a"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "retained_rows_validated": 38,
+  "removed_rows_preserved": 9,
+  "ui_executions_passed": 14,
+  "migrated_cpu_executions_passed": 14,
+  "ordinary_trees_verified": 2,
+  "readmes_developer_only": true,
+  "local_links_checked": 8,
+  "broken_links": [],
+  "manual_acceptance": {
+    "lightbench_adaptation_resize_close": "user OK",
+    "lightbench_directional_toggle": "user OK",
+    "multiview_ordinary_and_console": "user OK",
+    "multiview_offscreen": "user OK"
+  },
+  "committed": false
+}

@@ -1,0 +1,12 @@
+{
+  "preset": "neutral-reference",
+  "pid": 82836,
+  "window": 55641572,
+  "extent": [
+    1920,
+    1080
+  ],
+  "settle_seconds": 5,
+  "method": "native visible client-area screenshot",
+  "path": "design\\vortex\\plan\\validation\\ex09-presets-20260925\\screens\\neutral-reference.png"
+}
