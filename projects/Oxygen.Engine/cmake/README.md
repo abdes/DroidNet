@@ -409,7 +409,9 @@ graph and need only the selected modules' dependencies.
 
 ## Embedded JSON Schemas
 
-Use `cmake/JsonSchemaHelpers.cmake` to embed JSON schema files into generated C++ headers at build time.
+Use `cmake/JsonSchemaHelpers.cmake` to embed JSON schema files into generated C++
+headers. Configure makes them available immediately for editor use; the build
+updates them when inputs change and recovers deleted headers.
 
 The public API is:
 
@@ -440,7 +442,22 @@ Arguments:
 Implementation split:
 
 1. `JsonSchemaHelpers.cmake` is configure-time API and build graph wiring.
-2. `GenerateEmbeddedJsonSchemas.cmake` is build-time code generation backend.
+2. `GenerateEmbeddedJsonSchemas.cmake` is the shared configure/build generator.
+
+Unchanged manifests and headers keep their timestamps. A stamp records processed
+inputs even when their contents produce an identical header, avoiding unnecessary
+C++ recompilation. Both the stamp and header are declared outputs so Visual Studio
+and Ninja can recover a missing header.
+
+Generation is ordered before the owning target. If another target compiles source
+files that include that same private header, it must also depend on the generation
+targets recorded in the owner's `OXYGEN_JSON_SCHEMA_TARGETS` property. An include
+directory alone does not establish that build dependency. For example:
+
+```cmake
+get_target_property(schema_targets owner OXYGEN_JSON_SCHEMA_TARGETS)
+add_dependencies(consumer ${schema_targets})
+```
 
 Why split:
 
