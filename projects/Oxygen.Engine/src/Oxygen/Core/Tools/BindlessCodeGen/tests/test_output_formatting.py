@@ -1,6 +1,8 @@
 """Generated output must remain stable across Windows builds and commit hooks."""
 
 import json
+import re
+import shutil
 
 from bindless_codegen._copy_helper import copy_single
 from bindless_codegen.generator import _format_json, generate
@@ -23,6 +25,19 @@ def test_scalar_arrays_are_compact_without_changing_string_contents():
     output = _format_json(value)
     assert '"views": ["StructuredBuffer_SRV", "RawBuffer_SRV"]' in output
     assert json.loads(output) == value
+
+
+def test_metadata_source_path_round_trips_outside_git(tmp_path):
+    # Conan source archives have no Git root. Windows paths must remain valid
+    # string literals, including the cache's backslash followed by 'oxygen'.
+    folder = tmp_path / "oxygen cache"
+    folder.mkdir()
+    source = folder / "Bindless.yaml"
+    shutil.copyfile(_resolve_spec_yaml(), source)
+    assert generate(str(source), None, None, out_base=str(folder / "Generated."))
+    header = (folder / "Generated.Meta.h").read_text(encoding="utf-8")
+    literal = re.search(r"kBindlessSourcePath\[\] = (.*);", header).group(1)
+    assert json.loads(literal) == str(source.absolute())
 
 
 def test_copy_repairs_crlf_in_existing_output(tmp_path):
