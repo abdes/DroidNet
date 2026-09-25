@@ -32,6 +32,10 @@ Generate Tracy (profiler enabled) build trees instead of standard builds.
 .PARAMETER Generator
 Generate Ninja, VisualStudio, or All (the default).
 
+.PARAMETER UiTests
+Instrument ImGui and demo applications for widget tests (default: enabled),
+including optimized Release builds. Pass -UiTests:$false for final-release builds.
+
 .PARAMETER Help
 Show this help message and exit.
 
@@ -52,6 +56,7 @@ param(
     [string]$DeployerPackage = "Oxygen/0.1.0",
     [switch]$NoClean,
     [switch]$WithTracy,
+    [switch]$UiTests = $true,
     [ValidateSet('All', 'Ninja', 'VisualStudio')][string]$Generator = 'All'
 )
 
@@ -60,7 +65,7 @@ $PSNativeCommandUseErrorActionPreference = $false
 
 function Show-Usage {
     Write-Host ""
-    Write-Host "Usage: .\tools\generate-builds.ps1 <profile> [-Generator All|Ninja|VisualStudio] [-Build <mode>] [-DeployerFolder <path>] [-DeployerPackage <pkg>] [-NoClean] [-WithTracy] [-Help]" -ForegroundColor Cyan
+    Write-Host "Usage: .\tools\generate-builds.ps1 <profile> [-Generator All|Ninja|VisualStudio] [-Build <mode>] [-DeployerFolder <path>] [-DeployerPackage <pkg>] [-NoClean] [-WithTracy] [-UiTests] [-Help]" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "Parameters:" -ForegroundColor Gray
     Write-Host "  profile             Path to Conan profile used for both host and build (required, positional)"
@@ -69,6 +74,7 @@ function Show-Usage {
     Write-Host "  -DeployerPackage    Deployer package (default: Oxygen/0.1.0)"
     Write-Host "  -NoClean            Do not clean existing build directories"
     Write-Host "  -WithTracy          Generate Tracy build trees; keep standard trees"
+    Write-Host '  -UiTests            Enabled by default for development; use -UiTests:$false for final release'
     Write-Host "  -Generator          All (default), Ninja, or VisualStudio"
     Write-Host "  -Help, -h, -?       Show this help message and exit"
     Write-Host ""
@@ -178,6 +184,7 @@ $conanBaseArgs = @(
     "--deployer-package=$DeployerPackage",
     "-o", "with_asan=$isAsan",
     "-o", "with_tracy=$([bool]$WithTracy)",
+    "-o", "ui_tests=$([bool]$UiTests)",
     # NOTE: CMakeConfigDeps is required for multi-config generators (Ninja Multi-Config, Visual Studio).
     # Conan only generates Debug/Release packages, but multi-config generators (especially Ninja)
     # may request other configurations (RelWithDebInfo, MinSizeRel, etc.). CMakeDeps cannot map

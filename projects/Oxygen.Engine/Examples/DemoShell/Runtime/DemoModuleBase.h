@@ -23,6 +23,10 @@
 #include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Renderer.h>
 
+#if defined(OXYGEN_BUILD_UI_TESTS)
+struct ImGuiTestEngine;
+#endif
+
 namespace oxygen {
 namespace engine {
   class FrameContext;
@@ -39,6 +43,11 @@ namespace vortex {
 namespace oxygen::examples {
 
 class DemoAppContext;
+#if defined(OXYGEN_BUILD_UI_TESTS)
+namespace testing {
+  class UiTestSession;
+}
+#endif
 
 //! Base class for demo engine modules.
 /*!
@@ -70,6 +79,12 @@ public:
     -> co::Co<> override;
 
 protected:
+#if defined(OXYGEN_BUILD_UI_TESTS)
+  auto UiTestOutputDirectory() const -> std::filesystem::path;
+  virtual auto RegisterUiTests(ImGuiTestEngine*) -> void { }
+  auto StopUiTests() -> void;
+  auto OnFrameEnd(observer_ptr<engine::FrameContext> context) -> void override;
+#endif
   //! Hook: derived demos create and configure the DemoShell instance.
   virtual auto OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
     -> std::unique_ptr<DemoShell> = 0;
@@ -134,6 +149,9 @@ private:
   };
 
   std::unique_ptr<DemoShell> shell_;
+#if defined(OXYGEN_BUILD_UI_TESTS)
+  std::unique_ptr<testing::UiTestSession> ui_tests_;
+#endif
 
   auto OnFrameStartCommon(engine::FrameContext& context) -> void;
   auto EnsureSceneFramebuffer(ViewId view_id, uint32_t width, uint32_t height)

@@ -94,6 +94,9 @@ public:
   auto OnFrameEnd(observer_ptr<engine::FrameContext> context) -> void override;
 
 protected:
+#if defined(OXYGEN_BUILD_UI_TESTS)
+  auto RegisterUiTests(ImGuiTestEngine* engine) -> void override;
+#endif
   auto BuildDefaultWindowProperties() const
     -> platform::window::Properties override;
 

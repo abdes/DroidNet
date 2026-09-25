@@ -241,6 +241,9 @@ auto MainModule::LoadSettings(const std::filesystem::path& path)
 
 auto MainModule::OnShutdown() noexcept -> void
 {
+#if defined(OXYGEN_BUILD_UI_TESTS)
+  StopUiTests();
+#endif
   console_bindings_.reset();
   ResetMainViewState();
   auto& shell = GetShell();
@@ -435,7 +438,11 @@ auto MainModule::OnPreRender(observer_ptr<engine::FrameContext> context)
 
 auto MainModule::OnFrameEnd(observer_ptr<engine::FrameContext> context) -> void
 {
+#if defined(OXYGEN_BUILD_UI_TESTS)
+  Base::OnFrameEnd(context);
+#else
   static_cast<void>(context);
+#endif
 }
 
 } // namespace oxygen::examples::light_bench

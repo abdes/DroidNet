@@ -112,6 +112,10 @@ target_link_libraries(
     oxygen::data
 )
 
+if(OXYGEN_BUILD_UI_TESTS)
+  target_sources(${META_MODULE_TARGET} PRIVATE "Test/Widgets_ui.cpp")
+endif()
+
 if(TARGET oxygen-vortex-exposure-test-support)
   include(GTestHelpers)
   set(

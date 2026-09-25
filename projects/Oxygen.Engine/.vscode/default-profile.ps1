@@ -21,5 +21,6 @@ function Add-OxygenTools {
 
 Set-Alias -Name oxyrun -Value (Join-Path $engineRoot 'tools\cli\oxyrun.ps1')
 Set-Alias -Name oxybuild -Value (Join-Path $engineRoot 'tools\cli\oxybuild.ps1')
+Set-Alias -Name oxy-ui-tests -Value (Join-Path $engineRoot 'tools\cli\oxy-ui-tests.ps1')
 Set-Alias -Name oxytidy -Value (Join-Path $engineRoot 'tools\cli\oxytidy.ps1')
 Set-Alias -Name oxyformat -Value (Join-Path $engineRoot 'tools\cli\oxyformat.ps1')

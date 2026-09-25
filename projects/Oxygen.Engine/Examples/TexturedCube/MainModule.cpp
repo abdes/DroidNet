@@ -8,6 +8,12 @@
 #include <memory>
 #include <source_location>
 
+#include "DemoShell/Runtime/DemoAppContext.h"
+#include "DemoShell/Services/FileBrowserService.h"
+#include "DemoShell/Services/SettingsService.h"
+#include "DemoShell/Services/SkyboxService.h"
+#include "DemoShell/UI/DemoShellUi.h"
+#include "TexturedCube/MainModule.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -21,13 +27,6 @@
 #include <Oxygen/Engine/IAsyncEngine.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Vortex/CompositionView.h>
-
-#include "DemoShell/Runtime/DemoAppContext.h"
-#include "DemoShell/Services/FileBrowserService.h"
-#include "DemoShell/Services/SettingsService.h"
-#include "DemoShell/Services/SkyboxService.h"
-#include "DemoShell/UI/DemoShellUi.h"
-#include "TexturedCube/MainModule.h"
 
 namespace oxygen::examples::textured_cube {
 
@@ -249,6 +248,9 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
 
 auto MainModule::OnShutdown() noexcept -> void
 {
+#if defined(OXYGEN_BUILD_UI_TESTS)
+  StopUiTests();
+#endif
   // Clear scene from shell first to ensure controlled destruction
   auto& shell = GetShell();
   shell.SetScene(nullptr);

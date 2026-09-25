@@ -182,6 +182,7 @@ set(OXYGEN_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")
 set(OPTIONS_LIST
   BUILD_SHARED_LIBS        "Build shared instead of static libraries." OFF
   OXYGEN_BUILD_TESTS       "Setup target to build and run tests." ON
+  OXYGEN_BUILD_UI_TESTS    "Instrument demo applications with ImGui Test Engine." OFF
   OXYGEN_BUILD_EXAMPLES    "Setup target to build the examples." ON
   OXYGEN_BUILD_DOCS        "Setup target to build the documentation." ON
   OXYGEN_WITH_ASAN         "Instrument code with address sanitizer" OFF
@@ -223,6 +224,39 @@ endforeach()
 
 if(OXYGEN_WITH_TRACY)
   add_compile_definitions(OXYGEN_WITH_TRACY=1)
+endif()
+
+# ImGui and every client must agree on this instrumentation ABI. Conan owns
+# the dependency variant; changing only the CMake switch is not sufficient.
+if(
+  (
+    OXYGEN_BUILD_UI_TESTS
+    AND
+      NOT
+        OXYGEN_IMGUI_TEST_ENGINE_AVAILABLE
+  )
+  OR
+    (
+      OXYGEN_IMGUI_TEST_ENGINE_AVAILABLE
+      AND
+        NOT
+          OXYGEN_BUILD_UI_TESTS
+    )
+)
+  message(
+    FATAL_ERROR
+    "UI test option differs from ImGui. Reinstall Conan dependencies with -o ui_tests=True/False to match."
+  )
+endif()
+if(OXYGEN_BUILD_UI_TESTS)
+  if(NOT OXYGEN_BUILD_EXAMPLES)
+    message(FATAL_ERROR "OXYGEN_BUILD_UI_TESTS requires OXYGEN_BUILD_EXAMPLES")
+  endif()
+  add_compile_definitions(
+    OXYGEN_BUILD_UI_TESTS=1
+    IMGUI_ENABLE_TEST_ENGINE=1
+    IMGUI_TEST_ENGINE_ENABLE_COROUTINE_STDTHREAD_IMPL=1
+  )
 endif()
 
 # ------------------------------------------------------------------------------
