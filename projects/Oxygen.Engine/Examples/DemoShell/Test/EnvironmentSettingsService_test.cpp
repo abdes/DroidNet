@@ -341,6 +341,35 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
     scene::AtmosphereLightSlot::kPrimary);
 }
 
+NOLINT_TEST_F(
+  EnvironmentSettingsServiceTest, AuthoringIntentFollowsAppliedBatch)
+{
+  ResetDemoSettings();
+  const auto scene = MakeScene("DemoShell.AuthoringIntent");
+  auto sun = CreateDirectionalLightNode(*scene, "Sun", true);
+  service_.OnSceneActivated(*scene);
+  service_.SetRuntimeConfig(
+    EnvironmentRuntimeConfig { .scene = observer_ptr { scene.get() },
+      .force_environment_override = false });
+  service_.ApplyPendingChanges();
+  const auto before = scene->GetEnvironmentAuthoringRevision();
+  service_.BeginUpdate();
+  service_.SetSunAzimuthDeg(25.0F);
+  service_.SetSunElevationDeg(15.0F);
+  service_.SetFogExtinctionSigmaTPerMeter(0.01F);
+  service_.EndUpdate();
+  EXPECT_EQ(scene->GetEnvironmentAuthoringRevision(), before);
+  service_.ApplyPendingChanges();
+  EXPECT_EQ(scene->GetEnvironmentAuthoringRevision(), before + 1U);
+  service_.ApplyPendingChanges();
+  EXPECT_EQ(scene->GetEnvironmentAuthoringRevision(), before + 1U);
+  ASSERT_TRUE(sun.EditLight<scene::DirectionalLight>(
+    [](auto& light) { light.SetIntensityLux(2500.0F); }));
+  scene->Update();
+  scene->SyncObservers();
+  EXPECT_EQ(scene->GetEnvironmentAuthoringRevision(), before + 1U);
+}
+
 NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   SceneSwapBindsDisabledSunDirectionWithoutEnvironmentOrStaleLightState)
 {
@@ -1746,8 +1775,13 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
                  .GetAtmosphereLightSlot()
     == scene::AtmosphereLightSlot::kPrimary);
 
+  const auto preview_authoring_before
+    = scene->GetEnvironmentAuthoringRevision();
   service_.SetPreviewSunEnabled(true);
+  EXPECT_EQ(scene->GetEnvironmentAuthoringRevision(), preview_authoring_before);
   service_.ApplyPendingChanges();
+  EXPECT_EQ(
+    scene->GetEnvironmentAuthoringRevision(), preview_authoring_before + 1U);
   EXPECT_EQ(service_.GetPresetIndex(), -2);
   EXPECT_TRUE(service_.IsPreviewSunActive());
   EXPECT_EQ(service_.GetSunSourceDescription(),
@@ -1764,6 +1798,8 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
 
   service_.SetPreviewSunEnabled(false);
   service_.ApplyPendingChanges();
+  EXPECT_EQ(
+    scene->GetEnvironmentAuthoringRevision(), preview_authoring_before + 2U);
   EXPECT_EQ(service_.GetPresetIndex(), -2);
   EXPECT_FALSE(service_.IsPreviewSunActive());
   EXPECT_FALSE(candidate.GetLightAs<scene::DirectionalLight>()

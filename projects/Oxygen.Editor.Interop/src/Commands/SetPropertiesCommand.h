@@ -94,6 +94,10 @@ namespace oxygen::interop::module {
           static_cast<std::size_t>(end - begin));
         applier->Apply(*sceneNode, run);
         applied = true;
+        if (component == ComponentId::kDirectionalLight
+          || component == ComponentId::kTransform) {
+          context.Scene->NotifyEnvironmentAuthoringChange();
+        }
       } else {
         LOG_F(WARNING,
           "SetPropertiesCommand skipped {} entries: no applier registered "

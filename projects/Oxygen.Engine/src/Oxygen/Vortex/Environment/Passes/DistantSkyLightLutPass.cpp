@@ -306,7 +306,6 @@ auto DistantSkyLightLutPass::Record(RenderContext& ctx,
   TrackBufferFromKnownOrInitial(*recorder, buffer);
   recorder->RequireResourceState(
     buffer, graphics::ResourceStates::kUnorderedAccess);
-  recorder->FlushBarriers();
 
   recorder->SetPipelineState(BuildPipelineDesc());
   if (!capture)
@@ -322,12 +321,15 @@ auto DistantSkyLightLutPass::Record(RenderContext& ctx,
 
   {
     graphics::GpuEventScope pass_scope(*recorder,
-      "Vortex.Environment.DistantSkyLightLut",
+      capture ? "Vortex.Environment.IBL.DistantSkyLightLut"
+              : "Vortex.Environment.DistantSkyLightLut",
       profiling::ProfileGranularity::kTelemetry,
       profiling::ProfileCategory::kPass);
+    recorder->FlushBarriers();
     recorder->Dispatch(1U, 1U, 1U);
     recorder->RequireResourceStateFinal(
       buffer, graphics::ResourceStates::kShaderResource);
+    recorder->FlushBarriers();
   }
   const auto submission = recorder.SubmitWithReceipt();
   if (submission.outcome != graphics::SubmissionOutcome::kSubmitted

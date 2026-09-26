@@ -9,10 +9,15 @@ controlled native material fixture. Capture
 and replay commands live in the [milestone validation](../../design/vortex/milestones/VX-IBL-01/validation.md).
 
 `SummarizeIblUpdate.py <run-directory>` checks matching CPU/GPU sample windows
-and reports the interval union for atmosphere LUTs plus IBL processing from
-`IblUpdateBenchmark.DISABLED_CapturedSunUpdates`. It reuses the existing timing
-statistics helpers. This isolated workload diagnoses update cost; the milestone's
-matched scene runs own performance acceptance.
+and reports atmosphere LUT plus IBL producer interval unions. Use
+`IblUpdateBenchmark.DISABLED_ScheduledSunUpdates` for incremental runtime updates
+or `DISABLED_AuthoringSunUpdates` for immediate authoring. The summary checks
+their cost/latency gates and reports first-use wall time, producer GPU work
+(including BRDF upload), and GPU queue span separately. The original
+`DISABLED_CapturedSunUpdates` remains a direct-producer diagnostic. Set
+`OXYGEN_IBL_TIMING_OUTPUT` to a new absolute directory and enable disabled tests.
+These isolated workloads use the existing timing helpers; matched scene runs
+qualify integrated performance.
 
 ## Proof Automation Contract
 
@@ -328,3 +333,11 @@ surface:
 powershell -NoProfile -File tools/vortex/Run-AsyncRuntimeValidation.ps1 `
   -Output build/artifacts/vortex/phase-4/async/current
 ```
+
+`SummarizeIblScene.py <run-directory>` checks the matched 1080p scene windows from
+`IblSceneBenchmark.DISABLED_Static`, `DISABLED_Runtime` and `DISABLED_Authoring`.
+Use the same output environment variable and disabled-test flag as the isolated
+workload. It checks every frame, capture-only GPU unions, publication latency,
+static reuse and warmed product storage, then reports whole-frame timings.
+HDR pixels are saved after timing; geometry residency is required before the
+measured window. First-use timing describes the first submitted IBL-ready frame.

@@ -18,10 +18,12 @@
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Types/Format.h>
@@ -40,6 +42,7 @@
 #include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
 #include <Oxygen/Vortex/Environment/Internal/IblGpuProcessor.h>
+#include <Oxygen/Vortex/Environment/Internal/IblWorkBudget.h>
 #include <Oxygen/Vortex/Environment/Types/IblProductMetadata.h>
 #include <Oxygen/Vortex/Internal/BindlessRootBindings.h>
 #include <Oxygen/Vortex/Renderer.h>
@@ -69,8 +72,27 @@ namespace {
     std::uint32_t capture_srv { kInvalidBindlessIndex };
     std::uint32_t processed_half_srv { kInvalidBindlessIndex };
     std::uint32_t specular_half_srv { kInvalidBindlessIndex };
+    std::array<std::uint32_t, 3> group_origin {};
+    std::uint32_t padding {};
   };
-  static_assert(sizeof(Work) == 80U);
+  static_assert(sizeof(Work) == 96U);
+
+  auto WorkRecordCount(std::uint32_t size, const std::uint32_t mips,
+    const std::uint32_t tile_size) -> std::uint32_t
+  {
+    auto count = 4U * mips + 2U;
+    if (tile_size == 0U)
+      return count;
+    for (auto mip = 0U; mip < mips; ++mip, size >>= 1U) {
+      if (size <= tile_size)
+        continue;
+      const auto tiles_per_face = (size / tile_size) * (size / tile_size);
+      // At mip zero: capture, normalize, SH, prefilter and both half chains.
+      // Later mips: downsample, prefilter and both half chains.
+      count += (mip == 0U ? 6U : 4U) * 6U * tiles_per_face;
+    }
+    return count;
+  }
 
   struct SkySnapshot {
     EnvironmentStaticData environment;
@@ -185,9 +207,11 @@ namespace {
   auto Track(graphics::CommandRecorder& recorder, const Resource& resource,
     ResourceStates initial = ResourceStates::kCommon) -> void
   {
+    // Accepted batches retain their states for the next batch. Final product
+    // transitions are explicit and timed before submission closes the list.
     if (!recorder.IsResourceTracked(resource)
       && !recorder.AdoptKnownResourceState(resource))
-      recorder.BeginTrackingResourceState(resource, initial, true);
+      recorder.BeginTrackingResourceState(resource, initial, false);
   }
 
   struct ProductStorage {
@@ -374,36 +398,62 @@ struct IblCaptureLeaseState {
 };
 
 auto IblGpuProducts::AcquireCapture() const
-  -> std::expected<IblCaptureLease, IblCaptureError>
+  -> Result<IblCaptureLease, IblCaptureError>
 try {
   if (!allocation || !producer.IsValid())
-    return std::unexpected(IblCaptureError::kUnavailable);
+    return Err(IblCaptureError::kUnavailable);
   const auto version = allocation->version;
   const auto operation = version->pool->backend->AcquireOperation();
   std::lock_guard lock(version->pool->mutex);
   auto& pool = *version->pool;
   if (pool.closed || pool.failed || !BackendAvailable(pool) || !version->owned
     || version->finalized)
-    return std::unexpected(IblCaptureError::kClosed);
+    return Err(IblCaptureError::kClosed);
   if (version->captures == 0U
     && pool.captured_generations >= pool.capture_capacity)
-    return std::unexpected(IblCaptureError::kBusy);
+    return Err(IblCaptureError::kBusy);
   auto pin = std::make_shared<IblCapturePin>(version);
   auto state = std::make_shared<IblCaptureLeaseState>(*this, pin);
   if (version->captures++ == 0U)
     ++pool.captured_generations;
   pin->admitted = true;
-  return IblCaptureLease(std::move(state));
+  return Ok(IblCaptureLease(std::move(state)));
 } catch (const std::bad_alloc&) {
-  return std::unexpected(IblCaptureError::kAllocationFailed);
+  return Err(IblCaptureError::kAllocationFailed);
 } catch (const std::exception&) {
-  return std::unexpected(IblCaptureError::kClosed);
+  return Err(IblCaptureError::kClosed);
+}
+
+struct IblGpuJob {
+  std::shared_ptr<ProductVersion> version;
+  std::shared_ptr<IblGpuProducts> products;
+  std::shared_ptr<const graphics::Texture> source;
+  graphics::RegistrationLease source_registration;
+  graphics::CompletionReceipt source_producer;
+  std::shared_ptr<const void> resident_owner;
+  std::optional<IblSkySource> sky;
+  std::vector<IblGpuDispatch> dispatches;
+  std::size_t next_dispatch {};
+  graphics::CompletionReceipt previous_submission;
+};
+
+auto IblGpuDispatch::CanShareBatchWith(
+  const IblGpuDispatch& other) const noexcept -> bool
+{
+  if (!shader || !other.shader || std::string_view(shader) != other.shader)
+    return false;
+  // Each source mip reads the preceding mip. Other spatial outputs are
+  // independent tiles/mips; prefilter metadata updates are commutative atomics.
+  return std::string_view(shader) != "IblMipCS"
+    || output_size == other.output_size;
 }
 
 struct IblGpuProcessor::Impl {
   Graphics& graphics;
   std::shared_ptr<ProductPool> pool;
   observer_ptr<DiagnosticsService> diagnostics { nullptr };
+  std::shared_ptr<IblWorkBudget> budget;
+  frame::SequenceNumber timing_frame {};
 };
 
 IblGpuProcessor::IblGpuProcessor(
@@ -436,6 +486,20 @@ auto IblGpuProcessor::Close() noexcept -> void
   impl_->pool->reuse.Close();
   impl_->pool->slots.fill(nullptr);
   impl_->pool->available = 0U;
+}
+
+auto IblGpuProcessor::IsOpen() const -> bool
+{
+  std::lock_guard lock(impl_->pool->mutex);
+  return !impl_->pool->closed && !impl_->pool->failed
+    && BackendAvailable(*impl_->pool);
+}
+
+auto IblGpuProcessor::SetTimingContext(std::shared_ptr<IblWorkBudget> budget,
+  const frame::SequenceNumber sequence) -> void
+{
+  impl_->budget = std::move(budget);
+  impl_->timing_frame = sequence;
 }
 
 auto IblGpuProcessor::GetStats() const -> Stats
@@ -511,21 +575,21 @@ auto IblGpuProducts::Attach(graphics::CommandRecorder& recorder,
 
 static auto AttachCapture(const std::shared_ptr<IblCaptureLeaseState>& state,
   graphics::CommandRecorder& recorder, graphics::ResourceRegistry& registry)
-  -> std::expected<void, IblCaptureError>
+  -> Result<void, IblCaptureError>
 try {
   if (!state)
-    return std::unexpected(IblCaptureError::kClosed);
+    return Err(IblCaptureError::kClosed);
   const auto& pin = state->pin;
   if (!BackendAvailable(*pin->version->pool))
-    return std::unexpected(IblCaptureError::kClosed);
+    return Err(IblCaptureError::kClosed);
   const auto operation = pin->version->pool->backend->AcquireOperation();
   {
     std::lock_guard lock(pin->version->pool->mutex);
     if (pin->version->pool->failed || pin->version->finalized)
-      return std::unexpected(IblCaptureError::kClosed);
+      return Err(IblCaptureError::kClosed);
   }
   if (!RetainProductRegistrations(state->products, recorder, registry))
-    return std::unexpected(IblCaptureError::kRecordingFailed);
+    return Err(IblCaptureError::kRecordingFailed);
   BindProductResources(state->products, recorder);
   recorder.RetainOpaqueUse(pin, 0x49424c4341505455ULL, pin.get(),
     { .prepare =
@@ -567,9 +631,9 @@ try {
         } });
   return {};
 } catch (const std::bad_alloc&) {
-  return std::unexpected(IblCaptureError::kAllocationFailed);
+  return Err(IblCaptureError::kAllocationFailed);
 } catch (const std::exception&) {
-  return std::unexpected(IblCaptureError::kRecordingFailed);
+  return Err(IblCaptureError::kRecordingFailed);
 }
 
 auto IblGpuProcessor::Process(const std::shared_ptr<graphics::Texture>& source,
@@ -615,12 +679,329 @@ auto IblGpuProcessor::ProcessSource(
   std::shared_ptr<const void> resident_owner)
   -> std::expected<std::shared_ptr<const IblGpuProducts>, IblProcessError>
 {
+  auto job = PrepareSource(source, source_registration, brdf, settings,
+    revision, source_producer, sky, resident_srv, std::move(resident_owner));
+  if (!job)
+    return std::unexpected(job.error());
+  const auto completed = Advance(*job, UINT32_MAX);
+  if (!completed)
+    return std::unexpected(completed.error());
+  return completed->products;
+}
+
+auto IblGpuProcessor::Begin(const std::shared_ptr<graphics::Texture>& source,
+  const graphics::RegistrationLease& source_registration,
+  const std::shared_ptr<const IblBrdfProduct>& brdf,
+  const IblProcessSettings& settings, const std::uint32_t revision,
+  const graphics::CompletionReceipt source_producer)
+  -> std::expected<std::shared_ptr<IblGpuJob>, IblProcessError>
+{
+  auto job = PrepareSource(source, source_registration, brdf, settings,
+    revision, source_producer, nullptr);
+  if (!job)
+    return std::unexpected(job.error());
+  const auto initialized = Advance(*job, 1U);
+  if (!initialized)
+    return std::unexpected(initialized.error());
+  return job;
+}
+
+auto IblGpuProcessor::BeginSky(const IblSkySource& source,
+  const std::shared_ptr<const IblBrdfProduct>& brdf,
+  const IblProcessSettings& settings, const std::uint32_t revision)
+  -> std::expected<std::shared_ptr<IblGpuJob>, IblProcessError>
+{
+  auto job
+    = PrepareSource({}, {}, brdf, settings, revision, source.producer, &source);
+  if (!job)
+    return std::unexpected(job.error());
+  const auto initialized = Advance(*job, 1U);
+  if (!initialized)
+    return std::unexpected(initialized.error());
+  return job;
+}
+
+auto IblGpuProcessor::BeginCubeView(
+  const std::shared_ptr<const graphics::Texture>& source,
+  const ShaderVisibleIndex srv, std::shared_ptr<const void> owner,
+  const std::shared_ptr<const IblBrdfProduct>& brdf,
+  const IblProcessSettings& settings, const std::uint32_t revision)
+  -> std::expected<std::shared_ptr<IblGpuJob>, IblProcessError>
+{
+  if (!srv.IsValid() || !owner)
+    return std::unexpected(IblProcessError::kInvalidSource);
+  auto job = PrepareSource(
+    source, {}, brdf, settings, revision, {}, nullptr, srv, std::move(owner));
+  if (!job)
+    return std::unexpected(job.error());
+  const auto initialized = Advance(*job, 1U);
+  if (!initialized)
+    return std::unexpected(initialized.error());
+  return job;
+}
+
+auto IblGpuProcessor::PendingDispatches(const IblGpuJob& job) const
+  -> std::span<const IblGpuDispatch>
+{
+  if (job.version->pool != impl_->pool)
+    return {};
+  return std::span(job.dispatches).subspan(job.next_dispatch);
+}
+
+auto IblGpuProcessor::Advance(
+  const std::shared_ptr<IblGpuJob>& job, const std::uint32_t dispatch_limit)
+  -> std::expected<IblGpuAdvance, IblProcessError>
+try {
+  if (!job || job->version->pool != impl_->pool)
+    return std::unexpected(IblProcessError::kInvalidSource);
+  {
+    std::lock_guard lock(impl_->pool->mutex);
+    if (impl_->pool->closed || impl_->pool->failed
+      || !BackendAvailable(*impl_->pool))
+      return std::unexpected(IblProcessError::kClosed);
+  }
+  const auto remaining
+    = static_cast<std::uint32_t>(PendingDispatches(*job).size());
+  if (remaining == 0U)
+    return IblGpuAdvance { .products = job->products };
+  if (dispatch_limit == 0U)
+    return IblGpuAdvance { .remaining_dispatches = remaining };
+  const auto operation = impl_->pool->backend->AcquireOperation();
+  const profiling::CpuProfileScope cpu_scope(
+    "Vortex.Environment.IBL.Advance", profiling::ProfileCategory::kCompute);
+  auto& graphics = impl_->graphics;
+  auto& registry = graphics.GetResourceRegistry();
+  auto& storage = *job->version->storage;
+  const auto count = std::min(remaining, dispatch_limit);
+  bool accepted = false;
+  if (impl_->budget)
+    impl_->budget->Record(
+      impl_->timing_frame, PendingDispatches(*job).first(count));
+  const ScopeGuard feedback([&]() noexcept {
+    if (!accepted) {
+      if (impl_->budget)
+        impl_->budget->Reject(impl_->timing_frame);
+      if (impl_->diagnostics)
+        impl_->diagnostics->InvalidateIblTiming();
+    }
+  });
+  auto recording = graphics.AcquireCommandRecorder(
+    graphics.QueueKeyFor(graphics::QueueRole::kGraphics),
+    "Vortex.Environment.IBL", graphics::SubmissionPolicy::kExplicit);
+  if (!recording)
+    return std::unexpected(IblProcessError::kRecordingFailed);
+  auto& recorder = *recording;
+  if (impl_->diagnostics)
+    impl_->diagnostics->AttachIblTimelineCollector(recorder);
+  AttachVersion(recorder, job->version);
+  {
+    const graphics::GpuEventScope total_scope(recorder,
+      "Vortex.Environment.IBL.Process",
+      profiling::ProfileGranularity::kTelemetry,
+      profiling::ProfileCategory::kCompute);
+    recorder.RecordDependency(job->products->brdf->producer);
+    if (job->previous_submission.IsValid())
+      recorder.RecordDependency(job->previous_submission);
+    if (job->source_producer.IsValid())
+      recorder.RecordDependency(job->source_producer);
+    if (!recorder.RetainRegistration(
+          registry, job->products->brdf->registration))
+      return std::unexpected(IblProcessError::kBrdfUnavailable);
+    for (const auto& registration :
+      { storage.scratch.registration, storage.processed.registration,
+        storage.specular.registration, storage.processed_half.registration,
+        storage.specular_half.registration, storage.sh.registration,
+        storage.metadata.registration, storage.partials.registration,
+        storage.constants.registration }) {
+      if (!recorder.RetainRegistration(registry, registration))
+        return std::unexpected(IblProcessError::kRecordingFailed);
+    }
+    if (job->source) {
+      if (job->source_registration
+        && !recorder.RetainRegistration(registry, job->source_registration))
+        return std::unexpected(IblProcessError::kRecordingFailed);
+      if (job->resident_owner)
+        recorder.RetainOpaqueUse(job->resident_owner, 0x49424c4355424553ULL);
+      Track(recorder, *job->source);
+      recorder.RequireResourceState(
+        *job->source, ResourceStates::kShaderResource);
+    }
+    if (job->sky) {
+      if (!recorder.RetainRegistration(
+            registry, storage.sky_snapshot.registration))
+        return std::unexpected(IblProcessError::kRecordingFailed);
+      Track(
+        recorder, *storage.sky_snapshot.resource, ResourceStates::kGenericRead);
+    }
+    if (job->sky && job->sky->environment.atmosphere.enabled != 0U) {
+      if (!recorder.RetainRegistration(registry, storage.sky_lut.registration)
+        || !recorder.RetainRegistration(
+          registry, storage.distant_lut.registration))
+        return std::unexpected(IblProcessError::kRecordingFailed);
+      Track(recorder, *storage.sky_lut.resource);
+      Track(recorder, *storage.distant_lut.resource);
+      if (job->next_dispatch == 0U) {
+        constexpr auto kSkyCopyUse = 0x49424c534f555243ULL;
+        recorder.RetainOpaqueUse(job->sky->sky_view, kSkyCopyUse);
+        recorder.RetainOpaqueUse(job->sky->distant_sky, kSkyCopyUse);
+        Track(recorder, *job->sky->sky_view);
+        Track(recorder, *job->sky->distant_sky);
+        recorder.RequireResourceState(
+          *job->sky->sky_view, ResourceStates::kCopySource);
+        recorder.RequireResourceState(
+          *job->sky->distant_sky, ResourceStates::kCopySource);
+        recorder.RequireResourceState(
+          *storage.sky_lut.resource, ResourceStates::kCopyDest);
+        recorder.RequireResourceState(
+          *storage.distant_lut.resource, ResourceStates::kCopyDest);
+        recorder.FlushBarriers();
+        recorder.CopyTexture(
+          *job->sky->sky_view, {}, {}, *storage.sky_lut.resource, {}, {});
+        recorder.CopyBuffer(
+          *storage.distant_lut.resource, 0U, *job->sky->distant_sky, 0U, 16U);
+        recorder.RequireResourceStateFinal(
+          *job->sky->sky_view, ResourceStates::kShaderResource);
+        recorder.RequireResourceStateFinal(
+          *job->sky->distant_sky, ResourceStates::kShaderResource);
+      }
+      recorder.RequireResourceState(
+        *storage.sky_lut.resource, ResourceStates::kShaderResource);
+      recorder.RequireResourceState(
+        *storage.distant_lut.resource, ResourceStates::kShaderResource);
+    }
+    const auto textures = std::array { storage.scratch.resource,
+      storage.processed.resource, storage.specular.resource,
+      storage.processed_half.resource, storage.specular_half.resource };
+    const auto buffers = std::array { storage.sh.resource,
+      storage.metadata.resource, storage.partials.resource };
+    for (const auto& texture : textures) {
+      Track(recorder, *texture);
+      recorder.EnableAutoMemoryBarriers(*texture);
+    }
+    for (const auto& buffer : buffers) {
+      Track(recorder, *buffer);
+      recorder.EnableAutoMemoryBarriers(*buffer);
+    }
+    Track(recorder, *storage.constants.resource, ResourceStates::kGenericRead);
+    const auto bindings = vortex::internal::BuildVortexRootBindings();
+    const auto steps = PendingDispatches(*job).first(count);
+    for (std::size_t begin = 0U; begin < steps.size();) {
+      auto end = begin + 1U;
+      while (end < steps.size() && steps[begin].CanShareBatchWith(steps[end]))
+        ++end;
+      const auto shader = std::string_view(steps[begin].shader);
+      const graphics::GpuEventScope phase_scope(recorder,
+        IblWorkBudget::TimingLabel(steps[begin].shader),
+        impl_->budget ? profiling::ProfileGranularity::kTelemetry
+                      : profiling::ProfileGranularity::kDiagnostic,
+        profiling::ProfileCategory::kCompute);
+      const auto uav = [&](const auto& resource) {
+        recorder.RequireResourceState(
+          *resource, ResourceStates::kUnorderedAccess);
+      };
+      const bool prepare
+        = shader == "IblPrepareCS" || shader == "IblCapturePrepareCS";
+      const bool narrow = shader == "IblNarrowCS";
+      const bool precision = shader == "IblPrecisionRangeCS";
+      if (prepare || shader == "IblNormalizeCS")
+        uav(storage.scratch.resource);
+      if (shader == "IblNormalizeCS" || shader == "IblMipCS"
+        || shader == "IblShCS" || narrow || precision)
+        uav(storage.processed.resource);
+      if (shader == "IblPrefilterCS")
+        recorder.RequireResourceState(
+          *storage.processed.resource, ResourceStates::kShaderResource);
+      if (shader == "IblPrefilterCS" || narrow || precision)
+        uav(storage.specular.resource);
+      if (narrow || precision) {
+        uav(storage.processed_half.resource);
+        uav(storage.specular_half.resource);
+      }
+      if (shader == "IblShReduceCS")
+        uav(storage.sh.resource);
+      if (shader == "IblInitializeCS" || shader == "IblRangeCS"
+        || shader == "IblNormalizeCS" || shader == "IblShReduceCS"
+        || shader == "IblPrefilterCS" || precision || shader == "IblCompleteCS")
+        uav(storage.metadata.resource);
+      if (prepare || shader == "IblRangeCS" || shader == "IblShCS"
+        || shader == "IblShReduceCS" || precision
+        || shader == "IblPrecisionReduceCS" || shader == "IblCompleteCS")
+        uav(storage.partials.resource);
+      const auto pipeline
+        = graphics::ComputePipelineDesc::Builder {}
+            .SetComputeShader({ .stage = ShaderType::kCompute,
+              .source_path = "Vortex/Services/Environment/IblProcessing.hlsl",
+              .entry_point = steps[begin].shader })
+            .SetRootBindings(bindings)
+            .SetDebugName(steps[begin].shader)
+            .Build();
+      recorder.FlushBarriers();
+      recorder.SetPipelineState(pipeline);
+      recorder.SetComputeRoot32BitConstant(
+        static_cast<std::uint32_t>(root::RootParam::kRootConstants),
+        storage.constants.srv.get(), 1U);
+      for (const auto& step : steps.subspan(begin, end - begin)) {
+        const graphics::GpuEventScope dispatch_scope(recorder, step.shader,
+          profiling::ProfileGranularity::kDiagnostic,
+          profiling::ProfileCategory::kCompute);
+        recorder.SetComputeRoot32BitConstant(
+          static_cast<std::uint32_t>(root::RootParam::kRootConstants),
+          step.work_index, 0U);
+        recorder.Dispatch(step.groups[0], step.groups[1], step.groups[2]);
+      }
+      begin = end;
+    }
+    if (count == remaining) {
+      for (const auto& texture :
+        { storage.processed.resource, storage.specular.resource,
+          storage.processed_half.resource, storage.specular_half.resource })
+        recorder.RequireResourceStateFinal(
+          *texture, ResourceStates::kShaderResource);
+      for (const auto& buffer :
+        { storage.sh.resource, storage.metadata.resource })
+        recorder.RequireResourceStateFinal(
+          *buffer, ResourceStates::kShaderResource);
+      recorder.FlushBarriers();
+    }
+  }
+  const auto submitted = recording.SubmitWithReceipt();
+  if (submitted.outcome != graphics::SubmissionOutcome::kSubmitted
+    || !submitted.receipt)
+    return std::unexpected(IblProcessError::kSubmissionFailed);
+  job->previous_submission = *submitted.receipt;
+  accepted = true;
+  job->next_dispatch += count;
+  const bool complete = count == remaining;
+  if (complete)
+    job->products->producer = *submitted.receipt;
+  return IblGpuAdvance { .recorded_dispatches = count,
+    .remaining_dispatches = remaining - count,
+    .products = complete ? job->products : nullptr };
+} catch (const std::bad_alloc&) {
+  return std::unexpected(IblProcessError::kAllocationFailed);
+} catch (const std::exception&) {
+  return std::unexpected(IblProcessError::kRecordingFailed);
+}
+
+auto IblGpuProcessor::PrepareSource(
+  const std::shared_ptr<const graphics::Texture>& source,
+  const graphics::RegistrationLease& source_registration,
+  const std::shared_ptr<const IblBrdfProduct>& brdf,
+  const IblProcessSettings& settings, const std::uint32_t revision,
+  const graphics::CompletionReceipt source_producer, const IblSkySource* sky,
+  const ShaderVisibleIndex resident_srv,
+  std::shared_ptr<const void> resident_owner)
+  -> std::expected<std::shared_ptr<IblGpuJob>, IblProcessError>
+{
   const profiling::CpuProfileScope cpu_scope(
     "Vortex.Environment.IBL.Process", profiling::ProfileCategory::kCompute);
   auto& graphics = impl_->graphics;
   auto& registry = graphics.GetResourceRegistry();
   if ((!sky && (!source || (!source_registration && !resident_owner)))
     || revision == 0U || !std::has_single_bit(settings.face_size)
+    || (settings.dispatch_tile_size != 0U
+      && (settings.dispatch_tile_size < 8U
+        || !std::has_single_bit(settings.dispatch_tile_size)))
     || !std::isfinite(settings.source_rotation_radians)
     || !std::isfinite(settings.lower_hemisphere_blend_alpha)
     || settings.lower_hemisphere_blend_alpha < 0.0F
@@ -708,6 +1089,8 @@ auto IblGpuProcessor::ProcessSource(
     }
     const auto size = settings.face_size;
     const auto mips = static_cast<std::uint32_t>(std::bit_width(size));
+    const auto work_records
+      = WorkRecordCount(size, mips, settings.dispatch_tile_size);
     const auto tiles = ((size + 7U) / 8U) * ((size + 7U) / 8U) * 6U;
     auto precision_tiles = 0U;
     for (auto mip = 0U; mip < mips; ++mip) {
@@ -739,7 +1122,7 @@ auto IblGpuProcessor::ProcessSource(
       storage->partials
         = MakeBuffer(graphics, std::max(tiles * 10U + 1U, precision_tiles), 16U,
           "IBL.ReductionScratch");
-      storage->constants = MakeBuffer(graphics, 4U * mips + 2U, sizeof(Work),
+      storage->constants = MakeBuffer(graphics, work_records, sizeof(Work),
         "IBL.Work", graphics::BufferMemory::kUpload);
       version->storage = storage;
       std::lock_guard lock(version->pool->mutex);
@@ -755,6 +1138,14 @@ auto IblGpuProcessor::ProcessSource(
     auto& metadata = version->storage->metadata;
     auto& partials = version->storage->partials;
     auto& constants = version->storage->constants;
+    if (!constants.resource
+      || constants.resource->GetDescriptor().size_bytes
+        < work_records * sizeof(Work)) {
+      constants = {};
+      registry.PollManagedRetirements();
+      constants = MakeBuffer(graphics, work_records, sizeof(Work), "IBL.Work",
+        graphics::BufferMemory::kUpload);
+    }
     auto& snapshot = version->storage->sky_snapshot;
     if (sky) {
       if (!snapshot.resource)
@@ -839,8 +1230,6 @@ auto IblGpuProcessor::ProcessSource(
       base.output_uav = specular_half.uavs[mip].get();
       work.push_back(base);
     }
-    constants.resource->Update(work.data(), work.size() * sizeof(Work), 0U);
-
     auto result = std::make_shared<IblGpuProducts>();
     result->allocation = allocation;
     result->slot = version->handle;
@@ -867,199 +1256,102 @@ auto IblGpuProcessor::ProcessSource(
     }
     result->registrations.push_back(brdf->registration);
 
-    auto recording = graphics.AcquireCommandRecorder(
-      graphics.QueueKeyFor(graphics::QueueRole::kGraphics),
-      "Vortex.Environment.IBL", graphics::SubmissionPolicy::kExplicit);
-    if (!recording)
-      return std::unexpected(IblProcessError::kRecordingFailed);
-    auto& recorder = *recording;
-    if (impl_->diagnostics)
-      impl_->diagnostics->AttachGpuTimelineCollector(recorder);
-    AttachVersion(recorder, version);
-    {
-      const graphics::GpuEventScope total_scope(recorder,
-        "Vortex.Environment.IBL.Process",
-        profiling::ProfileGranularity::kTelemetry,
-        profiling::ProfileCategory::kCompute);
-      recorder.RecordDependency(brdf->producer);
-      if (!recorder.RetainRegistration(registry, brdf->registration))
-        return std::unexpected(IblProcessError::kBrdfUnavailable);
-      if (source_producer.IsValid())
-        recorder.RecordDependency(source_producer);
-      for (const auto& registration :
-        { scratch.registration, processed.registration, specular.registration,
-          processed_half.registration, specular_half.registration,
-          sh.registration, metadata.registration, partials.registration,
-          constants.registration }) {
-        if (!recorder.RetainRegistration(registry, registration))
-          return std::unexpected(IblProcessError::kRecordingFailed);
+    auto job = std::make_shared<IblGpuJob>();
+    job->version = version;
+    job->products = result;
+    job->source = source;
+    job->source_registration = source_registration;
+    job->source_producer = source_producer;
+    job->resident_owner = std::move(resident_owner);
+    if (sky)
+      job->sky = *sky;
+    const auto dispatch_raw
+      = [&](const char* entry, std::uint32_t index, std::uint32_t groups,
+          std::uint32_t faces, std::uint32_t rows = 0U) {
+          const auto y = rows != 0U ? rows : faces == 6U ? groups : 1U;
+          const auto shader = std::string_view(entry);
+          const auto& record = work[index];
+          const auto edge
+            = shader == "IblShCS" ? record.source_size : record.output_size;
+          std::uint64_t units = 1U;
+          if (shader == "IblRangeCS")
+            units = record.partial_count;
+          else if (shader == "IblShReduceCS")
+            units = std::uint64_t(record.partial_count) * 10U;
+          else if (shader == "IblPrecisionRangeCS")
+            units = std::uint64_t(precision_tiles) * 64U;
+          else if (shader == "IblPrecisionReduceCS")
+            units = precision_tiles;
+          else if (shader != "IblInitializeCS" && shader != "IblCompleteCS") {
+            units = std::uint64_t(
+                      std::min(groups * 8U, edge - record.group_origin[0] * 8U))
+              * std::min(y * 8U, edge - record.group_origin[1] * 8U) * faces;
+            if (shader == "IblPrefilterCS") {
+              const auto roughness = std::exp2(
+                (double(record.output_mip) + 2.0 - record.maximum_mip) / 1.2);
+              units *= roughness < 0.01 ? 1U : roughness < 0.1 ? 32U : 64U;
+            }
+          }
+          job->dispatches.push_back({ .shader = entry,
+            .work_index = index,
+            .groups = { groups, y, faces },
+            .output_size = edge,
+            .work_units = units });
+        };
+    const auto dispatch = [&](const char* entry, std::uint32_t index,
+                            std::uint32_t groups, std::uint32_t faces,
+                            std::uint32_t rows = 0U) {
+      const auto tile_groups = settings.dispatch_tile_size / 8U;
+      if (tile_groups == 0U || faces != 6U || rows != 0U
+        || groups <= tile_groups) {
+        dispatch_raw(entry, index, groups, faces, rows);
+        return;
       }
-      if (source) {
-        if (source_registration
-          && !recorder.RetainRegistration(registry, source_registration))
-          return std::unexpected(IblProcessError::kRecordingFailed);
-        if (resident_owner)
-          recorder.RetainOpaqueUse(
-            std::move(resident_owner), 0x49424c4355424553ULL);
-        Track(recorder, *source);
-        recorder.RequireResourceState(*source, ResourceStates::kShaderResource);
+      const auto canonical = work[index];
+      for (auto face = 0U; face < faces; ++face) {
+        for (auto y = 0U; y < groups; y += tile_groups) {
+          for (auto x = 0U; x < groups; x += tile_groups) {
+            auto tile = canonical;
+            tile.group_origin = { x, y, face };
+            const auto tile_index = static_cast<std::uint32_t>(work.size());
+            work.push_back(tile);
+            dispatch_raw(entry, tile_index, std::min(tile_groups, groups - x),
+              1U, std::min(tile_groups, groups - y));
+          }
+        }
       }
-      if (sky) {
-        if (!recorder.RetainRegistration(registry, snapshot.registration))
-          return std::unexpected(IblProcessError::kRecordingFailed);
-        Track(recorder, *snapshot.resource, ResourceStates::kGenericRead);
-      }
-      if (atmosphere) {
-        const auto& sky_lut = version->storage->sky_lut;
-        const auto& distant_lut = version->storage->distant_lut;
-        if (!recorder.RetainRegistration(registry, sky_lut.registration)
-          || !recorder.RetainRegistration(registry, distant_lut.registration))
-          return std::unexpected(IblProcessError::kRecordingFailed);
-        // Copy commands need resource allocations, not source descriptors.
-        // These pins cover legacy view/cache sources and managed captures
-        // alike.
-        constexpr std::uint64_t kSkyCopyUse = 0x49424c534f555243ULL;
-        recorder.RetainOpaqueUse(sky->sky_view, kSkyCopyUse);
-        recorder.RetainOpaqueUse(sky->distant_sky, kSkyCopyUse);
-        Track(recorder, *sky->sky_view);
-        Track(recorder, *sky->distant_sky);
-        Track(recorder, *sky_lut.resource);
-        Track(recorder, *distant_lut.resource);
-        recorder.RequireResourceState(
-          *sky->sky_view, ResourceStates::kCopySource);
-        recorder.RequireResourceState(
-          *sky->distant_sky, ResourceStates::kCopySource);
-        recorder.RequireResourceState(
-          *sky_lut.resource, ResourceStates::kCopyDest);
-        recorder.RequireResourceState(
-          *distant_lut.resource, ResourceStates::kCopyDest);
-        recorder.FlushBarriers();
-        recorder.CopyTexture(*sky->sky_view, {}, {}, *sky_lut.resource, {}, {});
-        recorder.CopyBuffer(
-          *distant_lut.resource, 0U, *sky->distant_sky, 0U, 16U);
-        recorder.RequireResourceState(
-          *sky->sky_view, ResourceStates::kShaderResource);
-        recorder.RequireResourceState(
-          *sky->distant_sky, ResourceStates::kShaderResource);
-        recorder.RequireResourceState(
-          *sky_lut.resource, ResourceStates::kShaderResource);
-        recorder.RequireResourceState(
-          *distant_lut.resource, ResourceStates::kShaderResource);
-      }
-      for (const auto& texture :
-        { scratch.resource, processed.resource, specular.resource,
-          processed_half.resource, specular_half.resource }) {
-        Track(recorder, *texture);
-        recorder.EnableAutoMemoryBarriers(*texture);
-        recorder.RequireResourceState(
-          *texture, ResourceStates::kUnorderedAccess);
-      }
-      for (const auto& buffer :
-        { sh.resource, metadata.resource, partials.resource }) {
-        Track(recorder, *buffer);
-        recorder.EnableAutoMemoryBarriers(*buffer);
-        recorder.RequireResourceState(
-          *buffer, ResourceStates::kUnorderedAccess);
-      }
-      Track(recorder, *constants.resource, ResourceStates::kGenericRead);
-      const auto bindings = vortex::internal::BuildVortexRootBindings();
-      const auto dispatch = [&](const char* entry, std::uint32_t index,
-                              std::uint32_t groups, std::uint32_t faces,
-                              std::uint32_t rows = 0U) {
-        const graphics::GpuEventScope phase_scope(recorder, entry,
-          profiling::ProfileGranularity::kDiagnostic,
-          profiling::ProfileCategory::kCompute);
-        const auto pipeline
-          = graphics::ComputePipelineDesc::Builder {}
-              .SetComputeShader({ .stage = ShaderType::kCompute,
-                .source_path = "Vortex/Services/Environment/IblProcessing.hlsl",
-                .entry_point = entry })
-              .SetRootBindings(bindings)
-              .SetDebugName(entry)
-              .Build();
-        recorder.FlushBarriers();
-        recorder.SetPipelineState(pipeline);
-        recorder.SetComputeRoot32BitConstant(
-          static_cast<std::uint32_t>(root::RootParam::kRootConstants), index,
-          0U);
-        recorder.SetComputeRoot32BitConstant(
-          static_cast<std::uint32_t>(root::RootParam::kRootConstants),
-          constants.srv.get(), 1U);
-        recorder.Dispatch(groups,
-          rows != 0U      ? rows
-            : faces == 6U ? groups
-                          : 1U,
-          faces);
-        // Explicit repeated UAV use inserts the producer/consumer memory
-        // barrier.
-        for (const auto& buffer : { partials.resource, metadata.resource })
-          recorder.RequireResourceState(
-            *buffer, ResourceStates::kUnorderedAccess);
-      };
-      dispatch("IblInitializeCS", 0U, 1U, 1U);
-      dispatch(
-        sky ? "IblCapturePrepareCS" : "IblPrepareCS", 0U, (size + 7U) / 8U, 6U);
-      recorder.RequireResourceState(
-        *scratch.resource, ResourceStates::kUnorderedAccess);
-      dispatch("IblRangeCS", 0U, 1U, 1U);
-      dispatch("IblNormalizeCS", 1U, (size + 7U) / 8U, 6U);
-      for (auto mip = 1U; mip < mips; ++mip) {
-        recorder.RequireResourceState(
-          *processed.resource, ResourceStates::kUnorderedAccess);
-        dispatch("IblMipCS", mip + 1U, ((size >> mip) + 7U) / 8U, 6U);
-      }
-      recorder.RequireResourceState(
-        *processed.resource, ResourceStates::kUnorderedAccess);
-      dispatch("IblShCS", sh_work, (size + 7U) / 8U, 6U);
-      dispatch("IblShReduceCS", sh_work, 1U, 1U);
-      recorder.RequireResourceState(
-        *processed.resource, ResourceStates::kShaderResource);
-      for (auto mip = 0U; mip < mips; ++mip) {
-        dispatch(
-          "IblPrefilterCS", specular_work + mip, ((size >> mip) + 7U) / 8U, 6U);
-        recorder.RequireResourceState(
-          *specular.resource, ResourceStates::kUnorderedAccess);
-      }
-      recorder.RequireResourceState(
-        *processed.resource, ResourceStates::kUnorderedAccess);
-      for (auto mip = 0U; mip < mips; ++mip) {
-        dispatch(
-          "IblNarrowCS", half_work + 2U * mip, ((size >> mip) + 7U) / 8U, 6U);
-        dispatch("IblNarrowCS", half_work + 2U * mip + 1U,
-          ((size >> mip) + 7U) / 8U, 6U);
-      }
-      recorder.RequireResourceState(
-        *processed_half.resource, ResourceStates::kUnorderedAccess);
-      recorder.RequireResourceState(
-        *specular_half.resource, ResourceStates::kUnorderedAccess);
-      // Scan both complete chains into disjoint partials, then reduce once.
-      // Rows keep larger specified cubes within D3D12's dispatch limit.
-      constexpr auto kMaximumDispatchGroups = 65535U;
-      dispatch("IblPrecisionRangeCS", half_work,
-        std::min(precision_tiles, kMaximumDispatchGroups), 1U,
-        (precision_tiles + kMaximumDispatchGroups - 1U)
-          / kMaximumDispatchGroups);
-      dispatch("IblPrecisionReduceCS", 0U, 1U, 1U);
-      dispatch("IblCompleteCS", 0U, 1U, 1U);
-      recorder.RequireResourceStateFinal(
-        *processed_half.resource, ResourceStates::kShaderResource);
-      recorder.RequireResourceStateFinal(
-        *specular_half.resource, ResourceStates::kShaderResource);
-      recorder.RequireResourceStateFinal(
-        *processed.resource, ResourceStates::kShaderResource);
-      recorder.RequireResourceStateFinal(
-        *specular.resource, ResourceStates::kShaderResource);
-      recorder.RequireResourceStateFinal(
-        *sh.resource, ResourceStates::kShaderResource);
-      recorder.RequireResourceStateFinal(
-        *metadata.resource, ResourceStates::kShaderResource);
+    };
+    dispatch("IblInitializeCS", 0U, 1U, 1U);
+    dispatch(
+      sky ? "IblCapturePrepareCS" : "IblPrepareCS", 0U, (size + 7U) / 8U, 6U);
+    dispatch("IblRangeCS", 0U, 1U, 1U);
+    dispatch("IblNormalizeCS", 1U, (size + 7U) / 8U, 6U);
+    for (auto mip = 1U; mip < mips; ++mip) {
+      dispatch("IblMipCS", mip + 1U, ((size >> mip) + 7U) / 8U, 6U);
     }
-    const auto submission = recording.SubmitWithReceipt();
-    if (submission.outcome != graphics::SubmissionOutcome::kSubmitted
-      || !submission.receipt)
-      return std::unexpected(IblProcessError::kSubmissionFailed);
-    result->producer = *submission.receipt;
-    return result;
+    dispatch("IblShCS", sh_work, (size + 7U) / 8U, 6U);
+    dispatch("IblShReduceCS", sh_work, 1U, 1U);
+    for (auto mip = 0U; mip < mips; ++mip) {
+      dispatch(
+        "IblPrefilterCS", specular_work + mip, ((size >> mip) + 7U) / 8U, 6U);
+    }
+    for (auto mip = 0U; mip < mips; ++mip) {
+      dispatch(
+        "IblNarrowCS", half_work + 2U * mip, ((size >> mip) + 7U) / 8U, 6U);
+      dispatch("IblNarrowCS", half_work + 2U * mip + 1U,
+        ((size >> mip) + 7U) / 8U, 6U);
+    }
+    // Scan both complete chains into disjoint partials, then reduce once.
+    // Rows keep larger specified cubes within D3D12's dispatch limit.
+    constexpr auto kMaximumDispatchGroups = 65535U;
+    dispatch("IblPrecisionRangeCS", half_work,
+      std::min(precision_tiles, kMaximumDispatchGroups), 1U,
+      (precision_tiles + kMaximumDispatchGroups - 1U) / kMaximumDispatchGroups);
+    dispatch("IblPrecisionReduceCS", 0U, 1U, 1U);
+    dispatch("IblCompleteCS", 0U, 1U, 1U);
+    assert(work.size() == work_records);
+    constants.resource->Update(work.data(), work.size() * sizeof(Work), 0U);
+    return job;
   } catch (const std::bad_alloc&) {
     return std::unexpected(IblProcessError::kAllocationFailed);
   } catch (const std::exception&) {
@@ -1078,8 +1370,7 @@ IblCaptureLease::IblCaptureLease(
 }
 
 auto IblCaptureLease::Attach(graphics::CommandRecorder& recorder,
-  graphics::ResourceRegistry& registry) const
-  -> std::expected<void, IblCaptureError>
+  graphics::ResourceRegistry& registry) const -> Result<void, IblCaptureError>
 {
   return internal::AttachCapture(state_, recorder, registry);
 }

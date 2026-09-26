@@ -7,6 +7,7 @@
 #include <exception>
 #include <new>
 
+#include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Core/Types/Atmosphere.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
@@ -63,8 +64,35 @@ auto CapturedSkySource::Process(RenderContext& ctx,
   IblGpuProcessor& processor, const std::shared_ptr<const IblBrdfProduct>& brdf,
   const IblProcessSettings& settings, const std::uint32_t revision)
   -> std::expected<std::shared_ptr<const IblGpuProducts>, IblProcessError>
+{
+  const auto source = Prepare(ctx, state, fog);
+  if (!source)
+    return std::unexpected(source.error());
+  return processor.ProcessSky(*source, brdf, settings, revision);
+}
+
+auto CapturedSkySource::Begin(RenderContext& ctx,
+  const StableAtmosphereState& state, const GpuFogParams& fog,
+  IblGpuProcessor& processor, const std::shared_ptr<const IblBrdfProduct>& brdf,
+  const IblProcessSettings& settings, const std::uint32_t revision)
+  -> std::expected<std::shared_ptr<IblGpuJob>, IblProcessError>
+{
+  const auto source = Prepare(ctx, state, fog);
+  if (!source)
+    return std::unexpected(source.error());
+  return processor.BeginSky(*source, brdf, settings, revision);
+}
+
+auto CapturedSkySource::Prepare(RenderContext& ctx,
+  const StableAtmosphereState& state, const GpuFogParams& fog)
+  -> std::expected<IblSkySource, IblProcessError>
 try {
   auto& p = *impl_;
+  bool accepted = false;
+  const ScopeGuard timing([&]() noexcept {
+    if (!accepted)
+      p.renderer.GetDiagnosticsService().InvalidateIblTiming();
+  });
   if (p.sequence != ctx.frame_sequence || p.slot != ctx.frame_slot) {
     p.sequence = ctx.frame_sequence;
     p.slot = ctx.frame_slot;
@@ -87,8 +115,10 @@ try {
     = engine::atmos::MetersToSkyUnit(atmosphere.atmosphere_height_m);
   source.view = BuildAtmosphereViewData(
     state, p.cache.GetState().internal_parameters, origin, true, true);
-  if (!atmosphere.enabled)
-    return processor.ProcessSky(source, brdf, settings, revision);
+  if (!atmosphere.enabled) {
+    accepted = true;
+    return source;
+  }
 
   const auto transmittance = p.transmittance.Record(ctx, state, p.cache, true);
   const auto multiple = p.multiple.Record(ctx, state, p.cache, true);
@@ -140,7 +170,8 @@ try {
   source.producer = *submitted.receipt;
   source.sky_view = sky.texture;
   source.distant_sky = p.cache.GetDistantSkyLightBuffer();
-  return processor.ProcessSky(source, brdf, settings, revision);
+  accepted = true;
+  return source;
 } catch (const std::bad_alloc&) {
   return std::unexpected(IblProcessError::kAllocationFailed);
 } catch (const std::exception&) {

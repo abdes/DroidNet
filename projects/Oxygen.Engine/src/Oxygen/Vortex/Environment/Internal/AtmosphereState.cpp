@@ -421,6 +421,7 @@ auto AtmosphereState::Update(const scene::Scene& scene_ref,
   const auto* const environment_systems = scene_ref.GetEnvironment().get();
 
   auto next = StableAtmosphereState {};
+  next.authoring_revision = scene_ref.GetEnvironmentAuthoringRevision();
   next.view_products.atmosphere = BuildAtmosphereModel(environment_systems);
   next.view_products.height_fog = BuildHeightFogModel(environment_systems);
   next.view_products.sky_light = BuildSkyLightModel(environment_systems);
@@ -448,6 +449,7 @@ auto AtmosphereState::Update(const scene::Scene& scene_ref,
     ? state_.stable_revision
     : state_.stable_revision + 1U;
   if (stable_hash == stable_hash_) {
+    state_.authoring_revision = next.authoring_revision;
     return false;
   }
 

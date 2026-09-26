@@ -72,6 +72,17 @@ command and dirty-domain path. It is coalesced with the scene snapshot and is
 not serialized. Gameplay changes use the runtime scheduler once a usable product
 exists. Neither intent adds an Inspector control.
 
+`Scene::NotifyEnvironmentAuthoringChange()` advances a transient scene revision
+after native/editor edits are applied. Environment carries the revision in its
+stable snapshot, separately from radiance hashes. S4 compares it with the
+revision last observed by that renderer's scene cache, including when the source
+key is unchanged, so an old edit cannot mark a later runtime change as authoring.
+Current processing remains immediate. An unchanged source key still reuses its
+products. Editor transform, hierarchy and visibility commands carry intent
+because they can move, replace, remove or hide an atmosphere light through its
+ancestors; radiance keys determine whether lighting work is needed. Runtime
+scene setters do not mark authoring.
+
 Fog's separate `visible_in_real_time_sky_captures` setting remains meaningful:
 it controls height-fog participation in the captured source. Keep its native,
 source/packed, loader and authoring routes intact.
@@ -459,6 +470,38 @@ Predict batch cost from work size and existing GPU timestamps; admit work within
 the per-frame allowance. Large mips are tiled so one dispatch cannot monopolize
 the allowance. The BRDF lookup is generated once per renderer/device revision.
 
+Estimate each shader's cost from launch count and work units: texels, GGX samples
+or reduction inputs. Completed GPU batch timings update the renderer-local model;
+discarded, mismatched and overflowed samples do not train it. IBL requests the
+existing collector independently of the diagnostic toggle and releases its
+request when idle. The first work frame after idle uses the retained estimates.
+
+Start with a 0.30 ms prediction allowance, reserving 0.10 ms for a new snapshot.
+Balance remaining estimated work over the frames left before the four-frame
+deadline; the fourth frame completes the remainder. This allowance is adaptive,
+not a hard time ceiling. Both the measured GPU-cost gates and completion/source-age
+gates below must pass together.
+
+Batch independent tiles and output mips. Keep barriers between source-mip levels
+and other producer/consumer dependencies. Native timestamps bracket batches;
+Tracy retains individual dispatch scopes. Range reduction shares the existing
+64-lane maximum/validity reduction, preserving extrema and validity exactly.
+Failed IBL/source recordings invalidate their timestamp frame before resolve; its query
+range still retires through the normal frame-tail fence.
+
+The 96-byte dispatch work record carries a group origin. Spatial tiles keep
+whole-cube texel and partial-reduction indices; appended tile records leave the
+canonical mip/half table intact. Work constants are uploaded once before
+submission and remain immutable while that generation has GPU readers.
+
+`IblGpuProcessor` prepares one immutable dispatch plan shared by immediate and
+incremental execution. `BeginSky` submits the LUT copy and invalid metadata before
+returning; specified-cube jobs retain an immutable source/descriptor lease.
+`Advance` commits its cursor only after accepted submission and returns products
+only with the final receipt. Dropping a job retires its already-submitted work
+through existing Graphics/Nexus ownership; recordings pin the internal generation,
+without retaining the job's external registration leases.
+
 Keep one building candidate and one latest desired snapshot per scene. Continuous
 runtime edits replace the queued desired snapshot, not the candidate in progress.
 Finish and publish that candidate, then start the latest snapshot by the next
@@ -495,7 +538,8 @@ formats. Reuse existing retirement primitives, adding admission at the IBL owner
 Generic texture-pool reuse alone does not establish this bound.
 
 `Renderer::AcquireIblCapture(view_id)` admits the complete generation published
-for that view. Copies share admission. `IblCaptureLease::Attach` retains the
+for that view. Public operations use Oxygen `Result` for C++20 SDK clients.
+Copies share admission. `IblCaptureLease::Attach` retains the
 generation through recording discard or GPU completion; dropping the CPU lease
 does not free a pending GPU reader's allowance. The CPU lease holds external
 registration leases; submitted batches hold internal generation/registration

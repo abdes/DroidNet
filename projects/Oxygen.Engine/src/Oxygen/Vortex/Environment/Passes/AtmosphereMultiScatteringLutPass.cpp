@@ -267,7 +267,6 @@ auto AtmosphereMultiScatteringLutPass::Record(RenderContext& ctx,
   TrackTextureFromKnownOrInitial(*recorder, texture);
   recorder->RequireResourceState(
     texture, graphics::ResourceStates::kUnorderedAccess);
-  recorder->FlushBarriers();
 
   recorder->SetPipelineState(BuildPipelineDesc());
   recorder->SetComputeRoot32BitConstant(
@@ -283,13 +282,16 @@ auto AtmosphereMultiScatteringLutPass::Record(RenderContext& ctx,
     = (constants.output_height + (kThreadGroupSize - 1U)) / kThreadGroupSize;
   {
     graphics::GpuEventScope pass_scope(*recorder,
-      "Vortex.Environment.AtmosphereMultiScatteringLut",
+      capture ? "Vortex.Environment.IBL.AtmosphereMultiScatteringLut"
+              : "Vortex.Environment.AtmosphereMultiScatteringLut",
       profiling::ProfileGranularity::kTelemetry,
       profiling::ProfileCategory::kPass);
+    recorder->FlushBarriers();
 
     recorder->Dispatch(dispatch_x, dispatch_y, 1U);
     recorder->RequireResourceStateFinal(
       texture, graphics::ResourceStates::kShaderResource);
+    recorder->FlushBarriers();
   }
   const auto submission = recorder.SubmitWithReceipt();
   if (submission.outcome != graphics::SubmissionOutcome::kSubmitted

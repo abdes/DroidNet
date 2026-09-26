@@ -622,6 +622,7 @@ private:
   bool preview_setting_initialized_ { false };
   bool preview_sun_enabled_ { false };
   bool preview_reconcile_pending_ { false };
+  bool preview_authoring_pending_ { false };
   bool restore_scene_pending_ { false };
   bool transient_profile_ { false };
 

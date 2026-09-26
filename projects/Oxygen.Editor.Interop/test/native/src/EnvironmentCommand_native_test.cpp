@@ -18,6 +18,7 @@
 #include <Commands/PerspectiveCameraPropertyApplier.h>
 #include <Commands/PropertyApplierRegistry.h>
 #include <Commands/SetPropertiesCommand.h>
+#include <Commands/SetVisibilityCommand.h>
 #include <Commands/SetEnvironmentCommand.h>
 #include <Commands/SetBackgroundColorCommand.h>
 #include <EditorModule/EditorCommand.h>
@@ -348,7 +349,11 @@ auto RunEnabledAtmosphereCreatesRuntimeEnvironmentWithAuthoredValues(
     post_process.display_gamma = 2.4F;
 
     SetEnvironmentCommand command(atmosphere, post_process);
+    const auto authoring_before = scene->GetEnvironmentAuthoringRevision();
     command.Execute(context);
+    if (scene->GetEnvironmentAuthoringRevision() != authoring_before + 1U) {
+      throw std::runtime_error("Environment command did not publish authoring intent");
+    }
 
     result = ReadEnvironmentSnapshot(*scene);
   });
@@ -488,6 +493,12 @@ auto RunSetPropertiesDirectionalLightEditInvalidatesResolvedSun(
     AttachLightCommand attach_command(node.GetHandle(), std::move(candidate));
 
     attach_command.Execute(context);
+    const auto visibility_revision = scene->GetEnvironmentAuthoringRevision();
+    SetVisibilityCommand(node.GetHandle(), false).Execute(context);
+    SetVisibilityCommand(node.GetHandle(), true).Execute(context);
+    if (scene->GetEnvironmentAuthoringRevision() != visibility_revision + 2U) {
+      throw std::runtime_error("Visibility edits did not publish authoring intent");
+    }
 
     scene->Update(false);
     scene->SyncObservers();

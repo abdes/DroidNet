@@ -13,7 +13,7 @@
 #include <utility>
 #include <vector>
 
-#include <Oxygen/Testing/GTest.h>
+#include "DemoShell/Services/SkyboxService.h"
 
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Core/EngineTag.h>
@@ -21,8 +21,7 @@
 #include <Oxygen/Scene/Environment/SkyLight.h>
 #include <Oxygen/Scene/Environment/SkySphere.h>
 #include <Oxygen/Scene/Scene.h>
-
-#include "DemoShell/Services/SkyboxService.h"
+#include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::engine::internal {
 struct EngineTagFactory {
@@ -173,10 +172,12 @@ NOLINT_TEST_F(SkyboxServiceTest, NewestCompletionWinsWhenLoadsFinishOutOfOrder)
   Load(2.5F);
   ASSERT_EQ(loader_.requests.size(), 2U);
   const auto newest_key = loader_.requests[1].key;
+  EXPECT_EQ(scene_->GetEnvironmentAuthoringRevision(), 0U);
 
   loader_.Complete(1);
   loader_.Complete(0);
 
+  EXPECT_EQ(scene_->GetEnvironmentAuthoringRevision(), 1U);
   ASSERT_EQ(completed_.size(), 1U);
   EXPECT_TRUE(completed_[0].success);
   EXPECT_EQ(completed_[0].resource_key, newest_key);
@@ -203,6 +204,7 @@ NOLINT_TEST_F(SkyboxServiceTest, CancelPreventsPinEquipAndStatusPublication)
   EXPECT_TRUE(loader_.pins.empty());
   EXPECT_FALSE(scene_->HasEnvironment());
   EXPECT_TRUE(service_->GetCurrentResourceKey().IsPlaceholder());
+  EXPECT_EQ(scene_->GetEnvironmentAuthoringRevision(), 0U);
 }
 
 NOLINT_TEST_F(SkyboxServiceTest, DestructionInvalidatesDeferredCompletion)

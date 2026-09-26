@@ -40,6 +40,7 @@ namespace oxygen::interop::module {
       if (flags) {
         flags->get().SetLocalValue(oxygen::scene::SceneNodeFlags::kVisible,
           visible_);
+        context.Scene->NotifyEnvironmentAuthoringChange();
       }
     }
   }

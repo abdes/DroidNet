@@ -12,6 +12,7 @@
 #include <memory>
 #include <string>
 #include <thread>
+#include <unordered_map>
 
 #include <glm/geometric.hpp>
 #include <glm/vec3.hpp>
@@ -26,6 +27,7 @@
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereState.h>
 #include <Oxygen/Vortex/Environment/Internal/CapturedSkySource.h>
 #include <Oxygen/Vortex/Environment/Internal/IblGpuProcessor.h>
+#include <Oxygen/Vortex/Environment/Internal/IblProcessor.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestTags.h>
 
@@ -33,6 +35,7 @@ namespace oxygen::vortex::testing::exposure {
 namespace {
   class IblUpdateBenchmark : public ExposureGpuTest {
   protected:
+    auto RunUpdates(bool scheduled, bool authoring = false) -> void;
     auto SetUp() -> void override
     {
       ExposureGpuTest::SetUp();
@@ -56,6 +59,22 @@ namespace {
 
   NOLINT_TEST_F(IblUpdateBenchmark, DISABLED_CapturedSunUpdates)
   {
+    RunUpdates(false);
+  }
+
+  NOLINT_TEST_F(IblUpdateBenchmark, DISABLED_ScheduledSunUpdates)
+  {
+    RunUpdates(true);
+  }
+
+  NOLINT_TEST_F(IblUpdateBenchmark, DISABLED_AuthoringSunUpdates)
+  {
+    RunUpdates(true, true);
+  }
+
+  auto IblUpdateBenchmark::RunUpdates(
+    const bool scheduled, const bool authoring) -> void
+  {
 #ifndef NDEBUG
     GTEST_SKIP() << "Native timing requires Release";
 #endif
@@ -70,7 +89,7 @@ namespace {
     std::filesystem::create_directories(directory);
     auto& diagnostics = renderer_->GetDiagnosticsService();
     diagnostics.SetEnabledFeatures(DiagnosticsFeature::kGpuTimeline);
-    diagnostics.SetGpuTimelineMaxScopesPerFrame(128U);
+    diagnostics.SetGpuTimelineMaxScopesPerFrame(scheduled ? 1024U : 128U);
     diagnostics.SetGpuTimelineRetainLatestFrame(false);
     diagnostics.SetGpuTimelineEnabled(true);
     const auto verbosity = loguru::g_global_verbosity;
@@ -81,14 +100,34 @@ namespace {
     auto source = env::CapturedSkySource(*renderer_);
     auto processor = env::IblGpuProcessor(*renderer_);
     auto brdf_owner = env::IblBrdfResources(Backend());
+    auto scheduler
+      = scheduled ? std::make_unique<env::IblProcessor>(*renderer_) : nullptr;
     using Clock = std::chrono::steady_clock;
     const auto first_begin = Clock::now();
-    const auto brdf = brdf_owner.Prepare();
-    ASSERT_TRUE(brdf.has_value());
+    std::shared_ptr<const env::IblBrdfProduct> brdf;
+    if (!scheduled) {
+      const auto prepared = brdf_owner.Prepare();
+      ASSERT_TRUE(prepared);
+      brdf = *prepared;
+    }
     auto state = env::StableAtmosphereState {};
     state.atmosphere_revision = 1U;
     state.view_products.atmosphere.enabled = true;
-    state.view_products.atmosphere_light_count = 1U;
+    state.view_products.atmosphere_light_count = scheduled ? 2U : 1U;
+    state.view_products.sky_light.enabled = true;
+    state.view_products.sky_light.source
+      = environment::kSkyLightSourceCapturedScene;
+    if (scheduled) {
+      auto& secondary = state.view_products.atmosphere_lights[1];
+      secondary.enabled = true;
+      secondary.illuminance_rgb_lux = { 1000, 2000, 4000 };
+      secondary.disk_luminance_scale_rgb = glm::vec3(1.0F);
+      state.view_products.height_fog.enabled = true;
+      state.view_products.height_fog.fog_density = 0.01F;
+      state.view_products.height_fog.fog_height_falloff = 0.001F;
+      state.view_products.height_fog.fog_inscattering_luminance
+        = { 0.2F, 0.3F, 0.4F };
+    }
     auto& light = state.view_products.atmosphere_lights[0];
     light.enabled = true;
     light.illuminance_rgb_lux = glm::vec3(120000.0F);
@@ -105,7 +144,11 @@ namespace {
     std::shared_ptr<const env::IblGpuProducts> published;
     double first_use_wall_ms = 0;
     auto cpu = std::ofstream(directory / "updates.csv");
-    cpu << "frame_seq,cpu_record_ms,storage_creations,allocated_slots\n";
+    cpu << (scheduled
+        ? "frame_seq,cpu_record_ms,published_revision,source_age,completion_"
+          "frames,feedback_samples\n"
+        : "frame_seq,cpu_record_ms,storage_creations,allocated_slots\n");
+    auto source_frames = std::unordered_map<std::uint64_t, unsigned> {};
     const auto paced_begin = Clock::now();
     for (unsigned index = 0; index < warmup + samples + 4U; ++index) {
       const auto sequence = frame::SequenceNumber { index + 1U };
@@ -115,6 +158,12 @@ namespace {
         sequence, engine::internal::EngineTagFactory::Get());
       frame.SetFrameSlot(slot, engine::internal::EngineTagFactory::Get());
       renderer_->OnFrameStart(observer_ptr { &frame });
+      if (scheduler)
+        static_cast<void>(scheduler->OnFrameStart());
+      if (index == 0U && scheduled) {
+        ASSERT_TRUE(diagnostics.RequestGpuTimelineRecording(
+          directory / "first-use-gpu.json", 1U));
+      }
       if (index == warmup) {
         ASSERT_TRUE(diagnostics.RequestGpuTimelineRecording(
           directory / "gpu.json", samples));
@@ -126,11 +175,37 @@ namespace {
       light.direction_to_light_ws
         = glm::normalize(glm::vec3(std::cos(angle), 0.0F, std::sin(angle)));
       state.light_revision = index + 1U;
+      if (authoring)
+        state.authoring_revision = index + 1U;
+      if (scheduled) {
+        state.view_products.atmosphere_lights[1].direction_to_light_ws
+          = -light.direction_to_light_ws;
+        source_frames.emplace(env::HashSkyCaptureInputs(state), index + 1U);
+      }
       const auto begin = Clock::now();
-      auto next
-        = source.Process(ctx_, state, fog, processor, *brdf, {}, index + 1U);
-      ASSERT_TRUE(next.has_value()) << static_cast<int>(next.error());
-      published = std::move(*next);
+      unsigned source_age = 0U;
+      unsigned completion_frames = 0U;
+      if (scheduled) {
+        const auto next
+          = scheduler->RefreshSkyLightProducts({}, ctx_, state, fog, {});
+        ASSERT_TRUE(next.probe_state.valid);
+        published = scheduler->GetPublishedProducts();
+        ASSERT_TRUE(published);
+        const auto source_frame = source_frames.at(
+          next.probe_state.static_sky_light.key.source_revision);
+        source_age = index + 1U - source_frame;
+        completion_frames = next.refreshed ? source_age + 1U : 0U;
+        if (authoring) {
+          EXPECT_TRUE(next.refreshed);
+          EXPECT_EQ(source_age, 0U);
+          EXPECT_EQ(completion_frames, 1U);
+        }
+      } else {
+        auto next
+          = source.Process(ctx_, state, fog, processor, brdf, {}, index + 1U);
+        ASSERT_TRUE(next.has_value()) << static_cast<int>(next.error());
+        published = std::move(*next);
+      }
       const auto elapsed
         = std::chrono::duration<double, std::milli>(Clock::now() - begin)
             .count();
@@ -149,9 +224,15 @@ namespace {
                               .count();
       }
       if (index >= warmup && index < warmup + samples) {
-        const auto stats = processor.GetStats();
-        cpu << index + 1U << ',' << elapsed << ',' << stats.storage_creations
-            << ',' << stats.allocated << '\n';
+        cpu << index + 1U << ',' << elapsed << ',';
+        if (scheduled)
+          cpu << published->revision << ',' << source_age << ','
+              << completion_frames << ',' << scheduler->GetTimingSampleCount()
+              << '\n';
+        else {
+          const auto stats = processor.GetStats();
+          cpu << stats.storage_creations << ',' << stats.allocated << '\n';
+        }
       }
       std::this_thread::sleep_until(paced_begin
         + std::chrono::duration_cast<Clock::duration>(
@@ -171,15 +252,25 @@ namespace {
         if (scope.at("name") == "Vortex.Environment.IBL.Process")
           ++process_scopes;
       }
-      EXPECT_EQ(process_scopes, 1U);
+      if (scheduled) {
+        EXPECT_GE(process_scopes, 1U);
+        EXPECT_LE(process_scopes, 2U);
+      } else
+        EXPECT_EQ(process_scopes, 1U);
     }
     auto manifest = std::ofstream(directory / "run.json");
     manifest << nlohmann::json { { "samples", samples }, { "warmup", warmup },
       { "hz", 60 }, { "first_use_wall_ms", first_use_wall_ms },
+      { "scheduled", scheduled }, { "authoring", authoring },
       { "scope",
-        "Isolated current immediate atmosphere+fog capture/convolution; "
-        "full-scene latency, incremental scheduling and acceptance remain "
-        "open" } }
+        authoring ? "Isolated same-frame authoring updates with two atmosphere "
+                    "lights and height fog"
+          : scheduled
+          ? "Isolated automatic runtime updates with two atmosphere "
+            "lights and height fog; native timings and source latency, "
+            "no full-scene acceptance claim"
+          : "Isolated immediate atmosphere+fog capture/convolution; "
+            "full-scene acceptance remains open" } }
                   .dump(2)
              << '\n';
   }

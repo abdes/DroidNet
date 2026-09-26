@@ -522,7 +522,6 @@ auto AtmosphereSkyViewLutPass::RecordToTarget(RenderContext& ctx,
   TrackTextureFromKnownOrInitial(recorder, *texture);
   recorder.RequireResourceState(
     *texture, graphics::ResourceStates::kUnorderedAccess);
-  recorder.FlushBarriers();
 
   recorder.SetPipelineState(BuildPipelineDesc(capture));
   if (!capture)
@@ -542,12 +541,15 @@ auto AtmosphereSkyViewLutPass::RecordToTarget(RenderContext& ctx,
     = (height + (kThreadGroupSizeY - 1U)) / kThreadGroupSizeY;
   {
     graphics::GpuEventScope pass_scope(recorder,
-      "Vortex.Environment.AtmosphereSkyViewLut",
+      capture ? "Vortex.Environment.IBL.AtmosphereSkyViewLut"
+              : "Vortex.Environment.AtmosphereSkyViewLut",
       profiling::ProfileGranularity::kTelemetry,
       profiling::ProfileCategory::kPass);
+    recorder.FlushBarriers();
     recorder.Dispatch(dispatch_x, dispatch_y, 1U);
-    recorder.RequireResourceState(
+    recorder.RequireResourceStateFinal(
       *texture, graphics::ResourceStates::kShaderResource);
+    recorder.FlushBarriers();
   }
 
   state.executed = true;

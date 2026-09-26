@@ -285,11 +285,11 @@ auto EnvironmentLightingService::RemoveViewState(const ViewId view_id) -> void
 }
 
 auto EnvironmentLightingService::AcquireIblCapture(const ViewId view)
-  -> std::expected<environment::IblCaptureLease, environment::IblCaptureError>
+  -> Result<environment::IblCaptureLease, environment::IblCaptureError>
 {
   const auto found = published_views_.find(view);
   if (found == published_views_.end())
-    return std::unexpected(environment::IblCaptureError::kUnavailable);
+    return Err(environment::IblCaptureError::kUnavailable);
   return ibl_->AcquireCapture(found->second.ibl);
 }
 

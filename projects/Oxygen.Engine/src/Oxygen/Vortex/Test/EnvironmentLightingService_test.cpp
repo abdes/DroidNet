@@ -1854,6 +1854,22 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   const auto base_stable_revision
     = service.InspectAtmosphereState().stable_revision;
 
+  const auto capture_key
+    = oxygen::vortex::environment::internal::HashSkyCaptureInputs(
+      service.InspectAtmosphereState());
+  scene->NotifyEnvironmentAuthoringChange();
+  scene->NotifyEnvironmentAuthoringChange();
+  std::ignore = oxygen::graphics::testing::SubmitCommands(*graphics_,
+    "Authoring intent", [&](oxygen::graphics::CommandRecorder& recorder) {
+      return service.PublishEnvironmentBindings(ctx, recorder);
+    });
+  EXPECT_EQ(service.InspectAtmosphereState().authoring_revision, 2U);
+  EXPECT_EQ(
+    service.InspectAtmosphereState().stable_revision, base_stable_revision);
+  EXPECT_EQ(oxygen::vortex::environment::internal::HashSkyCaptureInputs(
+              service.InspectAtmosphereState()),
+    capture_key);
+
   auto local_fog = scene->CreateNode("UnrelatedLocalFog");
   ASSERT_TRUE(local_fog.IsAlive());
   const auto local_fog_impl = local_fog.GetImpl();

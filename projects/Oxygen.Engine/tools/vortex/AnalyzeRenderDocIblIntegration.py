@@ -72,6 +72,72 @@ def precision_report(controller, report, capture_path, report_path, indirect):
     report.append("ibl_precision_verdict=pass same_generation=true draws=2")
 
 
+def scheduling_report(controller, report, capture_path, report_path, indirect):
+    rd = renderdoc_module()
+    if len(indirect) != 4:
+        raise RuntimeError(f"Expected four scheduled scene draws, got {len(indirect)}")
+    names = resource_id_to_name(controller)
+    initialized = {}
+    completed = []
+    producers = []
+    for action in collect_action_records(controller):
+        if not (action.flags & rd.ActionFlags.Dispatch and "Vortex.Environment.IBL.Process" in action.path):
+            continue
+        controller.SetFrameEvent(action.event_id, True)
+        pipeline = controller.GetPipelineState()
+        shader = pipeline.GetShaderReflection(rd.ShaderStage.Compute)
+        if not shader or shader.entryPoint not in ("IblInitializeCS", "IblCompleteCS"):
+            continue
+        writes = [x.descriptor for x in pipeline.GetReadWriteResources(rd.ShaderStage.Compute, True)]
+        metadata = next(x for x in writes if names.get(str(x.resource)) == "IBL.Metadata")
+        _, _, flags, revision = struct.unpack(
+            "<ffII", bytes(controller.GetBufferData(metadata.resource, metadata.byteOffset, 16)))
+        frame_index = next(i for i, draw in enumerate(indirect) if draw.event_id > action.event_id)
+        if shader.entryPoint == "IblInitializeCS":
+            if flags != 0 or revision <= 1 or revision in initialized:
+                raise RuntimeError("Invalid or duplicate candidate initialization")
+            # The native fixture changes uniform fog to frame_index + 2.
+            initialized[revision] = (frame_index, float(frame_index + 2))
+        else:
+            if flags != 3 or revision not in initialized or frame_index - initialized[revision][0] >= 4:
+                raise RuntimeError("Candidate completion is invalid or missed its deadline")
+            completed.append((action.event_id, revision))
+        producers.append({"shader": shader.entryPoint, "event": action.event_id,
+                          "revision": revision, "frame": frame_index + 1})
+    if not completed or completed[0][1] != 2:
+        raise RuntimeError("The first candidate did not complete within the four-frame capture")
+    rows = []
+    for action in indirect:
+        ready = [(event, revision) for event, revision in completed if event < action.event_id]
+        expected_revision = ready[-1][1] if ready else 1
+        expected_light = initialized[expected_revision][1] if ready else 1.0
+        controller.SetFrameEvent(action.event_id, True)
+        pipeline = controller.GetPipelineState()
+        if pipeline.GetShaderReflection(rd.ShaderStage.Pixel).entryPoint != "DeferredIblPS":
+            raise RuntimeError("Unexpected scheduled IBL consumer")
+        reads = [x.descriptor for x in pipeline.GetReadOnlyResources(rd.ShaderStage.Pixel, True)]
+        metadata = next(x for x in reads if names.get(str(x.resource)) == "IBL.Metadata")
+        _, _, flags, revision = struct.unpack(
+            "<ffII", bytes(controller.GetBufferData(metadata.resource, metadata.byteOffset, 16)))
+        if flags != 3 or revision != expected_revision:
+            raise RuntimeError(f"Wrong/incomplete bound generation at {action.event_id}: {flags}, {revision}")
+        target = pipeline.GetOutputTargets()[0].resource
+        raw = bytes(controller.GetTextureData(target, rd.Subresource()))
+        if len(raw) != 16:
+            raise RuntimeError("Expected one FP32 scene-color pixel")
+        pixel = struct.unpack("<4f", raw)
+        if any(not math.isfinite(value) or abs(value - expected_light) > 0.002 for value in pixel[:3]):
+            raise RuntimeError(f"Scheduled lighting changed before complete publication: {pixel}")
+        rows.append({"event": action.event_id, "bound_revision": revision, "flags": flags, "pixel": pixel})
+    if rows[0]["bound_revision"] != 1:
+        raise RuntimeError("Fixture did not exercise retained lighting during incremental work")
+    result = {"verdict": "pass", "capture": str(capture_path), "draws": rows,
+              "candidate_producers": producers,
+              "scope": "Four diagnostic scene frames: each draw uses the latest complete generation and its frozen fog value. Adaptive completion may precede frame four; no timing or maximum-in-flight claim."}
+    Path(report_path).with_suffix(".json").write_text(json.dumps(result, indent=2) + "\n")
+    report.append("ibl_scheduling_verdict=pass consumer_revisions=" + ",".join(str(row["bound_revision"]) for row in rows))
+
+
 def build_report(controller, report, capture_path, report_path):
     rd = renderdoc_module()
     raster_reference = os.environ.get("OXYGEN_RENDERDOC_PASS_NAME") == "IblRaster"
@@ -79,6 +145,9 @@ def build_report(controller, report, capture_path, report_path):
     if any("Stage12.StaticSkyLight" in a.path for a in actions):
         raise RuntimeError("The retired Stage 12 sky-light draw is still present")
     indirect = [a for a in actions if a.flags & rd.ActionFlags.Drawcall and "Stage13.IndirectLighting" in a.path]
+    if os.environ.get("OXYGEN_RENDERDOC_PASS_NAME") == "IblScheduling":
+        scheduling_report(controller, report, capture_path, report_path, indirect)
+        return
     if os.environ.get("OXYGEN_RENDERDOC_PASS_NAME") == "IblPrecision":
         precision_report(controller, report, capture_path, report_path, indirect)
         return

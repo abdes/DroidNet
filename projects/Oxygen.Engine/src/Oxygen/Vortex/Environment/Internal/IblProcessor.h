@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <memory>
 
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Vortex/Environment/Internal/IblGpuProcessor.h>
 #include <Oxygen/Vortex/Environment/Types/EnvironmentProbeState.h>
 #include <Oxygen/Vortex/Environment/Types/SkyLightEnvironmentModel.h>
@@ -62,9 +63,13 @@ namespace internal {
     [[nodiscard]] OXGN_VRTX_API auto GetPublishedProducts() const
       -> std::shared_ptr<const IblGpuProducts>;
     [[nodiscard]] OXGN_VRTX_API auto GetCachedSceneCount() const -> std::size_t;
+    [[nodiscard]] OXGN_VRTX_API auto GetActivePoolStats() const
+      -> IblGpuProcessor::Stats;
+    [[nodiscard]] OXGN_VRTX_API auto GetTimingSampleCount() const
+      -> std::uint64_t;
     [[nodiscard]] OXGN_VRTX_API auto AcquireCapture(
       const std::shared_ptr<const IblGpuProducts>& products)
-      -> std::expected<IblCaptureLease, IblCaptureError>;
+      -> Result<IblCaptureLease, IblCaptureError>;
 
   private:
     auto RetireExpiredScenes() -> void;

@@ -10,7 +10,6 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
-#include <expected>
 #include <functional>
 #include <memory>
 #include <span>
@@ -33,6 +32,7 @@
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/FrameCaptureController.h>
 #include <Oxygen/Graphics/Common/Test/CommandRecordingTestSupport.h>
+#include <Oxygen/Graphics/Common/Test/HeapAllocationFailure.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Scene/Environment/Fog.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
@@ -41,9 +41,12 @@
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
+#include <Oxygen/Vortex/Environment/Internal/AtmosphereState.h>
 #include <Oxygen/Vortex/Environment/Internal/IblBrdfLookup.h>
 #include <Oxygen/Vortex/Environment/Internal/IblGpuProcessor.h>
+#include <Oxygen/Vortex/Environment/Internal/IblProcessor.h>
 #include <Oxygen/Vortex/Environment/Types/IblProductMetadata.h>
+#include <Oxygen/Vortex/Resources/TextureBinder.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureLightingFixture.h>
 #include <Oxygen/Vortex/Test/Fakes/AssetLoader.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
@@ -103,6 +106,23 @@ namespace {
     {
       return *scene->GetEnvironment()
                 ->TryGetSystem<scene::environment::SkyLight>();
+    }
+
+    auto SetCapturedUniformFog() -> scene::environment::Fog&
+    {
+      Sky().SetSource(scene::environment::SkyLightSource::kCapturedScene);
+      Sky().SetSpecularIntensity(0.0F);
+      auto& fog = scene->GetEnvironment()->AddSystem<scene::environment::Fog>();
+      fog.SetEnabled(true);
+      fog.SetEnableHeightFog(true);
+      fog.SetFogDensity(0.01F);
+      fog.SetHeightFalloffPerMeter(0.0F);
+      fog.SetMaxOpacity(1.0F);
+      fog.SetFogInscatteringLuminance({ 1, 1, 1 });
+      fog.SetRenderInMainPass(false);
+      fog.SetVisibleInRealTimeSkyCaptures(true);
+      Material(data::MaterialDomain::kOpaque, 1.0F, 0.0F, glm::vec3(1.0F));
+      return fog;
     }
 
     auto WriteComparisonMetadata(
@@ -555,6 +575,7 @@ namespace {
     Material(data::MaterialDomain::kOpaque, 0.0F, 1.0F, glm::vec3(1.0F));
     ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F));
     fog.SetFogInscatteringLuminance({ 64, 128, 32 });
+    scene->NotifyEnvironmentAuthoringChange();
     ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F, 1U));
     const auto edited = ReadFloatTexture(*probe->color).at(0);
     EXPECT_NEAR(edited[0], 64.0F, 0.002F);
@@ -721,6 +742,290 @@ namespace {
       "captured_half_surface_max_ev", std::to_string(maximum_ev_error));
   }
 
+  NOLINT_TEST_F(
+    IblSurfaceGpuTest, RepeatedAuthoringBatchesPublishTheLatestFogSnapshot)
+  {
+    Sky().SetSource(scene::environment::SkyLightSource::kCapturedScene);
+    Sky().SetSpecularIntensity(0.0F);
+    auto& fog = scene->GetEnvironment()->AddSystem<scene::environment::Fog>();
+    fog.SetEnabled(true);
+    fog.SetEnableHeightFog(true);
+    fog.SetFogDensity(0.01F);
+    fog.SetHeightFalloffPerMeter(0.0F);
+    fog.SetMaxOpacity(1.0F);
+    fog.SetFogInscatteringLuminance({ 1, 2, 3 });
+    fog.SetRenderInMainPass(false);
+    fog.SetVisibleInRealTimeSkyCaptures(true);
+    Material(data::MaterialDomain::kOpaque, 1.0F, 0.0F, glm::vec3(1.0F));
+    std::uint32_t revision = 0U;
+    probe->inspect = [&](const auto& context, const auto&, unsigned) {
+      auto* owner = vortex::testing::RendererPublicationProbe::GetSceneRenderer(
+        *renderer_);
+      const auto products
+        = vortex::testing::RendererPublicationProbe::PublishedIblProducts(
+          *owner, context.current_view.view_id);
+      ASSERT_TRUE(products);
+      revision = products->revision;
+    };
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F));
+    for (unsigned edit = 1U; edit <= 12U; ++edit) {
+      SCOPED_TRACE(edit);
+      const auto previous = revision;
+      const glm::vec3 wanted { float(edit), 0.5F * edit, 0.25F * edit };
+      fog.SetFogInscatteringLuminance(wanted * 3.0F);
+      scene->NotifyEnvironmentAuthoringChange();
+      fog.SetFogInscatteringLuminance(wanted);
+      scene->NotifyEnvironmentAuthoringChange();
+      ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F, 1U));
+      const auto actual = ReadFloatTexture(*probe->color).front();
+      for (unsigned c = 0U; c < 3U; ++c)
+        EXPECT_NEAR(actual[c], wanted[c], wanted[c] * 0.0001F);
+      EXPECT_EQ(revision, previous + 1U);
+      EXPECT_EQ(scene->GetEnvironmentAuthoringRevision(), 2U * edit);
+    }
+    RecordProperty("immediate_authoring_batches", 12U);
+  }
+
+  NOLINT_TEST_F(IblSurfaceGpuTest, RuntimeFogUpdatesPublishWithoutStarvation)
+  {
+    auto& fog = SetCapturedUniformFog();
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F));
+    const auto capture = BeginOptionalCapture();
+    float last_published = 1.0F;
+    unsigned publications = 0U;
+    unsigned longest_wait = 0U;
+    unsigned wait = 0U;
+    for (unsigned edit = 1U; edit <= 16U; ++edit) {
+      SCOPED_TRACE(edit);
+      const auto wanted = float(edit + 1U);
+      fog.SetFogInscatteringLuminance(glm::vec3(wanted));
+      ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F, 1U));
+      const auto actual = ReadFloatTexture(*probe->color).front()[0];
+      ++wait;
+      if (std::abs(actual - last_published) > 0.01F) {
+        EXPECT_GT(actual, last_published);
+        last_published = actual;
+        ++publications;
+        longest_wait = std::max(longest_wait, wait);
+        wait = 0U;
+      }
+      EXPECT_LE(wait, 3U);
+      EXPECT_LE(wanted - actual, 8.001F);
+      EXPECT_LE(actual, wanted + 0.001F);
+      if (edit == 4U && capture)
+        EXPECT_TRUE(capture->EndCapture());
+    }
+    EXPECT_GE(publications, 4U);
+    EXPECT_LE(longest_wait, 4U);
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F, 4U));
+    EXPECT_NEAR(ReadFloatTexture(*probe->color).front()[0], 17.0F, 0.002F);
+    RecordProperty("runtime_frames", 20U);
+    RecordProperty("runtime_publications", publications);
+    RecordProperty("maximum_publication_gap", longest_wait);
+  }
+
+  NOLINT_TEST_F(IblSurfaceGpuTest, AuthoringPreemptsRuntimeCandidate)
+  {
+    auto& fog = SetCapturedUniformFog();
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F));
+    fog.SetFogInscatteringLuminance(glm::vec3(2.0F));
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F, 2U));
+    EXPECT_NEAR(ReadFloatTexture(*probe->color).front()[0], 1.0F, 0.001F);
+    fog.SetFogInscatteringLuminance(glm::vec3(8.0F));
+    scene->NotifyEnvironmentAuthoringChange();
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F, 1U));
+    EXPECT_NEAR(ReadFloatTexture(*probe->color).front()[0], 8.0F, 0.001F);
+    for (unsigned frame_index = 0U; frame_index < 6U; ++frame_index) {
+      ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F, 1U));
+      EXPECT_NEAR(ReadFloatTexture(*probe->color).front()[0], 8.0F, 0.001F);
+    }
+  }
+
+  NOLINT_TEST_F(IblSurfaceGpuTest, UnchangedKeyConsumesAuthoringIntent)
+  {
+    auto& fog = SetCapturedUniformFog();
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F));
+    scene->NotifyEnvironmentAuthoringChange();
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F, 1U));
+    fog.SetFogInscatteringLuminance(glm::vec3(4.0F));
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F, 1U));
+    EXPECT_NEAR(ReadFloatTexture(*probe->color).front()[0], 1.0F, 0.001F);
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F, 3U));
+    EXPECT_NEAR(ReadFloatTexture(*probe->color).front()[0], 4.0F, 0.001F);
+  }
+
+  NOLINT_TEST_F(
+    IblSurfaceGpuTest, WorkBudgetLearnsWithDiagnosticsDisabledThenIdles)
+  {
+    auto& fog = SetCapturedUniformFog();
+    auto& diagnostics = renderer_->GetDiagnosticsService();
+    diagnostics.SetEnabledFeatures(DiagnosticsFeature::kNone);
+    diagnostics.SetGpuTimelineEnabled(false);
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F));
+    auto* scene_renderer
+      = vortex::testing::RendererPublicationProbe::GetSceneRenderer(*renderer_);
+    auto& owner
+      = vortex::testing::RendererPublicationProbe::IblOwner(*scene_renderer);
+    const auto before = owner.GetTimingSampleCount();
+    for (unsigned edit = 0U; edit < 16U; ++edit) {
+      fog.SetFogInscatteringLuminance(glm::vec3(float(edit + 2U)));
+      ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F, 1U));
+      EXPECT_FALSE(diagnostics.IsGpuTimelineEnabled());
+    }
+    ASSERT_GT(owner.GetTimingSampleCount(), before);
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F, 12U));
+    const auto settled = owner.GetTimingSampleCount();
+    auto& profiler
+      = vortex::testing::RendererPublicationProbe::GetGpuTimelineProfiler(
+        *renderer_);
+    const auto final_timing = profiler.GetLastPublishedFrame();
+    ASSERT_TRUE(final_timing);
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F, 6U));
+    EXPECT_EQ(owner.GetTimingSampleCount(), settled);
+    ASSERT_TRUE(profiler.GetLastPublishedFrame());
+    EXPECT_EQ(profiler.GetLastPublishedFrame()->frame_sequence,
+      final_timing->frame_sequence);
+    EXPECT_FALSE(diagnostics.IsGpuTimelineEnabled());
+    RecordProperty("ibl_timing_samples", settled);
+  }
+
+#if defined(_MSC_VER) && defined(_DEBUG)
+  NOLINT_TEST_F(IblSurfaceGpuTest, SourceResolutionAllocationHonorsUpdatePolicy)
+  {
+    const auto cube = Texture(
+      16U, true, [](auto, auto, auto) { return Pixel { 2, 2, 2, 1 }; });
+    Sky().SetCubemapResource(cube);
+    Material(data::MaterialDomain::kOpaque, 1.0F, 0.0F, glm::vec3(1.0F));
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F));
+    auto* scene_renderer
+      = vortex::testing::RendererPublicationProbe::GetSceneRenderer(*renderer_);
+    const auto binder
+      = vortex::testing::RendererPublicationProbe::SkyTextureBinder(
+        *scene_renderer);
+    ASSERT_TRUE(binder);
+    {
+      auto resident = binder->AcquireReadyTexture(cube);
+      ASSERT_TRUE(resident);
+      const auto weak = std::weak_ptr(resident);
+      resident.reset();
+      ASSERT_TRUE(weak.expired());
+    }
+    namespace env = environment::internal;
+    using graphics::testing::HeapAllocationFailure;
+    for (const auto [replacement, authoring] :
+      { std::pair { false, false }, std::pair { false, true },
+        std::pair { true, false }, std::pair { true, true } }) {
+      SCOPED_TRACE(::testing::Message()
+        << "replacement=" << replacement << " authoring=" << authoring);
+      auto processor = env::IblProcessor(*renderer_);
+      auto state = env::StableAtmosphereState {};
+      state.view_products.sky_light.enabled = true;
+      state.view_products.sky_light.lower_hemisphere_is_solid_color = false;
+      if (!replacement) {
+        state.view_products.sky_light.source
+          = environment::kSkyLightSourceSpecifiedCubemap;
+        state.view_products.sky_light.cubemap_resource = cube;
+      }
+      auto context = RenderContext {};
+      context.scene = observer_ptr { scene.get() };
+      context.frame_sequence = frame::SequenceNumber { 1U };
+      context.frame_slot = frame::Slot { 0U };
+      ASSERT_TRUE(
+        processor.RefreshSkyLightProducts({}, context, state, {}, binder)
+          .refreshed);
+      WaitForQueueIdle();
+      const auto original = processor.GetPublishedProducts();
+      state.view_products.sky_light.source
+        = environment::kSkyLightSourceSpecifiedCubemap;
+      state.view_products.sky_light.cubemap_resource = cube;
+      state.view_products.sky_light.source_cubemap_angle_radians = 0.25F;
+      state.authoring_revision = authoring ? 1U : 0U;
+      context.frame_sequence = frame::SequenceNumber { 2U };
+      context.frame_slot = frame::Slot { 1U };
+      env::IblProcessor::RefreshState rejected;
+      const auto failures = HeapAllocationFailure::RejectedCount();
+      {
+        // GetOrAllocate hits the resident cache; AcquireReadyTexture must
+        // allocate its lease before update policy is fully classified.
+        HeapAllocationFailure denied;
+        rejected
+          = processor.RefreshSkyLightProducts({}, context, state, {}, binder);
+      }
+      EXPECT_GT(HeapAllocationFailure::RejectedCount(), failures);
+      const bool retain_prior = !replacement && !authoring;
+      EXPECT_EQ(rejected.probe_state.valid, retain_prior);
+      EXPECT_EQ(rejected.probe_state.static_sky_light.unavailable_reason,
+        environment::StaticSkyLightUnavailableReason::kProcessingFailed);
+      EXPECT_EQ(
+        processor.GetPublishedProducts(), retain_prior ? original : nullptr);
+      bool refreshed = false;
+      for (unsigned frame_number = 3U; frame_number <= (retain_prior ? 6U : 3U);
+        ++frame_number) {
+        context.frame_sequence = frame::SequenceNumber { frame_number };
+        context.frame_slot = frame::Slot { (frame_number - 1U) % 3U };
+        const auto retry
+          = processor.RefreshSkyLightProducts({}, context, state, {}, binder);
+        EXPECT_TRUE(retry.probe_state.valid);
+        refreshed = refreshed || retry.refreshed;
+      }
+      EXPECT_TRUE(refreshed);
+      WaitForQueueIdle();
+    }
+  }
+#endif
+
+  NOLINT_TEST_F(
+    IblSurfaceGpuTest, ViewRecreationPreservesSharedIblAndRetainedCapture)
+  {
+    Sky().SetCubemapResource(Texture(
+      16U, true, [](auto, auto, auto) { return Pixel { 2, 1, 0.5F, 1 }; }));
+    Sky().SetSpecularIntensity(0.0F);
+    Material(data::MaterialDomain::kOpaque, 1.0F, 0.0F, glm::vec3(1.0F));
+    auto acquired
+      = Result<environment::IblCaptureLease, environment::IblCaptureError>(
+        Err(environment::IblCaptureError::kUnavailable));
+    auto published_id = kInvalidViewId;
+    probe->inspect = [&](const auto& context, const auto&, unsigned) {
+      published_id = context.current_view.view_id;
+      acquired = renderer_->AcquireIblCapture(context.current_view.view_id);
+    };
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F));
+    probe->draws = 0U;
+    ASSERT_NO_FATAL_FAILURE(RenderPublishedSurface(false));
+    ASSERT_TRUE(acquired);
+    const auto retained = *acquired;
+    const auto id = published_id;
+    ASSERT_TRUE(renderer_->AcquireIblCapture(id));
+    renderer_->RemovePublishedRuntimeView(frame, ViewId { surface_view_id });
+    const auto removed = renderer_->AcquireIblCapture(id);
+    ASSERT_FALSE(removed);
+    EXPECT_EQ(removed.error(), environment::IblCaptureError::kUnavailable);
+    acquired = Err(environment::IblCaptureError::kUnavailable);
+    probe->draws = 0U;
+    ASSERT_NO_FATAL_FAILURE(RenderPublishedSurface(false));
+    ASSERT_TRUE(acquired);
+    ASSERT_TRUE(renderer_->AcquireIblCapture(published_id));
+    EXPECT_EQ(acquired->Revision(), retained.Revision());
+    EXPECT_EQ(acquired->ProcessedCube(), retained.ProcessedCube());
+    EXPECT_NEAR(ReadFloatTexture(*probe->color).front()[0], 2.0F, 0.0002F);
+    auto readback = GetReadbackManager()->CreateBufferReadback(
+      "IBL retained through view recreation");
+    SubmitCommands(
+      "IBL retained view metadata", [&](graphics::CommandRecorder& recorder) {
+        ASSERT_TRUE(retained.Attach(recorder, Backend().GetResourceRegistry()));
+        recorder.FlushBarriers();
+        ASSERT_TRUE(readback->EnqueueCopy(recorder, *retained.Metadata(),
+          { 0U, sizeof(environment::IblProductMetadata) }));
+      });
+    const auto mapped = readback->MapNow();
+    ASSERT_TRUE(mapped);
+    environment::IblProductMetadata metadata;
+    std::memcpy(&metadata, mapped->Bytes().data(), sizeof(metadata));
+    EXPECT_EQ(metadata.product_revision, retained.Revision());
+    EXPECT_EQ(metadata.processing_flags, 3U);
+    RecordProperty("recreated_view_retained_revision", retained.Revision());
+  }
+
   NOLINT_TEST_F(IblSurfaceGpuTest,
     RendererCaptureAdmissionPreservesLiveUpdatesAndRetainedReads)
   {
@@ -730,9 +1035,9 @@ namespace {
     EXPECT_EQ(unavailable.error(), environment::IblCaptureError::kUnavailable);
     Sky().SetSpecularIntensity(0.0F);
     Material(data::MaterialDomain::kOpaque, 1.0F, 0.0F, glm::vec3(1.0F));
-    auto acquired = std::expected<environment::IblCaptureLease,
-      environment::IblCaptureError>(
-      std::unexpected(environment::IblCaptureError::kUnavailable));
+    auto acquired
+      = Result<environment::IblCaptureLease, environment::IblCaptureError>(
+        Err(environment::IblCaptureError::kUnavailable));
     probe->inspect = [&](const auto& context, const auto&, unsigned) {
       acquired = renderer_->AcquireIblCapture(context.current_view.view_id);
     };

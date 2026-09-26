@@ -38,6 +38,8 @@ struct IblWork
     uint capture_srv;
     uint processed_half_srv;
     uint specular_half_srv;
+    uint3 group_origin;
+    uint padding;
 };
 
 struct IblSkySnapshot
@@ -95,9 +97,23 @@ static void ReduceSum(uint lane, uint terms)
 }
 
 // Source adapter and range reduction share the same post-hemisphere FP32 values.
+static void ReduceMaximumAndValidity(uint lane)
+{
+    GroupMemoryBarrierWithGroupSync();
+    for (uint offset = 32u; offset > 0u; offset >>= 1u) {
+        if (lane < offset) {
+            Shared[0][lane].x = max(Shared[0][lane].x, Shared[0][lane + offset].x);
+            Shared[0][lane].y = min(Shared[0][lane].y, Shared[0][lane + offset].y);
+        }
+        GroupMemoryBarrierWithGroupSync();
+    }
+}
+
 static void PrepareSource(uint3 id, uint3 group, uint lane, bool captured_sky)
 {
     IblWork w = Work();
+    id += w.group_origin * uint3(8u, 8u, 1u);
+    group += w.group_origin;
     RWTexture2DArray<float4> output = ResourceDescriptorHeap[w.output_uav];
     RWStructuredBuffer<float4> partials = ResourceDescriptorHeap[w.partials_uav];
     SamplerState linear_clamp = SamplerDescriptorHeap[VORTEX_SAMPLER_LINEAR_CLAMP];
@@ -125,14 +141,7 @@ static void PrepareSource(uint3 id, uint3 group, uint lane, bool captured_sky)
         maximum = max(radiance.r, max(radiance.g, radiance.b));
     }
     Shared[0][lane] = float4(maximum, valid, 0.0, 0.0);
-    GroupMemoryBarrierWithGroupSync();
-    for (uint offset = 32u; offset > 0u; offset >>= 1u) {
-        if (lane < offset) {
-            Shared[0][lane].x = max(Shared[0][lane].x, Shared[0][lane + offset].x);
-            Shared[0][lane].y = min(Shared[0][lane].y, Shared[0][lane + offset].y);
-        }
-        GroupMemoryBarrierWithGroupSync();
-    }
+    ReduceMaximumAndValidity(lane);
     if (lane == 0u) {
         uint groups = (w.output_size + 7u) / 8u;
         partials[(group.z * groups + group.y) * groups + group.x] = Shared[0][0];
@@ -153,18 +162,25 @@ void IblCapturePrepareCS(uint3 id : SV_DispatchThreadID, uint3 group : SV_GroupI
     PrepareSource(id, group, lane, true);
 }
 
-[numthreads(1, 1, 1)]
-void IblRangeCS()
+[numthreads(64, 1, 1)]
+void IblRangeCS(uint lane : SV_GroupIndex)
 {
     IblWork w = Work();
     RWStructuredBuffer<float4> partials = ResourceDescriptorHeap[w.partials_uav];
     RWStructuredBuffer<IblProductMetadata> metadata = ResourceDescriptorHeap[w.metadata_uav];
     float maximum = 0.0;
     float valid = 1.0;
-    for (uint i = 0u; i < w.partial_count; ++i) {
+    for (uint i = lane; i < w.partial_count; i += 64u) {
         maximum = max(maximum, partials[i].x);
         valid = min(valid, partials[i].y);
     }
+    // Max/min preserve the exact extrema and validity bits; no summation order
+    // or radiance quantization changes when distributing the reads over lanes.
+    Shared[0][lane] = float4(maximum, valid, 0.0, 0.0);
+    ReduceMaximumAndValidity(lane);
+    if (lane != 0u) return;
+    maximum = Shared[0][0].x;
+    valid = Shared[0][0].y;
     IblProductMetadata value = metadata[0];
     value.source_radiance_scale = max(1.0, maximum / 65504.0);
     value.average_brightness = 0.0;
@@ -177,6 +193,7 @@ void IblRangeCS()
 void IblNormalizeCS(uint3 id : SV_DispatchThreadID)
 {
     IblWork w = Work();
+    id += w.group_origin * uint3(8u, 8u, 1u);
     if (any(id.xy >= w.output_size)) return;
     RWTexture2DArray<float4> source = ResourceDescriptorHeap[w.input_uav];
     RWTexture2DArray<float4> output = ResourceDescriptorHeap[w.output_uav];
@@ -188,6 +205,7 @@ void IblNormalizeCS(uint3 id : SV_DispatchThreadID)
 void IblMipCS(uint3 id : SV_DispatchThreadID)
 {
     IblWork w = Work();
+    id += w.group_origin * uint3(8u, 8u, 1u);
     if (any(id.xy >= w.output_size)) return;
     RWTexture2DArray<float4> source = ResourceDescriptorHeap[w.input_uav];
     RWTexture2DArray<float4> output = ResourceDescriptorHeap[w.output_uav];
@@ -201,6 +219,8 @@ void IblShCS(uint3 id : SV_DispatchThreadID, uint3 group : SV_GroupID,
     uint lane : SV_GroupIndex)
 {
     IblWork w = Work();
+    id += w.group_origin * uint3(8u, 8u, 1u);
+    group += w.group_origin;
     RWTexture2DArray<float4> source = ResourceDescriptorHeap[w.input_uav];
     RWStructuredBuffer<float4> partials = ResourceDescriptorHeap[w.partials_uav];
     for (uint term = 0u; term < 10u; ++term) Shared[term][lane] = 0.0.xxxx;
@@ -267,6 +287,7 @@ void IblShReduceCS(uint lane : SV_GroupIndex)
 void IblPrefilterCS(uint3 id : SV_DispatchThreadID)
 {
     IblWork w = Work();
+    id += w.group_origin * uint3(8u, 8u, 1u);
     if (any(id.xy >= w.output_size)) return;
     TextureCube<float4> source = ResourceDescriptorHeap[w.source_srv];
     RWTexture2DArray<float4> output = ResourceDescriptorHeap[w.output_uav];
@@ -288,6 +309,7 @@ void IblPrefilterCS(uint3 id : SV_DispatchThreadID)
 void IblNarrowCS(uint3 id : SV_DispatchThreadID)
 {
     IblWork w = Work();
+    id += w.group_origin * uint3(8u, 8u, 1u);
     if (any(id.xy >= w.output_size)) return;
     RWTexture2DArray<float4> source = ResourceDescriptorHeap[w.input_uav];
     RWTexture2DArray<float4> output = ResourceDescriptorHeap[w.output_uav];

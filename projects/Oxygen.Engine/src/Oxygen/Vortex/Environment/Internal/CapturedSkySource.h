@@ -30,8 +30,16 @@ namespace environment::internal {
       const std::shared_ptr<const IblBrdfProduct>& brdf,
       const IblProcessSettings& settings, std::uint32_t revision)
       -> std::expected<std::shared_ptr<const IblGpuProducts>, IblProcessError>;
+    [[nodiscard]] OXGN_VRTX_API auto Begin(RenderContext& ctx,
+      const StableAtmosphereState& state, const GpuFogParams& fog,
+      IblGpuProcessor& processor,
+      const std::shared_ptr<const IblBrdfProduct>& brdf,
+      const IblProcessSettings& settings, std::uint32_t revision)
+      -> std::expected<std::shared_ptr<IblGpuJob>, IblProcessError>;
 
   private:
+    auto Prepare(RenderContext& ctx, const StableAtmosphereState& state,
+      const GpuFogParams& fog) -> std::expected<IblSkySource, IblProcessError>;
     struct Impl;
     std::unique_ptr<Impl> impl_;
   };

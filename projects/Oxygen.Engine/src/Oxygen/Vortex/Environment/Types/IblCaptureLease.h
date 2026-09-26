@@ -7,9 +7,9 @@
 #pragma once
 
 #include <cstdint>
-#include <expected>
 #include <memory>
 
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Vortex/api_export.h>
 
 namespace oxygen::graphics {
@@ -46,7 +46,7 @@ public:
   }
   [[nodiscard]] OXGN_VRTX_API auto Attach(graphics::CommandRecorder& recorder,
     graphics::ResourceRegistry& registry) const
-    -> std::expected<void, IblCaptureError>;
+    -> Result<void, IblCaptureError>;
   [[nodiscard]] OXGN_VRTX_API auto Revision() const noexcept -> std::uint32_t;
   [[nodiscard]] OXGN_VRTX_API auto ProcessedCube() const
     -> std::shared_ptr<const graphics::Texture>;

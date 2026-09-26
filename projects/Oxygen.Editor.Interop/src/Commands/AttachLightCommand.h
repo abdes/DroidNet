@@ -38,6 +38,7 @@ namespace oxygen::interop::module {
       }
       context.Scene->Update(false);
       context.Scene->SyncObservers();
+      context.Scene->NotifyEnvironmentAuthoringChange();
     }
 
   private:
@@ -58,9 +59,10 @@ namespace oxygen::interop::module {
       if (!context.Scene) return;
       auto node = context.Scene->GetNode(node_);
       if (!node || !node->IsAlive()) return;
-      static_cast<void>(node->DetachLight());
+      const bool detached = node->DetachLight();
       context.Scene->Update(false);
       context.Scene->SyncObservers();
+      if (detached) context.Scene->NotifyEnvironmentAuthoringChange();
     }
 
   private:

@@ -88,6 +88,9 @@ public:
   OXYGEN_MAKE_NON_MOVABLE(GpuTimelineProfiler)
 
   OXGN_VRTX_API auto SetEnabled(bool enabled) -> void;
+  //! Failed recording/submission: skip query resolve and retire the range at
+  //! the normal frame-tail fence. This path performs no allocation.
+  OXGN_VRTX_API auto InvalidateCurrentFrame() noexcept -> void;
   OXGN_VRTX_API auto SetMaxScopesPerFrame(uint32_t max_scopes) -> void;
   OXGN_VRTX_API auto SetRetainLatestFrame(bool retain_latest_frame) -> void;
 

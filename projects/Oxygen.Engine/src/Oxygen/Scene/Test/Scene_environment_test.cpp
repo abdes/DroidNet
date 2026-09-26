@@ -6,11 +6,10 @@
 
 #include <memory>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include "./SceneTest.h"
 
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::scene::testing {
 
@@ -25,6 +24,19 @@ NOLINT_TEST_F(SceneEnvironmentTest, InitiallyAbsent)
   EXPECT_FALSE(scene_->HasEnvironment());
   EXPECT_EQ(scene_->GetEnvironment().get(), nullptr);
   EXPECT_EQ(std::as_const(*scene_).GetEnvironment().get(), nullptr);
+}
+
+NOLINT_TEST_F(SceneEnvironmentTest, AuthoringIntentIsExplicitAndTransient)
+{
+  EXPECT_EQ(scene_->GetEnvironmentAuthoringRevision(), 0U);
+  scene_->SetEnvironment(std::make_unique<SceneEnvironment>());
+  scene_->Update();
+  EXPECT_EQ(scene_->GetEnvironmentAuthoringRevision(), 0U);
+  scene_->NotifyEnvironmentAuthoringChange();
+  scene_->NotifyEnvironmentAuthoringChange();
+  EXPECT_EQ(scene_->GetEnvironmentAuthoringRevision(), 2U);
+  scene_->ClearEnvironment();
+  EXPECT_EQ(scene_->GetEnvironmentAuthoringRevision(), 2U);
 }
 
 NOLINT_TEST_F(SceneEnvironmentTest, SetTakesOwnership)

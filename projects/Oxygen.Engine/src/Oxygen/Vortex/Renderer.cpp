@@ -1934,11 +1934,7 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
       = gfx->AcquireCommandRecorder(queue_key, "Vortex Renderer Compositing");
     CHECK_F(static_cast<bool>(recorder_ptr),
       "Compositing recorder acquisition failed");
-    if (gpu_timeline_profiler_) {
-      recorder_ptr->SetTelemetryCollector(
-        observer_ptr<graphics::IGpuProfileCollector>(
-          gpu_timeline_profiler_.get()));
-    }
+    diagnostics_service_->AttachGpuTimelineCollector(*recorder_ptr);
 
     auto& recorder = *recorder_ptr;
     auto& target_fb = *payload.composite_target;
@@ -2150,6 +2146,9 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
 
 auto Renderer::OnFrameEnd(observer_ptr<engine::FrameContext> context) -> void
 {
+  // Offscreen inside-frame sessions do not pass through OnCompositing.
+  if (gpu_timeline_profiler_)
+    gpu_timeline_profiler_->OnFrameRecordTailResolve();
   if (imgui_runtime_ != nullptr) {
     imgui_runtime_->OnFrameEnd();
   }
@@ -3152,10 +3151,10 @@ auto Renderer::GetUploadCoordinator() -> upload::UploadCoordinator&
 }
 
 auto Renderer::AcquireIblCapture(const ViewId view)
-  -> std::expected<environment::IblCaptureLease, environment::IblCaptureError>
+  -> Result<environment::IblCaptureLease, environment::IblCaptureError>
 {
   if (!scene_renderer_)
-    return std::unexpected(environment::IblCaptureError::kUnavailable);
+    return Err(environment::IblCaptureError::kUnavailable);
   return scene_renderer_->AcquireIblCapture(view);
 }
 

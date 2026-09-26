@@ -166,7 +166,50 @@ auto DiagnosticsService::AttachGpuTimelineCollector(
     return;
   }
   recorder.SetTelemetryCollector(observer_ptr<graphics::IGpuProfileCollector> {
-    gpu_timeline_profiler_.get() });
+    gpu_timeline_enabled_requested_ && IsGpuTimelineFeatureEnabled()
+      ? gpu_timeline_profiler_.get()
+      : nullptr });
+}
+
+auto DiagnosticsService::RegisterIblTimingSink(
+  std::shared_ptr<internal::GpuTimelineSink> sink) -> void
+{
+  std::scoped_lock lock(mutex_);
+  CHECK_NOTNULL_F(gpu_timeline_profiler_);
+  gpu_timeline_profiler_->AddSink(std::move(sink));
+}
+
+auto DiagnosticsService::AcquireIblTiming() -> void
+{
+  std::scoped_lock lock(mutex_);
+  ++ibl_timing_owners_;
+  ApplyGpuTimelineEnabled();
+}
+
+auto DiagnosticsService::ReleaseIblTiming() -> void
+{
+  std::scoped_lock lock(mutex_);
+  CHECK_GT_F(ibl_timing_owners_, 0U);
+  --ibl_timing_owners_;
+  ApplyGpuTimelineEnabled();
+}
+
+auto DiagnosticsService::InvalidateIblTiming() noexcept -> void
+{
+  std::scoped_lock lock(mutex_);
+  if (gpu_timeline_profiler_)
+    gpu_timeline_profiler_->InvalidateCurrentFrame();
+}
+
+auto DiagnosticsService::AttachIblTimelineCollector(
+  graphics::CommandRecorder& recorder) const -> void
+{
+  std::scoped_lock lock(mutex_);
+  const auto queue = recorder.GetTargetQueue();
+  if (queue && queue->GetQueueRole() == graphics::QueueRole::kGraphics)
+    recorder.SetTelemetryCollector(
+      observer_ptr<graphics::IGpuProfileCollector> {
+        gpu_timeline_profiler_.get() });
 }
 
 auto DiagnosticsService::SetGpuTimelineProfiler(
@@ -343,8 +386,8 @@ auto DiagnosticsService::HasAvailableGpuTimelineFrame() const -> bool
 auto DiagnosticsService::ApplyGpuTimelineEnabled() -> void
 {
   if (gpu_timeline_profiler_ != nullptr) {
-    gpu_timeline_profiler_->SetEnabled(
-      gpu_timeline_enabled_requested_ && IsGpuTimelineFeatureEnabled());
+    gpu_timeline_profiler_->SetEnabled(ibl_timing_owners_ != 0U
+      || (gpu_timeline_enabled_requested_ && IsGpuTimelineFeatureEnabled()));
   }
 }
 

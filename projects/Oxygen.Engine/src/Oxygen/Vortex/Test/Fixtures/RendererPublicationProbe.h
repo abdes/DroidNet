@@ -135,6 +135,21 @@ struct RendererPublicationProbe {
     const auto found = views.find(view);
     return found == views.end() ? nullptr : found->second.ibl;
   }
+  static auto SkyTextureBinder(SceneRenderer& renderer)
+    -> std::shared_ptr<resources::TextureBinder>
+  {
+    return renderer.environment_->sky_texture_binder_;
+  }
+  static auto IblOwner(SceneRenderer& renderer)
+    -> environment::internal::IblProcessor&
+  {
+    return *renderer.environment_->ibl_;
+  }
+  static auto EnvironmentOwner(SceneRenderer& renderer)
+    -> EnvironmentLightingService&
+  {
+    return *renderer.environment_;
+  }
   static auto FogHistory(SceneRenderer& renderer, ViewId view)
     -> std::pair<std::shared_ptr<graphics::Texture>,
       postprocess::ExposurePass::FrameLease>

@@ -1,14 +1,105 @@
 # VX-IBL-01 validation
 
-S1 and S2 are validated: common GPU products, captured atmosphere/height fog,
-Stage 13 and forward/translucent lighting, scene/settings migration and automatic
-FP16/FP32 selection pass their native checks. S3 is in progress; S3–S6 own the remaining cache,
-scheduling, UI and integrated performance/lifetime gates.
+S1–S4 are validated: products, captured atmosphere/height fog, native lighting,
+migration, precision, lifetime admission and automatic scheduling pass their
+checks. S5–S6 own DemoShell/editor workflows and remaining integrated qualification.
 
 Read: [current results](#current-results), [reproduce](#reproduce),
 [remaining gates](README.md#acceptance).
 
 ## Current results
+
+[S4 matched scene runs](evidence/s4-scene/run.json) pass on the reference GPU:
+**1,800 frames per workload at 1920×1080/60 Hz**, after 120 warmup frames. All use
+the same fixed-camera mixed scene with two atmosphere lights, height fog,
+shadows, deferred lighting and translucency.
+
+| Workload                                                      | IBL GPU p95 / p99    | Whole-frame GPU p95 / p99 | Publication / storage                                                                        |
+| ------------------------------------------------------------- | -------------------- | ------------------------- | -------------------------------------------------------------------------------------------- |
+| [Static](evidence/s4-scene/static/summary.json)               | **0 / 0 ms**         | **8.134 / 8.751 ms**      | Unchanged generation; one allocation, **9.13 MB**                                            |
+| [Runtime sun/fog](evidence/s4-scene/runtime/summary.json)     | **0.200 / 0.205 ms** | **8.386 / 9.251 ms**      | 600 publications; completion ≤**3 frames**, source age ≤**4**; two allocations, **18.24 MB** |
+| [Authoring sun/fog](evidence/s4-scene/authoring/summary.json) | **0.406 / 0.705 ms** | **8.710 / 9.620 ms**      | All 1,800 edits publish in-frame; source age zero; two allocations, **18.24 MB**             |
+
+Product placement bytes and allocation counts stay fixed after warmup; registered
+resources also stay at 142 for static and 154 for animated runs. Capture-specific
+LUT labels keep visible-sky work out of the IBL cost union. Whole-frame GPU spans
+include queue gaps; measured frames all execute the required rendering stages.
+The label split passes **63 environment tests and 8 native integration tests**.
+
+[Isolated update qualification](evidence/s4-update-qualification/run.json) also
+passes: authoring **1.415 / 2.016 ms p95/p99**, runtime **0.475 / 0.861 ms**,
+completion ≤4 frames and source age ≤6. First-use producer work, including BRDF
+upload, is **0.365–0.381 ms GPU / 30.46–39.55 ms wall** in those isolated runs.
+The matched scene startup frame costs **0.365–0.377 ms IBL GPU / 92.28–93.97 ms
+wall**; this is the first IBL-ready frame, before all geometry uploads complete.
+
+The pressure test queues three scene frames behind a GPU fence, preempts an
+incremental candidate with immediate edits, and keeps two older captures pinned.
+Across **36 queued frames**, it verifies published metadata after completion,
+peaks at **four normal generations**, uses **six physical allocations**, and
+shows no resource/registration growth after warmup. Retired normal occupancy
+returns to one; both captured generations remain readable.
+
+**26 Release / 27 Debug integration tests** and **54 Release / 56 Debug
+product/fog tests** pass, including the queued-pressure test in both configurations.
+
+Tracy identified tiled producer costs in the
+[baseline](evidence/s4-budget/tracy/attribution.json). Independent tiles share
+resource transitions and native timing batches; source mip dependencies retain
+barriers. Parallel max/validity reduction preserves the range result. The model
+learns launch/work cost and balances remaining work against the four-frame
+deadline. Failed recordings invalidate timing without reusing live queries.
+The [updated trace](evidence/s4-update-qualification/tracy/attribution.json)
+measures range reduction at **11.6 µs mean**, down from **149.4 µs** in the
+baseline; GGX prefilter remains the largest producer at **35.3%** of traced
+dispatch time. Native measurements above supply the acceptance results.
+[RenderDoc](evidence/s4-budget/renderdoc.json) verifies complete-generation
+bindings and frozen lighting values through adaptive publication.
+
+[S4 scene scheduling](evidence/s4-scheduling/run.json): **16 Release / 17 Debug
+integration tests** pass. Continuous fog edits publish four frozen snapshots in
+sixteen frames and converge after edits stop. Authoring preempts an unfinished
+candidate; unchanged-key edits consume their authoring intent. Later views reuse
+the scene's first scheduling decision that frame. Rejected submissions retain
+usable prior lighting; immediate failures and poisoned pools report unavailable.
+Source-lease allocation failure retains prior lighting only for runtime edits
+to the same resident source; authoring and replacement failures report unavailable.
+[RenderDoc](evidence/s4-scheduling/renderdoc.json) checks four actual Stage 13
+draws: bound revisions **1, 1, 1, 2**, with the old lighting visible until the final
+producer and the new lighting matching the frozen candidate.
+[Capture](evidence/s4-scheduling/schedule.rdc).
+
+[S4 GPU jobs](evidence/s4-jobs/run.json): **54 Release / 56 Debug product/fog
+tests** and **12 native integration tests** pass. A candidate advanced over four
+frames matches immediate cube chains and SH bitwise; semantic metadata fields
+match while the prior generation stays readable. Frozen atmosphere inputs,
+rejected-batch retry, cancelled-work retirement and closure/fault gates pass.
+[RenderDoc](evidence/s4-jobs/renderdoc.json) verifies initialization plus four
+work submissions, **694 dispatches**, unchanged prior metadata and candidate
+completion only at the final producer. [Capture](evidence/s4-jobs/jobs.rdc).
+
+[S4 spatial tiling](evidence/s4-tiling/run.json): **49 Release / 51 Debug
+product/fog tests** and **12 native integration tests** pass. Tiled and whole
+dispatches agree bitwise across **524,160 cube values** and SH for specified HDR
+and captured fog inputs; semantic metadata fields match. Constant-buffer growth failure returns
+its slot; retry and later smaller workloads reuse the same product storage.
+[RenderDoc](evidence/s4-tiling/renderdoc.json) verifies **694 actual dispatches**
+in the 8×8 stress case and completion only after the final producer.
+[Capture](evidence/s4-tiling/tiles.rdc).
+
+[S3 authoring and SDK](evidence/s3-authoring/run.json): **236 CPU tests**, **nine
+C++/CLI command tests**, **49 Debug / 47 Release IBL/fog tests** and **16 native
+integration tests** pass. Twelve successive authoring batches each render the
+latest fog radiance in one frame, with exactly one new generation per batch.
+Removing a registered view closes its capture access; recreation reuses the
+scene's IBL while an earlier capture remains readable.
+
+Native/editor edits carry a transient scene revision outside the radiance key.
+Applied batches, preview toggles, completed skybox loads and editor light,
+transform, hierarchy and visibility commands mark authoring; direct runtime
+setters do not. The scheduler consumes authoring revisions even when the radiance
+key is unchanged. The public capture API uses existing Oxygen `Result`, preserving
+C++20 SDK compatibility. Matching engine, example, SDK and editor builds pass.
 
 [S3 producer allocations](evidence/s3-producer-allocation/run.json): **49 injected
 resource-factory failures** pass in both native Debug and Release. The sweep covers
@@ -31,8 +122,8 @@ allocation attempts**, including reentrant submission callbacks. The completion
 test checks that hardware has finished while the capture is still pinned, then
 releases it under allocation denial. Discard closes
 the native list without preparing submission-only state snapshots; callback
-resolution consumes its existing storage. Edit intent and the incremental
-scheduler's preemption/lifetime cases remain open.
+resolution consumes its existing storage. The incremental scheduler's
+preemption/lifetime cases remain in S4.
 
 [S3 capture admission](evidence/s3-capture-admission/run.json): **43 product/fog
 tests**, **63 environment tests** and **10 native integration tests** pass.
@@ -75,11 +166,9 @@ generation actually samples RGBA32Float and RGBA16Float in the paired draws,
 with coverage preserved and no ambient bridge.
 [Capture](evidence/s2-half-admission/surface.rdc).
 
-The latest 1,800-update isolated native run measures **1.096 ms mean / 2.475 ms
-p95 / 2.937 ms p99**. Product storage stays at two allocations; first-use wall
-time is 69.65 ms. The 2 ms p95 target, first-use GPU cost and matched full-scene
-acceptance remain open. The texel certificate reuses SH scratch and needs
-**245,776 logical scratch bytes** per 128-face slot.
+The S2 isolated run measured **1.096 ms mean / 2.475 ms p95 / 2.937 ms p99**;
+the current S4 measurements are above. The texel certificate reuses SH scratch
+and needs **245,776 logical scratch bytes** per 128-face slot.
 
 [S2 precision batching](evidence/s2-batched-precision/run.json): all **36**
 IBL/fog checks plus the new **1/4/512-face** boundary test pass. Constant-cube
@@ -88,16 +177,11 @@ metadata complete only after all **40** producer dispatches. Both stored chains
 are scanned in one batch and reduced once; the certificate and filtering are
 unchanged. Scratch grows by **18,368 bytes per 128-face slot**.
 
-In matched 1,800-update isolated workloads, Tracy precision scanning/reduction
-falls from **0.451 to 0.148 ms mean**, and native GPU update mean falls from
-**1.447 to 1.173 ms**. Current native p95/p99 are **2.477 / 2.872 ms**;
-the 2 ms p95 target and full-scene acceptance remain open. Product storage stays
-at two allocations. First-use wall time is 33.43 ms including BRDF preparation
-and queue drain; first-use GPU cost remains unmeasured. The
-[baseline](evidence/s2-timing/run.json) and
+In the S2 matched 1,800-update workloads, precision batching reduced Tracy
+scanning/reduction from **0.451 to 0.148 ms mean** and native GPU update mean
+from **1.447 to 1.173 ms**. The [baseline](evidence/s2-timing/run.json) and
 [candidate trace](evidence/s2-batched-precision/tracy/attribution.json) retain
-the measured stage costs. Native timing includes the capture LUT work and
-convolution; Tracy supplies attribution.
+those measurements. S4 supplies the current cost and first-use qualification.
 
 [S2 surface run](evidence/s2-surfaces/run.json): **6 native tests / 1,035 cases**
 pass across deferred, forward, opaque, masked and alpha-blended surfaces. Checks
@@ -152,9 +236,6 @@ and precision flags become complete only after all **71** producer dispatches.
 [atmosphere replay](evidence/s2-precision/atmosphere-renderdoc.json) also checks
 all four chains, exact half narrowing, and **319,504** bytes of frozen LUT copies.
 [Atmosphere capture](evidence/s2-precision/atmosphere.rdc).
-
-Integrated multi-view/UI, lifetime, scheduling and performance qualification
-remain in S3–S6. The complete memory gate has not been qualified.
 
 [S2 production run](evidence/s2-production/run.json): 30 native sky/fog/offscreen
 tests, 31 IBL product tests, 64 environment tests and 22 scene-publication tests
@@ -265,11 +346,6 @@ view/roughness points against the prescribed 128-sample generator, with absolute
 A/B error at most 0.035. This estimator check does not replace material-image
 qualification.
 
-Remaining qualification: atmosphere/height-fog capture and production integration
-(S2), capture quotas and full fault/lifetime stress (S3), incremental scheduling
-(S4), DemoShell/editor workflows (S5), and integrated Tracy/native performance
-acceptance (S6).
-
 ## Reproduce
 
 For the isolated timing workload, build `Oxygen.Vortex.Exposure.Benchmarks`
@@ -281,6 +357,11 @@ checks and update interval unions. For Tracy attribution use the same target
 in `out/build-tracy-ninja`, activate its generated Release Conan runtime
 environment, and start `tracy-capture -a 127.0.0.1 -o <trace>` before the binary.
 `tracy-csvexport -g <trace>` exports the per-dispatch GPU events.
+
+Use `--gtest_filter=IblUpdateBenchmark.DISABLED_ScheduledSunUpdates` for the
+automatic runtime workload. Its CSV also records source age, candidate completion
+and feedback sample count; the summary reports the unchanged cost/latency gates.
+Use a fresh output directory for each measurement.
 
 From the repository root in a Visual Studio developer shell:
 

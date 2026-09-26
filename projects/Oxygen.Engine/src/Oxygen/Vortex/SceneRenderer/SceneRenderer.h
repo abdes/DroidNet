@@ -8,7 +8,6 @@
 
 #include <array>
 #include <cstdint>
-#include <expected>
 #include <memory>
 #include <optional>
 #include <string_view>
@@ -17,6 +16,7 @@
 
 #include <glm/vec2.hpp>
 
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/View.h>
@@ -201,8 +201,7 @@ public:
   OXGN_VRTX_NDAPI auto GetLastEnvironmentLightingState() const
     -> const EnvironmentLightingState&;
   [[nodiscard]] OXGN_VRTX_API auto AcquireIblCapture(ViewId view)
-    -> std::expected<environment::IblCaptureLease,
-      environment::IblCaptureError>;
+    -> Result<environment::IblCaptureLease, environment::IblCaptureError>;
   OXGN_VRTX_NDAPI static auto GetAuthoredStageOrder() -> const StageOrder&;
   OXGN_VRTX_API void PublishViewFrameBindings(
     ViewId view_id, const ViewFrameBindings& bindings, ShaderVisibleIndex slot);

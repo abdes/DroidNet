@@ -7,10 +7,10 @@
 #pragma once
 
 #include <cstdint>
-#include <expected>
 #include <memory>
 #include <unordered_map>
 
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Vortex/Environment/Internal/LocalFogVolumeState.h>
@@ -343,8 +343,7 @@ public:
   [[nodiscard]] OXGN_VRTX_API auto InspectAtmosphereState() const noexcept
     -> const environment::internal::StableAtmosphereState&;
   [[nodiscard]] OXGN_VRTX_API auto AcquireIblCapture(ViewId view)
-    -> std::expected<environment::IblCaptureLease,
-      environment::IblCaptureError>;
+    -> Result<environment::IblCaptureLease, environment::IblCaptureError>;
   [[nodiscard]] OXGN_VRTX_API auto InspectAtmosphereLightState() const noexcept
     -> const environment::internal::ResolvedAtmosphereLightState&;
 

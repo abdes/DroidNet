@@ -41,6 +41,7 @@ namespace oxygen::interop::module {
     if (sceneNode && sceneNode->IsAlive()) {
       auto transform = sceneNode->GetTransform();
       transform.SetLocalTransform(position_, rotation_, scale_);
+      context.Scene->NotifyEnvironmentAuthoringChange();
     }
   }
 

@@ -315,6 +315,7 @@ namespace oxygen::interop::module {
       ApplyPostProcess(*environment, post_process, exposure);
       EnsureDisabledFog(*environment);
       scene.Update(false);
+      scene.NotifyEnvironmentAuthoringChange();
     };
     if (context.AssetRequests) {
       context.AssetRequests->SetExposureMask(*context.Scene,

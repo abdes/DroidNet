@@ -379,6 +379,9 @@ auto SkyboxService::ApplyToScene(const SkyLightParams& params) -> void
       sky_light->SetTintRgb(params.tint_rgb);
     }
   }
+  if (params.enable_sky_light) {
+    scene->NotifyEnvironmentAuthoringChange();
+  }
 }
 
 auto SkyboxService::PinCurrentResource(content::ResourceKey key) -> bool
@@ -424,6 +427,7 @@ auto SkyboxService::UpdateSkyLightParams(const SkyLightParams& params) -> void
     sky_light->SetDiffuseIntensity(params.diffuse_intensity);
     sky_light->SetSpecularIntensity(params.specular_intensity);
     sky_light->SetTintRgb(params.tint_rgb);
+    scene->NotifyEnvironmentAuthoringChange();
   }
 }
 

@@ -30,8 +30,15 @@ namespace oxygen::vortex {
 
 namespace internal {
   class GpuTimelineProfiler;
+  class GpuTimelineSink;
   struct GpuTimelineDiagnostic;
 } // namespace internal
+namespace environment::internal {
+  class IblProcessor;
+  class IblGpuProcessor;
+  class IblBrdfResources;
+  class CapturedSkySource;
+}
 
 struct DiagnosticsConfig {
   DiagnosticsFeatureSet default_features { DiagnosticsFeature::kNone };
@@ -122,6 +129,18 @@ public:
 
 private:
   friend class Renderer;
+  friend class environment::internal::IblProcessor;
+  friend class environment::internal::IblGpuProcessor;
+  friend class environment::internal::IblBrdfResources;
+  friend class environment::internal::CapturedSkySource;
+
+  auto RegisterIblTimingSink(std::shared_ptr<internal::GpuTimelineSink> sink)
+    -> void;
+  auto AcquireIblTiming() -> void;
+  auto ReleaseIblTiming() -> void;
+  auto InvalidateIblTiming() noexcept -> void;
+  auto AttachIblTimelineCollector(graphics::CommandRecorder& recorder) const
+    -> void;
 
   OXGN_VRTX_API auto SetGpuTimelineProfiler(
     observer_ptr<internal::GpuTimelineProfiler> profiler) -> void;
@@ -146,6 +165,7 @@ private:
     nullptr
   };
   bool gpu_timeline_enabled_requested_ { false };
+  std::uint32_t ibl_timing_owners_ {};
   HdrPrecisionControl hdr_precision_control_ {
     HdrPrecisionControl::kProduction,
   };

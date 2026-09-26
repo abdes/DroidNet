@@ -444,6 +444,42 @@ namespace {
       }
       return pixels;
     }
+
+    auto ExpectMatchingProducts(
+      const IblGpuProducts& expected, const IblGpuProducts& actual) -> void
+    {
+      const auto a
+        = ReadBuffer<std::array<glm::vec4, 8>>(expected, *expected.diffuse_sh);
+      const auto b
+        = ReadBuffer<std::array<glm::vec4, 8>>(actual, *actual.diffuse_sh);
+      EXPECT_EQ(std::memcmp(a.data(), b.data(), sizeof(a)), 0);
+      const auto ma = ReadBuffer<environment::IblProductMetadata>(
+        expected, *expected.metadata);
+      const auto mb
+        = ReadBuffer<environment::IblProductMetadata>(actual, *actual.metadata);
+      EXPECT_EQ(ma.processing_flags, 3U);
+      EXPECT_EQ(mb.processing_flags, 3U);
+      EXPECT_EQ(ma.source_radiance_scale, mb.source_radiance_scale);
+      EXPECT_EQ(ma.average_brightness, mb.average_brightness);
+      EXPECT_EQ(ma.maximum_half_gain, mb.maximum_half_gain);
+      EXPECT_EQ(ma.precision_flags, mb.precision_flags);
+      const auto pairs = std::array { std::pair { expected.processed_cube,
+                                        actual.processed_cube },
+        std::pair { expected.specular_cube, actual.specular_cube },
+        std::pair { expected.processed_half_cube, actual.processed_half_cube },
+        std::pair { expected.specular_half_cube, actual.specular_half_cube } };
+      for (const auto& [reference, candidate] : pairs) {
+        for (unsigned mip = 0U; mip <= expected.maximum_mip; ++mip) {
+          for (unsigned face = 0U; face < 6U; ++face) {
+            const auto ra = ReadFace(expected, *reference, face, mip);
+            const auto rb = ReadFace(actual, *candidate, face, mip);
+            ASSERT_EQ(ra.size(), rb.size());
+            EXPECT_EQ(
+              std::memcmp(ra.data(), rb.data(), ra.size() * sizeof(Pixel)), 0);
+          }
+        }
+      }
+    }
   };
 
   // Fail only the producer's existing resource factories. Native allocations,
@@ -505,6 +541,18 @@ namespace {
         .is_shader_resource = true });
       auto distant = CreateRegisteredBuffer(
         { .size_bytes = 16U, .debug_name = "Allocation test distant LUT" });
+      working_sky_ = sky_view;
+      working_distant_ = distant;
+      UploadWorkingLuts({ 2, 1, 0.5F, 1 });
+      source.sky_view = std::move(sky_view);
+      source.distant_sky = std::move(distant);
+      return source;
+    }
+
+    auto UploadWorkingLuts(const Pixel& pixel) -> void
+    {
+      const auto& sky_view = working_sky_;
+      const auto& distant = working_distant_;
       const auto subresources = std::array<upload::UploadSubresource, 1> {};
       const auto plan
         = upload::UploadPlanner::PlanTexture2D({ .dst = sky_view },
@@ -514,7 +562,6 @@ namespace {
         = CreateRegisteredBuffer({ .size_bytes = plan->total_bytes + 16U,
           .memory = graphics::BufferMemory::kUpload,
           .debug_name = "Allocation test LUT upload" });
-      const Pixel pixel { 2, 1, 0.5F, 1 };
       const auto row = std::array { pixel, pixel, pixel, pixel };
       const auto& region = plan->regions.front();
       for (unsigned y = 0U; y < 4U; ++y)
@@ -524,8 +571,14 @@ namespace {
       SubmitCommands(
         "Allocation test LUT upload", [&](graphics::CommandRecorder& recorder) {
           EnsureTracked(recorder, staging, ResourceStates::kGenericRead);
-          EnsureTracked(recorder, sky_view, ResourceStates::kCommon);
-          EnsureTracked(recorder, distant, ResourceStates::kCommon);
+          EnsureTracked(recorder, sky_view,
+            Backend()
+              .TryGetKnownResourceState(sky_view->GetNativeResource())
+              .value_or(ResourceStates::kCommon));
+          EnsureTracked(recorder, distant,
+            Backend()
+              .TryGetKnownResourceState(distant->GetNativeResource())
+              .value_or(ResourceStates::kCommon));
           recorder.RequireResourceState(*sky_view, ResourceStates::kCopyDest);
           recorder.RequireResourceState(*distant, ResourceStates::kCopyDest);
           recorder.FlushBarriers();
@@ -536,10 +589,10 @@ namespace {
           recorder.RequireResourceStateFinal(
             *distant, ResourceStates::kShaderResource);
         });
-      source.sky_view = std::move(sky_view);
-      source.distant_sky = std::move(distant);
-      return source;
     }
+
+    std::shared_ptr<graphics::Texture> working_sky_;
+    std::shared_ptr<graphics::Buffer> working_distant_;
   };
 
   NOLINT_TEST_F(IblProducerAllocationGpuTest,
@@ -646,6 +699,332 @@ namespace {
       total_failures += failures;
     }
     RecordProperty("producer_factory_failures", total_failures);
+  }
+
+  NOLINT_TEST_F(IblProducerAllocationGpuTest,
+    TiledConstantGrowthRollsBackAndReusesTheSameProductSlot)
+  {
+    processor_ = std::make_unique<IblGpuProcessor>(Backend(), 1U);
+    const auto source = MakeSource(
+      32U, [](auto, auto, auto) { return Pixel { 2, 1, 0.5F, 1 }; });
+    const auto brdf = PrepareBrdf();
+    auto whole = Processor().Process(
+      source.texture, source.registration, brdf, { .face_size = 32U }, 950U);
+    ASSERT_TRUE(whole);
+    const auto storage = std::weak_ptr((*whole)->processed_cube);
+    whole->reset();
+    WaitForQueueIdle();
+    const auto registered
+      = Backend().GetResourceRegistry().GetRegisteredResourceCount();
+    Faults().FailAfter(0);
+    const auto rejected
+      = Processor().Process(source.texture, source.registration, brdf,
+        { .face_size = 32U, .dispatch_tile_size = 8U }, 951U);
+    Faults().FailAfter(-1);
+    ASSERT_FALSE(rejected);
+    EXPECT_EQ(rejected.error(),
+      environment::internal::IblProcessError::kAllocationFailed);
+    EXPECT_EQ(Processor().GetStats().normal_in_use, 0U);
+    EXPECT_EQ(Processor().GetStats().available, 1U);
+    EXPECT_EQ(Processor().GetStats().reuse.pending_count, 0U);
+    Backend().PollCompletedUses();
+    EXPECT_EQ(Backend().GetResourceRegistry().GetRegisteredResourceCount(),
+      registered - 1U);
+    for (const unsigned tile_size : { 8U, 16U, 0U }) {
+      if (tile_size != 8U)
+        Faults().FailAfter(
+          0); // Smaller/whole work must reuse the grown buffer.
+      auto built = Processor().Process(source.texture, source.registration,
+        brdf, { .face_size = 32U, .dispatch_tile_size = tile_size },
+        952U + tile_size);
+      Faults().FailAfter(-1);
+      ASSERT_TRUE(built);
+      EXPECT_EQ((*built)->processed_cube, storage.lock());
+      EXPECT_EQ(Processor().GetStats().storage_creations, 1U);
+      EXPECT_EQ(ReadBuffer<environment::IblProductMetadata>(
+                  **built, *(*built)->metadata)
+                  .processing_flags,
+        3U);
+      built->reset();
+      WaitForQueueIdle();
+      EXPECT_EQ(Backend().GetResourceRegistry().GetRegisteredResourceCount(),
+        registered);
+    }
+    for (const unsigned invalid : { 4U, 12U }) {
+      const auto bad = Processor().Process(source.texture, source.registration,
+        brdf, { .face_size = 32U, .dispatch_tile_size = invalid }, 970U);
+      ASSERT_FALSE(bad);
+      EXPECT_EQ(
+        bad.error(), environment::internal::IblProcessError::kInvalidSource);
+      EXPECT_EQ(Processor().GetStats().available, 1U);
+    }
+  }
+
+  NOLINT_TEST_F(
+    IblConvolutionGpuTest, MultiFrameJobPublishesOnlyCompleteProducts)
+  {
+    const auto source = MakeSource(32U, [](auto face, auto x, auto y) {
+      return Pixel { float(1U + face + x), 0.5F * (1U + y), 0.125F, 1 };
+    });
+    const auto brdf = PrepareBrdf();
+    const auto settings = IblProcessSettings { .face_size = 32U,
+      .lower_hemisphere_solid_color = false,
+      .dispatch_tile_size = 8U };
+    const auto reference = Processor().Process(
+      source.texture, source.registration, brdf, settings, 980U);
+    ASSERT_TRUE(reference);
+    BeginCapture();
+    std::shared_ptr<environment::internal::IblGpuJob> job;
+    std::uint32_t per_frame {};
+    std::shared_ptr<const IblGpuProducts> completed;
+    for (unsigned frame_index = 0U; frame_index < 4U; ++frame_index) {
+      const auto sequence = frame::SequenceNumber { frame_index + 1U };
+      const auto slot
+        = frame::Slot { frame_index % frame::kFramesInFlight.get() };
+      Backend().BeginFrame(sequence, slot);
+      const ScopeGuard end_frame(
+        [&]() noexcept { Backend().EndFrame(sequence, slot); });
+      if (frame_index == 0U) {
+        const auto begun = Processor().Begin(
+          source.texture, source.registration, brdf, settings, 981U);
+        ASSERT_TRUE(begun);
+        job = *begun;
+        const auto pending = Processor().PendingDispatches(*job).size();
+        ASSERT_GT(pending, 4U);
+        per_frame = static_cast<std::uint32_t>((pending + 3U) / 4U);
+      }
+      const auto advanced = Processor().Advance(job, per_frame);
+      ASSERT_TRUE(advanced);
+      EXPECT_LE(advanced->recorded_dispatches, per_frame);
+      if (frame_index < 3U) {
+        EXPECT_FALSE(advanced->products);
+        EXPECT_GT(advanced->remaining_dispatches, 0U);
+      } else {
+        completed = advanced->products;
+        EXPECT_EQ(advanced->remaining_dispatches, 0U);
+      }
+      const auto retained = ReadBuffer<environment::IblProductMetadata>(
+        **reference, *(*reference)->metadata);
+      EXPECT_EQ(retained.product_revision, 980U);
+      EXPECT_EQ(retained.processing_flags, 3U);
+    }
+    EndCapture();
+    ASSERT_TRUE(completed);
+    EXPECT_TRUE(Processor().PendingDispatches(*job).empty());
+    EXPECT_EQ(completed->revision, 981U);
+    ExpectMatchingProducts(**reference, *completed);
+  }
+
+  NOLINT_TEST_F(
+    IblConvolutionGpuTest, JobFastPathsRespectClosureAndBackendFault)
+  {
+    const auto source = MakeSource(
+      16U, [](auto, auto, auto) { return Pixel { 2, 1, 0.5F, 1 }; });
+    const auto brdf = PrepareBrdf();
+    const auto complete = Processor().Begin(
+      source.texture, source.registration, brdf, { .face_size = 16U }, 988U);
+    ASSERT_TRUE(complete);
+    const auto finished = Processor().Advance(*complete, UINT32_MAX);
+    ASSERT_TRUE(finished);
+    ASSERT_TRUE(finished->products);
+    const auto pending = Processor().Begin(
+      source.texture, source.registration, brdf, { .face_size = 16U }, 989U);
+    ASSERT_TRUE(pending);
+    WaitForQueueIdle();
+    const auto backend = Backend().GetBackendLifetime();
+    backend->MarkSubmissionFault();
+    const ScopeGuard restore(
+      [backend]() noexcept { backend->ClearSubmissionFault(); });
+    const auto expect_closed = [&]() {
+      for (const auto& job : { *complete, *pending }) {
+        for (const auto limit : { 0U, UINT32_MAX }) {
+          const auto denied = Processor().Advance(job, limit);
+          ASSERT_FALSE(denied);
+          EXPECT_EQ(
+            denied.error(), environment::internal::IblProcessError::kClosed);
+        }
+      }
+    };
+    expect_closed();
+    backend->ClearSubmissionFault();
+    const auto idle = Processor().Advance(*pending, 0U);
+    ASSERT_TRUE(idle);
+    EXPECT_EQ(idle->recorded_dispatches, 0U);
+    EXPECT_GT(idle->remaining_dispatches, 0U);
+    EXPECT_FALSE(idle->products);
+    Processor().Close();
+    expect_closed();
+  }
+
+  NOLINT_TEST_F(
+    IblProducerAllocationGpuTest, JobFreezesAtmosphereBeforeWorkingLutsChange)
+  {
+    auto source = MakeAtmosphereSource();
+    const auto brdf = PrepareBrdf();
+    const auto settings = IblProcessSettings { .face_size = 16U,
+      .lower_hemisphere_solid_color = false,
+      .dispatch_tile_size = 8U };
+    const auto reference = Processor().ProcessSky(source, brdf, settings, 982U);
+    ASSERT_TRUE(reference);
+    const auto job = Processor().BeginSky(source, brdf, settings, 983U);
+    ASSERT_TRUE(job);
+    UploadWorkingLuts({ 64, 16, 8, 1 });
+    source.environment.atmosphere.enabled = 0U;
+    source.origin = { 1000, 2000, 3000 };
+    std::shared_ptr<const IblGpuProducts> completed;
+    while (!completed) {
+      const auto result = Processor().Advance(*job, 17U);
+      ASSERT_TRUE(result);
+      completed = result->products;
+    }
+    ExpectMatchingProducts(**reference, *completed);
+  }
+
+  NOLINT_TEST_F(IblConvolutionGpuTest, RejectedJobBatchDoesNotAdvanceItsCursor)
+  {
+    const auto source = MakeSource(
+      16U, [](auto, auto, auto) { return Pixel { 2, 1, 0.5F, 1 }; });
+    const auto job = Processor().Begin(source.texture, source.registration,
+      PrepareBrdf(), { .face_size = 16U, .dispatch_tile_size = 8U }, 984U);
+    ASSERT_TRUE(job);
+    const auto before = Processor().PendingDispatches(**job).size();
+    graphics::internal::SubmissionFaultTestAccess::FailNext(
+      *GetQueue(), graphics::internal::SubmissionFailurePoint::kBeforeIssue);
+    const auto rejected = Processor().Advance(*job, 7U);
+    ASSERT_FALSE(rejected);
+    EXPECT_EQ(rejected.error(),
+      environment::internal::IblProcessError::kSubmissionFailed);
+    EXPECT_EQ(Processor().PendingDispatches(**job).size(), before);
+    const auto retry = Processor().Advance(*job, UINT32_MAX);
+    ASSERT_TRUE(retry);
+    ASSERT_TRUE(retry->products);
+    EXPECT_EQ(ReadBuffer<environment::IblProductMetadata>(
+                *retry->products, *retry->products->metadata)
+                .product_revision,
+      984U);
+  }
+
+  NOLINT_TEST_F(IblConvolutionGpuTest, CancelledJobWaitsForItsSubmittedBatch)
+  {
+    processor_ = std::make_unique<IblGpuProcessor>(Backend(), 1U);
+    const auto source = MakeSource(
+      16U, [](auto, auto, auto) { return Pixel { 2, 1, 0.5F, 1 }; });
+    const auto brdf = PrepareBrdf();
+    auto job = Processor().Begin(source.texture, source.registration, brdf,
+      { .face_size = 16U, .dispatch_tile_size = 8U }, 985U);
+    ASSERT_TRUE(job);
+    WaitForQueueIdle();
+    Microsoft::WRL::ComPtr<ID3D12Fence> gate;
+    ASSERT_TRUE(SUCCEEDED(Backend().GetCurrentDevice()->CreateFence(
+      0U, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(gate.GetAddressOf()))));
+    const ScopeGuard release_gate(
+      [gate]() noexcept { static_cast<void>(gate->Signal(1U)); });
+    auto* queue = static_cast<graphics::d3d12::CommandQueue*>(GetQueue().get());
+    ASSERT_TRUE(SUCCEEDED(queue->GetCommandQueue()->Wait(gate.Get(), 1U)));
+    const auto partial = Processor().Advance(*job, 3U);
+    ASSERT_TRUE(partial);
+    ASSERT_FALSE(partial->products);
+    job->reset();
+    EXPECT_EQ(Processor().GetStats().normal_in_use, 1U);
+    const auto busy = Processor().Begin(
+      source.texture, source.registration, brdf, { .face_size = 16U }, 986U);
+    ASSERT_FALSE(busy);
+    EXPECT_EQ(busy.error(), environment::internal::IblProcessError::kPoolBusy);
+    ASSERT_TRUE(SUCCEEDED(gate->Signal(1U)));
+    WaitForQueueIdle();
+    EXPECT_EQ(Processor().GetStats().normal_in_use, 0U);
+    EXPECT_EQ(Processor().GetStats().available, 1U);
+    const auto retry = Processor().Process(
+      source.texture, source.registration, brdf, { .face_size = 16U }, 987U);
+    ASSERT_TRUE(retry);
+    EXPECT_EQ(
+      ReadBuffer<environment::IblProductMetadata>(**retry, *(*retry)->metadata)
+        .product_revision,
+      987U);
+  }
+
+  NOLINT_TEST_F(IblConvolutionGpuTest, SpatialTilesMatchWholeDispatchProducts)
+  {
+    const auto source = MakeSource(32U, [](auto face, auto x, auto y) {
+      return Pixel { 100000.0F * (1U + face) + 100.0F * x, 0.25F * (1U + y),
+        0x1p-24F * (1U + x + y), 1.0F };
+    });
+    auto sky = environment::internal::IblSkySource {};
+    sky.origin = { 0, 0, 2 };
+    sky.environment.fog.flags = kGpuFogFlagEnabled | kGpuFogFlagHeightFogEnabled
+      | kGpuFogFlagVisibleInRealTimeSkyCaptures;
+    sky.environment.fog.primary_density = 0.001F;
+    sky.environment.fog.primary_height_falloff = 0.005F;
+    sky.environment.fog.fog_inscattering_luminance_rgb = { 4, 2, 1 };
+    const auto brdf = PrepareBrdf();
+    unsigned revision = 900U;
+    unsigned comparisons = 0U;
+    for (const bool captured : { false, true }) {
+      const auto build = [&](unsigned tile_size) {
+        const auto settings = IblProcessSettings { .face_size = 32U,
+          .lower_hemisphere_solid_color = false,
+          .dispatch_tile_size = tile_size };
+        return captured
+          ? Processor().ProcessSky(sky, brdf, settings, ++revision)
+          : Processor().Process(
+              source.texture, source.registration, brdf, settings, ++revision);
+      };
+      const auto whole = build(0U);
+      ASSERT_TRUE(whole);
+      const auto expected_sh
+        = ReadBuffer<std::array<glm::vec4, 8>>(**whole, *(*whole)->diffuse_sh);
+      const auto expected_metadata
+        = ReadBuffer<environment::IblProductMetadata>(
+          **whole, *(*whole)->metadata);
+      for (const unsigned tile_size : { 8U, 16U }) {
+        SCOPED_TRACE(::testing::Message()
+          << "capture=" << captured << " tile=" << tile_size);
+        if (!captured && tile_size == 8U)
+          BeginCapture();
+        const auto tiled = build(tile_size);
+        ASSERT_TRUE(tiled);
+        if (!captured && tile_size == 8U)
+          EndCapture();
+        const auto actual_sh = ReadBuffer<std::array<glm::vec4, 8>>(
+          **tiled, *(*tiled)->diffuse_sh);
+        EXPECT_EQ(
+          std::memcmp(actual_sh.data(), expected_sh.data(), sizeof(actual_sh)),
+          0);
+        const auto actual_metadata
+          = ReadBuffer<environment::IblProductMetadata>(
+            **tiled, *(*tiled)->metadata);
+        EXPECT_EQ(actual_metadata.source_radiance_scale,
+          expected_metadata.source_radiance_scale);
+        EXPECT_EQ(actual_metadata.average_brightness,
+          expected_metadata.average_brightness);
+        EXPECT_EQ(
+          actual_metadata.processing_flags, expected_metadata.processing_flags);
+        EXPECT_EQ(actual_metadata.maximum_half_gain,
+          expected_metadata.maximum_half_gain);
+        EXPECT_EQ(
+          actual_metadata.precision_flags, expected_metadata.precision_flags);
+        const auto pairs = std::array { std::pair { (*whole)->processed_cube,
+                                          (*tiled)->processed_cube },
+          std::pair { (*whole)->specular_cube, (*tiled)->specular_cube },
+          std::pair {
+            (*whole)->processed_half_cube, (*tiled)->processed_half_cube },
+          std::pair {
+            (*whole)->specular_half_cube, (*tiled)->specular_half_cube } };
+        for (const auto& [expected, actual] : pairs) {
+          for (unsigned mip = 0U; mip <= (*whole)->maximum_mip; ++mip) {
+            for (unsigned face = 0U; face < 6U; ++face) {
+              const auto a = ReadFace(**whole, *expected, face, mip);
+              const auto b = ReadFace(**tiled, *actual, face, mip);
+              ASSERT_EQ(a.size(), b.size());
+              EXPECT_EQ(
+                std::memcmp(a.data(), b.data(), a.size() * sizeof(Pixel)), 0);
+              comparisons += static_cast<unsigned>(a.size()) * 4U;
+            }
+          }
+        }
+      }
+    }
+    RecordProperty("tiled_product_scalar_comparisons", comparisons);
   }
 
   NOLINT_TEST_F(
@@ -2088,9 +2467,9 @@ namespace {
     unsigned failures = 0U;
     bool succeeded = false;
     for (int allowed = 0; allowed < 16; ++allowed) {
-      auto capture = std::expected<environment::IblCaptureLease,
-        environment::IblCaptureError>(
-        std::unexpected(environment::IblCaptureError::kUnavailable));
+      auto capture
+        = Result<environment::IblCaptureLease, environment::IblCaptureError>(
+          Err(environment::IblCaptureError::kUnavailable));
       {
         graphics::testing::HeapAllocationFailure failure(allowed);
         capture = (*product)->AcquireCapture();

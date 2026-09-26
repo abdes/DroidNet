@@ -44,6 +44,7 @@ add_test(NAME ${link_test_target} COMMAND ${link_test_target})
 m_gtest_program(RendererCapability SOURCES "RendererCapability_test.cpp")
 
 m_gtest_program(GpuTimelineProfiler SOURCES "GpuTimelineProfiler_test.cpp")
+m_gtest_program(IblWorkBudget SOURCES "IblWorkBudget_test.cpp")
 target_link_libraries(
   Oxygen.Vortex.GpuTimelineProfiler.Tests
   PRIVATE

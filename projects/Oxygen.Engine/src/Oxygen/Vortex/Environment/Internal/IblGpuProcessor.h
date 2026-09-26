@@ -10,8 +10,11 @@
 #include <cstdint>
 #include <expected>
 #include <memory>
+#include <span>
 #include <vector>
 
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/Frame.h>
@@ -35,6 +38,7 @@ class ResourceRegistry;
 
 namespace oxygen::vortex {
 class Renderer;
+class DiagnosticsService;
 }
 
 namespace oxygen::vortex::environment::internal {
@@ -60,6 +64,7 @@ struct IblBrdfProduct {
 class IblBrdfResources final {
 public:
   OXGN_VRTX_API explicit IblBrdfResources(Graphics& graphics);
+  OXGN_VRTX_API explicit IblBrdfResources(Renderer& renderer);
   OXGN_VRTX_API ~IblBrdfResources();
   IblBrdfResources(const IblBrdfResources&) = delete;
   auto operator=(const IblBrdfResources&) -> IblBrdfResources& = delete;
@@ -69,6 +74,7 @@ public:
 
 private:
   Graphics& graphics_;
+  observer_ptr<DiagnosticsService> diagnostics_ { nullptr };
   std::shared_ptr<const IblBrdfProduct> product_;
 };
 
@@ -78,6 +84,8 @@ struct IblProcessSettings {
   bool lower_hemisphere_solid_color { true };
   std::array<float, 3> lower_hemisphere_color {};
   float lower_hemisphere_blend_alpha { 1.0F };
+  //! Internal dispatch granularity in texels; zero records whole mip faces.
+  std::uint32_t dispatch_tile_size { 0U };
 };
 
 //! Scene-global source. ProcessSky copies unit-exposure LUTs into its admitted
@@ -118,7 +126,29 @@ struct IblGpuProducts {
   [[nodiscard]] OXGN_VRTX_API auto Attach(graphics::CommandRecorder& recorder,
     graphics::ResourceRegistry& registry) const -> bool;
   [[nodiscard]] OXGN_VRTX_API auto AcquireCapture() const
-    -> std::expected<IblCaptureLease, IblCaptureError>;
+    -> Result<IblCaptureLease, IblCaptureError>;
+};
+
+struct IblGpuJob;
+class IblWorkBudget;
+
+//! Immutable dispatch description used by the scene's work-budget owner.
+struct IblGpuDispatch {
+  const char* shader {};
+  std::uint32_t work_index {};
+  std::array<std::uint32_t, 3> groups {};
+  std::uint32_t output_size {};
+  //! Active texels, GGX samples or reduction inputs, according to the shader.
+  std::uint64_t work_units {};
+  [[nodiscard]] OXGN_VRTX_API auto CanShareBatchWith(
+    const IblGpuDispatch& other) const noexcept -> bool;
+};
+
+struct IblGpuAdvance {
+  std::uint32_t recorded_dispatches {};
+  std::uint32_t remaining_dispatches {};
+  //! Non-null only after the complete producer set is accepted for submission.
+  std::shared_ptr<const IblGpuProducts> products;
 };
 
 //! One scene's bounded product storage. Process/Close run on the renderer
@@ -174,7 +204,37 @@ public:
     const std::shared_ptr<const IblBrdfProduct>& brdf,
     const IblProcessSettings& settings, std::uint32_t revision)
     -> std::expected<std::shared_ptr<const IblGpuProducts>, IblProcessError>;
+  //! Reserve a generation and submit its frozen sky inputs/invalid metadata.
+  [[nodiscard]] OXGN_VRTX_API auto BeginSky(const IblSkySource& source,
+    const std::shared_ptr<const IblBrdfProduct>& brdf,
+    const IblProcessSettings& settings, std::uint32_t revision)
+    -> std::expected<std::shared_ptr<IblGpuJob>, IblProcessError>;
+  //! Retains the registered source; its texels must stay immutable until the
+  //! job's last submitted read completes. BeginSky instead freezes mutable
+  //! LUTs.
+  [[nodiscard]] OXGN_VRTX_API auto Begin(
+    const std::shared_ptr<graphics::Texture>& source,
+    const graphics::RegistrationLease& source_registration,
+    const std::shared_ptr<const IblBrdfProduct>& brdf,
+    const IblProcessSettings& settings, std::uint32_t revision,
+    graphics::CompletionReceipt source_producer = {})
+    -> std::expected<std::shared_ptr<IblGpuJob>, IblProcessError>;
+  //! Retains the immutable resident cube and descriptor owner across batches.
+  [[nodiscard]] OXGN_VRTX_API auto BeginCubeView(
+    const std::shared_ptr<const graphics::Texture>& source,
+    ShaderVisibleIndex srv, std::shared_ptr<const void> owner,
+    const std::shared_ptr<const IblBrdfProduct>& brdf,
+    const IblProcessSettings& settings, std::uint32_t revision)
+    -> std::expected<std::shared_ptr<IblGpuJob>, IblProcessError>;
+  [[nodiscard]] OXGN_VRTX_API auto PendingDispatches(const IblGpuJob& job) const
+    -> std::span<const IblGpuDispatch>;
+  [[nodiscard]] OXGN_VRTX_API auto Advance(
+    const std::shared_ptr<IblGpuJob>& job, std::uint32_t dispatch_limit)
+    -> std::expected<IblGpuAdvance, IblProcessError>;
   OXGN_VRTX_API auto Close() noexcept -> void;
+  [[nodiscard]] OXGN_VRTX_API auto IsOpen() const -> bool;
+  OXGN_VRTX_API auto SetTimingContext(std::shared_ptr<IblWorkBudget> budget,
+    frame::SequenceNumber sequence) -> void;
   [[nodiscard]] OXGN_VRTX_API auto GetStats() const -> Stats;
 
 private:
@@ -186,6 +246,14 @@ private:
     ShaderVisibleIndex resident_srv = kInvalidShaderVisibleIndex,
     std::shared_ptr<const void> resident_owner = {})
     -> std::expected<std::shared_ptr<const IblGpuProducts>, IblProcessError>;
+  auto PrepareSource(const std::shared_ptr<const graphics::Texture>& source,
+    const graphics::RegistrationLease& source_registration,
+    const std::shared_ptr<const IblBrdfProduct>& brdf,
+    const IblProcessSettings& settings, std::uint32_t revision,
+    graphics::CompletionReceipt source_producer, const IblSkySource* sky,
+    ShaderVisibleIndex resident_srv = kInvalidShaderVisibleIndex,
+    std::shared_ptr<const void> resident_owner = {})
+    -> std::expected<std::shared_ptr<IblGpuJob>, IblProcessError>;
   struct Impl;
   std::unique_ptr<Impl> impl_;
 };

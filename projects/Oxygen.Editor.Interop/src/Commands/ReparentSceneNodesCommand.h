@@ -45,7 +45,9 @@ namespace oxygen::interop::module {
           if (!sceneNode || !sceneNode->IsAlive())
             continue;
 
-          (void)context.Scene->ReparentNode(*sceneNode, *parentNode, preserve_);
+          if (context.Scene->ReparentNode(*sceneNode, *parentNode, preserve_)) {
+            context.Scene->NotifyEnvironmentAuthoringChange();
+          }
         }
       }
       else {
@@ -54,7 +56,9 @@ namespace oxygen::interop::module {
           if (!sceneNode || !sceneNode->IsAlive())
             continue;
 
-          (void)context.Scene->MakeNodeRoot(*sceneNode, preserve_);
+          if (context.Scene->MakeNodeRoot(*sceneNode, preserve_)) {
+            context.Scene->NotifyEnvironmentAuthoringChange();
+          }
         }
       }
     }

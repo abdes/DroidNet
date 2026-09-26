@@ -13,6 +13,7 @@
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "DemoShell/Services/EnvironmentSettingsService.h"
@@ -883,6 +884,7 @@ auto EnvironmentSettingsService::SetRuntimeConfig(
   NormalizeSkySystems();
 
   if (scene_changed) {
+    preview_authoring_pending_ = false;
     BindPreviewObserver(SupportsPreviewSun() ? config_.scene.get() : nullptr);
     preview_sun_.Reset();
     scene_snapshot_.Reset();
@@ -940,6 +942,7 @@ auto EnvironmentSettingsService::OnSceneActivated(scene::Scene& scene) -> void
   PersistSettingsIfDirty();
   BindPreviewObserver(nullptr);
   config_.scene = observer_ptr { &scene };
+  preview_authoring_pending_ = false;
   preview_sun_.Reset();
   scene_snapshot_.Reset();
   // Ensure the next runtime config update runs scene-transition logic even
@@ -1165,6 +1168,7 @@ auto EnvironmentSettingsService::SetPreviewSunEnabled(const bool enabled)
   }
   preview_sun_enabled_ = enabled;
   preview_reconcile_pending_ = true;
+  preview_authoring_pending_ = true;
   if (const auto settings = SettingsService::ForDemoApp()) {
     settings->SetBool("render_scene.preview_sun.enabled", enabled);
   }
@@ -1240,6 +1244,9 @@ auto EnvironmentSettingsService::ReconcilePreviewSun() -> void
   preview_sun_.Update(*config_.scene,
     SupportsPreviewSun() && config_.preview_scene_ready
       && preview_sun_enabled_);
+  if (std::exchange(preview_authoring_pending_, false)) {
+    config_.scene->NotifyEnvironmentAuthoringChange();
+  }
   UpdateSunLightCandidate();
   if (preset_index_ == kPresetUseScene) {
     BindSceneSun(true);
@@ -3256,6 +3263,7 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
         [this]() noexcept { preview_reconciling_ = false; });
       preview_sun_.Update(*config_.scene, false);
       scene_snapshot_.Restore(*config_.scene);
+      config_.scene->NotifyEnvironmentAuthoringChange();
     }
     restore_scene_pending_ = false;
     preview_reconcile_pending_ = true;
@@ -3525,6 +3533,10 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
 
   config_.scene->Update(false);
 
+  if (apply_atmosphere || apply_sun || apply_sky_light
+    || HasDirty(dirty_domains_, DirtyDomain::kHeightFog)) {
+    config_.scene->NotifyEnvironmentAuthoringChange();
+  }
   settings_persist_dirty_ = true;
   applied_changes_this_frame_ = true;
   pending_changes_ = false;

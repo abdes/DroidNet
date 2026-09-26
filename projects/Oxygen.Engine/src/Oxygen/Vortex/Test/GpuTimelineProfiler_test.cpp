@@ -163,6 +163,35 @@ TEST(GpuTimelineProfilerTest, PublishesNestedTimelineOnNextFrame)
   EXPECT_EQ(graphics->GetTimestampQueryProvider().LastResolvedQueryCount(), 4U);
 }
 
+TEST(GpuTimelineProfilerTest, InvalidatedRecordingSkipsUnwrittenQueryResolve)
+{
+  auto graphics = MakeGraphics();
+  auto profiler
+    = GpuTimelineProfiler(observer_ptr<Graphics> { graphics.get() });
+  auto sink = std::make_shared<CapturingSink>();
+  profiler.SetEnabled(true);
+  profiler.AddSink(sink);
+  profiler.OnFrameStart(oxygen::frame::SequenceNumber { 1U });
+  auto recorder = graphics->AcquireCommandRecorder(
+    graphics->QueueKeyFor(QueueRole::kGraphics), "Discarded timestamps",
+    oxygen::graphics::SubmissionPolicy::kExplicit);
+  recorder->SetTelemetryCollector(
+    observer_ptr<oxygen::graphics::IGpuProfileCollector> { &profiler });
+  {
+    oxygen::graphics::GpuEventScope scope(*recorder, "Discarded",
+      oxygen::profiling::ProfileGranularity::kTelemetry);
+  }
+  recorder.Discard();
+  profiler.InvalidateCurrentFrame();
+  profiler.OnFrameRecordTailResolve();
+  EXPECT_GT(graphics->GetTimestampQueryProvider().WriteCount(), 0U);
+  EXPECT_EQ(graphics->GetTimestampQueryProvider().ResolveCount(), 0U);
+  profiler.OnFrameStart(oxygen::frame::SequenceNumber { 2U });
+  ASSERT_EQ(sink->frames.size(), 1U);
+  EXPECT_FALSE(sink->frames.front().profiling_enabled);
+  EXPECT_FALSE(sink->frames.front().scopes.front().valid);
+}
+
 TEST(GpuTimelineProfilerTest, FrameSpanIncludesSeparatePassRecorders)
 {
   auto graphics = MakeGraphics();

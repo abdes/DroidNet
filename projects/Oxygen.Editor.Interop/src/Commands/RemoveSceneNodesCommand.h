@@ -30,6 +30,7 @@ namespace oxygen::interop::module {
       for (const auto& handle : nodes_) {
         auto sceneNode = context.Scene->GetNode(handle);
         if (sceneNode && sceneNode->IsAlive()) {
+          context.Scene->NotifyEnvironmentAuthoringChange();
           if (sceneNode->HasChildren()) {
             context.Scene->DestroyNodeHierarchy(*sceneNode);
           }

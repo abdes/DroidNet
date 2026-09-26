@@ -49,13 +49,17 @@ namespace oxygen::interop::module {
     if (parent_.IsValid()) {
       auto parentNode = context.Scene->GetNode(parent_);
       if (parentNode && parentNode->IsAlive()) {
-        (void)context.Scene->ReparentNode(*sceneNode, *parentNode, preserve_);
+        if (context.Scene->ReparentNode(*sceneNode, *parentNode, preserve_)) {
+          context.Scene->NotifyEnvironmentAuthoringChange();
+        }
       }
       return;
     }
 
     // Reparent to root
-    (void)context.Scene->MakeNodeRoot(*sceneNode, preserve_);
+    if (context.Scene->MakeNodeRoot(*sceneNode, preserve_)) {
+      context.Scene->NotifyEnvironmentAuthoringChange();
+    }
   }
 
 } // namespace oxygen::interop::module

@@ -227,6 +227,18 @@ public:
   //! Removes the current scene environment (if any).
   OXGN_SCN_API auto ClearEnvironment() noexcept -> void;
 
+  //! Marks a native/editor environment edit after its scene mutations apply.
+  //! Transient, scene-thread metadata; runtime animation does not call this.
+  auto NotifyEnvironmentAuthoringChange() noexcept -> void
+  {
+    ++environment_authoring_revision_;
+  }
+  [[nodiscard]] auto GetEnvironmentAuthoringRevision() const noexcept
+    -> std::uint64_t
+  {
+    return environment_authoring_revision_;
+  }
+
   //=== Node Factories - Creation ===-----------------------------------------//
 
   //! Creates a new root node with the given \p name and default flags.
@@ -748,6 +760,7 @@ private:
   std::vector<NodeHandle> root_nodes_;
 
   std::unique_ptr<SceneEnvironment> environment_;
+  std::uint64_t environment_authoring_revision_ { 0U };
 
   //! Unique ID for this scene (0-255)
   SceneId scene_id_;

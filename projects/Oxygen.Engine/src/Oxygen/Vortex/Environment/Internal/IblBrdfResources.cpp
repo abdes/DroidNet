@@ -12,6 +12,7 @@
 #include <span>
 #include <utility>
 
+#include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
@@ -23,8 +24,11 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Profiling/GpuEventScope.h>
+#include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
 #include <Oxygen/Vortex/Environment/Internal/IblBrdfLookup.h>
 #include <Oxygen/Vortex/Environment/Internal/IblGpuProcessor.h>
+#include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/Upload/Types.h>
 #include <Oxygen/Vortex/Upload/UploadPlanner.h>
 #include <Oxygen/Vortex/Upload/UploadPolicy.h>
@@ -37,6 +41,12 @@ IblBrdfResources::IblBrdfResources(Graphics& graphics)
 }
 
 IblBrdfResources::~IblBrdfResources() = default;
+
+IblBrdfResources::IblBrdfResources(Renderer& renderer)
+  : IblBrdfResources(*renderer.GetGraphics())
+{
+  diagnostics_ = observer_ptr { &renderer.GetDiagnosticsService() };
+}
 
 auto IblBrdfResources::Prepare()
   -> std::expected<std::shared_ptr<const IblBrdfProduct>, IblProcessError>
@@ -98,21 +108,36 @@ auto IblBrdfResources::Prepare()
       || !recording->RetainRegistration(registry, candidate->registration)
       || !recording->RetainRegistration(registry, *staging_registration))
       return std::unexpected(IblProcessError::kRecordingFailed);
-    recording->BeginTrackingResourceState(
-      *staging, graphics::ResourceStates::kGenericRead);
-    recording->BeginTrackingResourceState(
-      *candidate->texture, graphics::ResourceStates::kCommon);
-    recording->RequireResourceState(
-      *candidate->texture, graphics::ResourceStates::kCopyDest);
-    recording->FlushBarriers();
-    recording->CopyBufferToTexture(*staging, region, *candidate->texture);
-    recording->RequireResourceStateFinal(
-      *candidate->texture, graphics::ResourceStates::kShaderResource);
+    bool accepted = false;
+    const ScopeGuard timing([&]() noexcept {
+      if (!accepted && diagnostics_)
+        diagnostics_->InvalidateIblTiming();
+    });
+    if (diagnostics_)
+      diagnostics_->AttachIblTimelineCollector(*recording);
+    {
+      const graphics::GpuEventScope upload_scope(*recording,
+        "Vortex.Environment.IBL.BrdfUpload",
+        profiling::ProfileGranularity::kTelemetry,
+        profiling::ProfileCategory::kUpload);
+      recording->BeginTrackingResourceState(
+        *staging, graphics::ResourceStates::kGenericRead);
+      recording->BeginTrackingResourceState(
+        *candidate->texture, graphics::ResourceStates::kCommon);
+      recording->RequireResourceState(
+        *candidate->texture, graphics::ResourceStates::kCopyDest);
+      recording->FlushBarriers();
+      recording->CopyBufferToTexture(*staging, region, *candidate->texture);
+      recording->RequireResourceStateFinal(
+        *candidate->texture, graphics::ResourceStates::kShaderResource);
+      recording->FlushBarriers();
+    }
     const auto submission = recording.SubmitWithReceipt();
     if (submission.outcome != graphics::SubmissionOutcome::kSubmitted
       || !submission.receipt)
       return std::unexpected(IblProcessError::kSubmissionFailed);
     candidate->producer = *submission.receipt;
+    accepted = true;
     product_ = std::move(candidate);
     return product_;
   } catch (const std::bad_alloc&) {

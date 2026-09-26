@@ -3121,10 +3121,10 @@ auto SceneRenderer::InspectExposureSettings(
 }
 
 auto SceneRenderer::AcquireIblCapture(const ViewId view)
-  -> std::expected<environment::IblCaptureLease, environment::IblCaptureError>
+  -> Result<environment::IblCaptureLease, environment::IblCaptureError>
 {
   if (!environment_)
-    return std::unexpected(environment::IblCaptureError::kUnavailable);
+    return Err(environment::IblCaptureError::kUnavailable);
   return environment_->AcquireIblCapture(view);
 }
 

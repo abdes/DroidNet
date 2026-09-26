@@ -27,6 +27,7 @@ struct StableAtmosphereState {
   std::uint64_t atmosphere_revision { 0U };
   std::uint64_t light_revision { 0U };
   std::uint64_t stable_revision { 0U };
+  std::uint64_t authoring_revision { 0U };
 };
 
 //! Capture input identity, excluding surface gains and view-only visibility.

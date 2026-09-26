@@ -367,6 +367,11 @@ auto GpuTimelineProfiler::SetEnabled(const bool enabled) -> void
   enabled_ = enabled;
 }
 
+auto GpuTimelineProfiler::InvalidateCurrentFrame() noexcept -> void
+{
+  frame_capture_.profiling_enabled = false;
+}
+
 auto GpuTimelineProfiler::SetMaxScopesPerFrame(const uint32_t max_scopes)
   -> void
 {
@@ -488,7 +493,7 @@ auto GpuTimelineProfiler::BeginScope(graphics::CommandRecorder& recorder,
   const graphics::GpuProfileScopeInfo& info,
   graphics::GpuProfileCollectorState& state) -> void
 {
-  if (!frame_capture_.profiling_enabled
+  if (!frame_capture_.profiling_enabled || frame_capture_.resolve_submitted
     || info.desc.granularity != profiling::ProfileGranularity::kTelemetry) {
     state.flags = 0U;
     return;

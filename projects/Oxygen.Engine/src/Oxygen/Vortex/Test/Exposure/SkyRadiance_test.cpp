@@ -22,8 +22,10 @@
 #include <d3d12.h>
 #include <dxgiformat.h>
 #include <glm/geometric.hpp>
+#include <wrl/client.h>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/PostProcess.h>
@@ -31,7 +33,10 @@
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/FrameCaptureController.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
+#include <Oxygen/Graphics/Common/Internal/SubmissionFaultTestAccess.h>
+#include <Oxygen/Graphics/Common/ReadbackManager.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Graphics/Direct3D12/CommandQueue.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Environment/Background.h>
 #include <Oxygen/Scene/Environment/Fog.h>
@@ -1247,6 +1252,8 @@ NOLINT_TEST_F(ExposureGpuTest, SkyIblCacheSeparatesSceneLifetimesAndReusesBrdf)
   state.view_products.atmosphere.aerial_perspective_start_depth_m = 5000.0F;
   state.view_products.sky_light.cubemap_resource = content::ResourceKey { 99U };
   ctx_.current_view.view_id = ViewId { 991U };
+  ctx_.frame_sequence = frame::SequenceNumber { 2U };
+  ctx_.frame_slot = frame::Slot { 1U };
   EXPECT_FALSE(
     processor.RefreshSkyLightProducts(reuse.probe_state, ctx_, state, fog, {})
       .requested);
@@ -1261,6 +1268,9 @@ NOLINT_TEST_F(ExposureGpuTest, SkyIblCacheSeparatesSceneLifetimesAndReusesBrdf)
     reuse.probe_state, ctx_, missing, fog, {});
   EXPECT_FALSE(failed.probe_state.valid);
   EXPECT_EQ(processor.GetPublishedProducts(), nullptr);
+  // The next scene snapshot retries; later views share the first decision.
+  ctx_.frame_sequence = frame::SequenceNumber { 3U };
+  ctx_.frame_slot = frame::Slot { 2U };
   const auto replacement = processor.RefreshSkyLightProducts(
     failed.probe_state, ctx_, state, fog, {});
   ASSERT_TRUE(replacement.refreshed);
@@ -1300,6 +1310,306 @@ NOLINT_TEST_F(ExposureGpuTest, SkyIblCacheSeparatesSceneLifetimesAndReusesBrdf)
   EXPECT_EQ(processor.GetCachedSceneCount(), 0U);
   EXPECT_EQ(ReadFloatTexture(*second->processed_cube, true), reference);
   FlushBackend();
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, IblSchedulerFailurePolicyKeepsOnlyUsablePriorProducts)
+{
+  namespace env = environment::internal;
+  using graphics::internal::SubmissionFailurePoint;
+  using graphics::internal::SubmissionFaultTestAccess;
+  auto scene = std::make_shared<scene::Scene>("IBL scheduler faults", 8U);
+  ctx_.scene = observer_ptr { scene.get() };
+  for (const auto point : { SubmissionFailurePoint::kBeforeIssue,
+         SubmissionFailurePoint::kAfterIssueBeforeMarker }) {
+    const bool benign = point == SubmissionFailurePoint::kBeforeIssue;
+    SCOPED_TRACE(benign);
+    auto processor = env::IblProcessor(*renderer_);
+    auto state = env::StableAtmosphereState {};
+    state.view_products.sky_light.enabled = true;
+    state.view_products.sky_light.lower_hemisphere_is_solid_color = false;
+    auto& height_fog = state.view_products.height_fog;
+    height_fog.enabled = true;
+    height_fog.enable_height_fog = true;
+    height_fog.visible_in_real_time_sky_captures = true;
+    height_fog.fog_inscattering_luminance = glm::vec3(1.0F);
+    auto fog = GpuFogParams {};
+    fog.flags = kGpuFogFlagEnabled | kGpuFogFlagHeightFogEnabled
+      | kGpuFogFlagVisibleInRealTimeSkyCaptures;
+    fog.primary_density = 0.01F;
+    fog.fog_inscattering_luminance_rgb = { 1, 1, 1 };
+    const auto refresh = [&](unsigned sequence) {
+      ctx_.frame_sequence = frame::SequenceNumber { sequence };
+      ctx_.frame_slot = frame::Slot { (sequence - 1U) % 3U };
+      return processor.RefreshSkyLightProducts({}, ctx_, state, fog, {});
+    };
+    ASSERT_TRUE(refresh(1U).refreshed);
+    const auto original = processor.GetPublishedProducts();
+    ASSERT_TRUE(original);
+    WaitForQueueIdle();
+    height_fog.fog_inscattering_luminance = glm::vec3(2.0F);
+    fog.fog_inscattering_luminance_rgb = { 2, 2, 2 };
+    const auto partial = refresh(2U);
+    EXPECT_TRUE(partial.probe_state.valid);
+    EXPECT_FALSE(partial.refreshed);
+    EXPECT_EQ(processor.GetPublishedProducts(), original);
+    // Later views must not advance the same scene a second time this frame.
+    EXPECT_FALSE(refresh(2U).requested);
+    SubmissionFaultTestAccess::FailNext(*GetQueue(), point);
+    const auto backend = Backend().GetBackendLifetime();
+    const ScopeGuard restore(
+      [backend]() noexcept { backend->ClearSubmissionFault(); });
+    const auto failed = refresh(3U);
+    EXPECT_EQ(failed.probe_state.valid, benign);
+    EXPECT_EQ(failed.probe_state.static_sky_light.unavailable_reason,
+      environment::StaticSkyLightUnavailableReason::kProcessingFailed);
+    if (!benign) {
+      EXPECT_EQ(processor.GetPublishedProducts(), nullptr);
+      backend->ClearSubmissionFault();
+      EXPECT_FALSE(refresh(3U).probe_state.valid);
+      EXPECT_FALSE(refresh(4U).probe_state.valid);
+      EXPECT_EQ(processor.GetPublishedProducts(), nullptr);
+      WaitForQueueIdle();
+      continue;
+    }
+    EXPECT_EQ(processor.GetPublishedProducts(), original);
+    for (unsigned sequence = 4U; sequence <= 7U; ++sequence)
+      EXPECT_TRUE(refresh(sequence).probe_state.valid);
+    EXPECT_NE(processor.GetPublishedProducts(), original);
+    EXPECT_NEAR(
+      ReadFloatTexture(*processor.GetPublishedProducts()->processed_cube, true)
+        .front()[0],
+      2.0F, 0.001F);
+    height_fog.fog_inscattering_luminance = glm::vec3(4.0F);
+    fog.fog_inscattering_luminance_rgb = { 4, 4, 4 };
+    ++state.authoring_revision;
+    SubmissionFaultTestAccess::FailNext(
+      *GetQueue(), SubmissionFailurePoint::kBeforeIssue);
+    EXPECT_FALSE(refresh(8U).probe_state.valid);
+    EXPECT_EQ(processor.GetPublishedProducts(), nullptr);
+    EXPECT_FALSE(refresh(8U).probe_state.valid);
+    EXPECT_TRUE(refresh(9U).refreshed);
+    EXPECT_NEAR(
+      ReadFloatTexture(*processor.GetPublishedProducts()->processed_cube, true)
+        .front()[0],
+      4.0F, 0.001F);
+    WaitForQueueIdle();
+  }
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, RejectedIblBatchInvalidatesActiveTimestampCapture)
+{
+  namespace env = environment::internal;
+  auto scene = std::make_shared<scene::Scene>("IBL timed failure", 8U);
+  ctx_.scene = observer_ptr { scene.get() };
+  auto processor = env::IblProcessor(*renderer_);
+  auto state = env::StableAtmosphereState {};
+  state.view_products.sky_light.enabled = true;
+  state.view_products.sky_light.lower_hemisphere_is_solid_color = false;
+  auto& height_fog = state.view_products.height_fog;
+  height_fog.enabled = true;
+  height_fog.enable_height_fog = true;
+  height_fog.visible_in_real_time_sky_captures = true;
+  height_fog.fog_inscattering_luminance = glm::vec3(1.0F);
+  auto fog = GpuFogParams {};
+  fog.flags = kGpuFogFlagEnabled | kGpuFogFlagHeightFogEnabled
+    | kGpuFogFlagVisibleInRealTimeSkyCaptures;
+  fog.primary_density = 0.01F;
+  fog.fog_inscattering_luminance_rgb = { 1, 1, 1 };
+  const auto refresh = [&](unsigned sequence) {
+    ctx_.frame_sequence = frame::SequenceNumber { sequence };
+    ctx_.frame_slot = frame::Slot { (sequence - 1U) % 3U };
+    return processor.RefreshSkyLightProducts({}, ctx_, state, fog, {});
+  };
+  ASSERT_TRUE(refresh(1U).refreshed);
+  WaitForQueueIdle();
+  auto& profiler
+    = vortex::testing::RendererPublicationProbe::GetGpuTimelineProfiler(
+      *renderer_);
+  profiler.OnFrameStart(frame::SequenceNumber { 2U });
+  height_fog.fog_inscattering_luminance = glm::vec3(2.0F);
+  fog.fog_inscattering_luminance_rgb = { 2, 2, 2 };
+  const auto partial = refresh(2U);
+  ASSERT_TRUE(partial.probe_state.valid);
+  ASSERT_FALSE(partial.refreshed);
+  profiler.OnFrameRecordTailResolve();
+  WaitForQueueIdle();
+  profiler.OnFrameStart(frame::SequenceNumber { 3U });
+  ASSERT_GT(processor.GetTimingSampleCount(), 0U);
+  graphics::internal::SubmissionFaultTestAccess::FailNext(
+    *GetQueue(), graphics::internal::SubmissionFailurePoint::kBeforeIssue);
+  const auto rejected = refresh(3U);
+  EXPECT_TRUE(rejected.probe_state.valid);
+  EXPECT_FALSE(rejected.refreshed);
+  profiler.OnFrameRecordTailResolve();
+  WaitForQueueIdle();
+  profiler.OnFrameStart(frame::SequenceNumber { 4U });
+  const auto invalid = profiler.GetLastPublishedFrame();
+  ASSERT_TRUE(invalid);
+  EXPECT_EQ(invalid->frame_sequence, 3U);
+  EXPECT_FALSE(invalid->profiling_enabled);
+  EXPECT_TRUE(std::ranges::none_of(
+    invalid->scopes, [](const auto& scope) { return scope.valid; }));
+  profiler.OnFrameRecordTailResolve();
+  WaitForQueueIdle();
+}
+
+NOLINT_TEST_F(
+  ExposureGpuTest, QueuedIblPreemptionKeepsPinnedCapturesAndBoundedStorage)
+{
+  namespace env = environment::internal;
+  pass_.reset();
+  renderer_->OnShutdown();
+  auto config = RendererConfig {};
+  config.upload_queue_key = QueueKeyFor().get();
+  renderer_ = std::make_unique<Renderer>(GetGraphicsShared(), config,
+    kPhase1DefaultRuntimeCapabilityFamilies
+      | RendererCapabilityFamily::kEnvironmentLighting);
+  auto scene = std::make_shared<scene::Scene>("IBL queued preemption", 8U);
+  ctx_.scene = observer_ptr { scene.get() };
+  auto processor = env::IblProcessor(*renderer_);
+  auto state = env::StableAtmosphereState {};
+  state.view_products.sky_light.enabled = true;
+  state.view_products.sky_light.lower_hemisphere_is_solid_color = false;
+  state.view_products.atmosphere.enabled = true;
+  state.atmosphere_revision = 1U;
+  state.view_products.atmosphere_light_count = 2U;
+  for (unsigned index = 0U; index < 2U; ++index) {
+    auto& light = state.view_products.atmosphere_lights[index];
+    light.enabled = true;
+    light.direction_to_light_ws
+      = glm::normalize(glm::vec3(index == 0U ? 1.0F : -1.0F, 0, 1));
+    light.illuminance_rgb_lux = glm::vec3(index == 0U ? 1000.0F : 100.0F);
+    light.disk_luminance_scale_rgb = glm::vec3(1.0F);
+  }
+  auto& height_fog = state.view_products.height_fog;
+  height_fog.enabled = true;
+  height_fog.enable_height_fog = true;
+  height_fog.visible_in_real_time_sky_captures = true;
+  auto fog = GpuFogParams {};
+  fog.flags = kGpuFogFlagEnabled | kGpuFogFlagHeightFogEnabled
+    | kGpuFogFlagVisibleInRealTimeSkyCaptures;
+  fog.primary_density = 0.01F;
+  unsigned sequence = 0U;
+  env::IblProcessor::RefreshState last;
+  std::uint32_t revision = 0U;
+  const auto submit =
+    [&](bool authoring,
+      const std::shared_ptr<graphics::GpuBufferReadback>& readback = {}) {
+      const auto number = frame::SequenceNumber { ++sequence };
+      const auto slot
+        = frame::Slot { (sequence - 1U) % frame::kFramesInFlight.get() };
+      Backend().BeginFrame(number, slot);
+      const ScopeGuard end_frame(
+        [&]() noexcept { Backend().EndFrame(number, slot); });
+      ctx_.frame_sequence = number;
+      ctx_.frame_slot = slot;
+      static_cast<void>(processor.OnFrameStart());
+      height_fog.fog_inscattering_luminance = glm::vec3(float(sequence));
+      fog.fog_inscattering_luminance_rgb
+        = { float(sequence), float(sequence), float(sequence) };
+      if (authoring)
+        ++state.authoring_revision;
+      last = processor.RefreshSkyLightProducts({}, ctx_, state, fog, {});
+      ASSERT_TRUE(last.probe_state.valid);
+      const auto product = processor.GetPublishedProducts();
+      ASSERT_TRUE(product);
+      revision = product->revision;
+      if (readback) {
+        auto reader = AcquireRecorder("IBL queued scene consumer",
+          graphics::QueueRole::kGraphics,
+          graphics::SubmissionPolicy::kExplicit);
+        ASSERT_TRUE(product->Attach(*reader, Backend().GetResourceRegistry()));
+        ASSERT_TRUE(readback->EnqueueCopy(*reader, *product->metadata,
+          { 0U, sizeof(environment::IblProductMetadata) }));
+        reader->RequireResourceStateFinal(
+          *product->metadata, ResourceStates::kShaderResource);
+        ASSERT_TRUE(reader.Submit());
+      }
+    };
+  ASSERT_NO_FATAL_FAILURE(submit(true));
+  auto first = processor.AcquireCapture(processor.GetPublishedProducts());
+  ASSERT_TRUE(first);
+  WaitForQueueIdle();
+  ASSERT_NO_FATAL_FAILURE(submit(true));
+  auto second = processor.AcquireCapture(processor.GetPublishedProducts());
+  ASSERT_TRUE(second);
+  WaitForQueueIdle();
+  ASSERT_NO_FATAL_FAILURE(submit(true));
+  WaitForQueueIdle();
+  auto& registry = Backend().GetResourceRegistry();
+  std::uint64_t warmed_creations = 0U;
+  std::size_t warmed_registrations = 0U;
+  unsigned peak_normal = 0U;
+  for (unsigned cycle = 0U; cycle < 12U; ++cycle) {
+    SCOPED_TRACE(cycle);
+    std::array<std::shared_ptr<graphics::GpuBufferReadback>,
+      frame::kFramesInFlight.get()>
+      readbacks;
+    std::array<std::uint32_t, frame::kFramesInFlight.get()> expected;
+    for (auto& readback : readbacks)
+      readback = GetReadbackManager()->CreateBufferReadback(
+        "IBL in-flight generation");
+    Microsoft::WRL::ComPtr<ID3D12Fence> gate;
+    ASSERT_TRUE(SUCCEEDED(Backend().GetCurrentDevice()->CreateFence(
+      0U, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(gate.GetAddressOf()))));
+    const ScopeGuard release_gate(
+      [gate]() noexcept { static_cast<void>(gate->Signal(1U)); });
+    auto* queue = static_cast<graphics::d3d12::CommandQueue*>(GetQueue().get());
+    const auto completed_before = queue->GetCompletedValue();
+    ASSERT_TRUE(SUCCEEDED(queue->GetCommandQueue()->Wait(gate.Get(), 1U)));
+    const auto previous = revision;
+    for (unsigned flight = 0U; flight < frame::kFramesInFlight.get();
+      ++flight) {
+      ASSERT_NO_FATAL_FAILURE(submit(flight != 0U, readbacks[flight]));
+      expected[flight] = revision;
+      EXPECT_EQ(last.refreshed, flight != 0U);
+      EXPECT_EQ(revision, flight == 0U ? previous : previous + flight + 1U);
+    }
+    EXPECT_EQ(queue->GetCompletedValue(), completed_before);
+    const auto pending = processor.GetActivePoolStats();
+    peak_normal = std::max(peak_normal, pending.normal_in_use);
+    EXPECT_EQ(pending.captured_generations, 2U);
+    EXPECT_LE(pending.normal_in_use, env::IblGpuProcessor::kNormalSlots);
+    EXPECT_LE(pending.allocated, env::IblGpuProcessor::kMaximumSlots);
+    ASSERT_TRUE(SUCCEEDED(gate->Signal(1U)));
+    WaitForQueueIdle();
+    for (unsigned flight = 0U; flight < readbacks.size(); ++flight) {
+      auto mapped = readbacks[flight]->MapNow();
+      ASSERT_TRUE(mapped);
+      environment::IblProductMetadata metadata;
+      std::memcpy(&metadata, mapped->Bytes().data(), sizeof(metadata));
+      EXPECT_EQ(metadata.product_revision, expected[flight]);
+      EXPECT_EQ(metadata.processing_flags, 3U);
+    }
+    readbacks = {};
+    WaitForQueueIdle();
+    registry.PollManagedRetirements();
+    const auto retired = processor.GetActivePoolStats();
+    EXPECT_EQ(retired.normal_in_use, 1U);
+    EXPECT_EQ(retired.captured_generations, 2U);
+    if (cycle == 7U) {
+      warmed_creations = retired.storage_creations;
+      warmed_registrations = registry.GetRegisteredResourceCount();
+    } else if (cycle > 7U) {
+      EXPECT_EQ(retired.storage_creations, warmed_creations);
+      EXPECT_EQ(registry.GetRegisteredResourceCount(), warmed_registrations);
+    }
+  }
+  EXPECT_GE(peak_normal, 4U);
+  EXPECT_LE(warmed_creations, env::IblGpuProcessor::kMaximumSlots);
+  EXPECT_EQ(Read<environment::IblProductMetadata>(
+              *first->Metadata(), ResourceStates::kShaderResource)
+              .product_revision,
+    first->Revision());
+  EXPECT_EQ(Read<environment::IblProductMetadata>(
+              *second->Metadata(), ResourceStates::kShaderResource)
+              .product_revision,
+    second->Revision());
+  RecordProperty("queued_scene_frames", 12U * frame::kFramesInFlight.get());
+  RecordProperty("peak_normal_generations", peak_normal);
+  RecordProperty("physical_storage_creations", warmed_creations);
 }
 
 NOLINT_TEST_F(

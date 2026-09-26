@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include <expected>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -466,8 +465,7 @@ public:
   //! Acquire during the view's publication window, before accepting an
   //! asynchronous IBL inspection/readback. kBusy leaves normal updates intact.
   [[nodiscard]] OXGN_VRTX_API auto AcquireIblCapture(ViewId view)
-    -> std::expected<environment::IblCaptureLease,
-      environment::IblCaptureError>;
+    -> Result<environment::IblCaptureLease, environment::IblCaptureError>;
 
   class OffscreenSceneFacade {
   public:
