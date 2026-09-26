@@ -30,6 +30,11 @@ reads the canonical `share/oxygen/schemas` directory. Both installed shader
 archives and scene headers match their current builds/source. No shader code was
 added for these checks. Matched-image gates remain open.
 
+[Release editor packaging](evidence/s5-editor-pack/run.json) passes the full
+application build and Runtime package generation. Interop retains its declared
+`net9.0` framework when the outer NuGet query supplies an empty framework; the
+same query previously failed with `NETSDK1013` and `MSB4181`.
+
 [S5 GPU validity](evidence/s5-metadata/run.json): **30 Debug / 28 Release native
 tests, 13 DemoShell CPU tests and two real widget cases** pass. Frame Diagnostics
 reads existing GPU metadata asynchronously; production shaders are unchanged.
