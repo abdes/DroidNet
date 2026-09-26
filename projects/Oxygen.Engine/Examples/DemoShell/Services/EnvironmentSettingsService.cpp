@@ -276,6 +276,8 @@ namespace {
     target.SetRayleighScaleHeightMeters(source.rayleigh_scale_height_m);
     target.SetMieScatteringRgb(Vec3 { source.mie_scattering_rgb[0],
       source.mie_scattering_rgb[1], source.mie_scattering_rgb[2] });
+    target.SetMieAbsorptionRgb(Vec3 { source.mie_absorption_rgb[0],
+      source.mie_absorption_rgb[1], source.mie_absorption_rgb[2] });
     target.SetMieScaleHeightMeters(source.mie_scale_height_m);
     target.SetMieAnisotropy(source.mie_g);
     target.SetOzoneAbsorptionRgb(Vec3 { source.absorption_rgb[0],

@@ -12,6 +12,7 @@
 #include <memory>
 #include <numbers>
 #include <optional>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -1659,6 +1660,36 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
 
   EXPECT_EQ(service_.GetLocalFogVolumeCount(), 0);
   EXPECT_TRUE(CollectLocalFogVolumeNodes(*scene).empty());
+}
+
+NOLINT_TEST_F(EnvironmentSettingsServiceTest, HydratesAuthoredMieAbsorption)
+{
+  namespace world = data::pak::world;
+  auto descriptor = world::SceneAssetDesc {};
+  descriptor.header.asset_type = static_cast<uint8_t>(data::AssetType::kScene);
+  descriptor.header.version = world::kSceneAssetVersion;
+  auto atmosphere = world::SkyAtmosphereEnvironmentRecord {};
+  atmosphere.mie_absorption_rgb[0] = 1.1e-6F;
+  atmosphere.mie_absorption_rgb[1] = 2.2e-6F;
+  atmosphere.mie_absorption_rgb[2] = 3.3e-6F;
+  const auto block = world::SceneEnvironmentBlockHeader {
+    .byte_size
+    = sizeof(world::SceneEnvironmentBlockHeader) + sizeof(atmosphere),
+    .systems_count = 1,
+  };
+  serio::MemoryStream stream;
+  serio::Writer writer(stream);
+  const auto packed = writer.ScopedAlignment(1);
+  ASSERT_TRUE(writer.Write(descriptor));
+  ASSERT_TRUE(writer.Write(block));
+  ASSERT_TRUE(writer.WriteBlob(std::as_bytes(std::span(&atmosphere, 1))));
+  const auto asset = data::SceneAsset(data::AssetKey {}, stream.Data());
+  auto environment = scene::SceneEnvironment {};
+  EnvironmentSettingsService::HydrateEnvironment(environment, asset, {});
+  const auto sky
+    = environment.TryGetSystem<scene::environment::SkyAtmosphere>();
+  ASSERT_TRUE(sky);
+  EXPECT_EQ(sky->GetMieAbsorptionRgb(), glm::vec3(1.1e-6F, 2.2e-6F, 3.3e-6F));
 }
 
 NOLINT_TEST_F(

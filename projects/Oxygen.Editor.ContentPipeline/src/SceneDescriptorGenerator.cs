@@ -531,9 +531,23 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
         return null;
     }
 
+    // Match the captured lighting supplied by Interop's ApplySkyLight.
     private static NativeEnvironment CreateEnvironment(SceneEnvironmentData environment)
         => new(
             CreateSkyAtmosphere(environment.AtmosphereEnabled, environment.SkyAtmosphere ?? new()),
+            new NativeSkyLightEnvironment(
+                Enabled: true,
+                Source: 0,
+                Intensity: 1.0f,
+                TintRgb: [1.0f, 1.0f, 1.0f],
+                DiffuseIntensity: 1.0f,
+                SpecularIntensity: 1.0f,
+                SourceCubemapAngleRadians: 0.0f,
+                LowerHemisphereColor: [0.02f, 0.02f, 0.03f],
+                LowerHemisphereIsSolidColor: true,
+                LowerHemisphereBlendAlpha: 1.0f,
+                VolumetricScatteringIntensity: 1.0f,
+                AffectReflections: true),
             CreatePostProcess(environment.PostProcess ?? new()),
             new NativeBackgroundEnvironment(Enabled: true, ToArray(environment.BackgroundColor)));
 
@@ -572,19 +586,20 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
     private static string? GetMeteringMaskPath(Uri? mask)
         => mask is null ? null : ContentPipelinePaths.ToNativeDescriptorPath(mask, ".otex");
 
+    // Mirrors the native Earth baseline in Oxygen/Core/Types/Atmosphere.h.
     private static NativeSkyAtmosphereEnvironment CreateSkyAtmosphere(bool enabled, SkyAtmosphereEnvironmentData authored)
         => new(
             Enabled: enabled,
             PlanetRadiusMeters: authored.PlanetRadiusMeters,
             AtmosphereHeightMeters: authored.AtmosphereHeightMeters,
             GroundAlbedoRgb: ToArray(authored.GroundAlbedoRgb),
-            RayleighScatteringRgb: [5.8e-6f, 13.5e-6f, 33.1e-6f],
+            RayleighScatteringRgb: [5.802e-6f, 13.558e-6f, 33.1e-6f],
             RayleighScaleHeightMeters: authored.RayleighScaleHeightMeters,
-            MieScatteringRgb: [21.0e-6f, 21.0e-6f, 21.0e-6f],
-            MieAbsorptionRgb: [0.0f, 0.0f, 0.0f],
+            MieScatteringRgb: [3.996e-6f, 3.996e-6f, 3.996e-6f],
+            MieAbsorptionRgb: [4.405e-7f, 4.405e-7f, 4.405e-7f],
             MieScaleHeightMeters: authored.MieScaleHeightMeters,
             MieAnisotropy: authored.MieAnisotropy,
-            OzoneAbsorptionRgb: [0.65e-6f, 1.88e-6f, 0.085e-6f],
+            OzoneAbsorptionRgb: [0.650e-6f, 1.881e-6f, 0.085e-6f],
             OzoneDensityProfile: [25_000.0f, 15_000.0f, 0.0f],
             MultiScatteringFactor: 1.0f,
             SkyLuminanceFactorRgb: ToArray(authored.SkyLuminanceFactorRgb),

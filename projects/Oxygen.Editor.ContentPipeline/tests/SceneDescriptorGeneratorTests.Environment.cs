@@ -14,6 +14,37 @@ namespace Oxygen.Editor.ContentPipeline.Tests;
 /// <summary>Checks the complete authored post-process contract against native descriptor output.</summary>
 public sealed partial class SceneDescriptorGeneratorTests
 {
+    /// <summary>Cooked scenes retain the captured skylight supplied by the live editor.</summary>
+    /// <param name="atmosphereEnabled">Whether the captured source contains an atmosphere.</param>
+    /// <returns>The asynchronous descriptor check.</returns>
+    [TestMethod]
+    [DataRow(true)]
+    [DataRow(false)]
+    public async Task GenerateAsyncPreservesEditorCapturedSkyLight(bool atmosphereEnabled)
+    {
+        using var workspace = new TempWorkspace();
+        var scene = CreateScene(workspace.Project);
+        scene.RootNodes.Add(new SceneNode(scene) { Name = "Root" });
+        scene.SetEnvironment(new SceneEnvironmentData { AtmosphereEnabled = atmosphereEnabled });
+        var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
+        var result = await generator.GenerateAsync(scene, CreateScope(workspace), this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = result.Diagnostics.Should().BeEmpty();
+        using var document = JsonDocument.Parse(await File.ReadAllTextAsync(result.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false));
+        var sky = document.RootElement.GetProperty("environment").GetProperty("sky_light");
+        _ = sky.GetProperty("enabled").GetBoolean().Should().BeTrue();
+        _ = sky.GetProperty("source").GetInt32().Should().Be(0);
+        foreach (var name in new[] { "intensity", "diffuse_intensity", "specular_intensity", "lower_hemisphere_blend_alpha", "volumetric_scattering_intensity" })
+        {
+            _ = sky.GetProperty(name).GetSingle().Should().Be(1.0f);
+        }
+
+        _ = sky.GetProperty("tint_rgb").EnumerateArray().Select(static item => item.GetSingle()).Should().Equal(1.0f, 1.0f, 1.0f);
+        _ = sky.GetProperty("lower_hemisphere_color").EnumerateArray().Select(static item => item.GetSingle()).Should().Equal(0.02f, 0.02f, 0.03f);
+        _ = sky.GetProperty("source_cubemap_angle_radians").GetSingle().Should().Be(0.0f);
+        _ = sky.GetProperty("lower_hemisphere_is_solid_color").GetBoolean().Should().BeTrue();
+        _ = sky.GetProperty("affect_reflections").GetBoolean().Should().BeTrue();
+    }
+
     /// <summary>Schema bounds and coupled exposure fields reject invalid authoring states.</summary>
     [TestMethod]
     public void ValidatePostProcessRejectsMalformedValues()

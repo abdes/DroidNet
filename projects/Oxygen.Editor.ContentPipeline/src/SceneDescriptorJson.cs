@@ -120,8 +120,23 @@ internal sealed record NativeSpotLight(
 
 internal sealed record NativeEnvironment(
     [property: JsonPropertyName("sky_atmosphere")] NativeSkyAtmosphereEnvironment SkyAtmosphere,
+    [property: JsonPropertyName("sky_light")] NativeSkyLightEnvironment SkyLight,
     [property: JsonPropertyName("post_process_volume")] NativePostProcessEnvironment PostProcess,
     [property: JsonPropertyName("background")] NativeBackgroundEnvironment Background);
+
+internal sealed record NativeSkyLightEnvironment(
+    [property: JsonPropertyName("enabled")] bool Enabled,
+    [property: JsonPropertyName("source")] int Source,
+    [property: JsonPropertyName("intensity")] float Intensity,
+    [property: JsonPropertyName("tint_rgb")] float[] TintRgb,
+    [property: JsonPropertyName("diffuse_intensity")] float DiffuseIntensity,
+    [property: JsonPropertyName("specular_intensity")] float SpecularIntensity,
+    [property: JsonPropertyName("source_cubemap_angle_radians")] float SourceCubemapAngleRadians,
+    [property: JsonPropertyName("lower_hemisphere_color")] float[] LowerHemisphereColor,
+    [property: JsonPropertyName("lower_hemisphere_is_solid_color")] bool LowerHemisphereIsSolidColor,
+    [property: JsonPropertyName("lower_hemisphere_blend_alpha")] float LowerHemisphereBlendAlpha,
+    [property: JsonPropertyName("volumetric_scattering_intensity")] float VolumetricScatteringIntensity,
+    [property: JsonPropertyName("affect_reflections")] bool AffectReflections);
 
 internal sealed record NativeBackgroundEnvironment(
     [property: JsonPropertyName("enabled")] bool Enabled,

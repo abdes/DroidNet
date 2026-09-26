@@ -274,6 +274,10 @@ public sealed partial class SceneDescriptorGeneratorTests
         _ = atmosphere.GetProperty("planet_radius_m").GetSingle().Should().Be(6_400_000.0f);
         _ = atmosphere.GetProperty("atmosphere_height_m").GetSingle().Should().Be(90_000.0f);
         _ = atmosphere.GetProperty("ground_albedo_rgb")[0].GetSingle().Should().Be(0.2f);
+        _ = atmosphere.GetProperty("rayleigh_scattering_rgb").EnumerateArray().Select(static item => item.GetSingle()).Should().Equal(5.802e-6f, 13.558e-6f, 33.1e-6f);
+        _ = atmosphere.GetProperty("mie_scattering_rgb").EnumerateArray().Select(static item => item.GetSingle()).Should().Equal(3.996e-6f, 3.996e-6f, 3.996e-6f);
+        _ = atmosphere.GetProperty("mie_absorption_rgb").EnumerateArray().Select(static item => item.GetSingle()).Should().Equal(4.405e-7f, 4.405e-7f, 4.405e-7f);
+        _ = atmosphere.GetProperty("ozone_absorption_rgb").EnumerateArray().Select(static item => item.GetSingle()).Should().Equal(0.650e-6f, 1.881e-6f, 0.085e-6f);
         _ = atmosphere.GetProperty("rayleigh_scale_height_m").GetSingle().Should().Be(7_500.0f);
         _ = atmosphere.GetProperty("mie_scale_height_m").GetSingle().Should().Be(1_500.0f);
         _ = atmosphere.GetProperty("mie_anisotropy").GetSingle().Should().Be(0.75f);

@@ -337,6 +337,53 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
   if (!testing::UiTestSession::UsesIsolatedSettings())
     return;
 
+  test = IM_REGISTER_TEST(engine, "renderscene", "ibl_editor_reference");
+  test->UserData = this;
+  test->TestFunc = [](ImGuiTestContext* ctx) {
+    auto& app = *static_cast<MainModule*>(ctx->Test->UserData);
+    for (unsigned wait = 0U;
+      wait < 600U && (!app.current_scene_key_ || app.active_scene_load_key_);
+      ++wait)
+      ctx->Yield();
+    IM_CHECK(app.current_scene_key_ && !app.active_scene_load_key_);
+    const auto scene = app.GetShell().TryGetScene();
+    const auto renderer = app.ResolveVortexRenderer();
+    IM_CHECK(scene && renderer);
+    CheckGpuLighting(ctx, *renderer, *scene);
+    if (ctx->IsError())
+      return;
+    const auto exposure = renderer->InspectExposureSettings(
+      renderer->ResolvePublishedRuntimeViewId(app.main_view_id_));
+    IM_CHECK(exposure && exposure->active_settings);
+    IM_CHECK(exposure->active_settings->mode == engine::ExposureMode::kManual);
+    IM_CHECK_EQ(exposure->active_settings->manual_ev, 13.0F);
+    IM_CHECK_EQ(exposure->active_settings->key, 12.5F);
+    IM_CHECK_EQ(exposure->active_settings->compensation_ev, 0.0F);
+    ctx->Yield(30);
+    const auto graphics = app.app_.gfx_weak.lock();
+    IM_CHECK(graphics);
+    if (const auto capture = graphics->GetFrameCaptureController();
+      capture && capture->IsAvailable()) {
+      IM_CHECK(capture->TriggerNextFrame());
+      ctx->Yield(8);
+      IM_CHECK(!capture->IsCapturing());
+    }
+    const auto state = renderer->InspectSkyLight(*scene);
+    std::ofstream record(
+      SettingsService::ForDemoApp()->GetStoragePath().parent_path()
+      / "native-reference.json");
+    IM_CHECK(record.good());
+    record << nlohmann::json {
+      { "scene_key", std::string(nostd::to_string(*app.current_scene_key_)) },
+      { "published_revision", state.published_revision },
+      { "validated_revision", state.validated_revision },
+      { "source_radiance_scale", state.source_radiance_scale },
+      { "average_brightness", state.average_brightness }
+    }.dump(2);
+    record.flush();
+    IM_CHECK(record.good());
+  };
+
   for (const auto* name : { "ibl_appearance_off", "ibl_appearance_on" }) {
     test = IM_REGISTER_TEST(engine, "renderscene", name);
     test->UserData = this;

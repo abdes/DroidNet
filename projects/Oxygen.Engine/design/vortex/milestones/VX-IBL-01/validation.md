@@ -2,13 +2,25 @@
 
 S1–S4 are validated: products, captured atmosphere/height fog, native lighting,
 migration, precision, lifetime admission and automatic scheduling pass their
-checks. Native town4new off/on appearance also passes. S5–S6 own editor/native
-and other-view image agreement and integrated qualification.
+checks. Town4new appearance and editor/standalone deferred images also pass.
+S5–S6 own forward/translucent/offscreen image agreement and integrated qualification.
 
 Read: [current results](#current-results), [reproduce](#reproduce),
 [remaining gates](README.md#acceptance).
 
 ## Current results
+
+[Editor/standalone images](evidence/s5-editor-images/run.json): two editor views
+match across five complete frames. The cooked scene in RenderScene has identical
+SH/specular products, material buffers, direct lighting and **3,404 displayed
+geometry pixels**. Three sky pixels differ by one display code after camera
+quaternion round-tripping; the [raw comparison](evidence/s5-editor-images/comparison.json)
+records the separate host-comparison bounds and HDR/depth differences. FP16 gates
+are unchanged. Cooking now preserves captured skylight and the engine's current
+atmosphere coefficients; DemoShell hydrates authored Mie absorption. **29 descriptor
+and 53 environment-service tests** pass, along with captured and ordinary editor
+runs and the standalone run. The oracle rejects the stale-coefficient and
+presentation-only captures.
 
 [Native town4new appearance](evidence/s5-native-appearance/run.json): fixed EV12
 off/on runs have byte-identical direct lighting, depth and material buffers.
