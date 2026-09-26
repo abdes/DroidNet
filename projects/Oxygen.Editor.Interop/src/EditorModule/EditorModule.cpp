@@ -528,13 +528,15 @@ namespace oxygen::interop::module {
     }
     co_await ProcessContentPauseAsync(*context);
     const auto content_changed = co_await SynchronizeCookedRootsAsync();
+    const auto renderer = engine_->GetModule<oxygen::vortex::Renderer>();
     // Drain only commands targeting SceneMutation. Leave other commands for
     // their appropriate phases so insertion order is preserved across phases.
     CommandContext cmd_context{
       .Scene = observer_ptr{scene_.get()},
       .AssetLoader = observer_ptr{asset_loader_.get()},
       .PathResolver = observer_ptr{path_resolver_.get()},
-      .AssetRequests = observer_ptr{asset_requests_.get()}
+      .AssetRequests = observer_ptr{asset_requests_.get()},
+      .Renderer = renderer ? observer_ptr{ &renderer->get() } : nullptr
     };
     command_queue_.DrainIf(
       [](const std::unique_ptr<EditorCommand>& cmd) {

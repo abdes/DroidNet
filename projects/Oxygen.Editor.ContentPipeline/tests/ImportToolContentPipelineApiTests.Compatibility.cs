@@ -21,6 +21,25 @@ public sealed partial class ImportToolContentPipelineApiTests
         await result.Artifacts!.DisposeAsync().ConfigureAwait(false);
     }
 
+    /// <summary>The installed SDK supplies the real catalog through the ordinary compatibility and worker path.</summary>
+    /// <returns>The asynchronous native catalog check.</returns>
+    [TestMethod]
+    public async Task InstalledSdkProvidesBuiltinCatalog()
+    {
+        var root = Directory.CreateTempSubdirectory("OxygenInstalledCatalog-");
+        try
+        {
+            var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance);
+            var catalog = await api.GetBuiltinGeometryCatalogAsync(root.FullName, "Content", this.TestContext.CancellationToken).ConfigureAwait(false);
+            _ = catalog.AuthoringGeometries.Should().Contain(value => string.Equals(value.CanonicalName, "Cube", StringComparison.Ordinal));
+            _ = catalog.MountName.Should().Be("Content");
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
     /// <summary>Changed tool bytes block both native import and catalog discovery.</summary>
     /// <param name="catalog">Whether to exercise catalog discovery.</param>
     /// <returns>The asynchronous compatibility test.</returns>

@@ -653,6 +653,9 @@ Record dimensions, formats, sampling, source/build/published generations, source
 age, range scale, readiness, GPU costs and stage use through existing development
 diagnostics. Native visual review covers dielectric and metallic materials,
 fog/horizon response, sun movement, roughness changes and editor edit latency.
+The editor's existing environment observation includes the scene's last rendered
+IBL identity. Authoring workflows distinguish that preceding render snapshot from
+the authored values sampled at the current mutation boundary.
 The milestone plan owns execution state and evidence links.
 
 ## 6. Implementation map

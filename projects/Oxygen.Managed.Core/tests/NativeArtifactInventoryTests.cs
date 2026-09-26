@@ -41,6 +41,32 @@ public sealed class NativeArtifactInventoryTests
         _ = inventory.Should().NotContain(item => item.Id == NativeArtifactInventory.InteropId || item.Id.EndsWith("RenderScene.exe", StringComparison.Ordinal));
     }
 
+    /// <summary>Cooking reads the canonical SDK data layout, not a legacy root-level schema directory.</summary>
+    /// <param name="configuration">The SDK configuration.</param>
+    [TestMethod]
+    [DataRow("Debug")]
+    [DataRow("Release")]
+    public void CookingUsesInstalledDataDirectory(string configuration)
+    {
+        var root = Directory.CreateTempSubdirectory("OxygenSdkData-");
+        try
+        {
+            var schema = Path.Combine(root.FullName, "Engine", "share", "oxygen", "schemas", "oxygen.buffer-container.schema.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(schema)!);
+            File.WriteAllText(schema, """{"$id":"installed.buffer.v1"}""");
+            var installation = new EditorNativeInstallation(Path.Combine(root.FullName, "Editor"), Path.Combine(root.FullName, "Engine"), configuration);
+            var inventory = NativeArtifactInventory.CreateCooking(installation);
+            var buffer = inventory.Single(value => string.Equals(value.Id, "engine/schemas/oxygen.buffer-container.schema.json", StringComparison.Ordinal));
+            _ = buffer.FullPath.Should().Be(schema);
+            _ = buffer.SchemaId.Should().Be("installed.buffer.v1");
+            _ = installation.ShaderLibraryPath.Should().Be(Path.Combine(root.FullName, "Engine", "share", "oxygen", "shaders", "shaders.bin"));
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
     /// <summary>The SDK comes from the package or the checkout's installed configuration.</summary>
     [TestMethod]
     public void DiscoveryPrefersBundledEngineAndOtherwiseUsesInstalledConfiguration()

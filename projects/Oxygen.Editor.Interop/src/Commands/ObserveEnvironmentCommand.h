@@ -15,6 +15,8 @@
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/Types/SkyLightRuntimeState.h>
 
 namespace oxygen::interop::module {
 
@@ -28,6 +30,8 @@ struct EnvironmentObservation {
   content::ResourceKey metering_mask {};
   bool metering_mask_pending { false };
   std::string metering_mask_error;
+  //! Last rendered state for this scene, preceding this mutation boundary.
+  vortex::SkyLightRuntimeState sky_light;
 };
 
 //! Reads the live scene's authored environment properties in the mutation phase.
@@ -49,6 +53,9 @@ public:
       result.metering_mask_error = mask.error;
     }
     if (context.Scene) {
+      if (context.Renderer) {
+        result.sky_light = context.Renderer->InspectSkyLight(*context.Scene);
+      }
       const auto environment = context.Scene->GetEnvironment();
       result.exists = environment != nullptr;
       if (environment) {

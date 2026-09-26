@@ -20,6 +20,16 @@ public value struct EnvironmentStateManaged {
   bool Exists;
   bool AtmosphereExists;
   bool PostProcessExists;
+  // Last rendered scene snapshot, independent of authored values below.
+  bool SkyLightObserved;
+  bool SkyLightUsable;
+  bool SkyLightEmptyCapture;
+  System::UInt64 SkyLightSceneLifetime;
+  System::UInt64 SkyLightFrameSequence;
+  System::UInt32 SkyLightPublishedRevision;
+  System::UInt64 SkyLightPublishedSourceRevision;
+  System::UInt64 SkyLightDesiredSourceRevision;
+  System::UInt64 SkyLightSourceAgeFrames;
   bool AtmosphereEnabled;
   bool SunDiskEnabled;
   float PlanetRadiusMeters;

@@ -21,14 +21,14 @@ ED-M07.
 
 ## 2. PRD Traceability
 
-| ID | Coverage |
-| --- | --- |
-| `REQ-025` | Embedded viewport renders the active scene through the live engine. |
-| `REQ-027` | Runtime surface/view lifecycle supports the V0.1 single live viewport; multi-viewport is deferred. |
-| `REQ-028` | Runtime presentation is routed to the correct editor surface for the supported live viewport. |
-| `REQ-030` | Partial: runtime presentation provides the embedded preview path used later for parity validation; full authored-content parity remains ED-M08. |
-| `SUCCESS-003` | Live editor viewport presents correctly. |
-| `SUCCESS-005` | Runtime presentation is stable enough for later authoring validation. |
+| ID            | Coverage                                                                                                                                        |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `REQ-025`     | Embedded viewport renders the active scene through the live engine.                                                                             |
+| `REQ-027`     | Runtime surface/view lifecycle supports the V0.1 single live viewport; multi-viewport is deferred.                                              |
+| `REQ-028`     | Runtime presentation is routed to the correct editor surface for the supported live viewport.                                                   |
+| `REQ-030`     | Partial: runtime presentation provides the embedded preview path used later for parity validation; full authored-content parity remains ED-M08. |
+| `SUCCESS-003` | Live editor viewport presents correctly.                                                                                                        |
+| `SUCCESS-005` | Runtime presentation is stable enough for later authoring validation.                                                                           |
 
 ED-M04 consumes this LLD for `REQ-008`, `REQ-022`, `REQ-024`, and `REQ-026`
 only to define runtime readiness, rejected runtime setting writes, and sync
@@ -159,14 +159,14 @@ native engine frame loop. The ordering contract is:
 
 ## 7. Ownership
 
-| Owner | Responsibility |
-| --- | --- |
-| `Oxygen.Editor` | Process bootstrap, DI composition, native runtime discovery setup. |
-| `Oxygen.Editor.WorldEditor` workspace | Runtime startup trigger during workspace activation; cooked-root refresh request. |
-| `Oxygen.Editor.WorldEditor` viewport UI | `SwapChainPanel` ownership, load/unload/size events, initial measured size, engine view request timing. |
-| `Oxygen.Editor.Runtime` | Engine lifecycle, settings bridge, surface leases, view calls, input bridge access, runtime diagnostics mapping. |
-| `Oxygen.Editor.Interop` | Managed/native bridge calls and native handle abstractions. |
-| Oxygen Engine | Frame loop, rendering, content loading, composition, native resource ownership. |
+| Owner                                   | Responsibility                                                                                                   |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `Oxygen.Editor`                         | Process bootstrap, DI composition, native runtime discovery setup.                                               |
+| `Oxygen.Editor.WorldEditor` workspace   | Runtime startup trigger during workspace activation; cooked-root refresh request.                                |
+| `Oxygen.Editor.WorldEditor` viewport UI | `SwapChainPanel` ownership, load/unload/size events, initial measured size, engine view request timing.          |
+| `Oxygen.Editor.Runtime`                 | Engine lifecycle, settings bridge, surface leases, view calls, input bridge access, runtime diagnostics mapping. |
+| `Oxygen.Editor.Interop`                 | Managed/native bridge calls and native handle abstractions.                                                      |
+| Oxygen Engine                           | Frame loop, rendering, content loading, composition, native resource ownership.                                  |
 
 ED-M02 accepts that viewport UI currently creates engine views directly after
 surface attachment. Later runtime cleanup may wrap view lifecycle more tightly
@@ -344,17 +344,17 @@ ED-M07 mount contract:
 
 ED-M02 service operations:
 
-| Operation | Owner | Completion Meaning |
-| --- | --- | --- |
-| Runtime initialize | `IEngineService.InitializeAsync` | Engine context created and service is `Ready`. |
-| Runtime start | `IEngineService.StartAsync` | Native startup and module registration acknowledged; service is `Running`. |
-| Runtime shutdown | `IEngineService.ShutdownAsync` | Engine resources released or service faulted. |
-| Apply startup settings | `EngineSettingsExtensions` | Settings copied into config before context creation. |
-| Apply FPS/logging | `IEngineService` properties | Native service accepted the value. |
-| Attach surface | `AttachViewportAsync` | Native surface registration completed and lease is attached. |
-| Resize surface | `IViewportSurfaceLease.ResizeAsync` | Native resize request accepted/queued. |
-| Create/destroy view | `CreateViewAsync` / `DestroyViewAsync` | Native view operation returned success or failure. |
-| Refresh cooked roots | workspace through `IEngineService` | Existing cooked roots are mounted or a non-fatal warning is produced. |
+| Operation              | Owner                                  | Completion Meaning                                                         |
+| ---------------------- | -------------------------------------- | -------------------------------------------------------------------------- |
+| Runtime initialize     | `IEngineService.InitializeAsync`       | Engine context created and service is `Ready`.                             |
+| Runtime start          | `IEngineService.StartAsync`            | Native startup and module registration acknowledged; service is `Running`. |
+| Runtime shutdown       | `IEngineService.ShutdownAsync`         | Engine resources released or service faulted.                              |
+| Apply startup settings | `EngineSettingsExtensions`             | Settings copied into config before context creation.                       |
+| Apply FPS/logging      | `IEngineService` properties            | Native service accepted the value.                                         |
+| Attach surface         | `AttachViewportAsync`                  | Native surface registration completed and lease is attached.               |
+| Resize surface         | `IViewportSurfaceLease.ResizeAsync`    | Native resize request accepted/queued.                                     |
+| Create/destroy view    | `CreateViewAsync` / `DestroyViewAsync` | Native view operation returned success or failure.                         |
+| Refresh cooked roots   | workspace through `IEngineService`     | Existing cooked roots are mounted or a non-fatal warning is produced.      |
 
 Frame-presented completion is not exposed as a managed contract in ED-M02. The
 detailed ED-M02 validation plan must therefore use visual validation and engine
@@ -442,12 +442,12 @@ preconditions that the live-sync adapter
 Before any `ISceneEngineSync.<Update*|Attach*|Detach*>` call hits the engine,
 the adapter MUST observe **all** of:
 
-| Precondition | Source | Failure classification |
-| --- | --- | --- |
-| `IEngineService.State == Running` | `EngineService.State` | `SyncOutcome.SkippedNotRunning`, code `OXE.LIVESYNC.NotRunning`. |
+| Precondition                                                              | Source                                                       | Failure classification                                                       |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------ | ---------------------------------------------------------------------------- |
+| `IEngineService.State == Running`                                         | `EngineService.State`                                        | `SyncOutcome.SkippedNotRunning`, code `OXE.LIVESYNC.NotRunning`.             |
 | Managed world capability is available for the matching run/scene lifetime | `IEngineService.WorldCommands` target contract in section 18 | Unavailable/stale target result; no concrete facade access from the feature. |
-| `IEngineService.State != Faulted` | `EngineService.State` | `SyncOutcome.SkippedNotRunning`, code `OXE.LIVESYNC.RuntimeFaulted`. |
-| Scope cancellation token not cancelled | command-supplied `CancellationToken` | `SyncOutcome.Failed`, code `OXE.LIVESYNC.Cancelled`. |
+| `IEngineService.State != Faulted`                                         | `EngineService.State`                                        | `SyncOutcome.SkippedNotRunning`, code `OXE.LIVESYNC.RuntimeFaulted`.         |
+| Scope cancellation token not cancelled                                    | command-supplied `CancellationToken`                         | `SyncOutcome.Failed`, code `OXE.LIVESYNC.Cancelled`.                         |
 
 The adapter performs these checks **without** taking any runtime lock other
 than reading managed state/capability availability. The Runtime adapter rechecks
@@ -590,6 +590,10 @@ tools and schemas on demand. Missing/mismatched native artifacts disable the
 affected capability visibly while Project Browser and safe authoring/save remain
 available. The public managed boundary is loadable without initializing Interop
 merely to open the Project Browser.
+
+SDK data lives under `share/oxygen`: cooking reads `schemas`, and default editor
+startup reads `shaders/shaders.bin` from the selected Debug, Release or bundled
+installation. Explicit shader-library settings retain their path semantics.
 
 Settings, `IEngineService`, view IDs/configuration and camera choices use managed
 contracts. `EngineSession` exposes managed operations and ownership facts;

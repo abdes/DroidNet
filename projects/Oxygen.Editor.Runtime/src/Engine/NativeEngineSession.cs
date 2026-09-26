@@ -38,7 +38,8 @@ internal sealed partial class NativeEngineSession(HostingContext hostingContext,
     /// <inheritdoc/>
     public override void Initialize(IEngineSettings settings, string? editorCVarsArchivePath, ILogger? logger)
     {
-        var config = CreateConfig(settings, editorCVarsArchivePath);
+        var runtimeLibrary = artifacts.GetPath(NativeArtifactInventory.RuntimeId(EditorNativeCompatibilityService.CurrentConfiguration));
+        var config = CreateConfig(settings, editorCVarsArchivePath, runtimeLibrary);
         this.runner = new EngineRunner();
         if (logger is not null)
         {

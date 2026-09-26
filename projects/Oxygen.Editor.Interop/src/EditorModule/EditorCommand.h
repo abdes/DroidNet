@@ -13,6 +13,9 @@
 
 namespace oxygen {
   class Graphics;
+  namespace vortex {
+    class Renderer;
+  }
 
   namespace engine {
     class FrameContext;
@@ -37,6 +40,7 @@ namespace oxygen::interop::module {
     oxygen::observer_ptr<oxygen::content::IAssetLoader> AssetLoader;
     oxygen::observer_ptr<oxygen::content::VirtualPathResolver> PathResolver;
     oxygen::observer_ptr<SceneAssetRequests> AssetRequests;
+    oxygen::observer_ptr<oxygen::vortex::Renderer> Renderer;
   };
 
   //! Abstract base class for all editor commands.

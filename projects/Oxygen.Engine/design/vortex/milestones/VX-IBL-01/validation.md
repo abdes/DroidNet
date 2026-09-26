@@ -2,13 +2,26 @@
 
 S1–S4 are validated: products, captured atmosphere/height fog, native lighting,
 migration, precision, lifetime admission and automatic scheduling pass their
-checks. S5–S6 own the remaining native/editor workflows and integrated
-qualification.
+checks. S5–S6 own DemoShell app persistence/scene replacement, matched images
+and integrated qualification.
 
 Read: [current results](#current-results), [reproduce](#reproduce),
 [remaining gates](README.md#acceptance).
 
 ## Current results
+
+[S5 editor workflows](evidence/s5-editor/run.json): **42 real editor UI cases**
+pass. Inspector radiance edits and Undo/Redo advance the rendered IBL generation
+and restore the matching source identity at zero age. View recreation retains
+scene-global products; Save/reopen and scene replacement publish under new native
+scene lifetimes. Forty environment-field history/reopen cases also pass.
+
+**22 SDK/configuration checks** pass, including the actual Debug cooker preflight
+and native built-in catalog query. The Debug editor builds. Default shader loading
+uses the compatibility-selected SDK; explicit overrides remain intact. Cooking
+reads the canonical `share/oxygen/schemas` directory. Both installed shader
+archives and scene headers match their current builds/source. No shader code was
+added for these checks. App lifecycle and matched-image gates remain open.
 
 [S5 GPU validity](evidence/s5-metadata/run.json): **30 Debug / 28 Release native
 tests, 13 DemoShell CPU tests and two real widget cases** pass. Frame Diagnostics
@@ -18,8 +31,8 @@ results cannot reject a newer generation. Diagnostic allocation or rejected-copy
 failure preserves lighting and retries; uncertain submission closes the existing
 product pool. Registered resources stay fixed across **24 authoring generations**.
 The widget runner restored the user's current settings at its run boundary.
-The matching SDK installs successfully and **nine C++20 editor command tests**
-pass against it. Editor GUI workflows remain part of S5.
+The Release SDK installs successfully and **nine C++20 editor command tests**
+pass against it.
 
 [S5 native controls](evidence/s5-controls/run.json): **two real RenderScene
 widget cases** pass on town4new. They exercise source failure/recovery, independent
@@ -33,7 +46,7 @@ are gone. [Native UI](evidence/s5-controls/ui/final-state.png).
 Coverage includes settings reload, poisoned-pool/source identity, unresolved
 cubemaps, unchanged 16-face source allocation failure, and rejection of partial
 GPU timing when collection is enabled. The public status header is installed.
-Remaining scene-replacement/editor workflows and final matched visual
+DemoShell app persistence/scene replacement and final matched visual
 qualification remain open; S5 stays `in_progress`.
 
 [S4 matched scene runs](evidence/s4-scene/run.json) pass on the reference GPU:

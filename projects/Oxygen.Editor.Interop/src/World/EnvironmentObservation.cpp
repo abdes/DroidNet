@@ -41,6 +41,15 @@ public:
     result.Exists = value.exists;
     result.AtmosphereExists = value.atmosphere_exists;
     result.PostProcessExists = value.post_process_exists;
+    result.SkyLightObserved = value.sky_light.observed;
+    result.SkyLightUsable = value.sky_light.usable;
+    result.SkyLightEmptyCapture = value.sky_light.empty_capture;
+    result.SkyLightSceneLifetime = value.sky_light.scene_lifetime;
+    result.SkyLightFrameSequence = value.sky_light.frame_sequence;
+    result.SkyLightPublishedRevision = value.sky_light.published_revision;
+    result.SkyLightPublishedSourceRevision = value.sky_light.published_source_revision;
+    result.SkyLightDesiredSourceRevision = value.sky_light.desired_source_revision;
+    result.SkyLightSourceAgeFrames = value.sky_light.source_age_frames;
     result.AtmosphereEnabled = value.atmosphere.enabled;
     result.SunDiskEnabled = value.atmosphere.sun_disk_enabled;
     result.PlanetRadiusMeters = value.atmosphere.planet_radius_m;

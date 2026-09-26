@@ -7,7 +7,7 @@ using System.Numerics;
 
 namespace Oxygen.Editor.Runtime.Engine;
 
-/// <summary>Native environment presence and stored values from one scene mutation boundary.</summary>
+/// <summary>Native environment values and the preceding rendered sky-light snapshot, read at a scene mutation boundary.</summary>
 public sealed record RuntimeEnvironmentState
 {
     /// <summary>Gets a value indicating whether the native scene owns an environment.</summary>
@@ -18,6 +18,33 @@ public sealed record RuntimeEnvironmentState
 
     /// <summary>Gets a value indicating whether post-process values are present.</summary>
     public bool PostProcessExists { get; init; }
+
+    /// <summary>Gets a value indicating whether this scene has a rendered sky-light snapshot.</summary>
+    public bool SkyLightObserved { get; init; }
+
+    /// <summary>Gets a value indicating whether complete sky-light products were accepted for GPU-ordered consumption.</summary>
+    public bool SkyLightUsable { get; init; }
+
+    /// <summary>Gets a value indicating whether neither atmosphere nor captured height fog supplies radiance.</summary>
+    public bool SkyLightEmptyCapture { get; init; }
+
+    /// <summary>Gets the native scene lifetime owning the rendered sky-light snapshot.</summary>
+    public ulong SkyLightSceneLifetime { get; init; }
+
+    /// <summary>Gets the last rendered frame, preceding this observation's mutation boundary.</summary>
+    public ulong SkyLightFrameSequence { get; init; }
+
+    /// <summary>Gets the published sky-light product generation, or zero when unavailable.</summary>
+    public uint SkyLightPublishedRevision { get; init; }
+
+    /// <summary>Gets the source identity used by the published products.</summary>
+    public ulong SkyLightPublishedSourceRevision { get; init; }
+
+    /// <summary>Gets the desired source identity from the last render decision.</summary>
+    public ulong SkyLightDesiredSourceRevision { get; init; }
+
+    /// <summary>Gets snapshot age in frames while updating; zero when current.</summary>
+    public ulong SkyLightSourceAgeFrames { get; init; }
 
     /// <summary>Gets a value indicating whether native atmosphere is enabled.</summary>
     public bool AtmosphereEnabled { get; init; }

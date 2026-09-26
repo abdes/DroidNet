@@ -13,6 +13,12 @@ public sealed record EditorNativeInstallation(string EditorRoot, string EngineRo
     /// <summary>Gets the Interop assembly containing its native SDK build receipt.</summary>
     public string InteropPath => Path.Combine(this.EditorRoot, "DroidNet.Oxygen.Editor.Interop.dll");
 
+    /// <summary>Gets the schema directory installed by the engine SDK.</summary>
+    public string SchemaDirectory => Path.Combine(this.EngineRoot, "share", "oxygen", "schemas");
+
+    /// <summary>Gets this SDK configuration's installed shader archive.</summary>
+    public string ShaderLibraryPath => Path.Combine(this.EngineRoot, "share", "oxygen", "shaders", "shaders.bin");
+
     /// <summary>Resolves the packaged engine or the current checkout's installed SDK without loading native code.</summary>
     /// <param name="editorRoot">The application directory.</param>
     /// <param name="configuration">The running build configuration.</param>
