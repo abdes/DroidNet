@@ -2,12 +2,22 @@
 
 S1–S4 are validated: products, captured atmosphere/height fog, native lighting,
 migration, precision, lifetime admission and automatic scheduling pass their
-checks. S5–S6 own matched native/editor images and integrated qualification.
+checks. Native town4new off/on appearance also passes. S5–S6 own editor/native
+and other-view image agreement and integrated qualification.
 
 Read: [current results](#current-results), [reproduce](#reproduce),
 [remaining gates](README.md#acceptance).
 
 ## Current results
+
+[Native town4new appearance](evidence/s5-native-appearance/run.json): fixed EV12
+off/on runs have byte-identical direct lighting, depth and material buffers.
+IBL lights **613,412 previously black geometry pixels** while all **607,743 sky
+pixels** remain identical. The shadowed façade gains visible texture detail;
+the sunlit façade has **8.57×** the shadowed façade's mean scene-linear luminance.
+Both HDR and displayed-image checks pass. Compare [IBL off](evidence/s5-native-appearance/renderdoc/off/appearance.png)
+and [IBL on](evidence/s5-native-appearance/renderdoc/on/appearance-v2.png).
+Four real app runs pass; captures, pixel exports and isolated settings are retained.
 
 [S5 DemoShell lifecycle](evidence/s5-lifecycle/run.json): **four real app cases**
 pass. Sidebar and Library clicks switch town4new → Lantern → town4new; the

@@ -21,6 +21,10 @@
 #include <nlohmann/json.hpp>
 
 #include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Console/Console.h>
+#include <Oxygen/Engine/AsyncEngine.h>
+#include <Oxygen/Graphics/Common/FrameCaptureController.h>
+#include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
 #include <Oxygen/Scene/Environment/Fog.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
@@ -332,6 +336,107 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
 
   if (!testing::UiTestSession::UsesIsolatedSettings())
     return;
+
+  for (const auto* name : { "ibl_appearance_off", "ibl_appearance_on" }) {
+    test = IM_REGISTER_TEST(engine, "renderscene", name);
+    test->UserData = this;
+    struct AppearanceState {
+      std::string post_process_scope;
+    };
+    test->SetVarsDataType<AppearanceState>();
+    test->GuiFunc = [](ImGuiTestContext* ctx) {
+      auto& app = *static_cast<MainModule*>(ctx->Test->UserData);
+      const auto targets
+        = app.app_.engine->GetConsole().Execute("pp.targets").output;
+      if (targets.starts_with("scene:")) {
+        constexpr auto prefix = std::string_view("scene:").size();
+        ctx->GetVars<AppearanceState>().post_process_scope = "Post Process/"
+          + targets.substr(prefix, targets.find(' ') - prefix);
+      }
+    };
+    test->TestFunc = [](ImGuiTestContext* ctx) {
+      auto& app = *static_cast<MainModule*>(ctx->Test->UserData);
+      for (unsigned wait = 0U;
+        wait < 600U && (!app.current_scene_key_ || app.active_scene_load_key_);
+        ++wait)
+        ctx->Yield();
+      IM_CHECK(app.current_scene_key_ && !app.active_scene_load_key_);
+      const auto scene = app.GetShell().TryGetScene();
+      const auto renderer = app.ResolveVortexRenderer();
+      IM_CHECK(scene && renderer);
+      SelectPanel(
+        ctx, app.GetShell(), "Environment", imgui::icons::kIconEnvironment);
+      SelectOutdoorProfile(ctx);
+      ctx->ItemClose("**/Sun");
+      ctx->ItemClose("**/Sky Atmosphere");
+      ctx->ItemOpen("**/Sky Light (IBL)");
+      ctx->ItemCheck("**/Enabled##SkyLight");
+      CheckGpuLighting(ctx, *renderer, *scene);
+      if (ctx->IsError())
+        return;
+      const bool enabled
+        = std::string_view(ctx->Test->Name) == "ibl_appearance_on";
+      if (!enabled)
+        ctx->ItemUncheck("**/Enabled##SkyLight");
+      SelectPanel(
+        ctx, app.GetShell(), "Post Process", imgui::icons::kIconHdrTonemap);
+      ctx->ItemCheck("**/Enable exposure");
+      // BeginCombo lacks a discovery hook; use the panel's actual scene scope.
+      const auto& scope = ctx->GetVars<AppearanceState>().post_process_scope;
+      IM_CHECK(!scope.empty());
+      ctx->SetRef(scope.c_str());
+      ctx->ItemClick("##Exposure mode");
+      ctx->ItemClick("//$FOCUSED/Manual EV100");
+      ctx->ItemInputValue("**/EV100/value/##value", "12");
+      ctx->ItemInputValue("**/Compensation (EV)/value/##value", "0");
+      if (ctx->IsError())
+        return;
+      ctx->Yield(5);
+      const auto exposure = renderer->InspectExposureSettings(
+        renderer->ResolvePublishedRuntimeViewId(app.main_view_id_));
+      IM_CHECK(exposure && exposure->active_settings);
+      const auto& settings = *exposure->active_settings;
+      IM_CHECK(
+        settings.enabled && settings.mode == engine::ExposureMode::kManual);
+      IM_CHECK_EQ(settings.manual_ev, 12.0F);
+      IM_CHECK_EQ(settings.compensation_ev, 0.0F);
+      const auto state = renderer->InspectSkyLight(*scene);
+      IM_CHECK_EQ(state.enabled, enabled);
+      if (enabled) {
+        CheckGpuLighting(ctx, *renderer, *scene);
+        if (ctx->IsError())
+          return;
+      }
+      // Close the panel through the sidebar so both images have the same area.
+      ctx->SetRef("//DemoPanelSideBar");
+      ctx->ItemClick(imgui::icons::kIconHdrTonemap.data());
+      ctx->Yield(120);
+      const auto graphics = app.app_.gfx_weak.lock();
+      IM_CHECK(graphics);
+      if (const auto capture = graphics->GetFrameCaptureController();
+        capture && capture->IsAvailable()) {
+        IM_CHECK(capture->TriggerNextFrame());
+        ctx->Yield(8);
+        IM_CHECK(!capture->IsCapturing());
+      }
+      std::ofstream record(
+        SettingsService::ForDemoApp()->GetStoragePath().parent_path()
+        / (std::string(ctx->Test->Name) + ".json"));
+      IM_CHECK(record.good());
+      record << nlohmann::json {
+        { "scene_key", std::string(nostd::to_string(*app.current_scene_key_)) },
+        { "ibl_enabled", enabled }, { "manual_ev", settings.manual_ev },
+        { "exposure_key", settings.key },
+        { "compensation_ev", settings.compensation_ev },
+        { "scene_lifetime", state.scene_lifetime },
+        { "published_revision", state.published_revision },
+        { "validated_revision", state.validated_revision },
+        { "source_age_frames", state.source_age_frames }
+      }.dump(2);
+      record.flush();
+      IM_CHECK(record.good());
+    };
+  }
 
   test = IM_REGISTER_TEST(engine, "renderscene", "ibl_persist_and_replace");
   test->UserData = this;
