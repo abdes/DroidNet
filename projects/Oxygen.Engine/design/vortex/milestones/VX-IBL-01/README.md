@@ -5,8 +5,8 @@ Status: `in_progress`
 | Field     | Summary                                                                                                                                                                                                                                    |
 | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Outcome   | Target: atmosphere/height-fog IBL with diffuse/specular lighting, immediate authoring and budgeted runtime updates.                                                                                                                        |
-| Remaining | [VX-IBL-01](../../OPEN_ITEMS.md#p1--current-delivery): S1–S4 validated. Remaining: DemoShell reopen/scene replacement, matched images and integrated qualification.                                                                        |
-| Evidence  | [Current checks](validation.md): matched static/runtime/authoring scene gates and queued preemption pass. Native/editor widgets and GPU validity pass; app lifecycle, matched images and [integrated acceptance](#acceptance) remain open. |
+| Remaining | [VX-IBL-01](../../OPEN_ITEMS.md#p1--current-delivery): S1–S4 validated. Remaining: matched native/editor images and integrated qualification.                                                                                              |
+| Evidence  | [Current checks](validation.md): matched static/runtime/authoring scene gates and queued preemption pass. Native/editor widgets, app lifecycle and GPU validity pass; matched images and [integrated acceptance](#acceptance) remain open. |
 
 Read: [scope](#scope-and-ownership), [delivery sequence](#delivery-sequence),
 [DemoShell UI](#demoshell-ui), [validation tools](#validation-tools),

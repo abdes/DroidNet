@@ -13,6 +13,7 @@
 #include <stdexcept>
 #include <string>
 
+#include "DemoShell/Services/SettingsService.h"
 #include "DemoShell/Test/UiTestSession.h"
 #include <Windows.h> // IWYU pragma: keep
 #include <imgui.h>
@@ -35,6 +36,12 @@ namespace {
   {
     static bool completed = false;
     return completed;
+  }
+
+  auto IsolatedSettings() -> bool&
+  {
+    static bool enabled = false;
+    return enabled;
   }
 
   auto Environment(const char* name) -> std::string
@@ -129,6 +136,22 @@ namespace {
 auto UiTestSession::Requested() -> bool
 {
   return !Environment("OXYGEN_UI_TEST_OUTPUT").empty();
+}
+
+auto UiTestSession::InitializeSettings() -> bool
+{
+  const auto path = Environment("OXYGEN_UI_TEST_SETTINGS");
+  if (!Requested() || path.empty()) {
+    return false;
+  }
+  SettingsService::InitializeForDemoApp(std::filesystem::absolute(path));
+  IsolatedSettings() = true;
+  return true;
+}
+
+auto UiTestSession::UsesIsolatedSettings() -> bool
+{
+  return IsolatedSettings();
 }
 auto UiTestSession::ExitCode(const int application_exit_code) -> int
 {

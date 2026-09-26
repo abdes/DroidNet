@@ -5,22 +5,45 @@
 //===----------------------------------------------------------------------===//
 
 #define IMGUI_DEFINE_MATH_OPERATORS
+#include <algorithm>
+#include <cmath>
+#include <filesystem>
+#include <fstream>
+#include <string>
 #include <string_view>
 
+#include "DemoShell/Services/SettingsService.h"
+#include "DemoShell/Test/UiTestSession.h"
 #include "RenderScene/MainModule.h"
 #include <imgui_internal.h>
 #include <imgui_te_context.h>
 #include <imgui_te_engine.h>
+#include <nlohmann/json.hpp>
 
+#include <Oxygen/Base/NoStd.h>
+#include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
 #include <Oxygen/Scene/Environment/Fog.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/SkyLight.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
+#include <Oxygen/Vortex/Renderer.h>
 
 namespace oxygen::examples::render_scene {
 
 namespace {
+  auto SelectPanel(ImGuiTestContext* ctx, DemoShell& shell,
+    const std::string_view name, const std::string_view icon) -> void
+  {
+    const auto active = shell.GetActivePanelName();
+    if (!active || *active != name) {
+      ctx->SetRef("//DemoPanelSideBar");
+      ctx->ItemClick(icon.data());
+    }
+    ctx->Yield(3);
+    ctx->SetRef(std::string(name).c_str());
+  }
+
   auto SelectOutdoorProfile(ImGuiTestContext* ctx) -> void
   {
     ctx->ScrollToTop("//Environment");
@@ -43,6 +66,86 @@ namespace {
     ctx->SetRef("Environment");
     ctx->Yield(3);
   }
+
+  auto FindChild(ImGuiTestContext* ctx, ImGuiWindow* root,
+    const std::string_view name) -> ImGuiWindow*
+  {
+    for (auto* window : ctx->UiContext->Windows) {
+      if (window->RootWindow == root->RootWindow
+        && std::string_view(window->Name).find(name) != std::string_view::npos)
+        return window;
+    }
+    return nullptr;
+  }
+
+  auto ClickScene(ImGuiTestContext* ctx, const ui::SceneEntry& entry) -> void
+  {
+    ctx->Yield(3);
+    auto* root = ctx->GetWindowByRef("//Content Loader");
+    IM_CHECK(root);
+    auto* main = FindChild(ctx, root, "ContentLoaderMain");
+    IM_CHECK(main);
+    ctx->SetRef(main);
+    ctx->ItemClick("**/Library");
+    ctx->Yield(3);
+    ctx->ItemInputValue("**/##SceneFilter", entry.name.c_str());
+    ctx->Yield(3);
+    auto* scenes = FindChild(ctx, root, "LibraryScenes");
+    IM_CHECK(scenes);
+    const auto source
+      = std::string(
+          entry.source.kind == ui::SceneSourceKind::kPak ? "PAK: " : "Index: ")
+      + entry.source.path.filename().string();
+    const auto label = entry.name + " (" + source + ")##"
+      + std::string(nostd::to_string(entry.key)) + "-"
+      + entry.source.path.string();
+    ctx->SetRef(scenes);
+    ctx->ItemClick(scenes->GetID(label.c_str()));
+  }
+
+  auto CheckPersistedLighting(const scene::Scene& scene) -> void
+  {
+    const auto sky
+      = scene.GetEnvironment()->TryGetSystem<scene::environment::SkyLight>();
+    const auto fog
+      = scene.GetEnvironment()->TryGetSystem<scene::environment::Fog>();
+    IM_CHECK(sky && fog);
+    IM_CHECK(sky->IsEnabled());
+    IM_CHECK(
+      sky->GetSource() == scene::environment::SkyLightSource::kCapturedScene);
+    IM_CHECK_EQ(sky->GetIntensityMul(), 1.25F);
+    IM_CHECK_EQ(sky->GetDiffuseIntensity(), 0.65F);
+    IM_CHECK_EQ(sky->GetSpecularIntensity(), 1.35F);
+    IM_CHECK(!sky->GetAffectReflections());
+    IM_CHECK(!sky->GetLowerHemisphereIsSolidColor());
+    IM_CHECK_EQ(sky->GetLowerHemisphereBlendAlpha(), 0.35F);
+    IM_CHECK(fog->IsEnabled() && fog->GetEnableHeightFog());
+    IM_CHECK(!fog->GetRenderInMainPass());
+    IM_CHECK(fog->GetVisibleInRealTimeSkyCaptures());
+    IM_CHECK_EQ(fog->GetExtinctionSigmaTPerMeter(), 0.01F);
+  }
+
+  auto CheckGpuLighting(ImGuiTestContext* ctx, vortex::Renderer& renderer,
+    const scene::Scene& scene) -> void
+  {
+    auto& diagnostics = renderer.GetDiagnosticsService();
+    diagnostics.SetEnabledFeatures(diagnostics.GetRequestedFeatures()
+      | vortex::DiagnosticsFeature::kFrameLedger);
+    for (unsigned wait = 0U; wait < 600U; ++wait) {
+      const auto state = renderer.InspectSkyLight(scene);
+      if (state.usable && state.source_age_frames == 0U
+        && state.gpu_validation == vortex::SkyLightGpuValidation::kValid)
+        break;
+      ctx->Yield();
+    }
+    const auto state = renderer.InspectSkyLight(scene);
+    IM_CHECK(state.usable && state.observed && !state.empty_capture);
+    IM_CHECK_EQ(state.scene_lifetime, scene.GetLifetimeId().get());
+    IM_CHECK_EQ(state.source_age_frames, 0U);
+    IM_CHECK_EQ(state.published_source_revision, state.desired_source_revision);
+    IM_CHECK(state.gpu_validation == vortex::SkyLightGpuValidation::kValid);
+    IM_CHECK_EQ(state.validated_revision, state.published_revision);
+  }
 }
 
 // NOLINTBEGIN(readability-magic-numbers) - concrete widget values and wait
@@ -59,7 +162,8 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
       ctx->Yield();
     IM_CHECK(app.current_scene_key_.has_value());
     IM_CHECK(!app.active_scene_load_key_.has_value());
-    app.GetShell().SetActivePanel("Environment");
+    SelectPanel(
+      ctx, app.GetShell(), "Environment", imgui::icons::kIconEnvironment);
     ctx->Yield(3);
     SelectOutdoorProfile(ctx);
     ctx->ItemClose("**/Sun");
@@ -101,7 +205,8 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
     ctx->Yield(3);
     IM_CHECK(sky->GetLowerHemisphereIsSolidColor());
     IM_CHECK_EQ(sky->GetLowerHemisphereBlendAlpha(), 0.35F);
-    app.GetShell().SetActivePanel("Diagnostics");
+    SelectPanel(
+      ctx, app.GetShell(), "Diagnostics", imgui::icons::kIconRendering);
     ctx->Yield(3);
     ctx->SetRef("Diagnostics");
     ctx->ItemOpen("**/Sky Lighting");
@@ -126,7 +231,8 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
       ctx->Yield();
     IM_CHECK(
       renderer->GetDiagnosticsService().GetLatestIblGpuTiming().has_value());
-    app.GetShell().SetActivePanel("Environment");
+    SelectPanel(
+      ctx, app.GetShell(), "Environment", imgui::icons::kIconEnvironment);
     ctx->Yield(3);
     ctx->SetRef("Environment");
     IM_CHECK(ctx->ItemExists("**/Specular Indirect"));
@@ -149,7 +255,8 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
       ctx->Yield();
     IM_CHECK(app.current_scene_key_.has_value());
     IM_CHECK(!app.active_scene_load_key_.has_value());
-    app.GetShell().SetActivePanel("Environment");
+    SelectPanel(
+      ctx, app.GetShell(), "Environment", imgui::icons::kIconEnvironment);
     ctx->Yield(3);
     SelectOutdoorProfile(ctx);
     ctx->ItemOpen("**/Sky Light (IBL)");
@@ -221,6 +328,146 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
     IM_CHECK_EQ(sky->GetDiffuseIntensity(), 1.0F);
     IM_CHECK_EQ(sky->GetSpecularIntensity(), 1.0F);
     ctx->ItemOpen("**/Sky Light (IBL)");
+  };
+
+  if (!testing::UiTestSession::UsesIsolatedSettings())
+    return;
+
+  test = IM_REGISTER_TEST(engine, "renderscene", "ibl_persist_and_replace");
+  test->UserData = this;
+  test->TestFunc = [](ImGuiTestContext* ctx) {
+    auto& app = *static_cast<MainModule*>(ctx->Test->UserData);
+    for (unsigned wait = 0U;
+      wait < 600U && (!app.current_scene_key_ || app.active_scene_load_key_);
+      ++wait)
+      ctx->Yield();
+    IM_CHECK(app.current_scene_key_ && !app.active_scene_load_key_);
+    const auto renderer = app.ResolveVortexRenderer();
+    IM_CHECK(renderer);
+    SelectPanel(
+      ctx, app.GetShell(), "Environment", imgui::icons::kIconEnvironment);
+    ctx->Yield(3);
+    SelectOutdoorProfile(ctx);
+    ctx->ItemClose("**/Sun");
+    ctx->ItemClose("**/Sky Atmosphere");
+    ctx->ItemOpen("**/Sky Light (IBL)");
+    ctx->ItemCheck("**/Enabled##SkyLight");
+    ctx->ItemInputValue("**/Intensity##SkyLight", "1.25");
+    ctx->ItemOpen("**/Advanced##SkyLight");
+    ctx->ItemInputValue("**/Diffuse Indirect", "0.65");
+    ctx->ItemInputValue("**/Specular Indirect", "1.35");
+    ctx->ItemUncheck("**/Affect Reflections");
+    ctx->ItemCheck("**/Override Lower Hemisphere");
+    ctx->ItemInputValue("**/Hemisphere Blend", "0.35");
+    ctx->ItemUncheck("**/Override Lower Hemisphere");
+    ctx->ItemClose("**/Sky Light (IBL)");
+    ctx->ItemOpen("**/Height Fog");
+    ctx->ItemCheck("**/Enable Height Fog");
+    ctx->ItemUncheck("**/Render In Main Pass##Fog");
+    ctx->ItemInputValue(R"(Density \/ Extinction (1\/m))", "0.01");
+    ctx->ItemCheck("**/Include in Sky Lighting");
+    ctx->Yield(5);
+    CheckPersistedLighting(*app.GetShell().TryGetScene());
+    if (ctx->IsError())
+      return;
+    CheckGpuLighting(ctx, *renderer, *app.GetShell().TryGetScene());
+    if (ctx->IsError())
+      return;
+    const auto vm = app.GetShell().GetContentVm();
+    IM_CHECK(vm);
+    const auto& scenes = vm->GetAvailableScenes();
+    const auto original = std::ranges::find_if(scenes,
+      [&](const auto& entry) { return entry.key == *app.current_scene_key_; });
+    const auto other = std::ranges::find_if(scenes, [&](const auto& entry) {
+      return std::filesystem::path(entry.name).stem() == "Lantern";
+    });
+    IM_CHECK(original != scenes.end() && other != scenes.end());
+    const auto original_entry = *original;
+    const auto other_entry = *other;
+    IM_CHECK(original_entry.key != other_entry.key);
+    for (const auto& target : { other_entry, original_entry }) {
+      const auto previous_lifetime
+        = app.GetShell().TryGetScene()->GetLifetimeId();
+      SelectPanel(ctx, app.GetShell(), "Content Loader",
+        imgui::icons::kIconContentLoader);
+      ClickScene(ctx, target);
+      if (ctx->IsError())
+        return;
+      for (unsigned wait = 0U; wait < 600U; ++wait) {
+        const auto current = app.GetShell().TryGetScene();
+        if (app.current_scene_key_ == target.key && !app.active_scene_load_key_
+          && current && current->GetLifetimeId() != previous_lifetime)
+          break;
+        ctx->Yield();
+      }
+      IM_CHECK(
+        app.current_scene_key_ == target.key && !app.active_scene_load_key_);
+      const auto current = app.GetShell().TryGetScene();
+      IM_CHECK(current && current->GetLifetimeId() != previous_lifetime);
+      CheckPersistedLighting(*current);
+      if (ctx->IsError())
+        return;
+      CheckGpuLighting(ctx, *renderer, *current);
+      if (ctx->IsError())
+        return;
+    }
+    const auto state = renderer->InspectSkyLight(*app.GetShell().TryGetScene());
+    const auto expected_path
+      = SettingsService::ForDemoApp()->GetStoragePath().parent_path()
+      / "expected.json";
+    std::ofstream expected(expected_path);
+    IM_CHECK(expected.good());
+    expected << nlohmann::json {
+      { "scene_key", std::string(nostd::to_string(*app.current_scene_key_)) },
+      { "writer_runtime_source_revision", state.published_source_revision },
+      { "radiance_scale", state.source_radiance_scale },
+      { "average_brightness", state.average_brightness }
+    }.dump(2);
+    expected.flush();
+    IM_CHECK(expected.good());
+    SelectPanel(
+      ctx, app.GetShell(), "Environment", imgui::icons::kIconEnvironment);
+    ctx->Yield(5);
+  };
+
+  test = IM_REGISTER_TEST(engine, "renderscene", "ibl_reopen");
+  test->UserData = this;
+  test->TestFunc = [](ImGuiTestContext* ctx) {
+    auto& app = *static_cast<MainModule*>(ctx->Test->UserData);
+    std::ifstream expected_file(
+      SettingsService::ForDemoApp()->GetStoragePath().parent_path()
+      / "expected.json");
+    IM_CHECK(expected_file.good());
+    const auto expected = nlohmann::json::parse(expected_file);
+    for (unsigned wait = 0U;
+      wait < 600U && (!app.current_scene_key_ || app.active_scene_load_key_);
+      ++wait)
+      ctx->Yield();
+    IM_CHECK(app.current_scene_key_ && !app.active_scene_load_key_);
+    IM_CHECK(std::string(nostd::to_string(*app.current_scene_key_))
+      == expected.at("scene_key").get<std::string>());
+    const auto scene = app.GetShell().TryGetScene();
+    const auto renderer = app.ResolveVortexRenderer();
+    IM_CHECK(scene && renderer);
+    CheckPersistedLighting(*scene);
+    if (ctx->IsError())
+      return;
+    CheckGpuLighting(ctx, *renderer, *scene);
+    if (ctx->IsError())
+      return;
+    const auto state = renderer->InspectSkyLight(*scene);
+    IM_CHECK_EQ(
+      state.source_radiance_scale, expected.at("radiance_scale").get<float>());
+    const auto brightness = expected.at("average_brightness").get<float>();
+    IM_CHECK(std::abs(state.average_brightness - brightness)
+      <= std::max(0.00001F, brightness * 0.00001F));
+    SelectPanel(
+      ctx, app.GetShell(), "Environment", imgui::icons::kIconEnvironment);
+    ctx->Yield(3);
+    ctx->SetRef("Environment");
+    ctx->ItemOpen("**/Sky Light (IBL)");
+    ctx->ItemOpen("**/Advanced##SkyLight");
+    IM_CHECK(ctx->ItemExists("**/Specular Indirect"));
   };
 }
 // NOLINTEND(readability-magic-numbers)

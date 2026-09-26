@@ -305,6 +305,8 @@ auto DemoShell::OnFrameStart(const engine::FrameContext& context) -> void
     return;
   }
 
+  // Bind a newly published scene before flushing its profile and exposure.
+  SyncRuntimeState();
   impl_->camera_settings_service.OnFrameStart(context);
   impl_->rendering_settings_service.OnFrameStart(context);
   impl_->light_culling_settings_service.OnFrameStart(context);
@@ -313,7 +315,6 @@ auto DemoShell::OnFrameStart(const engine::FrameContext& context) -> void
   if (impl_->config.panel_config.ground_grid) {
     impl_->grid_settings_service.OnFrameStart(context);
   }
-  SyncRuntimeState();
 }
 
 auto DemoShell::OnMainViewReady(const engine::FrameContext& context,

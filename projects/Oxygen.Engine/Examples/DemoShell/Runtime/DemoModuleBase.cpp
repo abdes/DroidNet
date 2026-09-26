@@ -148,7 +148,8 @@ auto DemoModuleBase::OnAttached(observer_ptr<IAsyncEngine> engine) noexcept
   DCHECK_NOTNULL_F(engine);
 #if defined(OXYGEN_BUILD_UI_TESTS)
   if (testing::UiTestSession::Requested()) {
-    SettingsService::ForDemoApp()->SetPersistenceEnabled(false);
+    SettingsService::ForDemoApp()->SetPersistenceEnabled(
+      testing::UiTestSession::UsesIsolatedSettings());
   }
 #endif
   LOG_SCOPE_FUNCTION(1);

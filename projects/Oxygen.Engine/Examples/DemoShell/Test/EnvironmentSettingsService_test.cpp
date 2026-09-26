@@ -2083,7 +2083,8 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   ASSERT_TRUE(candidate.EditLight<scene::DirectionalLight>(
     [](auto& light) { light.SetIntensityLux(1234.0F); }));
   service_.OnSceneActivated(*loaded);
-  // The real shell runs domain frame-start before refreshing runtime config.
+  // A pending rebind must preserve the profile until runtime config is
+  // refreshed.
   engine::FrameContext frame;
   service_.OnFrameStart(frame);
   service_.SyncFromSceneIfNeeded();

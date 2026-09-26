@@ -2,13 +2,20 @@
 
 S1–S4 are validated: products, captured atmosphere/height fog, native lighting,
 migration, precision, lifetime admission and automatic scheduling pass their
-checks. S5–S6 own DemoShell app persistence/scene replacement, matched images
-and integrated qualification.
+checks. S5–S6 own matched native/editor images and integrated qualification.
 
 Read: [current results](#current-results), [reproduce](#reproduce),
 [remaining gates](README.md#acceptance).
 
 ## Current results
+
+[S5 DemoShell lifecycle](evidence/s5-lifecycle/run.json): **four real app cases**
+pass. Sidebar and Library clicks switch town4new → Lantern → town4new; the
+selected profile now applies before the new scene's first frame. A second process
+restores the saved scene and Custom IBL/fog controls, with valid GPU metadata and
+matching scene-linear scale/brightness. The runs use isolated settings and leave
+the user's file unchanged. **99 owning service tests** also pass.
+[Reopened controls](evidence/s5-lifecycle/lifecycle/reopen/final-state.png).
 
 [S5 editor workflows](evidence/s5-editor/run.json): **42 real editor UI cases**
 pass. Inspector radiance edits and Undo/Redo advance the rendered IBL generation
@@ -21,7 +28,7 @@ and native built-in catalog query. The Debug editor builds. Default shader loadi
 uses the compatibility-selected SDK; explicit overrides remain intact. Cooking
 reads the canonical `share/oxygen/schemas` directory. Both installed shader
 archives and scene headers match their current builds/source. No shader code was
-added for these checks. App lifecycle and matched-image gates remain open.
+added for these checks. Matched-image gates remain open.
 
 [S5 GPU validity](evidence/s5-metadata/run.json): **30 Debug / 28 Release native
 tests, 13 DemoShell CPU tests and two real widget cases** pass. Frame Diagnostics
@@ -46,8 +53,7 @@ are gone. [Native UI](evidence/s5-controls/ui/final-state.png).
 Coverage includes settings reload, poisoned-pool/source identity, unresolved
 cubemaps, unchanged 16-face source allocation failure, and rejection of partial
 GPU timing when collection is enabled. The public status header is installed.
-DemoShell app persistence/scene replacement and final matched visual
-qualification remain open; S5 stays `in_progress`.
+Matched visual qualification remains open; S5 stays `in_progress`.
 
 [S4 matched scene runs](evidence/s4-scene/run.json) pass on the reference GPU:
 **1,800 frames per workload at 1920×1080/60 Hz**, after 120 warmup frames. All use

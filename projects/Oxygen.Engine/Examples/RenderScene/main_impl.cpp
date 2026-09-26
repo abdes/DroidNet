@@ -225,7 +225,13 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
 
   const auto runtime_paths
     = oxygen::examples::render_scene::ResolveRuntimePaths();
-  if (runtime_paths.installed) {
+#if defined(OXYGEN_BUILD_UI_TESTS)
+  const bool isolated_settings
+    = oxygen::examples::testing::UiTestSession::InitializeSettings();
+#else
+  constexpr bool isolated_settings = false;
+#endif
+  if (runtime_paths.installed && !isolated_settings) {
     SettingsService::InitializeForDemoApp(
       runtime_paths.showcase / "demo_settings.json", runtime_paths.root);
   }

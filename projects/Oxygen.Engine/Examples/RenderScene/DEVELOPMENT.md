@@ -383,6 +383,14 @@ speed.
 
 ## Settings and repeatable runs
 
+Widget tests built with `OXYGEN_BUILD_UI_TESTS` use `OXYGEN_UI_TEST_OUTPUT` for
+reports and `OXYGEN_UI_TEST_FILTER` to select cases. Set `OXYGEN_UI_TEST_SETTINGS`
+to a separate settings file before launch to exercise normal persistence. Without
+that override, widget runs disable settings writes. The `ibl_persist_and_replace`
+and `ibl_reopen` cases run in separate processes against the same isolated file;
+the second process restores the saved scene and profile without scene/profile CLI
+overrides.
+
 `Examples/RenderScene/demo_settings.json` persists mounts, active scene, camera
 poses keyed by camera name, exposure, render/debug modes, environment UI values,
 and panels. Camera names can repeat across scenes. The shell reapplies

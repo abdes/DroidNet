@@ -20,6 +20,9 @@ namespace oxygen::examples::testing {
 class UiTestSession final {
 public:
   static auto Requested() -> bool;
+  //! Select an explicit test settings file before the application's first use.
+  static auto InitializeSettings() -> bool;
+  static auto UsesIsolatedSettings() -> bool;
   static auto ExitCode(int application_exit_code) -> int;
   UiTestSession(ImGuiContext& context, void* native_window);
   ~UiTestSession();
