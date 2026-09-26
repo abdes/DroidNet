@@ -32,6 +32,7 @@
 #include <Oxygen/Scene/Light/LightCommon.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Vortex/Types/SkyLightRuntimeState.h>
 
 namespace oxygen {
 namespace vortex {
@@ -288,11 +289,17 @@ public:
   virtual auto SetSkyLightDiffuse(float value) -> void;
 
   [[nodiscard]] virtual auto GetSkyLightSpecular() const -> float;
+  [[nodiscard]] virtual auto GetSkyLightRuntimeState() const
+    -> vortex::SkyLightRuntimeState;
   virtual auto SetSkyLightSpecular(float value) -> void;
 
   [[nodiscard]] virtual auto GetSkyLightLowerHemisphereColor() const
     -> glm::vec3;
   virtual auto SetSkyLightLowerHemisphereColor(const glm::vec3& value) -> void;
+  [[nodiscard]] virtual auto GetSkyLightLowerHemisphereOverride() const -> bool;
+  virtual auto SetSkyLightLowerHemisphereOverride(bool enabled) -> void;
+  [[nodiscard]] virtual auto GetSkyLightLowerHemisphereBlend() const -> float;
+  virtual auto SetSkyLightLowerHemisphereBlend(float value) -> void;
   [[nodiscard]] virtual auto GetSkyLightVolumetricScatteringIntensity() const
     -> float;
   virtual auto SetSkyLightVolumetricScatteringIntensity(float value) -> void;

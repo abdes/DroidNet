@@ -6,17 +6,22 @@
 
 #include <algorithm>
 #include <bit>
+#include <chrono>
 #include <cmath>
 #include <new>
+#include <optional>
+#include <string>
 #include <unordered_map>
 #include <utility>
 
+#include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereState.h>
 #include <Oxygen/Vortex/Environment/Internal/CapturedSkySource.h>
+#include <Oxygen/Vortex/Environment/Internal/IblGpuValidation.h>
 #include <Oxygen/Vortex/Environment/Internal/IblProcessor.h>
 #include <Oxygen/Vortex/Environment/Internal/IblWorkBudget.h>
 #include <Oxygen/Vortex/Environment/Passes/IblProbePass.h>
@@ -59,6 +64,13 @@ struct IblProcessor::Cache {
     std::unique_ptr<CapturedSkySource> captured;
     std::shared_ptr<const IblGpuProducts> published;
     StaticSkyLightProductKey key;
+    StaticSkyLightProductKey desired_key;
+    frame::SequenceNumber published_frame {};
+    std::uint32_t candidate_revision {};
+    std::uint32_t source {};
+    bool enabled { false };
+    bool empty_capture { false };
+    double cpu_update_ms {};
     std::shared_ptr<IblGpuJob> candidate;
     StaticSkyLightProductKey candidate_key;
     frame::SequenceNumber candidate_frame {};
@@ -67,6 +79,8 @@ struct IblProcessor::Cache {
     RefreshState frame_result;
     bool has_frame { false };
     bool retry_immediate { false };
+    std::unique_ptr<IblGpuValidation> validation;
+    bool validation_allocation_failed { false };
   };
   std::unordered_map<std::uint64_t, SceneCache> scenes;
   std::unique_ptr<IblBrdfResources> brdf;
@@ -77,6 +91,7 @@ struct IblProcessor::Cache {
   std::shared_ptr<IblWorkBudget> budget { std::make_shared<IblWorkBudget>() };
   bool timing_required { false };
   bool recorded_work { false };
+  std::optional<frame::SequenceNumber> diagnostics_frame;
 };
 
 IblProcessor::IblProcessor(Renderer& renderer)
@@ -92,13 +107,74 @@ IblProcessor::~IblProcessor()
     renderer_.GetDiagnosticsService().ReleaseIblTiming();
 }
 
-auto IblProcessor::OnFrameStart() -> bool
+auto IblProcessor::OnFrameStart(const frame::SequenceNumber sequence) -> bool
 {
   if (cache_->timing_required && !cache_->recorded_work) {
     renderer_.GetDiagnosticsService().ReleaseIblTiming();
     cache_->timing_required = false;
   }
   cache_->recorded_work = false;
+  RetireExpiredScenes();
+  // Embedded/offscreen views may start the same scene renderer more than once
+  // in a frame. Poll and request metadata only on its first frame entry.
+  if (cache_->diagnostics_frame == sequence)
+    return std::exchange(cache_->publication_invalidated, false);
+  cache_->diagnostics_frame = sequence;
+  auto& diagnostics = renderer_.GetDiagnosticsService();
+  const bool collect = HasAnyFeature(
+    diagnostics.GetEnabledFeatures(), DiagnosticsFeature::kFrameLedger);
+  for (auto& [lifetime, scene] : cache_->scenes) {
+    try {
+      // Drain already requested observations even when collection is disabled.
+      if (scene.validation) {
+        for (const auto& observed : scene.validation->Poll()) {
+          if (!observed || observed->status == SkyLightGpuValidation::kValid)
+            continue;
+          const bool invalid
+            = observed->status == SkyLightGpuValidation::kInvalid;
+          diagnostics.ReportIssue(
+            { .severity = invalid ? DiagnosticsSeverity::kError
+                                  : DiagnosticsSeverity::kWarning,
+              .code = invalid ? "ibl.gpu-invalid" : "ibl.readback-unavailable",
+              .message = std::string(invalid
+                             ? "Invalid GPU sky-light generation "
+                             : "Readback unavailable for sky-light generation ")
+                + std::to_string(observed->revision) + " in scene "
+                + std::to_string(lifetime)
+                + (invalid ? ". Its lighting contribution is zero." : "."),
+              .pass_name = "Vortex.Diagnostics.IBL.Metadata",
+              .product_name = "SkyLight" });
+        }
+      }
+      if (!collect || !scene.published || !scene.processor
+        || !scene.processor->IsOpen())
+        continue;
+      try {
+        if (!scene.validation) {
+          scene.validation_allocation_failed = true;
+          scene.validation
+            = std::make_unique<IblGpuValidation>(renderer_.GetGraphics());
+          scene.validation_allocation_failed = false;
+        }
+        scene.validation->Request(*scene.published, diagnostics);
+      } catch (const std::bad_alloc&) {
+        // Diagnostic allocation does not alter the accepted lighting products.
+      }
+      if (!scene.validation
+        || scene.validation->Inspect(*scene.published, collect).gpu_validation
+          == SkyLightGpuValidation::kUnavailable)
+        diagnostics.ReportIssue({ .severity = DiagnosticsSeverity::kWarning,
+          .code = "ibl.readback-unavailable",
+          .message = "GPU sky-light validation unavailable for scene "
+            + std::to_string(lifetime),
+          .pass_name = "Vortex.Diagnostics.IBL.Metadata",
+          .product_name = "SkyLight" });
+    } catch (const std::bad_alloc&) {
+      // Reporting an unavailable diagnostic must not reject a healthy frame.
+    }
+  }
+  // An execution-uncertain diagnostic submission closes the same Nexus pool
+  // as any other reader. Invalidate that publication before view preparation.
   RetireExpiredScenes();
   return std::exchange(cache_->publication_invalidated, false);
 }
@@ -136,6 +212,67 @@ auto IblProcessor::GetPublishedProducts() const
 auto IblProcessor::GetCachedSceneCount() const -> std::size_t
 {
   return cache_->scenes.size();
+}
+
+auto IblProcessor::InspectState(const std::uint64_t scene_lifetime) const
+  -> SkyLightRuntimeState
+{
+  const auto found = cache_->scenes.find(scene_lifetime);
+  if (found == cache_->scenes.end()
+    || (scene_lifetime != 0U && found->second.scene.expired()))
+    return {};
+  const auto& cached = found->second;
+  const auto& state = cached.frame_result.probe_state;
+  const bool open = cached.processor && cached.processor->IsOpen();
+  auto result = SkyLightRuntimeState { .observed = cached.has_frame,
+    .enabled = cached.enabled,
+    .usable = state.valid && open && cached.published != nullptr,
+    .empty_capture = cached.empty_capture,
+    .source = cached.source,
+    .source_cubemap = cached.desired_key.source_cubemap,
+    .scene_lifetime = scene_lifetime,
+    .frame_sequence = cached.last_frame.get(),
+    .published_source_revision = cached.key.source_revision,
+    .desired_source_revision = cached.desired_key.source_revision,
+    .published_revision = cached.published ? cached.published->revision : 0U,
+    .building_revision = cached.candidate ? cached.candidate_revision : 0U,
+    .face_size = cached.published ? cached.key.output_face_size : 0U,
+    .source_age_frames = cached.published && cached.key != cached.desired_key
+      ? cached.last_frame.get() - cached.published_frame.get()
+      : 0U,
+    .cpu_update_ms = cached.cpu_update_ms,
+    .status = state.static_sky_light.status,
+    .unavailable_reason = state.static_sky_light.unavailable_reason };
+  if (cached.processor && !open) {
+    result.status = StaticSkyLightProductStatus::kUnavailable;
+    result.unavailable_reason
+      = StaticSkyLightUnavailableReason::kProcessingFailed;
+    result.building_revision = 0U;
+  }
+  if (!result.usable) {
+    result.published_revision = 0U;
+    result.published_source_revision = 0U;
+    result.face_size = 0U;
+    result.source_age_frames = 0U;
+  }
+  if (result.usable) {
+    const bool collect
+      = HasAnyFeature(renderer_.GetDiagnosticsService().GetEnabledFeatures(),
+        DiagnosticsFeature::kFrameLedger);
+    const auto validation = cached.validation
+      ? cached.validation->Inspect(*cached.published, collect)
+      : SkyLightRuntimeState { .gpu_validation
+          = cached.validation_allocation_failed
+            ? SkyLightGpuValidation::kUnavailable
+            : collect ? SkyLightGpuValidation::kPending
+                      : SkyLightGpuValidation::kNotRequested };
+    result.gpu_validation = validation.gpu_validation;
+    result.validated_revision = validation.validated_revision;
+    result.last_failed_gpu_revision = validation.last_failed_gpu_revision;
+    result.source_radiance_scale = validation.source_radiance_scale;
+    result.average_brightness = validation.average_brightness;
+  }
+  return result;
 }
 
 auto IblProcessor::GetTimingSampleCount() const -> std::uint64_t
@@ -190,13 +327,37 @@ try {
     scene_cache.frame_result = { true, false, next };
     return scene_cache.frame_result;
   };
-  if (scene_cache.processor && !scene_cache.processor->IsOpen())
+  if (scene_cache.processor && !scene_cache.processor->IsOpen()) {
+    scene_cache.enabled = light.enabled;
+    scene_cache.source = light.source;
+    scene_cache.empty_capture = false;
+    scene_cache.desired_key
+      = { .source_cubemap = light.source == kSkyLightSourceSpecifiedCubemap
+            ? light.cubemap_resource
+            : content::ResourceKey {},
+          .source_revision
+          = light.enabled && light.source == kSkyLightSourceCapturedScene
+            ? HashSkyCaptureInputs(stable)
+            : 0U };
+    scene_cache.last_frame = ctx.frame_sequence;
+    scene_cache.has_frame = true;
+    scene_cache.cpu_update_ms = 0.0;
     return unavailable(StaticSkyLightUnavailableReason::kProcessingFailed);
+  }
   if (scene_cache.has_frame && scene_cache.last_frame == ctx.frame_sequence) {
     if (scene_cache.frame_result.probe_state.valid)
       cache.published = scene_cache.published;
     return { false, false, scene_cache.frame_result.probe_state };
   }
+  const auto cpu_begin = std::chrono::steady_clock::now();
+  const ScopeGuard cpu_time([&]() noexcept {
+    scene_cache.cpu_update_ms = std::chrono::duration<double, std::milli>(
+      std::chrono::steady_clock::now() - cpu_begin)
+                                  .count();
+  });
+  scene_cache.enabled = light.enabled;
+  scene_cache.source = light.source;
+  scene_cache.empty_capture = false;
   const bool resumed = scene_cache.has_frame
     && ctx.frame_sequence.get() != scene_cache.last_frame.get() + 1U;
   const bool authoring
@@ -225,6 +386,9 @@ try {
   };
   if (!light.enabled)
     key = { .output_face_size = 128U, .source_format_class = 0xFFFFFFFFU };
+  scene_cache.desired_key = key;
+  if (light.source == kSkyLightSourceSpecifiedCubemap)
+    scene_cache.desired_key.source_revision = 0U;
   struct ResidentOwner {
     std::shared_ptr<resources::TextureBinder> binder;
     std::shared_ptr<const resources::TextureBinder::ReadyTexture> texture;
@@ -237,6 +401,17 @@ try {
       return unavailable(
         StaticSkyLightUnavailableReason::kResourceResolveFailed);
     const auto descriptor = binder->GetOrAllocate(light.cubemap_resource);
+    if (binder->IsResourceReady(light.cubemap_resource)) {
+      scene_cache.desired_key.source_revision
+        = binder->GetContentRevision(descriptor);
+      if (scene_cache.published
+        && scene_cache.key.source_cubemap == key.source_cubemap
+        && scene_cache.key.source_format_class == key.source_format_class
+        && scene_cache.key.source_revision
+          == scene_cache.desired_key.source_revision)
+        scene_cache.desired_key.output_face_size
+          = scene_cache.key.output_face_size;
+    }
     // An unchanged resident descriptor also proves unchanged layout. Runtime
     // edits may retain its prior products if allocating the source lease fails.
     if (scene_cache.published && !authoring && !resumed && !retry_immediate
@@ -270,6 +445,7 @@ try {
     key.output_face_size = std::bit_floor(source_desc.width);
   }
   const bool changed = !scene_cache.published || scene_cache.key != key;
+  scene_cache.desired_key = key;
   constexpr auto capture_fog_flags = kGpuFogFlagEnabled
     | kGpuFogFlagHeightFogEnabled | kGpuFogFlagVisibleInRealTimeSkyCaptures;
   const bool empty_capture = light.source == kSkyLightSourceCapturedScene
@@ -280,6 +456,7 @@ try {
   const bool structural = scene_cache.key.source_cubemap != key.source_cubemap
     || scene_cache.key.source_format_class != key.source_format_class
     || scene_cache.key.output_face_size != key.output_face_size;
+  scene_cache.empty_capture = empty_capture;
   const bool immediate = !scene_cache.published || authoring || resumed
     || structural || !light.enabled || empty_capture || retry_immediate;
   if (immediate)
@@ -299,6 +476,8 @@ try {
                          const StaticSkyLightProductKey& product_key) {
     scene_cache.published = product;
     scene_cache.key = product_key;
+    scene_cache.published_frame
+      = immediate ? ctx.frame_sequence : scene_cache.candidate_frame;
     scene_cache.retry_immediate = false;
     refreshed = true;
   };
@@ -368,6 +547,7 @@ try {
         scene_cache.candidate = *job;
         scene_cache.candidate_key = key;
         scene_cache.candidate_frame = ctx.frame_sequence;
+        scene_cache.candidate_revision = revision;
         snapshot_started = true;
         cache.revision = revision;
       } else

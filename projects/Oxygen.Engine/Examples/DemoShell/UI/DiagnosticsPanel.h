@@ -6,12 +6,11 @@
 
 #pragma once
 
-#include <Oxygen/Base/ObserverPtr.h>
-
 #include "DemoShell/Runtime/RendererUiTypes.h"
-
 #include "DemoShell/UI/DemoPanel.h"
 #include "DemoShell/UI/DiagnosticsVm.h"
+
+#include <Oxygen/Base/ObserverPtr.h>
 
 namespace oxygen::examples::ui {
 
@@ -42,6 +41,7 @@ public:
 
 private:
   void DrawRuntimeStatus();
+  void DrawSkyLightDiagnostics();
   void DrawRendererCapabilities();
   void DrawViewModeControls();
   void DrawWireframeColor();

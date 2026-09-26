@@ -11,21 +11,30 @@
 #include <limits>
 #include <memory>
 
-#include <Oxygen/Testing/GTest.h>
-
-#include <Oxygen/Core/FrameContext.h>
-#include <Oxygen/Scene/Environment/PostProcessVolume.h>
-#include <Oxygen/Scene/Environment/SceneEnvironment.h>
-#include <Oxygen/Scene/Scene.h>
-
 #include "DemoShell/Services/EnvironmentSettingsService.h"
 #include "DemoShell/Services/PostProcessSettingsService.h"
 #include "DemoShell/Services/SettingsService.h"
 #include "DemoShell/UI/EnvironmentVm.h"
 
+#include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Scene/Environment/PostProcessVolume.h>
+#include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Testing/GTest.h>
+
 namespace oxygen::examples::testing {
 
 namespace {
+
+  class EnvironmentStatusService : public EnvironmentSettingsService {
+  public:
+    vortex::SkyLightRuntimeState runtime;
+    auto GetSkyLightRuntimeState() const
+      -> vortex::SkyLightRuntimeState override
+    {
+      return runtime;
+    }
+  };
 
   class MockPostProcessSettingsService : public ui::PostProcessSettingsService {
   public:
@@ -94,7 +103,7 @@ namespace {
       EXPECT_FLOAT_EQ(service_.GetFogExtinctionSigmaTPerMeter(), 0.012F);
     }
 
-    EnvironmentSettingsService service_;
+    EnvironmentStatusService service_;
     // Any exposure write, including resetting adaptation, fails the test.
     ::testing::StrictMock<MockPostProcessSettingsService> post_process_;
     ui::EnvironmentVm vm_ { observer_ptr { &service_ },
@@ -103,6 +112,95 @@ namespace {
   };
 
 } // namespace
+
+NOLINT_TEST_F(
+  EnvironmentVmTest, CapturedSkyFeedbackTracksReadinessAndRetainedUpdates)
+{
+  auto scene = std::make_shared<scene::Scene>("Sky-light feedback", 8U);
+  service_.SetRuntimeConfig({ .scene = observer_ptr { scene.get() } });
+  vm_.SetSkyLightEnabled(true);
+  vm_.SetSkyLightSource(0);
+  EXPECT_FALSE(vm_.GetSkyLightFeedback().warning);
+  EXPECT_FALSE(vm_.GetSkyLightFeedback().active);
+  service_.runtime = { .observed = true,
+    .enabled = true,
+    .usable = true,
+    .status
+    = vortex::environment::StaticSkyLightProductStatus::kValidCurrentKey };
+  EXPECT_EQ(vm_.GetSkyLightFeedback().label, "Active");
+  EXPECT_TRUE(vm_.GetSkyLightFeedback().active);
+  service_.runtime.status
+    = vortex::environment::StaticSkyLightProductStatus::kRegeneratingCurrentKey;
+  EXPECT_EQ(vm_.GetSkyLightFeedback().label, "Updating");
+  EXPECT_TRUE(vm_.GetSkyLightFeedback().active);
+  EXPECT_FALSE(vm_.GetSkyLightFeedback().warning);
+  service_.runtime.unavailable_reason
+    = vortex::environment::StaticSkyLightUnavailableReason::kProcessingFailed;
+  EXPECT_TRUE(vm_.GetSkyLightFeedback().active);
+  EXPECT_TRUE(vm_.GetSkyLightFeedback().warning);
+  EXPECT_EQ(
+    vm_.GetSkyLightFeedback().detail, "Previous lighting remains active.");
+  service_.runtime.usable = false;
+  EXPECT_FALSE(vm_.GetSkyLightFeedback().active);
+  EXPECT_EQ(vm_.GetSkyLightFeedback().label, "Lighting update failed");
+  vm_.SetSkyLightEnabled(false);
+  EXPECT_EQ(vm_.GetSkyLightFeedback().label, "Off");
+  EXPECT_FALSE(vm_.GetSkyLightFeedback().warning);
+}
+
+NOLINT_TEST_F(EnvironmentVmTest,
+  CapturedSkyFeedbackRejectsAnotherSourceAndExplainsEmptyCapture)
+{
+  auto scene = std::make_shared<scene::Scene>("Sky-light source feedback", 8U);
+  service_.SetRuntimeConfig({ .scene = observer_ptr { scene.get() } });
+  vm_.SetSkyLightEnabled(true);
+  vm_.SetSkyLightSource(0);
+  service_.runtime = { .observed = true,
+    .enabled = true,
+    .usable = true,
+    .source = 1U,
+    .status
+    = vortex::environment::StaticSkyLightProductStatus::kValidCurrentKey };
+  EXPECT_EQ(vm_.GetSkyLightFeedback().label, "Updating source");
+  EXPECT_FALSE(vm_.GetSkyLightFeedback().active);
+  service_.runtime.source = 0U;
+  service_.runtime.empty_capture = true;
+  EXPECT_EQ(vm_.GetSkyLightFeedback().label, "No captured sky or fog");
+  EXPECT_FALSE(vm_.GetSkyLightFeedback().warning);
+  EXPECT_FALSE(vm_.GetSkyLightFeedback().active);
+  service_.runtime.empty_capture = false;
+  service_.runtime.enabled = false;
+  EXPECT_EQ(vm_.GetSkyLightFeedback().label, "Waiting for lighting");
+}
+
+NOLINT_TEST_F(EnvironmentVmTest, GpuFailureDoesNotClaimRetainedLighting)
+{
+  auto scene = std::make_shared<scene::Scene>("GPU failure feedback", 8U);
+  service_.SetRuntimeConfig({ .scene = observer_ptr { scene.get() } });
+  vm_.SetSkyLightEnabled(true);
+  vm_.SetSkyLightSource(0);
+  service_.runtime = { .observed = true,
+    .enabled = true,
+    .usable = true,
+    .unavailable_reason
+    = vortex::environment::StaticSkyLightUnavailableReason::kProcessingFailed,
+    .gpu_validation = vortex::SkyLightGpuValidation::kInvalid };
+  EXPECT_EQ(vm_.GetSkyLightFeedback().label, "Invalid sky lighting");
+  EXPECT_TRUE(vm_.GetSkyLightFeedback().warning);
+  EXPECT_FALSE(vm_.GetSkyLightFeedback().active);
+  EXPECT_EQ(vm_.GetSkyLightFeedback().detail,
+    "GPU validation failed. This generation contributes no lighting.");
+  service_.runtime.unavailable_reason
+    = vortex::environment::StaticSkyLightUnavailableReason::kNone;
+  for (const auto state : { vortex::SkyLightGpuValidation::kNotRequested,
+         vortex::SkyLightGpuValidation::kPending,
+         vortex::SkyLightGpuValidation::kValid,
+         vortex::SkyLightGpuValidation::kUnavailable }) {
+    service_.runtime.gpu_validation = state;
+    EXPECT_TRUE(vm_.GetSkyLightFeedback().active);
+    EXPECT_FALSE(vm_.GetSkyLightFeedback().warning);
+  }
+}
 
 NOLINT_TEST_F(
   EnvironmentVmTest, SelectingCustomRetainsEnvironmentWithoutChangingExposure)

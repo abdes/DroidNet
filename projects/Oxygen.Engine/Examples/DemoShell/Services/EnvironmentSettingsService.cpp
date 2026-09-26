@@ -584,6 +584,10 @@ namespace {
 
   constexpr std::string_view kSkyLightLowerHemisphereColorKey
     = "env.sky_light.lower_hemisphere_color";
+  constexpr std::string_view kSkyLightLowerHemisphereOverrideKey
+    = "env.sky_light.lower_hemisphere_override";
+  constexpr std::string_view kSkyLightLowerHemisphereBlendKey
+    = "env.sky_light.lower_hemisphere_blend";
   constexpr std::string_view kSkyLightVolumetricScatteringIntensityKey
     = "env.sky_light.volumetric_scattering_intensity";
   constexpr std::string_view kSkyLightAffectReflectionsKey
@@ -1998,6 +2002,14 @@ auto EnvironmentSettingsService::GetSkyLightSpecular() const -> float
   return sky_light_specular_;
 }
 
+auto EnvironmentSettingsService::GetSkyLightRuntimeState() const
+  -> vortex::SkyLightRuntimeState
+{
+  return config_.scene && config_.renderer
+    ? config_.renderer->InspectSkyLight(*config_.scene)
+    : vortex::SkyLightRuntimeState {};
+}
+
 auto EnvironmentSettingsService::SetSkyLightSpecular(float value) -> void
 {
   if (sky_light_specular_ == value) {
@@ -2027,6 +2039,36 @@ auto EnvironmentSettingsService::GetSkyLightVolumetricScatteringIntensity()
   const -> float
 {
   return sky_light_volumetric_scattering_intensity_;
+}
+
+auto EnvironmentSettingsService::GetSkyLightLowerHemisphereOverride() const
+  -> bool
+{
+  return sky_light_lower_hemisphere_is_solid_color_;
+}
+
+auto EnvironmentSettingsService::SetSkyLightLowerHemisphereOverride(
+  const bool enabled) -> void
+{
+  if (sky_light_lower_hemisphere_is_solid_color_ == enabled)
+    return;
+  sky_light_lower_hemisphere_is_solid_color_ = enabled;
+  MarkDirty(ToMask(DirtyDomain::kSkyLight));
+}
+
+auto EnvironmentSettingsService::GetSkyLightLowerHemisphereBlend() const
+  -> float
+{
+  return sky_light_lower_hemisphere_blend_alpha_;
+}
+
+auto EnvironmentSettingsService::SetSkyLightLowerHemisphereBlend(
+  const float value) -> void
+{
+  if (sky_light_lower_hemisphere_blend_alpha_ == value)
+    return;
+  sky_light_lower_hemisphere_blend_alpha_ = value;
+  MarkDirty(ToMask(DirtyDomain::kSkyLight));
 }
 
 auto EnvironmentSettingsService::SetSkyLightVolumetricScatteringIntensity(
@@ -3980,6 +4022,10 @@ auto EnvironmentSettingsService::ValidateAndClampState() -> void
   clamp_float(sky_light_diffuse_, 0.0F, 100.0F);
   clamp_float(sky_light_specular_, 0.0F, 100.0F);
   clamp_vec3_min(sky_light_lower_hemisphere_color_, 0.0F);
+  sky_light_lower_hemisphere_blend_alpha_
+    = std::isfinite(sky_light_lower_hemisphere_blend_alpha_)
+    ? std::clamp(sky_light_lower_hemisphere_blend_alpha_, 0.0F, 1.0F)
+    : 1.0F;
   clamp_float(sky_light_volumetric_scattering_intensity_, 0.0F, 100.0F);
 
   clamp_int(fog_model_, 0, 1);
@@ -4273,6 +4319,10 @@ auto EnvironmentSettingsService::LoadSettings(const bool custom_only) -> void
 
     any_loaded |= load_vec3(
       kSkyLightLowerHemisphereColorKey, sky_light_lower_hemisphere_color_);
+    any_loaded |= load_bool(kSkyLightLowerHemisphereOverrideKey,
+      sky_light_lower_hemisphere_is_solid_color_);
+    any_loaded |= load_float(kSkyLightLowerHemisphereBlendKey,
+      sky_light_lower_hemisphere_blend_alpha_);
     any_loaded |= load_float(kSkyLightVolumetricScatteringIntensityKey,
       sky_light_volumetric_scattering_intensity_);
     any_loaded |= load_bool(
@@ -4545,6 +4595,10 @@ auto EnvironmentSettingsService::SaveSettings() const -> void
   save_float(kSkyLightSpecularKey, sky_light_specular_);
   save_vec3(
     kSkyLightLowerHemisphereColorKey, sky_light_lower_hemisphere_color_);
+  save_bool(kSkyLightLowerHemisphereOverrideKey,
+    sky_light_lower_hemisphere_is_solid_color_);
+  save_float(
+    kSkyLightLowerHemisphereBlendKey, sky_light_lower_hemisphere_blend_alpha_);
   save_float(kSkyLightVolumetricScatteringIntensityKey,
     sky_light_volumetric_scattering_intensity_);
   save_bool(kSkyLightAffectReflectionsKey, sky_light_affect_reflections_);

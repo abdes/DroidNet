@@ -8,12 +8,12 @@
 
 #include <mutex>
 
+#include "DemoShell/Runtime/RendererUiTypes.h"
+#include "DemoShell/Services/EnvironmentSettingsService.h"
+#include "DemoShell/Services/RenderingSettingsService.h"
+
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Vortex/RendererCapability.h>
-
-#include "DemoShell/Runtime/RendererUiTypes.h"
-
-#include "DemoShell/Services/RenderingSettingsService.h"
 
 namespace oxygen::examples::ui {
 
@@ -35,7 +35,16 @@ namespace oxygen::examples::ui {
 class DiagnosticsVm {
 public:
   //! Creates a view model backed by the provided settings service.
-  explicit DiagnosticsVm(observer_ptr<RenderingSettingsService> service);
+  explicit DiagnosticsVm(observer_ptr<RenderingSettingsService> service,
+    observer_ptr<EnvironmentSettingsService> environment = nullptr);
+  [[nodiscard]] auto GetSkyLightRuntimeState() const
+    -> vortex::SkyLightRuntimeState;
+  [[nodiscard]] auto GetLatestIblGpuTiming() const
+    -> std::optional<vortex::IblGpuTiming>;
+  [[nodiscard]] auto GetGpuTimelineEnabled() const -> bool;
+  [[nodiscard]] auto GetFrameDiagnosticsEnabled() const -> bool;
+  auto SetFrameDiagnosticsEnabled(bool enabled) -> void;
+  auto SetGpuTimelineEnabled(bool enabled) -> void;
 
   //! Returns the cached view mode.
   [[nodiscard]] auto GetRenderMode() -> vortex::RenderMode;
@@ -81,6 +90,7 @@ private:
 
   mutable std::mutex mutex_ {};
   observer_ptr<RenderingSettingsService> service_;
+  observer_ptr<EnvironmentSettingsService> environment_;
   std::uint64_t epoch_ { 0 };
   vortex::RenderMode render_mode_ { vortex::RenderMode::kSolid };
   engine::ShaderDebugMode requested_debug_mode_ {

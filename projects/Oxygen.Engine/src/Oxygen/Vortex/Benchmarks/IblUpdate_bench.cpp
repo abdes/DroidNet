@@ -159,7 +159,7 @@ namespace {
       frame.SetFrameSlot(slot, engine::internal::EngineTagFactory::Get());
       renderer_->OnFrameStart(observer_ptr { &frame });
       if (scheduler)
-        static_cast<void>(scheduler->OnFrameStart());
+        static_cast<void>(scheduler->OnFrameStart(sequence));
       if (index == 0U && scheduled) {
         ASSERT_TRUE(diagnostics.RequestGpuTimelineRecording(
           directory / "first-use-gpu.json", 1U));

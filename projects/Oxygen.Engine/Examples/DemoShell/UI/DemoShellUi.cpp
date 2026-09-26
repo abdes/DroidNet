@@ -9,18 +9,6 @@
 #include <optional>
 #include <string_view>
 
-#include <imgui.h>
-
-#include <Oxygen/Base/Logging.h>
-#include <Oxygen/Content/IAssetLoader.h>
-#include <Oxygen/Core/FrameContext.h>
-#include <Oxygen/Engine/AsyncEngine.h>
-#include <Oxygen/Engine/IAsyncEngine.h>
-#include <Oxygen/ImGui/Console/CommandPalette.h>
-#include <Oxygen/ImGui/Console/ConsolePanel.h>
-#include <Oxygen/ImGui/Console/ConsoleUiState.h>
-#include <Oxygen/Vortex/Renderer.h>
-
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/PanelRegistry.h"
 #include "DemoShell/Services/CameraSettingsService.h"
@@ -54,6 +42,17 @@
 #include "DemoShell/UI/StatsOverlay.h"
 #include "DemoShell/UI/UiSettingsPanel.h"
 #include "DemoShell/UI/UiSettingsVm.h"
+#include <imgui.h>
+
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Content/IAssetLoader.h>
+#include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Engine/AsyncEngine.h>
+#include <Oxygen/Engine/IAsyncEngine.h>
+#include <Oxygen/ImGui/Console/CommandPalette.h>
+#include <Oxygen/ImGui/Console/ConsolePanel.h>
+#include <Oxygen/ImGui/Console/ConsoleUiState.h>
+#include <Oxygen/Vortex/Renderer.h>
 
 namespace oxygen::examples::ui {
 
@@ -171,16 +170,18 @@ namespace {
     }
   }
 
-  void DrawViewFailures(const engine::FrameContext& frame,
-    const vortex::Renderer& renderer)
+  void DrawViewFailures(
+    const engine::FrameContext& frame, const vortex::Renderer& renderer)
   {
     bool opened = false;
     bool visible = false;
     for (const auto entry : frame.GetViews()) {
       const auto& view = entry.get();
-      if (!view.metadata.is_scene_view) continue;
+      if (!view.metadata.is_scene_view)
+        continue;
       const auto status = renderer.InspectViewRenderStatus(view.id);
-      if (!status || status->state != vortex::ViewRenderState::kFailed) continue;
+      if (!status || status->state != vortex::ViewRenderState::kFailed)
+        continue;
       if (!opened) {
         const auto* viewport = ImGui::GetMainViewport();
         ImGui::SetNextWindowPos(
@@ -196,7 +197,8 @@ namespace {
         ImGui::Text("%s: rendering failed", view.metadata.name.c_str());
       }
     }
-    if (opened) ImGui::End();
+    if (opened)
+      ImGui::End();
   }
 
 } // namespace
@@ -504,8 +506,8 @@ auto DemoShellUi::Draw(observer_ptr<engine::FrameContext> fc) -> void
       impl_->light_culling_settings_service->BindVortexRenderer(
         observer_ptr { &renderer });
     }
-    impl_->diagnostics_vm
-      = std::make_unique<DiagnosticsVm>(impl_->rendering_settings_service);
+    impl_->diagnostics_vm = std::make_unique<DiagnosticsVm>(
+      impl_->rendering_settings_service, impl_->environment_settings_service);
     impl_->diagnostics_panel = std::make_shared<DiagnosticsPanel>(
       observer_ptr { impl_->diagnostics_vm.get() });
     if (impl_->panel_registry->RegisterPanel(impl_->diagnostics_panel)) {
@@ -554,7 +556,8 @@ auto DemoShellUi::Draw(observer_ptr<engine::FrameContext> fc) -> void
   // Settings now flow through UiSettingsVm instead of view-owned state.
   impl_->axes_widget.Draw(impl_->ui_settings_vm.GetActiveCamera());
   impl_->stats_overlay.Draw(fc);
-  if (fc) DrawViewFailures(*fc, renderer);
+  if (fc)
+    DrawViewFailures(*fc, renderer);
 
   if (impl_->file_browser_service) {
     impl_->file_browser_service->UpdateAndDraw();

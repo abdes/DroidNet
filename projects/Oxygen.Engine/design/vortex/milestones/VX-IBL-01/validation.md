@@ -2,12 +2,39 @@
 
 S1–S4 are validated: products, captured atmosphere/height fog, native lighting,
 migration, precision, lifetime admission and automatic scheduling pass their
-checks. S5–S6 own DemoShell/editor workflows and remaining integrated qualification.
+checks. S5–S6 own the remaining native/editor workflows and integrated
+qualification.
 
 Read: [current results](#current-results), [reproduce](#reproduce),
 [remaining gates](README.md#acceptance).
 
 ## Current results
+
+[S5 GPU validity](evidence/s5-metadata/run.json): **30 Debug / 28 Release native
+tests, 13 DemoShell CPU tests and two real widget cases** pass. Frame Diagnostics
+reads existing GPU metadata asynchronously; production shaders are unchanged.
+Invalid generations contribute zero lighting and remain visible in status. Late
+results cannot reject a newer generation. Diagnostic allocation or rejected-copy
+failure preserves lighting and retries; uncertain submission closes the existing
+product pool. Registered resources stay fixed across **24 authoring generations**.
+The widget runner restored the user's current settings at its run boundary.
+The matching SDK installs successfully and **nine C++20 editor command tests**
+pass against it. Editor GUI workflows remain part of S5.
+
+[S5 native controls](evidence/s5-controls/run.json): **two real RenderScene
+widget cases** pass on town4new. They exercise source failure/recovery, independent
+intensity/diffuse/specular/reflection controls, hemisphere capture edits, sun/fog
+drags, fog-only lighting with main-pass fog hidden, preset reset, panel return,
+and the Diagnostics GPU readout. The panel reports scene-specific readiness and
+keeps prior lighting active during updates; the obsolete unavailable warnings
+are gone. [Native UI](evidence/s5-controls/ui/final-state.png).
+
+**73 CPU tests, 23 Debug native tests and nine C++20 editor command tests** pass.
+Coverage includes settings reload, poisoned-pool/source identity, unresolved
+cubemaps, unchanged 16-face source allocation failure, and rejection of partial
+GPU timing when collection is enabled. The public status header is installed.
+Remaining scene-replacement/editor workflows and final matched visual
+qualification remain open; S5 stays `in_progress`.
 
 [S4 matched scene runs](evidence/s4-scene/run.json) pass on the reference GPU:
 **1,800 frames per workload at 1920×1080/60 Hz**, after 120 warmup frames. All use

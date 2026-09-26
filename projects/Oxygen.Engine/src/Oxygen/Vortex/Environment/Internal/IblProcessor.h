@@ -13,6 +13,7 @@
 #include <Oxygen/Vortex/Environment/Internal/IblGpuProcessor.h>
 #include <Oxygen/Vortex/Environment/Types/EnvironmentProbeState.h>
 #include <Oxygen/Vortex/Environment/Types/SkyLightEnvironmentModel.h>
+#include <Oxygen/Vortex/Types/SkyLightRuntimeState.h>
 #include <Oxygen/Vortex/api_export.h>
 
 namespace oxygen::vortex {
@@ -46,7 +47,7 @@ namespace internal {
     OXGN_VRTX_API explicit IblProcessor(Renderer& renderer);
     OXGN_VRTX_API ~IblProcessor();
     //! Retire expired scene caches; report invalidated active publication.
-    OXGN_VRTX_API auto OnFrameStart() -> bool;
+    OXGN_VRTX_API auto OnFrameStart(frame::SequenceNumber sequence) -> bool;
 
     IblProcessor(const IblProcessor&) = delete;
     auto operator=(const IblProcessor&) -> IblProcessor& = delete;
@@ -67,6 +68,8 @@ namespace internal {
       -> IblGpuProcessor::Stats;
     [[nodiscard]] OXGN_VRTX_API auto GetTimingSampleCount() const
       -> std::uint64_t;
+    [[nodiscard]] OXGN_VRTX_API auto InspectState(
+      std::uint64_t scene_lifetime) const -> SkyLightRuntimeState;
     [[nodiscard]] OXGN_VRTX_API auto AcquireCapture(
       const std::shared_ptr<const IblGpuProducts>& products)
       -> Result<IblCaptureLease, IblCaptureError>;

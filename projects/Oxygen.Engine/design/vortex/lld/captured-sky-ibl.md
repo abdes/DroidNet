@@ -356,6 +356,9 @@ shader catalog/build identities and ABI assertions atomically. The metadata
 buffer, textures and descriptors share the same generation lifetime. Development
 diagnostics can read back metadata asynchronously; ordinary shading needs no
 CPU readback of scale, brightness or validity.
+Frame Diagnostics enables bounded, nonblocking metadata readback. Shader validity
+checks always apply; disabling diagnostics stops new readbacks and preserves any
+known failure of the current generation.
 Any native/embedded qualification capture lease retains this metadata buffer and
 its descriptor with the product textures until its GPU/readback consumers drain.
 Use managed SRV views in `kGlobalSrvDomain` for SH/metadata and

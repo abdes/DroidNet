@@ -1756,6 +1756,13 @@ auto Renderer::GetLastEnvironmentLightingState() const noexcept
     : EnvironmentLightingState {};
 }
 
+auto Renderer::InspectSkyLight(const scene::Scene& scene) const
+  -> SkyLightRuntimeState
+{
+  return scene_renderer_ ? scene_renderer_->InspectSkyLight(scene)
+                         : SkyLightRuntimeState {};
+}
+
 auto Renderer::OnFrameStart(observer_ptr<engine::FrameContext> context) -> void
 {
   profiling::CpuProfileScope frame_scope(

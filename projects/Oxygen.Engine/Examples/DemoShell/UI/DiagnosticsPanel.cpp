@@ -8,15 +8,14 @@
 #include <string>
 #include <string_view>
 
+#include "DemoShell/UI/DiagnosticsPanel.h"
+#include "DemoShell/UI/DiagnosticsVm.h"
 #include <imgui.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
 #include <Oxygen/Vortex/Diagnostics/ShaderDebugModeRegistry.h>
-
-#include "DemoShell/UI/DiagnosticsPanel.h"
-#include "DemoShell/UI/DiagnosticsVm.h"
 
 namespace oxygen::examples::ui {
 
@@ -124,6 +123,9 @@ auto DiagnosticsPanel::DrawContents() -> void
   if (ImGui::CollapsingHeader("Status", ImGuiTreeNodeFlags_DefaultOpen)) {
     DrawRuntimeStatus();
   }
+  if (ImGui::CollapsingHeader("Sky Lighting", ImGuiTreeNodeFlags_DefaultOpen)) {
+    DrawSkyLightDiagnostics();
+  }
 
   if (vm_->SupportsRenderModeControls()
     && ImGui::CollapsingHeader("Render Mode", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -136,6 +138,73 @@ auto DiagnosticsPanel::DrawContents() -> void
   if (ImGui::CollapsingHeader("Shader Debug", ImGuiTreeNodeFlags_DefaultOpen)) {
     DrawDebugModes();
   }
+}
+
+void DiagnosticsPanel::DrawSkyLightDiagnostics()
+{
+  const auto state = vm_->GetSkyLightRuntimeState();
+  if (!state.observed) {
+    ImGui::TextDisabled("No rendered sky-light state");
+    return;
+  }
+  ImGui::Text(
+    "Scene frame: %llu", static_cast<unsigned long long>(state.frame_sequence));
+  ImGui::Text("Published / building: %u / %u", state.published_revision,
+    state.building_revision);
+  ImGui::Text("Snapshot age: %llu frames",
+    static_cast<unsigned long long>(state.source_age_frames));
+  ImGui::Text("Cube: %u x %u", state.face_size, state.face_size);
+  ImGui::Text("CPU decision: %.3f ms", state.cpu_update_ms);
+  if (state.gpu_validation != vortex::SkyLightGpuValidation::kInvalid
+    && state.unavailable_reason
+      == vortex::environment::StaticSkyLightUnavailableReason::
+        kProcessingFailed)
+    ImGui::TextColored(ImVec4(1.0F, 0.7F, 0.0F, 1.0F),
+      state.usable ? "Update failed; previous lighting retained"
+                   : "Lighting update failed");
+  bool timing = vm_->GetGpuTimelineEnabled();
+  const bool supported
+    = vortex::HasAllCapabilities(vm_->GetRendererCapabilities(),
+      vortex::RendererCapabilityFamily::kDiagnosticsAndProfiling);
+  ImGui::BeginDisabled(!supported);
+  bool validation = vm_->GetFrameDiagnosticsEnabled();
+  if (ImGui::Checkbox("Frame Diagnostics", &validation))
+    vm_->SetFrameDiagnosticsEnabled(validation);
+  if (ImGui::Checkbox("GPU Timeline", &timing))
+    vm_->SetGpuTimelineEnabled(timing);
+  ImGui::EndDisabled();
+  using Validation = vortex::SkyLightGpuValidation;
+  switch (state.gpu_validation) {
+  case Validation::kNotRequested:
+    ImGui::TextDisabled(state.usable
+        ? "Enable Frame Diagnostics to check GPU products"
+        : "No submitted sky-light products");
+    break;
+  case Validation::kPending:
+    ImGui::TextDisabled("GPU validation pending");
+    break;
+  case Validation::kValid:
+    ImGui::Text("GPU validated: generation %u", state.validated_revision);
+    ImGui::Text("Radiance scale: %.6g", state.source_radiance_scale);
+    ImGui::Text("Average brightness: %.6g", state.average_brightness);
+    break;
+  case Validation::kInvalid:
+    ImGui::TextColored(ImVec4(1.0F, 0.7F, 0.0F, 1.0F),
+      "Invalid GPU generation %u; lighting is zero", state.validated_revision);
+    break;
+  case Validation::kUnavailable:
+    ImGui::TextDisabled("GPU validation readback unavailable");
+    break;
+  }
+  if (state.last_failed_gpu_revision != 0U
+    && state.last_failed_gpu_revision != state.validated_revision)
+    ImGui::Text(
+      "Last GPU failure: generation %u", state.last_failed_gpu_revision);
+  if (const auto gpu = vm_->GetLatestIblGpuTiming())
+    ImGui::Text("IBL GPU (all scenes): %.3f ms [frame %llu]", gpu->producer_ms,
+      static_cast<unsigned long long>(gpu->frame_sequence));
+  else if (timing)
+    ImGui::TextDisabled("Waiting for complete GPU timing");
 }
 
 auto DiagnosticsPanel::GetName() const noexcept -> std::string_view

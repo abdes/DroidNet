@@ -42,6 +42,7 @@
 #include <Oxygen/Vortex/Types/ExposureSettingsStatus.h>
 #include <Oxygen/Vortex/Types/ExposureTransition.h>
 #include <Oxygen/Vortex/Types/GroundGridConfig.h>
+#include <Oxygen/Vortex/Types/SkyLightRuntimeState.h>
 #include <Oxygen/Vortex/Types/ViewConstants.h>
 #include <Oxygen/Vortex/Types/ViewHistoryFrameBindings.h>
 #include <Oxygen/Vortex/Types/ViewRenderStatus.h>
@@ -713,6 +714,9 @@ public:
   }
   [[nodiscard]] OXGN_VRTX_API auto
   GetLastEnvironmentLightingState() const noexcept -> EnvironmentLightingState;
+  //! Last sky-light decision for this scene, retained between render frames.
+  [[nodiscard]] OXGN_VRTX_API auto InspectSkyLight(
+    const scene::Scene& scene) const -> SkyLightRuntimeState;
 
   OXGN_VRTX_API auto IsViewReady(ViewId view_id) const -> bool;
   OXGN_VRTX_API auto SetImGuiWindowId(platform::WindowIdType window_id) -> void;

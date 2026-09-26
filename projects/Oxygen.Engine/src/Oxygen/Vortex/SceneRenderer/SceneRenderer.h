@@ -36,6 +36,7 @@
 #include <Oxygen/Vortex/Types/ExposureSettingsStatus.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
 #include <Oxygen/Vortex/Types/ScreenHzbFrameBindings.h>
+#include <Oxygen/Vortex/Types/SkyLightRuntimeState.h>
 #include <Oxygen/Vortex/Types/ViewFrameBindings.h>
 #include <Oxygen/Vortex/Types/ViewRenderStatus.h>
 #include <Oxygen/Vortex/api_export.h>
@@ -200,6 +201,8 @@ public:
     -> std::optional<ExposureSettingsStatus>;
   OXGN_VRTX_NDAPI auto GetLastEnvironmentLightingState() const
     -> const EnvironmentLightingState&;
+  [[nodiscard]] OXGN_VRTX_API auto InspectSkyLight(
+    const scene::Scene& scene) const -> SkyLightRuntimeState;
   [[nodiscard]] OXGN_VRTX_API auto AcquireIblCapture(ViewId view)
     -> Result<environment::IblCaptureLease, environment::IblCaptureError>;
   OXGN_VRTX_NDAPI static auto GetAuthoredStageOrder() -> const StageOrder&;

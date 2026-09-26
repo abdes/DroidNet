@@ -14,6 +14,10 @@
 #include <unordered_map>
 #include <vector>
 
+#include "DemoShell/DemoShell.h"
+#include "DemoShell/Runtime/DemoAppContext.h"
+#include "DemoShell/Runtime/DemoModuleBase.h"
+#include "DemoShell/UI/ContentVm.h"
 #include <glm/vec3.hpp>
 
 #include <Oxygen/Base/Macros.h>
@@ -24,11 +28,6 @@
 #include <Oxygen/Platform/Window.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Vortex/CompositionView.h>
-
-#include "DemoShell/DemoShell.h"
-#include "DemoShell/Runtime/DemoAppContext.h"
-#include "DemoShell/Runtime/DemoModuleBase.h"
-#include "DemoShell/UI/ContentVm.h"
 
 namespace oxygen {
 class IAsyncEngine;
@@ -108,6 +107,9 @@ public:
     -> co::Co<> override;
 
 private:
+#if defined(OXYGEN_BUILD_UI_TESTS)
+  auto RegisterUiTests(ImGuiTestEngine* engine) -> void override;
+#endif
   auto ReleaseCurrentSceneAsset(const char* reason) -> void;
 
   auto ResetMainViewState(observer_ptr<engine::FrameContext> context = nullptr)

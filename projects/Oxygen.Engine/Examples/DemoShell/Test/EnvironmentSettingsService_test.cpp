@@ -1323,6 +1323,8 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   service_.SetSkyLightDiffuse(0.7F);
   service_.SetSkyLightSpecular(0.9F);
   service_.SetSkyLightLowerHemisphereColor({ 0.1F, 0.2F, 0.3F });
+  service_.SetSkyLightLowerHemisphereOverride(false);
+  service_.SetSkyLightLowerHemisphereBlend(0.35F);
   service_.SetSkyLightVolumetricScatteringIntensity(0.6F);
   service_.SetSkyLightAffectReflections(false);
   service_.ApplyPendingChanges();
@@ -1357,8 +1359,37 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest,
   EXPECT_FLOAT_EQ(sky_light->GetDiffuseIntensity(), 0.7F);
   EXPECT_FLOAT_EQ(sky_light->GetSpecularIntensity(), 0.9F);
   EXPECT_EQ(sky_light->GetLowerHemisphereColor(), glm::vec3(0.1F, 0.2F, 0.3F));
+  EXPECT_FALSE(sky_light->GetLowerHemisphereIsSolidColor());
+  EXPECT_FLOAT_EQ(sky_light->GetLowerHemisphereBlendAlpha(), 0.35F);
   EXPECT_FLOAT_EQ(sky_light->GetVolumetricScatteringIntensity(), 0.6F);
   EXPECT_FALSE(sky_light->GetAffectReflections());
+}
+
+NOLINT_TEST_F(
+  EnvironmentSettingsServiceTest, SkyLightAdvancedControlsSurviveSettingsReload)
+{
+  ResetDemoSettings();
+  auto scene = MakeScene("DemoShell.SkyLightAdvanced");
+  service_.SetRuntimeConfig({ .scene = observer_ptr { scene.get() } });
+  service_.ActivateCustomMode();
+  service_.SetSkyLightEnabled(true);
+  service_.SetSkyLightSpecular(0.65F);
+  service_.SetSkyLightAffectReflections(false);
+  service_.SetSkyLightLowerHemisphereOverride(false);
+  service_.SetSkyLightLowerHemisphereBlend(0.35F);
+  PersistPendingSettings(service_);
+  const auto settings = SettingsService::ForDemoApp();
+  settings->Load();
+  auto replacement = MakeScene("DemoShell.SkyLightReload");
+  EnvironmentSettingsService reopened;
+  reopened.SetRuntimeConfig({ .scene = observer_ptr { replacement.get() } });
+  EXPECT_FLOAT_EQ(reopened.GetSkyLightSpecular(), 0.65F);
+  EXPECT_FALSE(reopened.GetSkyLightAffectReflections());
+  EXPECT_FALSE(reopened.GetSkyLightLowerHemisphereOverride());
+  EXPECT_FLOAT_EQ(reopened.GetSkyLightLowerHemisphereBlend(), 0.35F);
+  reopened.SetSkyLightLowerHemisphereBlend(2.0F);
+  reopened.ApplyPendingChanges();
+  EXPECT_FLOAT_EQ(reopened.GetSkyLightLowerHemisphereBlend(), 1.0F);
 }
 
 NOLINT_TEST_F(EnvironmentSettingsServiceTest,

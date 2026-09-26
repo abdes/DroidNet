@@ -11,15 +11,14 @@
 #include <span>
 #include <string>
 
+#include "DemoShell/Services/SettingsService.h"
+#include "DemoShell/UI/EnvironmentDebugPanel.h"
+#include "DemoShell/UI/EnvironmentVm.h"
 #include <glm/gtc/quaternion.hpp>
 #include <imgui.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
-
-#include "DemoShell/Services/SettingsService.h"
-#include "DemoShell/UI/EnvironmentDebugPanel.h"
-#include "DemoShell/UI/EnvironmentVm.h"
 
 // NOLINTBEGIN(cppcoreguidelines-pro-type-vararg)
 
@@ -304,7 +303,7 @@ void EnvironmentDebugPanel::DrawFog()
     environment_vm_->SetFogRenderInMainPass(fog_main_pass);
   }
 
-  ImGui::BeginDisabled(!fog_enabled || !fog_main_pass);
+  ImGui::BeginDisabled(!fog_enabled);
 
   ImGui::SeparatorText("Primary Layer");
   float extinction_sigma_t_per_m
@@ -421,9 +420,12 @@ void EnvironmentDebugPanel::DrawFog()
     environment_vm_->SetFogVisibleInReflectionCaptures(fog_reflection_captures);
   }
   bool fog_realtime_sky = environment_vm_->GetFogVisibleInRealTimeSkyCaptures();
-  if (ImGui::Checkbox("Visible In Real-Time Sky Captures", &fog_realtime_sky)) {
+  if (ImGui::Checkbox("Include in Sky Lighting", &fog_realtime_sky)) {
     environment_vm_->SetFogVisibleInRealTimeSkyCaptures(fog_realtime_sky);
   }
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
+    ImGui::SetTooltip("Includes height fog in the Captured Scene skylight, "
+                      "even when hidden in the main pass.");
 
   ImGui::EndDisabled();
 }
@@ -578,22 +580,10 @@ void EnvironmentDebugPanel::DrawRuntimeStateSection()
     ImGui::TextDisabled("Off");
   }
 
-  const bool sky_light_enabled = environment_vm_->GetSkyLightEnabled();
-  const int sky_light_source = environment_vm_->GetSkyLightSource();
-  const bool sky_light_has_cubemap
-    = !environment_vm_->GetSkyLightCubemapResourceKey().IsPlaceholder();
-  const bool sky_light_can_light = sky_light_enabled && sky_light_source == 1
-    && sky_light_has_cubemap && environment_vm_->GetSkyLightDiffuse() > 0.0F
-    && environment_vm_->GetSkyLightIntensityMul() > 0.0F;
-
-  ImGui::Text("Static SkyLight diffuse:");
-  ImGui::SameLine();
-  if (sky_light_can_light) {
-    ImGui::TextColored(ImVec4(0.4F, 0.9F, 0.4F, 1.0F), "Active");
-  } else if (sky_light_enabled) {
-    ImGui::TextColored(ImVec4(1.0F, 0.7F, 0.0F, 1.0F), "Unavailable");
-  } else {
-    ImGui::TextDisabled("Off");
+  if (!sky_light_section_open_) {
+    ImGui::TextUnformatted("Sky lighting:");
+    ImGui::SameLine();
+    DrawSkyLightFeedback();
   }
 }
 
@@ -1261,6 +1251,19 @@ void EnvironmentDebugPanel::DrawSkySphereSection()
   ImGui::Unindent();
 }
 
+void EnvironmentDebugPanel::DrawSkyLightFeedback()
+{
+  const auto feedback = environment_vm_->GetSkyLightFeedback();
+  const auto color = feedback.warning ? ImVec4(1.0F, 0.7F, 0.0F, 1.0F)
+    : feedback.active ? ImVec4(0.4F, 0.9F, 0.4F, 1.0F)
+                      : ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled);
+  ImGui::TextColored(color, "%.*s", static_cast<int>(feedback.label.size()),
+    feedback.label.data());
+  if (!feedback.detail.empty() && ImGui::IsItemHovered())
+    ImGui::SetTooltip(
+      "%.*s", static_cast<int>(feedback.detail.size()), feedback.detail.data());
+}
+
 void EnvironmentDebugPanel::DrawSkyLightSection()
 {
   bool enabled = environment_vm_->GetSkyLightEnabled();
@@ -1274,35 +1277,30 @@ void EnvironmentDebugPanel::DrawSkyLightSection()
 
   ImGui::PushItemWidth(150);
 
-  const char* sources[]
-    = { "Captured Scene (Unavailable)", "Specified Cubemap" };
-  int sky_light_source = environment_vm_->GetSkyLightSource();
-  if (ImGui::Combo("Source##SkyLight", &sky_light_source, sources, 2)) {
-    environment_vm_->SetSkyLightSource(sky_light_source);
-  }
+  float intensity = environment_vm_->GetSkyLightIntensityMul();
+  if (ImGui::DragFloat(
+        "Intensity##SkyLight", &intensity, 0.01F, 0.0F, 20.0F, "%.2F"))
+    environment_vm_->SetSkyLightIntensityMul(intensity);
 
-  if (sky_light_source == 1) {
+  const char* sources[] = { "Captured Scene", "Specified Cubemap" };
+  int source = environment_vm_->GetSkyLightSource();
+  ImGui::SetNextItemWidth(220.0F);
+  if (ImGui::Combo("Source##SkyLight", &source, sources, 2))
+    environment_vm_->SetSkyLightSource(source);
+  if (source == 1) {
     const auto key = environment_vm_->GetSkyLightCubemapResourceKey();
     ImGui::Text(
       "Cubemap ResourceKey: %llu", static_cast<unsigned long long>(key.get()));
-    if (key.IsPlaceholder()) {
-      ImGui::TextColored(ImVec4(1.0F, 0.7F, 0.0F, 1.0F),
-        "No specified cubemap is bound to SkyLight.");
-    }
-  } else {
-    ImGui::TextColored(ImVec4(1.0F, 0.7F, 0.0F, 1.0F),
-      "Captured-scene SkyLight is not implemented in Vortex yet.");
+  }
+  DrawSkyLightFeedback();
+  if (!ImGui::TreeNode("Advanced##SkyLight")) {
+    ImGui::PopItemWidth();
+    return;
   }
 
   auto sky_light_tint = environment_vm_->GetSkyLightTint();
   if (ImGui::ColorEdit3("Tint##SkyLight", &sky_light_tint.x)) {
     environment_vm_->SetSkyLightTint(sky_light_tint);
-  }
-
-  float sky_light_intensity_mul = environment_vm_->GetSkyLightIntensityMul();
-  if (ImGui::DragFloat("SkyLight Multiplier", &sky_light_intensity_mul, 0.01F,
-        0.0F, 20.0F, "%.2F")) {
-    environment_vm_->SetSkyLightIntensityMul(sky_light_intensity_mul);
   }
 
   float sky_light_diffuse = environment_vm_->GetSkyLightDiffuse();
@@ -1311,24 +1309,38 @@ void EnvironmentDebugPanel::DrawSkyLightSection()
     environment_vm_->SetSkyLightDiffuse(sky_light_diffuse);
   }
 
+  float specular = environment_vm_->GetSkyLightSpecular();
+  if (ImGui::DragFloat(
+        "Specular Indirect", &specular, 0.01F, 0.0F, 6.0F, "%.2F"))
+    environment_vm_->SetSkyLightSpecular(specular);
+  bool reflections = environment_vm_->GetSkyLightAffectReflections();
+  if (ImGui::Checkbox("Affect Reflections", &reflections))
+    environment_vm_->SetSkyLightAffectReflections(reflections);
+
+  bool override_hemisphere
+    = environment_vm_->GetSkyLightLowerHemisphereOverride();
+  if (ImGui::Checkbox("Override Lower Hemisphere", &override_hemisphere))
+    environment_vm_->SetSkyLightLowerHemisphereOverride(override_hemisphere);
+  ImGui::BeginDisabled(!override_hemisphere);
   auto lower_hemisphere = environment_vm_->GetSkyLightLowerHemisphereColor();
   if (ImGui::ColorEdit3(
         "Lower Hemisphere", &lower_hemisphere.x, ImGuiColorEditFlags_Float)) {
     environment_vm_->SetSkyLightLowerHemisphereColor(lower_hemisphere);
   }
+  float blend = environment_vm_->GetSkyLightLowerHemisphereBlend();
+  if (ImGui::SliderFloat("Hemisphere Blend", &blend, 0.0F, 1.0F, "%.2F"))
+    environment_vm_->SetSkyLightLowerHemisphereBlend(blend);
+  ImGui::EndDisabled();
 
   float volumetric_scattering_intensity
     = environment_vm_->GetSkyLightVolumetricScatteringIntensity();
   if (ImGui::DragFloat("Volumetric Scattering",
-        &volumetric_scattering_intensity, 0.01F, 0.25F, 4.0F, "%.2F")) {
+        &volumetric_scattering_intensity, 0.01F, 0.0F, 4.0F, "%.2F")) {
     environment_vm_->SetSkyLightVolumetricScatteringIntensity(
       volumetric_scattering_intensity);
   }
 
-  ImGui::TextDisabled(
-    "Specular/reflection IBL, captured-scene SkyLight, and real-time "
-    "capture are not active runtime paths.");
-
+  ImGui::TreePop();
   ImGui::PopItemWidth();
 }
 

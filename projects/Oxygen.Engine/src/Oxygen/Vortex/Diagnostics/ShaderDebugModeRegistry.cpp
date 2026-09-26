@@ -24,8 +24,7 @@ namespace {
     = RendererCapabilityFamily::kLightingData;
   constexpr auto kShadowCapabilities = RendererCapabilityFamily::kShadowing;
   constexpr auto kIblUnavailableReason
-    = "IBL debug views are disabled until Oxygen has a real deferred IBL "
-      "product and capture/proof path";
+    = "This IBL diagnostic view has no Vortex visualization pass.";
   constexpr auto kLightCullingUnavailableReason
     = "Light-culling debug views are disabled until the deferred light-grid "
       "visualization path is implemented";

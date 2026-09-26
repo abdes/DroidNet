@@ -22,6 +22,7 @@
 #include <Oxygen/Vortex/Types/EnvironmentFrameBindings.h>
 #include <Oxygen/Vortex/Types/EnvironmentStaticData.h>
 #include <Oxygen/Vortex/Types/EnvironmentViewData.h>
+#include <Oxygen/Vortex/Types/SkyLightRuntimeState.h>
 #include <Oxygen/Vortex/api_export.h>
 
 namespace oxygen::scene {
@@ -342,6 +343,8 @@ public:
   }
   [[nodiscard]] OXGN_VRTX_API auto InspectAtmosphereState() const noexcept
     -> const environment::internal::StableAtmosphereState&;
+  [[nodiscard]] OXGN_VRTX_API auto InspectSkyLight(
+    const scene::Scene& scene) const -> SkyLightRuntimeState;
   [[nodiscard]] OXGN_VRTX_API auto AcquireIblCapture(ViewId view)
     -> Result<environment::IblCaptureLease, environment::IblCaptureError>;
   [[nodiscard]] OXGN_VRTX_API auto InspectAtmosphereLightState() const noexcept

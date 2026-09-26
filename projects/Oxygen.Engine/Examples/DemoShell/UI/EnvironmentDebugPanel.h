@@ -9,10 +9,10 @@
 #include <array>
 #include <string_view>
 
-#include <Oxygen/Base/ObserverPtr.h>
-
 #include "DemoShell/UI/DemoPanel.h"
 #include "DemoShell/UI/EnvironmentVm.h"
+
+#include <Oxygen/Base/ObserverPtr.h>
 
 namespace oxygen::examples::ui {
 
@@ -67,6 +67,7 @@ private:
   void DrawSkyAtmosphereSection();
   void DrawSkySphereSection();
   void DrawSkyLightSection();
+  void DrawSkyLightFeedback();
   void DrawFog();
   void DrawLocalFogVolumes();
   void DrawSunSection();

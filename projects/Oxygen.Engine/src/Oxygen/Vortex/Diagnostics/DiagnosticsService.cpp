@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <exception>
 #include <filesystem>
@@ -14,6 +16,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
@@ -311,6 +314,7 @@ auto DiagnosticsService::ExportCaptureManifest(
 auto DiagnosticsService::BeginFrame(const frame::SequenceNumber frame) -> void
 {
   std::scoped_lock lock(mutex_);
+  current_frame_ = frame.get();
   frame_ledger_.BeginFrame(frame);
   RefreshLedgerState();
 }
@@ -357,6 +361,36 @@ auto DiagnosticsService::GetLatestSnapshot() const -> DiagnosticsFrameSnapshot
   return frame_ledger_.GetLatestSnapshot();
 }
 
+auto DiagnosticsService::GetLatestIblGpuTiming() const
+  -> std::optional<IblGpuTiming>
+{
+  std::scoped_lock lock(mutex_);
+  // Internal budget feedback can omit capture LUTs when user timing is off.
+  if (!gpu_timeline_enabled_requested_ || !IsGpuTimelineFeatureEnabled()
+    || !gpu_timeline_profiler_)
+    return std::nullopt;
+  const auto frame = gpu_timeline_profiler_->GetLastPublishedFrame();
+  if (!frame || !frame->profiling_enabled || frame->overflowed
+    || frame->frame_sequence < complete_ibl_timing_from_)
+    return std::nullopt;
+  std::vector<std::pair<double, double>> intervals;
+  for (const auto& scope : frame->scopes) {
+    if (!scope.valid || !std::isfinite(scope.start_ms)
+      || !std::isfinite(scope.end_ms) || scope.end_ms < scope.start_ms)
+      return std::nullopt;
+    if (scope.display_name.starts_with("Vortex.Environment.IBL."))
+      intervals.emplace_back(scope.start_ms, scope.end_ms);
+  }
+  std::ranges::sort(intervals);
+  auto result = IblGpuTiming { .frame_sequence = frame->frame_sequence };
+  double end = -std::numeric_limits<double>::infinity();
+  for (const auto& [left, right] : intervals) {
+    result.producer_ms += std::max(0.0, right - std::max(left, end));
+    end = std::max(end, right);
+  }
+  return result;
+}
+
 auto DiagnosticsService::ComputeEffectiveFeatures() const noexcept
   -> DiagnosticsFeatureSet
 {
@@ -385,9 +419,13 @@ auto DiagnosticsService::HasAvailableGpuTimelineFrame() const -> bool
 
 auto DiagnosticsService::ApplyGpuTimelineEnabled() -> void
 {
+  const bool user_timing = gpu_timeline_profiler_ != nullptr
+    && gpu_timeline_enabled_requested_ && IsGpuTimelineFeatureEnabled();
+  if (user_timing && !complete_user_timing_active_)
+    complete_ibl_timing_from_ = current_frame_ + 1U;
+  complete_user_timing_active_ = user_timing;
   if (gpu_timeline_profiler_ != nullptr) {
-    gpu_timeline_profiler_->SetEnabled(ibl_timing_owners_ != 0U
-      || (gpu_timeline_enabled_requested_ && IsGpuTimelineFeatureEnabled()));
+    gpu_timeline_profiler_->SetEnabled(ibl_timing_owners_ != 0U || user_timing);
   }
 }
 

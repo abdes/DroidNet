@@ -3134,6 +3134,13 @@ auto SceneRenderer::GetLastEnvironmentLightingState() const
   return environment_lighting_state_;
 }
 
+auto SceneRenderer::InspectSkyLight(const scene::Scene& scene) const
+  -> SkyLightRuntimeState
+{
+  return environment_ ? environment_->InspectSkyLight(scene)
+                      : SkyLightRuntimeState {};
+}
+
 void SceneRenderer::PublishViewFrameBindings(const ViewId view_id,
   const ViewFrameBindings& bindings, const ShaderVisibleIndex slot)
 {

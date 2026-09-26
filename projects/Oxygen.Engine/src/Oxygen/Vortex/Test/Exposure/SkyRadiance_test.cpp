@@ -1268,6 +1268,11 @@ NOLINT_TEST_F(ExposureGpuTest, SkyIblCacheSeparatesSceneLifetimesAndReusesBrdf)
     reuse.probe_state, ctx_, missing, fog, {});
   EXPECT_FALSE(failed.probe_state.valid);
   EXPECT_EQ(processor.GetPublishedProducts(), nullptr);
+  const auto unresolved
+    = processor.InspectState(second_scene->GetLifetimeId().get());
+  EXPECT_TRUE(unresolved.observed);
+  EXPECT_EQ(unresolved.source, environment::kSkyLightSourceSpecifiedCubemap);
+  EXPECT_EQ(unresolved.desired_source_revision, 0U);
   // The next scene snapshot retries; later views share the first decision.
   ctx_.frame_sequence = frame::SequenceNumber { 3U };
   ctx_.frame_slot = frame::Slot { 2U };
@@ -1295,8 +1300,8 @@ NOLINT_TEST_F(ExposureGpuTest, SkyIblCacheSeparatesSceneLifetimesAndReusesBrdf)
   ASSERT_FALSE(expired_capture);
   EXPECT_EQ(expired_capture.error(), environment::IblCaptureError::kClosed);
   // Admission cleanup must not consume the next frame's invalidation signal.
-  EXPECT_TRUE(processor.OnFrameStart());
-  EXPECT_FALSE(processor.OnFrameStart());
+  EXPECT_TRUE(processor.OnFrameStart(ctx_.frame_sequence));
+  EXPECT_FALSE(processor.OnFrameStart(ctx_.frame_sequence));
   EXPECT_FALSE(
     processor.RefreshSkyLightProducts(resumed.probe_state, ctx_, state, fog, {})
       .requested);
@@ -1306,7 +1311,7 @@ NOLINT_TEST_F(ExposureGpuTest, SkyIblCacheSeparatesSceneLifetimesAndReusesBrdf)
   ctx_.scene = nullptr;
   second_scene.reset();
   EXPECT_EQ(processor.GetPublishedProducts(), nullptr);
-  EXPECT_TRUE(processor.OnFrameStart());
+  EXPECT_TRUE(processor.OnFrameStart(ctx_.frame_sequence));
   EXPECT_EQ(processor.GetCachedSceneCount(), 0U);
   EXPECT_EQ(ReadFloatTexture(*second->processed_cube, true), reference);
   FlushBackend();
@@ -1369,6 +1374,23 @@ NOLINT_TEST_F(
       EXPECT_FALSE(refresh(3U).probe_state.valid);
       EXPECT_FALSE(refresh(4U).probe_state.valid);
       EXPECT_EQ(processor.GetPublishedProducts(), nullptr);
+      state.view_products.sky_light.source
+        = environment::kSkyLightSourceSpecifiedCubemap;
+      state.view_products.sky_light.cubemap_resource
+        = content::ResourceKey { 123U };
+      EXPECT_FALSE(refresh(5U).probe_state.valid);
+      const auto snapshot
+        = processor.InspectState(scene->GetLifetimeId().get());
+      EXPECT_TRUE(snapshot.observed);
+      EXPECT_FALSE(snapshot.usable);
+      EXPECT_EQ(snapshot.source, environment::kSkyLightSourceSpecifiedCubemap);
+      EXPECT_EQ(snapshot.source_cubemap, content::ResourceKey { 123U });
+      EXPECT_EQ(snapshot.frame_sequence, 5U);
+      EXPECT_EQ(snapshot.published_revision, 0U);
+      EXPECT_EQ(snapshot.building_revision, 0U);
+      EXPECT_EQ(snapshot.desired_source_revision, 0U);
+      EXPECT_EQ(snapshot.unavailable_reason,
+        environment::StaticSkyLightUnavailableReason::kProcessingFailed);
       WaitForQueueIdle();
       continue;
     }
@@ -1505,7 +1527,7 @@ NOLINT_TEST_F(
         [&]() noexcept { Backend().EndFrame(number, slot); });
       ctx_.frame_sequence = number;
       ctx_.frame_slot = slot;
-      static_cast<void>(processor.OnFrameStart());
+      static_cast<void>(processor.OnFrameStart(ctx_.frame_sequence));
       height_fog.fog_inscattering_luminance = glm::vec3(float(sequence));
       fog.fog_inscattering_luminance_rgb
         = { float(sequence), float(sequence), float(sequence) };

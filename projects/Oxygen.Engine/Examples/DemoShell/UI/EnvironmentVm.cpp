@@ -1226,6 +1226,65 @@ auto EnvironmentVm::SetSkyLightDiffuse(float value) -> void
   service_->SetSkyLightDiffuse(value);
 }
 
+auto EnvironmentVm::GetSkyLightFeedback() const -> SkyLightFeedback
+{
+  using Status = vortex::environment::StaticSkyLightProductStatus;
+  using Reason = vortex::environment::StaticSkyLightUnavailableReason;
+  if (!GetSkyLightEnabled())
+    return { .label = "Off" };
+  if (!HasScene())
+    return { .label = "No scene" };
+  const auto state = service_->GetSkyLightRuntimeState();
+  if (GetSkyLightSource() == 1
+    && GetSkyLightCubemapResourceKey().IsPlaceholder())
+    return { .label = "No cubemap selected", .warning = true };
+  if (!state.observed)
+    return { .label = "Waiting for scene rendering" };
+  if (state.source != static_cast<std::uint32_t>(GetSkyLightSource())
+    || (state.source == 1U
+      && state.source_cubemap != GetSkyLightCubemapResourceKey()))
+    return { .label = "Updating source" };
+  if (state.unavailable_reason == Reason::kGpuProductsPending)
+    return { .label = "Loading cubemap" };
+  if (state.gpu_validation == vortex::SkyLightGpuValidation::kInvalid)
+    return { .label = "Invalid sky lighting",
+      .detail
+      = "GPU validation failed. This generation contributes no lighting.",
+      .warning = true };
+  if (state.unavailable_reason == Reason::kProcessingFailed && state.usable)
+    return { .label = "Update failed",
+      .detail = "Previous lighting remains active.",
+      .active = true,
+      .warning = true };
+  if (!state.usable) {
+    switch (state.unavailable_reason) {
+    case Reason::kMissingCubemap:
+      return { .label = "No cubemap selected", .warning = true };
+    case Reason::kResourceResolveFailed:
+      return { .label = "Cubemap load failed", .warning = true };
+    case Reason::kNotTextureCube:
+      return { .label = "Source is not a cubemap", .warning = true };
+    case Reason::kUnsupportedFormat:
+      return { .label = "Unsupported cubemap format", .warning = true };
+    case Reason::kProcessingFailed:
+      return { .label = "Lighting update failed", .warning = true };
+    default:
+      return { .label = "Waiting for lighting" };
+    }
+  }
+  if (state.empty_capture)
+    return { .label = "No captured sky or fog",
+      .detail
+      = "Atmosphere is off and no height fog contributes to sky lighting." };
+  if (!state.enabled)
+    return { .label = "Waiting for lighting" };
+  if (state.status == Status::kRegeneratingCurrentKey)
+    return { .label = "Updating",
+      .detail = "Current lighting remains active.",
+      .active = true };
+  return { .label = "Active", .active = true };
+}
+
 auto EnvironmentVm::GetSkyLightSpecular() const -> float
 {
   return service_->GetSkyLightSpecular();
@@ -1247,6 +1306,29 @@ auto EnvironmentVm::SetSkyLightLowerHemisphereColor(const glm::vec3& value)
 {
   PrepareForManualOverride();
   service_->SetSkyLightLowerHemisphereColor(value);
+}
+
+auto EnvironmentVm::GetSkyLightLowerHemisphereOverride() const -> bool
+{
+  return service_->GetSkyLightLowerHemisphereOverride();
+}
+
+auto EnvironmentVm::SetSkyLightLowerHemisphereOverride(const bool enabled)
+  -> void
+{
+  PrepareForManualOverride();
+  service_->SetSkyLightLowerHemisphereOverride(enabled);
+}
+
+auto EnvironmentVm::GetSkyLightLowerHemisphereBlend() const -> float
+{
+  return service_->GetSkyLightLowerHemisphereBlend();
+}
+
+auto EnvironmentVm::SetSkyLightLowerHemisphereBlend(const float value) -> void
+{
+  PrepareForManualOverride();
+  service_->SetSkyLightLowerHemisphereBlend(value);
 }
 
 auto EnvironmentVm::GetSkyLightVolumetricScatteringIntensity() const -> float

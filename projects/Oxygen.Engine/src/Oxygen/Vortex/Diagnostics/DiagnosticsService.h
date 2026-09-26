@@ -36,6 +36,7 @@ namespace internal {
 namespace environment::internal {
   class IblProcessor;
   class IblGpuProcessor;
+  class IblGpuValidation;
   class IblBrdfResources;
   class CapturedSkySource;
 }
@@ -126,11 +127,14 @@ public:
 
   [[nodiscard]] OXGN_VRTX_API auto GetLatestSnapshot() const
     -> DiagnosticsFrameSnapshot;
+  [[nodiscard]] OXGN_VRTX_API auto GetLatestIblGpuTiming() const
+    -> std::optional<IblGpuTiming>;
 
 private:
   friend class Renderer;
   friend class environment::internal::IblProcessor;
   friend class environment::internal::IblGpuProcessor;
+  friend class environment::internal::IblGpuValidation;
   friend class environment::internal::IblBrdfResources;
   friend class environment::internal::CapturedSkySource;
 
@@ -165,6 +169,9 @@ private:
     nullptr
   };
   bool gpu_timeline_enabled_requested_ { false };
+  bool complete_user_timing_active_ { false };
+  std::uint64_t current_frame_ {};
+  std::uint64_t complete_ibl_timing_from_ {};
   std::uint32_t ibl_timing_owners_ {};
   HdrPrecisionControl hdr_precision_control_ {
     HdrPrecisionControl::kProduction,

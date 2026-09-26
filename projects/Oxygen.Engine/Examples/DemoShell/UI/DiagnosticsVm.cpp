@@ -4,17 +4,52 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Base/Logging.h>
-
 #include "DemoShell/Services/RenderingSettingsService.h"
 #include "DemoShell/UI/DiagnosticsVm.h"
 
+#include <Oxygen/Base/Logging.h>
+
 namespace oxygen::examples::ui {
 
-DiagnosticsVm::DiagnosticsVm(observer_ptr<RenderingSettingsService> service)
+DiagnosticsVm::DiagnosticsVm(observer_ptr<RenderingSettingsService> service,
+  observer_ptr<EnvironmentSettingsService> environment)
   : service_(service)
+  , environment_(environment)
 {
   Refresh();
+}
+
+auto DiagnosticsVm::GetSkyLightRuntimeState() const
+  -> vortex::SkyLightRuntimeState
+{
+  return environment_ ? environment_->GetSkyLightRuntimeState()
+                      : vortex::SkyLightRuntimeState {};
+}
+
+auto DiagnosticsVm::GetLatestIblGpuTiming() const
+  -> std::optional<vortex::IblGpuTiming>
+{
+  return service_->GetLatestIblGpuTiming();
+}
+
+auto DiagnosticsVm::GetGpuTimelineEnabled() const -> bool
+{
+  return service_->GetGpuTimelineEnabled();
+}
+
+auto DiagnosticsVm::SetGpuTimelineEnabled(const bool enabled) -> void
+{
+  service_->SetGpuTimelineEnabled(enabled);
+}
+
+auto DiagnosticsVm::GetFrameDiagnosticsEnabled() const -> bool
+{
+  return service_->GetFrameDiagnosticsEnabled();
+}
+
+auto DiagnosticsVm::SetFrameDiagnosticsEnabled(const bool enabled) -> void
+{
+  service_->SetFrameDiagnosticsEnabled(enabled);
 }
 
 auto DiagnosticsVm::GetRenderMode() -> vortex::RenderMode

@@ -63,6 +63,12 @@
 
 namespace oxygen::vortex {
 
+auto EnvironmentLightingService::InspectSkyLight(
+  const scene::Scene& scene) const -> SkyLightRuntimeState
+{
+  return ibl_->InspectState(scene.GetLifetimeId().get());
+}
+
 namespace {
 
   constexpr float kPi = 3.14159265358979323846F;
@@ -299,7 +305,7 @@ auto EnvironmentLightingService::OnFrameStart(
   current_sequence_ = sequence;
   current_slot_ = slot;
   published_views_.clear();
-  if (ibl_->OnFrameStart())
+  if (ibl_->OnFrameStart(sequence))
     probe_state_ = {};
   last_probe_refresh_state_ = {
     .frame_sequence = sequence,

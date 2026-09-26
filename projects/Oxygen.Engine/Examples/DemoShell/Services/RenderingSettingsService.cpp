@@ -8,14 +8,60 @@
 #include <string>
 #include <string_view>
 
-#include <Oxygen/Base/Logging.h>
-#include <Oxygen/Vortex/Diagnostics/ShaderDebugModeRegistry.h>
-#include <Oxygen/Vortex/Renderer.h>
-
 #include "DemoShell/Services/RenderingSettingsService.h"
 #include "DemoShell/Services/SettingsService.h"
 
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
+#include <Oxygen/Vortex/Diagnostics/ShaderDebugModeRegistry.h>
+#include <Oxygen/Vortex/Renderer.h>
+
 namespace oxygen::examples {
+
+auto RenderingSettingsService::GetFrameDiagnosticsEnabled() const -> bool
+{
+  return vortex_renderer_
+    && vortex::HasAnyFeature(
+      vortex_renderer_->GetDiagnosticsService().GetEnabledFeatures(),
+      vortex::DiagnosticsFeature::kFrameLedger);
+}
+
+auto RenderingSettingsService::SetFrameDiagnosticsEnabled(const bool enabled)
+  -> void
+{
+  if (!vortex_renderer_)
+    return;
+  auto& diagnostics = vortex_renderer_->GetDiagnosticsService();
+  const auto features = diagnostics.GetRequestedFeatures();
+  diagnostics.SetEnabledFeatures(enabled
+      ? features | vortex::DiagnosticsFeature::kFrameLedger
+      : features & ~vortex::DiagnosticsFeature::kFrameLedger);
+}
+
+auto RenderingSettingsService::GetGpuTimelineEnabled() const -> bool
+{
+  return vortex_renderer_
+    && vortex_renderer_->GetDiagnosticsService().IsGpuTimelineEnabled();
+}
+
+auto RenderingSettingsService::SetGpuTimelineEnabled(const bool enabled) -> void
+{
+  if (!vortex_renderer_)
+    return;
+  auto& diagnostics = vortex_renderer_->GetDiagnosticsService();
+  if (enabled)
+    diagnostics.SetEnabledFeatures(diagnostics.GetRequestedFeatures()
+      | vortex::DiagnosticsFeature::kGpuTimeline);
+  diagnostics.SetGpuTimelineEnabled(enabled);
+}
+
+auto RenderingSettingsService::GetLatestIblGpuTiming() const
+  -> std::optional<vortex::IblGpuTiming>
+{
+  return vortex_renderer_
+    ? vortex_renderer_->GetDiagnosticsService().GetLatestIblGpuTiming()
+    : std::nullopt;
+}
 
 namespace {
 

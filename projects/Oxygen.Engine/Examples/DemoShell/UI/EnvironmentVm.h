@@ -37,6 +37,12 @@ namespace oxygen::examples::ui {
 */
 class EnvironmentVm {
 public:
+  struct SkyLightFeedback {
+    std::string_view label;
+    std::string_view detail;
+    bool active { false };
+    bool warning { false };
+  };
   //! Creates a view model backed by the provided settings service.
   explicit EnvironmentVm(observer_ptr<EnvironmentSettingsService> service,
     observer_ptr<PostProcessSettingsService> post_process_service,
@@ -161,6 +167,7 @@ public:
     -> std::optional<std::filesystem::path>;
 
   // SkyLight
+  [[nodiscard]] auto GetSkyLightFeedback() const -> SkyLightFeedback;
   [[nodiscard]] auto GetSkyLightEnabled() const -> bool;
   auto SetSkyLightEnabled(bool enabled) -> void;
   [[nodiscard]] auto GetSkyLightSource() const -> int;
@@ -178,6 +185,10 @@ public:
 
   [[nodiscard]] auto GetSkyLightLowerHemisphereColor() const -> glm::vec3;
   auto SetSkyLightLowerHemisphereColor(const glm::vec3& value) -> void;
+  [[nodiscard]] auto GetSkyLightLowerHemisphereOverride() const -> bool;
+  auto SetSkyLightLowerHemisphereOverride(bool enabled) -> void;
+  [[nodiscard]] auto GetSkyLightLowerHemisphereBlend() const -> float;
+  auto SetSkyLightLowerHemisphereBlend(float value) -> void;
   [[nodiscard]] auto GetSkyLightVolumetricScatteringIntensity() const -> float;
   auto SetSkyLightVolumetricScatteringIntensity(float value) -> void;
   [[nodiscard]] auto GetSkyLightAffectReflections() const -> bool;

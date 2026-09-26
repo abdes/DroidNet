@@ -113,6 +113,12 @@ struct DiagnosticsFrameSnapshot {
   std::vector<DiagnosticsIssue> issues;
 };
 
+//! Renderer-wide IBL producer interval union from a completed timing frame.
+struct IblGpuTiming {
+  std::uint64_t frame_sequence { 0U };
+  double producer_ms { 0.0 };
+};
+
 [[nodiscard]] constexpr auto HasAnyFeature(const DiagnosticsFeatureSet features,
   const DiagnosticsFeatureSet requested) noexcept -> bool
 {

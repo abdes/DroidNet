@@ -7,16 +7,17 @@
 #pragma once
 
 #include <atomic>
+#include <optional>
+
+#include "DemoShell/Runtime/RendererUiTypes.h"
+#include "DemoShell/Services/DomainService.h"
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
+#include <Oxygen/Vortex/Diagnostics/DiagnosticsTypes.h>
 #include <Oxygen/Vortex/RendererCapability.h>
-
-#include "DemoShell/Runtime/RendererUiTypes.h"
-
-#include "DemoShell/Services/DomainService.h"
 
 namespace oxygen::vortex {
 class Renderer;
@@ -51,6 +52,12 @@ public:
   //! Binds the service to the Vortex runtime.
   virtual auto BindVortexRenderer(observer_ptr<vortex::Renderer> renderer)
     -> void;
+  [[nodiscard]] virtual auto GetGpuTimelineEnabled() const -> bool;
+  [[nodiscard]] virtual auto GetFrameDiagnosticsEnabled() const -> bool;
+  virtual auto SetFrameDiagnosticsEnabled(bool enabled) -> void;
+  virtual auto SetGpuTimelineEnabled(bool enabled) -> void;
+  [[nodiscard]] virtual auto GetLatestIblGpuTiming() const
+    -> std::optional<vortex::IblGpuTiming>;
 
   //! Returns the persisted render mode.
   [[nodiscard]] virtual auto GetRenderMode() const -> vortex::RenderMode;
