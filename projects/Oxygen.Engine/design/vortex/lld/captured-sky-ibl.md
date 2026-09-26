@@ -13,27 +13,28 @@ Read: [source and fog](#2-capture-source-and-coordinates),
 
 ## 1. Ownership and scope
 
-Activate Vortex Stage 13's `IndirectLightingService` for diffuse and specular
+Vortex Stage 13's `IndirectLightingService` evaluates diffuse and specular
 environment lighting. `EnvironmentLightingService` remains the owner of sky
 radiance generation, cubemap processing, persistent product resources and
 `EnvironmentFrameBindings`. Stage 13 consumes published bindings; it does not
-reach into Environment internals. Put the service under the current Vortex
-family layout `src/Oxygen/Vortex/IndirectLighting/`, matching the actual
-`Lighting/` and `Environment/` families rather than reviving the reserved LLD's
-obsolete `Services/` directory convention.
+reach into Environment internals. The C++ service lives under
+`src/Oxygen/Vortex/IndirectLighting/`, alongside the `Lighting/` and
+`Environment/` families.
 
-Remove the Stage 12 static-SkyLight draw kind, ambient-bridge bindings/flags,
-configuration switches and shader branch in the same activation. Stage 12
-becomes direct lighting only. Stage 13 adds indirect lighting to deferred
+Stage 12 contains direct lighting only. Its former static-SkyLight draw kind,
+ambient-bridge bindings/flags, configuration switches and shader branch are
+removed. Stage 13 adds indirect lighting to deferred
 opaque/masked SceneColor once. Forward/translucent surfaces evaluate the same
 Stage-13-owned shader helper in their existing surface pass: do not run the
 deferred full-screen apply over their already shaded colour. Product publication
 must precede both consumers. Existing fog consumers can read the published SH
 product without acquiring surface-indirect ownership.
 
-The V0.1 editor exposes CapturedScene, Enabled and Intensity only; native tint,
-diffuse/specular multipliers and reflection participation keep their established
-meaning and defaults. Existing native specified-cubemap support remains a valid
+The current editor `ApplySkyLight` route supplies CapturedScene, enabled at
+intensity 1. Existing atmosphere/exposure controls drive that lighting; separate
+SkyLight Inspector controls remain with [ED-M08 field integration](../milestones/ED-M08/README.md).
+Native tint, diffuse/specular multipliers and reflection participation keep their
+established meaning and defaults. Existing native specified-cubemap support remains a valid
 source adapter feeding the same product/evaluation contract. It is not a fallback
 when captured sky fails. No HDRI picker, local probes, geometry reflections, SSR,
 GI, clouds, local/volumetric fog capture, new AO algorithm, reflection occlusion
@@ -660,21 +661,21 @@ The milestone plan owns execution state and evidence links.
 
 ## 6. Implementation map
 
-| Existing file/section                                   | Current statement/path                                                          | Required reconciliation                                                                                            |
-| ------------------------------------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| cubemap-processing.md §§1,4.3,5.1,6.1                   | CapturedScene unavailable; diffuse-only readiness; specular optional            | Keep closed VTX-M08 proof historical; new extension requires full product set for canonical IBL                    |
-| skybox-static-skylight.md §§2.5,6.4,11                  | Static diffuse routed through Lighting; captured/specular deferred              | Retain source/sky policy and evidence; supersede Stage 12 placement and captured/specular deferral                 |
-| indirect-lighting-service.md §§1.3,2.1,5                | Stage 13 reserved; old Services path; optional AO                               | Activate bounded sky diffuse/specular subset; use current family path; no new AO requirement                       |
-| environment-service.md §§2.3,10                         | Stage 13 future/deferred                                                        | Product ownership stays Environment; Stage 13 apply is now mandatory for V0.1                                      |
-| IblProbePass.cpp:164–171                                | Diffuse 0 disables all; CapturedScene unavailable                               | Independent diffuse/specular gates; captured atmosphere/fog, automatic scheduling and explicit ready-zero          |
-| IblProcessor.cpp:386–423                                | Specular/LUT slots invalid; CPU static-source processing/upload                 | Reuse valid static machinery; add GPU captured processing and complete common publication                          |
-| SceneRenderer.cpp:2052,2187; DeferredLightPass.cpp:905  | Ambient bridge enabled; Stage 13 reserved; `Vortex.Stage12.StaticSkyLight` draw | Remove bridge and activate canonical indirect service                                                              |
-| Sky.hlsl:329–339                                        | Irradiance/prefilter entry points are empty                                     | Implement actual owned processors/shared radiance helper; catalog registration alone is no evidence                |
-| ForwardMesh_PS.hlsl:92–145                              | Linear mip mapping, approximate missing-LUT fallback                            | Shared canonical IBL helper and matching producer mapping, complete product gate                                   |
-| Fog.hlsl / Sky.hlsl / atmosphere LUT cache              | Main-view fog skips far depth; LUTs follow live views                           | Share distant height-fog evaluation, visible-sky composition and capture-specific immutable LUT snapshots          |
-| Existing authoring commands / environment dirty domains | No IBL scheduling intent or candidate queue                                     | Carry transient authoring intent; bound incremental work, coalesce runtime inputs and publish complete generations |
-| SkyLight.h:25                                           | CapturedScene prose includes background                                         | Clarify lighting-sky radiance versus display background with implementation                                        |
-| SkyLight.h / source schema / Interop / DemoShell        | Unsupported real-time-capture bool is stored and sometimes forced true          | Remove canonical field/API/branch; migrate useful source/settings once and recook under automatic scheduling       |
+| Owner                         | Current entry points and responsibility                                                                                                                                                                                                                                                                                 |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Environment source/scheduling | [`IblProcessor`](../../../src/Oxygen/Vortex/Environment/Internal/IblProcessor.cpp) resolves captured/specified sources, scene cache, edit intent and publication; [`EnvironmentLightingService`](../../../src/Oxygen/Vortex/Environment/EnvironmentLightingService.cpp) owns frozen capture LUTs and per-view bindings. |
+| GPU products                  | [`IblGpuProcessor`](../../../src/Oxygen/Vortex/Environment/Internal/IblGpuProcessor.cpp) records tiled copy/capture, range/mips, SH and GGX; [`IblWorkBudget`](../../../src/Oxygen/Vortex/Environment/Internal/IblWorkBudget.cpp) chooses bounded runtime work.                                                         |
+| Generation lifetime           | [`IblGpuProcessor`](../../../src/Oxygen/Vortex/Environment/Internal/IblGpuProcessor.cpp) uses Nexus retirement and Graphics completion for normal/capture admission and queued readers.                                                                                                                                 |
+| Surface lighting              | [`IndirectLightingService`](../../../src/Oxygen/Vortex/IndirectLighting/IndirectLightingService.cpp) records deferred Stage 13; [`IblEvaluation.hlsli`](../../../src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/IndirectLighting/IblEvaluation.hlsli) is shared with forward/translucent surfaces.              |
+| Frame integration             | [`SceneRenderer`](../../../src/Oxygen/Vortex/SceneRenderer/SceneRenderer.cpp) publishes products before consumers, records Stage 13 once, and shares scene products across views. Stage 12 is direct only.                                                                                                              |
+| Sky and fog                   | [`Sky.hlsl`](../../../src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Environment/Sky.hlsl) and [`Fog.hlsl`](../../../src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Environment/Fog.hlsl) share distant analytic fog and preserve the existing opaque path.                                             |
+| Authored/packed data          | [`SkyLight`](../../../src/Oxygen/Scene/Environment/SkyLight.h), [`scene v8`](../../../src/Oxygen/Data/PakFormat_world.h) and the migration tool use automatic scheduling; native/editor commands carry transient authoring intent.                                                                                      |
+| GPU ABI and diagnostics       | [`EnvironmentStaticData`](../../../src/Oxygen/Vortex/Types/EnvironmentStaticData.h) mirrors typed shader slots; [`EnvironmentLightingService`](../../../src/Oxygen/Vortex/Environment/EnvironmentLightingService.h) exposes readiness, identity, age and measured costs.                                                |
+
+[Environment](environment-service.md), [indirect lighting](indirect-lighting-service.md),
+[skybox policy](skybox-static-skylight.md) and [cubemap conventions](cubemap-processing.md)
+record their current boundaries. The [milestone](../milestones/VX-IBL-01/README.md)
+owns acceptance results; historical VTX-M08 captures retain their original scope.
 
 ## 7. Primary sources and bounded choices
 
@@ -704,7 +705,7 @@ The milestone plan owns execution state and evidence links.
   submits immediately by default; deferred same-queue lists retain order.
   `Graphics/Direct3D12/Test/SubmitOrderedQueueActions_test.cpp` covers submission
   versus completion and ordered queue actions. These existing mechanisms support
-  same-frame consumption; their presence is not evidence that IBL is implemented.
+  same-frame producer/consumer ordering and retained GPU readers.
 - Local UE 5.7 `ReflectionEnvironmentRealTimeCapture.cpp:415,913–949`:
   full/editor versus time-sliced capture, capture-visible distant height fog and
   capture-position origin. `ReflectionEnvironmentCapture.cpp:57,1237–1242`

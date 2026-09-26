@@ -18,12 +18,12 @@ validation of this complete path, including pre-existing defects and necessary
 dependencies in scene/editor input, shaders, shadows and resource lifetime.
 Both correctness and performance must pass; an existing limitation is repair work.
 
-| Stage/consumer | Responsibility                                                                                                                                                                                                             |
-| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Stage 6        | Prepare shared immutable light records and record/publish per-view culling products before their first consumer.                                                                                                           |
-| Stage 12       | Evaluate deferred direct lighting into SceneColor from the canonical frame-light selection. Start with directional fullscreen draws and bounded point/spot volumes; algorithm improvements retain this stage owner.        |
-| Forward        | Consume the same physical records, relevant per-view lists and matching shadows, including supported translucent receivers.                                                                                                |
-| Stage 13       | Indirect/IBL ownership stays under its [own contract](captured-sky-ibl.md#1-ownership-and-scope). An existing ambient bridge is an explicitly bounded environment input; never duplicate it when Stage 13 takes ownership. |
+| Stage/consumer | Responsibility                                                                                                                                                                                                      |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Stage 6        | Prepare shared immutable light records and record/publish per-view culling products before their first consumer.                                                                                                    |
+| Stage 12       | Evaluate deferred direct lighting into SceneColor from the canonical frame-light selection. Start with directional fullscreen draws and bounded point/spot volumes; algorithm improvements retain this stage owner. |
+| Forward        | Consume the same physical records, relevant per-view lists and matching shadows, including supported translucent receivers.                                                                                         |
+| Stage 13       | Indirect/IBL ownership stays under its [own contract](captured-sky-ibl.md#1-ownership-and-scope). Stage 12 records direct lighting only; the ambient bridge is removed.                                             |
 
 Use existing renderer, LightingService, ShadowService, publication, allocator,
 recorder and fence-retirement owners. The service does not own scene light

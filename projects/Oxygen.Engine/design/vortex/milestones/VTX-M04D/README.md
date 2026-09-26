@@ -2,11 +2,11 @@
 
 Status: `validated`
 
-| Field     | Summary                                                                                                                                                                                         |
-| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Outcome   | Main-view atmosphere and fog integration through the M04D submilestones.                                                                                                                        |
-| Remaining | Extensions: [VX-IBL-01](../../OPEN_ITEMS.md#p1--current-delivery), [VX-FOG-01](../../OPEN_ITEMS.md#p3--unscheduled-capabilities), [VX-AP-01](../../OPEN_ITEMS.md#p3--unscheduled-capabilities). |
-| Evidence  | [Validation record](validation.md)                                                                                                                                                              |
+| Field     | Summary                                                                                                                                  |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Outcome   | Main-view atmosphere and fog integration through the M04D submilestones.                                                                 |
+| Remaining | Extensions: [VX-FOG-01](../../OPEN_ITEMS.md#p3--unscheduled-capabilities), [VX-AP-01](../../OPEN_ITEMS.md#p3--unscheduled-capabilities). |
+| Evidence  | [Validation record](validation.md)                                                                                                       |
 
 [Roadmap](../../PLAN.md) · [Design index](../../lld/README.md)
 

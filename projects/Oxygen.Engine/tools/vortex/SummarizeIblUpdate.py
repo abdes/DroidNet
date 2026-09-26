@@ -21,6 +21,7 @@ def isolated_scope_name(name: str) -> str:
 
 def summarize(directory: Path) -> dict:
     run = json.loads((directory / "run.json").read_text())
+    specified = run.get("specified_face_size", 0)
     scheduled = run.get("scheduled", False)
     authoring = run.get("authoring", False)
     recording = directory / "gpu.json"
@@ -40,6 +41,8 @@ def summarize(directory: Path) -> dict:
         "Vortex.Environment.AtmosphereSkyViewLut",
         "Vortex.Environment.IBL.Process",
     }
+    if specified:
+        update_names = {"Vortex.Environment.IBL.Process"}
     if scheduled:
         update_names |= {"Vortex.Environment.AtmosphereTransmittanceLut",
                          "Vortex.Environment.AtmosphereMultiScatteringLut"}
@@ -75,7 +78,7 @@ def summarize(directory: Path) -> dict:
             stages[name].append(value)
         updates.append(union_duration(intervals))
     result = {
-        "scope": "Isolated immediate authoring; full-scene acceptance remains separate" if authoring else "Isolated scheduled update; full-scene acceptance remains separate" if scheduled else "Isolated immediate update; full-scene acceptance remains separate",
+        "scope": "Isolated specified-cube processing; size scaling report" if specified else "Isolated immediate authoring; full-scene acceptance remains separate" if authoring else "Isolated scheduled update; full-scene acceptance remains separate" if scheduled else "Isolated immediate update; full-scene acceptance remains separate",
         "update_gpu_union_ms": statistics(updates),
         "scopes_ms": {name: statistics(values) for name, values in stages.items()},
         "cpu_record_ms": statistics([float(row["cpu_record_ms"]) for row in cpu]),
@@ -100,6 +103,28 @@ def summarize(directory: Path) -> dict:
     else:
         result["storage_creations"] = sorted({int(row["storage_creations"]) for row in cpu})
         result["allocated_slots"] = sorted({int(row["allocated_slots"]) for row in cpu})
+    if specified:
+        before, after = run["memory"]
+        def product_bytes(snapshot):
+            return sum(item["placement_bytes"] for kind in ("textures", "buffers")
+                       for item in snapshot["resources"][kind]
+                       if item["name"].startswith("IBL.")
+                       and item["name"] not in {"IBL.ScalingSource", "IBL.ScalingUpload"})
+        if (before["frame_seq"] != run["warmup"]
+                or after["frame_seq"] != run["warmup"] + run["samples"]
+                or before["storage_creations"] != after["storage_creations"]
+                or before["registered_resources"] != after["registered_resources"]
+                or product_bytes(before) != product_bytes(after)):
+            raise ValueError("Specified-cube warm storage changed")
+        result["specified_scaling"] = {
+            "face_size": specified,
+            "product_placement_bytes": product_bytes(after),
+            "storage_creations": after["storage_creations"],
+            "allocated_slots": after["allocated_slots"],
+            "registered_resources": after["registered_resources"],
+            "stable_warm_storage": True,
+            "scope": "Two retained processing slots including BRDF and scratch; excludes source and upload",
+        }
     first_path = directory / "first-use-gpu.json"
     if first_path.exists() or first_path.with_suffix('.json.gz').exists():
         first = json.loads(first_path.read_text() if first_path.exists()

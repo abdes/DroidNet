@@ -36,7 +36,7 @@ All draws add to SceneColor.
 | Predecessor             | Stage 10 (RebuildSceneTextures) — GBuffers now SRV-readable |       |
 | Predecessors (reserved) | Stage 11 (MatComposite post — stub)                         |       |
 | **This**                | **Stage 12 — Deferred Direct Lighting**                     |       |
-| Successor               | Stage 13 (IndirectLighting — reserved)                      |       |
+| Successor               | Stage 13 (IndirectLighting — sky IBL)                       |       |
 
 ### 1.3 Architectural Authority
 

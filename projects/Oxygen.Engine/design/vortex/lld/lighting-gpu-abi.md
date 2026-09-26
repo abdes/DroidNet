@@ -433,11 +433,10 @@ is discarded. Retired resources count against the budget until safe release.
 
 Deferred packets carry the selection index plus proxy transform/geometry, not
 another physical-light authority. Per-draw constants: matrix at 0
-(64 bytes); uint kind at 64 (Directional=0, Point=1, Spot=2, existing ambient
-bridge=3), selection index at 68, geometry SRV at 72, vertex count at 76. Payload
+(64 bytes); uint kind at 64 (Directional=0, Point=1, Spot=2), selection index at 68, geometry SRV at 72, vertex count at 76. Payload
 stride **80**, allocation alignment **256**. No repeated intensity/cone/shadow
 counter. Both forward and deferred load the same record and view shadow map.
-The ambient bridge retains its existing environment owner and never loads a
+Stage 13 sky IBL consumes Environment bindings and never loads a
 physical light at an invalid selection index.
 
 ## Sentinel gate and migration obligations

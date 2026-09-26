@@ -2,11 +2,11 @@
 
 Status: `validated`
 
-| Field     | Summary                                                                                                                                                                                          |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Outcome   | Static cubemap skyboxes and specified-cubemap diffuse SH lighting.                                                                                                                               |
-| Remaining | Extensions: [VX-IBL-01](../../OPEN_ITEMS.md#p1--current-delivery), [VX-SKY-01](../../OPEN_ITEMS.md#p3--unscheduled-capabilities), [VX-SKY-02](../../OPEN_ITEMS.md#p3--unscheduled-capabilities). |
-| Evidence  | [Validation record](validation.md)                                                                                                                                                               |
+| Field     | Summary                                                                                                                                   |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Outcome   | Static cubemap skyboxes and specified-cubemap diffuse SH lighting.                                                                        |
+| Remaining | Extensions: [VX-SKY-01](../../OPEN_ITEMS.md#p3--unscheduled-capabilities), [VX-SKY-02](../../OPEN_ITEMS.md#p3--unscheduled-capabilities). |
+| Evidence  | [Validation record](validation.md)                                                                                                        |
 
 [Roadmap](../../PLAN.md) · [Design index](../../lld/README.md)
 
@@ -14,7 +14,7 @@ Dependencies: VTX-M07, VTX-M04D environment publication truth, VTX-M05D shadows,
 
 ## Delivered scope
 
-Visual cubemap skybox/background rendering, static specified-cubemap SkyLight diffuse lighting, shader ABI migration, static SkyLight product processing/publication, deferred SH consumption, RenderScene/DemoShell startup plumbing, interaction/lifecycle proof, focused tests, ShaderBake/catalog validation where shader ABI changed, CDB/debug-layer audits, RenderDoc scripted analysis, allocation-churn proof, final `git diff --check`, and manual visual confirmation are recorded in the detailed M08 plan and status ledger. Captured-sky diffuse/specular and specified-cubemap specular lighting are planned under [ED-M08](../../lld/captured-sky-ibl.md); implementation and rendered qualification remain pending in [VX-IBL-01](../VX-IBL-01/README.md), including height fog and both automatic update schedules. Cubemap blending, SkyLight occlusion/baking, broader probes, cloud capture and static-skybox sun-disk overlay remain future work.
+Visual cubemap skybox/background rendering, static specified-cubemap SkyLight diffuse lighting, shader ABI migration, static SkyLight product processing/publication, deferred SH consumption, RenderScene/DemoShell startup plumbing, interaction/lifecycle proof, focused tests, ShaderBake/catalog validation where shader ABI changed, CDB/debug-layer audits, RenderDoc scripted analysis, allocation-churn proof, final `git diff --check`, and manual visual confirmation are recorded in the detailed M08 plan and status ledger. Captured-sky and specified-cubemap diffuse/specular lighting, height fog and both automatic schedules are implemented and qualified by [VX-IBL-01](../VX-IBL-01/README.md); that milestone owns its integrated acceptance status. Cubemap blending, SkyLight occlusion/baking, broader probes, cloud capture and static-skybox sun-disk overlay remain future work.
 
 Status: `validated`
 
@@ -118,10 +118,10 @@ residual-gap recording.
 These remain outside the closed VTX-M08 milestone. ED-M08 now owns captured-sky
 diffuse/specular lighting, specified-cubemap specular products, Stage 13 activation
 and ambient-bridge retirement under the [captured-sky contract](../../lld/captured-sky-ibl.md).
-That extension is specified but not implemented or rendered-qualified. Its
-capture policy is automatic and change-driven.
+The [VX-IBL-01 milestone](../VX-IBL-01/README.md) owns the implemented extension
+and its acceptance evidence. Its capture policy is automatic and change-driven.
 
-- Captured-scene SkyLight and static-cubemap specular contribution: planned in ED-M08.
+- Captured-scene SkyLight and static-cubemap specular contribution: VX-IBL-01.
 - Automatic immediate/incremental sky-light updates: [VX-IBL-01](../VX-IBL-01/README.md).
 - Cubemap blend transitions / time-of-day blending.
 - SkyLight AO, DFAO, bent-normal occlusion, and cloud AO.

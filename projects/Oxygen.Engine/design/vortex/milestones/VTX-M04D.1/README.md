@@ -2,11 +2,11 @@
 
 Status: `validated`
 
-| Field     | Summary                                                            |
-| --------- | ------------------------------------------------------------------ |
-| Outcome   | Environment model translation and frame/view publication.          |
-| Remaining | Extensions: [VX-IBL-01](../../OPEN_ITEMS.md#p1--current-delivery). |
-| Evidence  | [Validation record](validation.md)                                 |
+| Field     | Summary                                                   |
+| --------- | --------------------------------------------------------- |
+| Outcome   | Environment model translation and frame/view publication. |
+| Remaining | None in the delivered scope.                              |
+| Evidence  | [Validation record](validation.md)                        |
 
 [Roadmap](../../PLAN.md) · [Design index](../../lld/README.md)
 

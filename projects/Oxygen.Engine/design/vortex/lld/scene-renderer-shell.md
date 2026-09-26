@@ -270,7 +270,7 @@ void SceneRenderer::OnRender(RenderContext& ctx) {
   // === Stage 12: Deferred direct lighting ===
   // RenderDeferredLighting(ctx, scene_textures_);
 
-  // === Stage 13: reserved — IndirectLightingService ===
+  // === Stage 13: IndirectLightingService — environment diffuse/specular ===
 
   // === Stage 14: EnvironmentLightingService local / volumetric fog ===
   // Current service entrypoint records Stage 14 local-fog culling internally.

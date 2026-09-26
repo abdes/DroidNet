@@ -19,6 +19,13 @@ their cost/latency gates and reports first-use wall time, producer GPU work
 These isolated workloads use the existing timing helpers; matched scene runs
 qualify integrated performance.
 
+`DISABLED_SpecifiedCubeUpdates` reports size scaling through the same benchmark
+and summary tool. Set `OXYGEN_IBL_FACE_SIZE` to 64, 128, 256 or 512 and use a new
+output directory per process. Each run measures 1,800 immediate updates after
+120 warmup frames at 60 Hz, with product storage snapshots and final GPU metadata
+validation. It reports size/cost scaling; the capture performance gates remain
+at the specified 128-face reference.
+
 ## Proof Automation Contract
 
 Vortex proof wrappers must fail fast and must not claim proof from a failed

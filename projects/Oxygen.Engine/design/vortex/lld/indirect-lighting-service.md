@@ -1,265 +1,70 @@
-# IndirectLightingService LLD
+# Indirect lighting
 
-**Phase:** 7B — Advanced Lighting and GI
-**Deliverable:** Stage13 ownership with a bounded V0.1 activation contract
-**Status:** `specified`; implementation and rendered qualification pending
+Stage 13 adds environment diffuse and specular lighting to deferred surfaces.
+Environment owns the source and processed products; IndirectLighting owns their
+surface evaluation. Forward and translucent passes use the same evaluator.
 
-## Current V0.1 activation
+Read: [execution](#execution), [resources](#resources),
+[future families](#future-families). Algorithms and product contracts belong to
+[captured-sky IBL](captured-sky-ibl.md); delivery and validation belong to
+[VX-IBL-01](../milestones/VX-IBL-01/README.md).
 
-[Captured-sky IBL](captured-sky-ibl.md) defines the first
-activation: complete diffuse/specular environment evaluation and simultaneous
-Stage12 ambient-bridge retirement. It fixes current family placement under
-`src/Oxygen/Vortex/IndirectLighting/`, product contracts, shared forward/deferred
-evaluation and readiness. The reserved roadmap below retains broader reflection,
-GI and optional AO ownership; it does not require those extra families for this
-bounded activation. Its future-only status and old `Services/` directory layout
-are superseded. No runtime bridge or parallel indirect path remains after
-Stage13 activates.
+## Execution
 
-## 1. Scope and Context
+[`IndirectLightingService::Record`](../../../src/Oxygen/Vortex/IndirectLighting/IndirectLightingService.cpp)
+receives `RenderContext`, the existing command recorder, `SceneTextures` and
+published `EnvironmentFrameBindings`. It records one additive fullscreen draw
+when authored lighting and complete IBL bindings are available. It preserves
+SceneColor alpha, clamps the viewport/scissor to the view, and reads depth and
+G-buffers without writing them.
 
-### 1.1 What This Covers
+[`DeferredIbl.hlsl`](../../../src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/IndirectLighting/DeferredIbl.hlsl)
+skips background and non-default-lit surfaces. It reconstructs position, reads
+the material/world normal, evaluates diffuse plus specular IBL and applies the
+view's pre-exposure once. Products publish before both the forward base pass
+and Stage 13. Stage 12 contains direct lighting only.
 
-`IndirectLightingService` — the future stage-13 owner for:
+[`IblEvaluation.hlsli`](../../../src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/IndirectLighting/IblEvaluation.hlsli)
+is shared by deferred, forward and translucent shaders. Independent diffuse,
+specular and reflection controls apply there; incomplete or GPU-invalid metadata
+produces zero IBL. Forward surfaces receive lighting in their own surface pass
+and are not shaded again by the deferred apply.
 
-- canonical indirect environment evaluation
-- reflections and GI families
-- SSAO / ScreenSpaceAO production
-- subsurface-adjacent indirect-lighting work
+The captured-sky contract owns SH normalization, GGX roughness mapping, BRDF
+lookup, HDR scale and native-filtering qualification. No separate fallback
+material model or visual-sky sampling path exists in this service.
 
-The service is intentionally broad at the ownership level but **not** a
-catch-all implementation bucket. Its internal execution order and activation
-subset are defined here so the stage can grow in a controlled way instead of
-collapsing unlike concerns into one opaque pass.
+## Resources
 
-This document exists now to close the design handoff created in Phase 4. If a
-temporary environment-ambient bridge is used before stage 13 exists, that
-bridge must retire into this service rather than silently becoming a permanent
-stage-12 behavior.
+The C++ family lives under `src/Oxygen/Vortex/IndirectLighting/`. It owns the
+apply framebuffer and pipeline description. Graphics caches pipeline state;
+replaced framebuffers use Graphics deferred release. Record establishes the
+SceneColor, depth, G-buffer and exposure-status resource states through the
+existing recorder.
 
-### 1.2 What This Replaces
+Environment owns per-scene product generations, source snapshots, scheduling,
+BRDF lookup and capture leases. Existing publication and Graphics submission
+lifetimes keep those resources alive for all views. IndirectLighting adds no
+per-view sky history, product queue or duplicate resource pool.
 
-Any temporary Phase 4 ambient bridge that samples published environment probe
-data in stage 12 is explicitly transitional. Once `IndirectLightingService`
-activates, stage 12 returns to direct lighting only and stage 13 becomes the
-canonical home for indirect environment evaluation.
+## Validation
 
-The Phase 4 bridge is intentionally narrow:
+The [acceptance record](../milestones/VX-IBL-01/README.md#acceptance) links the
+product, material, render-path and native/editor image checks. RenderDoc verifies
+one Stage 13 apply and no Stage 12 ambient draw. Tests cover independent controls,
+normal maps, sidedness, pre-exposure, valid/invalid metadata and view isolation.
+Matched direct-light buffers remain unchanged when IBL is enabled.
 
-- ambient-only
-- opt-in
-- sourced from published `EnvironmentAmbientBridgeBindings`
-- never a license to let reflections, AO, skylight shadowing, or broader
-  indirect-light policy remain in Stage 12
+## Future families
 
-### 1.3 First Activation Subset
+Broader reflections, GI, AO production and subsurface-adjacent indirect work
+retain Stage 13 ownership. They require separate increments, resources and
+qualification; they are not dependencies of sky IBL. Future AO is produced
+before indirect apply, and reflection/history processing retains its own
+internal owner. Temporal histories remain distinct by technique and view.
 
-The first activation of stage 13 is intentionally narrower than UE 5.7:
-
-1. **Indirect environment / skylight evaluation** using published
-   `EnvironmentFrameBindings`
-2. **Ambient-bridge retirement** from stage 12
-3. **Optional SSAO production** if it is already available without widening the
-   activation too far
-
-SSR, broader reflections, and heavier GI families may follow in later 7B
-increments. This downscope is deliberate: it removes the Phase 4 architectural
-debt first, then expands stage 13 after ownership is proven in code.
-
-### 1.4 Architectural Authority
-
-- [ARCHITECTURE.md §5.1.3](../ARCHITECTURE.md) — future `IndirectLightingService`
-- [ARCHITECTURE.md §6.2](../ARCHITECTURE.md) — stage 13
-- [PLAN.md §9](../PLAN.md) — Phase 7B activation and deferred scope
-
-## 2. Interface Contracts
-
-### 2.1 File Placement
-
-```text
-src/Oxygen/Vortex/
-└── Services/
-    └── IndirectLighting/
-        ├── IndirectLightingService.h
-        ├── IndirectLightingService.cpp
-        ├── Internal/
-        │   ├── ReflectionIntegrator.h/.cpp
-        │   ├── AmbientOcclusionPipeline.h/.cpp
-        │   └── IndirectHistoryStore.h/.cpp
-        ├── Passes/
-        │   ├── SkyLightingPass.h/.cpp
-        │   ├── ReflectionPass.h/.cpp
-        │   └── SsaoPass.h/.cpp
-        └── Types/
-            ├── IndirectLightingFrameBindings.h
-            ├── ReflectionHistory.h
-            └── ScreenSpaceAoData.h
-```
-
-### 2.2 Public API
-
-```cpp
-namespace oxygen::vortex {
-
-class IndirectLightingService : public ISubsystemService {
- public:
-  explicit IndirectLightingService(Renderer& renderer);
-  ~IndirectLightingService() override;
-
-  void Initialize(graphics::IGraphics& gfx,
-                  const RendererConfig& config) override;
-  void OnFrameStart(const FrameContext& frame) override;
-  void Shutdown() override;
-
-  /// Stage 13: indirect lighting / reflections / SSAO / skylight evaluation.
-  void Execute(RenderContext& ctx, const SceneTextures& scene_textures);
-};
-
-}  // namespace oxygen::vortex
-```
-
-### 2.3 Published Payload Contract
-
-```cpp
-struct IndirectLightingFrameBindings {
-  uint32_t ambient_occlusion_srv{kInvalidIndex};
-  uint32_t reflection_result_srv{kInvalidIndex};
-  uint32_t diffuse_indirect_srv{kInvalidIndex};
-  uint32_t flags{0};
-};
-```
-
-This payload is intentionally narrower than UE's full view-state history and
-denoiser ecosystem. The goal is to publish stable consumer-facing results while
-keeping the large family of temporal histories and internal working textures
-owned privately by the service.
-
-## 3. Data Flow and Dependencies
-
-### 3.1 Inputs
-
-| Source                     | Data                                     | Purpose                                   |
-| -------------------------- | ---------------------------------------- | ----------------------------------------- |
-| SceneTextures              | GBufferA–D, SceneDepth, SceneColor       | Indirect-light evaluation inputs          |
-| EnvironmentLightingService | `EnvironmentFrameBindings`               | Canonical environment probe / IBL input   |
-| LightingService            | Published direct-light context as needed | Coordination only; not ownership transfer |
-| Previous frame             | Reflection / AO / temporal histories     | Stability and reuse                       |
-
-### 3.2 Internal Stage-13 Order
-
-```text
-IndirectLightingService::Execute(ctx, scene_textures)
-  │
-  ├─ 0. Resolve activation subset for the current build/config
-  │
-  ├─ 1. SSAO / ambient-occlusion production (when active)
-  │     └─ Produces AO signal for later indirect apply
-  │
-  ├─ 2. Reflection family (when active)
-  │     └─ SSR / reflection-environment / later GI reflection paths
-  │     └─ Updates reflection histories
-  │
-  ├─ 3. Canonical indirect environment / skylight apply
-  │     └─ Consumes EnvironmentFrameBindings
-  │     └─ Retires any temporary stage-12 ambient bridge
-  │
-  └─ 4. Subsurface-adjacent indirect work (when active)
-```
-
-The order matters. In UE 5.7, indirect environment evaluation, AO, reflections,
-and temporal filtering are not one undifferentiated pass. Vortex should keep
-that separation even when it groups the family under one service owner.
-
-### 3.3 Outputs
-
-| Product                         | Consumer                                 | Delivery                              |
-| ------------------------------- | ---------------------------------------- | ------------------------------------- |
-| Indirect-light contribution     | SceneColor                               | Stage-13 accumulation                 |
-| `ScreenSpaceAO`                 | SceneTextures or indirect-light bindings | Published downstream product          |
-| `IndirectLightingFrameBindings` | Later consumers                          | Published through `ViewFrameBindings` |
-
-## 4. Resource Management
-
-| Resource                                 | Lifetime            | Notes                                  |
-| ---------------------------------------- | ------------------- | -------------------------------------- |
-| Reflection histories                     | Persistent per view | Temporal reuse                         |
-| AO history / intermediate buffers        | Persistent per view | Optional depending on chosen technique |
-| Sky-light / indirect environment history | Persistent per view | Needed once the bridge retires         |
-| Skylight / indirect PSOs                 | Persistent          | Family-owned                           |
-
-### 4.1 History Ownership
-
-The service owns a richer history family than the current minimal Phase 4 docs:
-
-- AO history
-- reflections / SSR history
-- sky-light / indirect environment history
-- future GI denoiser histories
-
-This mirrors the important lesson from UE 5.7 without copying its full state
-surface: stage 13 cannot be robust if all temporal state is flattened into one
-anonymous history blob.
-
-## 5. Stage Integration
-
-- Stage 13 owns canonical indirect environment evaluation.
-- Stage 12 must no longer contain a Phase 4 ambient bridge once stage 13 is
-  active.
-- The service consumes published `EnvironmentFrameBindings`; it does not pull
-  environment data through service-internal backdoors.
-
-### 5.2 Bridge Retirement Rule
-
-Once `IndirectLightingService` activates, the design package requires the
-following simultaneously:
-
-1. Stage 12 returns to direct lighting only
-2. any temporary ambient-only bridge text is removed from the active
-   `LightingService` implementation contract
-3. canonical indirect environment evaluation, and any later AO/reflection
-   expansion, remain under Stage-13 ownership
-
-### 5.1 Explicit Non-Goals For First Activation
-
-The first activation of stage 13 does **not** need to reproduce every UE 5.7
-feature at once. The following are intentionally not required in the first
-activation unless separately justified:
-
-- full GI / Lumen-equivalent behavior
-- all denoiser variants and all temporal sub-histories from day one
-- hair-specific indirect-light branches
-- niche reflection-capture permutations that add cost without validating the
-  main Vortex ownership model
-
-Those items are deferred because they add complexity faster than they increase
-architectural confidence.
-
-## 6. Design Decision
-
-The key reason to define this document early is architectural hygiene: Vortex
-needs a named future owner for indirect environment lighting so that the Phase 4
-bridge cannot fossilize into a permanent stage-order violation. This service is
-that owner.
-
-The second key decision is sequencing. Vortex will not activate stage 13 by
-trying to swallow all of UE's indirect-light family at once. It will first
-activate the subset that removes current architectural debt, then layer in more
-complex families behind a service that already owns the stage cleanly.
-
-## 7. Testability Approach
-
-1. Verify stage-12 direct lighting still produces correct output with stage 13
-   disabled.
-2. Enable stage 13 and confirm the environment-ambient bridge is removed.
-3. Verify indirect environment lighting now flows through stage 13 and uses the
-   published `EnvironmentFrameBindings`.
-4. If SSAO is active, verify it is produced and consumed by stage 13 rather
-   than smuggled into unrelated stage families.
-5. If reflections are active, verify their histories remain stage-13-owned.
-
-## 8. Open Questions
-
-1. Whether `ScreenSpaceAO` lands in `SceneTextures` immediately or first as an
-   indirect-lighting-owned published payload.
-2. Which reflection subset should land first after skylight-only activation:
-   SSR-first, reflection-capture-first, or another bounded step.
+[VX-INDIRECT-01](../OPEN_ITEMS.md#p3--unscheduled-capabilities) owns two decisions:
+where ScreenSpaceAO is published, and which reflection increment follows sky
+lighting (SSR, captures or another bounded capability). Full GI, denoisers,
+hair-specific branches and specialized reflection permutations remain within
+[VX-FAMILY-01](../OPEN_ITEMS.md#p3--unscheduled-capabilities).

@@ -19,9 +19,8 @@ Geometry virtualization, material composition, broader indirect lighting/GI/refl
 ## Deferred capability owners
 
 - Captured-sky diffuse/specular IBL and specified-cubemap specular lighting are
-  scheduled in [VX-IBL-01](../VX-IBL-01/README.md) under ED-M08, including Stage 13 activation and
-  retirement of the Stage 12 ambient bridge. Implementation and rendered proof
-  were pending in the preserved baseline.
+  implemented in [VX-IBL-01](../VX-IBL-01/README.md) under ED-M08, including Stage 13 activation and
+  retirement of the Stage 12 ambient bridge. That milestone owns acceptance.
 - Broader GI/SSR, reflection probes, SkyLight
   occlusion/baking and cubemap blending require separate delivery plans.
 - Reflection/360-view aerial perspective still needs a runtime resource path.

@@ -317,6 +317,50 @@ def build_report(controller, report, capture_path, report_path):
     actions = collect_action_records(controller)
     if any("Stage12.StaticSkyLight" in a.path for a in actions):
         raise RuntimeError("The retired Stage 12 sky-light draw is still present")
+    path_modes = {"IblPathDeferred": ("deferred", "Stage13.IndirectLighting"),
+                  "IblPathForward": ("forward", "Stage9.BasePass.Forward"),
+                  "IblPathTranslucent": ("translucent", "Stage18.Translucency"),
+                  "IblPathCanonical": ("canonical", "Stage9.BasePass.Forward")}
+    path_mode = os.environ.get("OXYGEN_RENDERDOC_PASS_NAME")
+    if path_mode in path_modes:
+        names = resource_id_to_name(controller)
+        routes = {}
+        sampled_cubes = set()
+        for name, scope in (path_modes[path_mode],):
+            draws = [a for a in actions if a.flags & rd.ActionFlags.Drawcall and scope in a.path]
+            if not draws:
+                raise RuntimeError(f"Missing actual {name} draws")
+            shaders, ibl_draws = set(), []
+            # Use one representative event per fresh replay. Bindless feedback
+            # for this multi-frame capture is not reliable after shader reuse.
+            selected = draws[-1:] if name == "canonical" else draws[:1]
+            for draw in selected:
+                controller.SetFrameEvent(draw.event_id, True)
+                pipeline = controller.GetPipelineState()
+                shader = pipeline.GetShaderReflection(rd.ShaderStage.Pixel)
+                if not shader:
+                    raise RuntimeError("Surface draw has no pixel shader")
+                shaders.add(shader.entryPoint)
+                reads = [x.descriptor for x in pipeline.GetReadOnlyResources(rd.ShaderStage.Pixel, True)]
+                metadata = [x for x in reads if names.get(str(x.resource)) == "IBL.Metadata"]
+                if metadata:
+                    flags, revision = struct.unpack("<II", bytes(controller.GetBufferData(metadata[0].resource, metadata[0].byteOffset + 8, 8)))
+                    if flags != 3 or revision == 0:
+                        raise RuntimeError("Surface sampled incomplete IBL")
+                    ibl_draws.append(draw.event_id)
+                    sampled_cubes.update(names.get(str(x.resource)) for x in reads
+                                         if names.get(str(x.resource)) in ("IBL.SpecularCube", "IBL.SpecularHalfCube"))
+            if not ibl_draws:
+                raise RuntimeError(f"No {name} draw sampled ready IBL")
+            routes[name] = {"draw_count": len(draws), "ibl_events": ibl_draws, "pixel_entry_points": sorted(shaders)}
+        expected_cube = "IBL.SpecularCube" if path_mode == "IblPathCanonical" else "IBL.SpecularHalfCube"
+        if sampled_cubes != {expected_cube}:
+            raise RuntimeError(f"Expected {expected_cube}, got {sampled_cubes}")
+        result = {"verdict": "pass", "routes": routes, "sampled_cubes": sorted(sampled_cubes),
+                  "scope": "Actual surface shader paths; numerical image checks are in the native matrix and its raw-array summary"}
+        Path(report_path).with_suffix(".json").write_text(json.dumps(result, indent=2) + "\n")
+        report.append(f"ibl_path_matrix=pass route={path_modes[path_mode][0]}")
+        return
     appearance = os.environ.get("OXYGEN_RENDERDOC_PASS_NAME", "")
     if appearance in ("IblAppearanceOn", "IblAppearanceOff"):
         appearance_report(controller, report, capture_path, report_path, actions, appearance == "IblAppearanceOn")

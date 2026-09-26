@@ -1,14 +1,57 @@
 # VX-IBL-01 validation
 
-S1–S4 are validated: products, captured atmosphere/height fog, native lighting,
-migration, precision, lifetime admission and automatic scheduling pass their
-checks. Town4new appearance and editor/standalone deferred images also pass.
-S5–S6 own forward/translucent/offscreen image agreement and integrated qualification.
+**S1–S6 validated.** The [acceptance table](README.md#acceptance) links every
+required result. The [integrated audit](evidence/s6-integrated/run.json) checks
+retained evidence against current production owners; prior measurements keep
+their original source/build provenance.
 
-Read: [current results](#current-results), [reproduce](#reproduce),
-[remaining gates](README.md#acceptance).
+Read: [integrated results](#integrated-results), [checkpoint evidence](#checkpoint-evidence),
+[reproduce](#reproduce).
 
-## Current results
+## Integrated results
+
+All seven acceptance areas pass. Source audit confirms **12 performance-critical
+files** and **nine migration-core files** unchanged from their qualified snapshots.
+Native/editor ordinary runs and separate captured runs use the same production
+owners. Production shaders contain no added qualification probes; optional
+metadata readback is disabled by default in Release.
+
+Specified-cubemap scaling uses four serial native Release runs on the reference
+RTX 3080. Each measures **1,800 immediate updates at 60 Hz after 120 warmup frames**.
+No new timing threshold applies to these sizes; the 128-face captured-sky gates
+remain the matched S4 measurements below.
+
+| Face size | Producer GPU mean / p95 / p99 | Retained product placement |
+| --------- | ----------------------------- | -------------------------- |
+| 64        | 0.232 / 0.338 / 0.352 ms      | 5.00 MB                    |
+| 128       | 0.605 / 1.266 / 1.568 ms      | 17.19 MB                   |
+| 256       | 1.902 / 5.545 / 6.501 ms      | 65.95 MB                   |
+| 512       | 3.823 / 4.988 / 5.699 ms      | 260.59 MB                  |
+
+Storage includes two processing slots, scratch and the shared BRDF; source and
+upload buffers are excluded. Each run holds **two allocations and 21 registrations**
+through the warm window and validates complete finite GPU metadata afterward.
+These are direct-producer scaling runs, not the budgeted scene scheduler.
+[Raw timings, snapshots and commands](evidence/s6-integrated/run.json).
+
+Owner LLDs now describe the actual Stage 13/shared evaluator, complete GPU
+products, source modes and automatic updates. They retain source conventions,
+SH mathematics and the separately tracked future families. The
+[document map](evidence/s6-integrated/document-map.json) records that reconciliation.
+
+## Checkpoint evidence
+
+[Render-path images](evidence/s5-path-images/run.json): **144 cases** cover
+specified-cube, fog-only and atmosphere/fog lighting, dielectric/metal receivers,
+three roughness values, opaque/translucent materials and runtime/offscreen paths.
+All **72 runtime/offscreen display pairs** match exactly; forward/translucent
+contributions match after opacity normalization. Unclipped deferred/forward
+images stay below **0.36 RMS / 1.82 peak 8-bit code equivalents**, within the
+per-case visual budget of 1 RMS / 4 peak. [Comparison](evidence/s5-path-images/native/comparison.png).
+G-buffer quantization and small HDR residuals remain recorded diagnostics;
+production formats, shaders and sampling counts are unchanged. **18 FP32 controls**
+pass the existing FP16 filtering gates, and **14 surface regressions** pass.
+RenderDoc verifies the actual deferred, forward and translucent shader paths.
 
 [Editor/standalone images](evidence/s5-editor-images/run.json): two editor views
 match across five complete frames. The cooked scene in RenderScene has identical
@@ -50,7 +93,7 @@ and native built-in catalog query. The Debug editor builds. Default shader loadi
 uses the compatibility-selected SDK; explicit overrides remain intact. Cooking
 reads the canonical `share/oxygen/schemas` directory. Both installed shader
 archives and scene headers match their current builds/source. No shader code was
-added for these checks. Matched-image gates remain open.
+added for these checks.
 
 [Release editor packaging](evidence/s5-editor-pack/run.json) passes the full
 application build and Runtime package generation. Interop retains its declared
@@ -80,7 +123,6 @@ are gone. [Native UI](evidence/s5-controls/ui/final-state.png).
 Coverage includes settings reload, poisoned-pool/source identity, unresolved
 cubemaps, unchanged 16-face source allocation failure, and rejection of partial
 GPU timing when collection is enabled. The public status header is installed.
-Matched visual qualification remains open; S5 stays `in_progress`.
 
 [S4 matched scene runs](evidence/s4-scene/run.json) pass on the reference GPU:
 **1,800 frames per workload at 1920×1080/60 Hz**, after 120 warmup frames. All use
@@ -420,6 +462,11 @@ A/B error at most 0.035. This estimator check does not replace material-image
 qualification.
 
 ## Reproduce
+
+For specified-size scaling, use `IblUpdateBenchmark.DISABLED_SpecifiedCubeUpdates`
+with `OXYGEN_IBL_FACE_SIZE` set to 64, 128, 256 or 512 and a fresh
+`OXYGEN_IBL_TIMING_OUTPUT` directory per process. Use the same summary tool below;
+[the retained runner](evidence/s6-integrated/run-scaling.py) executes all four serially.
 
 For the isolated timing workload, build `Oxygen.Vortex.Exposure.Benchmarks`
 in Release. Set `OXYGEN_IBL_TIMING_OUTPUT` to a new directory and run the binary

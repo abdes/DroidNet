@@ -4,15 +4,18 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <memory>
 #include <string>
 #include <thread>
 #include <unordered_map>
+#include <vector>
 
 #include <glm/geometric.hpp>
 #include <glm/vec3.hpp>
@@ -20,6 +23,10 @@
 
 #include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Graphics/Common/Buffer.h>
+#include <Oxygen/Graphics/Common/CommandRecorder.h>
+#include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
@@ -28,14 +35,75 @@
 #include <Oxygen/Vortex/Environment/Internal/CapturedSkySource.h>
 #include <Oxygen/Vortex/Environment/Internal/IblGpuProcessor.h>
 #include <Oxygen/Vortex/Environment/Internal/IblProcessor.h>
+#include <Oxygen/Vortex/Environment/Types/IblProductMetadata.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
+#include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestGraphics.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestTags.h>
+#include <Oxygen/Vortex/Upload/UploadPlanner.h>
+#include <Oxygen/Vortex/Upload/UploadPolicy.h>
 
 namespace oxygen::vortex::testing::exposure {
 namespace {
   class IblUpdateBenchmark : public ExposureGpuTest {
   protected:
-    auto RunUpdates(bool scheduled, bool authoring = false) -> void;
+    auto RunUpdates(bool scheduled, bool authoring = false,
+      unsigned specified_face_size = 0U) -> void;
+    struct SpecifiedSource {
+      std::shared_ptr<graphics::Texture> texture;
+      graphics::RegistrationLease registration;
+    };
+    auto MakeSpecifiedSource(unsigned size) -> SpecifiedSource
+    {
+      using graphics::ResourceStates;
+      using Pixel = std::array<float, 4>;
+      auto texture = Backend().CreateTexture({ .width = size,
+        .height = size,
+        .array_size = 6U,
+        .format = Format::kRGBA32Float,
+        .texture_type = TextureType::kTextureCube,
+        .debug_name = "IBL.ScalingSource",
+        .is_shader_resource = true,
+        .initial_state = ResourceStates::kCommon });
+      CHECK_NOTNULL_F(texture.get());
+      auto registration
+        = Backend().GetResourceRegistry().RegisterManaged(texture);
+      CHECK_F(registration.has_value());
+      auto subresources = std::array<upload::UploadSubresource, 6> {};
+      for (auto face = 0U; face < 6U; ++face)
+        subresources[face].array_slice = face;
+      const auto plan = upload::UploadPlanner::PlanTexture2D({ .dst = texture },
+        subresources, upload::UploadPolicy { QueueKeyFor() });
+      CHECK_F(plan.has_value());
+      auto staging = CreateRegisteredBuffer({ .size_bytes = plan->total_bytes,
+        .memory = graphics::BufferMemory::kUpload,
+        .debug_name = "IBL.ScalingUpload" });
+      auto row = std::vector<Pixel>(size);
+      for (auto face = 0U; face < 6U; ++face) {
+        const auto& region = plan->regions[face];
+        for (auto y = 0U; y < size; ++y) {
+          for (auto x = 0U; x < size; ++x)
+            row[x] = { 0.2F + 0.6F * x / size, 0.3F + 0.3F * y / size,
+              0.5F + 0.01F * face, 1.0F };
+          staging->Update(row.data(), row.size() * sizeof(Pixel),
+            region.buffer_offset + std::uint64_t(y) * region.buffer_row_pitch);
+        }
+      }
+      SubmitCommands(
+        "IBL scaling upload", [&](graphics::CommandRecorder& recorder) {
+          CHECK_F(static_cast<bool>(recorder.RetainRegistration(
+            Backend().GetResourceRegistry(), *registration)));
+          EnsureTracked(recorder, staging, ResourceStates::kGenericRead);
+          recorder.BeginTrackingResourceState(
+            *texture, ResourceStates::kCommon);
+          recorder.RequireResourceState(*texture, ResourceStates::kCopyDest);
+          recorder.FlushBarriers();
+          for (const auto& region : plan->regions)
+            recorder.CopyBufferToTexture(*staging, region, *texture);
+          recorder.RequireResourceStateFinal(
+            *texture, ResourceStates::kShaderResource);
+        });
+      return { texture, std::move(*registration) };
+    }
     auto SetUp() -> void override
     {
       ExposureGpuTest::SetUp();
@@ -72,8 +140,21 @@ namespace {
     RunUpdates(true, true);
   }
 
-  auto IblUpdateBenchmark::RunUpdates(
-    const bool scheduled, const bool authoring) -> void
+  NOLINT_TEST_F(IblUpdateBenchmark, DISABLED_SpecifiedCubeUpdates)
+  {
+    char* value = nullptr;
+    std::size_t length = 0;
+    ASSERT_EQ(_dupenv_s(&value, &length, "OXYGEN_IBL_FACE_SIZE"), 0);
+    const auto owned
+      = std::unique_ptr<char, decltype(&std::free)>(value, &std::free);
+    ASSERT_NE(value, nullptr);
+    const auto size = std::stoul(value);
+    ASSERT_TRUE(size == 64U || size == 128U || size == 256U || size == 512U);
+    RunUpdates(false, false, static_cast<unsigned>(size));
+  }
+
+  auto IblUpdateBenchmark::RunUpdates(const bool scheduled,
+    const bool authoring, const unsigned specified_face_size) -> void
   {
 #ifndef NDEBUG
     GTEST_SKIP() << "Native timing requires Release";
@@ -87,6 +168,10 @@ namespace {
     const auto directory = std::filesystem::path(output);
     ASSERT_FALSE(std::filesystem::exists(directory));
     std::filesystem::create_directories(directory);
+    const bool specified = specified_face_size != 0U;
+    if (specified)
+      FailureBackend().track_resources = true;
+    auto memory = nlohmann::json::array();
     auto& diagnostics = renderer_->GetDiagnosticsService();
     diagnostics.SetEnabledFeatures(DiagnosticsFeature::kGpuTimeline);
     diagnostics.SetGpuTimelineMaxScopesPerFrame(scheduled ? 1024U : 128U);
@@ -110,6 +195,8 @@ namespace {
       ASSERT_TRUE(prepared);
       brdf = *prepared;
     }
+    const auto cube = specified ? MakeSpecifiedSource(specified_face_size)
+                                : SpecifiedSource {};
     auto state = env::StableAtmosphereState {};
     state.atmosphere_revision = 1U;
     state.view_products.atmosphere.enabled = true;
@@ -200,6 +287,13 @@ namespace {
           EXPECT_EQ(source_age, 0U);
           EXPECT_EQ(completion_frames, 1U);
         }
+      } else if (specified) {
+        auto next = processor.Process(cube.texture, cube.registration, brdf,
+          { .face_size = specified_face_size,
+            .lower_hemisphere_solid_color = false },
+          index + 1U);
+        ASSERT_TRUE(next.has_value()) << static_cast<int>(next.error());
+        published = std::move(*next);
       } else {
         auto next
           = source.Process(ctx_, state, fog, processor, brdf, {}, index + 1U);
@@ -234,6 +328,15 @@ namespace {
           cpu << stats.storage_creations << ',' << stats.allocated << '\n';
         }
       }
+      if (specified
+        && (index + 1U == warmup || index + 1U == warmup + samples)) {
+        memory.push_back({ { "frame_seq", index + 1U },
+          { "storage_creations", processor.GetStats().storage_creations },
+          { "allocated_slots", processor.GetStats().allocated },
+          { "registered_resources",
+            Backend().GetResourceRegistry().GetRegisteredResourceCount() },
+          { "resources", FailureBackend().MeasureTrackedPlacement() } });
+      }
       std::this_thread::sleep_until(paced_begin
         + std::chrono::duration_cast<Clock::duration>(
           std::chrono::duration<double>(double(index + 1U) / 60.0)));
@@ -258,13 +361,38 @@ namespace {
       } else
         EXPECT_EQ(process_scopes, 1U);
     }
+    if (specified) {
+      auto readback
+        = GetReadbackManager()->CreateBufferReadback("IBL scaling validity");
+      SubmitCommands(
+        "IBL scaling validity", [&](graphics::CommandRecorder& recorder) {
+          CHECK_F(published->Attach(recorder, Backend().GetResourceRegistry()));
+          recorder.FlushBarriers();
+          CHECK_F(readback
+              ->EnqueueCopy(recorder, *published->metadata,
+                { 0U, sizeof(environment::IblProductMetadata) })
+              .has_value());
+        });
+      auto mapped = readback->MapNow();
+      ASSERT_TRUE(mapped.has_value());
+      auto metadata = environment::IblProductMetadata {};
+      std::memcpy(&metadata, mapped->Bytes().data(), sizeof(metadata));
+      ASSERT_EQ(metadata.product_revision, published->revision);
+      ASSERT_EQ(metadata.processing_flags,
+        environment::kIblProductFinite | environment::kIblProductComplete);
+      ASSERT_GT(metadata.average_brightness, 0.0F);
+    }
     auto manifest = std::ofstream(directory / "run.json");
     manifest << nlohmann::json { { "samples", samples }, { "warmup", warmup },
       { "hz", 60 }, { "first_use_wall_ms", first_use_wall_ms },
       { "scheduled", scheduled }, { "authoring", authoring },
+      { "specified_face_size", specified_face_size }, { "memory", memory },
       { "scope",
-        authoring ? "Isolated same-frame authoring updates with two atmosphere "
-                    "lights and height fog"
+        specified
+          ? "Isolated specified-cube immediate processing; size scaling report"
+          : authoring
+          ? "Isolated same-frame authoring updates with two atmosphere "
+            "lights and height fog"
           : scheduled
           ? "Isolated automatic runtime updates with two atmosphere "
             "lights and height fog; native timings and source latency, "

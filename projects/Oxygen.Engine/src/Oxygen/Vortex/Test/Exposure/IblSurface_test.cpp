@@ -9,7 +9,10 @@
 #include <bit>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <functional>
 #include <memory>
 #include <span>
@@ -18,7 +21,9 @@
 
 #include <glm/geometric.hpp>
 #include <glm/vec3.hpp>
+#include <nlohmann/json.hpp>
 
+#include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/GeometryAsset.h>
@@ -31,10 +36,12 @@
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/FrameCaptureController.h>
+#include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Internal/SubmissionFaultTestAccess.h>
 #include <Oxygen/Graphics/Common/Test/CommandRecordingTestSupport.h>
 #include <Oxygen/Graphics/Common/Test/HeapAllocationFailure.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Environment/Fog.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
@@ -218,8 +225,8 @@ namespace {
           desc, std::vector<data::ShaderReference> {}, std::move(keys)));
     }
 
-    std::array<std::uint32_t, 2> packed_input_slots {};
-    std::array<std::shared_ptr<graphics::Texture>, 2> packed_input_textures;
+    std::array<std::uint32_t, 3> packed_input_slots {};
+    std::array<std::shared_ptr<graphics::Texture>, 3> packed_input_textures;
 
     auto TearDown() -> void override
     {
@@ -245,15 +252,16 @@ namespace {
         auto& textures = owner->GetSceneTextures();
         // Capture while the view scope is active; SceneRenderer restores its
         // default resources when RenderSurface returns.
-        packed_input_slots
-          = { bindings.gbuffer_srvs[2], bindings.gbuffer_srvs[1] };
+        packed_input_slots = { bindings.gbuffer_srvs[2],
+          bindings.gbuffer_srvs[1], bindings.gbuffer_srvs[0] };
         packed_input_textures
           = { textures.GetGBufferBaseColor().shared_from_this(),
-              textures.GetGBufferMaterial().shared_from_this() };
+              textures.GetGBufferMaterial().shared_from_this(),
+              textures.GetGBufferNormal().shared_from_this() };
       };
     }
 
-    auto PackedMaterialInputs() -> std::array<Pixel, 2>
+    auto PackedSurfaceInputs() -> std::array<Pixel, 3>
     {
       // Reuse the typed texture-sampling probe. These are producer inputs,
       // not an invocation of the production IBL evaluator.
@@ -266,8 +274,11 @@ namespace {
             std::array<std::uint32_t, 4> { one, 0, 0, 0 },
             std::array<std::uint32_t, 4> {
               packed_input_slots[1], point_clamp_sampler, half, half },
+            std::array<std::uint32_t, 4> { one, 0, 0, 0 },
+            std::array<std::uint32_t, 4> {
+              packed_input_slots[2], point_clamp_sampler, half, half },
             std::array<std::uint32_t, 4> { one, 0, 0, 0 } };
-      const auto values = RunToneProbe(std::as_bytes(std::span(inputs)), 2U,
+      const auto values = RunToneProbe(std::as_bytes(std::span(inputs)), 3U,
         512U, false, [&](graphics::CommandRecorder& recorder) {
           for (const auto& texture : packed_input_textures) {
             CHECK_F(recorder.AdoptKnownResourceState(*texture));
@@ -276,7 +287,8 @@ namespace {
           }
         });
       return { Pixel { values[0][0], values[0][1], values[0][2], values[0][3] },
-        Pixel { values[1][0], values[1][1], values[1][2], values[1][3] } };
+        Pixel { values[1][0], values[1][1], values[1][2], values[1][3] },
+        Pixel { values[2][0], values[2][1], values[2][2], values[2][3] } };
     }
 
     auto Receiver(bool backface) -> void
@@ -651,7 +663,7 @@ namespace {
                     EXPECT_TRUE(capture->EndCapture());
                   const auto pixel = ReadFloatTexture(*probe->color).at(0);
                   if (read_packed_inputs) {
-                    const auto packed = PackedMaterialInputs();
+                    const auto packed = PackedSurfaceInputs();
                     for (unsigned c = 0; c < 3; ++c) {
                       EXPECT_NEAR(packed[0][c], albedo[c], 0.01F);
                       material_color[c] = packed[0][c];
@@ -1442,7 +1454,7 @@ namespace {
         const auto expected_revision = revision;
         ASSERT_GT(expected_revision, 0U);
         const double f0
-          = forward_shader ? 0.04 : 0.08 * PackedMaterialInputs()[1][1];
+          = forward_shader ? 0.04 : 0.08 * PackedSurfaceInputs()[1][1];
         const auto brdf = BrdfAtNormalIncidence(1.0F);
         const double coverage
           = domain == data::MaterialDomain::kAlphaBlended ? 0.5 : 1.0;
@@ -1472,6 +1484,382 @@ namespace {
     }
     probe->inspect = {};
     RecordProperty("ibl_immediate_gain_cases", cases);
+  }
+
+  NOLINT_TEST_F(IblSurfaceGpuTest, ImagesAgreeAcrossPublishedAndOffscreenPaths)
+  {
+    constexpr unsigned width = 128U;
+    constexpr unsigned height = 96U;
+    view.viewport.width = width;
+    view.viewport.height = height;
+    auto lens = camera.GetCameraAs<scene::PerspectiveCamera>();
+    ASSERT_TRUE(lens);
+    lens->get().SetAspectRatio(float(width) / height);
+    lens->get().SetViewport(view.viewport);
+    framebuffer = Backend().CreateFramebuffer(
+      graphics::FramebufferDesc {}.AddColorAttachment(CreateRegisteredTexture({
+        .width = width,
+        .height = height,
+        .format = Format::kRGBA32Float,
+        .is_render_target = true,
+        .initial_state = graphics::ResourceStates::kCommon,
+      })));
+    probe->prepare = [](RenderContext&) { };
+    verify_manual_p = false;
+    renderer_->GetDiagnosticsService().SetHdrPrecisionControl(
+      HdrPrecisionControl::kProduction);
+    std::shared_ptr<const environment::internal::IblGpuProducts> products;
+    probe->inspect = [&](const RenderContext& context, const auto&, unsigned) {
+      auto* owner = RendererPublicationProbe::GetSceneRenderer(*renderer_);
+      products = RendererPublicationProbe::PublishedIblProducts(
+        *owner, context.current_view.view_id);
+    };
+    const auto clear_inspection
+      = ScopeGuard([&] noexcept { probe->inspect = {}; });
+    char* destination = nullptr;
+    std::size_t destination_size = 0;
+    ASSERT_EQ(
+      _dupenv_s(&destination, &destination_size, "OXYGEN_IBL_IMAGE"), 0);
+    const auto owned_destination
+      = std::unique_ptr<char, decltype(&std::free)>(destination, &std::free);
+    const auto output = destination ? std::filesystem::path(destination)
+                                    : std::filesystem::path {};
+    if (!output.empty())
+      std::filesystem::create_directories(output.parent_path());
+    auto records = nlohmann::json::array();
+    auto packed_references = nlohmann::json::array();
+    const auto save
+      = [&](const std::string& name, const std::vector<Pixel>& pixels) {
+          if (output.empty())
+            return;
+          std::ofstream stream(output.parent_path()
+              / (output.stem().string() + "-" + name + ".rgba32f"),
+            std::ios::binary);
+          ASSERT_TRUE(stream.good());
+          stream.write(reinterpret_cast<const char*>(pixels.data()),
+            static_cast<std::streamsize>(pixels.size() * sizeof(Pixel)));
+          ASSERT_TRUE(stream.good());
+        };
+    const auto render
+      = [&](bool published, bool forward, float ev, unsigned count) {
+          settings.manual_ev = ev;
+          if (published) {
+            // The published fixture expects resident geometry/materials. Warm
+            // the shared uploads first; the measured frame still uses
+            // publication.
+            if (count > 1)
+              ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, ev, count));
+            probe->color.reset();
+            ASSERT_NO_FATAL_FAILURE(RenderPublishedSurface(forward));
+          } else {
+            ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, ev, count));
+          }
+          ASSERT_NE(probe->color, nullptr);
+        };
+    const auto linear = [&]() {
+      const auto domain = Read<FrameExposureData>(
+        *probe->exposure->buffer, graphics::ResourceStates::kShaderResource);
+      CHECK_F(std::isfinite(domain.pre_exposure) && domain.pre_exposure > 0);
+      auto pixels = ReadFloatTexture(*probe->color);
+      for (auto& pixel : pixels)
+        for (unsigned channel = 0; channel < 3; ++channel)
+          pixel[channel] /= domain.pre_exposure;
+      return pixels;
+    };
+    double maximum_relative = 0;
+    double maximum_display_peak_codes = 0;
+    double maximum_display_rms_codes = 0;
+    unsigned cases = 0;
+    for (unsigned source = 0; source < 3; ++source) {
+      if (source == 0) {
+        Sky().SetCubemapResource(
+          Texture(32U, true, [](auto face, auto x, auto y) {
+            const auto direction = WorldDirection(face, x, y, 32U);
+            return Pixel { .5F + .1F * direction.x, .5F + .1F * direction.y,
+              .5F + .1F * direction.z, 1 };
+          }));
+      } else if (source == 1) {
+        auto& fog = SetCapturedUniformFog();
+        fog.SetFogInscatteringLuminance({ .25F, .5F, 1.0F });
+      } else {
+        auto& atmosphere = scene->GetEnvironment()
+                             ->AddSystem<scene::environment::SkyAtmosphere>();
+        atmosphere.SetEnabled(true);
+        atmosphere.SetRenderInMainPass(false);
+        const auto fog
+          = scene->GetEnvironment()->TryGetSystem<scene::environment::Fog>();
+        ASSERT_TRUE(fog);
+        fog->SetFogDensity(.0001F);
+        fog->SetHeightFalloffPerMeter(.001F);
+        auto sun = scene->CreateNode("Image reference sun");
+        auto light = std::make_unique<scene::DirectionalLight>();
+        light->SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kPrimary);
+        light->SetIntensityLux(100000.0F);
+        ASSERT_TRUE(sun.AttachLight(std::move(light)));
+      }
+      Sky().SetDiffuseIntensity(1);
+      Sky().SetSpecularIntensity(1);
+      scene->NotifyEnvironmentAuthoringChange();
+      // Keep every displayed channel away from clipping in all three sources.
+      const float ev = source == 2 ? 9.0F : source == 1 ? 1.0F : 0.0F;
+      for (const float metallic : { 0.0F, 1.0F }) {
+        for (const float roughness : { .2F, .6F, 1.0F }) {
+          const auto capture = source == 2 && metallic == 1 && roughness == .6F
+            ? BeginOptionalCapture()
+            : observer_ptr<graphics::FrameCaptureController> {};
+          const auto finish_capture = ScopeGuard([&] noexcept {
+            if (capture)
+              EXPECT_TRUE(capture->EndCapture());
+          });
+          std::vector<Pixel> reference;
+          std::vector<Pixel> forward_reference;
+          std::array<std::vector<Pixel>, 2> deferred_display;
+          std::array<Pixel, 3> packed {};
+          for (const bool translucent : { false, true }) {
+            for (const bool forward : { false, true }) {
+              std::vector<Pixel> runtime_display;
+              for (const bool published : { true, false }) {
+                const auto name = std::to_string(source) + "-"
+                  + std::to_string(int(metallic)) + "-"
+                  + std::to_string(roughness) + "-"
+                  + (translucent ? "alpha" : "opaque") + "-"
+                  + (forward ? "forward" : "deferred") + "-"
+                  + (published ? "runtime" : "offscreen");
+                SCOPED_TRACE(name);
+                CapturePackedInputs(!forward && !translucent);
+                Material(translucent ? data::MaterialDomain::kAlphaBlended
+                                     : data::MaterialDomain::kOpaque,
+                  roughness, metallic, glm::vec3(1));
+                Sky().SetIntensityMul(0);
+                ASSERT_NO_FATAL_FAILURE(render(published, forward, ev, 5));
+                const auto baseline = linear();
+                Sky().SetIntensityMul(1);
+                ASSERT_NO_FATAL_FAILURE(render(published, forward, ev, 1));
+                const auto lit = linear();
+                ASSERT_EQ(lit.size(), width * height);
+                ASSERT_EQ(baseline.size(), lit.size());
+                auto contribution = lit;
+                const auto coverage = translucent ? .5F : 1.0F;
+                double peak_error = 0;
+                for (std::size_t i = 0; i < lit.size(); ++i) {
+                  ASSERT_EQ(lit[i][3], coverage);
+                  for (unsigned c = 0; c < 3; ++c) {
+                    contribution[i][c]
+                      = (lit[i][c] - baseline[i][c]) / coverage;
+                    ASSERT_TRUE(std::isfinite(contribution[i][c]));
+                    ASSERT_GT(contribution[i][c], 0);
+                    if (!reference.empty()) {
+                      const auto error = std::abs(
+                        double(contribution[i][c]) - reference[i][c]);
+                      peak_error = std::max(peak_error,
+                        error / std::max(1.0e-5, double(reference[i][c])));
+                    }
+                  }
+                }
+                if (reference.empty()) {
+                  reference = contribution;
+                  packed = PackedSurfaceInputs();
+                  EXPECT_EQ(packed[0], (Pixel { 1, 1, 1, 1 }));
+                  EXPECT_FLOAT_EQ(packed[1][0], metallic);
+                  EXPECT_NEAR(packed[1][2], roughness, 1.0e-6F);
+                }
+                for (auto& pixel : contribution)
+                  pixel[3] = 1;
+                if (forward || translucent) {
+                  if (forward_reference.empty())
+                    forward_reference = contribution;
+                  else
+                    EXPECT_EQ(contribution, forward_reference);
+                } else {
+                  EXPECT_EQ(contribution, reference);
+                }
+                maximum_relative = std::max(maximum_relative, peak_error);
+                const auto display
+                  = ReadFloatTexture(*framebuffer->GetDescriptor()
+                      .color_attachments.front()
+                      .texture);
+                ASSERT_EQ(display.size(), width * height);
+                for (const auto& pixel : display)
+                  for (unsigned channel = 0; channel < 3; ++channel) {
+                    ASSERT_TRUE(std::isfinite(pixel[channel]));
+                    ASSERT_GT(pixel[channel], 0);
+                    ASSERT_LT(pixel[channel], 1);
+                  }
+                double display_peak_codes = 0;
+                double display_rms_codes = 0;
+                if (!forward) {
+                  deferred_display[translucent ? 1 : 0] = display;
+                } else {
+                  const auto& compared = deferred_display[translucent ? 1 : 0];
+                  ASSERT_EQ(compared.size(), display.size());
+                  double squared_codes = 0;
+                  for (std::size_t i = 0; i < display.size(); ++i) {
+                    for (unsigned c = 0; c < 3; ++c) {
+                      ASSERT_TRUE(std::isfinite(display[i][c]));
+                      ASSERT_TRUE(std::isfinite(compared[i][c]));
+                      const double difference
+                        = 255.0 * (double(display[i][c]) - compared[i][c]);
+                      squared_codes += difference * difference;
+                      display_peak_codes
+                        = std::max(display_peak_codes, std::abs(difference));
+                    }
+                  }
+                  display_rms_codes
+                    = std::sqrt(squared_codes / (display.size() * 3U));
+                  // A visual regression budget for different G-buffer inputs,
+                  // in 8-bit code equivalents; FP16 filtering is checked below.
+                  EXPECT_LE(display_peak_codes, 4.0);
+                  EXPECT_LE(display_rms_codes, 1.0);
+                  maximum_display_peak_codes
+                    = std::max(maximum_display_peak_codes, display_peak_codes);
+                  maximum_display_rms_codes
+                    = std::max(maximum_display_rms_codes, display_rms_codes);
+                }
+                if (published)
+                  runtime_display = display;
+                else
+                  EXPECT_EQ(display, runtime_display);
+                ASSERT_NO_FATAL_FAILURE(save(name + "-baseline", baseline));
+                ASSERT_NO_FATAL_FAILURE(save(name + "-lit", lit));
+                ASSERT_NO_FATAL_FAILURE(save(name + "-display", display));
+                records.push_back({ { "name", name }, { "coverage", coverage },
+                  { "exposure_ev", ev },
+                  { "maximum_relative_error", peak_error },
+                  { "display_peak_code_equivalents", display_peak_codes },
+                  { "display_rms_code_equivalents", display_rms_codes } });
+                ++cases;
+              }
+            }
+          }
+          // Compare transport using the actual deferred shading normal. The
+          // original images above retain the UNORM10 normal-packing difference.
+          const float nx = packed[2][0] * 2 - 1;
+          const float ny = packed[2][1] * 2 - 1;
+          const auto normal = glm::normalize(
+            glm::vec3(nx, ny, 1 - std::abs(nx) - std::abs(ny)));
+          ASSERT_GT(normal.z, 0);
+          const auto normal_texture = Texture(1U, false, [&](auto, auto, auto) {
+            return Pixel { .5F + .5F * normal.x, .5F + .5F * normal.y,
+              .5F + .5F * normal.z, 1 };
+          });
+          CapturePackedInputs(false);
+          Material(data::MaterialDomain::kOpaque, roughness, metallic,
+            glm::vec3(1), normal_texture);
+          Sky().SetIntensityMul(0);
+          ASSERT_NO_FATAL_FAILURE(render(false, true, ev, 5));
+          const auto baseline = linear();
+          Sky().SetIntensityMul(1);
+          ASSERT_NO_FATAL_FAILURE(render(false, true, ev, 1));
+          const auto lit = linear();
+          ASSERT_EQ(lit.size(), reference.size());
+          ASSERT_EQ(baseline.size(), reference.size());
+          const auto f0_bound
+            = metallic == 0 ? std::abs(.08 * packed[1][1] - .04) / .04 : 0.0;
+          double maximum_residual = 0;
+          for (std::size_t i = 0; i < lit.size(); ++i) {
+            for (unsigned c = 0; c < 3; ++c) {
+              const double matched = double(lit[i][c]) - baseline[i][c];
+              ASSERT_TRUE(std::isfinite(matched));
+              ASSERT_GT(matched, 0);
+              const double error = std::abs(matched - reference[i][c]);
+              maximum_residual = std::max(maximum_residual,
+                error / std::max(1.0e-5, double(reference[i][c])));
+            }
+          }
+          ASSERT_NE(products, nullptr);
+          const auto comparison_products = products;
+          const auto metadata = Read<environment::IblProductMetadata>(
+            *products->metadata, graphics::ResourceStates::kShaderResource);
+          auto canonical_metadata = metadata;
+          canonical_metadata.precision_flags = 0;
+          ASSERT_NO_FATAL_FAILURE(
+            WriteComparisonMetadata(*comparison_products, canonical_metadata));
+          const auto restore_metadata = ScopeGuard([&] noexcept {
+            WriteComparisonMetadata(*comparison_products, metadata);
+          });
+          const auto canonical = [&](bool forward, content::ResourceKey normal,
+                                   std::vector<Pixel>& result) {
+            Material(data::MaterialDomain::kOpaque, roughness, metallic,
+              glm::vec3(1), normal);
+            Sky().SetIntensityMul(0);
+            ASSERT_NO_FATAL_FAILURE(render(false, forward, ev, 5));
+            const auto dark = linear();
+            Sky().SetIntensityMul(1);
+            ASSERT_NO_FATAL_FAILURE(render(false, forward, ev, 1));
+            ASSERT_EQ(products.get(), comparison_products.get());
+            result = linear();
+            ASSERT_EQ(result.size(), dark.size());
+            for (std::size_t i = 0; i < result.size(); ++i)
+              for (unsigned c = 0; c < 3; ++c)
+                result[i][c] -= dark[i][c];
+          };
+          std::vector<Pixel> canonical_deferred, canonical_forward;
+          ASSERT_NO_FATAL_FAILURE(canonical(false, {}, canonical_deferred));
+          ASSERT_NO_FATAL_FAILURE(
+            canonical(true, normal_texture, canonical_forward));
+          ASSERT_EQ(canonical_deferred.size(), reference.size());
+          ASSERT_EQ(canonical_forward.size(), reference.size());
+          double canonical_residual = 0, filter_rgb = 0, filter_ev = 0;
+          for (std::size_t i = 0; i < reference.size(); ++i) {
+            for (unsigned c = 0; c < 3; ++c) {
+              const double d = canonical_deferred[i][c];
+              const double f = canonical_forward[i][c];
+              ASSERT_TRUE(std::isfinite(d) && std::isfinite(f));
+              ASSERT_GT(d, 0);
+              ASSERT_GT(f, 0);
+              canonical_residual
+                = std::max(canonical_residual, std::abs(d - f) / d);
+              for (const auto pair :
+                { std::array<double, 2> { reference[i][c], d },
+                  std::array<double, 2> {
+                    double(lit[i][c]) - baseline[i][c], f } }) {
+                filter_rgb
+                  = std::max(filter_rgb, std::abs(pair[0] - pair[1]) / pair[1]);
+                filter_ev
+                  = std::max(filter_ev, std::abs(std::log2(pair[0] / pair[1])));
+              }
+            }
+          }
+          // Keep the normal/F0-matched residual as diagnostic evidence. Its
+          // small transport/sampling differences are not a filtering budget.
+          EXPECT_LE(filter_rgb, .0025);
+          EXPECT_LE(filter_ev, 2.0 / 1024.0);
+          const auto name = std::to_string(source) + "-"
+            + std::to_string(int(metallic)) + "-" + std::to_string(roughness)
+            + "-packed-normal-reference";
+          ASSERT_NO_FATAL_FAILURE(save(name + "-baseline", baseline));
+          ASSERT_NO_FATAL_FAILURE(save(name + "-lit", lit));
+          ASSERT_NO_FATAL_FAILURE(
+            save(name + "-canonical-deferred", canonical_deferred));
+          ASSERT_NO_FATAL_FAILURE(
+            save(name + "-canonical-forward", canonical_forward));
+          packed_references.push_back(
+            { { "name", name }, { "packed_inputs", packed },
+              { "normal", { normal.x, normal.y, normal.z } },
+              { "f0_relative_bound", f0_bound },
+              { "maximum_residual", maximum_residual },
+              { "canonical_residual", canonical_residual },
+              { "filter_relative_rgb", filter_rgb },
+              { "filter_stops", filter_ev } });
+        }
+      }
+    }
+    if (!output.empty()) {
+      std::ofstream manifest(output);
+      ASSERT_TRUE(manifest.good());
+      manifest << nlohmann::json {
+        { "width", width }, { "height", height }, { "cases", records },
+        { "packed_normal_references", packed_references },
+        { "maximum_relative_error", maximum_relative },
+        { "maximum_display_peak_code_equivalents", maximum_display_peak_codes },
+        { "maximum_display_rms_code_equivalents", maximum_display_rms_codes },
+        { "display_limits",
+          { { "peak_code_equivalents", 4 }, { "rms_code_equivalents", 1 } } }
+      }.dump(2);
+      ASSERT_TRUE(manifest.good());
+    }
+    RecordProperty("image_cases", cases);
+    RecordProperty("maximum_image_relative_error", maximum_relative);
   }
 
 } // namespace

@@ -351,11 +351,11 @@ Environment-family execution is split as follows:
 ### 2.3 Boundary Rules
 
 - Stage 12 remains direct-lighting only.
-- Stage 13 remains the future canonical owner for indirect environment
-  evaluation, reflections, AO, and ambient-bridge retirement.
+- Stage 13 evaluates environment diffuse/specular lighting. Broader reflection
+  and AO production remain future work under the same owner.
 - Stage 14 and Stage 15 are both owned by the Environment family.
 - Sky-light coupling required by atmosphere/fog/local-volumetric media is part
-  of the Environment family even before Stage 13 exists.
+  of the Environment family; surface evaluation belongs to Stage 13.
 - Clouds remain excluded; this document must not silently pull them into scope.
 
 ## 3. Environment Feature Summary
@@ -547,7 +547,7 @@ Authoring file:
 #### 4.2.3 `scene::environment::SkyLight`
 
 `SkyLight` provides environment-family coupling for atmosphere, fog, local
-media, and later indirect-lighting consumers.
+media, and indirect-lighting consumers.
 
 Required authored fields:
 
@@ -558,7 +558,9 @@ Required authored fields:
 - `tint_rgb`
 - `diffuse_intensity`
 - `specular_intensity`
-- `real_time_capture_enabled`
+- `source_cubemap_angle_radians`
+- `lower_hemisphere_is_solid_color`
+- `lower_hemisphere_blend_alpha`
 - `lower_hemisphere_color`
 - `volumetric_scattering_intensity`
 - `affect_reflections`
@@ -810,7 +812,9 @@ Fields must match the authored Scene types in Section 4.
 
 `SkyLightEnvironmentRecord` must explicitly include:
 
-- `real_time_capture_enabled`
+- `source_cubemap_angle_radians`
+- `lower_hemisphere_is_solid_color`
+- `lower_hemisphere_blend_alpha`
 - `lower_hemisphere_color`
 - `volumetric_scattering_intensity`
 - `affect_reflections`
@@ -1394,9 +1398,11 @@ Required proof surfaces:
 
 The current environment path implements atmosphere, two atmosphere-light slots,
 analytic height/local fog, volumetric fog, publication and DemoShell authoring.
-The remaining extensions have shared tracker entries:
+Captured atmosphere/height-fog and specified-cubemap diffuse/specular products
+use automatic immediate/budgeted updates through
+[VX-IBL-01](../milestones/VX-IBL-01/README.md). Stage 13 and forward surfaces
+consume the complete product set. Remaining extensions have shared tracker entries:
 
-- [VX-IBL-01](../milestones/VX-IBL-01/README.md): captured atmosphere/height-fog and specular products, immediate/budgeted updates, Stage 13 and ambient-bridge retirement.
 - VX-FOG-01: height-fog inscattering cubemaps.
 - VX-AP-01: reflection/360-view aerial-perspective resources.
 - VX-SKY-01: cubemap blending, occlusion/baking and probe extensions.
@@ -1422,7 +1428,6 @@ The linear-clamp correction is recorded in the
 [filter-gradient manifest](../../../out/build-ninja/analysis/vortex/exposure-lightbench/lifecycle/filter-gradients-manifest.json).
 
 Remaining work is tracked in [OPEN_ITEMS.md](../OPEN_ITEMS.md): height-fog
-cubemap sampling (VX-FOG-01), reflection-view AP resources (VX-AP-01), captured
-sky/specular IBL and Stage 13 activation (VX-IBL-01), clouds and heterogeneous
-volumes (VX-FAMILY-01). The authored height-fog cubemap currently publishes an
+cubemap sampling (VX-FOG-01), reflection-view AP resources (VX-AP-01), clouds
+and heterogeneous volumes (VX-FAMILY-01). The authored height-fog cubemap currently publishes an
 invalid SRV and zero mip count; the reflection-360 AP constant remains zero.
