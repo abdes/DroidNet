@@ -26,12 +26,16 @@
 #include <glm/geometric.hpp>
 #include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
+#include <wrl/client.h>
 
+#include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Data/HalfFloat.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecording.h>
 #include <Oxygen/Graphics/Common/FrameCaptureController.h>
+#include <Oxygen/Graphics/Common/Internal/SubmissionFaultTestAccess.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Direct3D12/CommandQueue.h>
 #include <Oxygen/Vortex/Environment/Internal/IblBrdfLookup.h>
 #include <Oxygen/Vortex/Environment/Internal/IblGpuProcessor.h>
 #include <Oxygen/Vortex/Environment/Internal/StaticSkyLightProcessor.h>
@@ -371,15 +375,16 @@ namespace {
       return { texture, std::move(*registration) };
     }
 
-    template <typename Value>
-    auto ReadBuffer(
-      const IblGpuProducts& products, const graphics::Buffer& buffer) -> Value
+    template <typename Value, typename Owner>
+    auto ReadBuffer(const Owner& products, const graphics::Buffer& buffer)
+      -> Value
     {
       auto readback
         = GetReadbackManager()->CreateBufferReadback("IBL product check");
       SubmitCommands(
         "IBL buffer readback", [&](graphics::CommandRecorder& recorder) {
-          CHECK_F(products.Attach(recorder, Backend().GetResourceRegistry()));
+          CHECK_F(static_cast<bool>(
+            products.Attach(recorder, Backend().GetResourceRegistry())));
           recorder.FlushBarriers();
           CHECK_F(readback->EnqueueCopy(recorder, buffer, { 0U, sizeof(Value) })
               .has_value());
@@ -391,16 +396,17 @@ namespace {
       return value;
     }
 
-    auto ReadFace(const IblGpuProducts& products,
-      const graphics::Texture& texture, std::uint32_t face, std::uint32_t mip)
-      -> std::vector<Pixel>
+    template <typename Owner>
+    auto ReadFace(const Owner& products, const graphics::Texture& texture,
+      std::uint32_t face, std::uint32_t mip) -> std::vector<Pixel>
     {
       const auto size = texture.GetDescriptor().width >> mip;
       auto readback
         = GetReadbackManager()->CreateTextureReadback("IBL face check");
       SubmitCommands(
         "IBL face readback", [&](graphics::CommandRecorder& recorder) {
-          CHECK_F(products.Attach(recorder, Backend().GetResourceRegistry()));
+          CHECK_F(static_cast<bool>(
+            products.Attach(recorder, Backend().GetResourceRegistry())));
           recorder.FlushBarriers();
           CHECK_F(readback
               ->EnqueueCopy(recorder, texture,
@@ -1552,6 +1558,231 @@ namespace {
     ASSERT_TRUE(next.has_value());
     EXPECT_EQ((*next)->slot.generation.get(), 2U);
     EXPECT_EQ(Processor().GetStats().storage_creations, 1U);
+  }
+
+  NOLINT_TEST_F(
+    IblConvolutionGpuTest, CaptureAdmissionReservesNormalUpdateCapacity)
+  {
+    const auto source = MakeSource(
+      16U, [](auto, auto, auto) { return Pixel { 1, 0.5F, 0.25F, 1 }; });
+    const auto brdf = PrepareBrdf();
+    const auto make = [&](std::uint32_t revision) {
+      auto result = Processor().Process(source.texture, source.registration,
+        brdf, { .face_size = 16U }, revision);
+      CHECK_F(result.has_value());
+      return std::move(*result);
+    };
+    auto first = make(501U);
+    auto second = make(502U);
+    auto third = make(503U);
+    auto a = first->AcquireCapture();
+    auto duplicate = first->AcquireCapture();
+    auto b = second->AcquireCapture();
+    ASSERT_TRUE(a && duplicate && b);
+    EXPECT_EQ(Processor().GetStats().captured_generations, 2U);
+    const auto busy = third->AcquireCapture();
+    ASSERT_FALSE(busy);
+    EXPECT_EQ(busy.error(), environment::IblCaptureError::kBusy);
+    first.reset();
+    second.reset();
+    WaitForQueueIdle();
+    Backend().PollCompletedUses();
+    EXPECT_EQ(Processor().GetStats().normal_in_use, 1U);
+    auto normal = std::vector<std::shared_ptr<const IblGpuProducts>> { third };
+    for (unsigned i = 1U; i < IblGpuProcessor::kNormalSlots; ++i)
+      normal.push_back(make(503U + i));
+    EXPECT_EQ(
+      Processor().GetStats().normal_in_use, IblGpuProcessor::kNormalSlots);
+    EXPECT_EQ(Processor().GetStats().available, 0U);
+    const auto full = Processor().Process(
+      source.texture, source.registration, brdf, { .face_size = 16U }, 599U);
+    ASSERT_FALSE(full);
+    EXPECT_EQ(full.error(), environment::internal::IblProcessError::kPoolBusy);
+    EXPECT_EQ(ReadBuffer<environment::IblProductMetadata>(*a, *a->Metadata())
+                .product_revision,
+      501U);
+    WaitForQueueIdle();
+    Backend().PollCompletedUses();
+    *a = {};
+    EXPECT_EQ(Processor().GetStats().captured_generations, 2U);
+    *duplicate = {};
+    EXPECT_EQ(Processor().GetStats().captured_generations, 1U);
+    EXPECT_EQ(Processor().GetStats().available, 1U);
+    const auto still_full = Processor().Process(
+      source.texture, source.registration, brdf, { .face_size = 16U }, 599U);
+    ASSERT_FALSE(still_full);
+    EXPECT_EQ(
+      still_full.error(), environment::internal::IblProcessError::kPoolBusy);
+    auto c = third->AcquireCapture();
+    ASSERT_TRUE(c);
+    normal.pop_back();
+    WaitForQueueIdle();
+    Backend().PollCompletedUses();
+    normal.push_back(make(599U));
+    EXPECT_EQ(
+      Processor().GetStats().storage_creations, IblGpuProcessor::kMaximumSlots);
+    EXPECT_EQ(Processor().GetStats().captured_generations, 2U);
+  }
+
+  NOLINT_TEST_F(IblConvolutionGpuTest,
+    CaptureRecordingsHoldAdmissionThroughDiscardAndCompletion)
+  {
+    const auto source = MakeSource(
+      16U, [](auto, auto, auto) { return Pixel { 1, 0.5F, 0.25F, 1 }; });
+    auto result = Processor().Process(source.texture, source.registration,
+      PrepareBrdf(), { .face_size = 16U }, 601U);
+    ASSERT_TRUE(result);
+    auto product = std::move(*result);
+    auto capture = product->AcquireCapture();
+    ASSERT_TRUE(capture);
+    product.reset();
+    WaitForQueueIdle();
+    Backend().PollCompletedUses();
+    auto pending = AcquireRecorder("IBL capture discard",
+      graphics::QueueRole::kGraphics, graphics::SubmissionPolicy::kExplicit);
+    ASSERT_TRUE(capture->Attach(*pending, Backend().GetResourceRegistry()));
+    *capture = {};
+    EXPECT_EQ(Processor().GetStats().captured_generations, 1U);
+    EXPECT_EQ(Processor().GetStats().normal_in_use, 0U);
+    pending.Discard();
+    EXPECT_EQ(Processor().GetStats().captured_generations, 0U);
+    EXPECT_EQ(Processor().GetStats().available, IblGpuProcessor::kMaximumSlots);
+
+    result = Processor().Process(source.texture, source.registration,
+      PrepareBrdf(), { .face_size = 16U }, 602U);
+    ASSERT_TRUE(result);
+    product = std::move(*result);
+    capture = product->AcquireCapture();
+    ASSERT_TRUE(capture);
+    product.reset();
+    WaitForQueueIdle();
+    Backend().PollCompletedUses();
+    auto readback
+      = GetReadbackManager()->CreateBufferReadback("IBL retained capture");
+    auto submitted = AcquireRecorder("IBL capture completion",
+      graphics::QueueRole::kGraphics, graphics::SubmissionPolicy::kExplicit);
+    ASSERT_TRUE(capture->Attach(*submitted, Backend().GetResourceRegistry()));
+    submitted->FlushBarriers();
+    ASSERT_TRUE(readback->EnqueueCopy(*submitted, *capture->Metadata(),
+      { 0U, sizeof(environment::IblProductMetadata) }));
+    *capture = {};
+    Microsoft::WRL::ComPtr<ID3D12Fence> gate;
+    ASSERT_TRUE(SUCCEEDED(Backend().GetCurrentDevice()->CreateFence(
+      0U, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(gate.GetAddressOf()))));
+    const auto release_gate
+      = ScopeGuard([gate]() noexcept { static_cast<void>(gate->Signal(1U)); });
+    auto* queue = static_cast<graphics::d3d12::CommandQueue*>(GetQueue().get());
+    ASSERT_TRUE(SUCCEEDED(queue->GetCommandQueue()->Wait(gate.Get(), 1U)));
+    ASSERT_TRUE(submitted.Submit());
+    Backend().PollCompletedUses();
+    EXPECT_EQ(Processor().GetStats().captured_generations, 1U);
+    EXPECT_EQ(Processor().GetStats().normal_in_use, 0U);
+    // GPU pins must not own Graphics: its queues own the submitted batch.
+    const auto owners_while_pending = GetGraphicsShared().use_count();
+    ASSERT_TRUE(SUCCEEDED(gate->Signal(1U)));
+    WaitForQueueIdle();
+    Backend().PollCompletedUses();
+    EXPECT_EQ(GetGraphicsShared().use_count(), owners_while_pending);
+    auto mapped = readback->MapNow();
+    ASSERT_TRUE(mapped);
+    auto metadata = environment::IblProductMetadata {};
+    std::memcpy(&metadata, mapped->Bytes().data(), sizeof(metadata));
+    EXPECT_EQ(metadata.product_revision, 602U);
+    WaitForQueueIdle();
+    Backend().PollCompletedUses();
+    EXPECT_EQ(Processor().GetStats().captured_generations, 0U);
+    EXPECT_EQ(Processor().GetStats().available, IblGpuProcessor::kMaximumSlots);
+  }
+
+  NOLINT_TEST_F(
+    IblConvolutionGpuTest, RejectedCaptureSubmissionRetainsRetryableLease)
+  {
+    const auto source = MakeSource(
+      16U, [](auto, auto, auto) { return Pixel { 1, 0.5F, 0.25F, 1 }; });
+    auto result = Processor().Process(source.texture, source.registration,
+      PrepareBrdf(), { .face_size = 16U }, 650U);
+    ASSERT_TRUE(result);
+    auto product = std::move(*result);
+    auto capture = product->AcquireCapture();
+    ASSERT_TRUE(capture);
+    product.reset();
+    WaitForQueueIdle();
+    Backend().PollCompletedUses();
+    auto rejected = AcquireRecorder("IBL rejected capture",
+      graphics::QueueRole::kGraphics, graphics::SubmissionPolicy::kExplicit);
+    ASSERT_TRUE(capture->Attach(*rejected, Backend().GetResourceRegistry()));
+    graphics::internal::SubmissionFaultTestAccess::FailNext(
+      *GetQueue(), graphics::internal::SubmissionFailurePoint::kBeforeIssue);
+    EXPECT_EQ(rejected.SubmitWithReceipt().outcome,
+      graphics::SubmissionOutcome::kDiscarded);
+    EXPECT_FALSE(Backend().GetBackendLifetime()->IsFaulted());
+    EXPECT_EQ(Processor().GetStats().captured_generations, 1U);
+    EXPECT_EQ(ReadBuffer<environment::IblProductMetadata>(
+                *capture, *capture->Metadata())
+                .product_revision,
+      650U);
+    *capture = {};
+    WaitForQueueIdle();
+    Backend().PollCompletedUses();
+    EXPECT_EQ(Processor().GetStats().captured_generations, 0U);
+    EXPECT_EQ(Processor().GetStats().available, IblGpuProcessor::kMaximumSlots);
+  }
+
+  NOLINT_TEST_F(
+    IblConvolutionGpuTest, BackendFaultGateRejectsCaptureAdmissionAndAttachment)
+  {
+    const auto source = MakeSource(
+      16U, [](auto, auto, auto) { return Pixel { 1, 0.5F, 0.25F, 1 }; });
+    const auto result = Processor().Process(source.texture, source.registration,
+      PrepareBrdf(), { .face_size = 16U }, 660U);
+    ASSERT_TRUE(result);
+    const auto capture = (*result)->AcquireCapture();
+    ASSERT_TRUE(capture);
+    WaitForQueueIdle();
+    Backend().PollCompletedUses();
+    auto recording = AcquireRecorder("IBL faulted capture",
+      graphics::QueueRole::kGraphics, graphics::SubmissionPolicy::kExplicit);
+    const auto backend = Backend().GetBackendLifetime();
+    // Exercise the existing admission gate without issuing uncertain GPU work.
+    backend->MarkSubmissionFault();
+    const auto restore
+      = ScopeGuard([backend]() noexcept { backend->ClearSubmissionFault(); });
+    const auto denied = (*result)->AcquireCapture();
+    ASSERT_FALSE(denied);
+    EXPECT_EQ(denied.error(), environment::IblCaptureError::kClosed);
+    const auto attachment
+      = capture->Attach(*recording, Backend().GetResourceRegistry());
+    ASSERT_FALSE(attachment);
+    EXPECT_EQ(attachment.error(), environment::IblCaptureError::kClosed);
+    EXPECT_EQ(Processor().GetStats().captured_generations, 1U);
+    recording.Discard();
+  }
+
+  NOLINT_TEST_F(
+    IblConvolutionGpuTest, AdmittedCaptureSurvivesGracefulPoolClosure)
+  {
+    const auto source = MakeSource(
+      16U, [](auto, auto, auto) { return Pixel { 2, 1, 0.5F, 1 }; });
+    auto result
+      = Processor().Process(source.texture, source.registration, PrepareBrdf(),
+        { .face_size = 16U, .lower_hemisphere_solid_color = false }, 701U);
+    ASSERT_TRUE(result);
+    auto product = std::move(*result);
+    auto capture = product->AcquireCapture();
+    ASSERT_TRUE(capture);
+    Processor().Close();
+    const auto denied = product->AcquireCapture();
+    ASSERT_FALSE(denied);
+    EXPECT_EQ(denied.error(), environment::IblCaptureError::kClosed);
+    product.reset();
+    processor_.reset();
+    brdf_resources_.reset();
+    EXPECT_EQ(ReadBuffer<environment::IblProductMetadata>(
+                *capture, *capture->Metadata())
+                .product_revision,
+      701U);
+    EXPECT_EQ(ReadFace(*capture, *capture->SpecularCube(), 0U, 0U).front(),
+      (Pixel { 2, 1, 0.5F, 1 }));
   }
 
   NOLINT_TEST_F(IblConvolutionGpuTest, RetainedProductsSurvivePoolClosure)

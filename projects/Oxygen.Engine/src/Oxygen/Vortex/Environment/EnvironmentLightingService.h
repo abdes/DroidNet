@@ -7,6 +7,7 @@
 #pragma once
 
 #include <cstdint>
+#include <expected>
 #include <memory>
 #include <unordered_map>
 
@@ -17,6 +18,7 @@
 #include <Oxygen/Vortex/Environment/Passes/VolumetricFogPass.h>
 #include <Oxygen/Vortex/Environment/Types/EnvironmentProbeState.h>
 #include <Oxygen/Vortex/Environment/Types/EnvironmentViewProducts.h>
+#include <Oxygen/Vortex/Environment/Types/IblCaptureLease.h>
 #include <Oxygen/Vortex/Types/EnvironmentFrameBindings.h>
 #include <Oxygen/Vortex/Types/EnvironmentStaticData.h>
 #include <Oxygen/Vortex/Types/EnvironmentViewData.h>
@@ -340,6 +342,9 @@ public:
   }
   [[nodiscard]] OXGN_VRTX_API auto InspectAtmosphereState() const noexcept
     -> const environment::internal::StableAtmosphereState&;
+  [[nodiscard]] OXGN_VRTX_API auto AcquireIblCapture(ViewId view)
+    -> std::expected<environment::IblCaptureLease,
+      environment::IblCaptureError>;
   [[nodiscard]] OXGN_VRTX_API auto InspectAtmosphereLightState() const noexcept
     -> const environment::internal::ResolvedAtmosphereLightState&;
 

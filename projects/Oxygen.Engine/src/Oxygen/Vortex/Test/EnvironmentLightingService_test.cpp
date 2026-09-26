@@ -4232,10 +4232,70 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
     = !state.view_products.atmosphere.render_in_main_pass;
   state.view_products.height_fog.render_in_main_pass
     = !state.view_products.height_fog.render_in_main_pass;
+  state.view_products.atmosphere.aerial_perspective_distance_scale = 20.0F;
+  state.view_products.atmosphere.aerial_scattering_strength = 5.0F;
+  state.view_products.atmosphere.aerial_perspective_start_depth_m = 5000.0F;
   EXPECT_EQ(internal::HashSkyCaptureInputs(state), original);
   state.view_products.atmosphere_lights[0].illuminance_rgb_lux
     = glm::vec3(1000.0F);
   EXPECT_NE(internal::HashSkyCaptureInputs(state), original);
+}
+
+NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
+  CaptureSourceIdentityIncludesParticipatingNodeGeneration)
+{
+  namespace internal = oxygen::vortex::environment::internal;
+  auto state = internal::StableAtmosphereState {};
+  state.view_products.atmosphere.enabled = true;
+  state.view_products.atmosphere_lights[0].enabled = true;
+  state.capture_light_nodes[0] = oxygen::scene::NodeHandle { 7U, 1U };
+  const auto first = internal::HashSkyCaptureInputs(state);
+  state.capture_light_nodes[0].NewGeneration();
+  EXPECT_NE(internal::HashSkyCaptureInputs(state), first);
+  const auto active = internal::HashSkyCaptureInputs(state);
+  state.capture_light_nodes[1] = oxygen::scene::NodeHandle { 9U, 1U };
+  EXPECT_EQ(internal::HashSkyCaptureInputs(state), active);
+  state.view_products.atmosphere_lights[1].enabled = true;
+  EXPECT_NE(internal::HashSkyCaptureInputs(state), active);
+}
+
+NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
+  RecycledAtmosphereLightNodeRefreshesCaptureIdentity)
+{
+  namespace internal = oxygen::vortex::environment::internal;
+  auto scene = std::make_shared<oxygen::scene::Scene>("Recycled IBL light", 8U);
+  scene->SetEnvironment(std::make_unique<oxygen::scene::SceneEnvironment>());
+  scene->GetEnvironment()
+    ->AddSystem<oxygen::scene::environment::SkyAtmosphere>()
+    .SetEnabled(true);
+  const auto make_sun = [&] {
+    auto node = scene->CreateNode("Sun");
+    auto light = std::make_unique<oxygen::scene::DirectionalLight>();
+    light->SetAtmosphereLightSlot(oxygen::scene::AtmosphereLightSlot::kPrimary);
+    EXPECT_TRUE(node.AttachLight(std::move(light)));
+    return node;
+  };
+  auto sun = make_sun();
+  const auto old_handle = sun.GetHandle();
+  scene->Update();
+  scene->SyncObservers();
+  auto service = EnvironmentLightingService(*renderer_);
+  auto ctx = RenderContext {};
+  ctx.scene = oxygen::observer_ptr { scene.get() };
+  std::ignore = service.DescribeViewRadianceLayout(ctx);
+  const auto revision = service.InspectAtmosphereLightState().revision;
+  const auto key
+    = internal::HashSkyCaptureInputs(service.InspectAtmosphereState());
+  ASSERT_TRUE(scene->DestroyNode(sun));
+  auto replacement = make_sun();
+  ASSERT_EQ(replacement.GetHandle().Index(), old_handle.Index());
+  EXPECT_NE(replacement.GetHandle().Generation(), old_handle.Generation());
+  scene->Update();
+  scene->SyncObservers();
+  std::ignore = service.DescribeViewRadianceLayout(ctx);
+  EXPECT_GT(service.InspectAtmosphereLightState().revision, revision);
+  EXPECT_NE(
+    internal::HashSkyCaptureInputs(service.InspectAtmosphereState()), key);
 }
 
 NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,

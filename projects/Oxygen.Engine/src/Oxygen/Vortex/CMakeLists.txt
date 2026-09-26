@@ -135,6 +135,7 @@ set(
   "Environment/Internal/IblBrdfLookup.h"
   "Environment/Internal/IblGpuProcessor.h"
   "Environment/Types/IblProductMetadata.h"
+  "Environment/Types/IblCaptureLease.h"
   "Environment/Passes/SkyPass.h"
   "Environment/Passes/AtmosphereComposePass.h"
   "Environment/Passes/AtmosphereTransmittanceLutPass.h"

@@ -2,13 +2,39 @@
 
 S1 and S2 are validated: common GPU products, captured atmosphere/height fog,
 Stage 13 and forward/translucent lighting, scene/settings migration and automatic
-FP16/FP32 selection pass their native checks. S3–S6 own the remaining cache,
+FP16/FP32 selection pass their native checks. S3 is in progress; S3–S6 own the remaining cache,
 scheduling, UI and integrated performance/lifetime gates.
 
 Read: [current results](#current-results), [reproduce](#reproduce),
 [remaining gates](README.md#acceptance).
 
 ## Current results
+
+[S3 capture admission](evidence/s3-capture-admission/run.json): **43 product/fog
+tests**, **63 environment tests** and **10 native integration tests** pass.
+Two captured generations leave all five normal update slots available once
+ordinary readers drain. Duplicate leases share admission; a third generation
+returns busy while lighting continues updating. Discard, rejected submission,
+delayed GPU completion and pool closure preserve the expected reservation and
+retirement. Pending GPU captures do not retain the external Graphics owner.
+Denied capture after scene expiry preserves next-frame invalidation.
+
+The renderer API retains the requested view's generation across renderer
+shutdown. [RenderDoc replay](evidence/s3-capture-admission/renderdoc.json)
+checks **1,024 scalar values** and **32 metadata bytes** in the retained readback,
+matching revision 2 after later lighting updates.
+[Capture](evidence/s3-capture-admission/retained.rdc).
+The backend-fault check covers admission/attachment rejection; actual device-loss
+teardown, allocation-failure stress and edit intent remain open in S3.
+
+[S3 cache identity](evidence/s3-cache-identity/run.json): **63 environment tests**
+and **three native regressions** pass. Recycled light-node generations invalidate
+capture identity. A failed first update in another scene exposes no previous
+scene product; recovery shares the BRDF. A → B → A rendering reuses each live
+scene's products. Expired-scene cache removal preserves retained product reads.
+Camera-only aerial controls, view-ID
+changes and an inactive specified-cubemap selection reuse captured IBL. Native
+atmosphere output is unchanged by the aerial controls.
 
 [S2 half admission](evidence/s2-half-admission/run.json): **38 product/fog tests**
 and **1,083 raster cases** pass. The GPU certificate checks every actual stored

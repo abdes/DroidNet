@@ -208,16 +208,27 @@ namespace {
 
   struct ProductPool {
     std::mutex mutex;
+    std::shared_ptr<graphics::BackendLifetime> backend;
     nexus::IndexReuse<std::uint32_t> reuse;
     std::array<std::shared_ptr<ProductStorage>, IblGpuProcessor::kMaximumSlots>
       slots;
     std::array<std::uint32_t, IblGpuProcessor::kMaximumSlots> free {};
     std::uint32_t capacity {};
     std::uint32_t available {};
+    std::uint32_t normal_capacity {};
+    std::uint32_t normal_in_use {};
+    std::uint32_t capture_capacity {};
+    std::uint32_t captured_generations {};
     std::uint64_t storage_creations {};
     bool closed { false };
     bool failed { false };
   };
+
+  auto BackendAvailable(const ProductPool& pool) -> bool
+  {
+    return pool.backend->State() == graphics::BackendLifecycle::kActive
+      && !pool.backend->IsFaulted();
+  }
 
   struct ProductVersion {
     std::shared_ptr<ProductPool> pool;
@@ -225,6 +236,8 @@ namespace {
     nexus::VersionedIndex<std::uint32_t> handle;
     std::optional<nexus::RetirementTicket<std::uint32_t>> retirement;
     std::size_t uses {};
+    std::size_t captures {};
+    bool normal_counted { false };
     bool activated { false };
     bool owned { true };
     bool finalized { false };
@@ -233,7 +246,12 @@ namespace {
     // is published; completion callbacks neither allocate nor add frame delays.
     auto Finalize() noexcept -> void
     {
-      if (owned || uses != 0U || finalized || !retirement)
+      if (normal_counted && !owned && uses == 0U) {
+        assert(pool->normal_in_use > 0U);
+        --pool->normal_in_use;
+        normal_counted = false;
+      }
+      if (owned || uses != 0U || captures != 0U || finalized || !retirement)
         return;
       const auto result = retirement->Finalize();
       retirement.reset();
@@ -318,6 +336,70 @@ struct IblGenerationOwner {
   std::shared_ptr<ProductVersion> version;
 };
 
+// Recording batches retain internal pins, never external registration leases.
+struct IblCapturePin {
+  explicit IblCapturePin(std::shared_ptr<ProductVersion> captured_version)
+    : version(std::move(captured_version))
+  {
+  }
+  ~IblCapturePin()
+  {
+    if (!admitted)
+      return;
+    std::lock_guard lock(version->pool->mutex);
+    assert(version->captures > 0U);
+    if (--version->captures == 0U) {
+      assert(version->pool->captured_generations > 0U);
+      --version->pool->captured_generations;
+    }
+    version->Finalize();
+  }
+  IblCapturePin(const IblCapturePin&) = delete;
+  auto operator=(const IblCapturePin&) -> IblCapturePin& = delete;
+  std::shared_ptr<ProductVersion> version;
+  bool admitted { false };
+};
+
+struct IblCaptureLeaseState {
+  IblCaptureLeaseState(
+    const IblGpuProducts& source, std::shared_ptr<IblCapturePin> captured_pin)
+    : products(source)
+    , pin(std::move(captured_pin))
+  {
+    // Capture ownership is independent of ordinary renderer ownership.
+    products.allocation.reset();
+  }
+  IblGpuProducts products;
+  std::shared_ptr<IblCapturePin> pin;
+};
+
+auto IblGpuProducts::AcquireCapture() const
+  -> std::expected<IblCaptureLease, IblCaptureError>
+try {
+  if (!allocation || !producer.IsValid())
+    return std::unexpected(IblCaptureError::kUnavailable);
+  const auto version = allocation->version;
+  const auto operation = version->pool->backend->AcquireOperation();
+  std::lock_guard lock(version->pool->mutex);
+  auto& pool = *version->pool;
+  if (pool.closed || pool.failed || !BackendAvailable(pool) || !version->owned
+    || version->finalized)
+    return std::unexpected(IblCaptureError::kClosed);
+  if (version->captures == 0U
+    && pool.captured_generations >= pool.capture_capacity)
+    return std::unexpected(IblCaptureError::kBusy);
+  auto pin = std::make_shared<IblCapturePin>(version);
+  auto state = std::make_shared<IblCaptureLeaseState>(*this, pin);
+  if (version->captures++ == 0U)
+    ++pool.captured_generations;
+  pin->admitted = true;
+  return IblCaptureLease(std::move(state));
+} catch (const std::bad_alloc&) {
+  return std::unexpected(IblCaptureError::kAllocationFailed);
+} catch (const std::exception&) {
+  return std::unexpected(IblCaptureError::kClosed);
+}
+
 struct IblGpuProcessor::Impl {
   Graphics& graphics;
   std::shared_ptr<ProductPool> pool;
@@ -331,6 +413,9 @@ IblGpuProcessor::IblGpuProcessor(
   if (capacity == 0U || capacity > kMaximumSlots)
     throw std::invalid_argument("IBL capacity exceeds its generation bound");
   impl_->pool->capacity = capacity;
+  impl_->pool->backend = graphics.GetBackendLifetime();
+  impl_->pool->normal_capacity = std::min(capacity, kNormalSlots);
+  impl_->pool->capture_capacity = capacity - impl_->pool->normal_capacity;
   impl_->pool->available = capacity;
   for (auto i = 0U; i < capacity; ++i)
     impl_->pool->free[i] = capacity - i - 1U;
@@ -359,47 +444,132 @@ auto IblGpuProcessor::GetStats() const -> Stats
   auto result = Stats { .capacity = impl_->pool->capacity,
     .available = impl_->pool->available,
     .storage_creations = impl_->pool->storage_creations,
-    .reuse = impl_->pool->reuse.GetTelemetrySnapshot() };
+    .reuse = impl_->pool->reuse.GetTelemetrySnapshot(),
+    .normal_capacity = impl_->pool->normal_capacity,
+    .normal_in_use = impl_->pool->normal_in_use,
+    .capture_capacity = impl_->pool->capture_capacity,
+    .captured_generations = impl_->pool->captured_generations };
   for (const auto& slot : impl_->pool->slots)
     if (slot)
       ++result.allocated;
   return result;
 }
 
+namespace {
+  auto RetainProductRegistrations(const IblGpuProducts& p,
+    graphics::CommandRecorder& recorder, graphics::ResourceRegistry& registry)
+    -> bool
+  {
+    if (!p.producer.IsValid() || !p.brdf || !p.brdf->producer.IsValid()
+      || !p.processed_cube || !p.specular_cube || !p.processed_half_cube
+      || !p.specular_half_cube || !p.diffuse_sh || !p.metadata
+      || recorder.GetTargetQueue()->GetQueueRole()
+        != graphics::QueueRole::kGraphics)
+      return false;
+    for (const auto& registration : p.registrations)
+      if (!recorder.RetainRegistration(registry, registration))
+        return false;
+    return true;
+  }
+
+  auto BindProductResources(
+    const IblGpuProducts& p, graphics::CommandRecorder& recorder) -> void
+  {
+    recorder.RecordDependency(p.producer);
+    Track(recorder, *p.brdf->texture);
+    recorder.RequireResourceState(
+      *p.brdf->texture, ResourceStates::kShaderResource);
+    Track(recorder, *p.processed_cube);
+    Track(recorder, *p.specular_cube);
+    Track(recorder, *p.processed_half_cube);
+    Track(recorder, *p.specular_half_cube);
+    Track(recorder, *p.diffuse_sh);
+    Track(recorder, *p.metadata);
+    recorder.RequireResourceState(
+      *p.processed_cube, ResourceStates::kShaderResource);
+    recorder.RequireResourceState(
+      *p.specular_cube, ResourceStates::kShaderResource);
+    recorder.RequireResourceState(
+      *p.processed_half_cube, ResourceStates::kShaderResource);
+    recorder.RequireResourceState(
+      *p.specular_half_cube, ResourceStates::kShaderResource);
+    recorder.RequireResourceState(
+      *p.diffuse_sh, ResourceStates::kShaderResource);
+    recorder.RequireResourceState(*p.metadata, ResourceStates::kShaderResource);
+  }
+} // namespace
+
 auto IblGpuProducts::Attach(graphics::CommandRecorder& recorder,
   graphics::ResourceRegistry& registry) const -> bool
 {
-  if (!allocation || !producer.IsValid() || !brdf || !brdf->producer.IsValid()
-    || !processed_cube || !specular_cube || !processed_half_cube
-    || !specular_half_cube || !diffuse_sh || !metadata
-    || recorder.GetTargetQueue()->GetQueueRole()
-      != graphics::QueueRole::kGraphics)
+  if (!allocation || !RetainProductRegistrations(*this, recorder, registry))
     return false;
-  for (const auto& registration : registrations)
-    if (!recorder.RetainRegistration(registry, registration))
-      return false;
   AttachVersion(recorder, allocation->version);
-  recorder.RecordDependency(producer);
-  Track(recorder, *brdf->texture);
-  recorder.RequireResourceState(
-    *brdf->texture, ResourceStates::kShaderResource);
-  Track(recorder, *processed_cube);
-  Track(recorder, *specular_cube);
-  Track(recorder, *processed_half_cube);
-  Track(recorder, *specular_half_cube);
-  Track(recorder, *diffuse_sh);
-  Track(recorder, *metadata);
-  recorder.RequireResourceState(
-    *processed_cube, ResourceStates::kShaderResource);
-  recorder.RequireResourceState(
-    *specular_cube, ResourceStates::kShaderResource);
-  recorder.RequireResourceState(
-    *processed_half_cube, ResourceStates::kShaderResource);
-  recorder.RequireResourceState(
-    *specular_half_cube, ResourceStates::kShaderResource);
-  recorder.RequireResourceState(*diffuse_sh, ResourceStates::kShaderResource);
-  recorder.RequireResourceState(*metadata, ResourceStates::kShaderResource);
+  BindProductResources(*this, recorder);
   return true;
+}
+
+static auto AttachCapture(const std::shared_ptr<IblCaptureLeaseState>& state,
+  graphics::CommandRecorder& recorder, graphics::ResourceRegistry& registry)
+  -> std::expected<void, IblCaptureError>
+try {
+  if (!state)
+    return std::unexpected(IblCaptureError::kClosed);
+  const auto& pin = state->pin;
+  if (!BackendAvailable(*pin->version->pool))
+    return std::unexpected(IblCaptureError::kClosed);
+  const auto operation = pin->version->pool->backend->AcquireOperation();
+  {
+    std::lock_guard lock(pin->version->pool->mutex);
+    if (pin->version->pool->failed || pin->version->finalized)
+      return std::unexpected(IblCaptureError::kClosed);
+  }
+  if (!RetainProductRegistrations(state->products, recorder, registry))
+    return std::unexpected(IblCaptureError::kRecordingFailed);
+  BindProductResources(state->products, recorder);
+  recorder.RetainOpaqueUse(pin, 0x49424c4341505455ULL, pin.get(),
+    { .prepare =
+        [](void* pointer, graphics::QueueIdentity) {
+          auto& value = *static_cast<IblCapturePin*>(pointer);
+          std::lock_guard lock(value.version->pool->mutex);
+          if (!value.admitted || value.version->finalized
+            || value.version->pool->failed
+            || !BackendAvailable(*value.version->pool))
+            throw std::logic_error("IBL capture is closed");
+        },
+      .valid =
+        [](const void* pointer) noexcept {
+          const auto& value = *static_cast<const IblCapturePin*>(pointer);
+          std::lock_guard lock(value.version->pool->mutex);
+          return !value.version->finalized && !value.version->pool->failed
+            && BackendAvailable(*value.version->pool);
+        },
+      .submitted =
+        [](void* pointer, graphics::QueueIdentity,
+          const graphics::SubmissionResult& result) noexcept {
+          if (result.outcome
+            != graphics::SubmissionOutcome::kExecutionUncertain)
+            return;
+          auto& pool = *static_cast<IblCapturePin*>(pointer)->version->pool;
+          std::lock_guard lock(pool.mutex);
+          pool.failed = pool.closed = true;
+          pool.reuse.Close();
+        },
+      .released =
+        [](void* pointer, graphics::QueueIdentity, graphics::SubmissionOutcome,
+          graphics::UseReleaseReason reason) noexcept {
+          if (reason != graphics::UseReleaseReason::kDeviceLost)
+            return;
+          auto& pool = *static_cast<IblCapturePin*>(pointer)->version->pool;
+          std::lock_guard lock(pool.mutex);
+          pool.failed = pool.closed = true;
+          pool.reuse.Close();
+        } });
+  return {};
+} catch (const std::bad_alloc&) {
+  return std::unexpected(IblCaptureError::kAllocationFailed);
+} catch (const std::exception&) {
+  return std::unexpected(IblCaptureError::kRecordingFailed);
 }
 
 auto IblGpuProcessor::Process(const std::shared_ptr<graphics::Texture>& source,
@@ -508,7 +678,8 @@ auto IblGpuProcessor::ProcessSource(
       std::lock_guard lock(version->pool->mutex);
       if (version->pool->closed)
         return std::unexpected(IblProcessError::kClosed);
-      if (version->pool->available == 0U)
+      if (version->pool->available == 0U
+        || version->pool->normal_in_use >= version->pool->normal_capacity)
         return std::unexpected(IblProcessError::kPoolBusy);
       const auto index = version->pool->free[--version->pool->available];
       try {
@@ -518,6 +689,8 @@ auto IblGpuProcessor::ProcessSource(
         throw;
       }
       version->activated = true;
+      version->normal_counted = true;
+      ++version->pool->normal_in_use;
       version->storage = version->pool->slots[index];
     }
     auto source_srv = resident_srv;
@@ -895,3 +1068,56 @@ auto IblGpuProcessor::ProcessSource(
 }
 
 } // namespace oxygen::vortex::environment::internal
+
+namespace oxygen::vortex::environment {
+
+IblCaptureLease::IblCaptureLease(
+  std::shared_ptr<internal::IblCaptureLeaseState> state) noexcept
+  : state_(std::move(state))
+{
+}
+
+auto IblCaptureLease::Attach(graphics::CommandRecorder& recorder,
+  graphics::ResourceRegistry& registry) const
+  -> std::expected<void, IblCaptureError>
+{
+  return internal::AttachCapture(state_, recorder, registry);
+}
+
+auto IblCaptureLease::Revision() const noexcept -> std::uint32_t
+{
+  return state_ ? state_->products.revision : 0U;
+}
+
+auto IblCaptureLease::ProcessedCube() const
+  -> std::shared_ptr<const graphics::Texture>
+{
+  return state_ ? state_->products.processed_cube : nullptr;
+}
+auto IblCaptureLease::SpecularCube() const
+  -> std::shared_ptr<const graphics::Texture>
+{
+  return state_ ? state_->products.specular_cube : nullptr;
+}
+auto IblCaptureLease::ProcessedHalfCube() const
+  -> std::shared_ptr<const graphics::Texture>
+{
+  return state_ ? state_->products.processed_half_cube : nullptr;
+}
+auto IblCaptureLease::SpecularHalfCube() const
+  -> std::shared_ptr<const graphics::Texture>
+{
+  return state_ ? state_->products.specular_half_cube : nullptr;
+}
+auto IblCaptureLease::DiffuseSh() const
+  -> std::shared_ptr<const graphics::Buffer>
+{
+  return state_ ? state_->products.diffuse_sh : nullptr;
+}
+auto IblCaptureLease::Metadata() const
+  -> std::shared_ptr<const graphics::Buffer>
+{
+  return state_ ? state_->products.metadata : nullptr;
+}
+
+} // namespace oxygen::vortex::environment

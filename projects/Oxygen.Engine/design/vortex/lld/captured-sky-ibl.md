@@ -417,10 +417,21 @@ capture-visible height-fog parameters and their radiance inputs, global anchor,
 hemisphere/yaw policy, dimensions/formats and processing revision. Specified-cube
 keys use asset/processing inputs rather than unrelated atmosphere/fog state.
 
+Use the scene's process-unique lifetime ID and each active light's full node
+handle, including its generation. Keep one cache per live scene so interleaved
+views reuse their scene's products. Switching scenes clears active publication
+before selecting or updating the target cache; an update failure cannot expose
+another scene's products. Scene expiry invalidates active publication; frame and
+source-update boundaries retire expired caches. Submitted readers retain their
+existing ownership. The BRDF lookup
+is shared by the renderer/device.
+
 Intensity/tint/diffuse/specular multipliers and AffectReflections update evaluation
 bindings without reconvolution. Exposure, grading, display background, geometry,
 materials, workspace Hide and consumer camera movement/resize do not change the
 captured source key. Fog capture visibility and effective radiance changes do.
+Camera aerial-perspective distance, strength and start depth are view-only;
+the inactive specified-cubemap selection does not affect CapturedScene identity.
 
 | Event                                                                                            | Execution                                                  | Visible result                                                                                   |
 | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
@@ -482,6 +493,21 @@ result before accepting the capture. Never reclaim a live lease. Count resources
 descriptors and metadata together; bound bytes using the admitted dimensions and
 formats. Reuse existing retirement primitives, adding admission at the IBL owner.
 Generic texture-pool reuse alone does not establish this bound.
+
+`Renderer::AcquireIblCapture(view_id)` admits the complete generation published
+for that view. Copies share admission. `IblCaptureLease::Attach` retains the
+generation through recording discard or GPU completion; dropping the CPU lease
+does not free a pending GPU reader's allowance. The CPU lease holds external
+registration leases; submitted batches hold internal generation/registration
+pins, so queue ownership cannot keep Graphics alive through a cycle.
+
+Normal occupancy ends when renderer ownership and ordinary GPU uses drain.
+A captured generation then occupies only its reserved capture slot. With three
+frames in flight, the per-scene bound is five normal plus two capture slots.
+Scene expiry or renderer shutdown closes new admission; an already admitted
+lease remains readable while the Graphics backend is active. Backend closure
+or fault rejects attachment. Scene-expiry invalidation remains pending until
+the environment consumes it or publishes a replacement state.
 
 Reuse resources after all readers drain. Genuine allocation or normal-pool
 exhaustion follows the failure rules below rather than adding a CPU wait or

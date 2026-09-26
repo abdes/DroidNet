@@ -3120,6 +3120,14 @@ auto SceneRenderer::InspectExposureSettings(
                        : std::nullopt;
 }
 
+auto SceneRenderer::AcquireIblCapture(const ViewId view)
+  -> std::expected<environment::IblCaptureLease, environment::IblCaptureError>
+{
+  if (!environment_)
+    return std::unexpected(environment::IblCaptureError::kUnavailable);
+  return environment_->AcquireIblCapture(view);
+}
+
 auto SceneRenderer::GetLastEnvironmentLightingState() const
   -> const EnvironmentLightingState&
 {

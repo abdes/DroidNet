@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <bit>
+#include <cstddef>
 #include <cstdint>
 
 #include <Oxygen/Scene/Environment/Fog.h>
@@ -383,6 +384,10 @@ auto HashSkyCaptureInputs(const StableAtmosphereState& state) -> std::uint64_t
   atmosphere.sun_disk_enabled = false;
   atmosphere.render_in_main_pass = true;
   atmosphere.holdout = false;
+  // These controls affect camera aerial perspective, not captured sky rays.
+  atmosphere.aerial_perspective_distance_scale = 1.0F;
+  atmosphere.aerial_scattering_strength = 1.0F;
+  atmosphere.aerial_perspective_start_depth_m = 0.0F;
   auto fog = state.view_products.height_fog;
   fog.render_in_main_pass = true;
   fog.visible_in_reflection_captures = true;
@@ -390,10 +395,16 @@ auto HashSkyCaptureInputs(const StableAtmosphereState& state) -> std::uint64_t
   fog.holdout = false;
   auto hash
     = HashCombineU64(HashAtmosphereModel(atmosphere), HashHeightFogModel(fog));
-  for (const auto& light : state.view_products.atmosphere_lights) {
+  for (std::size_t index = 0;
+    index < state.view_products.atmosphere_lights.size(); ++index) {
+    const auto& light = state.view_products.atmosphere_lights[index];
     hash = HashCombineU64(hash, light.enabled);
     if (!light.enabled)
       continue;
+    const auto node = state.capture_light_nodes[index];
+    hash = HashCombineU64(hash, node.Index());
+    hash = HashCombineU64(hash, node.Generation());
+    hash = HashCombineU64(hash, node.GetSceneId());
     for (unsigned c = 0; c < 3; ++c) {
       hash = HashCombineU64(hash, FloatBits(light.direction_to_light_ws[c]));
       hash = HashCombineU64(hash, FloatBits(light.illuminance_rgb_lux[c]));
@@ -416,6 +427,7 @@ auto AtmosphereState::Update(const scene::Scene& scene_ref,
   next.view_products.volumetric_fog
     = BuildVolumetricFogModel(environment_systems);
   next.view_products.atmosphere_lights = light_state.atmosphere_lights;
+  next.capture_light_nodes = light_state.source_nodes;
   next.view_products.atmosphere_light_count = light_state.active_light_count;
   next.light_revision = light_state.revision;
 

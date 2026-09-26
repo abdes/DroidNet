@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <memory>
 
 #include <Oxygen/Vortex/Environment/Internal/IblGpuProcessor.h>
@@ -43,6 +44,8 @@ namespace internal {
 
     OXGN_VRTX_API explicit IblProcessor(Renderer& renderer);
     OXGN_VRTX_API ~IblProcessor();
+    //! Retire expired scene caches; report invalidated active publication.
+    OXGN_VRTX_API auto OnFrameStart() -> bool;
 
     IblProcessor(const IblProcessor&) = delete;
     auto operator=(const IblProcessor&) -> IblProcessor& = delete;
@@ -58,8 +61,13 @@ namespace internal {
       const std::shared_ptr<resources::TextureBinder>& binder) -> RefreshState;
     [[nodiscard]] OXGN_VRTX_API auto GetPublishedProducts() const
       -> std::shared_ptr<const IblGpuProducts>;
+    [[nodiscard]] OXGN_VRTX_API auto GetCachedSceneCount() const -> std::size_t;
+    [[nodiscard]] OXGN_VRTX_API auto AcquireCapture(
+      const std::shared_ptr<const IblGpuProducts>& products)
+      -> std::expected<IblCaptureLease, IblCaptureError>;
 
   private:
+    auto RetireExpiredScenes() -> void;
     struct Cache;
 
     Renderer& renderer_;

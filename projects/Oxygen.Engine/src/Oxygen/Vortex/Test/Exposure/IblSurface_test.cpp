@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <expected>
 #include <functional>
 #include <memory>
 #include <span>
@@ -31,6 +32,7 @@
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/FrameCaptureController.h>
+#include <Oxygen/Graphics/Common/Test/CommandRecordingTestSupport.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Scene/Environment/Fog.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
@@ -717,6 +719,78 @@ namespace {
       std::to_string(maximum_rgb_error));
     RecordProperty(
       "captured_half_surface_max_ev", std::to_string(maximum_ev_error));
+  }
+
+  NOLINT_TEST_F(IblSurfaceGpuTest,
+    RendererCaptureAdmissionPreservesLiveUpdatesAndRetainedReads)
+  {
+    const auto unavailable
+      = renderer_->AcquireIblCapture(ViewId { surface_view_id });
+    ASSERT_FALSE(unavailable);
+    EXPECT_EQ(unavailable.error(), environment::IblCaptureError::kUnavailable);
+    Sky().SetSpecularIntensity(0.0F);
+    Material(data::MaterialDomain::kOpaque, 1.0F, 0.0F, glm::vec3(1.0F));
+    auto acquired = std::expected<environment::IblCaptureLease,
+      environment::IblCaptureError>(
+      std::unexpected(environment::IblCaptureError::kUnavailable));
+    probe->inspect = [&](const auto& context, const auto&, unsigned) {
+      acquired = renderer_->AcquireIblCapture(context.current_view.view_id);
+    };
+    const auto publish = [&](float value) {
+      Sky().SetCubemapResource(Texture(16U, true, [value](auto, auto, auto) {
+        return Pixel { value, value, value, 1 };
+      }));
+      RenderSurface(false, 0.0F);
+    };
+    ASSERT_NO_FATAL_FAILURE(publish(1.0F));
+    ASSERT_TRUE(acquired);
+    auto first = std::move(*acquired);
+    ASSERT_NO_FATAL_FAILURE(publish(2.0F));
+    ASSERT_TRUE(acquired);
+    auto second = std::move(*acquired);
+    EXPECT_GT(second.Revision(), first.Revision());
+    ASSERT_NO_FATAL_FAILURE(publish(3.0F));
+    ASSERT_FALSE(acquired);
+    EXPECT_EQ(acquired.error(), environment::IblCaptureError::kBusy);
+    EXPECT_NEAR(ReadFloatTexture(*probe->color).front()[0], 3.0F, 0.003F);
+    first = {};
+    WaitForQueueIdle();
+    Backend().PollCompletedUses();
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F, 1U));
+    ASSERT_TRUE(acquired);
+    auto third = std::move(*acquired);
+    EXPECT_GT(third.Revision(), second.Revision());
+    probe->inspect = {};
+    const auto capture = BeginOptionalCapture();
+    renderer_->OnShutdown();
+    EXPECT_FALSE(renderer_->AcquireIblCapture(ViewId { surface_view_id }));
+    auto readback = GetReadbackManager()->CreateTextureReadback(
+      "Retained renderer IBL capture");
+    auto metadata_readback = GetReadbackManager()->CreateBufferReadback(
+      "Retained renderer IBL metadata");
+    graphics::testing::SubmitCommands(Backend(), "IBL capture after shutdown",
+      [&](graphics::CommandRecorder& recorder) {
+        ASSERT_TRUE(second.Attach(recorder, Backend().GetResourceRegistry()));
+        recorder.FlushBarriers();
+        ASSERT_TRUE(readback->EnqueueCopy(recorder, *second.ProcessedCube(),
+          { .src_slice = { .width = 16U, .height = 16U, .depth = 1U } }));
+        ASSERT_TRUE(metadata_readback->EnqueueCopy(recorder, *second.Metadata(),
+          { 0U, sizeof(environment::IblProductMetadata) }));
+      });
+    const auto mapped = readback->MapNow();
+    ASSERT_TRUE(mapped);
+    auto pixel = Pixel {};
+    std::memcpy(pixel.data(), mapped->Data(), sizeof(pixel));
+    EXPECT_EQ(pixel, (Pixel { 2, 2, 2, 1 }));
+    const auto mapped_metadata = metadata_readback->MapNow();
+    ASSERT_TRUE(mapped_metadata);
+    auto metadata = environment::IblProductMetadata {};
+    std::memcpy(&metadata, mapped_metadata->Bytes().data(), sizeof(metadata));
+    EXPECT_EQ(metadata.product_revision, second.Revision());
+    EXPECT_EQ(metadata.processing_flags, 3U);
+    if (capture)
+      EXPECT_TRUE(capture->EndCapture());
+    RecordProperty("retained_capture_revision", second.Revision());
   }
 
   NOLINT_TEST_F(IblSurfaceGpuTest, GainOnlyEditsReachNextFrameWithoutRecapture)

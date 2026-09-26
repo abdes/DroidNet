@@ -78,6 +78,7 @@ namespace {
 
       seed = HashCombineU64(
         seed, static_cast<std::uint64_t>(state.source_nodes[index].Index()));
+      seed = HashCombineU64(seed, state.source_nodes[index].Generation());
       seed = HashCombineU64(seed,
         static_cast<std::uint64_t>(state.source_nodes[index].GetSceneId()));
       seed = HashCombineU64(

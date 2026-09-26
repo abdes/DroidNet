@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <array>
 #include <cstdint>
 
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereLightState.h>
@@ -20,6 +21,8 @@ namespace oxygen::vortex::environment::internal {
 
 struct StableAtmosphereState {
   environment::EnvironmentViewProducts view_products {};
+  std::array<scene::NodeHandle, environment::kAtmosphereLightSlotCount>
+    capture_light_nodes {};
   std::uint64_t authored_hash { 0U };
   std::uint64_t atmosphere_revision { 0U };
   std::uint64_t light_revision { 0U };

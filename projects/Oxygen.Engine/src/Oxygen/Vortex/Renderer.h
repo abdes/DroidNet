@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <expected>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -32,6 +33,7 @@
 #include <Oxygen/Platform/Types.h>
 #include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
+#include <Oxygen/Vortex/Environment/Types/IblCaptureLease.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/RendererCapability.h>
@@ -461,6 +463,11 @@ public:
 
   [[nodiscard]] OXGN_VRTX_API auto InspectViewRenderStatus(ViewId view_id) const
     -> std::optional<ViewRenderStatus>;
+  //! Acquire during the view's publication window, before accepting an
+  //! asynchronous IBL inspection/readback. kBusy leaves normal updates intact.
+  [[nodiscard]] OXGN_VRTX_API auto AcquireIblCapture(ViewId view)
+    -> std::expected<environment::IblCaptureLease,
+      environment::IblCaptureError>;
 
   class OffscreenSceneFacade {
   public:

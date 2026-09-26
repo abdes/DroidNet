@@ -18,6 +18,7 @@
 #include <Oxygen/Graphics/Common/Registration.h>
 #include <Oxygen/Graphics/Common/Submission.h>
 #include <Oxygen/Nexus/IndexReuse.h>
+#include <Oxygen/Vortex/Environment/Types/IblCaptureLease.h>
 #include <Oxygen/Vortex/Types/EnvironmentStaticData.h>
 #include <Oxygen/Vortex/Types/EnvironmentViewData.h>
 #include <Oxygen/Vortex/api_export.h>
@@ -116,6 +117,8 @@ struct IblGpuProducts {
 
   [[nodiscard]] OXGN_VRTX_API auto Attach(graphics::CommandRecorder& recorder,
     graphics::ResourceRegistry& registry) const -> bool;
+  [[nodiscard]] OXGN_VRTX_API auto AcquireCapture() const
+    -> std::expected<IblCaptureLease, IblCaptureError>;
 };
 
 //! One scene's bounded product storage. Process/Close run on the renderer
@@ -123,14 +126,21 @@ struct IblGpuProducts {
 //! it.
 class IblGpuProcessor final {
 public:
+  static constexpr std::uint32_t kNormalSlots
+    = frame::kFramesInFlight.get() + 2U;
+  static constexpr std::uint32_t kMaximumCaptureGenerations = 2U;
   static constexpr std::uint32_t kMaximumSlots
-    = frame::kFramesInFlight.get() + 4U;
+    = kNormalSlots + kMaximumCaptureGenerations;
   struct Stats {
     std::uint32_t capacity {};
     std::uint32_t available {};
     std::uint32_t allocated {};
     std::uint64_t storage_creations {};
     nexus::IndexReuseTelemetry reuse;
+    std::uint32_t normal_capacity {};
+    std::uint32_t normal_in_use {};
+    std::uint32_t capture_capacity {};
+    std::uint32_t captured_generations {};
   };
 
   OXGN_VRTX_API explicit IblGpuProcessor(

@@ -3151,6 +3151,14 @@ auto Renderer::GetUploadCoordinator() -> upload::UploadCoordinator&
   return *uploader_;
 }
 
+auto Renderer::AcquireIblCapture(const ViewId view)
+  -> std::expected<environment::IblCaptureLease, environment::IblCaptureError>
+{
+  if (!scene_renderer_)
+    return std::unexpected(environment::IblCaptureError::kUnavailable);
+  return scene_renderer_->AcquireIblCapture(view);
+}
+
 auto Renderer::InspectViewRenderStatus(ViewId view_id) const
   -> std::optional<ViewRenderStatus>
 {

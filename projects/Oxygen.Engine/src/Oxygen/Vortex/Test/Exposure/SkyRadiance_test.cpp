@@ -45,6 +45,7 @@
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereState.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereView.h>
 #include <Oxygen/Vortex/Environment/Internal/CapturedSkySource.h>
+#include <Oxygen/Vortex/Environment/Internal/IblProcessor.h>
 #include <Oxygen/Vortex/Environment/Passes/AtmosphereMultiScatteringLutPass.h>
 #include <Oxygen/Vortex/Environment/Passes/AtmosphereSkyViewLutPass.h>
 #include <Oxygen/Vortex/Environment/Passes/AtmosphereTransmittanceLutPass.h>
@@ -1102,8 +1103,8 @@ NOLINT_TEST_F(
     CHECK_F(products.has_value());
     return *products;
   };
-  const auto primary = produce(true, false);
-  const auto secondary = produce(false, true);
+  auto primary = produce(true, false);
+  auto secondary = produce(false, true);
   const auto capture = BeginOptionalCapture();
   const auto combined = produce(true, true);
   if (capture)
@@ -1120,6 +1121,11 @@ NOLINT_TEST_F(
   const auto sh0 = read_sh(primary);
   const auto sh1 = read_sh(secondary);
   const auto sh_sum = read_sh(combined);
+  const auto primary_capture = primary->AcquireCapture();
+  const auto secondary_capture = secondary->AcquireCapture();
+  ASSERT_TRUE(primary_capture && secondary_capture);
+  primary.reset();
+  secondary.reset();
   // Atmospheric transport and SH are linear in incident illuminance. Both
   // native slots must contribute without a role-None fallback or disk energy.
   for (unsigned row = 0U; row < 8U; ++row)
@@ -1146,6 +1152,9 @@ NOLINT_TEST_F(
   ctx_.current_view.with_atmosphere = true;
   ctx_.current_view.hdr_color_format = Format::kRGBA16Float;
   atmosphere.sun_disk_enabled = false;
+  atmosphere.aerial_perspective_distance_scale = 20.0F;
+  atmosphere.aerial_scattering_strength = 4.0F;
+  atmosphere.aerial_perspective_start_depth_m = 5000.0F;
   const auto changed_view = produce(true, true);
   EXPECT_EQ(read_sh(changed_view), sh_sum);
   EXPECT_EQ(ReadFloatTexture(*changed_view->processed_cube, true),
@@ -1189,9 +1198,107 @@ NOLINT_TEST_F(
     for (unsigned c = 0U; c < (row == 6U ? 3U : 4U); ++c)
       EXPECT_NEAR(final_sh[row][c], 2.0F * sh_sum[row][c],
         0.002F * std::max(1.0F, std::abs(2.0F * sh_sum[row][c])));
-  EXPECT_EQ(read_sh(primary), sh0);
-  EXPECT_EQ(read_sh(secondary), sh1);
+  const auto retained_primary = Read<std::array<glm::vec4, 8>>(
+    *primary_capture->DiffuseSh(), ResourceStates::kShaderResource);
+  const auto retained_secondary = Read<std::array<glm::vec4, 8>>(
+    *secondary_capture->DiffuseSh(), ResourceStates::kShaderResource);
+  EXPECT_EQ(retained_primary, sh0);
+  EXPECT_EQ(retained_secondary, sh1);
   ctx_.view_constants.reset();
+  FlushBackend();
+}
+
+NOLINT_TEST_F(ExposureGpuTest, SkyIblCacheSeparatesSceneLifetimesAndReusesBrdf)
+{
+  namespace env = environment::internal;
+  auto first_scene = std::make_shared<scene::Scene>("IBL scene A", 8U);
+  auto second_scene = std::make_shared<scene::Scene>("IBL scene B", 8U);
+  auto processor = env::IblProcessor(*renderer_);
+  auto state = env::StableAtmosphereState {};
+  state.view_products.sky_light.enabled = true;
+  state.view_products.sky_light.source
+    = environment::kSkyLightSourceCapturedScene;
+  state.view_products.sky_light.lower_hemisphere_is_solid_color = false;
+  state.view_products.height_fog.enabled = true;
+  state.view_products.height_fog.enable_height_fog = true;
+  state.view_products.height_fog.visible_in_real_time_sky_captures = true;
+  auto fog = GpuFogParams {};
+  fog.flags = kGpuFogFlagEnabled | kGpuFogFlagHeightFogEnabled
+    | kGpuFogFlagVisibleInRealTimeSkyCaptures;
+  fog.primary_density = 0.01F;
+  fog.fog_inscattering_luminance_rgb = { 0.25F, 0.5F, 1.0F };
+  ctx_.scene = observer_ptr { first_scene.get() };
+  ctx_.frame_sequence = frame::SequenceNumber { 1U };
+  ctx_.frame_slot = frame::Slot { 0U };
+  const auto first_state
+    = processor.RefreshSkyLightProducts({}, ctx_, state, fog, {});
+  ASSERT_TRUE(first_state.refreshed);
+  const auto first = processor.GetPublishedProducts();
+  ASSERT_NE(first, nullptr);
+  const auto first_capture = processor.AcquireCapture(first);
+  ASSERT_TRUE(first_capture);
+  const auto reference = ReadFloatTexture(*first->processed_cube, true);
+  const auto reuse = processor.RefreshSkyLightProducts(
+    first_state.probe_state, ctx_, state, fog, {});
+  EXPECT_FALSE(reuse.requested);
+  EXPECT_EQ(processor.GetPublishedProducts(), first);
+  state.view_products.atmosphere.aerial_perspective_distance_scale = 20.0F;
+  state.view_products.atmosphere.aerial_scattering_strength = 4.0F;
+  state.view_products.atmosphere.aerial_perspective_start_depth_m = 5000.0F;
+  state.view_products.sky_light.cubemap_resource = content::ResourceKey { 99U };
+  ctx_.current_view.view_id = ViewId { 991U };
+  EXPECT_FALSE(
+    processor.RefreshSkyLightProducts(reuse.probe_state, ctx_, state, fog, {})
+      .requested);
+  EXPECT_EQ(processor.GetPublishedProducts(), first);
+
+  ctx_.scene = observer_ptr { second_scene.get() };
+  auto missing = state;
+  missing.view_products.sky_light.source
+    = environment::kSkyLightSourceSpecifiedCubemap;
+  missing.view_products.sky_light.cubemap_resource = {};
+  const auto failed = processor.RefreshSkyLightProducts(
+    reuse.probe_state, ctx_, missing, fog, {});
+  EXPECT_FALSE(failed.probe_state.valid);
+  EXPECT_EQ(processor.GetPublishedProducts(), nullptr);
+  const auto replacement = processor.RefreshSkyLightProducts(
+    failed.probe_state, ctx_, state, fog, {});
+  ASSERT_TRUE(replacement.refreshed);
+  const auto second = processor.GetPublishedProducts();
+  ASSERT_NE(second, nullptr);
+  EXPECT_GT(second->revision, first->revision);
+  EXPECT_NE(second->processed_cube, first->processed_cube);
+  EXPECT_EQ(second->brdf, first->brdf);
+  EXPECT_EQ(ReadFloatTexture(*second->processed_cube, true), reference);
+  EXPECT_EQ(processor.GetCachedSceneCount(), 2U);
+  ctx_.scene = observer_ptr { first_scene.get() };
+  const auto resumed = processor.RefreshSkyLightProducts(
+    replacement.probe_state, ctx_, state, fog, {});
+  EXPECT_FALSE(resumed.requested);
+  EXPECT_EQ(processor.GetPublishedProducts(), first);
+  EXPECT_EQ(processor.GetCachedSceneCount(), 2U);
+  const auto old_scene = std::weak_ptr(first_scene);
+  ctx_.scene = observer_ptr { second_scene.get() };
+  first_scene.reset();
+  EXPECT_TRUE(old_scene.expired());
+  const auto expired_capture = processor.AcquireCapture(first);
+  ASSERT_FALSE(expired_capture);
+  EXPECT_EQ(expired_capture.error(), environment::IblCaptureError::kClosed);
+  // Admission cleanup must not consume the next frame's invalidation signal.
+  EXPECT_TRUE(processor.OnFrameStart());
+  EXPECT_FALSE(processor.OnFrameStart());
+  EXPECT_FALSE(
+    processor.RefreshSkyLightProducts(resumed.probe_state, ctx_, state, fog, {})
+      .requested);
+  EXPECT_EQ(processor.GetPublishedProducts(), second);
+  EXPECT_EQ(processor.GetCachedSceneCount(), 1U);
+  EXPECT_EQ(ReadFloatTexture(*first->processed_cube, true), reference);
+  ctx_.scene = nullptr;
+  second_scene.reset();
+  EXPECT_EQ(processor.GetPublishedProducts(), nullptr);
+  EXPECT_TRUE(processor.OnFrameStart());
+  EXPECT_EQ(processor.GetCachedSceneCount(), 0U);
+  EXPECT_EQ(ReadFloatTexture(*second->processed_cube, true), reference);
   FlushBackend();
 }
 

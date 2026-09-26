@@ -8,6 +8,7 @@
 
 #include <array>
 #include <cstdint>
+#include <expected>
 #include <memory>
 #include <optional>
 #include <string_view>
@@ -22,6 +23,7 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Scene/Light/DirectionalLightResolver.h>
 #include <Oxygen/Vortex/CompositionView.h>
+#include <Oxygen/Vortex/Environment/Types/IblCaptureLease.h>
 #include <Oxygen/Vortex/Lighting/Types/FrameLightingInputs.h>
 #include <Oxygen/Vortex/Lighting/Types/LightingPreparationFailure.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
@@ -198,6 +200,9 @@ public:
     -> std::optional<ExposureSettingsStatus>;
   OXGN_VRTX_NDAPI auto GetLastEnvironmentLightingState() const
     -> const EnvironmentLightingState&;
+  [[nodiscard]] OXGN_VRTX_API auto AcquireIblCapture(ViewId view)
+    -> std::expected<environment::IblCaptureLease,
+      environment::IblCaptureError>;
   OXGN_VRTX_NDAPI static auto GetAuthoredStageOrder() -> const StageOrder&;
   OXGN_VRTX_API void PublishViewFrameBindings(
     ViewId view_id, const ViewFrameBindings& bindings, ShaderVisibleIndex slot);

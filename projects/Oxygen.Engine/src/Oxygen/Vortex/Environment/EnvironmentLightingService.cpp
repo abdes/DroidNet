@@ -284,12 +284,23 @@ auto EnvironmentLightingService::RemoveViewState(const ViewId view_id) -> void
   }
 }
 
+auto EnvironmentLightingService::AcquireIblCapture(const ViewId view)
+  -> std::expected<environment::IblCaptureLease, environment::IblCaptureError>
+{
+  const auto found = published_views_.find(view);
+  if (found == published_views_.end())
+    return std::unexpected(environment::IblCaptureError::kUnavailable);
+  return ibl_->AcquireCapture(found->second.ibl);
+}
+
 auto EnvironmentLightingService::OnFrameStart(
   const frame::SequenceNumber sequence, const frame::Slot slot) -> void
 {
   current_sequence_ = sequence;
   current_slot_ = slot;
   published_views_.clear();
+  if (ibl_->OnFrameStart())
+    probe_state_ = {};
   last_probe_refresh_state_ = {
     .frame_sequence = sequence,
     .frame_slot = slot,
