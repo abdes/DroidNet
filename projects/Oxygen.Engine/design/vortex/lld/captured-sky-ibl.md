@@ -509,6 +509,11 @@ lease remains readable while the Graphics backend is active. Backend closure
 or fault rejects attachment. Scene-expiry invalidation remains pending until
 the environment consumes it or publishes a replacement state.
 
+Failed lease allocation leaves admission unchanged. IBL generation retirement
+allocates no memory during CPU release, recording discard or completed GPU-use
+release. Discard closes the native command list without preparing submission
+state snapshots, and submission callbacks resolve in their existing storage.
+
 Reuse resources after all readers drain. Genuine allocation or normal-pool
 exhaustion follows the failure rules below rather than adding a CPU wait or
 growing the pool. Scene/device teardown invalidates publication before resource

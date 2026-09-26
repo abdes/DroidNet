@@ -17,9 +17,11 @@
 #include <functional>
 #include <limits>
 #include <memory>
+#include <new>
 #include <numbers>
 #include <span>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -34,6 +36,7 @@
 #include <Oxygen/Graphics/Common/CommandRecording.h>
 #include <Oxygen/Graphics/Common/FrameCaptureController.h>
 #include <Oxygen/Graphics/Common/Internal/SubmissionFaultTestAccess.h>
+#include <Oxygen/Graphics/Common/Test/HeapAllocationFailure.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Direct3D12/CommandQueue.h>
 #include <Oxygen/Vortex/Environment/Internal/IblBrdfLookup.h>
@@ -442,6 +445,208 @@ namespace {
       return pixels;
     }
   };
+
+  // Fail only the producer's existing resource factories. Native allocations,
+  // registrations, submission and retirement still run through D3D12/Graphics.
+  class IblAllocationFaultGraphics final : public graphics::d3d12::Graphics {
+  public:
+    using Graphics::Graphics;
+
+    auto FailAfter(const int allowed) -> void { remaining_ = allowed; }
+
+    auto CreateTexture(const graphics::TextureDesc& desc) const
+      -> std::shared_ptr<graphics::Texture> override
+    {
+      BeforeAllocation(desc.debug_name);
+      return Graphics::CreateTexture(desc);
+    }
+
+    auto CreateBuffer(const graphics::BufferDesc& desc) const
+      -> std::shared_ptr<graphics::Buffer> override
+    {
+      BeforeAllocation(desc.debug_name);
+      return Graphics::CreateBuffer(desc);
+    }
+
+  private:
+    auto BeforeAllocation(const std::string_view name) const -> void
+    {
+      if (remaining_ < 0 || !name.starts_with("IBL."))
+        return;
+      if (remaining_-- == 0)
+        throw std::bad_alloc {};
+    }
+    mutable int remaining_ { -1 };
+  };
+
+  class IblProducerAllocationGpuTest : public IblConvolutionGpuTest {
+  protected:
+    auto CreateBackend(const SerializedBackendConfig& config,
+      const SerializedPathFinderConfig& paths)
+      -> std::shared_ptr<graphics::d3d12::Graphics> override
+    {
+      return std::make_shared<IblAllocationFaultGraphics>(config, paths);
+    }
+
+    auto Faults() -> IblAllocationFaultGraphics&
+    {
+      return static_cast<IblAllocationFaultGraphics&>(Backend());
+    }
+
+    auto MakeAtmosphereSource() -> environment::internal::IblSkySource
+    {
+      auto source = environment::internal::IblSkySource {};
+      source.environment.atmosphere.enabled = 1U;
+      auto sky_view = CreateTexture({ .width = 4U,
+        .height = 4U,
+        .format = Format::kRGBA32Float,
+        .texture_type = TextureType::kTexture2D,
+        .debug_name = "Allocation test sky LUT",
+        .is_shader_resource = true });
+      auto distant = CreateRegisteredBuffer(
+        { .size_bytes = 16U, .debug_name = "Allocation test distant LUT" });
+      const auto subresources = std::array<upload::UploadSubresource, 1> {};
+      const auto plan
+        = upload::UploadPlanner::PlanTexture2D({ .dst = sky_view },
+          subresources, upload::UploadPolicy { QueueKeyFor() });
+      CHECK_F(plan.has_value());
+      auto staging
+        = CreateRegisteredBuffer({ .size_bytes = plan->total_bytes + 16U,
+          .memory = graphics::BufferMemory::kUpload,
+          .debug_name = "Allocation test LUT upload" });
+      const Pixel pixel { 2, 1, 0.5F, 1 };
+      const auto row = std::array { pixel, pixel, pixel, pixel };
+      const auto& region = plan->regions.front();
+      for (unsigned y = 0U; y < 4U; ++y)
+        staging->Update(row.data(), sizeof(row),
+          region.buffer_offset + y * std::uint64_t(region.buffer_row_pitch));
+      staging->Update(pixel.data(), sizeof(pixel), plan->total_bytes);
+      SubmitCommands(
+        "Allocation test LUT upload", [&](graphics::CommandRecorder& recorder) {
+          EnsureTracked(recorder, staging, ResourceStates::kGenericRead);
+          EnsureTracked(recorder, sky_view, ResourceStates::kCommon);
+          EnsureTracked(recorder, distant, ResourceStates::kCommon);
+          recorder.RequireResourceState(*sky_view, ResourceStates::kCopyDest);
+          recorder.RequireResourceState(*distant, ResourceStates::kCopyDest);
+          recorder.FlushBarriers();
+          recorder.CopyBufferToTexture(*staging, region, *sky_view);
+          recorder.CopyBuffer(*distant, 0U, *staging, plan->total_bytes, 16U);
+          recorder.RequireResourceStateFinal(
+            *sky_view, ResourceStates::kShaderResource);
+          recorder.RequireResourceStateFinal(
+            *distant, ResourceStates::kShaderResource);
+        });
+      source.sky_view = std::move(sky_view);
+      source.distant_sky = std::move(distant);
+      return source;
+    }
+  };
+
+  NOLINT_TEST_F(IblProducerAllocationGpuTest,
+    FactoryFailuresPreservePublishedProductsAndPermitRetry)
+  {
+    const Pixel radiance { 1, 0.5F, 0.25F, 1 };
+    const auto source
+      = MakeSource(32U, [&](auto, auto, auto) { return radiance; });
+    const auto brdf = PrepareBrdf();
+    auto sky = environment::internal::IblSkySource {};
+    sky.environment.fog.flags = kGpuFogFlagEnabled | kGpuFogFlagHeightFogEnabled
+      | kGpuFogFlagVisibleInRealTimeSkyCaptures;
+    sky.environment.fog.primary_density = 0.01F;
+    sky.environment.fog.fog_inscattering_luminance_rgb = { 2, 1, 0.5F };
+    const auto atmosphere = MakeAtmosphereSource();
+    unsigned total_failures = 0U;
+    enum class Scenario { kCold, kResize, kFog, kAtmosphere, kFirstUse };
+    const std::array cases { std::pair { Scenario::kCold, 9U },
+      std::pair { Scenario::kResize, 9U }, std::pair { Scenario::kFog, 10U },
+      std::pair { Scenario::kAtmosphere, 12U },
+      std::pair { Scenario::kFirstUse, 9U } };
+    for (const auto [scenario, expected_failures] : cases) {
+      bool completed = false;
+      unsigned failures = 0U;
+      for (int allowed = 0; allowed < 32; ++allowed) {
+        SCOPED_TRACE(::testing::Message()
+          << "scenario=" << static_cast<unsigned>(scenario)
+          << " allowed=" << allowed);
+        processor_ = std::make_unique<IblGpuProcessor>(Backend());
+        std::shared_ptr<const IblGpuProducts> retained;
+        if (scenario != Scenario::kFirstUse) {
+          const auto result = Processor().Process(source.texture,
+            source.registration, brdf,
+            { .face_size = 16U, .lower_hemisphere_solid_color = false }, 800U);
+          ASSERT_TRUE(result);
+          retained = *result;
+        }
+        WaitForQueueIdle();
+        const auto live_resources
+          = Backend().GetResourceRegistry().GetRegisteredResourceCount();
+        if (scenario == Scenario::kResize) {
+          // Populate a free slot at another size before forcing replacement.
+          auto warm = Processor().Process(source.texture, source.registration,
+            brdf, { .face_size = 8U }, 801U);
+          ASSERT_TRUE(warm);
+          warm->reset();
+          WaitForQueueIdle();
+        }
+        const auto process = [&]() {
+          const auto settings = IblProcessSettings { .face_size = 32U,
+            .lower_hemisphere_solid_color = false };
+          return scenario == Scenario::kFog
+            ? Processor().ProcessSky(sky, brdf, settings, 802U)
+            : scenario == Scenario::kAtmosphere
+            ? Processor().ProcessSky(atmosphere, brdf, settings, 802U)
+            : Processor().Process(
+                source.texture, source.registration, brdf, settings, 802U);
+        };
+        Faults().FailAfter(allowed);
+        auto candidate = process();
+        Faults().FailAfter(-1);
+        if (!candidate) {
+          ++failures;
+          EXPECT_EQ(candidate.error(),
+            environment::internal::IblProcessError::kAllocationFailed);
+          const auto stats = Processor().GetStats();
+          EXPECT_EQ(stats.normal_in_use, retained ? 1U : 0U);
+          EXPECT_EQ(stats.available,
+            IblGpuProcessor::kMaximumSlots - (retained ? 1U : 0U));
+          EXPECT_EQ(stats.reuse.pending_count, 0U);
+          EXPECT_EQ(stats.reuse.abandoned_retirements, 0U);
+          if (retained) {
+            const auto pixels
+              = ReadFace(*retained, *retained->processed_cube, 0U, 0U);
+            EXPECT_TRUE(std::ranges::all_of(
+              pixels, [&](const auto& pixel) { return pixel == radiance; }));
+          }
+          candidate = process();
+          ASSERT_TRUE(candidate);
+        } else {
+          completed = true;
+        }
+        const auto metadata = ReadBuffer<environment::IblProductMetadata>(
+          **candidate, *(*candidate)->metadata);
+        EXPECT_EQ(metadata.product_revision, 802U);
+        EXPECT_EQ(metadata.processing_flags, 3U);
+        candidate->reset();
+        WaitForQueueIdle();
+        EXPECT_EQ(Processor().GetStats().normal_in_use, retained ? 1U : 0U);
+        Processor().Close();
+        Backend().PollCompletedUses();
+        EXPECT_EQ(Backend().GetResourceRegistry().GetRegisteredResourceCount(),
+          live_resources);
+        if (retained)
+          EXPECT_EQ(ReadBuffer<environment::IblProductMetadata>(
+                      *retained, *retained->metadata)
+                      .product_revision,
+            800U);
+        if (completed)
+          break;
+      }
+      EXPECT_TRUE(completed);
+      EXPECT_EQ(failures, expected_failures);
+      total_failures += failures;
+    }
+    RecordProperty("producer_factory_failures", total_failures);
+  }
 
   NOLINT_TEST_F(
     IblConvolutionGpuTest, HalfMirrorsNarrowCompletedCanonicalChains)
@@ -1757,6 +1962,219 @@ namespace {
     EXPECT_EQ(Processor().GetStats().captured_generations, 1U);
     recording.Discard();
   }
+
+  NOLINT_TEST_F(IblConvolutionGpuTest, RejectedProducerReturnsNormalCapacity)
+  {
+    const auto source = MakeSource(
+      16U, [](auto, auto, auto) { return Pixel { 1, 0.5F, 0.25F, 1 }; });
+    const auto brdf = PrepareBrdf();
+    WaitForQueueIdle();
+    Backend().PollCompletedUses();
+    graphics::internal::SubmissionFaultTestAccess::FailNext(
+      *GetQueue(), graphics::internal::SubmissionFailurePoint::kBeforeIssue);
+    const auto failed = Processor().Process(
+      source.texture, source.registration, brdf, { .face_size = 16U }, 670U);
+    ASSERT_FALSE(failed);
+    EXPECT_EQ(failed.error(),
+      environment::internal::IblProcessError::kSubmissionFailed);
+    EXPECT_EQ(Processor().GetStats().normal_in_use, 0U);
+    EXPECT_EQ(Processor().GetStats().available, IblGpuProcessor::kMaximumSlots);
+    EXPECT_FALSE(Backend().GetBackendLifetime()->IsFaulted());
+    const auto retry = Processor().Process(
+      source.texture, source.registration, brdf, { .face_size = 16U }, 671U);
+    ASSERT_TRUE(retry);
+    EXPECT_EQ(
+      ReadBuffer<environment::IblProductMetadata>(**retry, *(*retry)->metadata)
+        .product_revision,
+      671U);
+    EXPECT_EQ(Processor().GetStats().storage_creations, 1U);
+  }
+
+  NOLINT_TEST_F(
+    IblConvolutionGpuTest, UncertainCaptureClosesPoolAfterBackendRecovery)
+  {
+    const auto source = MakeSource(
+      16U, [](auto, auto, auto) { return Pixel { 1, 0.5F, 0.25F, 1 }; });
+    auto result = Processor().Process(source.texture, source.registration,
+      PrepareBrdf(), { .face_size = 16U }, 680U);
+    ASSERT_TRUE(result);
+    auto product = std::move(*result);
+    auto capture = product->AcquireCapture();
+    ASSERT_TRUE(capture);
+    WaitForQueueIdle();
+    Backend().PollCompletedUses();
+    auto recording = AcquireRecorder("IBL uncertain capture",
+      graphics::QueueRole::kGraphics, graphics::SubmissionPolicy::kExplicit);
+    ASSERT_TRUE(capture->Attach(*recording, Backend().GetResourceRegistry()));
+    recording->FlushBarriers();
+    graphics::internal::SubmissionFaultTestAccess::FailNext(*GetQueue(),
+      graphics::internal::SubmissionFailurePoint::kAfterIssueBeforeMarker);
+    EXPECT_EQ(recording.SubmitWithReceipt().outcome,
+      graphics::SubmissionOutcome::kExecutionUncertain);
+    EXPECT_TRUE(Backend().GetBackendLifetime()->IsFaulted());
+    EXPECT_EQ(Processor().GetStats().captured_generations, 1U);
+    ASSERT_TRUE(Backend().RecoverSubmissionFault());
+    const auto denied = product->AcquireCapture();
+    ASSERT_FALSE(denied);
+    EXPECT_EQ(denied.error(), environment::IblCaptureError::kClosed);
+    auto retry = AcquireRecorder("IBL poisoned capture retry",
+      graphics::QueueRole::kGraphics, graphics::SubmissionPolicy::kExplicit);
+    const auto attachment
+      = capture->Attach(*retry, Backend().GetResourceRegistry());
+    ASSERT_FALSE(attachment);
+    EXPECT_EQ(attachment.error(), environment::IblCaptureError::kClosed);
+    retry.Discard();
+    product.reset();
+    *capture = {};
+    EXPECT_EQ(Processor().GetStats().normal_in_use, 0U);
+    EXPECT_EQ(Processor().GetStats().captured_generations, 0U);
+    // Recovery never revives a poisoned generation; a fresh owner rebuilds.
+    processor_.reset();
+    brdf_resources_.reset();
+    const auto rebuilt = Processor().Process(source.texture,
+      source.registration, PrepareBrdf(), { .face_size = 16U }, 681U);
+    ASSERT_TRUE(rebuilt);
+    EXPECT_EQ(ReadBuffer<environment::IblProductMetadata>(
+                **rebuilt, *(*rebuilt)->metadata)
+                .product_revision,
+      681U);
+  }
+
+  NOLINT_TEST_F(
+    IblConvolutionGpuTest, DeviceLossReleasesCaptureAndClosesAdmission)
+  {
+    const auto source = MakeSource(
+      16U, [](auto, auto, auto) { return Pixel { 1, 0.5F, 0.25F, 1 }; });
+    auto result = Processor().Process(source.texture, source.registration,
+      PrepareBrdf(), { .face_size = 16U }, 690U);
+    ASSERT_TRUE(result);
+    auto product = std::move(*result);
+    auto capture = product->AcquireCapture();
+    ASSERT_TRUE(capture);
+    WaitForQueueIdle();
+    Backend().PollCompletedUses();
+    auto recording = AcquireRecorder("IBL capture device removal",
+      graphics::QueueRole::kGraphics, graphics::SubmissionPolicy::kExplicit);
+    ASSERT_TRUE(capture->Attach(*recording, Backend().GetResourceRegistry()));
+    recording->FlushBarriers();
+    *capture = {};
+    const auto submitted = recording.SubmitWithReceipt();
+    ASSERT_TRUE(submitted.receipt);
+    EXPECT_EQ(Processor().GetStats().captured_generations, 1U);
+    graphics::internal::SubmissionFaultTestAccess::LoseDevice(*GetQueue());
+    EXPECT_EQ(GetQueue()->QueryCompletion(*submitted.receipt),
+      graphics::CompletionStatus::kDeviceLost);
+    EXPECT_EQ(Processor().GetStats().captured_generations, 0U);
+    const auto denied = product->AcquireCapture();
+    ASSERT_FALSE(denied);
+    EXPECT_EQ(denied.error(), environment::IblCaptureError::kClosed);
+    product.reset();
+    EXPECT_EQ(Processor().GetStats().normal_in_use, 0U);
+    EXPECT_FALSE(Backend().RecoverSubmissionFault());
+    EXPECT_EQ(Backend().GetBackendLifetime()->State(),
+      graphics::BackendLifecycle::kRetiring);
+  }
+
+#if defined(_MSC_VER) && defined(_DEBUG)
+  NOLINT_TEST_F(IblConvolutionGpuTest, CaptureAllocationFailuresReturnAdmission)
+  {
+    const auto source = MakeSource(
+      16U, [](auto, auto, auto) { return Pixel { 1, 0.5F, 0.25F, 1 }; });
+    const auto product = Processor().Process(source.texture,
+      source.registration, PrepareBrdf(), { .face_size = 16U }, 695U);
+    ASSERT_TRUE(product);
+    WaitForQueueIdle();
+    Backend().PollCompletedUses();
+    unsigned failures = 0U;
+    bool succeeded = false;
+    for (int allowed = 0; allowed < 16; ++allowed) {
+      auto capture = std::expected<environment::IblCaptureLease,
+        environment::IblCaptureError>(
+        std::unexpected(environment::IblCaptureError::kUnavailable));
+      {
+        graphics::testing::HeapAllocationFailure failure(allowed);
+        capture = (*product)->AcquireCapture();
+      }
+      if (capture) {
+        EXPECT_EQ(Processor().GetStats().captured_generations, 1U);
+        *capture = {};
+        succeeded = true;
+      } else {
+        EXPECT_EQ(
+          capture.error(), environment::IblCaptureError::kAllocationFailed);
+        ++failures;
+      }
+      EXPECT_EQ(Processor().GetStats().captured_generations, 0U);
+      EXPECT_EQ(Processor().GetStats().normal_in_use, 1U);
+      EXPECT_EQ(
+        Processor().GetStats().available, IblGpuProcessor::kMaximumSlots - 1U);
+      if (succeeded)
+        break;
+    }
+    EXPECT_GE(failures, 3U);
+    EXPECT_TRUE(succeeded);
+    const auto retry = (*product)->AcquireCapture();
+    ASSERT_TRUE(retry);
+    EXPECT_EQ(
+      ReadBuffer<environment::IblProductMetadata>(*retry, *retry->Metadata())
+        .product_revision,
+      695U);
+    RecordProperty("capture_allocation_failures", failures);
+  }
+
+  NOLINT_TEST_F(IblConvolutionGpuTest, CaptureRetirementDoesNotAllocate)
+  {
+    using graphics::testing::HeapAllocationFailure;
+    const auto source = MakeSource(
+      16U, [](auto, auto, auto) { return Pixel { 1, 0.5F, 0.25F, 1 }; });
+    for (const bool submit : { false, true }) {
+      auto result = Processor().Process(source.texture, source.registration,
+        PrepareBrdf(), { .face_size = 16U }, 696U + unsigned(submit));
+      ASSERT_TRUE(result);
+      auto product = std::move(*result);
+      auto capture = product->AcquireCapture();
+      ASSERT_TRUE(capture);
+      WaitForQueueIdle();
+      auto recording = AcquireRecorder("IBL allocation-free retirement",
+        graphics::QueueRole::kGraphics, graphics::SubmissionPolicy::kExplicit);
+      ASSERT_TRUE(capture->Attach(*recording, Backend().GetResourceRegistry()));
+      recording->FlushBarriers();
+      unsigned resolved = 0U;
+      auto* recorder = recording.operator->();
+      recording->OnSubmission([recorder, &resolved](auto) {
+        ++resolved;
+        recorder->OnSubmission([&resolved](auto) { ++resolved; });
+      });
+      const auto rejected_before = HeapAllocationFailure::RejectedCount();
+      {
+        HeapAllocationFailure denied;
+        product.reset();
+        *capture = {};
+      }
+      EXPECT_EQ(Processor().GetStats().captured_generations, 1U);
+      if (submit) {
+        ASSERT_TRUE(recording.Submit());
+        // Wait for hardware without retiring the submitted internal pins.
+        const auto queue = GetQueue();
+        queue->Wait(queue->SignalSubmittedWork());
+        ASSERT_EQ(Processor().GetStats().captured_generations, 1U);
+        HeapAllocationFailure denied;
+        Backend().PollCompletedUses();
+      } else {
+        HeapAllocationFailure denied;
+        recording.Discard();
+      }
+      EXPECT_EQ(HeapAllocationFailure::RejectedCount(), rejected_before);
+      EXPECT_EQ(resolved, 2U);
+      EXPECT_EQ(Processor().GetStats().captured_generations, 0U);
+      EXPECT_EQ(Processor().GetStats().normal_in_use, 0U);
+      EXPECT_EQ(
+        Processor().GetStats().available, IblGpuProcessor::kMaximumSlots);
+      EXPECT_EQ(Processor().GetStats().reuse.pending_count, 0U);
+      EXPECT_EQ(Processor().GetStats().reuse.abandoned_retirements, 0U);
+    }
+  }
+#endif
 
   NOLINT_TEST_F(
     IblConvolutionGpuTest, AdmittedCaptureSurvivesGracefulPoolClosure)

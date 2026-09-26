@@ -10,6 +10,30 @@ Read: [current results](#current-results), [reproduce](#reproduce),
 
 ## Current results
 
+[S3 producer allocations](evidence/s3-producer-allocation/run.json): **49 injected
+resource-factory failures** pass in both native Debug and Release. The sweep covers
+new storage, resized storage, fog snapshots, frozen atmosphere LUTs and first use
+without an existing generation. Each failure returns its normal slot, preserves
+any retained generation, permits retry and releases all additional registrations
+on pool closure. **16 Graphics managed-registration tests** also pass, including
+registration/view allocation rollback and allocation-free retirement.
+
+[S3 lifetime faults](evidence/s3-lifetime-faults/run.json): **48 Debug / 46 Release
+product/fog tests**, **31 Debug / 30 Release Graphics tests** and **10 native
+renderer integration tests** pass. Injected
+pre-issue failure returns normal capacity; uncertain submission closes its
+generation even after backend recovery. Forced D3D12 device removal releases
+capture pins and rejects further admission. Four injected capture-allocation
+failures leave admission unchanged, followed by a successful retained read.
+
+CPU release, recording discard and completed GPU-reader retirement make **zero
+allocation attempts**, including reentrant submission callbacks. The completion
+test checks that hardware has finished while the capture is still pinned, then
+releases it under allocation denial. Discard closes
+the native list without preparing submission-only state snapshots; callback
+resolution consumes its existing storage. Edit intent and the incremental
+scheduler's preemption/lifetime cases remain open.
+
 [S3 capture admission](evidence/s3-capture-admission/run.json): **43 product/fog
 tests**, **63 environment tests** and **10 native integration tests** pass.
 Two captured generations leave all five normal update slots available once
@@ -24,8 +48,6 @@ shutdown. [RenderDoc replay](evidence/s3-capture-admission/renderdoc.json)
 checks **1,024 scalar values** and **32 metadata bytes** in the retained readback,
 matching revision 2 after later lighting updates.
 [Capture](evidence/s3-capture-admission/retained.rdc).
-The backend-fault check covers admission/attachment rejection; actual device-loss
-teardown, allocation-failure stress and edit intent remain open in S3.
 
 [S3 cache identity](evidence/s3-cache-identity/run.json): **63 environment tests**
 and **three native regressions** pass. Recycled light-node generations invalidate

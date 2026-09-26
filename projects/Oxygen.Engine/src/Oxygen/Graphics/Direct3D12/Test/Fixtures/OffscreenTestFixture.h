@@ -19,6 +19,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Core/Types/ByteUnits.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
@@ -97,8 +98,11 @@ protected:
     CleanupTrackedResources();
 
     if (graphics_ != nullptr) {
-      graphics_->Flush();
-      graphics_->Close();
+      const ScopeGuard close_backend([this]() noexcept { graphics_->Close(); });
+      if (graphics_->GetBackendLifetime()->State()
+        == graphics::BackendLifecycle::kActive) {
+        graphics_->Flush();
+      }
     }
 
     textures_.clear();

@@ -209,9 +209,11 @@ void CommandRecording::Discard() noexcept
   if (!ended_) {
     ended_ = true;
     try {
-      if (!recorder_->End()) {
-        command_list_->Invalidate();
-      }
+      // Discarded work has no final states to publish. End() snapshots them
+      // with allocations, which cannot be required by noexcept cleanup.
+      recorder_->DrainActiveProfileScopes(
+        CommandRecorder::ScopeCloseKind::kAbort);
+      command_list_->OnEndRecording();
     } catch (...) {
       command_list_->Invalidate();
     }

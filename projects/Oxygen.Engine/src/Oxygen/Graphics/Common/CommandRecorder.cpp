@@ -100,8 +100,10 @@ void CommandRecorder::ResolveSubmission(
     return;
   }
   submission_outcome_ = outcome;
-  auto callbacks = std::move(submission_callbacks_);
-  for (auto& callback : callbacks) {
+  // Reentrant registrations execute immediately once the outcome is set.
+  // Consume in place: a vector move allocates a checked-iterator proxy in MSVC
+  // Debug, even when empty, and resolution must survive allocation failure.
+  for (auto& callback : submission_callbacks_) {
     try {
       callback(outcome);
     } catch (const std::exception& error) {
@@ -110,6 +112,7 @@ void CommandRecorder::ResolveSubmission(
       LOG_F(ERROR, "Command submission callback failed with an unknown error");
     }
   }
+  submission_callbacks_.clear();
 }
 
 void CommandRecorder::Begin()
