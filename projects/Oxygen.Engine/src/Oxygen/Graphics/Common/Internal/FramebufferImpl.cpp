@@ -4,14 +4,26 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <memory>
+#include <ranges>
+#include <stdexcept>
+#include <utility>
+
+#include <fmt/format.h>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ScopeGuard.h>
+#include <Oxygen/Base/StaticVector.h>
+#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
+#include <Oxygen/Graphics/Common/Constants.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Internal/FramebufferImpl.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 
 using oxygen::graphics::FramebufferDesc;
 using oxygen::graphics::Texture;
@@ -31,13 +43,9 @@ auto CleanupFramebufferRegistrations(oxygen::Graphics& gfx,
     rtvs,
   oxygen::graphics::NativeView& dsv) noexcept -> void
 {
-  for (std::size_t index = 0; index < textures.size(); ++index) {
-    const auto& texture = textures[index];
-    if (!texture) {
-      continue;
-    }
-    if (index < owns_resource_registration.size()
-      && owns_resource_registration[index]) {
+  for (const auto& [texture, owns_registration] :
+    std::views::zip(textures, owns_resource_registration)) {
+    if (texture && owns_registration) {
       gfx.ForgetKnownResourceState(*texture);
       resource_registry.UnRegisterResource(*texture);
     }
@@ -70,7 +78,7 @@ FramebufferImpl::FramebufferImpl(
   // will use the size of the first color attachment, or if none is provided,
   // the depth attachment.
   if (!desc_.color_attachments.empty()) {
-    const auto texture = desc_.color_attachments[0].texture;
+    const auto texture = desc_.color_attachments.front().texture;
     rt_width_ = texture->GetDescriptor().width;
     rt_height_ = texture->GetDescriptor().height;
   } else if (desc_.depth_attachment.IsValid()) {
@@ -81,7 +89,7 @@ FramebufferImpl::FramebufferImpl(
 
   auto& resource_registry = gfx->GetResourceRegistry();
   bool construction_complete = false;
-  const auto rollback = oxygen::ScopeGuard([&]() noexcept {
+  const auto rollback = oxygen::ScopeGuard([&] noexcept -> void {
     if (construction_complete) {
       return;
     }
@@ -89,8 +97,11 @@ FramebufferImpl::FramebufferImpl(
       owns_resource_registration_, owned_descriptor_handles_, rtvs_, dsv_);
   });
 
-  for (const auto& attachment : desc_.color_attachments) {
+  for (auto& attachment : desc_.color_attachments) {
     auto texture = attachment.texture;
+    if (attachment.format == Format::kUnknown) {
+      attachment.format = texture->GetDescriptor().format;
+    }
 
     DCHECK_EQ_F(texture->GetDescriptor().width, rt_width_,
       "FramebufferImpl {}: width mismatch between attachments",
@@ -134,6 +145,10 @@ FramebufferImpl::FramebufferImpl(
   if (auto& depth_attachment = desc_.depth_attachment;
     depth_attachment.IsValid()) {
     auto texture = depth_attachment.texture;
+    // Backend clears consume this descriptor as well as the native view.
+    if (depth_attachment.format == Format::kUnknown) {
+      depth_attachment.format = texture->GetDescriptor().format;
+    }
     DCHECK_EQ_F(texture->GetDescriptor().width, rt_width_,
       "FramebufferImpl {}: width mismatch between attachments",
       texture->GetName());

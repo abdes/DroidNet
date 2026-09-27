@@ -8,6 +8,7 @@
 #include <string>
 
 #include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Direct3D12/Devices/DebugLayer.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
@@ -77,5 +78,27 @@ NOLINT_TEST_F(NativeLifetimeTest, DiagnosticsOutliveFacadeUntilTextureRetires)
 {
   ObserveLifetime();
   RetainTexture();
+}
+
+NOLINT_TEST_F(NativeLifetimeTest, FramebufferPublishesResolvedAttachmentFormats)
+{
+  const auto color = Backend().CreateTexture({
+    .width = 4U,
+    .height = 4U,
+    .format = Format::kRGBA32Float,
+    .is_render_target = true,
+  });
+  const auto depth = Backend().CreateTexture({
+    .width = 4U,
+    .height = 4U,
+    .format = Format::kDepth32,
+    .is_render_target = true,
+  });
+  const auto framebuffer = Backend().CreateFramebuffer(
+    FramebufferDesc {}.AddColorAttachment(color).SetDepthAttachment(depth));
+  const auto& description = framebuffer->GetDescriptor();
+  ASSERT_EQ(description.color_attachments.size(), 1U);
+  EXPECT_EQ(description.color_attachments.front().format, Format::kRGBA32Float);
+  EXPECT_EQ(description.depth_attachment.format, Format::kDepth32);
 }
 } // namespace oxygen::graphics::d3d12::testing
