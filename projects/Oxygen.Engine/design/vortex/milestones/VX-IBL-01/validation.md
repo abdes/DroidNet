@@ -1,9 +1,9 @@
 # VX-IBL-01 validation
 
-**S1–S7 validated.** [S7 integrated qualification](#s7-integrated-qualification)
+**S1–S8 validated.** [S7 integrated qualification](#s7-integrated-qualification)
 closes the six extractions, performance, captures, installed SDK and applications.
-[S8](README.md#s8--atmosphere-and-fog-correctness) adds seven source-confirmed
-atmosphere/fog regression cases; [implementation is in progress](#s8-correctness). The [acceptance table](README.md#acceptance) links every
+[S8 correctness and performance](#s8-correctness) closes seven atmosphere/fog
+regressions at the existing sample/resource budgets. The [acceptance table](README.md#acceptance) links every
 required result. The [S1–S6 audit](evidence/s6-integrated/run.json) records
 baseline provenance; earlier measurements retain their original source/build scope.
 
@@ -11,6 +11,8 @@ Read: [S8 correctness](#s8-correctness), [S7 qualification](#s7-integrated-quali
 [reproduce](#reproduce).
 
 ## S8 correctness
+
+Validated on **2026-09-28**, implementation **`82e99f11b`**.
 
 **S8.1 passes:** the production volumetric shader now uses incident propagation
 for the HG cosine. The native regression covers positive/zero/negative anisotropy
@@ -35,20 +37,60 @@ Reproduce with Exposure filters `ExposureGpuTest.DistantSky*`,
 `IblSurfaceGpuTest.CapturedAtmosphereAndFogHalfMatchesCanonicalAcrossPaths`, plus
 `ExposureGpuTest.VolumetricPhaseScattersTowardEachAtmosphereLight`.
 
-S8.5–S8.7 and final scene/performance qualification remain open.
+**S8.5–S8.7 pass:** six native fixtures validate per-pixel orthographic ray
+origins (including translated/rotated views and both depth conventions), unchanged
+perspective distance, continuous scattering strength and preserved extinction.
+Real deferred/forward opaque, masked and translucent surfaces retain extinction;
+illuminated AP holdout removes added RGB. Sky/disks and independent fog preserve
+premultiplied coverage over a colored background at two exposure scales. Captured
+IBL matches independently regenerated non-held products and reuses products for
+holdout-only edits.
+
+All selected cases pass in Debug/Release: **42 atmosphere/fog/sky tests**,
+**56/54 IBL GPU tests** and **63 environment-service tests** per configuration.
+Debug totals combine the suite with two focused reruns after fixture corrections.
+All modified C++ passes oxytidy; the extra-high review is clear. A native framebuffer
+regression also verifies inferred attachment formats, which backend depth clears
+require. Production shaders contain no new testing diagnostics.
+Reproduce the new cases with `AtmosphereCompositionGpuTest.*`,
+`ExposureLightingGpuTest.AerialExtinctionSurvivesZeroStrengthAcrossPaths` and
+`ExposureLightingGpuTest.CapturedIblIgnoresAtmosphereAndFogHoldout`. The integrated
+Exposure filter is `*Fog*:*Sky*:*Aerial*:*Atmosphere*`; LightingGpuAbi uses
+`*Ibl*:*HeightFog*`, and EnvironmentLightingService runs in full.
+
+**Application and SDK:** Async's isolated `lighting` UI test passes with the
+D3D12 debug layer. RenderDoc inspection confirms readable daylight materials,
+spotlight shadow toggling (18,357 changed pixels) and zero lights-off RGB. Replay
+handles close cleanly. Matching Debug/Release SDK dev/runtime/data components are
+installed; installed shader archives match their corresponding builds.
+Reproduce with the [Async lighting procedure](../../../../Examples/Async/README.md#validation)
+and its existing replay analyzer. User settings are not used by the test.
 
 The pre-S8 native Release baseline uses the S7 production code (`5d54e438f`),
 RTX 3080, 1920×1080, default power and unchanged benchmark settings. M01 records
 12,000 warmed frames; the IBL authoring scene records 1,800 at 60 Hz.
 
-| Workload / affected GPU scope         | Before mean / p95 (ms) |
-| ------------------------------------- | ---------------------: |
-| M01 / volumetric fog                  |          0.133 / 0.131 |
-| M01 / aerial-perspective volume       |          0.105 / 0.101 |
-| M01 / fog composition                 |          0.212 / 0.218 |
-| Authoring / distant sky               |          0.014 / 0.014 |
-| Authoring / captured distant sky      |          0.012 / 0.014 |
-| Authoring / aerial-perspective volume |          0.190 / 0.202 |
+| Workload / affected GPU scope    | Before mean / p95 (ms) | S8 mean / p95 (ms) |
+| -------------------------------- | ---------------------: | -----------------: |
+| M01 / volumetric fog             |          0.133 / 0.131 |      0.130 / 0.130 |
+| M01 / AP volume                  |          0.105 / 0.101 |      0.099 / 0.101 |
+| M01 / AP composition             |          0.200 / 0.201 |      0.200 / 0.201 |
+| M01 / fog composition            |          0.212 / 0.218 |      0.201 / 0.201 |
+| M01 / sky                        |          0.007 / 0.011 |      0.007 / 0.008 |
+| Authoring / distant sky          |          0.014 / 0.014 |      0.016 / 0.017 |
+| Authoring / captured distant sky |          0.012 / 0.014 |      0.015 / 0.017 |
+| Authoring / AP volume            |          0.190 / 0.202 |      0.191 / 0.208 |
+| Authoring / AP composition       |          0.214 / 0.243 |      0.230 / 0.253 |
+| Authoring / fog composition      |          0.232 / 0.373 |      0.233 / 0.252 |
+| Authoring / sky                  |          0.007 / 0.011 |      0.006 / 0.008 |
+
+All frames have valid timestamps; no samples are trimmed. The largest mean
+increase is **0.0165 ms** in authoring AP composition. The two distant-sky
+passes each add about **0.002–0.003 ms**; these costs do not warrant additional
+complexity or reduced quality. The authoring workload passes its existing
+IBL gates: update GPU union **p95 0.459 / p99 0.770 ms**, 1,800 same-frame
+publications, source age zero, two unchanged product slots and stable product
+allocation bytes. M01 completes its 12,000-frame measurement window.
 
 Reproduce correctness with Exposure filter
 `*Fog*:ExposureGpuTest.VolumetricPhaseScattersTowardEachAtmosphereLight`.

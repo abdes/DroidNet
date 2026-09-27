@@ -283,8 +283,14 @@ static float4 EvaluateSkyHeightFog(EnvironmentStaticData environment,
     EnvironmentViewData view, float3 origin, float3 direction, bool capture)
 {
     if (!IsSkyHeightFogEnabled(environment.fog, view, capture)) return float4(0, 0, 0, 1);
-    return EvaluateExponentialHeightFog(environment.fog, environment, view,
+    float4 fog = EvaluateExponentialHeightFog(environment.fog, environment, view,
         origin, direction, HeightFogDistantRayDistance(direction));
+    if (!capture && (view.flags & (1u << 1u)) == 0u
+        && FogFlagEnabled(environment.fog.flags, GPU_FOG_FLAG_HOLDOUT))
+    {
+        fog.rgb = 0.0f.xxx;
+    }
+    return fog;
 }
 
 #endif

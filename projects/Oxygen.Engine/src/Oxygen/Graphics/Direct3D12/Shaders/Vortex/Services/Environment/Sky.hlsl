@@ -203,15 +203,17 @@ float4 VortexSkyPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
     RecordHdrConsumerUsage(HDR_CONSUMER_SKY,
         environment_view.sky_luminance_factor_height_fog_contribution.xyz);
     const float4 sky_sample = SampleSkyViewRadiance(env_data, environment_view, view_direction);
-    float3 sky_color = max(sky_sample.rgb, 0.0.xxx);
+    const bool reflection_capture_view = IsReflectionCaptureView(environment_view);
+    const bool atmosphere_holdout = !reflection_capture_view
+        && environment_view.trace_sample_scale_transmittance_min_light_elevation_holdout_mainpass.z > 0.5f;
+    float3 sky_color = atmosphere_holdout ? 0.0f.xxx : max(sky_sample.rgb, 0.0.xxx);
 
     const float3 planet_center_to_camera = float3(0.0f, 0.0f, view_height);
-    const bool reflection_capture_view = IsReflectionCaptureView(environment_view);
-    const bool light0_disk_enabled = !reflection_capture_view
+    const bool light0_disk_enabled = !reflection_capture_view && !atmosphere_holdout
         && env_data.atmosphere.sun_disk_enabled != 0u
         && env_data.atmosphere.transmittance_lut_slot != K_INVALID_BINDLESS_INDEX
         && environment_view.atmosphere_light0_disk_luminance_rgb.w > 0.5f;
-    const bool light1_disk_enabled = !reflection_capture_view
+    const bool light1_disk_enabled = !reflection_capture_view && !atmosphere_holdout
         && env_data.atmosphere.sun_disk_enabled != 0u
         && env_data.atmosphere.transmittance_lut_slot != K_INVALID_BINDLESS_INDEX
         && environment_view.atmosphere_light1_disk_luminance_rgb.w > 0.5f;
@@ -250,8 +252,10 @@ float4 VortexSkyPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
     }
 
     sky_color = sky_color * height_fog.a + height_fog.rgb * view_pre_exposure;
-    CheckHdrStoreRange(float4(sky_color, 1.0), 7u,
+    const float coverage = atmosphere_holdout
+        ? saturate(1.0f - saturate(sky_sample.a) * height_fog.a) : 1.0f;
+    CheckHdrStoreRange(float4(sky_color, coverage), 7u,
         LoadViewFrameBindings(bindless_view_frame_bindings_slot).exposure_status_uav,
         0u, view_pre_exposure);
-    return float4(sky_color, 1.0);
+    return float4(sky_color, coverage);
 }

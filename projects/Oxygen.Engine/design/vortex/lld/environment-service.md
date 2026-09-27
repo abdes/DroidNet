@@ -31,6 +31,8 @@ owns delivery and regression coverage for these seven contracts.
   extinction and premultiplied coverage `1-T_atmosphere`. Independent height fog
   keeps its own controls: composition yields `L_fog` with coverage
   `1-T_fog*T_atmosphere`. AP retains transmittance while suppressing inscattering.
+  Fog's own holdout zeros its visible sky/geometry RGB while retaining extinction;
+  sky/fog evaluation in reflection and real-time sky captures ignores holdout.
   Captured IBL remains lit. Ordinary non-holdout sky remains opaque; this uses
   existing scene-color blending rather than introducing a global alpha mode.
 
@@ -40,7 +42,8 @@ UE5.7 source references, relative to `F:/Epic Games/UE_5.7/Engine`:
 `SkyAtmosphere.usf:1437` applies the shared luminance factor, and
 `Source/Runtime/Renderer/Private/SkyAtmosphereRendering.cpp:1144` generates fixed-seed
 8×8 stratified sphere directions. `SkyAtmosphere.usf:865–900,1668` defines enabled
-holdout radiance/coverage and AP extinction behavior. Oxygen's orthographic
+holdout radiance/coverage and AP extinction behavior; `HeightFogCommon.ush:378`
+retains extinction for independently held-out height fog. Oxygen's orthographic
 distance follows its own producer's near-plane origin; UE's translated-world
 expression in `SkyAtmosphereCommon.ush:59` is not an interchangeable formula.
 

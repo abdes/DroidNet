@@ -145,5 +145,6 @@ float4 VortexFogPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
         input.uv,
         ray_length_m);
     const float4 fog_result = ComposeFogResults(height_fog, volumetric_fog);
-    return float4(fog_result.rgb, 1.0f - fog_result.a);
+    const bool holdout = !reflection_capture && FogFlagEnabled(fog.flags, GPU_FOG_FLAG_HOLDOUT);
+    return float4(holdout ? 0.0f.xxx : fog_result.rgb, 1.0f - fog_result.a);
 }

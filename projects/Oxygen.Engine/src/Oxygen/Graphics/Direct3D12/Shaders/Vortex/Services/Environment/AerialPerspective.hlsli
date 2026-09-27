@@ -96,7 +96,7 @@ static inline float4 GetAerialPerspectiveLuminanceTransmittance(
             screen_uv_for_view,
             ResolveNearDepthReference(),
             inverse_view_projection_matrix);
-        world_position_relative_to_camera_km += WorldMetersToAtmosphereKm(
+        world_position_relative_to_camera_km -= WorldMetersToAtmosphereKm(
             near_world_position - camera_position);
     }
 
@@ -233,11 +233,6 @@ AerialPerspectiveResult ComputeAerialPerspectiveLut(
     result.transmittance = float3(1.0, 1.0, 1.0);
 
     float scattering_strength = max(GetAerialScatteringStrength(), 0.0);
-
-    if (scattering_strength < 0.0001)
-    {
-        return result;
-    }
 
     float4 ap_sample = SampleCameraVolumeLut(atmo, world_pos, camera_pos, view_distance);
 
