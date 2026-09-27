@@ -479,10 +479,12 @@ static inline float3 EvaluateLocalFogVolumeInScattering(
             directional_light_color,
             directional_light_direction))
     {
+        // The camera ray and direction to the light give the scattering cosine.
+        // Unlike UE's helper, ours takes (cos_theta, g) and uses -2*g*cos_theta.
         in_scattering += directional_light_color
             * HenyeyGreensteinPhase(
-                -instance.phase_g,
-                dot(ray_dir_world, directional_light_direction));
+                dot(ray_dir_world, directional_light_direction),
+                instance.phase_g);
     }
 
     EnvironmentStaticData env_data = (EnvironmentStaticData)0;

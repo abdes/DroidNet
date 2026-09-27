@@ -55,11 +55,10 @@ float HenyeyGreensteinPhase(float cos_theta, float g)
     return (1.0 - g2) * INV_FOUR_PI / pow(denom, 1.5);
 }
 
-//! Cornette-Shanks phase function (UE5 reference).
+//! Cornette-Shanks phase function.
 //!
-//! More physically accurate than standard Henyey-Greenstein for Mie scattering.
-//! Includes a cos²θ term that better matches real aerosol scattering patterns.
-//! Used in Unreal Engine 5's atmosphere system.
+//! Includes a cos²θ angular factor and reduces to Rayleigh scattering at g = 0.
+//! The active Vortex and UE5.7 sky-atmosphere paths use Henyey-Greenstein instead.
 //!
 //! @param cos_theta Cosine of scattering angle.
 //! @param g Asymmetry parameter [-1, 1].
