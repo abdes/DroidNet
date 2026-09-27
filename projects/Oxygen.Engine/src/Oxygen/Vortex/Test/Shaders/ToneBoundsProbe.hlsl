@@ -75,6 +75,16 @@ void CS(uint3 thread : SV_DispatchThreadID)
     if (thread.x >= pass.count) {
         return;
     }
+    if (pass.reserved == 262144u) {
+        // Exact texel contents through a published production LUT descriptor.
+        const uint4 texel = input[thread.x];
+        Texture2D<float2> source = ResourceDescriptorHeap[NonUniformResourceIndex(texel.x)];
+        const float2 value = source.Load(int3(texel.yz, 0));
+        const float2 decoded = texel.w != 0u ? round(value * 65535.0f) : value;
+        output.Store4(thread.x * 32u, asuint(float4(decoded, 0, 0)));
+        output.Store4(thread.x * 32u + 16u, 0u.xxxx);
+        return;
+    }
     if (pass.reserved == 131072u) {
         const float4 position_radius = asfloat(input[thread.x * 2u]);
         const float4 direction_height = asfloat(input[thread.x * 2u + 1u]);

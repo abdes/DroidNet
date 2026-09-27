@@ -59,7 +59,6 @@ auto UploadTracker::RegisterFailedImmediate(
   e.result.success = false;
   e.result.bytes_uploaded = 0;
   e.result.error = error;
-  last_registered_fence_raw_.store(e.fence.get());
   return UploadTicket { id, e.fence };
 }
 
@@ -67,9 +66,6 @@ auto UploadTracker::MarkFenceCompleted(const FenceValue completed) -> void
 {
   {
     std::scoped_lock lk(mu_);
-    if (completed_fence_.Get() < completed) {
-      completed_fence_.Set(completed);
-    }
     for (auto& [id, e] : entries_) {
       (void)id;
       if (!e.completed && e.fence <= completed) {
@@ -77,6 +73,13 @@ auto UploadTracker::MarkFenceCompleted(const FenceValue completed) -> void
       }
     }
   }
+  // Value resumes matching coroutines synchronously. Publish their results
+  // before notification, and never resume a caller while holding mu_.
+  completed_fence_.Modify([completed](FenceValue& value) -> void {
+    if (value < completed) {
+      value = completed;
+    }
+  });
   cv_.notify_all();
 }
 
@@ -94,11 +97,11 @@ auto UploadTracker::TryGetResult(const TicketId id) const
   -> std::optional<UploadResult>
 {
   std::scoped_lock lk(mu_);
-  if (const auto it = entries_.find(id); it != entries_.end()) {
-    if (it->second.completed) {
-      return it->second.result;
-    }
+  if (const auto it = entries_.find(id);
+    it != entries_.end() && it->second.completed) {
+    return it->second.result;
   }
+
   return std::nullopt;
 }
 

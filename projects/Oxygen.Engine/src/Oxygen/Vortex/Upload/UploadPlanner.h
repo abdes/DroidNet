@@ -46,6 +46,11 @@ struct TextureUploadPlan {
   uint64_t total_bytes { 0 };
   std::vector<oxygen::graphics::TextureUploadRegion> regions;
   std::vector<std::size_t> source_indices;
+
+  //! Pack pitched CPU rows into this plan's staging layout. Borrows all bytes.
+  OXGN_VRTX_NDAPI auto Pack2D(const graphics::TextureDesc& destination,
+    const UploadTextureSourceView& source, std::span<std::byte> staging,
+    const UploadPolicy::FillerPolicy& filler) const -> bool;
 };
 
 //! Upload item mapping a region to the original requests it covers.

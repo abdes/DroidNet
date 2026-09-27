@@ -25,11 +25,13 @@ struct ShadowFrameData;
 
 namespace lighting::internal {
   class BrdfEnergyResources;
+  struct BrdfEnergyProduct;
   class SpatialLightGrid;
 
   struct PublishedLightingView {
     ShaderVisibleIndex slot { kInvalidShaderVisibleIndex };
     LightingFrameBindings bindings {};
+    std::shared_ptr<const BrdfEnergyProduct> brdf_energy;
   };
 
   class ForwardLightPublisher {
@@ -42,6 +44,8 @@ namespace lighting::internal {
 
     auto OnFrameStart(frame::SequenceNumber sequence, frame::Slot slot) -> void;
     auto InvalidateViews() -> void { published_views_.clear(); }
+    [[nodiscard]] auto AttachResources(
+      ViewId view_id, graphics::CommandRecorder& recorder) const -> bool;
     [[nodiscard]] auto Publish(const BuiltLightGridFrame& built_frame)
       -> std::expected<void, LightingPreparationFailure>;
     [[nodiscard]] auto PublishShadowReferences(

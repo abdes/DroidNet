@@ -120,9 +120,8 @@ NOLINT_TEST_F(UploadCoordinatorTest, Shutdown_WaitsForOutstandingUploads)
   ASSERT_TRUE(res.has_value()) << "Shutdown did not complete successfully";
 }
 
-// With the current tracker cleanup semantics, shutdown may still complete
-// after frame-start retirement even if the fake queue is manually reset.
-NOLINT_TEST_F(UploadCoordinatorTest, ShutdownSucceedsAfterFrameCleanup)
+// CPU frame retirement cannot substitute for the last submitted GPU fence.
+NOLINT_TEST_F(UploadCoordinatorTest, ShutdownWaitsForFenceAfterFrameCleanup)
 {
   BufferDesc dst_desc {
     .size_bytes = 256,
@@ -151,20 +150,22 @@ NOLINT_TEST_F(UploadCoordinatorTest, ShutdownSucceedsAfterFrameCleanup)
   auto ticket_res = uploader.Submit(req, Staging());
   ASSERT_TRUE(ticket_res.has_value());
 
-  // Force the transfer queue to appear stale in the fake backend.
+  // Hide completion before the tracker can observe it, then recycle the CPU
+  // slot. The submitted fence must remain a shutdown dependency.
   auto q
     = GfxPtr()->GetCommandQueue(oxygen::graphics::SingleQueueStrategy().KeyFor(
       oxygen::graphics::QueueRole::kTransfer));
   ASSERT_NE(q, nullptr);
   q->Signal(0);
+  SimulateFrameStart(oxygen::frame::Slot { 2U });
 
-  // Current Vortex semantics retire any tracked work that was already
-  // frame-cleaned, so shutdown still succeeds in this fake-backend scenario.
   auto res = uploader.Shutdown(std::chrono::milliseconds {
     5,
   });
-  ASSERT_TRUE(res.has_value())
-    << "Expected shutdown to succeed after frame cleanup";
+  ASSERT_FALSE(res.has_value());
+  EXPECT_EQ(res.error(), UploadError::kSubmitFailed);
+  q->Signal(ticket_res->fence.get());
+  EXPECT_TRUE(uploader.Shutdown(std::chrono::milliseconds { 5 }));
 }
 
 } // namespace

@@ -8,7 +8,6 @@
 #include <array>
 #include <cstddef>
 #include <cstring>
-#include <functional>
 #include <memory>
 #include <span>
 #include <utility>
@@ -120,7 +119,7 @@ NOLINT_TEST_F(UploadCoordinatorTest, BufferUpload_WithProducer_Completes)
 
   constexpr size_t size = 128;
   bool producer_ran = false;
-  std::move_only_function<bool(std::span<std::byte>)> producer
+  oxygen::vortex::upload::UploadProducer producer
     = [&producer_ran](std::span<std::byte> out) -> bool {
     producer_ran = true;
     std::size_t index = 0;
@@ -298,13 +297,13 @@ NOLINT_TEST_F(
   bool prod_b_ran = false;
   constexpr size_t size_a = 96;
   constexpr size_t size_b = 128;
-  std::move_only_function<bool(std::span<std::byte>)> pa
+  oxygen::vortex::upload::UploadProducer pa
     = [&prod_a_ran](std::span<std::byte> out) -> bool {
     prod_a_ran = true;
     std::memset(out.data(), 0x11, out.size());
     return true;
   };
-  std::move_only_function<bool(std::span<std::byte>)> pb
+  oxygen::vortex::upload::UploadProducer pb
     = [&prod_b_ran](std::span<std::byte> out) -> bool {
     prod_b_ran = true;
     std::memset(out.data(), 0x22, out.size());
@@ -405,7 +404,7 @@ NOLINT_TEST_F(UploadCoordinatorTest, BufferUpload_WithProducer_Fails_NoCopy)
   auto dst = GfxPtr()->CreateBuffer(dst_desc2);
 
   bool prod_ran = false;
-  std::move_only_function<bool(std::span<std::byte>)> prod
+  oxygen::vortex::upload::UploadProducer prod
     = [&prod_ran](std::span<std::byte>) -> bool {
     prod_ran = true;
     return false; // fail
@@ -468,13 +467,13 @@ NOLINT_TEST_F(
 
   bool prod_a_ran = false;
   bool prod_b_ran = false;
-  std::move_only_function<bool(std::span<std::byte>)> pa
+  oxygen::vortex::upload::UploadProducer pa
     = [&prod_a_ran](std::span<std::byte> out) -> bool {
     prod_a_ran = true;
     std::memset(out.data(), 0x33, out.size());
     return true;
   };
-  std::move_only_function<bool(std::span<std::byte>)> pb
+  oxygen::vortex::upload::UploadProducer pb
     = [&prod_b_ran](std::span<std::byte>) -> bool {
     prod_b_ran = true;
     return false;

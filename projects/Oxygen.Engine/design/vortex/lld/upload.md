@@ -4,18 +4,20 @@ Upload owns CPU-to-GPU data preparation and transfer. Existing planning and
 coordinator APIs remain the foundation; immutable texture initialization adds
 a bounded path for renderer-owned lookup products.
 
-The capability below is planned; [VX-IBL-01.S7](../milestones/VX-IBL-01/README.md#s7--reusable-infrastructure)
-owns adoption, implementation state and integration qualification.
+[VX-IBL-01.S7](../milestones/VX-IBL-01/README.md#s7--reusable-infrastructure)
+owns implementation state, adopter migration and integration qualification.
 
-Read: [contract](#immutable-texture-initialization), [C++ guidance](../../../../../design/oxygen/RULES.md#c).
+Read: [immutable initialization](#immutable-texture-initialization),
+[async ownership](#async-request-ownership), [C++ guidance](../../../../../design/oxygen/RULES.md#c).
 
 ## Immutable texture initialization
 
-**Implementation home:** `Vortex/Upload/ImmutableTextureUpload.*`, with shared packing in the
-existing Upload module. Migrate
+**Implementation home:** `UploadCoordinator::PrepareImmutableTexture2D` prepares
+the move-only `Vortex/Upload/ImmutableTextureUpload` recording object. Shared row
+packing belongs to `TextureUploadPlan::Pack2D`. Its production users are
 [`IblBrdfResources::Prepare`](../../../src/Oxygen/Vortex/Environment/Internal/IblBrdfResources.cpp)
 and [`BrdfEnergyResources::Prepare`](../../../src/Oxygen/Vortex/Lighting/Internal/BrdfEnergyResources.cpp).
-Keep both LUT generators, formats, dimensions and service publication fields.
+Both LUT generators, formats, dimensions and service publication fields are unchanged.
 
 - Accept a newly created managed 2D texture, explicit source subresources/row
   pitches and allocation-budget/debug context. Preparation returns a move-only
@@ -23,9 +25,11 @@ Keep both LUT generators, formats, dimensions and service publication fields.
   `Record(CommandRecorder&)` records it. The caller obtains the producer
   `CompletionReceipt` from `SubmitWithReceipt`. S7 supports the
   two existing 2D LUT consumers; 3D/cube upload remains with `UploadCoordinator`.
-- Extract and reuse `PackTexture2DToStaging` from
+  Initialize full selected subresources using the canonical destination
+  footprint. Boxed updates are rejected; source rows may have their own pitch.
+- `TextureUploadPlan::Pack2D` replaces the local `PackTexture2DToStaging` in
   [`UploadCoordinator.cpp`](../../../src/Oxygen/Vortex/Upload/UploadCoordinator.cpp)
-  and use `UploadPlanner::PlanTexture2D`. The coordinator calls the same packer;
+  and uses `UploadPlanner::PlanTexture2D` layouts. The coordinator calls the same packer;
   keep its existing tickets, queues, cancellation and 3D behavior unchanged.
 - Separate preparation/recording from submission: the caller owns the explicit
   graphics-queue recording, diagnostic scope and timing-failure handling. The
@@ -36,15 +40,30 @@ Keep both LUT generators, formats, dimensions and service publication fields.
   valid receipt. Discard/rejection leaves it unpublished and retryable; uncertain
   submission follows existing Graphics fault handling. Consumers attach the
   registration and record the producer dependency without a CPU wait.
-- Move the older BRDF-energy resource/staging retirement to this managed path,
-  including publication through `ForwardLightPublisher` and the deferred/base/
-  translucent recording sites that consume `LightingFrameBindings`. Carry CPU
-  resource leases/dependencies alongside existing bindings; do not enlarge the
-  shader ABI to carry ownership. Preserve Lighting's allocation
-  budget and failure classification. Cache a complete product; no per-frame
-  upload, staging allocation or new global cache.
+- `ForwardLightPublisher` retains the BRDF-energy product beside its existing
+  `LightingFrameBindings`. Deferred, base and translucent recordings attach its
+  registration and producer receipt. CPU ownership does not enlarge the shader
+  ABI. Lighting's allocation budget and failure classification remain intact.
+  Complete products are cached; stable frames allocate no upload staging and
+  issue no LUT upload. There is no new global cache.
 
 **Checks:** pitched/short/overflowing source rows, padding, setup/view/allocation
 failure, discard, rejected/uncertain submission, retry and backend close. Read
 back both real LUTs exactly and execute both lighting consumers after releasing
 initialization CPU temporaries. Exercise existing 2D/3D/coordinator regressions.
+
+## Async request ownership
+
+`SubmitAsync` owns its request and staging-provider handle; `SubmitManyAsync`
+owns the request vector and provider. Both remain lazy: packing and submission
+start when the coroutine executes. Source byte views remain borrowed through
+packing; an owning producer capture can carry source storage with the request.
+Producers are const-callable and receive a writable staging span.
+Each copy recording retains its staging backing and destination through Graphics
+completion, independently of coroutine/provider lifetime. Cancellation remains
+prompt; partial batch failure cannot release resources still used by the GPU.
+Ticket results are published before waking coroutine consumers outside the
+tracker lock.
+
+`Shutdown` drains ticketed submissions. Prepared immutable uploads belong to
+their caller's recording and retire through Graphics submission receipts.

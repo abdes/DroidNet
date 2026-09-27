@@ -61,7 +61,7 @@ using Priority = NamedType<int, struct PriorityTag,
   Printable>; // clang-format on
 
 // FenceValue exists in graphics common; reuse to avoid duplication.
-using FenceValue = graphics::FenceValue;
+using graphics::FenceValue;
 
 //=== POD contracts ----------------------------------------------------------//
 
@@ -128,7 +128,8 @@ struct UploadTextureSourceView {
 
 #if defined(__cpp_lib_move_only_function)                                      \
   && (__cpp_lib_move_only_function >= 202110L)
-using UploadProducer = std::move_only_function<bool(std::span<std::byte>)>;
+using UploadProducer
+  = std::move_only_function<bool(std::span<std::byte>) const>;
 #else
 using UploadProducer = std::function<bool(std::span<std::byte>)>;
 #endif

@@ -307,7 +307,6 @@ public:
   {
     completed_ = current_.load();
     private_completed_ = private_issued_;
-    const_cast<FakeCommandQueue*>(this)->PollCompletedUses();
   }
   [[nodiscard]] auto GetQueueRole() const -> QueueRole override
   {
@@ -316,8 +315,8 @@ public:
 
 private:
   struct PreparedSubmission final : graphics::internal::NativeSubmission {
-    FakeCommandQueue* queue;
-    size_t count;
+    FakeCommandQueue* queue {};
+    size_t count {};
     std::vector<CommandList::SubmitQueueAction> actions;
     std::optional<uint64_t> marker;
     std::vector<graphics::CompletionReceipt> dependencies;
@@ -347,7 +346,7 @@ private:
   };
   auto PrepareNativeSubmission(
     const graphics::internal::NativeSubmissionRequest& request,
-    std::unique_ptr<graphics::internal::NativeSubmission>)
+    std::unique_ptr<graphics::internal::NativeSubmission> /*reusable*/)
     -> std::unique_ptr<graphics::internal::NativeSubmission> override
   {
     if (submission_failure_ && *submission_failure_) {
@@ -930,7 +929,7 @@ private:
   static constexpr auto Key(graphics::ResourceViewType vt,
     graphics::DescriptorVisibility vis) -> DomainKey
   {
-    return (static_cast<DomainKey>(static_cast<uint32_t>(vt)) << 32)
+    return (static_cast<DomainKey>(static_cast<uint32_t>(vt)) << 32U)
       | static_cast<DomainKey>(static_cast<uint32_t>(vis));
   }
   std::unordered_map<DomainKey, DomainState> domains_;
@@ -1284,9 +1283,11 @@ public:
       observer_ptr<const bool> constant_view_failure_;
       std::vector<std::byte> storage_;
     };
-    return std::make_shared<FakeBuffer>("Staging", desc.size_bytes, desc.usage,
-      desc.memory, fail_map_, &buffer_view_log_,
+    auto buffer = std::make_shared<FakeBuffer>("Staging", desc.size_bytes,
+      desc.usage, desc.memory, fail_map_, &buffer_view_log_,
       make_observer(&fail_constant_buffer_views_));
+    latest_created_buffer_ = buffer;
+    return buffer;
   }
   auto CreateCommandQueues(const graphics::QueuesStrategy& queue_strategy)
     -> void override
@@ -1300,6 +1301,7 @@ public:
     }
     queue_strategy_ = queue_strategy.Clone();
     queues_.clear();
+    created_queues_.clear();
 
     for (const auto& spec : queue_strategy.Specifications()) {
       if (queues_.contains(spec.key)) {
@@ -1314,6 +1316,11 @@ public:
     -> graphics::QueueKey override
   {
     return queue_strategy_ ? queue_strategy_->KeyFor(role) : QueueKey {};
+  }
+  [[nodiscard]] auto GetFakeCommandQueue(const QueueRole role) const
+    -> std::shared_ptr<FakeCommandQueue>
+  {
+    return created_queues_.at(QueueKeyFor(role)).lock();
   }
   auto GetCommandQueue(const QueueKey& key) const
     -> observer_ptr<CommandQueue> override
@@ -1341,11 +1348,19 @@ public:
     }
     return {};
   }
-  auto FlushCommandQueues() -> void override { Graphics::FlushCommandQueues(); }
+  auto FlushCommandQueues() -> void override
+  {
+    Graphics::FlushCommandQueues();
+    PollCompletedUses();
+  }
   auto AcquireCommandRecorder(const QueueKey& queue_key,
-    std::string_view command_list_name,
-    graphics::SubmissionPolicy policy
-    = graphics::SubmissionPolicy::kOnScopeExit)
+    const std::string_view command_list_name) -> graphics::CommandRecording
+  {
+    return AcquireCommandRecorder(
+      queue_key, command_list_name, graphics::SubmissionPolicy::kOnScopeExit);
+  }
+  auto AcquireCommandRecorder(const QueueKey& queue_key,
+    std::string_view command_list_name, graphics::SubmissionPolicy policy)
     -> graphics::CommandRecording override
   {
     auto queue = GetCommandQueue(queue_key);
@@ -1372,7 +1387,9 @@ public:
   ClearFramebufferLog clear_framebuffer_log_ {};
   IndirectCommandLog indirect_log_ {};
   mutable SrvViewCreationLog srv_view_log_ {};
+  mutable std::weak_ptr<Buffer> latest_created_buffer_;
   std::map<QueueKey, std::shared_ptr<CommandQueue>> queues_;
+  std::map<QueueKey, std::weak_ptr<FakeCommandQueue>> created_queues_;
   std::unique_ptr<graphics::QueuesStrategy> queue_strategy_;
   mutable FakeTimestampQueryProvider timestamp_query_provider_ {};
   // Test injection flags (mutable to allow const CreateBuffer)
@@ -1398,8 +1415,10 @@ protected:
       return found->second;
     }
     const auto* const name = role == QueueRole::kTransfer ? "CopyQ" : "GfxQ";
-    return std::make_shared<FakeCommandQueue>(
+    auto queue = std::make_shared<FakeCommandQueue>(
       name, role, make_observer(&fail_submission_));
+    created_queues_.insert_or_assign(queue_name, queue);
+    return queue;
   }
   [[nodiscard]] auto CreateCommandListImpl(
     QueueRole /*role*/, std::string_view /*command_list_name*/)

@@ -4,138 +4,147 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <cstddef>
+#include <array>
 #include <cstdint>
 #include <exception>
+#include <expected>
 #include <memory>
 #include <new>
 #include <span>
 #include <utility>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
-#include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/CommandRecording.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Graphics/Common/ManagedResource.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
+#include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
 #include <Oxygen/Vortex/Environment/Internal/IblBrdfLookup.h>
 #include <Oxygen/Vortex/Environment/Internal/IblGpuProcessor.h>
 #include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/Upload/ImmutableTextureUpload.h>
 #include <Oxygen/Vortex/Upload/Types.h>
-#include <Oxygen/Vortex/Upload/UploadPlanner.h>
+#include <Oxygen/Vortex/Upload/UploadCoordinator.h>
 #include <Oxygen/Vortex/Upload/UploadPolicy.h>
 
 namespace oxygen::vortex::environment::internal {
 
 IblBrdfResources::IblBrdfResources(Graphics& graphics)
   : graphics_(graphics)
+  , owned_uploads_(
+      std::make_unique<upload::UploadCoordinator>(observer_ptr { &graphics },
+        upload::UploadPolicy {
+          graphics.QueueKeyFor(graphics::QueueRole::kGraphics) }))
+  , uploads_(owned_uploads_.get())
+{
+}
+
+IblBrdfResources::IblBrdfResources(Renderer& renderer)
+  : graphics_(*renderer.GetGraphics())
+  , uploads_(&renderer.GetUploadCoordinator())
+  , diagnostics_(&renderer.GetDiagnosticsService())
 {
 }
 
 IblBrdfResources::~IblBrdfResources() = default;
-
-IblBrdfResources::IblBrdfResources(Renderer& renderer)
-  : IblBrdfResources(*renderer.GetGraphics())
-{
-  diagnostics_ = observer_ptr { &renderer.GetDiagnosticsService() };
-}
 
 auto IblBrdfResources::Prepare()
   -> std::expected<std::shared_ptr<const IblBrdfProduct>, IblProcessError>
 {
   auto& registry = graphics_.GetResourceRegistry();
   if (product_) {
-    // A backend close invalidates acquisition even if an external lease still
-    // owns the native allocation. Do not advertise it to a new generation.
-    if (!registry.RetainUse(product_->registration))
+    if (!registry.RetainUse(product_->registration)) {
       return std::unexpected(IblProcessError::kBrdfUnavailable);
+    }
     return product_;
   }
   try {
-    auto candidate = std::make_shared<IblBrdfProduct>();
-    candidate->texture = graphics_.CreateTexture({ .width = kIblBrdfWidth,
-      .height = kIblBrdfHeight,
-      .format = Format::kRG16UNorm,
-      .texture_type = TextureType::kTexture2D,
-      .debug_name = "IBL.BrdfLookup",
-      .is_shader_resource = true,
-      .initial_state = graphics::ResourceStates::kCommon });
-    auto registration = registry.RegisterManaged(candidate->texture);
-    if (!registration)
+    const auto views = std::array { graphics::TextureViewRequest {
+      .description = {
+        .view_type = graphics::ResourceViewType::kTexture_SRV,
+        .format = Format::kRG16UNorm,
+        .dimension = TextureType::kTexture2D,
+        .sub_resources = graphics::TextureSubResourceSet::EntireTexture(),
+      },
+      .domain = bindless::generated::kTexturesDomain,
+    }, };
+    auto texture = registry.RegisterManagedTexture(
+      graphics_.CreateTexture({
+        .width = kIblBrdfWidth,
+        .height = kIblBrdfHeight,
+        .format = Format::kRG16UNorm,
+        .texture_type = TextureType::kTexture2D,
+        .debug_name = "IBL.BrdfLookup",
+        .is_shader_resource = true,
+        .initial_state = graphics::ResourceStates::kCommon,
+      }),
+      views);
+    if (!texture) {
       return std::unexpected(IblProcessError::kAllocationFailed);
-    candidate->registration = std::move(*registration);
-    const auto view
-      = registry.AcquireManagedView<graphics::Texture>(candidate->registration,
-        { .view_type = graphics::ResourceViewType::kTexture_SRV,
-          .format = Format::kRG16UNorm,
-          .dimension = TextureType::kTexture2D,
-          .sub_resources = graphics::TextureSubResourceSet::EntireTexture() },
-        bindless::generated::kTexturesDomain);
-    if (!view)
-      return std::unexpected(IblProcessError::kAllocationFailed);
-    candidate->srv = view->shader_visible_index;
-    const auto queue = graphics_.QueueKeyFor(graphics::QueueRole::kGraphics);
-    const auto plan = upload::UploadPlanner::PlanTexture2D(
-      { .dst = candidate->texture }, {}, upload::UploadPolicy { queue });
-    if (!plan || plan->regions.size() != 1U)
-      return std::unexpected(IblProcessError::kAllocationFailed);
-    auto staging = graphics_.CreateBuffer({ .size_bytes = plan->total_bytes,
-      .memory = graphics::BufferMemory::kUpload,
-      .debug_name = "IBL.BrdfUpload" });
-    auto staging_registration = registry.RegisterManaged(staging);
-    if (!staging_registration)
-      return std::unexpected(IblProcessError::kAllocationFailed);
-    const auto data = GetIblBrdfLookup();
-    const auto& region = plan->regions.front();
-    for (auto row = 0U; row < kIblBrdfHeight; ++row) {
-      staging->Update(data.data() + row * kIblBrdfWidth,
-        kIblBrdfWidth * sizeof(IblBrdfTexel),
-        region.buffer_offset
-          + static_cast<std::uint64_t>(row) * region.buffer_row_pitch);
     }
+    constexpr auto kRowBytes = kIblBrdfWidth * sizeof(IblBrdfTexel);
+    const auto source = upload::UploadTextureSourceView {
+      .subresources = { upload::UploadTextureSourceSubresource {
+        .bytes = std::as_bytes(GetIblBrdfLookup()),
+        .row_pitch = static_cast<std::uint32_t>(kRowBytes),
+        .slice_pitch = static_cast<std::uint32_t>(kRowBytes * kIblBrdfHeight),
+      }, },
+    };
+    auto prepared
+      = uploads_->PrepareImmutableTexture2D(std::move(*texture), source);
+    if (!prepared) {
+      return std::unexpected(IblProcessError::kAllocationFailed);
+    }
+    const auto& destination = prepared->Destination();
+    auto lease = registry.AcquireManaged(destination.registration.Identity());
+    if (!lease) {
+      return std::unexpected(IblProcessError::kBrdfUnavailable);
+    }
+    auto candidate = std::make_shared<IblBrdfProduct>();
+    candidate->texture = destination.resource;
+    candidate->registration = std::move(*lease);
+    candidate->srv = destination.views.front().shader_visible_index;
+    const auto queue = graphics_.QueueKeyFor(graphics::QueueRole::kGraphics);
     auto recording = graphics_.AcquireCommandRecorder(queue,
       "Vortex.Environment.IBL.BrdfUpload",
       graphics::SubmissionPolicy::kExplicit);
-    if (!recording
-      || !recording->RetainRegistration(registry, candidate->registration)
-      || !recording->RetainRegistration(registry, *staging_registration))
+    if (!recording) {
       return std::unexpected(IblProcessError::kRecordingFailed);
+    }
     bool accepted = false;
-    const ScopeGuard timing([&]() noexcept {
-      if (!accepted && diagnostics_)
+    const ScopeGuard timing([&] noexcept -> void {
+      if (!accepted && diagnostics_) {
         diagnostics_->InvalidateIblTiming();
+      }
     });
-    if (diagnostics_)
+    if (diagnostics_) {
       diagnostics_->AttachIblTimelineCollector(*recording);
+    }
     {
       const graphics::GpuEventScope upload_scope(*recording,
         "Vortex.Environment.IBL.BrdfUpload",
         profiling::ProfileGranularity::kTelemetry,
         profiling::ProfileCategory::kUpload);
-      recording->BeginTrackingResourceState(
-        *staging, graphics::ResourceStates::kGenericRead);
-      recording->BeginTrackingResourceState(
-        *candidate->texture, graphics::ResourceStates::kCommon);
-      recording->RequireResourceState(
-        *candidate->texture, graphics::ResourceStates::kCopyDest);
-      recording->FlushBarriers();
-      recording->CopyBufferToTexture(*staging, region, *candidate->texture);
-      recording->RequireResourceStateFinal(
-        *candidate->texture, graphics::ResourceStates::kShaderResource);
-      recording->FlushBarriers();
+      if (!prepared->Record(*recording)) {
+        return std::unexpected(IblProcessError::kRecordingFailed);
+      }
     }
     const auto submission = recording.SubmitWithReceipt();
     if (submission.outcome != graphics::SubmissionOutcome::kSubmitted
-      || !submission.receipt)
+      || !submission.receipt) {
       return std::unexpected(IblProcessError::kSubmissionFailed);
+    }
     candidate->producer = *submission.receipt;
     accepted = true;
     product_ = std::move(candidate);
@@ -146,5 +155,4 @@ auto IblBrdfResources::Prepare()
     return std::unexpected(IblProcessError::kRecordingFailed);
   }
 }
-
 } // namespace oxygen::vortex::environment::internal

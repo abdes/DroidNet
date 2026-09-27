@@ -30,6 +30,7 @@
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/FenceValue.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/OxCo/Co.h>
@@ -54,8 +55,31 @@ auto UploaderTagFactory::Get() noexcept -> UploaderTag
 
 namespace {
 
-using namespace oxygen::graphics;
-using namespace oxygen::vortex::upload;
+constexpr std::uint64_t kUploadDestinationUse = 0x55504C4453540000ULL;
+
+using oxygen::graphics::Buffer;
+using oxygen::graphics::BufferUsage;
+using oxygen::graphics::CommandQueue;
+using oxygen::graphics::FenceValue;
+using oxygen::graphics::QueueKey;
+using oxygen::graphics::QueueRole;
+using oxygen::graphics::ResourceStates;
+using oxygen::graphics::Texture;
+using oxygen::graphics::TextureUploadRegion;
+using oxygen::vortex::upload::StagingProvider;
+using oxygen::vortex::upload::TextureUploadPlan;
+using oxygen::vortex::upload::UploadBufferDesc;
+using oxygen::vortex::upload::UploadDataView;
+using oxygen::vortex::upload::UploadError;
+using oxygen::vortex::upload::UploadKind;
+using oxygen::vortex::upload::UploadPlanner;
+using oxygen::vortex::upload::UploadPolicy;
+using oxygen::vortex::upload::UploadProducer;
+using oxygen::vortex::upload::UploadRequest;
+using oxygen::vortex::upload::UploadTextureDesc;
+using oxygen::vortex::upload::UploadTextureSourceView;
+using oxygen::vortex::upload::UploadTicket;
+using oxygen::vortex::upload::UploadTracker;
 
 //! Determines if the given queue is a copy/transfer queue that has limited
 //! resource state capabilities.
@@ -166,78 +190,6 @@ auto MakeTextureCopyStatePolicy(const oxygen::observer_ptr<CommandQueue>& queue,
   };
 }
 
-auto PackTexture2DToStaging(const UploadPolicy& policy,
-  const oxygen::graphics::TextureDesc& dst_desc, const TextureUploadPlan& plan,
-  const UploadTextureSourceView& src, std::byte* dst_staging) -> bool
-{
-  const auto& fp = policy.filler;
-  if (fp.enable_default_fill) {
-    std::memset(
-      dst_staging, static_cast<int>(fp.filler_value), plan.total_bytes);
-  }
-
-  if (plan.regions.size() != plan.source_indices.size()) {
-    return false;
-  }
-
-  for (std::size_t i = 0; i < plan.regions.size(); ++i) {
-    const auto& region = plan.regions[i];
-    const auto src_index = plan.source_indices[i];
-    if (src_index >= src.subresources.size()) {
-      return false;
-    }
-    const auto& s = src.subresources[src_index];
-    if (s.row_pitch == 0U || s.slice_pitch == 0U) {
-      return false;
-    }
-
-    const auto width = region.dst_slice.width;
-    const auto height = region.dst_slice.height;
-    const auto tight_footprint
-      = oxygen::graphics::ComputeLinearTextureCopyFootprint(dst_desc.format,
-        oxygen::graphics::LinearTextureExtent {
-          .width = width,
-          .height = height,
-          .depth = 1U,
-        });
-    const auto copy_bytes_per_row = tight_footprint.row_pitch.get();
-    const auto rows = tight_footprint.row_count;
-
-    const uint64_t required_src_bytes = (rows == 0U)
-      ? 0ULL
-      : (static_cast<uint64_t>(rows - 1U) * static_cast<uint64_t>(s.row_pitch))
-        + copy_bytes_per_row;
-    if (s.bytes.size() < required_src_bytes) {
-      return false;
-    }
-    if (s.row_pitch < copy_bytes_per_row) {
-      return false;
-    }
-
-    const uint64_t required_dst_bytes = (rows == 0U)
-      ? 0ULL
-      : (static_cast<uint64_t>(rows - 1U)
-          * static_cast<uint64_t>(region.buffer_row_pitch))
-        + copy_bytes_per_row;
-    if (region.buffer_offset + required_dst_bytes > plan.total_bytes) {
-      return false;
-    }
-
-    for (uint32_t row = 0; row < rows; ++row) {
-      const auto src_off
-        = static_cast<uint64_t>(row) * static_cast<uint64_t>(s.row_pitch);
-      const auto dst_off = region.buffer_offset
-        + (static_cast<uint64_t>(row)
-          * static_cast<uint64_t>(region.buffer_row_pitch));
-      std::memcpy(dst_staging + dst_off,
-        s.bytes.data() + static_cast<std::size_t>(src_off),
-        static_cast<std::size_t>(copy_bytes_per_row));
-    }
-  }
-
-  return true;
-}
-
 auto PackTexture3DToStaging(const UploadPolicy& policy,
   const oxygen::graphics::TextureDesc& dst_desc, const TextureUploadPlan& plan,
   const UploadTextureSourceView& src, std::byte* dst_staging) -> bool
@@ -253,12 +205,12 @@ auto PackTexture3DToStaging(const UploadPolicy& policy,
   }
 
   for (std::size_t i = 0; i < plan.regions.size(); ++i) {
-    const auto& region = plan.regions[i];
-    const auto src_index = plan.source_indices[i];
+    const auto& region = plan.regions.at(i);
+    const auto src_index = plan.source_indices.at(i);
     if (src_index >= src.subresources.size()) {
       return false;
     }
-    const auto& s = src.subresources[src_index];
+    const auto& s = src.subresources.at(src_index);
     if (s.row_pitch == 0U || s.slice_pitch == 0U) {
       return false;
     }
@@ -314,8 +266,10 @@ auto PackTexture3DToStaging(const UploadPolicy& policy,
         const auto dst_off = dst_slice_off
           + (static_cast<uint64_t>(row)
             * static_cast<uint64_t>(region.buffer_row_pitch));
-        std::memcpy(dst_staging + dst_off,
-          s.bytes.data() + static_cast<std::size_t>(src_off),
+        std::memcpy(std::span(dst_staging, plan.total_bytes)
+                      .subspan(dst_off, copy_bytes_per_row)
+                      .data(),
+          s.bytes.subspan(src_off, copy_bytes_per_row).data(),
           static_cast<std::size_t>(copy_bytes_per_row));
       }
     }
@@ -360,8 +314,7 @@ auto SubmitBuffer(oxygen::Graphics& gfx, const UploadRequest& req,
         staging.Ptr(), view.bytes.data(), static_cast<size_t>(to_copy));
     }
   } else if (std::holds_alternative<UploadProducer>(req.data)) {
-    auto& producer
-      = const_cast<UploadProducer&>(std::get<UploadProducer>(req.data));
+    const auto& producer = std::get<UploadProducer>(req.data);
     if (!producer) {
       return std::unexpected(UploadError::kInvalidRequest);
     }
@@ -378,6 +331,11 @@ auto SubmitBuffer(oxygen::Graphics& gfx, const UploadRequest& req,
   const auto& key = queue_key;
   auto recorder
     = gfx.AcquireCommandRecorder(key, "UploadCoordinator.SubmitBuffer");
+  if (!recorder) {
+    return std::unexpected(UploadError::kRecordingFailed);
+  }
+  staging.Attach(*recorder);
+  recorder->RetainOpaqueUse(desc.dst, kUploadDestinationUse);
   auto queue = gfx.GetCommandQueue(key);
   const auto state_policy = MakeSingleBufferCopyStatePolicy(queue, *desc.dst);
 
@@ -441,13 +399,13 @@ auto SubmitTexture2D(oxygen::Graphics& gfx, const UploadRequest& req,
 
   if (std::holds_alternative<UploadTextureSourceView>(req.data)) {
     const auto& src_view = std::get<UploadTextureSourceView>(req.data);
-    if (!PackTexture2DToStaging(
-          policy, tdesc.dst->GetDescriptor(), plan, src_view, staging.Ptr())) {
+    if (!plan.Pack2D(tdesc.dst->GetDescriptor(), src_view,
+          std::span(staging.Ptr(), static_cast<std::size_t>(total_bytes)),
+          fp)) {
       return std::unexpected(UploadError::kInvalidRequest);
     }
   } else if (std::holds_alternative<UploadProducer>(req.data)) {
-    auto& producer
-      = const_cast<UploadProducer&>(std::get<UploadProducer>(req.data));
+    const auto& producer = std::get<UploadProducer>(req.data);
     if (!producer) {
       return std::unexpected(UploadError::kInvalidRequest);
     }
@@ -470,6 +428,11 @@ auto SubmitTexture2D(oxygen::Graphics& gfx, const UploadRequest& req,
   const auto& key = policy.upload_queue_key;
   auto recorder
     = gfx.AcquireCommandRecorder(key, "UploadCoordinator.SubmitTexture2D");
+  if (!recorder) {
+    return std::unexpected(UploadError::kRecordingFailed);
+  }
+  staging.Attach(*recorder);
+  recorder->RetainOpaqueUse(tdesc.dst, kUploadDestinationUse);
   auto queue = gfx.GetCommandQueue(key);
   const auto state_policy = MakeTextureCopyStatePolicy(queue, *tdesc.dst);
 
@@ -537,8 +500,7 @@ auto SubmitTexture3D(oxygen::Graphics& gfx, const UploadRequest& req,
       return std::unexpected(UploadError::kInvalidRequest);
     }
   } else if (std::holds_alternative<UploadProducer>(req.data)) {
-    auto& producer
-      = const_cast<UploadProducer&>(std::get<UploadProducer>(req.data));
+    const auto& producer = std::get<UploadProducer>(req.data);
     if (!producer) {
       return std::unexpected(UploadError::kInvalidRequest);
     }
@@ -559,6 +521,11 @@ auto SubmitTexture3D(oxygen::Graphics& gfx, const UploadRequest& req,
   const auto& key = policy.upload_queue_key;
   auto recorder
     = gfx.AcquireCommandRecorder(key, "UploadCoordinator.SubmitTexture3D");
+  if (!recorder) {
+    return std::unexpected(UploadError::kRecordingFailed);
+  }
+  staging.Attach(*recorder);
+  recorder->RetainOpaqueUse(tdesc.dst, kUploadDestinationUse);
   auto queue = gfx.GetCommandQueue(key);
   const auto state_policy = MakeTextureCopyStatePolicy(queue, *tdesc.dst);
 
@@ -592,7 +559,7 @@ namespace oxygen::vortex::upload {
 UploadCoordinator::UploadCoordinator(
   observer_ptr<Graphics> gfx, UploadPolicy policy)
   : gfx_(gfx)
-  , policy_(policy)
+  , policy_(std::move(policy))
 {
   DCHECK_NOTNULL_F(gfx_);
 }
@@ -620,6 +587,8 @@ auto UploadCoordinator::Submit(const UploadRequest& req,
       *gfx_, req, policy_, tracker_, provider, policy_.upload_queue_key);
   case UploadKind::kTexture2D:
     return SubmitTexture2D(*gfx_, req, policy_, tracker_, provider);
+  case UploadKind::kTextureCube:
+    return std::unexpected(UploadError::kInvalidRequest);
   case UploadKind::kTexture3D:
     return SubmitTexture3D(*gfx_, req, policy_, tracker_, provider);
   }
@@ -642,11 +611,12 @@ auto UploadCoordinator::SubmitMany(
   while (idx < reqs.size()) {
     // Gather a run of consecutive buffer requests.
     size_t start = idx;
-    while (idx < reqs.size() && reqs[idx].kind == UploadKind::kBuffer) {
+    while (idx < reqs.size()
+      && reqs.subspan(idx, 1U).front().kind == UploadKind::kBuffer) {
       ++idx;
     }
     if (idx == start) {
-      auto submit_result = Submit(reqs[idx], provider);
+      auto submit_result = Submit(reqs.subspan(idx, 1U).front(), provider);
       if (!submit_result) {
         return std::unexpected(submit_result.error());
       }
@@ -654,8 +624,7 @@ auto UploadCoordinator::SubmitMany(
       ++idx;
       continue;
     }
-    auto exp_tickets
-      = SubmitRun({ reqs.data() + start, idx - start }, provider);
+    auto exp_tickets = SubmitRun(reqs.subspan(start, idx - start), provider);
     if (!exp_tickets) {
       return std::unexpected(exp_tickets.error());
     }
@@ -679,6 +648,7 @@ auto UploadCoordinator::Shutdown(std::chrono::milliseconds timeout)
 
   using namespace std::chrono_literals;
   const auto start = std::chrono::steady_clock::now();
+  constexpr auto kMaximumBackoff = std::chrono::milliseconds { 50 };
   std::chrono::milliseconds backoff { 1 };
 
   // Capture the highest fence value registered so far. This ensures that we
@@ -704,7 +674,7 @@ auto UploadCoordinator::Shutdown(std::chrono::milliseconds timeout)
 
     std::this_thread::sleep_for(backoff);
     // Exponential backoff with a small ceiling to remain responsive.
-    backoff = (std::min)(backoff * 2, std::chrono::milliseconds { 50 });
+    backoff = (std::min)(backoff * 2, kMaximumBackoff);
   }
 
   // One final retire so providers can recycle any completed allocations.
@@ -754,10 +724,16 @@ auto UploadCoordinator::OnFrameStart(
   }
 }
 
-auto UploadCoordinator::SubmitAsync(
-  const UploadRequest& req, StagingProvider& provider) -> co::Co<UploadResult>
+auto UploadCoordinator::SubmitAsync(UploadRequest req,
+  std::shared_ptr<StagingProvider> provider) -> co::Co<UploadResult>
 {
-  auto submit_result = Submit(req, provider);
+  if (!provider) {
+    co_return UploadResult {
+      .success = false,
+      .error = UploadError::kInvalidRequest,
+    };
+  }
+  auto submit_result = Submit(req, *provider);
   if (!submit_result.has_value()) {
     co_return UploadResult {
       .success = false,
@@ -769,13 +745,20 @@ auto UploadCoordinator::SubmitAsync(
   auto result = TryGetResult(t);
   DCHECK_F(result.has_value(),
     "Ticket result must be available after successful await");
-  co_return result.value();
+  co_return result.value_or(
+    UploadResult { .success = false, .error = UploadError::kTicketNotFound });
 }
 
-auto UploadCoordinator::SubmitManyAsync(std::span<const UploadRequest> reqs,
-  StagingProvider& provider) -> co::Co<std::vector<UploadResult>>
+auto UploadCoordinator::SubmitManyAsync(
+  std::vector<UploadRequest> reqs, std::shared_ptr<StagingProvider> provider)
+  -> co::Co<std::vector<UploadResult>>
 {
-  auto submit_result = SubmitMany(reqs, provider);
+  if (!provider) {
+    co_return std::vector<UploadResult> {
+      UploadResult { .success = false, .error = UploadError::kInvalidRequest },
+    };
+  }
+  auto submit_result = SubmitMany(reqs, *provider);
   if (!submit_result.has_value()) {
     co_return std::vector<UploadResult> {
       UploadResult {
@@ -792,7 +775,10 @@ auto UploadCoordinator::SubmitManyAsync(std::span<const UploadRequest> reqs,
     auto result = TryGetResult(t);
     DCHECK_F(result.has_value(),
       "Ticket result must be available after successful AwaitAll");
-    out.emplace_back(result.value());
+    out.emplace_back(result.value_or(UploadResult {
+      .success = false,
+      .error = UploadError::kTicketNotFound,
+    }));
   }
   co_return out;
 }
@@ -856,29 +842,33 @@ auto UploadCoordinator::PlanBufferRun(std::span<const UploadRequest> run)
 }
 
 auto UploadCoordinator::FillStagingForPlan(const BufferUploadPlan& plan,
-  std::span<const UploadRequest> run, StagingProvider::Allocation& allocation)
-  -> void
+  std::span<const UploadRequest> run,
+  StagingProvider::Allocation& allocation) const -> void
 {
   const auto& fp = policy_.filler;
   for (const auto& it : plan.uploads) {
     const auto rep = it.request_indices.front();
-    const auto& r = run[rep];
+    const auto& r = run.subspan(rep, 1U).front();
     const auto& reg = it.region;
     if (std::holds_alternative<UploadDataView>(r.data)) {
       auto view = std::get<UploadDataView>(r.data);
       const auto to_copy = std::min<uint64_t>(reg.size, view.bytes.size());
       if (to_copy > 0) {
-        std::memcpy(
-          allocation.Ptr() + reg.src_offset, view.bytes.data(), to_copy);
+        std::memcpy(std::span(allocation.Ptr(), plan.total_bytes)
+                      .subspan(reg.src_offset, to_copy)
+                      .data(),
+          view.bytes.data(), to_copy);
       }
       if (fp.enable_default_fill && to_copy < reg.size) {
-        std::memset(allocation.Ptr() + reg.src_offset + to_copy,
+        std::memset(std::span(allocation.Ptr(), plan.total_bytes)
+                      .subspan(reg.src_offset + to_copy, reg.size - to_copy)
+                      .data(),
           static_cast<int>(fp.filler_value), reg.size - to_copy);
       }
     } else {
-      auto& producer
-        = const_cast<UploadProducer&>(std::get<UploadProducer>(r.data));
-      std::span<std::byte> dst(allocation.Ptr() + reg.src_offset, reg.size);
+      const auto& producer = std::get<UploadProducer>(r.data);
+      const auto dst = std::span(allocation.Ptr(), plan.total_bytes)
+                         .subspan(reg.src_offset, reg.size);
       if (!producer && fp.enable_default_fill) {
         std::memset(dst.data(), static_cast<int>(fp.filler_value), dst.size());
       } else if (producer) {
@@ -904,17 +894,21 @@ auto UploadCoordinator::RecordBufferRun(const BufferUploadPlan& optimized,
   const auto& key = policy_.upload_queue_key;
   auto recorder
     = gfx_->AcquireCommandRecorder(key, "UploadCoordinator.SubmitBuffersBatch");
+  if (!recorder) {
+    return std::unexpected(UploadError::kRecordingFailed);
+  }
+  staging.Attach(*recorder);
   auto queue = gfx_->GetCommandQueue(key);
   const bool is_copy_queue = IsCopyQueue(queue);
 
   std::shared_ptr<Buffer> current_dst;
   for (size_t idx2 = 0; idx2 < optimized.uploads.size(); ++idx2) {
-    const auto& it = optimized.uploads[idx2];
+    const auto& it = optimized.uploads.at(idx2);
     if (it.request_indices.empty()) {
       return std::unexpected(UploadError::kInvalidRequest);
     }
     const auto rep = it.request_indices.front();
-    const auto& r = run[rep];
+    const auto& r = run.subspan(rep, 1U).front();
     const auto& bdesc = std::get<UploadBufferDesc>(r.desc);
     auto dst = bdesc.dst;
     if (!dst) {
@@ -925,6 +919,7 @@ auto UploadCoordinator::RecordBufferRun(const BufferUploadPlan& optimized,
       = (!current_dst) || (current_dst.get() != dst.get());
     if (first_for_dst) {
       current_dst = dst;
+      recorder->RetainOpaqueUse(dst, kUploadDestinationUse);
       const auto state_policy
         = MakeBatchBufferCopyStatePolicy(queue, *current_dst);
 
@@ -939,9 +934,9 @@ auto UploadCoordinator::RecordBufferRun(const BufferUploadPlan& optimized,
 
     const bool is_last = (idx2 + 1 == optimized.uploads.size());
     const bool next_diff = !is_last && [&] -> bool {
-      const auto& next_it = optimized.uploads[idx2 + 1];
+      const auto& next_it = optimized.uploads.at(idx2 + 1);
       const auto next_rep = next_it.request_indices.front();
-      const auto& next_r = run[next_rep];
+      const auto& next_r = run.subspan(next_rep, 1U).front();
       const auto& next_bdesc = std::get<UploadBufferDesc>(next_r.desc);
       return next_bdesc.dst.get() != dst.get();
     }();
@@ -973,7 +968,7 @@ auto UploadCoordinator::MakeTicketsForPlan(
       return std::unexpected(UploadError::kInvalidRequest);
     }
     const auto rep = it.request_indices.front();
-    const auto& r = run[rep];
+    const auto& r = run.subspan(rep, 1U).front();
     tickets.emplace_back(
       tracker_.Register(fence, it.region.size, r.debug_name));
   }

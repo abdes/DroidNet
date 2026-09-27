@@ -8,8 +8,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <expected>
-#include <limits>
 #include <memory>
+#include <optional>
 #include <span>
 #include <unordered_map>
 #include <utility>
@@ -19,6 +19,8 @@
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Graphics/Common/CommandRecorder.h>
+#include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Profiling/CpuProfileScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
@@ -26,16 +28,15 @@
 #include <Oxygen/Vortex/Lighting/Internal/ForwardLightPublisher.h>
 #include <Oxygen/Vortex/Lighting/Internal/LightGridBuilder.h>
 #include <Oxygen/Vortex/Lighting/Internal/SpatialLightGrid.h>
-#include <Oxygen/Vortex/Lighting/Types/ClusterLightRange.h>
 #include <Oxygen/Vortex/Lighting/Types/DirectionalLightForwardData.h>
 #include <Oxygen/Vortex/Lighting/Types/ForwardLocalLightRecord.h>
 #include <Oxygen/Vortex/Lighting/Types/LightGridBuildStatus.h>
 #include <Oxygen/Vortex/Lighting/Types/LightGridMetadata.h>
+#include <Oxygen/Vortex/Lighting/Types/LightGridResources.h>
 #include <Oxygen/Vortex/Lighting/Types/LightingPreparationFailure.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/Shadows/Types/ShadowFrameData.h>
 #include <Oxygen/Vortex/Types/LightingFrameBindings.h>
-#include <Oxygen/Vortex/Types/LightingIndices.h>
 #include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
 
 namespace oxygen::vortex::lighting::internal {
@@ -170,7 +171,7 @@ auto ForwardLightPublisher::Publish(const BuiltLightGridFrame& built_frame)
   for (const auto& view : built_frame.per_view) {
     failure.view_id = view.view_id;
     auto bindings = view.bindings;
-    brdf_energy_->Publish(bindings);
+    (*moments)->Publish(bindings);
     bindings.local_records_srv = local_srv;
     bindings.directional_records_srv = directional_srv;
     auto status = LightGridBuildStatus {
@@ -205,7 +206,11 @@ auto ForwardLightPublisher::Publish(const BuiltLightGridFrame& built_frame)
       return std::unexpected(failure);
     }
     candidate.insert_or_assign(view.view_id,
-      PublishedLightingView { .slot = slot, .bindings = bindings });
+      PublishedLightingView {
+        .slot = slot,
+        .bindings = bindings,
+        .brdf_energy = *moments,
+      });
   }
   published_views_ = std::move(candidate);
   return {};
@@ -237,6 +242,7 @@ auto ForwardLightPublisher::PublishShadowReferences(
     return std::unexpected(failure);
   }
   auto bindings = it->second.bindings;
+  auto brdf_energy = it->second.brdf_energy;
   // Erase the CPU route first. Already recorded readers retain their immutable
   // allocation; a failed replacement cannot expose an earlier successful view.
   published_views_.erase(it);
@@ -263,8 +269,12 @@ auto ForwardLightPublisher::PublishShadowReferences(
   if (!slot.IsValid()) {
     return std::unexpected(failure);
   }
-  published_views_.insert_or_assign(
-    view_id, PublishedLightingView { .slot = slot, .bindings = bindings });
+  published_views_.insert_or_assign(view_id,
+    PublishedLightingView {
+      .slot = slot,
+      .bindings = bindings,
+      .brdf_energy = std::move(brdf_energy),
+    });
   return {};
 }
 
@@ -273,6 +283,17 @@ auto ForwardLightPublisher::InspectBindings(const ViewId view_id) const
 {
   const auto it = published_views_.find(view_id);
   return it != published_views_.end() ? &it->second.bindings : nullptr;
+}
+
+auto ForwardLightPublisher::AttachResources(
+  const ViewId view_id, graphics::CommandRecorder& recorder) const -> bool
+{
+  const auto published = published_views_.find(view_id);
+  const auto graphics = renderer_.GetGraphics();
+  return graphics && published != published_views_.end()
+    && published->second.brdf_energy
+    && published->second.brdf_energy->Attach(
+      graphics->GetResourceRegistry(), recorder);
 }
 
 auto ForwardLightPublisher::ResolveBindingSlot(const ViewId view_id) const

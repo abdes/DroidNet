@@ -4,25 +4,22 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <cstddef>
+#include <array>
 #include <cstdint>
-#include <cstring>
 #include <expected>
 #include <memory>
-#include <span>
 #include <utility>
 
 #include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
-#include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/CommandRecording.h>
-#include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Graphics/Common/ManagedResource.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
+#include <Oxygen/Graphics/Common/Submission.h>
 #include <Oxygen/Graphics/Common/Texture.h>
-#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
@@ -31,9 +28,9 @@
 #include <Oxygen/Vortex/Lighting/Types/LightingPreparationFailure.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/Types/LightingFrameBindings.h>
+#include <Oxygen/Vortex/Upload/ImmutableTextureUpload.h>
 #include <Oxygen/Vortex/Upload/Types.h>
-#include <Oxygen/Vortex/Upload/UploadPlanner.h>
-#include <Oxygen/Vortex/Upload/UploadPolicy.h>
+#include <Oxygen/Vortex/Upload/UploadCoordinator.h>
 
 namespace oxygen::vortex::lighting::internal {
 
@@ -42,114 +39,109 @@ BrdfEnergyResources::BrdfEnergyResources(Renderer& renderer)
 {
 }
 
-BrdfEnergyResources::~BrdfEnergyResources()
-{
-  if (auto graphics = renderer_.GetGraphics(); graphics && texture_) {
-    auto* registry = &graphics->GetResourceRegistry();
-    graphics->GetDeferredReclaimer().RegisterDeferredAction(
-      [registry, resource = std::move(texture_)] mutable -> void {
-        if (registry->Contains(*resource)) {
-          registry->UnRegisterResource(*resource);
-        }
-        resource.reset();
-      });
-  }
-}
+BrdfEnergyResources::~BrdfEnergyResources() = default;
 
 auto BrdfEnergyResources::Prepare()
-  -> std::expected<void, LightingPreparationFailure>
+  -> std::expected<std::shared_ptr<const BrdfEnergyProduct>,
+    LightingPreparationFailure>
 {
-  if (initialized_) return {};
+  const auto graphics = renderer_.GetGraphics();
+  const auto failure = LightingPreparationFailure {
+    .error = LightingPreparationError::kAllocationFailed,
+  };
+  if (!graphics) {
+    return std::unexpected(failure);
+  }
+  auto& registry = graphics->GetResourceRegistry();
+  if (product_) {
+    if (!registry.RetainUse(product_->allocation.registration)) {
+      return std::unexpected(failure);
+    }
+    return product_;
+  }
   const auto data = GetBrdfEnergyData();
   if (!data) {
     return std::unexpected(LightingPreparationFailure {
       .error = LightingPreparationError::kMissingBrdfData,
     });
   }
-  const auto graphics = renderer_.GetGraphics();
-  const auto failure = LightingPreparationFailure {
-    .error = LightingPreparationError::kAllocationFailed,
-  };
-  if (!graphics) return std::unexpected(failure);
-  auto& registry = graphics->GetResourceRegistry();
-  constexpr auto kName = "LightingService.BrdfEnergy";
-  if (!texture_) {
-    texture_ = graphics->CreateTexture({
+  const auto views = std::array { graphics::TextureViewRequest {
+    .description = {
+      .view_type = graphics::ResourceViewType::kTexture_SRV,
+      .format = Format::kRG32Float,
+      .dimension = TextureType::kTexture2D,
+      .sub_resources = graphics::TextureSubResourceSet::EntireTexture(),
+    },
+    .domain = bindless::generated::kTexturesDomain,
+  }, };
+  auto allocation = registry.RegisterManagedTexture(
+    graphics->CreateTexture({
       .width = data->view_nodes,
       .height = data->roughness_nodes,
       .format = Format::kRG32Float,
       .texture_type = TextureType::kTexture2D,
-      .debug_name = kName,
+      .debug_name = "LightingService.BrdfEnergy",
       .is_shader_resource = true,
       .initial_state = graphics::ResourceStates::kCommon,
       .allocation_budget = { .owner = renderer_.GetLightingAllocationBudget() },
-    });
-    if (!texture_) return std::unexpected(failure);
-    registry.Register(texture_);
+    }),
+    views);
+  if (!allocation) {
+    return std::unexpected(failure);
   }
-  if (!slot_.IsValid()) {
-    auto allocation = graphics->GetDescriptorAllocator().AllocateBindless(
-      bindless::generated::kTexturesDomain, graphics::ResourceViewType::kTexture_SRV);
-    if (!allocation.IsValid()) return std::unexpected(failure);
-    const auto slot = graphics->GetDescriptorAllocator().GetShaderVisibleIndex(allocation);
-    registry.RegisterView(*texture_, std::move(allocation),
-      graphics::TextureViewDescription {
-        .view_type = graphics::ResourceViewType::kTexture_SRV,
-        .visibility = graphics::DescriptorVisibility::kShaderVisible,
-        .format = Format::kRG32Float,
-        .dimension = TextureType::kTexture2D,
-        .sub_resources = graphics::TextureSubResourceSet::EntireTexture(),
-      });
-    slot_ = slot;
+  const auto row_bytes = data->view_nodes * sizeof(float) * 2U;
+  const auto source = upload::UploadTextureSourceView {
+    .subresources = { upload::UploadTextureSourceSubresource {
+      .bytes = data->energy,
+      .row_pitch = static_cast<std::uint32_t>(row_bytes),
+      .slice_pitch = static_cast<std::uint32_t>(row_bytes * data->roughness_nodes),
+    }, },
+  };
+  // Cache only the immutable product. The upload owns its staging until the
+  // recording has retained it; no frame-based retirement callback is needed.
+  auto candidate = std::make_shared<BrdfEnergyProduct>();
+  auto prepared = renderer_.GetUploadCoordinator().PrepareImmutableTexture2D(
+    std::move(*allocation), source);
+  if (!prepared) {
+    return std::unexpected(failure);
   }
-  const auto queue = graphics->QueueKeyFor(graphics::QueueRole::kGraphics);
-  const auto plan = upload::UploadPlanner::PlanTexture2D(
-    { .dst = texture_ }, {}, upload::UploadPolicy { queue });
-  if (!plan || plan->regions.size() != 1U) return std::unexpected(failure);
-  auto staging = graphics->CreateBuffer({
-    .size_bytes = plan->total_bytes,
-    .memory = graphics::BufferMemory::kUpload,
-    .debug_name = kName,
-    .allocation_budget = { .owner = renderer_.GetLightingAllocationBudget() },
-  });
-  if (!staging) return std::unexpected(failure);
-  const auto& region = plan->regions.front();
-  const auto source_pitch = static_cast<std::size_t>(data->view_nodes) * sizeof(float) * 2U;
-  auto* mapped = static_cast<std::byte*>(staging->Map());
-  if (mapped == nullptr) return std::unexpected(failure);
-  auto destination = std::span(mapped, static_cast<std::size_t>(plan->total_bytes));
-  for (std::uint32_t row = 0; row < data->roughness_nodes; ++row) {
-    std::memcpy(destination.subspan(region.buffer_offset
-        + static_cast<std::size_t>(row) * region.buffer_row_pitch, source_pitch).data(),
-      data->energy.subspan(static_cast<std::size_t>(row) * source_pitch, source_pitch).data(),
-      source_pitch);
+  const auto& destination = prepared->Destination();
+  candidate->allocation.resource = destination.resource;
+  candidate->allocation.registration = destination.registration;
+  candidate->allocation.views = destination.views;
+  auto recording = graphics->AcquireCommandRecorder(
+    graphics->QueueKeyFor(graphics::QueueRole::kGraphics),
+    "Vortex.Lighting.InitializeBrdfEnergy",
+    graphics::SubmissionPolicy::kExplicit);
+  if (!recording || !prepared->Record(*recording)) {
+    return std::unexpected(failure);
   }
-  staging->UnMap();
-  auto recording = graphics->AcquireCommandRecorder(queue,
-    "Vortex.Lighting.InitializeBrdfEnergy", graphics::SubmissionPolicy::kExplicit);
-  if (!recording) return std::unexpected(failure);
-  recording->BeginTrackingResourceState(*staging, graphics::ResourceStates::kGenericRead);
-  recording->BeginTrackingResourceState(*texture_, graphics::ResourceStates::kCommon);
-  recording->RequireResourceState(*texture_, graphics::ResourceStates::kCopyDest);
-  recording->FlushBarriers();
-  recording->CopyBufferToTexture(*staging, region, *texture_);
-  recording->RequireResourceStateFinal(*texture_, graphics::ResourceStates::kShaderResource);
-  if (!recording.Submit()) return std::unexpected(failure);
-  graphics->GetDeferredReclaimer().RegisterDeferredAction(
-    [owner = graphics.get(), resource = std::move(staging)] mutable -> void {
-      owner->ForgetKnownResourceState(resource->GetNativeResource());
-      resource.reset();
-    });
-  initialized_ = true;
-  return {};
+  const auto submission = recording.SubmitWithReceipt();
+  if (submission.outcome != graphics::SubmissionOutcome::kSubmitted
+    || !submission.receipt) {
+    return std::unexpected(failure);
+  }
+  candidate->producer = *submission.receipt;
+  product_ = std::move(candidate);
+  return product_;
 }
 
-auto BrdfEnergyResources::Publish(LightingFrameBindings& bindings) const -> void
+auto BrdfEnergyProduct::Publish(LightingFrameBindings& bindings) const -> void
 {
-  if (initialized_) {
-    bindings.brdf_energy_srv = slot_;
-    bindings.brdf_model_revision = kBrdfModelRevision;
-  }
+  bindings.brdf_energy_srv = allocation.views.front().shader_visible_index;
+  bindings.brdf_model_revision = kBrdfModelRevision;
 }
 
+auto BrdfEnergyProduct::Attach(graphics::ResourceRegistry& registry,
+  graphics::CommandRecorder& recorder) const -> bool
+{
+  if (recorder.RetainsRegistration(allocation.registration.Identity())) {
+    return true;
+  }
+  if (!recorder.RetainRegistration(registry, allocation.registration)) {
+    return false;
+  }
+  recorder.RecordDependency(producer);
+  return true;
+}
 } // namespace oxygen::vortex::lighting::internal

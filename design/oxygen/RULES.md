@@ -133,9 +133,11 @@ Read: [ownership](#ownership), [C++](#c), [editor](#editor),
   findings, significant details, open questions and evidence, and check source-to-target
   coverage. Give newly discovered gaps concrete tasks and pass/fail cases; retain
   historical proof at its original scope.
-- Record validation commands, configuration, source/runtime identity, results and
-  limits. Store raw evidence once, immutable; link derived reports to it with
-  identities/hashes. Never rewrite old captures or manifests to fit a new checkout.
+- Git holds working code and accurate docs, not debugging archives. Keep captures,
+  traces, logs, source snapshots and binary bundles in ignored local output, never
+  Git. Retain only compact proof or benchmark results useful for future comparison
+  or establishing baselines, with reproduction commands, configuration and source
+  identity. Commit reusable tests/tools; do not package routine successful runs.
 - Editor: maintain one concise milestone validation summary in
   [IMPLEMENTATION_STATUS.md](../editor/IMPLEMENTATION_STATUS.md), not an execution log.
   Assign new fixes to named gap-closing milestones; do not reopen or supersede

@@ -20,6 +20,10 @@
 #include <Oxygen/Vortex/Upload/UploaderTag.h>
 #include <Oxygen/Vortex/api_export.h>
 
+namespace oxygen::graphics {
+class CommandRecorder;
+}
+
 namespace oxygen::vortex::upload {
 
 //! Interface for CPU-visible GPU upload memory providers.
@@ -81,22 +85,26 @@ public:
     ~Allocation() = default;
 
     //! Access the backing buffer.
-    auto Buffer() const noexcept -> auto& { return *buffer; }
+    [[nodiscard]] auto Buffer() const noexcept -> auto& { return *buffer; }
+
+    //! Keep the native backing alive through submission, discard or fault.
+    OXGN_VRTX_API auto Attach(graphics::CommandRecorder& recorder) const
+      -> void;
 
     //! Access the byte offset within the buffer.
-    auto Offset() const noexcept { return offset; }
+    [[nodiscard]] auto Offset() const noexcept { return offset; }
 
     //! Access the size in bytes of the allocation.
-    auto Size() const noexcept { return size; }
+    [[nodiscard]] auto Size() const noexcept { return size; }
 
     //! Access the mapped pointer for CPU writes.
-    auto Ptr() const noexcept { return ptr; }
+    [[nodiscard]] auto Ptr() const noexcept { return ptr; }
 
     //! Update the fence value for this allocation.
     auto SetFenceValue(FenceValue fence_v) noexcept -> void { fence = fence_v; }
 
     //! Access the fence value associated with this allocation.
-    auto FenceValue() const noexcept { return fence; }
+    [[nodiscard]] auto FenceValue() const noexcept { return fence; }
 
   private:
     std::shared_ptr<graphics::Buffer> buffer; //! Underlying upload buffer

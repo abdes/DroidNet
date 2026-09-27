@@ -17,6 +17,7 @@
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Value.h>
 #include <Oxygen/Vortex/RendererTag.h>
+#include <Oxygen/Vortex/Upload/ImmutableTextureUpload.h>
 #include <Oxygen/Vortex/Upload/StagingProvider.h>
 #include <Oxygen/Vortex/Upload/Types.h>
 #include <Oxygen/Vortex/Upload/UploadPolicy.h>
@@ -39,6 +40,7 @@ struct BufferUploadPlan;
 
 class UploadCoordinator {
 public:
+  static constexpr std::chrono::milliseconds kDefaultShutdownTimeout { 3000 };
   /*!
    @note UploadCoordinator lifetime is entirely linked to the Renderer. We
          completely rely on the Renderer to handle the lifetime of the Graphics
@@ -53,6 +55,14 @@ public:
   OXYGEN_DEFAULT_MOVABLE(UploadCoordinator)
 
   ~UploadCoordinator() = default;
+
+  //! Pack a newly created managed 2D texture without recording or submitting.
+  //! Staging uses the destination's allocation budget and debug label.
+  //! Select full subresources; boxed updates are not supported here.
+  OXGN_VRTX_NDAPI auto PrepareImmutableTexture2D(
+    graphics::ManagedTexture destination, const UploadTextureSourceView& source,
+    std::span<const UploadSubresource> subresources = {})
+    -> Result<ImmutableTextureUpload, UploadError>;
 
   OXGN_VRTX_API auto CreateRingBufferStaging(frame::SlotCount partitions,
     std::uint32_t alignment, float slack = kDefaultRingBufferStagingSlack,
@@ -75,12 +85,13 @@ public:
     std::string_view reason = "UploadCoordinator.Trim") -> bool;
 
   // Shutdown helpers -----------------------------------------------------//
-  // Prevents any new submissions and waits for outstanding upload work to
+  // Prevents new preparation/submission and waits for ticketed upload work to
   // complete. Call during Renderer/Engine shutdown to ensure the transfer
   // queue has finished referencing upload resources before they are
-  // destroyed.
+  // destroyed. Caller-recorded immutable uploads use Graphics completion;
+  // their submissions are not tracked by this coordinator.
   OXGN_VRTX_API auto Shutdown(std::chrono::milliseconds timeout
-    = std::chrono::milliseconds { 3000 }) -> std::expected<void, UploadError>;
+    = kDefaultShutdownTimeout) -> std::expected<void, UploadError>;
 
   auto IsComplete(UploadTicket t) const -> std::expected<bool, UploadError>
   {
@@ -109,7 +120,7 @@ public:
    * and retirement. Do not construct providers directly; always use
    * CreateSingleBufferStaging or CreateRingBufferStaging.
    */
-  OXGN_VRTX_API auto OnFrameStart(vortex::RendererTag, frame::Slot slot)
+  OXGN_VRTX_API auto OnFrameStart(vortex::RendererTag tag, frame::Slot slot)
     -> void;
 
   // Best-effort cancellation; may not prevent GPU copy if already submitted.
@@ -119,11 +130,14 @@ public:
   }
 
   // OxCo helpers
-  OXGN_VRTX_NDAPI auto SubmitAsync(const UploadRequest& req,
-    StagingProvider& provider) -> co::Co<UploadResult>;
+  //! Lazy submission owns its request/provider. Source byte views remain
+  //! borrowed until packing; producer captures may own their source storage.
+  OXGN_VRTX_NDAPI auto SubmitAsync(UploadRequest req,
+    std::shared_ptr<StagingProvider> provider) -> co::Co<UploadResult>;
 
-  OXGN_VRTX_NDAPI auto SubmitManyAsync(std::span<const UploadRequest> reqs,
-    StagingProvider& provider) -> co::Co<std::vector<UploadResult>>;
+  OXGN_VRTX_NDAPI auto SubmitManyAsync(
+    std::vector<UploadRequest> reqs, std::shared_ptr<StagingProvider> provider)
+    -> co::Co<std::vector<UploadResult>>;
 
   OXGN_VRTX_NDAPI auto AwaitAsync(UploadTicket t) -> co::Co<void>;
 
@@ -145,8 +159,8 @@ private:
 
   //! Stage 2: Allocate and fill staging according to the plan and policy.
   auto FillStagingForPlan(const BufferUploadPlan& plan,
-    std::span<const UploadRequest> run, StagingProvider::Allocation& allocation)
-    -> void;
+    std::span<const UploadRequest> run,
+    StagingProvider::Allocation& allocation) const -> void;
 
   //! Stage 3: Optimize the buffer plan by coalescing contiguous regions.
   auto OptimizeBufferRun(

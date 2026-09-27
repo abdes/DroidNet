@@ -7,6 +7,7 @@
 #include <exception>
 #include <expected>
 #include <memory>
+#include <optional>
 #include <span>
 #include <utility>
 
@@ -22,6 +23,7 @@
 #include <Oxygen/Vortex/Lighting/LightingService.h>
 #include <Oxygen/Vortex/Lighting/Passes/DeferredLightPass.h>
 #include <Oxygen/Vortex/Lighting/Types/FrameLightingInputs.h>
+#include <Oxygen/Vortex/Lighting/Types/LightGridResources.h>
 #include <Oxygen/Vortex/Lighting/Types/LightingPreparationFailure.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
@@ -72,6 +74,12 @@ auto LightingService::InspectGridResources(ViewId view_id) const
   -> LightGridResources
 {
   return publisher_->InspectGridResources(view_id);
+}
+
+auto LightingService::AttachResources(
+  const ViewId view_id, graphics::CommandRecorder& recorder) const -> bool
+{
+  return publisher_->AttachResources(view_id, recorder);
 }
 
 auto LightingService::BuildLightGrid(const FrameLightingInputs& inputs)
@@ -152,7 +160,8 @@ auto LightingService::RenderDeferredLighting(RenderContext& ctx,
   -> bool
 {
   if (!prepared_lighting_
-    || prepared_lighting_->selection_epoch != frame_light_set.selection_epoch) {
+    || prepared_lighting_->selection_epoch != frame_light_set.selection_epoch
+    || !AttachResources(ctx.current_view.view_id, recorder)) {
     last_deferred_lighting_state_ = {};
     return false;
   }

@@ -11,6 +11,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <exception>
 #include <initializer_list>
 #include <limits>
 #include <memory>
@@ -25,18 +26,15 @@
 #include <vector>
 
 #include <fmt/format.h>
-#include <glm/ext/matrix_float4x4.hpp>
-#include <glm/ext/matrix_transform.hpp>
 #include <glm/ext/quaternion_float.hpp>
 #include <glm/ext/vector_float3.hpp>
-#include <glm/ext/vector_float4.hpp>
 #include <glm/ext/vector_uint2.hpp>
 #include <glm/ext/vector_uint3.hpp>
 #include <glm/geometric.hpp>
-#include <glm/gtc/quaternion.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Bindless/Types.h>
@@ -76,8 +74,13 @@
 #include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
+#include <Oxygen/Vortex/Environment/Types/IblCaptureLease.h>
+#include <Oxygen/Vortex/Lighting/Types/LightGridBuildStatus.h>
 #include <Oxygen/Vortex/Lighting/Types/LightingPreparationFailure.h>
+#include <Oxygen/Vortex/Types/ExposureSettingsStatus.h>
 #include <Oxygen/Vortex/Types/LightingIndices.h>
+#include <Oxygen/Vortex/Types/SkyLightRuntimeState.h>
+#include <Oxygen/Vortex/Types/ViewRenderStatus.h>
 // Completes the traversal returned by Scene::Traverse().
 #include <Oxygen/Scene/SceneTraversal.h> // IWYU pragma: keep
 #include <Oxygen/Scene/Types/Flags.h>
@@ -126,11 +129,10 @@ namespace oxygen::vortex {
 namespace {
   namespace bindless_d3d12 = oxygen::bindless::generated::d3d12;
 
-  constexpr std::uint32_t kDirectionalLightFlagAffectsWorld = 1U << 0U;
-  constexpr std::uint32_t kDirectionalLightFlagEnvContribution = 1U << 3U;
-  constexpr std::uint32_t kDirectionalLightFlagSunLight = 1U << 4U;
-  constexpr std::uint32_t kDirectionalLightFlagPerPixelAtmosphereTransmittance
-    = 1U << 5U;
+  constexpr std::uint32_t kSceneColorExposureProduct = 11U;
+  constexpr std::uint32_t kSkyViewExposureProduct = 5U;
+  constexpr std::uint32_t kAerialExposureProduct = 6U;
+  constexpr std::uint32_t kFogExposureProduct = 10U;
 
   constexpr SceneRenderer::StageOrder kAuthoredStageOrder {
     1,
@@ -196,9 +198,9 @@ namespace {
           table.view_type = RangeTypeToViewType(
             static_cast<bindless_d3d12::RangeType>(range.range_type));
           table.base_index = range.base_register;
-          table.count = range.num_descriptors
-              == (std::numeric_limits<std::uint32_t>::max)()
-            ? (std::numeric_limits<std::uint32_t>::max)()
+          table.count
+            = range.num_descriptors == std::numeric_limits<std::uint32_t>::max()
+            ? std::numeric_limits<std::uint32_t>::max()
             : range.num_descriptors;
         }
         binding.data = table;
@@ -547,6 +549,7 @@ namespace {
       DiagnosticsProductRecord {
         .name = std::move(name),
         .producer_pass = std::move(producer_pass),
+        .resource_name = {},
         .descriptor = ShaderVisibleDescriptor(slot),
         .published = slot != kInvalidShaderVisibleIndex,
         .valid = slot != kInvalidShaderVisibleIndex,
@@ -804,6 +807,7 @@ namespace {
     if (ctx.current_view.view_id != kInvalidViewId) {
       out.push_back(PreparedViewShadowInput {
         .view_id = ctx.current_view.view_id,
+        .shadow_caster_dependencies = {},
         .prepared_scene = ctx.current_view.prepared_frame != nullptr
           ? ctx.current_view.prepared_frame
           : observer_ptr<const PreparedSceneFrame> {
@@ -816,17 +820,6 @@ namespace {
         .composition_view = ctx.current_view.composition_view,
       });
     }
-  }
-
-  auto BuildDirectionalLightFramebuffer(const SceneTextures& scene_textures)
-    -> graphics::FramebufferDesc
-  {
-    auto desc = graphics::FramebufferDesc {};
-    desc.AddColorAttachment({
-      .texture = scene_textures.GetSceneColorResource(),
-      .format = scene_textures.GetSceneColor().GetDescriptor().format,
-    });
-    return desc;
   }
 
   auto IsDeferredDebugVisualizationMode(const ShaderDebugMode mode) -> bool
@@ -892,7 +885,7 @@ namespace {
 
     const auto& desc = framebuffer->GetDescriptor();
     return desc.color_attachments.size() != 1U
-      || desc.color_attachments[0].texture.get()
+      || desc.color_attachments.at(0).texture.get()
       != scene_textures.GetSceneColorResource().get()
       || desc.depth_attachment.texture != nullptr;
   }
@@ -1210,7 +1203,7 @@ namespace {
       {
         .texture = &accumulated,
         .srv = accumulated_srv,
-        .id = 11U,
+        .id = kSceneColorExposureProduct,
         .metering = true,
         .coverage = environment::ResolveSceneBackground(ctx).has_value(),
         .composed_error = true,
@@ -1240,14 +1233,14 @@ namespace {
           .texture = radiance ? radiance->sky_view.get() : nullptr,
           .srv = published ? published->sky_view_lut_srv
                            : kInvalidShaderVisibleIndex,
-          .id = 5U,
+          .id = kSkyViewExposureProduct,
           .transmittance = true,
         });
         products.push_back({
           .texture = radiance ? radiance->aerial_perspective.get() : nullptr,
           .srv = published ? published->camera_aerial_perspective_srv
                            : kInvalidShaderVisibleIndex,
-          .id = 6U,
+          .id = kAerialExposureProduct,
           .transmittance = true,
           .consumer_rgb_gain
           = std::fmax(authored.atmosphere.aerial_scattering_strength, 0.0F),
@@ -1258,7 +1251,7 @@ namespace {
           .texture = radiance ? radiance->volumetric_fog.get() : nullptr,
           .srv = published ? published->integrated_light_scattering_srv
                            : kInvalidShaderVisibleIndex,
-          .id = 10U,
+          .id = kFogExposureProduct,
           .transmittance = true,
         });
       }
@@ -1411,7 +1404,7 @@ void SceneRenderer::BeginFrame(const frame::SequenceNumber sequence,
 
   // Keep the last outcome until this view renders again or is removed. Capture
   // consumers can inspect it after EndFrame; frame identity prevents stale use.
-  std::erase_if(view_render_status_, [sequence](const auto& entry) {
+  std::erase_if(view_render_status_, [sequence](const auto& entry) -> auto {
     return sequence.get()
       > entry.second.frame_sequence.get() + frame::kFramesInFlight.get();
   });
@@ -1503,8 +1496,8 @@ auto SceneRenderer::DescribeExposureProductLayout(const RenderContext& ctx)
   layout.fp32_only = ctx.current_view.hdr_fp32_only;
   const auto extent = ResolveRenderContextTargetExtent(ctx).value_or(
     ActiveSceneTextures().GetExtent());
-  layout.products[0] = {
-    11U,
+  layout.products.at(0) = {
+    kSceneColorExposureProduct,
     extent.x,
     extent.y,
     1U,
@@ -1517,7 +1510,7 @@ auto SceneRenderer::DescribeExposureProductLayout(const RenderContext& ctx)
     const auto append
       = [&](const std::uint32_t id, const glm::uvec3 size, float gain) -> void {
       if (size.x != 0U) {
-        layout.products[index++] = {
+        layout.products.at(index++) = {
           id,
           size.x,
           size.y,
@@ -1527,9 +1520,10 @@ auto SceneRenderer::DescribeExposureProductLayout(const RenderContext& ctx)
         };
       }
     };
-    append(5U, required.sky_view, 1.0F);
-    append(6U, required.aerial_perspective, required.aerial_rgb_gain);
-    append(10U, required.volumetric_fog, 1.0F);
+    append(kSkyViewExposureProduct, required.sky_view, 1.0F);
+    append(kAerialExposureProduct, required.aerial_perspective,
+      required.aerial_rgb_gain);
+    append(kFogExposureProduct, required.volumetric_fog, 1.0F);
   }
   return layout;
 }
@@ -1572,8 +1566,8 @@ auto SceneRenderer::PrepareExposureDomain(
     }
     std::uint32_t expected = 0U;
     for (const auto& product : retained.products) {
-      if (product[0] != 0U) {
-        expected |= 1U << (product[0] - 1U);
+      if (product.front() != 0U) {
+        expected |= 1U << (product.front() - 1U);
       }
     }
     candidate = post_process_->SelectPrecisionCandidate(ctx,
@@ -1621,13 +1615,18 @@ void SceneRenderer::RenderViewFamily(RenderContext& ctx)
     PrimePreparedViews(ctx);
   } catch (const std::exception& error) {
     for (auto& view : ctx.frame_views) {
-      if (!view.is_scene_view)
+      if (!view.is_scene_view) {
         continue;
+      }
       view.rendered = false;
-      view_render_status_[view.view_id] = { .view_id = view.view_id,
+      view_render_status_[view.view_id] = {
+        .view_id = view.view_id,
         .frame_sequence = ctx.frame_sequence,
         .state = ViewRenderState::kFailed,
-        .failure = ViewRenderFailure::kRequiredInput };
+        .failure = ViewRenderFailure::kRequiredInput,
+        .lighting_failure = {},
+        .required_input_views = {},
+      };
     }
     ResetPerViewSceneProducts();
     LOG_F(ERROR, "Scene preparation failed: {}", error.what());
@@ -1640,17 +1639,21 @@ void SceneRenderer::RenderViewFamily(RenderContext& ctx)
     = std::unordered_map<CompositionView::AuxOutputId, AuxiliaryProduct> {};
   for (std::size_t view_index = 0U; view_index < ctx.frame_views.size();
     ++view_index) {
-    const auto& entry = ctx.frame_views[view_index];
+    const auto& entry = ctx.frame_views.at(view_index);
     if (!entry.is_scene_view) {
       continue;
     }
 
-    ctx.frame_views[view_index].rendered = false;
+    ctx.frame_views.at(view_index).rendered = false;
     auto& result = view_render_status_[entry.view_id];
-    result = { .view_id = entry.view_id,
+    result = {
+      .view_id = entry.view_id,
       .frame_sequence = ctx.frame_sequence,
       .state = ViewRenderState::kFailed,
-      .failure = ViewRenderFailure::kRequiredInput };
+      .failure = ViewRenderFailure::kRequiredInput,
+      .lighting_failure = {},
+      .required_input_views = {},
+    };
     for (const auto& input : entry.resolved_aux_inputs) {
       if (input.valid && input.input.required) {
         result.required_input_views.push_back(input.producer_view_id);
@@ -1772,14 +1775,14 @@ void SceneRenderer::RenderViewFamily(RenderContext& ctx)
         ResetPerViewSceneProducts();
         continue;
       }
-      ctx.frame_views[view_index].rendered = true;
+      ctx.frame_views.at(view_index).rendered = true;
       result.state = ViewRenderState::kSubmitted;
       result.failure = ViewRenderFailure::kNone;
       const auto* lighting_bindings = lighting_
         ? lighting_->InspectForwardLightBindings(entry.view_id)
         : nullptr;
       result.lighting_validated
-        = !lighting_bindings || lighting_bindings->local_count == 0U;
+        = lighting_bindings == nullptr || lighting_bindings->local_count == 0U;
       result.output_checks_lighting
         = published_view_frame_bindings_.post_process_frame_slot.IsValid();
       ++rendered_scene_view_count;
@@ -1807,11 +1810,13 @@ void SceneRenderer::RenderViewFamily(RenderContext& ctx)
 
     } catch (const std::exception& error) {
       result.state = ViewRenderState::kFailed;
-      if (result.failure == ViewRenderFailure::kNone)
+      if (result.failure == ViewRenderFailure::kNone) {
         result.failure = ViewRenderFailure::kRecording;
-      if (ctx.frame_views[view_index].rendered)
+      }
+      if (ctx.frame_views.at(view_index).rendered) {
         --rendered_scene_view_count;
-      ctx.frame_views[view_index].rendered = false;
+      }
+      ctx.frame_views.at(view_index).rendered = false;
       ResetPerViewSceneProducts();
       LOG_F(ERROR, "View {} failed: {}", entry.view_id.get(), error.what());
     }
@@ -1832,8 +1837,9 @@ auto SceneRenderer::InspectViewRenderStatus(ViewId view_id) const
   -> std::optional<ViewRenderStatus>
 {
   const auto found = view_render_status_.find(view_id);
-  if (found == view_render_status_.end())
+  if (found == view_render_status_.end()) {
     return std::nullopt;
+  }
   auto result = found->second;
   if (result.state == ViewRenderState::kSubmitted
     && !result.lighting_validated) {
@@ -1882,10 +1888,14 @@ auto SceneRenderer::OnRender(RenderContext& ctx) -> bool
       ctx.frame_views, [](const auto& view) -> auto { return view.rendered; });
   }
   auto& result = view_render_status_[ctx.current_view.view_id];
-  result = { .view_id = ctx.current_view.view_id,
+  result = {
+    .view_id = ctx.current_view.view_id,
     .frame_sequence = ctx.frame_sequence,
     .state = ViewRenderState::kFailed,
-    .failure = ViewRenderFailure::kRecording };
+    .failure = ViewRenderFailure::kRecording,
+    .lighting_failure = {},
+    .required_input_views = {},
+  };
   try {
     auto recording = gfx_.AcquireCommandRecorder(
       gfx_.QueueKeyFor(graphics::QueueRole::kGraphics), "Vortex View",
@@ -1921,7 +1931,7 @@ auto SceneRenderer::OnRender(RenderContext& ctx) -> bool
       ? lighting_->InspectForwardLightBindings(ctx.current_view.view_id)
       : nullptr;
     result.lighting_validated
-      = !lighting_bindings || lighting_bindings->local_count == 0U;
+      = lighting_bindings == nullptr || lighting_bindings->local_count == 0U;
     result.output_checks_lighting
       = published_view_frame_bindings_.post_process_frame_slot.IsValid();
     return true;
@@ -2008,10 +2018,12 @@ auto SceneRenderer::RenderCurrentView(
       .name = "Vortex.Stage2.InitViews",
       .kind = DiagnosticsPassKind::kCpuOnly,
       .executed = ctx.current_view.prepared_frame != nullptr,
+      .inputs = {},
       .outputs = { "Vortex.PreparedSceneFrame" },
       .missing_inputs = ctx.current_view.prepared_frame == nullptr
         ? std::initializer_list<std::string> { "PreparedSceneFrame" }
         : std::initializer_list<std::string> {},
+      .gpu_duration_ms = {},
     });
   if (diagnostics_only_variant) {
     RecordDiagnosticsPass(renderer_,
@@ -2019,12 +2031,16 @@ auto SceneRenderer::RenderCurrentView(
         .name = "Vortex.FeatureVariant.DiagnosticsOnly",
         .kind = DiagnosticsPassKind::kCpuOnly,
         .executed = true,
+        .inputs = {},
         .outputs = { "Vortex.DiagnosticsLedger" },
+        .missing_inputs = {},
+        .gpu_duration_ms = {},
       });
     RecordDiagnosticsProduct(renderer_,
       DiagnosticsProductRecord {
         .name = "Vortex.DiagnosticsLedger",
         .producer_pass = "Vortex.FeatureVariant.DiagnosticsOnly",
+        .resource_name = {},
         .descriptor = "frame-ledger",
         .published = true,
         .valid = true,
@@ -2042,6 +2058,8 @@ auto SceneRenderer::RenderCurrentView(
         ctx.frame_sequence.get(), frame_light_selection_);
     } else {
       frame_light_selection_ = FrameLightSelection {
+        .directional_lights = {},
+        .local_lights = {},
         .selection_epoch = ctx.frame_sequence.get(),
       };
     }
@@ -2083,6 +2101,8 @@ auto SceneRenderer::RenderCurrentView(
           != kInvalidShaderVisibleIndex,
         .inputs = { "FrameLightSelection" },
         .outputs = { "Vortex.LightingFrameBindings" },
+        .missing_inputs = {},
+        .gpu_duration_ms = {},
       });
     RecordDiagnosticsViewProduct(renderer_, "Vortex.LightingFrameBindings",
       "Vortex.Stage6.ForwardLightData",
@@ -2112,10 +2132,13 @@ auto SceneRenderer::RenderCurrentView(
       .executed = depth_prepass_ != nullptr
         && ctx.current_view.depth_prepass_completeness
           != DepthPrePassCompleteness::kDisabled,
+      .inputs = {},
       .outputs = wants_depth_prepass
         ? std::initializer_list<std::string> { "Vortex.SceneDepth",
             "Vortex.PartialDepth", }
         : std::initializer_list<std::string> {},
+      .missing_inputs = {},
+      .gpu_duration_ms = {},
     });
   if (ctx.current_view.depth_prepass_completeness
     == DepthPrePassCompleteness::kComplete) {
@@ -2203,6 +2226,7 @@ auto SceneRenderer::RenderCurrentView(
           && !ctx.current_view.scene_depth_product_valid
         ? std::initializer_list<std::string> { "Vortex.SceneDepth" }
         : std::initializer_list<std::string> {},
+      .gpu_duration_ms = {},
     });
   RecordDiagnosticsViewProduct(renderer_, "Vortex.ScreenHzb",
     "Vortex.Stage5.ScreenHzbBuild",
@@ -2222,11 +2246,14 @@ auto SceneRenderer::RenderCurrentView(
         .executed = occlusion_stats.results_valid,
         .inputs = { "PreparedSceneFrame", "Vortex.ScreenHzb" },
         .outputs = { "Vortex.OcclusionFrameResults" },
+        .missing_inputs = {},
+        .gpu_duration_ms = {},
       });
     RecordDiagnosticsProduct(renderer_,
       DiagnosticsProductRecord {
         .name = "Vortex.OcclusionFrameResults",
         .producer_pass = "Vortex.Stage5.Occlusion",
+        .resource_name = {},
         .descriptor = OcclusionStatsDescriptor(occlusion_stats),
         .published = ctx.current_view.occlusion_results.get() != nullptr,
         .valid = occlusion_stats.results_valid,
@@ -2250,11 +2277,15 @@ auto SceneRenderer::RenderCurrentView(
       if (!view.is_scene_view || !view.resolved_view) {
         continue;
       }
-      frame_shadow_preparation_views_.push_back({ .view_id = view.view_id,
+      frame_shadow_preparation_views_.push_back({
+        .view_id = view.view_id,
+        .shadow_caster_dependencies = {},
         .prepared_scene = observer_ptr<const PreparedSceneFrame> { init_views_
             ->GetPreparedSceneFrame(view.view_id) },
         .resolved_view = view.resolved_view,
-        .composition_view = view.composition_view });
+        .view_constants = {},
+        .composition_view = view.composition_view,
+      });
     }
     shadows_->RenderShadowDepths(FrameShadowInputs {
       .frame_light_set = &frame_light_selection_,
@@ -2307,6 +2338,8 @@ auto SceneRenderer::RenderCurrentView(
           != kInvalidShaderVisibleIndex,
         .inputs = { "FrameShadowInputs" },
         .outputs = { "Vortex.ShadowFrameBindings" },
+        .missing_inputs = {},
+        .gpu_duration_ms = {},
       });
     RecordDiagnosticsViewProduct(renderer_, "Vortex.ShadowFrameBindings",
       "Vortex.Stage8.ShadowDepth",
@@ -2314,6 +2347,11 @@ auto SceneRenderer::RenderCurrentView(
   }
   ctx.current_view.lighting_frame_slot
     = published_view_frame_bindings_.lighting_frame_slot;
+  // This recording consumes lighting in base, deferred and translucent passes.
+  if (lighting_ && ctx.current_view.lighting_frame_slot.IsValid()
+    && !lighting_->AttachResources(ctx.current_view.view_id, recorder)) {
+    return false;
+  }
   if (reported_lighting_failures_.erase(ctx.current_view.view_id) != 0U) {
     LOG_F(
       INFO, "Lighting recovered for view {}", ctx.current_view.view_id.get());
@@ -2400,12 +2438,15 @@ auto SceneRenderer::RenderCurrentView(
             "Vortex.OcclusionFrameResults", }
         : std::initializer_list<std::string> { "Vortex.PreparedSceneFrame" },
       .outputs = std::move(base_pass_outputs),
+      .missing_inputs = {},
+      .gpu_duration_ms = {},
     });
   if (base_pass_wrote_scene_color) {
     RecordDiagnosticsProduct(renderer_,
       DiagnosticsProductRecord {
         .name = "Vortex.BasePassDrawCommands",
         .producer_pass = "Vortex.Stage9.BasePass",
+        .resource_name = {},
         .descriptor = BasePassDrawDescriptor(
           base_pass_draw_count, base_pass_occlusion_culled_draw_count),
         .published = true,
@@ -2430,8 +2471,9 @@ auto SceneRenderer::RenderCurrentView(
       DiagnosticsProductRecord {
         .name = "Vortex.GBuffer",
         .producer_pass = "Vortex.Stage9.BasePass",
+        .resource_name = {},
         .descriptor
-        = SceneTextureDescriptor(scene_texture_bindings_.gbuffer_srvs[0]),
+        = SceneTextureDescriptor(scene_texture_bindings_.gbuffer_srvs.at(0)),
         .published = HasPublishedGBufferBindings(scene_texture_bindings_),
         .valid = HasPublishedGBufferBindings(scene_texture_bindings_),
       });
@@ -2443,11 +2485,9 @@ auto SceneRenderer::RenderCurrentView(
   const auto rendered_debug_visualization = wants_scene_lighting
     ? RenderDebugVisualization(ctx, recorder, scene_textures)
     : false;
-  if (!rendered_debug_visualization) {
-    if (wants_scene_lighting) {
-      if (!RenderDeferredLighting(ctx, recorder, scene_textures))
-        return false;
-    }
+  if (!rendered_debug_visualization && wants_scene_lighting
+    && !RenderDeferredLighting(ctx, recorder, scene_textures)) {
+    return false;
   }
   const auto deferred_lighting_executed = rendered_debug_visualization
     || deferred_lighting_state_.consumed_published_scene_textures;
@@ -2462,6 +2502,8 @@ auto SceneRenderer::RenderCurrentView(
       .outputs = wants_scene_lighting
         ? std::initializer_list<std::string> { "Vortex.SceneColor" }
         : std::initializer_list<std::string> {},
+      .missing_inputs = {},
+      .gpu_duration_ms = {},
     });
 
   // Stage 13: deferred surface indirect lighting. Forward surfaces already
@@ -2472,17 +2514,22 @@ auto SceneRenderer::RenderCurrentView(
     && !IsNonIblDebugMode(ctx.shader_debug_mode)
     && shading_mode == ShadingMode::kDeferred && base_pass_published) {
     if (const auto* bindings
-      = environment_->InspectBindings(ctx.current_view.view_id))
+      = environment_->InspectBindings(ctx.current_view.view_id)) {
       indirect_executed
         = indirect_->Record(ctx, recorder, scene_textures, *bindings);
+    }
   }
   environment_lighting_state_.indirect_draw_count = indirect_executed ? 1U : 0U;
   RecordDiagnosticsPass(renderer_,
-    DiagnosticsPassRecord { .name = "Vortex.Stage13.IndirectLighting",
+    DiagnosticsPassRecord {
+      .name = "Vortex.Stage13.IndirectLighting",
       .kind = DiagnosticsPassKind::kGraphics,
       .executed = indirect_executed,
       .inputs = { "Vortex.GBuffer", "Vortex.EnvironmentFrameBindings" },
-      .outputs = { "Vortex.SceneColor" } });
+      .outputs = { "Vortex.SceneColor" },
+      .missing_inputs = {},
+      .gpu_duration_ms = {},
+    });
 
   // Stage 14: reserved - EnvironmentLightingService volumetrics
 
@@ -2594,11 +2641,14 @@ auto SceneRenderer::RenderCurrentView(
         .inputs = { "Vortex.ScreenHzb", "Vortex.EnvironmentFrameBindings",
           "Vortex.ShadowFrameBindings", },
         .outputs = { "Vortex.Environment.IntegratedLightScattering" },
+        .missing_inputs = {},
+        .gpu_duration_ms = {},
       });
     RecordDiagnosticsProduct(renderer_,
       DiagnosticsProductRecord {
         .name = "Vortex.Environment.IntegratedLightScattering",
         .producer_pass = "Vortex.Stage14.VolumetricAndLocalFog",
+        .resource_name = {},
         .descriptor = ShaderVisibleDescriptor(
           stage14_state.integrated_light_scattering_srv),
         .published = stage14_state.integrated_light_scattering_srv
@@ -2613,6 +2663,8 @@ auto SceneRenderer::RenderCurrentView(
         .inputs = { "Vortex.SceneColor",
           "Vortex.Environment.IntegratedLightScattering", },
         .outputs = { "Vortex.SceneColor" },
+        .missing_inputs = {},
+        .gpu_duration_ms = {},
       });
   }
 
@@ -2639,11 +2691,13 @@ auto SceneRenderer::RenderCurrentView(
         : std::initializer_list<std::string> {},
       .missing_inputs = TranslucencyMissingInputs(
         translucency_result, translucency_ != nullptr),
+      .gpu_duration_ms = {},
     });
   RecordDiagnosticsProduct(renderer_,
     DiagnosticsProductRecord {
       .name = "Vortex.TranslucencyDrawCommands",
       .producer_pass = "Vortex.Stage18.Translucency",
+      .resource_name = {},
       .descriptor = TranslucencyDrawDescriptor(translucency_result),
       .published = translucency_result.draw_count > 0U,
       .valid = !translucency_result.requested || translucency_result.executed
@@ -2668,6 +2722,8 @@ auto SceneRenderer::RenderCurrentView(
         .inputs = { "Vortex.SceneColor", "Vortex.SceneDepth",
           "Vortex.PreparedSceneFrame", },
         .outputs = { "Vortex.SceneColor" },
+        .missing_inputs = {},
+        .gpu_duration_ms = {},
       });
   };
 
@@ -2702,10 +2758,10 @@ auto SceneRenderer::RenderCurrentView(
     CHECK_LE_F(precision_products.size(), layout.products.size());
     auto expected_products = std::uint32_t { 0U };
     for (std::size_t i = 0; i < precision_products.size(); ++i) {
-      const auto& product = precision_products[i];
+      const auto& product = precision_products.at(i);
       const auto desc = product.texture ? product.texture->GetDescriptor()
                                         : graphics::TextureDesc {};
-      layout.products[i] = {
+      layout.products.at(i) = {
         product.id,
         desc.width,
         desc.height,
@@ -2738,7 +2794,9 @@ auto SceneRenderer::RenderCurrentView(
       ctx.current_view.view_id, ctx, recorder,
       {
         .scene_signal = accumulated,
+        .post_target = {},
         .scene_signal_srv = accumulated_srv,
+        .checked_resolution = {},
         .require_scene_range = true,
       });
     if (!prepared_exposure) {
@@ -2789,6 +2847,7 @@ auto SceneRenderer::RenderCurrentView(
       = wants_resolve && !scene_texture_extracts_.resolved_scene_color.valid
         ? std::initializer_list<std::string> { "Vortex.SceneColor" }
         : std::initializer_list<std::string> {},
+      .gpu_duration_ms = {},
     });
   if (scene_texture_extracts_.resolved_scene_color.valid
     && scene_texture_extracts_.resolved_scene_color.texture != nullptr) {
@@ -2799,6 +2858,7 @@ auto SceneRenderer::RenderCurrentView(
         .resource_name = std::string {
           scene_texture_extracts_.resolved_scene_color.texture->GetName(),
         },
+        .descriptor = {},
         .published = true,
         .valid = true,
       });
@@ -2808,7 +2868,7 @@ auto SceneRenderer::RenderCurrentView(
   if (post_process_ != nullptr && wants_scene_lighting) {
     const auto post_target = ResolveViewOutputTarget(ctx);
 
-    const auto* scene_signal = scene_textures.GetSceneColorResource().get();
+    auto* scene_signal = scene_textures.GetSceneColorResource().get();
     auto scene_signal_kind = std::string_view { "scene_color" };
     if (scene_texture_extracts_.resolved_scene_color.valid
       && scene_texture_extracts_.resolved_scene_color.texture != nullptr) {
@@ -2817,20 +2877,20 @@ auto SceneRenderer::RenderCurrentView(
     }
     CHECK_NOTNULL_F(scene_signal,
       "SceneRenderer Stage 22 requires a valid SceneColor source texture");
-    const auto scene_signal_srv = ShaderVisibleIndex { RegisterSceneTextureView(
-      *const_cast<graphics::Texture*>(scene_signal),
-      MakeSrvDesc(*scene_signal, scene_signal->GetDescriptor().format)) };
+    const auto scene_signal_srv
+      = ShaderVisibleIndex { RegisterSceneTextureView(*scene_signal,
+        MakeSrvDesc(*scene_signal, scene_signal->GetDescriptor().format)) };
 
-    const auto* scene_depth = scene_textures.GetSceneDepthResource().get();
+    auto* scene_depth = scene_textures.GetSceneDepthResource().get();
     if (scene_texture_extracts_.resolved_scene_depth.valid
       && scene_texture_extracts_.resolved_scene_depth.texture != nullptr) {
       scene_depth = scene_texture_extracts_.resolved_scene_depth.texture;
     }
     CHECK_NOTNULL_F(scene_depth,
       "SceneRenderer Stage 22 requires a valid SceneDepth source texture");
-    const auto scene_depth_srv = ShaderVisibleIndex { RegisterSceneTextureView(
-      *const_cast<graphics::Texture*>(scene_depth),
-      MakeSrvDesc(*scene_depth, scene_depth->GetDescriptor().format)) };
+    const auto scene_depth_srv
+      = ShaderVisibleIndex { RegisterSceneTextureView(*scene_depth,
+        MakeSrvDesc(*scene_depth, scene_depth->GetDescriptor().format)) };
     CHECK_NOTNULL_F(post_target.get(),
       "SceneRenderer Stage 22 requires a SceneRenderer-supplied post target");
 
@@ -2868,6 +2928,8 @@ auto SceneRenderer::RenderCurrentView(
         .inputs = { std::string { "Vortex." } + std::string(scene_signal_kind),
           "Vortex.SceneDepth", },
         .outputs = { "Vortex.PostProcessFrameBindings" },
+        .missing_inputs = {},
+        .gpu_duration_ms = {},
       });
     RecordDiagnosticsViewProduct(renderer_, "Vortex.PostProcessFrameBindings",
       "Vortex.Stage22.PostProcess",
@@ -2890,6 +2952,8 @@ auto SceneRenderer::RenderCurrentView(
         .executed = true,
         .inputs = { "Vortex.SceneColor" },
         .outputs = { "Vortex.SceneColor" },
+        .missing_inputs = {},
+        .gpu_duration_ms = {},
       });
   }
 
@@ -3061,8 +3125,7 @@ auto SceneRenderer::GetResolvedSceneColorTexture() const
 {
   const auto& color = scene_texture_extracts_.resolved_scene_color;
   if (color.fallback && color.source_color) {
-    return std::shared_ptr<graphics::Texture>(
-      std::make_shared<SceneTextureExtractRef>(color), color.fallback);
+    return { std::make_shared<SceneTextureExtractRef>(color), color.fallback };
   }
   return resolved_scene_color_artifact_.texture;
 }
@@ -3123,8 +3186,9 @@ auto SceneRenderer::InspectExposureSettings(
 auto SceneRenderer::AcquireIblCapture(const ViewId view)
   -> Result<environment::IblCaptureLease, environment::IblCaptureError>
 {
-  if (!environment_)
+  if (!environment_) {
     return Err(environment::IblCaptureError::kUnavailable);
+  }
   return environment_->AcquireIblCapture(view);
 }
 
@@ -3238,7 +3302,7 @@ void SceneRenderer::RefreshSceneTextureBindings()
     for (std::uint32_t i = 0; i < scene_textures.GetGBufferCount(); ++i) {
       const auto gbuffer_index = static_cast<GBufferIndex>(i);
       auto& texture = scene_textures.GetGBuffer(gbuffer_index);
-      scene_texture_bindings_.gbuffer_srvs[i] = RegisterSceneTextureView(
+      scene_texture_bindings_.gbuffer_srvs.at(i) = RegisterSceneTextureView(
         texture, MakeSrvDesc(texture, texture.GetDescriptor().format));
     }
   }

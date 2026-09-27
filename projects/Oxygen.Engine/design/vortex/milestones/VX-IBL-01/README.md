@@ -2,11 +2,11 @@
 
 Status: `in_progress`
 
-| Field     | Summary                                                                                                                                                                                              |
-| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Outcome   | Atmosphere/height-fog and specified-cubemap diffuse/specular IBL, immediate authoring and budgeted runtime updates.                                                                                  |
-| Remaining | [S7 reusable infrastructure](#s7--reusable-infrastructure) is in progress: six bounded refactorings. Track [VX-IBL-01](../../OPEN_ITEMS.md#p1--current-delivery).                                    |
-| Evidence  | [Lighting acceptance](#acceptance) · [Validation](validation.md). S1–S6 remain validated; S7 distant-sky synchronization and S7.4 checks pass; five extractions and integrated qualification remain. |
+| Field     | Summary                                                                                                                                                                                                    |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Outcome   | Atmosphere/height-fog and specified-cubemap diffuse/specular IBL, immediate authoring and budgeted runtime updates.                                                                                        |
+| Remaining | [S7 reusable infrastructure](#s7--reusable-infrastructure) has four extractions and integrated qualification remaining. Track [VX-IBL-01](../../OPEN_ITEMS.md#p1--current-delivery).                       |
+| Evidence  | [Lighting acceptance](#acceptance) · [Validation](validation.md). S1–S6 remain validated; S7 distant-sky synchronization, S7.4 and S7.1 checks pass; four extractions and integrated qualification remain. |
 
 Read: [scope](#scope-and-ownership), [delivery sequence](#delivery-sequence),
 [DemoShell UI](#demoshell-ui), [validation tools](#validation-tools),
@@ -68,8 +68,9 @@ technical contracts in the owning documents linked below.
 The starting implementation is `a58b00e0c`; S1–S6 results remain the qualified
 lighting baseline. The [distant-sky barrier correction](evidence/s7-barrier/run.json)
 passes native sky checks and the authoring timing gate.
-[S7.4 registry methods](evidence/s7-resources-final/run.json) pass their focused checks;
-the other five extractions and integrated qualification remain.
+[S7.4 registry methods](evidence/s7-resources-final/run.json) and
+[S7.1 immutable uploads](validation.md#s71-immutable-lut-uploads) pass their focused checks;
+four extractions and integrated qualification remain.
 
 Read: [work items](#s7-work-items), [execution and exit](#s7-execution-and-exit),
 [C++ guidance](../../../../../../design/oxygen/RULES.md#c).
@@ -84,7 +85,7 @@ Each extraction lands as a buildable, reviewed commit with its adopters and chec
 
 | ID   | Deliverable / boundary                                                                                                                                                               | Production adopters                                                                                       | Focused exit                                                                                                                                             | State       |
 | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
-| S7.1 | [Immutable texture initialization](../../lld/upload.md#immutable-texture-initialization) in Upload; reuse existing 2D packing/planning and explicit submission.                      | IBL BRDF and direct-light BRDF-energy resources and their consuming recordings.                           | Exact LUT contents; managed lifetime, budget accounting, failed submission/retry and same-frame use pass; duplicate pack/copy initialization is removed. | planned     |
+| S7.1 | [Immutable texture initialization](../../lld/upload.md#immutable-texture-initialization) in Upload; reuse existing 2D packing/planning and explicit submission.                      | IBL BRDF and direct-light BRDF-energy resources and their consuming recordings.                           | Exact LUT contents; managed lifetime, budget accounting, failed submission/retry and same-frame use pass; duplicate pack/copy initialization is removed. | validated   |
 | S7.2 | [Bounded typed feedback](../../lld/gpu-feedback.md#bounded-gpu-feedback) over ReadbackManager; transport only.                                                                       | IBL metadata, PostProcess exposure status, SpatialLightGrid demand.                                       | All three retain their capacity, polling order, identity checks and failure behavior; no new stalls, submissions or readback frequency.                  | planned     |
 | S7.3 | [Retirement accounting](../../../../src/Oxygen/Nexus/Docs/slot-retirement.md#10-owner-and-use-accounting) above Nexus IndexReuse; preserve family admission and Graphics completion. | IBL ProductVersion and shared-shadow ShadowSlotCore.                                                      | Ordinary ownership and retained pins drain independently; discard/fault/close and allocation-denied retirement pass in both families.                    | planned     |
 | S7.4 | [Managed resource/view setup](../../../../src/Oxygen/Graphics/Common/README.md#managed-resources-and-views); caller chooses allocation and view descriptors.                         | IBL allocations, captured-sky target setup and shared-shadow backing/initial SRV setup; S7.1 consumes it. | Transactional setup, domains, mip views and cleanup pass; shadow budget fallback and lazy DSVs stay intact.                                              | validated   |
@@ -158,8 +159,8 @@ Owning check surfaces, not a new suite hierarchy:
 | S7.3   | `Oxygen.Nexus.Reuse.Tests`, `Oxygen.Nexus.AllocationFailure.Tests`, `Oxygen.Vortex.ShadowService.Tests`, native IBL retirement/queued-pressure and `Oxygen.Vortex.LightingImageReference.Tests` shadow-admission fixtures.                                                          |
 | S7.5/6 | ShaderBake production catalog; native `Oxygen.Vortex.LightingGpuAbi.Tests` and `Oxygen.Vortex.Exposure.Tests` products, sky, fog, exposure and images; existing independent CPU references.                                                                                         |
 
-Use the existing `validation.md`; retain new immutable results under
-`evidence/s7-*` as implementation produces them. Nexus, Upload, renderer feedback,
+Use the existing `validation.md` for concise results and reproduction commands;
+keep reproducible captures and generated artifacts in ignored `out/`. Nexus, Upload, renderer feedback,
 Graphics registration and shader contracts each own their reusable capability; this section
 owns adopter migration, sequence, state and exit. No parallel refactoring plan or
 second progress ledger is introduced.

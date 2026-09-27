@@ -13,6 +13,7 @@
 #include <span>
 #include <vector>
 
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Core/Bindless/Types.h>
@@ -39,6 +40,9 @@ class ResourceRegistry;
 namespace oxygen::vortex {
 class Renderer;
 class DiagnosticsService;
+namespace upload {
+  class UploadCoordinator;
+}
 }
 
 namespace oxygen::vortex::environment::internal {
@@ -66,20 +70,23 @@ public:
   OXGN_VRTX_API explicit IblBrdfResources(Graphics& graphics);
   OXGN_VRTX_API explicit IblBrdfResources(Renderer& renderer);
   OXGN_VRTX_API ~IblBrdfResources();
-  IblBrdfResources(const IblBrdfResources&) = delete;
-  auto operator=(const IblBrdfResources&) -> IblBrdfResources& = delete;
+  OXYGEN_MAKE_NON_COPYABLE(IblBrdfResources)
+  OXYGEN_MAKE_NON_MOVABLE(IblBrdfResources)
 
-  [[nodiscard]] OXGN_VRTX_API auto Prepare()
+  OXGN_VRTX_NDAPI auto Prepare()
     -> std::expected<std::shared_ptr<const IblBrdfProduct>, IblProcessError>;
 
 private:
   Graphics& graphics_;
+  std::unique_ptr<upload::UploadCoordinator> owned_uploads_;
+  observer_ptr<upload::UploadCoordinator> uploads_;
   observer_ptr<DiagnosticsService> diagnostics_ { nullptr };
   std::shared_ptr<const IblBrdfProduct> product_;
 };
 
 struct IblProcessSettings {
-  std::uint32_t face_size { 128U };
+  static constexpr std::uint32_t kDefaultFaceSize = 128U;
+  std::uint32_t face_size { kDefaultFaceSize };
   float source_rotation_radians { 0.0F };
   bool lower_hemisphere_solid_color { true };
   std::array<float, 3> lower_hemisphere_color {};
@@ -179,8 +186,8 @@ public:
   OXGN_VRTX_API explicit IblGpuProcessor(
     Renderer& renderer, std::uint32_t capacity = kMaximumSlots);
   OXGN_VRTX_API ~IblGpuProcessor();
-  IblGpuProcessor(const IblGpuProcessor&) = delete;
-  auto operator=(const IblGpuProcessor&) -> IblGpuProcessor& = delete;
+  OXYGEN_MAKE_NON_COPYABLE(IblGpuProcessor)
+  OXYGEN_MAKE_NON_MOVABLE(IblGpuProcessor)
 
   //! Immutable source with a matching managed registration. Supply a receipt
   //! for cross-queue input; otherwise writes must already precede this call on

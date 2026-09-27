@@ -7,7 +7,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <functional>
 #include <memory>
 #include <span>
 #include <utility>
@@ -245,7 +244,7 @@ NOLINT_TEST_F(
   constexpr uint64_t expected_slice = expected_row * h; // 32768
 
   bool producer_ran = false;
-  std::move_only_function<bool(std::span<std::byte>)> prod
+  oxygen::vortex::upload::UploadProducer prod
     = [&producer_ran](std::span<std::byte> out) -> bool {
     producer_ran = true;
     std::memset(out.data(), 0x7F, out.size());
@@ -318,7 +317,7 @@ NOLINT_TEST_F(UploadCoordinatorTest, Texture2D_FullUpload_ProducerFails_NoCopy)
   auto tex = GfxPtr()->CreateTexture(tex_desc);
 
   bool producer_ran = false;
-  std::move_only_function<bool(std::span<std::byte>)> prod
+  oxygen::vortex::upload::UploadProducer prod
     = [&producer_ran](std::span<std::byte>) -> bool {
     producer_ran = true;
     return false;

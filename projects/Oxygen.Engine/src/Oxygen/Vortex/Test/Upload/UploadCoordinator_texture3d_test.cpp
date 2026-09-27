@@ -6,7 +6,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <functional>
 #include <memory>
 #include <span>
 #include <utility>
@@ -139,7 +138,7 @@ NOLINT_TEST_F(UploadCoordinatorTest, Texture3D_FullUpload_ProducerFails_NoCopy)
   auto tex = GfxPtr()->CreateTexture(tex_desc);
 
   bool producer_ran = false;
-  std::move_only_function<bool(std::span<std::byte>)> prod
+  oxygen::vortex::upload::UploadProducer prod
     = [&producer_ran](std::span<std::byte>) -> bool {
     producer_ran = true;
     return false;

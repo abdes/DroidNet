@@ -95,6 +95,9 @@ public:
 
   OXGN_VRTX_API auto OnFrameStart(
     frame::SequenceNumber sequence, frame::Slot slot) -> void;
+  //! Pin immutable lighting products and their producer dependencies.
+  OXGN_VRTX_NDAPI auto AttachResources(
+    ViewId view_id, graphics::CommandRecorder& recorder) const -> bool;
   [[nodiscard]] OXGN_VRTX_API auto BuildLightGrid(
     const FrameLightingInputs& inputs)
     -> std::expected<void, LightingPreparationFailure>;

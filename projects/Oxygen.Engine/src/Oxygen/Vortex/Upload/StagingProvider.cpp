@@ -5,12 +5,14 @@
 //===----------------------------------------------------------------------===//
 
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <utility>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Types/ByteUnits.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
+#include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Vortex/Upload/StagingProvider.h>
 
 namespace oxygen::vortex::upload {
@@ -43,6 +45,13 @@ StagingProvider::~StagingProvider()
   if (!ps.implementation_info.empty()) {
     LOG_F(INFO, "{}", ps.implementation_info);
   }
+}
+
+auto StagingProvider::Allocation::Attach(
+  graphics::CommandRecorder& recorder) const -> void
+{
+  constexpr std::uint64_t kStagingUse = 0x55504C5354414745ULL;
+  recorder.RetainOpaqueUse(buffer, kStagingUse);
 }
 
 } // namespace oxygen::vortex::upload

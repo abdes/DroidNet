@@ -6,10 +6,37 @@ required result. The [integrated audit](evidence/s6-integrated/run.json) checks
 retained evidence against current production owners; prior measurements keep
 their original source/build provenance.
 
-Read: [integrated results](#integrated-results), [checkpoint evidence](#checkpoint-evidence),
+Read: [S7 checkpoints](#s7-checkpoints), [integrated results](#integrated-results), [checkpoint evidence](#checkpoint-evidence),
 [reproduce](#reproduce).
 
 ## S7 checkpoints
+
+### S7.1 immutable LUT uploads
+
+S7.1 shares 2D packing and
+managed recording between IBL and BRDF-energy initialization. Both Debug and
+Release pass **27 upload**, **25 planner**, **34 lighting-service** and **six
+native LUT tests**, plus **four IBL consumer/reference tests** per configuration.
+The native checks compare all **4,096 IBL texels** and
+**1,024 energy texels** after CPU owner release, then exercise discard, rejected/
+uncertain submission, recovery/retry and staging-budget rejection. Async tests
+cover cancellation and partial-batch failure through private GPU completion.
+**50 shadow** and **18 GPU-timeline** Release regressions pass.
+
+RenderDoc separately checks exact texel readback and production shader reads.
+The analyzed captures cover deferred direct/indirect, opaque-forward and
+translucent LUT consumers in shader-resource state. The **144-case image matrix**
+and Async lighting/VortexBasic forward smoke runs pass. Oxytidy covers every
+changed C++ file; no check is disabled. Integrated S7 performance, SDK and editor
+gates remain in the [S7 exit](README.md#s7-execution-and-exit).
+
+Validated on 2026-09-27, on `codex/vx-ibl-01-implementation` over `0513b0f36`
+with the S7.1 working changes, using the normal Ninja Debug/Release builds.
+MSVC reports existing C4702 in `OxCo/Detail/SanitizedAwaiter.h:101` through the
+cancellation test. [Reproduction](#reproduce-s71) uses the committed tests and
+analyzer; generated captures and logs stay in ignored `out/`.
+
+### Earlier S7 checkpoints
 
 [S7.4 final cleanup](evidence/s7-resources-final/run.json): the three requested
 source files pass oxytidy with **zero warnings/errors**, with all configured
@@ -37,7 +64,7 @@ tests** pass after adding the group barrier between offset-2 writes and the fina
 lane-zero pair. ShaderBake publishes all **237** production modules. The isolated
 1,800-update authoring run measures **1.269 / 2.536 ms p95/p99**, inside the
 2/4-ms gates. The arithmetic tree is unchanged. S7.5 remains open for the shared
-reduction extraction; other S7 items remain planned.
+reduction extraction; remaining S7 states are tracked in the milestone plan.
 
 ## Integrated results
 
@@ -493,6 +520,34 @@ A/B error at most 0.035. This estimator check does not replace material-image
 qualification.
 
 ## Reproduce
+
+### Reproduce S7.1
+
+From the engine directory in a Visual Studio developer shell, build and run
+`Oxygen.Vortex.UploadCoordinator.Tests`, `Oxygen.Vortex.UploadPlanner.Tests`,
+`Oxygen.Vortex.LightingService.Tests`, `Oxygen.Vortex.Exposure.Tests` and
+`Oxygen.Vortex.LightingGpuAbi.Tests` in Debug and Release with the normal
+`cmake --build out/build-ninja --config <configuration> --target <targets>`.
+Run the first three suites in full; Exposure filter `ExposureGpuTest.Immutable*Lut*`
+covers the six native checks. LightingGpuAbi filters `IblBrdfLookupTest.*`,
+`IblConvolutionGpuTest.BrdfLookupIsSharedAndRequiredByGenerations`,
+`IblConvolutionGpuTest.SurfaceRecordingRetainsBrdfAfterCacheAndProductRelease`
+and `LightingGpuAbiTest.IblBrdfNativeUnormSamplingHasNoSecondRemap` cover the
+four consumer checks (join with `:`).
+
+For exact-texel captures, put RenderDoc on `PATH`, set
+`OXYGEN_EXPOSURE_CAPTURE` to an absolute prefix under `out/`, and run Exposure
+filter `ExposureGpuTest.ImmutableIblLutPreservesEveryTexelAfterOwnerRelease`
+or `ExposureGpuTest.ImmutableEnergyLutPreservesEveryBitAfterServiceRelease`.
+The same capture hook with `IblSurfaceGpuTest.ImagesAgreeAcrossPublishedAndOffscreenPaths`
+runs the 144-case image matrix. Replay captures serially with
+`tools/shadows/Invoke-RenderDocUiAnalysis.ps1`,
+`-UiScriptPath tools/vortex/AnalyzeRenderDocImmutableLut.py` and the matching
+`-PassName` documented in that analyzer. Supply absolute capture/report paths;
+keep generated output under ignored `out/`. Native readback checks texel contents;
+use production deferred, forward and translucent modes to inspect consumer reads.
+
+### Earlier slices
 
 For specified-size scaling, use `IblUpdateBenchmark.DISABLED_SpecifiedCubeUpdates`
 with `OXYGEN_IBL_FACE_SIZE` set to 64, 128, 256 or 512 and a fresh
