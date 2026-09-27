@@ -87,10 +87,11 @@ Read: [ownership](#ownership), [C++](#c), [editor](#editor),
 
 ## Validation and delivery
 
-- Run `oxyformat` on all uncommitted C++ files in the task before building. Preserve
-  unrelated user edits/settings. Fix relevant diagnostics, including IDE recommendations,
-  without suppressing or disabling checks. Batch `oxytidy`/analyzer cleanup for
-  commit preparation; do not use repeated lint runs as a substitute for careful coding.
+- Before building or testing, clear all `oxytidy` warnings in modified C++ files,
+  including pre-existing warnings and IDE diagnostics, then run `oxyformat` on
+  the task's uncommitted C++. Preserve unrelated user edits/settings. Do not
+  suppress checks without an explicitly approved exception. Batch cleanup;
+  repeated lint runs are not a substitute for careful coding.
 - Use parallel `MSBuild.exe /m` for editor verification, not `dotnet`. For example:
   `MSBuild.exe projects/Oxygen.Editor/src/Oxygen.Editor.App.csproj /nologo /m /p:Configuration=Debug /v:minimal`.
   Editor-only work does not authorize an engine build; obtain explicit authorization.

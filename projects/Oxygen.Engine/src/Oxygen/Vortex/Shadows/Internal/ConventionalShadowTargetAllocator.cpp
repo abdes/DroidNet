@@ -491,7 +491,7 @@ auto ConventionalShadowTargetAllocator::AcquirePhysicalSlot(
     for (const auto& weak : local_pool_->slots) {
       if (const auto slot = weak.lock(); slot && slot->backing == candidate) {
         std::scoped_lock lock(slot->mutex);
-        if (!slot->finalized) {
+        if (!slot->retirement.IsResolved()) {
           occupied.at(slot->offset) = true;
         }
       }
@@ -521,16 +521,15 @@ auto ConventionalShadowTargetAllocator::AcquirePhysicalSlot(
     if (local_pool_->closed) {
       throw std::logic_error("Shadow slot pool is closed");
     }
-    if (!local_pool_->free.empty()) {
-      index = local_pool_->free.back();
-      local_pool_->free.pop_back();
+    if (local_pool_->free_count != 0) {
+      index = local_pool_->free.at(--local_pool_->free_count);
     } else {
       index
         = ShadowSlotIndex { static_cast<uint32_t>(local_pool_->slots.size()) };
-      if (local_pool_->free.capacity() <= local_pool_->slots.size()) {
-        local_pool_->free.reserve((std::max)(local_pool_->slots.size() + 1,
-          local_pool_->free.capacity() * 2));
-      }
+      // Allocate every return entry before its slot becomes live. Retirement
+      // writes existing storage and cannot grow a vector in a noexcept
+      // callback.
+      local_pool_->free.resize(local_pool_->slots.size() + 1);
       local_pool_->slots.emplace_back();
     }
   }
@@ -538,10 +537,12 @@ auto ConventionalShadowTargetAllocator::AcquirePhysicalSlot(
     slot->handle = local_pool_->reuse.ActivateSlot(index);
   } catch (...) {
     std::scoped_lock lock(local_pool_->mutex);
-    local_pool_->free.push_back(index);
+    local_pool_->free.at(local_pool_->free_count++) = index;
     throw;
   }
   slot->pool = local_pool_;
+  [[maybe_unused]] const auto activated = slot->retirement.Activate();
+  assert(activated);
   local_pool_->slots.at(index.get()) = slot;
   EnsureSlotViews(*slot);
   if (new_chunk) {
@@ -559,7 +560,7 @@ auto ConventionalShadowTargetAllocator::PruneLocalChunks() -> void
           return false;
         }
         std::scoped_lock lock(slot->mutex);
-        return !slot->finalized;
+        return !slot->retirement.IsResolved();
       });
   });
 }
@@ -671,8 +672,8 @@ auto ConventionalShadowTargetAllocator::InspectLocalSharing() const
       for (const auto& weak : local_pool_->slots) {
         if (const auto slot = weak.lock(); slot && slot->backing == backing) {
           std::scoped_lock lock(slot->mutex);
-          occupied += slot->finalized ? 0U : 1U;
-          closing = closing && slot->owners == 0;
+          occupied += slot->retirement.IsResolved() ? 0U : 1U;
+          closing = closing && slot->retirement.OwnerCount() == 0;
         }
       }
       spare = (backing->map_capacity - occupied) * backing->resolution

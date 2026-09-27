@@ -39,6 +39,7 @@ m_gtest_program(
   SOURCES
     "GenerationTracker_test.cpp"
     "IndexReuse_test.cpp"
+    "RetirementState_test.cpp"
     "DomainIndexMapper_test.cpp"
     "FrameDrivenSlotReuse_test.cpp"
     "FrameDrivenIndexReuse_test.cpp"

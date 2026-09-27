@@ -5,13 +5,27 @@
 //===----------------------------------------------------------------------===//
 #include <algorithm>
 #include <cassert>
+#include <cstddef>
+#include <iterator>
+#include <memory>
+#include <mutex>
+#include <optional>
 #include <stdexcept>
 #include <utility>
 
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
+#include <Oxygen/Graphics/Common/Registration.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
+#include <Oxygen/Graphics/Common/Submission.h>
+#include <Oxygen/Graphics/Common/SubmissionCallback.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Nexus/IndexReuse.h>
+#include <Oxygen/Vortex/Shadows/Internal/LocalShadowRequest.h>
 #include <Oxygen/Vortex/Shadows/Internal/SharedShadowMap.h>
+#include <Oxygen/Vortex/Shadows/Types/ShadowUseError.h>
+#include <Oxygen/Vortex/Types/LightingIndices.h>
 
 namespace oxygen::vortex::shadows::internal {
 namespace {
@@ -28,7 +42,7 @@ namespace {
     const auto& context = *static_cast<ShadowMapVersion::UseContext*>(pointer);
     auto& version = *context.version;
     auto& backing = *version.slot->backing;
-    std::lock_guard lock(backing.mutex);
+    std::scoped_lock lock(backing.mutex);
     if (backing.quarantined || !version.accepting
       || (context.mode != ShadowUseMode::kWrite
         && version.state != ShadowMapVersion::State::kSubmitted)) {
@@ -45,8 +59,10 @@ namespace {
     if (std::ranges::find(
           backing.queues, queue, &SharedShadowBacking::QueueUse::queue)
       == backing.queues.end()) {
-      backing.queues.push_back(
-        { .queue = queue }); // Before publishing any pin.
+      backing.queues.push_back({
+        .queue = queue,
+        .latest = std::nullopt,
+      }); // Before publishing any pin.
     }
     version.slot->AddUse();
     auto& use = FindQueue(backing, queue);
@@ -61,7 +77,7 @@ namespace {
     const auto& context
       = *static_cast<const ShadowMapVersion::UseContext*>(pointer);
     const auto& version = *context.version;
-    std::lock_guard lock(version.slot->backing->mutex);
+    std::scoped_lock lock(version.slot->backing->mutex);
     return !version.slot->backing->quarantined
       && (context.mode == ShadowUseMode::kWrite
           ? version.state == ShadowMapVersion::State::kRecording
@@ -73,7 +89,7 @@ namespace {
     const auto& context = *static_cast<ShadowMapVersion::UseContext*>(pointer);
     auto& version = *context.version;
     auto& backing = *version.slot->backing;
-    std::lock_guard lock(backing.mutex);
+    std::scoped_lock lock(backing.mutex);
     auto& use = FindQueue(backing, queue);
     if (context.mode == ShadowUseMode::kRead) {
       --use.pending_reads;
@@ -105,7 +121,7 @@ namespace {
     auto& version = *context.version;
     auto& backing = *version.slot->backing;
     {
-      std::lock_guard lock(backing.mutex);
+      std::scoped_lock lock(backing.mutex);
       auto& use = FindQueue(backing, queue);
       if (outcome == graphics::SubmissionOutcome::kDiscarded) {
         if (context.mode == ShadowUseMode::kRead) {
@@ -126,67 +142,67 @@ namespace {
     }
     version.slot->ReleaseUse();
   }
-}
+} // namespace
 
 ShadowSlotCore::~ShadowSlotCore()
 {
-  assert(owners == 0 && uses == 0);
+  assert(retirement.OwnerCount() == 0 && retirement.UseCount() == 0);
   RetireAndFinalize();
 }
 auto ShadowSlotCore::AddOwner() -> void
 {
-  std::lock_guard lock(mutex);
-  if (retirement || finalized) {
+  std::scoped_lock lock(mutex);
+  if (!retirement.AcquireOwner()) {
     throw std::logic_error("Shadow slot has retired");
   }
-  ++owners;
 }
 auto ShadowSlotCore::ReleaseOwner() noexcept -> void
 {
-  std::lock_guard lock(mutex);
-  assert(owners != 0);
-  --owners;
+  std::scoped_lock lock(mutex);
+  if (!retirement.ReleaseOwner()) {
+    assert(false && "Shadow owner already released");
+    return;
+  }
   RetireAndFinalize();
 }
 auto ShadowSlotCore::AddUse() -> void
 {
-  std::lock_guard lock(mutex);
-  if (owners == 0 || retirement || finalized) {
+  std::scoped_lock lock(mutex);
+  if (!retirement.AcquireUse()) {
     throw std::logic_error("Shadow slot has no allocation owner");
   }
-  ++uses;
 }
 auto ShadowSlotCore::ReleaseUse() noexcept -> void
 {
-  std::lock_guard lock(mutex);
-  assert(uses != 0);
-  --uses;
+  std::scoped_lock lock(mutex);
+  if (!retirement.ReleaseUse()) {
+    assert(false && "Shadow use already released");
+    return;
+  }
   RetireAndFinalize();
 }
 auto ShadowSlotCore::RetireAndFinalize() noexcept -> void
 {
-  if (owners != 0 || finalized) {
-    return;
-  }
   auto target = pool.lock();
-  if (!retirement && target) {
-    auto ticket = target->reuse.TryRetire(handle);
-    if (ticket) {
-      retirement.emplace(std::move(*ticket));
-    }
-  }
-  if (uses != 0) {
-    return;
-  }
-  finalized = true;
-  if (retirement) {
-    const auto result = retirement->Finalize();
-    retirement.reset();
-    if (target && result.index) {
-      std::lock_guard target_lock(target->mutex);
-      if (!target->closed) {
-        target->free.push_back(*result.index);
+  if (retirement.BeginRetirement()) {
+    std::optional<nexus::RetirementTicket<ShadowSlotIndex>> ticket;
+    if (target) {
+      auto candidate = target->reuse.TryRetire(handle);
+      if (candidate) {
+        ticket.emplace(std::move(*candidate));
       }
+    }
+    [[maybe_unused]] const auto installed
+      = retirement.SetRetirement(std::move(ticket));
+    assert(installed);
+  }
+  const auto result = retirement.Finalize();
+  if (target && result && result->index) {
+    std::scoped_lock target_lock(target->mutex);
+    if (!target->closed) {
+      assert(target->free_count < target->free.size());
+      *std::next(target->free.begin(),
+        static_cast<std::ptrdiff_t>(target->free_count++)) = *result->index;
     }
   }
 }
@@ -194,8 +210,13 @@ ShadowMapVersion::ShadowMapVersion(
   std::shared_ptr<ShadowSlotCore> allocation, LocalShadowContentKey key)
   : slot(std::move(allocation))
   , content(std::move(key))
-  , use_contexts { { { this, ShadowUseMode::kRead },
-      { this, ShadowUseMode::kWrite }, { this, ShadowUseMode::kReadback } } }
+  , use_contexts {
+    {
+      { .version = this, .mode = ShadowUseMode::kRead },
+      { .version = this, .mode = ShadowUseMode::kWrite },
+      { .version = this, .mode = ShadowUseMode::kReadback },
+    },
+  }
 {
 }
 ShadowMapOwner::ShadowMapOwner(std::shared_ptr<ShadowMapVersion> map)
@@ -209,7 +230,7 @@ ShadowReadCapability::ShadowReadCapability(
   : owner_(std::move(owner))
 {
   if (owner_) {
-    std::lock_guard lock(owner_->version->slot->backing->mutex);
+    std::scoped_lock lock(owner_->version->slot->backing->mutex);
     if (!owner_->version->accepting
       || owner_->version->state != ShadowMapVersion::State::kSubmitted) {
       throw std::logic_error("Shadow version is closed for reader acquisition");
@@ -224,31 +245,44 @@ ShadowReadCapability::ShadowReadCapability(const ShadowReadCapability& other)
 ShadowReadCapability::~ShadowReadCapability()
 {
   if (owner_) {
-    std::lock_guard lock(owner_->version->slot->backing->mutex);
+    std::scoped_lock lock(owner_->version->slot->backing->mutex);
     --owner_->version->read_capabilities;
   }
 }
-auto ShadowReadCapability::operator=(ShadowReadCapability other) noexcept
+auto ShadowReadCapability::operator=(const ShadowReadCapability& other)
   -> ShadowReadCapability&
 {
-  owner_.swap(other.owner_);
+  if (this != &other) {
+    auto copy = ShadowReadCapability(other);
+    owner_.swap(copy.owner_);
+  }
+  return *this;
+}
+auto ShadowReadCapability::operator=(ShadowReadCapability&& other) noexcept
+  -> ShadowReadCapability&
+{
+  if (this != &other) {
+    auto moved = ShadowReadCapability(std::move(other));
+    owner_.swap(moved.owner_);
+  }
   return *this;
 }
 auto CanWriteBacking(const SharedShadowBacking& backing) -> bool
 {
-  std::lock_guard lock(backing.mutex);
+  std::scoped_lock lock(backing.mutex);
   return !backing.quarantined
-    && std::ranges::none_of(backing.queues, [](const auto& use) {
+    && std::ranges::none_of(backing.queues, [](const auto& use) -> auto {
          return use.pending_reads != 0 || use.pending_exclusive != 0;
        });
 }
 auto CanReplaceVersion(const ShadowMapVersion& version) -> bool
 {
-  std::lock_guard lock(version.slot->backing->mutex);
+  std::scoped_lock lock(version.slot->backing->mutex);
   return version.read_capabilities == 0 && !version.slot->backing->quarantined
-    && std::ranges::none_of(version.slot->backing->queues, [](const auto& use) {
-         return use.pending_reads != 0 || use.pending_exclusive != 0;
-       });
+    && std::ranges::none_of(
+      version.slot->backing->queues, [](const auto& use) -> auto {
+        return use.pending_reads != 0 || use.pending_exclusive != 0;
+      });
 }
 auto AttachShadowUse(const std::shared_ptr<ShadowMapVersion>& version,
   ShadowUseMode mode, graphics::CommandRecorder& recorder,
@@ -263,21 +297,25 @@ auto AttachShadowUse(const std::shared_ptr<ShadowMapVersion>& version,
   }
   const auto pin = recorder.RetainRegistration(registry, backing.registration);
   if (!pin) {
-    throw ShadowUseUnavailable(
-      pin.error() == graphics::RegistrationError::kWrongBackend
-        ? ShadowUseError::kWrongBackend
-        : pin.error() == graphics::RegistrationError::kAllocationFailed
-        ? ShadowUseError::kAllocationFailed
-        : ShadowUseError::kClosed);
+    auto error = ShadowUseError::kClosed;
+    if (pin.error() == graphics::RegistrationError::kWrongBackend) {
+      error = ShadowUseError::kWrongBackend;
+    } else if (pin.error() == graphics::RegistrationError::kAllocationFailed) {
+      error = ShadowUseError::kAllocationFailed;
+    }
+    throw ShadowUseUnavailable(error);
   }
   const auto index = static_cast<size_t>(mode);
-  recorder.RetainOpaqueUse(version, 0x5348445700ULL + index,
-    &version->use_contexts[index],
-    { .prepare = PrepareUse,
+  constexpr auto kShadowUseTag = 0x5348445700ULL;
+  recorder.RetainOpaqueUse(version, kShadowUseTag + index,
+    &version->use_contexts.at(index),
+    {
+      .prepare = PrepareUse,
       .valid = ValidateUse,
       .submitted = SubmittedUse,
-      .released = ReleasedUse });
-  std::lock_guard lock(backing.mutex);
+      .released = ReleasedUse,
+    });
+  std::scoped_lock lock(backing.mutex);
   if (version->producer) {
     recorder.RecordDependency(*version->producer);
   }
@@ -295,4 +333,4 @@ auto AttachShadowUse(const std::shared_ptr<ShadowMapVersion>& version,
     backing.has_submission ? graphics::ResourceStates::kShaderResource
                            : graphics::ResourceStates::kDepthWrite);
 }
-}
+} // namespace oxygen::vortex::shadows::internal

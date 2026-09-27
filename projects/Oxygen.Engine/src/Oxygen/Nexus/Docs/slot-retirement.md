@@ -340,8 +340,9 @@ Vortex keep the dependency direction `Vortex -> Nexus -> Graphics Common`.
 
 ## 10. Owner and use accounting
 
-The adapter is planned; [VX-IBL-01.S7.3](../../../../design/vortex/milestones/VX-IBL-01/README.md#s7-work-items)
-owns implementation and adopter qualification.
+[`RetirementState`](../RetirementState.h) implements the accounting adapter;
+[VX-IBL-01.S7.3](../../../../design/vortex/milestones/VX-IBL-01/README.md#s7-work-items)
+owns adopter qualification.
 
 **Owner:** a small `Nexus/RetirementState.h` adapter above
 [`IndexReuse`](../IndexReuse.h). Migrate
@@ -385,3 +386,14 @@ finalization, stale/exhausted generations, expired/closed pool, rollback and
 allocation-denied release. Run shared-shadow reader/writer, capture, discard and
 fault cases plus IBL queued preemption/two-pinned-capture pressure. No descriptor,
 physical-slot or admission growth after warmup.
+
+The caller activates accounting only after slot activation, then uses
+`AcquireOwner`/`AcquireUse`/`AcquireRetainedPin` and their matching releases.
+The last owner seals acquisitions. `BeginRetirement` reports the one-time ticket
+request (including ownerless construction rollback); `SetRetirement` installs
+the caller's ticket or an empty result when its pool is unavailable.
+`TakeOrdinaryDrained` releases ordinary admission once. `Finalize` returns an
+optional `FinalizeResult` only when every count has drained; the caller decides
+whether its pool is still open before publishing the returned index. The state is
+noncopyable and nonmovable, preserving callback identity. Shared-shadow return
+entries are sized before activation, so its finalizer writes existing storage.

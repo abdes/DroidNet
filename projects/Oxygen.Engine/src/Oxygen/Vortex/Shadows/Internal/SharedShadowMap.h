@@ -5,15 +5,19 @@
 //===----------------------------------------------------------------------===//
 #pragma once
 #include <array>
+#include <cstddef>
+#include <cstdint>
 #include <exception>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <vector>
 
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Graphics/Common/RecordingUseBatch.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Nexus/IndexReuse.h>
+#include <Oxygen/Nexus/RetirementState.h>
 #include <Oxygen/Vortex/Shadows/Internal/LocalShadowRequest.h>
 #include <Oxygen/Vortex/Shadows/Types/ShadowUseError.h>
 
@@ -28,8 +32,8 @@ public:
     : error_(error)
   {
   }
-  auto Error() const noexcept -> ShadowUseError { return error_; }
-  auto what() const noexcept -> const char* override
+  [[nodiscard]] auto Error() const noexcept -> ShadowUseError { return error_; }
+  [[nodiscard]] auto what() const noexcept -> const char* override
   {
     return "Shadow use is unavailable";
   }
@@ -44,6 +48,7 @@ struct ShadowSlotPool final {
   nexus::IndexReuse<ShadowSlotIndex> reuse;
   std::vector<std::weak_ptr<ShadowSlotCore>> slots;
   std::vector<ShadowSlotIndex> free;
+  std::size_t free_count { 0 };
   bool closed { false };
 };
 enum class ShadowUseMode : uint8_t { kRead, kWrite, kReadback };
@@ -75,11 +80,11 @@ struct ShadowSlotCore final {
   nexus::VersionedIndex<ShadowSlotIndex> handle;
   uint32_t offset { 0 };
   mutable std::mutex mutex;
-  size_t owners { 0 };
-  size_t uses { 0 };
-  std::optional<nexus::RetirementTicket<ShadowSlotIndex>> retirement;
-  bool finalized { false };
+  nexus::RetirementState<ShadowSlotIndex> retirement;
+  ShadowSlotCore() = default;
   ~ShadowSlotCore();
+  OXYGEN_MAKE_NON_COPYABLE(ShadowSlotCore)
+  OXYGEN_MAKE_NON_MOVABLE(ShadowSlotCore)
   auto AddOwner() -> void;
   auto ReleaseOwner() noexcept -> void;
   auto AddUse() -> void;
@@ -89,13 +94,21 @@ private:
   auto RetireAndFinalize() noexcept -> void;
 };
 struct ShadowMapVersion final {
-  enum class State { kRecording, kSubmitted, kInvalid, kQuarantined };
+  enum class State : std::uint8_t {
+    kRecording,
+    kSubmitted,
+    kInvalid,
+    kQuarantined,
+  };
   struct UseContext {
     ShadowMapVersion* version;
     ShadowUseMode mode;
   };
   explicit ShadowMapVersion(
     std::shared_ptr<ShadowSlotCore> allocation, LocalShadowContentKey key);
+  ~ShadowMapVersion() = default;
+  OXYGEN_MAKE_NON_COPYABLE(ShadowMapVersion)
+  OXYGEN_MAKE_NON_MOVABLE(ShadowMapVersion)
   std::shared_ptr<ShadowSlotCore> slot;
   const LocalShadowContentKey content;
   State state { State::kRecording }; // protected by backing.mutex
@@ -107,8 +120,8 @@ struct ShadowMapVersion final {
 struct ShadowMapOwner final {
   explicit ShadowMapOwner(std::shared_ptr<ShadowMapVersion> map);
   ~ShadowMapOwner();
-  ShadowMapOwner(const ShadowMapOwner&) = delete;
-  auto operator=(const ShadowMapOwner&) -> ShadowMapOwner& = delete;
+  OXYGEN_MAKE_NON_COPYABLE(ShadowMapOwner)
+  OXYGEN_MAKE_NON_MOVABLE(ShadowMapOwner)
   const std::shared_ptr<ShadowMapVersion> version;
 };
 //! A permission to attach a future reader; prevents overwriting this version.
@@ -119,7 +132,9 @@ public:
   ~ShadowReadCapability();
   ShadowReadCapability(const ShadowReadCapability& other);
   ShadowReadCapability(ShadowReadCapability&&) noexcept = default;
-  auto operator=(ShadowReadCapability other) noexcept -> ShadowReadCapability&;
+  auto operator=(const ShadowReadCapability& other) -> ShadowReadCapability&;
+  auto operator=(ShadowReadCapability&& other) noexcept
+    -> ShadowReadCapability&;
   [[nodiscard]] auto Owner() const -> const std::shared_ptr<ShadowMapOwner>&
   {
     return owner_;
@@ -136,4 +151,4 @@ OXGN_VRTX_API auto AttachShadowUse(
   -> void;
 [[nodiscard]] auto CanWriteBacking(const SharedShadowBacking& backing) -> bool;
 [[nodiscard]] auto CanReplaceVersion(const ShadowMapVersion& version) -> bool;
-}
+} // namespace oxygen::vortex::shadows::internal

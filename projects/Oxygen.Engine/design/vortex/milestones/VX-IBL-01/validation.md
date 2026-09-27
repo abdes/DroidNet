@@ -1,7 +1,9 @@
 # VX-IBL-01 validation
 
 **S1–S6 validated.** [S7 reusable infrastructure](README.md#s7--reusable-infrastructure)
-is in progress; its shared extractions and integrated qualification remain. The [acceptance table](README.md#acceptance) links every
+is in progress; its shared extractions and integrated qualification remain.
+[S8](README.md#s8--atmosphere-and-fog-correctness) adds seven source-confirmed
+atmosphere/fog regression cases; their fixes and runtime validation are planned. The [acceptance table](README.md#acceptance) links every
 required result. The [integrated audit](evidence/s6-integrated/run.json) checks
 retained evidence against current production owners; prior measurements keep
 their original source/build provenance.
@@ -10,6 +12,40 @@ Read: [S7 checkpoints](#s7-checkpoints), [integrated results](#integrated-result
 [reproduce](#reproduce).
 
 ## S7 checkpoints
+
+### S7.3 retirement accounting
+
+The shared Nexus state and both production adopters pass focused qualification
+on 2026-09-27 using normal Debug/Release builds; implementation commit `ea6f64004`:
+
+| Check                                               |  Debug | Release |
+| --------------------------------------------------- | -----: | ------: |
+| Nexus reuse / allocation-failure                    | 53 / 5 |  53 / 5 |
+| Shadow service, including owner/use retirement      |     51 |      51 |
+| Native IBL convolution, lifetimes and admission     |     43 |      41 |
+| Native shadow sharing, retained reads and budgets   |      4 |       4 |
+| Queued preemption / capture after renderer shutdown |      2 |       2 |
+
+Debug denies allocations during actual IBL/shadow owner and use retirement.
+The shadow test retains its fake command-list object outside that scope; slot
+expiration and generation reuse still occur through the production callbacks.
+RenderDoc checks 1,024 retained cube scalars and 32 metadata bytes after renderer
+shutdown. Oxytidy is clean across the changed files with the explicitly approved
+allocator-interceptor and CRT declaration-name exceptions. Captures/logs stay local.
+
+Reproduce with `Oxygen.Nexus.Reuse.Tests`, `Oxygen.Nexus.AllocationFailure.Tests`,
+`Oxygen.Vortex.ShadowService.Tests`, LightingGpuAbi filter `IblConvolutionGpuTest.*`,
+and the retained/queued cases named above in `Oxygen.Vortex.Exposure.Tests`.
+The native shadow filters are `BoundedShadowAdmissionGpuTest.*`,
+`ShadowAdmissionGpuTest.CompatibleViewsShareFiveCubeAndNineProjectedMapsInOneFrame`,
+`ShadowAdmissionGpuTest.RetainedShadowReadbackSurvivesUnsubmittedFrameSlotRollovers`
+and `ShadowBudgetGpuTest.*` in `Oxygen.Vortex.LightingImageReference.Tests`.
+For capture, run Exposure filter
+`IblSurfaceGpuTest.RendererCaptureAdmissionPreservesLiveUpdatesAndRetainedReads`
+with `OXYGEN_EXPOSURE_CAPTURE` under `out/`; replay with the existing wrapper and
+`AnalyzeRenderDocIblCaptureLease.py`, pass `IblCaptureLease`. Queued pressure uses
+`ExposureGpuTest.QueuedIblPreemptionKeepsPinnedCapturesAndBoundedStorage`.
+Integrated S7 performance, SDK and application qualification remain in the plan.
 
 ### S7.1 immutable LUT uploads
 
@@ -30,8 +66,8 @@ and Async lighting/VortexBasic forward smoke runs pass. Oxytidy covers every
 changed C++ file; no check is disabled. Integrated S7 performance, SDK and editor
 gates remain in the [S7 exit](README.md#s7-execution-and-exit).
 
-Validated on 2026-09-27, on `codex/vx-ibl-01-implementation` over `0513b0f36`
-with the S7.1 working changes, using the normal Ninja Debug/Release builds.
+Validated on 2026-09-27 using the normal Ninja Debug/Release builds;
+the S7.1 implementation is committed as `2e6bfb09f`.
 MSVC reports existing C4702 in `OxCo/Detail/SanitizedAwaiter.h:101` through the
 cancellation test. [Reproduction](#reproduce-s71) uses the committed tests and
 analyzer; generated captures and logs stay in ignored `out/`.

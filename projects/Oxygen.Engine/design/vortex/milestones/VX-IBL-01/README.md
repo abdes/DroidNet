@@ -2,15 +2,16 @@
 
 Status: `in_progress`
 
-| Field     | Summary                                                                                                                                                                                                    |
-| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Outcome   | Atmosphere/height-fog and specified-cubemap diffuse/specular IBL, immediate authoring and budgeted runtime updates.                                                                                        |
-| Remaining | [S7 reusable infrastructure](#s7--reusable-infrastructure) has four extractions and integrated qualification remaining. Track [VX-IBL-01](../../OPEN_ITEMS.md#p1--current-delivery).                       |
-| Evidence  | [Lighting acceptance](#acceptance) · [Validation](validation.md). S1–S6 remain validated; S7 distant-sky synchronization, S7.4 and S7.1 checks pass; four extractions and integrated qualification remain. |
+| Field     | Summary                                                                                                                                                                                                                                                                           |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Outcome   | Atmosphere/height-fog and specified-cubemap diffuse/specular IBL, immediate authoring and budgeted runtime updates.                                                                                                                                                               |
+| Remaining | [S7 reusable infrastructure](#s7--reusable-infrastructure) has three extractions and integrated qualification remaining; [S8](#s8--atmosphere-and-fog-correctness) addresses seven confirmed atmosphere/fog defects. Track [VX-IBL-01](../../OPEN_ITEMS.md#p1--current-delivery). |
+| Evidence  | [Lighting acceptance](#acceptance) · [Validation](validation.md). S1–S6 remain validated; S7 distant-sky synchronization, S7.4, S7.1 and S7.3 checks pass; three extractions and integrated qualification remain.                                                                 |
 
 Read: [scope](#scope-and-ownership), [delivery sequence](#delivery-sequence),
 [DemoShell UI](#demoshell-ui), [validation tools](#validation-tools),
-[lighting acceptance](#acceptance), [S7 plan](#s7--reusable-infrastructure). The [IBL design](../../lld/captured-sky-ibl.md) owns
+[lighting acceptance](#acceptance), [S7 plan](#s7--reusable-infrastructure),
+[S8 correctness fixes](#s8--atmosphere-and-fog-correctness). The [IBL design](../../lld/captured-sky-ibl.md) owns
 the algorithms, product formats, scheduling rules and performance targets.
 
 ## Scope and ownership
@@ -48,6 +49,7 @@ Implement and commit each buildable slice in order. Update these rows in place.
 | VX-IBL-01.S5 | DemoShell panel/VM/settings changes below, native/editor visual scenarios, and existing diagnostics for generation age, CPU/GPU costs and failures.                                                                                                                               | Deferred/forward/translucent IBL, multi-view and offscreen images agree. Real DemoShell widgets exercise immediate edits, reset/load/save, source changes, fog participation and stable status; editor controls use the same owners.                                    | validated   |
 | VX-IBL-01.S6 | Integrated correctness, performance and resource qualification; update owner designs and operating guidance to delivered behavior.                                                                                                                                                | Every acceptance row below has its result and evidence link; both schedules and the canonical migration are complete.                                                                                                                                                   | validated   |
 | VX-IBL-01.S7 | Promote six proven patterns into Nexus, renderer upload/resources/feedback and shared shader utilities; migrate the named production consumers.                                                                                                                                   | All six work items below and the integrated S7 exit pass, preserving S1–S6 lighting, performance and lifetime contracts.                                                                                                                                                | in_progress |
+| VX-IBL-01.S8 | Correct seven atmosphere/fog defects through the existing Environment owners; see the bounded plan below.                                                                                                                                                                         | Focused native regressions, visible composition and same-budget performance checks pass; the approved holdout coverage contract is implemented.                                                                                                                         | planned     |
 
 Primary implementation entry points:
 
@@ -69,8 +71,9 @@ The starting implementation is `a58b00e0c`; S1–S6 results remain the qualified
 lighting baseline. The [distant-sky barrier correction](evidence/s7-barrier/run.json)
 passes native sky checks and the authoring timing gate.
 [S7.4 registry methods](evidence/s7-resources-final/run.json) and
-[S7.1 immutable uploads](validation.md#s71-immutable-lut-uploads) pass their focused checks;
-four extractions and integrated qualification remain.
+[S7.1 immutable uploads](validation.md#s71-immutable-lut-uploads) and
+[S7.3 retirement](validation.md#s73-retirement-accounting) pass their focused checks;
+three extractions and integrated qualification remain.
 
 Read: [work items](#s7-work-items), [execution and exit](#s7-execution-and-exit),
 [C++ guidance](../../../../../../design/oxygen/RULES.md#c).
@@ -87,7 +90,7 @@ Each extraction lands as a buildable, reviewed commit with its adopters and chec
 | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
 | S7.1 | [Immutable texture initialization](../../lld/upload.md#immutable-texture-initialization) in Upload; reuse existing 2D packing/planning and explicit submission.                      | IBL BRDF and direct-light BRDF-energy resources and their consuming recordings.                           | Exact LUT contents; managed lifetime, budget accounting, failed submission/retry and same-frame use pass; duplicate pack/copy initialization is removed. | validated   |
 | S7.2 | [Bounded typed feedback](../../lld/gpu-feedback.md#bounded-gpu-feedback) over ReadbackManager; transport only.                                                                       | IBL metadata, PostProcess exposure status, SpatialLightGrid demand.                                       | All three retain their capacity, polling order, identity checks and failure behavior; no new stalls, submissions or readback frequency.                  | planned     |
-| S7.3 | [Retirement accounting](../../../../src/Oxygen/Nexus/Docs/slot-retirement.md#10-owner-and-use-accounting) above Nexus IndexReuse; preserve family admission and Graphics completion. | IBL ProductVersion and shared-shadow ShadowSlotCore.                                                      | Ordinary ownership and retained pins drain independently; discard/fault/close and allocation-denied retirement pass in both families.                    | planned     |
+| S7.3 | [Retirement accounting](../../../../src/Oxygen/Nexus/Docs/slot-retirement.md#10-owner-and-use-accounting) above Nexus IndexReuse; preserve family admission and Graphics completion. | IBL ProductVersion and shared-shadow ShadowSlotCore.                                                      | Ordinary ownership and retained pins drain independently; discard/fault/close and allocation-denied retirement pass in both families.                    | validated   |
 | S7.4 | [Managed resource/view setup](../../../../src/Oxygen/Graphics/Common/README.md#managed-resources-and-views); caller chooses allocation and view descriptors.                         | IBL allocations, captured-sky target setup and shared-shadow backing/initial SRV setup; S7.1 consumes it. | Transactional setup, domains, mip views and cleanup pass; shadow budget fallback and lazy DSVs stay intact.                                              | validated   |
 | S7.5 | [Shared group reductions](../../lld/shader-contracts.md#111-group-reductions); preserve fused trees and numerical contracts.                                                         | IBL reductions, distant-sky sum and three 64-lane exposure suitability reductions.                        | Native product/exposure checks pass with unchanged tolerances; distant sky gains the required offset-2 barrier; shader cost is inspected and measured.   | in_progress |
 | S7.6 | [Shared cubemap geometry](../../lld/shader-contracts.md#112-cubemap-geometry); pure coordinate/solid-angle math.                                                                     | IBL processing, environment conversions and forward debug face/UV mapping.                                | Face order, axis ties, seams, orientation and solid angles pass independent references; sky/material images remain qualified.                            | planned     |
@@ -164,6 +167,55 @@ keep reproducible captures and generated artifacts in ignored `out/`. Nexus, Upl
 Graphics registration and shader contracts each own their reusable capability; this section
 owns adopter migration, sequence, state and exit. No parallel refactoring plan or
 second progress ledger is introduced.
+
+## S8 — Atmosphere and fog correctness
+
+**Status: planned; implementation has not started.** Complete after S7. The seven
+findings below are confirmed by source review; the three numerical examples were
+independently reproduced. They are additional cases beyond the S1–S6 qualification.
+[EnvironmentLightingService](../../lld/environment-service.md#atmosphere-and-fog-evaluation-contracts)
+owns the contracts. S8 changes neither IBL formats/scheduling nor atmosphere's
+finite-order multiple-scattering model.
+
+| ID        | Confirmed defect and implementation boundary                                                                                                                                                                                                                    | Regression / exit                                                                                                                                                                                                                                                                     |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| S8.1 · P1 | `VolumetricFog.hlsl::EvaluateDirectionalContribution` uses two outward directions with the minus-sign HG helper. Negate their dot product; keep the shared helper's convention and other callers intact.                                                        | Through the actual volumetric producer, positive g brightens toward the light, negative g reverses it and g=0 is isotropic. The isolated g=0.8 forward/backward phase ratio is 729; do not impose that ratio on integrated scene pixels.                                              |
+| S8.2 · P2 | `DistantSkyLightLutPass.{h,cpp}` / `DistantSkyLightLut.hlsl` gate explicit slots by occupied count. Publish/use per-slot participation, without compacting Primary/Secondary assignments.                                                                       | The same light in slot 0 or slot 1 produces equal distant radiance; none/each/both and disable/re-enable transitions work.                                                                                                                                                            |
+| S8.3 · P2 | The distant-sky pass omits `sky_and_aerial_perspective_luminance_factor_rgb`. Apply it once to illuminance, preserving the separate final sky-only factor. Its cache hash already includes both factors.                                                        | Zero/scalar/RGB factors change the real distant product and fog ambient consistently; a live edit rebuilds it, unchanged inputs reuse it. Update CPU/HLSL constants together.                                                                                                         |
+| S8.4 · P2 | `ComputeUniformSphereDirection` uses one scalar for both sphere coordinates: mean x=-0.141833 and 14.18% error for L=1+x. Replace it with fixed, two-dimensional equal-area stratification, following UE's 8×8 sampling approach at the existing 64-ray budget. | Constant/linear radiance, first moments and a sun-azimuth sweep against a dense reference expose directional bias. Compare with UE's fixed-seed 64-sample set; preserve temporal determinism and reduction synchronization. Do not increase ray count to chase sub-percent agreement. |
+| S8.5 · P2 | `AerialPerspective.hlsli` adds the orthographic near-plane offset. Subtract it so distance is measured from the producer's per-pixel ray origin.                                                                                                                | A point 1,000 m sideways and 100 m forward with near=1 m samples 99 m, not 2,002.55 m. Exercise centered/edge pixels, translated/rotated views, both depth conventions and unchanged perspective behavior.                                                                            |
+| S8.6 · P2 | `ComputeAerialPerspectiveLut` returns neutral transmittance below strength=0.0001. Remove this semantic discontinuity: strength scales added radiance only.                                                                                                     | At strength 0, just below/above the old threshold and 1, sampled T is unchanged and RGB scales continuously. Verify deferred and shared forward/translucent composition.                                                                                                              |
+| S8.7 · P2 | `Sky.hlsl` ignores published atmosphere holdout and forces alpha=1, although the sky LUT already stores transmittance. Implement the approved coverage behavior below using existing `SkyPass` blending.                                                        | Check sky/disks, geometry AP, independent height fog, nonblack background and captured IBL. Ordinary sky output stays unchanged.                                                                                                                                                      |
+
+**Approved visible-sky holdout:** zero
+atmosphere/disk RGB and coverage `1-T_atmosphere`; retain AP extinction. Compose
+independent height fog normally, yielding `L_fog` and coverage
+`1-T_fog*T_atmosphere`. Holdout must not darken captured IBL. Oxygen already uses
+premultiplied coverage; no new global alpha mode is needed. All seven fixes are
+included. Further changes to quality, runtime cost or this contract require approval
+before implementation.
+
+Execution uses three focused batches: volumetric phase; distant-sky slots/factors/
+sampling; AP/holdout composition. Extend `EnvironmentLightingService_test.cpp`
+and the existing native `Exposure/SkyRadiance_test.cpp`, `FogComposition_test.cpp`
+and relevant volumetric fixtures, with test-only probes outside `shaders.bin`.
+Use `Oxygen.Vortex.EnvironmentLightingService.Tests` and
+`Oxygen.Vortex.Exposure.Tests`; run affected CPU/HLSL layout and production shader
+build checks. Format before builds and batch oxytidy across touched C++ files.
+
+Validate each batch through the production producer/consumer, then run one final
+Debug/Release affected-test pass and a representative visible-sky/fog scene.
+Use RenderDoc only where bindings, coverage or production inputs need inspection;
+keep captures local. Measure warmed Release distant-sky/fog/AP GPU costs at fixed
+settings before/after; use Tracy only to investigate a material regression. Preserve
+64 sky rays, LUT sizes, dispatch count and existing numerical formats. The zero-
+strength AP fix necessarily retains the texture sample needed for extinction.
+Any additional runtime cost or unresolved visible error requires a concrete
+quality/cost choice before expanding this scope.
+
+Keep only the compact comparison (configuration, revision, affected-pass timings
+and correctness results) in `validation.md`. Tests and commands provide repeatable
+proof; do not archive logs, captures or source/binary bundles.
 
 ## DemoShell UI
 

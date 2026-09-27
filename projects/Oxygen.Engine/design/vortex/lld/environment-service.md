@@ -4,6 +4,44 @@
 **Deliverable:** D.12
 **Status:** `in_progress`
 
+Read: [evaluation contracts](#atmosphere-and-fog-evaluation-contracts),
+[radiance publication](#radiance-resource-publication-for-exposure-qualification),
+[exposure domains](#exposure-domain-migration-contract).
+
+## Atmosphere and fog evaluation contracts
+
+[VX-IBL-01.S8](../milestones/VX-IBL-01/README.md#s8--atmosphere-and-fog-correctness)
+tracks seven confirmed deviations from these contracts; implementation is planned.
+
+- The minus-sign HG helper takes the cosine between incident propagation and
+  outgoing propagation. With directions toward the camera and light, pass their
+  negated dot product. Positive g concentrates scattering toward the light as
+  viewed by the camera. Do not change another helper's convention implicitly.
+- Distant-sky illumination preserves explicit Primary/Secondary slot participation.
+  Apply the shared sky/aerial RGB factor to light illuminance and the sky-only RGB
+  factor to the integrated result, each once. Integrate a two-dimensional,
+  equal-area sphere distribution with the existing fixed 64-ray budget.
+- Camera AP samples distance from the same ray origin as its volume producer:
+  the camera for perspective, the reconstructed per-pixel near plane for
+  orthographic. Scattering strength multiplies added radiance only; zero strength
+  preserves extinction.
+- Atmosphere holdout suppresses main-view atmosphere and disk radiance, retaining
+  extinction and premultiplied coverage `1-T_atmosphere`. Independent height fog
+  keeps its own controls: composition yields `L_fog` with coverage
+  `1-T_fog*T_atmosphere`. AP retains transmittance while suppressing inscattering.
+  Captured IBL remains lit. Ordinary non-holdout sky remains opaque; this uses
+  existing scene-color blending rather than introducing a global alpha mode.
+
+UE5.7 source references, relative to `F:/Epic Games/UE_5.7/Engine`:
+`Shaders/Private/ParticipatingMediaCommon.ush:91` uses the plus-sign HG convention;
+`VolumetricFog.usf:888` must be interpreted with that convention.
+`SkyAtmosphere.usf:1437` applies the shared luminance factor, and
+`Source/Runtime/Renderer/Private/SkyAtmosphereRendering.cpp:1144` generates fixed-seed
+8×8 stratified sphere directions. `SkyAtmosphere.usf:865–900,1668` defines enabled
+holdout radiance/coverage and AP extinction behavior. Oxygen's orthographic
+distance follows its own producer's near-plane origin; UE's translated-world
+expression in `SkyAtmosphereCommon.ush:59` is not an interchangeable formula.
+
 ## V0.1 Production Extension
 
 [Editor V0.1 rendering](editor-rendering.md) defines the
