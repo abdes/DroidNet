@@ -1,14 +1,23 @@
 # Nexus slot retirement and completion-controlled reuse
 
+Nexus separates identity retirement from safe index reuse. Graphics consumers
+supply completion; the planned accounting adapter tracks owners, uses and pins.
+
+Read: [core API](#2-types-and-api), [state and synchronization](#3-state-and-synchronization),
+[accounting adapter](#10-owner-and-use-accounting).
+
 ## 1. Purpose and ownership
 
 Separate invalidating a CPU slot handle from returning its index to an allocator.
 Retirement invalidates the handle immediately. Finalization returns the index only
 after the owning subsystem has finished every use of that allocation.
 
-Nexus owns the generation and slot state. The caller owns the free list, resources,
-use counts, and completion condition. A graphics caller obtains completion from
-Graphics; Nexus does not inspect fences or own GPU resources.
+`IndexReuse` owns generation and slot state. Its caller owns resources, the free
+list, use counts and the completion condition. The planned
+[accounting adapter](#10-owner-and-use-accounting) centralizes count bookkeeping
+under the caller's lock; admission and GPU completion remain caller decisions.
+A graphics caller obtains completion from Graphics. Nexus owns no GPU resources
+and inspects no fences.
 
 The implementation extracts the lifecycle code from
 [`FrameDrivenIndexReuse.h`](../FrameDrivenIndexReuse.h) into `IndexReuse.h` and
@@ -321,10 +330,58 @@ starts. Add no public generation setter or configurable production ceiling.
 The owning implementation files are `Nexus/IndexReuse.h`,
 `Nexus/FrameDrivenIndexReuse.h`, `Nexus/FrameDrivenSlotReuse.cpp`, and the existing
 `Graphics/Common/Detail/DeferredReclaimer` files. Tests belong in the corresponding
-Nexus and Graphics Common test directories. Caller edits are limited to the
-classes in section 6.
+Nexus and Graphics Common test directories. Core integration callers are listed
+in section 6; the optional accounting adapter names its adopters in section 10.
 
 `IndexReuse.h` includes Base/Core generation and index types, not Graphics queue
 types. The Nexus module already depends on Graphics Common for its frame adapter.
 Graphics Common must not include or link Nexus. Completion callbacks passed from
 Vortex keep the dependency direction `Vortex -> Nexus -> Graphics Common`.
+
+## 10. Owner and use accounting
+
+The adapter is planned; [VX-IBL-01.S7.3](../../../../design/vortex/milestones/VX-IBL-01/README.md#s7-work-items)
+owns implementation and adopter qualification.
+
+**Owner:** a small `Nexus/RetirementState.h` adapter above
+[`IndexReuse`](../IndexReuse.h). Migrate
+[`ProductVersion`](../../Vortex/Environment/Internal/IblGpuProcessor.cpp)
+and [`ShadowSlotCore`](../../Vortex/Shadows/Internal/SharedShadowMap.cpp).
+`IndexReuse` and `RetirementTicket` above continue to own generation invalidation
+and ticket finalization.
+
+- Embed counts for ordinary owners, ordinary recorded/GPU uses and retained
+  pins, plus an optional retirement ticket and resolved state. The caller
+  serializes operations with its existing lock. The adapter owns no resource,
+  Graphics pointer, queue, fence, free list, callback or additional mutex.
+- Distinguish inactive construction, open ownership, retiring and resolved.
+  Activate only after `IndexReuse::ActivateSlot` succeeds; support IBL's initial
+  single owner and shadow construction before its first owner. Owner acquisition
+  is allowed while open; ordinary-use and new-pin acquisition additionally
+  require at least one ordinary owner. Multiple shadow owners remain supported.
+- Last-owner release seals acquisition and reports a one-time retirement request.
+  The caller obtains and installs the existing `TryRetire` ticket under the same
+  owner lock. Construction rollback after activation, including zero-owner shadow
+  construction, requests retirement too; failed activation does not. A retired
+  identity cannot reopen. Counter underflow/duplicate release is rejected without
+  changing state; no callback is invoked from a count transition.
+- Finalization consumes the ticket exactly once after all three counts drain.
+  Return the existing `FinalizeResult` and one-time ordinary-drained notification;
+  the caller publishes a reusable index
+  only after that result. If the issuing pool has expired, close without
+  publishing an index. Retirement, release and finalization allocate nothing.
+- Expose ordinary-drained separately from fully-drained. IBL releases its normal
+  admission count when owners and ordinary uses drain, even while captures remain.
+  Capture admission/deduplication stays in IBL; an admitted capture pin can outlive
+  ordinary retirement and remains retained by captured recordings. It is not a
+  new ordinary acquisition. Preserve five normal and two captured generations.
+- Shadows retain their read/write/readback exclusion, backing locks, queue
+  dependencies and quarantine. IBL retains pool poisoning on uncertain execution.
+  Graphics `RetainOpaqueUse` callbacks drive use release; Nexus never infers GPU
+  completion. Keep existing external leases separate from internal batch pins.
+
+**Checks:** retire-before-completion, retained pin after owner release, duplicate
+finalization, stale/exhausted generations, expired/closed pool, rollback and
+allocation-denied release. Run shared-shadow reader/writer, capture, discard and
+fault cases plus IBL queued preemption/two-pinned-capture pressure. No descriptor,
+physical-slot or admission growth after warmup.

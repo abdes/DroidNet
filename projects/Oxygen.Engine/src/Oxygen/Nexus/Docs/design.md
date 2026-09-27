@@ -1,5 +1,8 @@
 # Bindless Deferred Slot Reuse Design
 
+For resource-independent identity retirement and the planned owner/use accounting
+adapter, see [slot retirement](slot-retirement.md).
+
 ## Problem Statement
 
 Bindless rendering requires stable, shader-visible descriptor indices for the

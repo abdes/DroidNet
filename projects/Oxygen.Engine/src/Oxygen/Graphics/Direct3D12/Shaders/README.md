@@ -23,6 +23,8 @@ Vortex-owned shader families live under `Vortex/`:
 - `Vortex/Services/` for subsystem-service-owned shader entrypoints
 
 Shader entrypoints are `*.hlsl` files. Shared includes are `*.hlsli` files.
+The [shared utility contracts](../../../../../design/vortex/lld/shader-contracts.md#11-shared-compute-and-geometry-utilities)
+own renderer-wide group reductions and cubemap geometry.
 
 ## Build Outputs
 

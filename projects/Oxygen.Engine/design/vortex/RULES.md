@@ -1,5 +1,8 @@
 # Vortex engineering and documentation rules
 
+Read: [engineering](#engineering), [document ownership](#document-ownership),
+[C++ for shared infrastructure](#c-for-shared-infrastructure).
+
 ## Engineering
 
 - Build Vortex-native systems. `Oxygen.Renderer` is retired and is not an
@@ -111,3 +114,36 @@ add `--migration` to compare retained content with the recorded original revisio
 ordinary design edits do not require the text to remain identical to that baseline.
 Use `--write-status` to refresh the generated progress index. The checker also
 requires unique open-item IDs and an entry for each deferred editor capability.
+
+## C++ for shared infrastructure
+
+Apply this guidance when introducing or extracting shared engine utilities.
+It is not a requirement to retrofit unrelated existing code.
+
+The [engine toolchain](../../cmake/ToolchainRequirements.cmake) supports
+C++23; the editor's C++/CLI and native-command projects use C++20. Keep new helpers
+in engine/internal include graphs. Existing `IndexReuse` already uses
+`std::expected`; shared-utility work does not migrate the entire Nexus API or raise the editor's
+language mode. An `Internal/` path is not a privacy boundary: current module
+CMake lists install some internal headers. Check `PRIVATE` sources versus
+`PUBLIC FILE_SET` and the transitive installed include graph explicitly; keep
+new C++23 types out of the C++20 Renderer/Interop surface. Validate with the
+installed SDK consumer build, without a legacy-header sweep.
+Editor-facing headers continue to use the existing Oxygen
+`Result` where needed, with internal implementation types hidden.
+
+| Technique                                              | Application                                                                                                                                                                                     | Keep the code simple                                                                                                                                                                                                                                         |
+| ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Move-only RAII                                         | Prepared upload, feedback reservation and Nexus retirement ticket clean up on every early return. Use the existing `ScopeGuard` for local rollback.                                             | Explicit prepare → record → resolve flow; no templated typestate pipeline. Release/destructors are nonthrowing and never wait for the GPU.                                                                                                                   |
+| `std::span<const T>` and value descriptors             | Borrow texels, view requests and copy plans for synchronous preparation. Copy the small immutable data needed by later work into its owner.                                                     | Never retain caller spans, references or range views past their lifetime. Preserve checked pitches, sizes and byte-layout assertions. Copy mapped bytes into an aligned local payload with `memcpy`; do not reinterpret an arbitrary mapped address as `T*`. |
+| `std::expected` internally; existing boundary `Result` | Distinguish busy, invalid input, allocation/registration and recording/submission errors. A typed poll can return `expected<optional<T>, ReadbackError>` for pending/payload/transport failure. | Match existing error families; convert once at the service boundary. Do not flatten device uncertainty or budget rejection into ordinary allocation failure. Prefer early returns to long monadic chains.                                                    |
+| Small enums and named structs                          | Describe reservation phase, finalization outcome, view request and initialization result explicitly.                                                                                            | Avoid boolean parameter sequences and unrelated success flags. Keep expected errors separate from valid-but-incomplete payloads.                                                                                                                             |
+| Constrained templates                                  | `IndexLike` for Nexus indices and a trivially-copyable payload constraint for typed feedback. Use fixed-capacity storage where the owning limit is fixed.                                       | Share non-type-dependent machinery out of line; avoid CRTP, policy matrices and type-erased callback collections. Separate texture/buffer overloads are clearer than a universal resource template.                                                          |
+| `unique_ptr`, `shared_ptr`, `weak_ptr`                 | Unique ownership for helpers; shared ownership only for genuine concurrent/retained readers; weak eligibility for returns to expired owners.                                                    | Do not add control-block allocations per dispatch/poll or capture Graphics-owning CPU pools in GPU-retained work. Preserve stable callback addresses.                                                                                                        |
+| `constexpr`, `std::array`, simple range algorithms     | Small fixed metadata, capacities and readable searches.                                                                                                                                         | Ordinary loops are preferred for state transitions and fused work. No custom allocator, coroutine scheduler, `mdspan` ABI layer or reflection/code generator is required.                                                                                    |
+
+A shared operation should make both real adopters easier to read. Keep domain
+checks beside the service state they explain; extract the repeated mechanism
+rather than parameterizing whole services. Comments explain ownership, ordering
+or a non-obvious constraint. Tests describe observable behavior and failure
+recovery, not the helper's private sequence of method calls.

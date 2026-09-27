@@ -1,16 +1,16 @@
 # VX-IBL-01 — Captured sky lighting
 
-Status: `validated`
+Status: `in_progress`
 
-| Field     | Summary                                                                                                                                 |
-| --------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| Outcome   | Atmosphere/height-fog and specified-cubemap diffuse/specular IBL, immediate authoring and budgeted runtime updates.                     |
-| Remaining | None in this milestone. Broader rendering capabilities remain in [Open items](../../OPEN_ITEMS.md).                                     |
-| Evidence  | [Acceptance results](#acceptance) · [Validation](validation.md) · [Integrated audit](evidence/s6-integrated/run.json). S1–S6 validated. |
+| Field     | Summary                                                                                                                                                       |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Outcome   | Atmosphere/height-fog and specified-cubemap diffuse/specular IBL, immediate authoring and budgeted runtime updates.                                           |
+| Remaining | [S7 reusable infrastructure](#s7--reusable-infrastructure) is planned: six bounded refactorings. Track [VX-IBL-01](../../OPEN_ITEMS.md#p1--current-delivery). |
+| Evidence  | [Lighting acceptance](#acceptance) · [Validation](validation.md). S1–S6 remain validated; S7 implementation and qualification have not started.               |
 
 Read: [scope](#scope-and-ownership), [delivery sequence](#delivery-sequence),
 [DemoShell UI](#demoshell-ui), [validation tools](#validation-tools),
-[acceptance](#acceptance). The [IBL design](../../lld/captured-sky-ibl.md) owns
+[lighting acceptance](#acceptance), [S7 plan](#s7--reusable-infrastructure). The [IBL design](../../lld/captured-sky-ibl.md) owns
 the algorithms, product formats, scheduling rules and performance targets.
 
 ## Scope and ownership
@@ -47,6 +47,7 @@ Implement and commit each buildable slice in order. Update these rows in place.
 | VX-IBL-01.S4 | Budgeted incremental scheduling, work tiling, one active candidate/latest desired snapshot, immediate preemption and automatic selection.                                                                                                                                         | Continuous runtime edits cannot starve publication. Candidate completion, published-source age and GPU cost meet the design gates; results match immediate processing of the same frozen source.                                                                        | validated |
 | VX-IBL-01.S5 | DemoShell panel/VM/settings changes below, native/editor visual scenarios, and existing diagnostics for generation age, CPU/GPU costs and failures.                                                                                                                               | Deferred/forward/translucent IBL, multi-view and offscreen images agree. Real DemoShell widgets exercise immediate edits, reset/load/save, source changes, fog participation and stable status; editor controls use the same owners.                                    | validated |
 | VX-IBL-01.S6 | Integrated correctness, performance and resource qualification; update owner designs and operating guidance to delivered behavior.                                                                                                                                                | Every acceptance row below has its result and evidence link; both schedules and the canonical migration are complete.                                                                                                                                                   | validated |
+| VX-IBL-01.S7 | Promote six proven patterns into Nexus, renderer upload/resources/feedback and shared shader utilities; migrate the named production consumers.                                                                                                                                   | All six work items below and the integrated S7 exit pass, preserving S1–S6 lighting, performance and lifetime contracts.                                                                                                                                                | planned   |
 
 Primary implementation entry points:
 
@@ -59,6 +60,106 @@ Primary implementation entry points:
 - [Native SkyLight](../../../../src/Oxygen/Scene/Environment/SkyLight.h),
   [packed records](../../../../src/Oxygen/Data/PakFormat_world.h),
   [GPU environment ABI](../../../../src/Oxygen/Vortex/Types/EnvironmentStaticData.h).
+
+## S7 — Reusable infrastructure
+
+**State: `planned`.** Six refactorings, with concrete production adopters and
+technical contracts in the owning documents linked below.
+The starting implementation is `a58b00e0c`; S1–S6 results remain the qualified
+lighting baseline. No S7 code or runtime validation is claimed by this plan.
+
+Read: [work items](#s7-work-items), [execution and exit](#s7-execution-and-exit),
+[C++ guidance](../../RULES.md#c-for-shared-infrastructure).
+
+### S7 work items
+
+IDs preserve the six review items. First land S7.5's distant-sky barrier fix as
+an isolated correctness commit with its native sky/LUT checks; S7.5 remains open
+until its extraction is complete. Then follow the dependency order:
+**S7.4 → S7.1 → S7.3 → S7.2 → S7.6 → S7.5**, then the integrated exit.
+Each extraction lands as a buildable, reviewed commit with its adopters and checks.
+
+| ID   | Deliverable / boundary                                                                                                                                                               | Production adopters                                                                                       | Focused exit                                                                                                                                             | State   |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| S7.1 | [Immutable texture initialization](../../lld/upload.md#immutable-texture-initialization) in Upload; reuse existing 2D packing/planning and explicit submission.                      | IBL BRDF and direct-light BRDF-energy resources and their consuming recordings.                           | Exact LUT contents; managed lifetime, budget accounting, failed submission/retry and same-frame use pass; duplicate pack/copy initialization is removed. | planned |
+| S7.2 | [Bounded typed feedback](../../lld/gpu-feedback.md#bounded-gpu-feedback) over ReadbackManager; transport only.                                                                       | IBL metadata, PostProcess exposure status, SpatialLightGrid demand.                                       | All three retain their capacity, polling order, identity checks and failure behavior; no new stalls, submissions or readback frequency.                  | planned |
+| S7.3 | [Retirement accounting](../../../../src/Oxygen/Nexus/Docs/slot-retirement.md#10-owner-and-use-accounting) above Nexus IndexReuse; preserve family admission and Graphics completion. | IBL ProductVersion and shared-shadow ShadowSlotCore.                                                      | Ordinary ownership and retained pins drain independently; discard/fault/close and allocation-denied retirement pass in both families.                    | planned |
+| S7.4 | [Managed resource/view setup](../../lld/managed-resources.md#managed-resources-and-views); caller chooses allocation and view descriptors.                                           | IBL allocations, captured-sky target setup and shared-shadow backing/initial SRV setup; S7.1 consumes it. | Transactional setup, domains, mip views and cleanup pass; shadow budget fallback and lazy DSVs stay intact.                                              | planned |
+| S7.5 | [Shared group reductions](../../lld/shader-contracts.md#111-group-reductions); preserve fused trees and numerical contracts.                                                         | IBL reductions, distant-sky sum and three 64-lane exposure suitability reductions.                        | Native product/exposure checks pass with unchanged tolerances; distant sky gains the required offset-2 barrier; shader cost is inspected and measured.   | planned |
+| S7.6 | [Shared cubemap geometry](../../lld/shader-contracts.md#112-cubemap-geometry); pure coordinate/solid-angle math.                                                                     | IBL processing, environment conversions and forward debug face/UV mapping.                                | Face order, axis ties, seams, orientation and solid angles pass independent references; sky/material images remain qualified.                            | planned |
+
+These helpers have immediate reuse and useful future consumers:
+
+| Mechanism                    | Future application; outside S7 implementation                                                                         |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Upload and managed views     | Grading/lookup textures, CPU-produced terrain inputs, procedural noise inputs, bloom/terrain/cloud resource setup.    |
+| Feedback and retirement      | Terrain generation demand/completion, retained tile or mesh versions, cloud-volume statistics and cached generations. |
+| Reductions and cube geometry | Terrain min/max/error summaries, luminance/cloud statistics, probes and cube-based planetary mapping.                 |
+
+S7 does not generalize IblGpuJob/IblWorkBudget, add a scheduler/render graph,
+implement terrain/clouds, introduce a universal mip filter, change IBL sample
+counts/precision limits, or add UI controls. Existing frame-transient uploads and
+retained-output pools remain their current mechanisms. Domain policies stay
+local even where two services share storage or transport code.
+[`RetainedTexturePool`](../../../../src/Oxygen/Vortex/Internal/RetainedTexturePool.h)
+and `SceneTextureLeasePool` retain their per-view lifetime contracts; IBL keeps
+its scene-global generations and separately admitted captures.
+
+### S7 execution and exit
+
+1. **Lock the comparison inputs.** Record the actual starting commit, binaries,
+   shader archives and relevant S1–S6 evidence. Use the existing fixtures and
+   isolated settings; preserve user settings. Update the named helper's module
+   CMake source/header lists and test membership in its own commit. Register new
+   shared HLSL includes in ShaderBake and existing test-shader dependency lists
+   so later helper edits cannot reuse stale bytecode.
+2. **Extract with consumers.** Implement the LLD contracts in the order above.
+   Remove replaced local bodies in the same item; preserve existing Graphics
+   receipts, registration ownership and diagnostic scope attribution. Apply the
+   [C++20/23 guidance](../../RULES.md#c-for-shared-infrastructure):
+   small value/span interfaces, move-only RAII, explicit errors, narrow templates
+   and no new per-dispatch allocation or generic callback/policy framework.
+3. **Run focused checks per item.** Use existing CPU/fake/native fixtures. Add
+   failure/lifetime cases where the extracted interface creates a new boundary;
+   do not build another test platform or repeat unrelated suites. Build/run the
+   affected owners in Debug and Release at integration.
+4. **Inspect the actual GPU path.** RenderDoc checks both LUT producers and
+   consumers after S7.1; delayed/captured IBL and shadow reads after S7.3/4;
+   reductions, cube orientation and complete-generation publication after S7.5/6.
+   Use the existing analyzers and report resources, barriers and stage use.
+   Extend test-side inspection only where a named gate lacks coverage; production
+   shader diagnostics are unchanged.
+5. **Check cost once the refactor is integrated.** Run existing native Release
+   static/runtime/authoring scene workloads (120 warmup + 1,800 frames at 60 Hz)
+   and isolated update gates. Preserve [§4.3 limits](../../lld/captured-sky-ibl.md#43-performance-and-latency-gates),
+   first-use reporting, zero stable-source work and bounded product/registration
+   counts. Record changed CPU recording/poll cost and shader resource/barrier
+   statistics. Use Tracy only to explain a measured regression, then recheck
+   native timings. No numerical tuning or repeated runs to chase invisible error.
+6. **Close the slice.** All six rows validated; no duplicate implementation of
+   the extracted operations; the installed SDK's editor-facing include surface
+   and actual Interop consumer compile in C++20. Install matching SDK dev/runtime/
+   data components and verify the consumed shader archive. Native Release shaders
+   contain no qualification probes. Re-run the
+   current material/render-path images and a real DemoShell/editor IBL smoke
+   through the affected owners. Reuse the accepted migration/scene-image evidence
+   where producer inputs and code are unchanged. Update this table, the technical
+   owners and the adjacent validation record, then remove the tracker item.
+
+Owning check surfaces, not a new suite hierarchy:
+
+| Items  | Existing check targets / fixtures to extend                                                                                                                                                                                                                                         |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| S7.1/4 | `Oxygen.Vortex.UploadPlanner.Tests`, `Oxygen.Vortex.UploadCoordinator.Tests`, `Oxygen.Vortex.LightingService.Tests`, `Oxygen.Vortex.ShadowService.Tests`; Graphics managed-registration tests; native `Oxygen.Vortex.LightingGpuAbi.Tests` BRDF/IBL and allocation-budget fixtures. |
+| S7.2   | `Oxygen.Vortex.PostProcessService.Tests`, `Oxygen.Vortex.LightingService.Tests`, native `Oxygen.Vortex.Exposure.Tests` IBL/exposure status and `Oxygen.Vortex.LightingGpuAbi.Tests` light-grid fixtures; Graphics readback tests.                                                   |
+| S7.3   | `Oxygen.Nexus.Reuse.Tests`, `Oxygen.Nexus.AllocationFailure.Tests`, `Oxygen.Vortex.ShadowService.Tests`, native IBL retirement/queued-pressure and `Oxygen.Vortex.LightingImageReference.Tests` shadow-admission fixtures.                                                          |
+| S7.5/6 | ShaderBake production catalog; native `Oxygen.Vortex.LightingGpuAbi.Tests` and `Oxygen.Vortex.Exposure.Tests` products, sky, fog, exposure and images; existing independent CPU references.                                                                                         |
+
+Use the existing `validation.md`; retain new immutable results under
+`evidence/s7-*` as implementation produces them. Nexus, Upload, renderer feedback,
+Resources and shader contracts each own their reusable capability; this section
+owns adopter migration, sequence, state and exit. No parallel refactoring plan or
+second progress ledger is introduced.
 
 ## DemoShell UI
 

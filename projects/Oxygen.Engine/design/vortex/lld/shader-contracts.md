@@ -4,6 +4,10 @@
 **Deliverable:** D.7
 **Status:** `ready`
 
+Shared helper contracts: [group reductions](#111-group-reductions) and
+[cubemap geometry](#112-cubemap-geometry). Their implementation is planned in
+[VX-IBL-01.S7](../milestones/VX-IBL-01/README.md#s7--reusable-infrastructure).
+
 ## Exposure ABI extension
 
 The exact [GPU record layouts](post-process-service.md#gpu-record-layouts) own
@@ -858,3 +862,67 @@ Vortex catalog entries.
 Shader architecture is fully specified by ARCHITECTURE.md §10. Format
 decisions follow DESIGN.md §3.3. Normal encoding uses octahedral mapping and
 BRDF follows Cook-Torrance / GGX.
+
+## 11. Shared compute and geometry utilities
+
+These renderer-wide helpers belong to `Vortex/Shared/`, independent of a service
+ABI. The contracts below are planned; the milestone owns migration and status.
+
+### 11.1 Group reductions
+
+**Owner:** compile-time helpers in shader `Vortex/Shared/GroupReduction.hlsli`.
+Migrate IBL's sum, max/validity and precision-min trees; the distant-sky sum;
+and only the three existing 64-lane suitability reductions in `Exposure.hlsl`.
+Leave exposure's histogram, wave operations and the light-grid scan unchanged.
+
+- Keep caller-owned groupshared storage, compile-time 64-lane participation and
+  fixed operation order. Support fused per-pair work so ten SH terms and mixed
+  max/min/OR/count tuples do not become separate reductions with extra barriers.
+  A small macro-generated specialization is acceptable where HLSL cannot pass
+  groupshared arrays safely; no runtime operation selector or dispatch framework.
+- Preserve the 32/16/8/4/2/1 arithmetic tree and each caller's operand order,
+  signedness, NaN/invalid handling, neutral values and output-lane contract.
+  Distant sky keeps its lane-zero final pair. Its current offset-2 writes have
+  no barrier before lane zero reads lane one's result. Add one unconditional
+  `GroupMemoryBarrierWithGroupSync` after offset 2, reached by all 64 lanes;
+  do not add an offset-1 shared-write stage. This synchronization correction is
+  the first S7 implementation commit, before the shared-code extractions, with
+  independent sky/LUT validation and its measured cost recorded. S7.5 remains
+  open until all reduction adopters migrate. No assumed wave width or new
+  subgroup-intrinsic dependency.
+- Keep existing entry points, group sizes, bindings, precision flags and sample
+  counts. No larger shared arrays, extra dispatches, standalone reduction pass
+  or production test instrumentation. CPU/reference implementations stay
+  independent of the extracted helpers.
+
+**Checks:** exercise every specialization and mixed tuple through existing
+production entry points and native fixtures/probes; use the existing
+SH/HDR/fog/precision suites and exposure cases. Add no shader diagnostic mode.
+Compare real products and displayed images under the existing tolerances, inspect generated shader
+resource/instruction statistics and barriers, then measure the changed passes.
+Extraction must not trigger numerical retuning to improve invisible residuals.
+
+### 11.2 Cubemap geometry
+
+**Owner:** shader `Vortex/Shared/CubemapGeometry.hlsli`. Move face/UV-to-direction
+and texel solid angle from `IblSampling.hlsli`, inverse face/UV mapping from
+`ForwardDebug_PS.hlsl`, and Oxygen↔cube direction conversion from
+`EnvironmentHelpers.hlsli`. Update all production callers and remove duplicate
+bodies; the shared header has no Environment ABI dependency.
+
+Preserve face order +X/-X/+Y/-Y/+Z/-Z, top-down UVs, X→Y→Z axis tie-breaking,
+normalization placement and Oxygen +Z-up conversion `(x,z,-y)` with its inverse.
+Face lookup requires a finite nonzero direction; face indices are 0–5 and texel
+sizes positive. Keep caller guards and the current zero-direction behavior of
+any diagnostic caller. The solid-angle formula and its texel-center/boundary
+conventions remain unchanged.
+
+Roughness/mip mapping, Hammersley sampling, GGX filtering, SH packing and the
+lower-hemisphere/source policy stay with IBL. CPU cooker orientation code and
+independent test references remain separate; no cross-language generator or
+universal mip filter is introduced.
+
+**Checks:** labelled faces, centers/edges/corners, axis ties and round trips,
+solid-angle sums and production debug-face output; preserve source rotation,
+hemisphere and sky/IBL images. Use the existing test shader/probe pipeline and
+unchanged product/image tolerances.

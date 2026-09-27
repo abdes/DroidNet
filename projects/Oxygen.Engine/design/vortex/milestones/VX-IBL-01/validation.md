@@ -1,6 +1,7 @@
 # VX-IBL-01 validation
 
-**S1–S6 validated.** The [acceptance table](README.md#acceptance) links every
+**S1–S6 validated.** [S7 reusable infrastructure](README.md#s7--reusable-infrastructure)
+is planned; its implementation and validation have not started. The [acceptance table](README.md#acceptance) links every
 required result. The [integrated audit](evidence/s6-integrated/run.json) checks
 retained evidence against current production owners; prior measurements keep
 their original source/build provenance.

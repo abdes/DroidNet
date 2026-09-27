@@ -5,7 +5,7 @@ additional capabilities through their owning milestone plans.
 
 | Priority                                                       | Focus                                                                           | Items |
 | -------------------------------------------------------------- | ------------------------------------------------------------------------------- | ----: |
-| [P1 — Current delivery](#p1--current-delivery)                 | Complete ED-M08 editor integration                                              |     1 |
+| [P1 — Current delivery](#p1--current-delivery)                 | ED-M08 integration and S7 reuse refactoring                                     |     2 |
 | [P2 — Engineering follow-ups](#p2--engineering-follow-ups)     | Recommended review order: correctness, measured cost, qualification and tooling |     8 |
 | [P3 — Unscheduled capabilities](#p3--unscheduled-capabilities) | Feature extensions and design choices, grouped by subsystem                     |    34 |
 
@@ -16,9 +16,10 @@ Owners below are responsible subsystems. [Milestone status](STATUS.md) tracks de
 
 ## P1 — Current delivery
 
-| Item     | State     | Work and next step                                                                                                                                                                     | Owner / references                                                                                                                                                                                                      |
-| -------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| VX-ED-01 | `pending` | **Editor integration.** Finish canonical data/slot provenance, native rendered gates, editor delivery, saved-input captures and comparisons. Follow the existing M08.1–M08.8 sequence. | [Editor delivery](../../../../design/editor/plan/ED-M08-runtime-parity-and-standalone-validation.md) · [Progress](../../../../design/editor/IMPLEMENTATION_STATUS.md#ed-m08---runtime-parity-and-standalone-validation) |
+| Item      | State     | Work and next step                                                                                                                                                                        | Owner / references                                                                                                                                                                                                      |
+| --------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| VX-ED-01  | `pending` | **Editor integration.** Finish canonical data/slot provenance, native rendered gates, editor delivery, saved-input captures and comparisons. Follow the existing M08.1–M08.8 sequence.    | [Editor delivery](../../../../design/editor/plan/ED-M08-runtime-parity-and-standalone-validation.md) · [Progress](../../../../design/editor/IMPLEMENTATION_STATUS.md#ed-m08---runtime-parity-and-standalone-validation) |
+| VX-IBL-01 | `pending` | **S7 reusable infrastructure.** Extract six bounded patterns and migrate named consumers; include the distant-sky reduction synchronization correction. S1–S6 lighting remains validated. | Nexus + Vortex · [S7 plan](milestones/VX-IBL-01/README.md#s7--reusable-infrastructure)                                                                                                                                  |
 
 ## P2 — Engineering follow-ups
 
