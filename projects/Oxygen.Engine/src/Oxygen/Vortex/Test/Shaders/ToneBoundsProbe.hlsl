@@ -14,6 +14,7 @@
 #include "Vortex/Services/Environment/TransmittanceMath.hlsli"
 #include "Vortex/Services/Environment/VolumetricFog.hlsl"
 #include "Vortex/Services/Shadows/PointShadowFiltering.hlsli"
+#include "Vortex/Services/Environment/ParityTransmittance.hlsli"
 
 struct ProbeConstants { uint inputs; uint output; uint count; uint reserved; };
 
@@ -72,6 +73,16 @@ void CS(uint3 thread : SV_DispatchThreadID)
         return;
     }
     if (thread.x >= pass.count) {
+        return;
+    }
+    if (pass.reserved == 131072u) {
+        const float4 position_radius = asfloat(input[thread.x * 2u]);
+        const float4 direction_height = asfloat(input[thread.x * 2u + 1u]);
+        const float3 transmittance = AnalyticalPlanetOccludedTransmittance(
+            position_radius.xyz, direction_height.xyz,
+            K_INVALID_BINDLESS_INDEX, 0, 0, position_radius.w, direction_height.w);
+        output.Store4(thread.x * 32u, asuint(float4(transmittance, 0)));
+        output.Store4(thread.x * 32u + 16u, 0u.xxxx);
         return;
     }
     if (pass.reserved == 65536u) {

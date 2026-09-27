@@ -497,6 +497,7 @@ if(WIN32)
     GPU
     SOURCES
       "Exposure/Adaptation_test.cpp"
+      "Exposure/AtmospherePlanetShadow_test.cpp"
       "Exposure/CheckedConversion_test.cpp"
       "Exposure/ComposedAdmission_test.cpp"
       "Exposure/Diagnostics_test.cpp"

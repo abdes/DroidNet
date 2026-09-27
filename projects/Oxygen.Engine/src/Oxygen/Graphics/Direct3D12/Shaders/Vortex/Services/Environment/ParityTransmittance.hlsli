@@ -75,7 +75,8 @@ static float3 ParityTransmittanceLutSample(
     return lut.SampleLevel(linear_sampler, uv, 0.0f).rgb;
 }
 
-// Mirrors UE5.7 SkyAtmosphereCommon.ush::GetAtmosphereTransmittance.
+// UE5.7 GetAtmosphereTransmittance visibility contract; world_dir is normalized.
+// Use a horizon test instead of cancellation-prone ray intersection roots.
 static float3 AnalyticalPlanetOccludedTransmittance(
     float3 planet_center_to_world_pos_km,
     float3 world_dir,
@@ -85,19 +86,27 @@ static float3 AnalyticalPlanetOccludedTransmittance(
     float planet_radius_km,
     float atmosphere_height_km)
 {
-    const float2 hits = RayIntersectSphere(
-        planet_center_to_world_pos_km,
-        world_dir,
-        float4(0.0f, 0.0f, 0.0f, planet_radius_km));
-    if (hits.x > 0.0f || hits.y > 0.0f)
+    const float p_height = length(planet_center_to_world_pos_km);
+    if (p_height < planet_radius_km)
     {
         return 0.0f.xxx;
     }
 
-    const float p_height = length(planet_center_to_world_pos_km);
     const float3 up_vector = planet_center_to_world_pos_km / p_height;
     const float light_zenith_cos_angle = dot(world_dir, up_vector);
-    const float altitude_km = max(p_height - planet_radius_km, 0.0f);
+    const float altitude_km = p_height - planet_radius_km;
+    // We need visibility, not intersection distances. Near the surface the
+    // quadratic's exit root subtracts nearly equal values and can become a
+    // small positive distance for an outward ray. Compare against the horizon
+    // instead, factoring h*h - r*r to preserve the small altitude term.
+    const float horizon_cos_angle =
+        -sqrt(altitude_km * (p_height + planet_radius_km)) / p_height;
+    if (light_zenith_cos_angle < 0.0f
+        && light_zenith_cos_angle <= horizon_cos_angle)
+    {
+        return 0.0f.xxx;
+    }
+
     return ParityTransmittanceLutSample(
         lut_slot,
         lut_width,

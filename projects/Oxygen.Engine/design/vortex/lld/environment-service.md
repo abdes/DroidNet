@@ -188,6 +188,13 @@ invariants remain non-negotiable:
    bake planet occlusion.
 4. Planet/ground occlusion is reintroduced analytically only at consumers that
    need it, such as sky/sun-disk and direct-light transmittance paths.
+   For radius `r`, radial height `h >= r` and normalized light direction, the
+   horizon cosine is `-sqrt((h - r) * (h + r)) / h`. Inward rays at or below
+   that horizon are occluded; points inside the planet are occluded. The
+   factored FP32 test avoids false positive exit distances from subtracting
+   nearly equal quadratic roots at ground level. Outward surface rays stay lit
+   without a shadow bias or an artificial altitude offset. See
+   [ray/sphere precision](https://research.nvidia.com/publication/2019-03_precision-improvements-raysphere-intersection).
 5. Sky-view LUT parameterization keeps the UE-style split-horizon mapping and
    sub-texel sky-view seam guard.
 6. Camera aerial-perspective voxels behind or below the horizon preserve the
