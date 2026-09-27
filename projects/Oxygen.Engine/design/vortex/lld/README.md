@@ -2,7 +2,7 @@
 
 These documents own the renderer's technical contracts. For delivery and results,
 use the [milestone roadmap](../PLAN.md). Shared policy and LLD expectations are in
-[RULES.md](../RULES.md).
+[Oxygen rules](../../../../../design/oxygen/RULES.md).
 
 | Topic                                 | Design                                                                                                  |
 | ------------------------------------- | ------------------------------------------------------------------------------------------------------- |

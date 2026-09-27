@@ -32,17 +32,17 @@ This LLD does not own:
 
 ## 2. PRD Traceability
 
-| Requirement | Coverage |
-| --- | --- |
-| `GOAL-005` | Source content, descriptors, cooked output, and mount state have a predictable user-facing layout. |
-| `REQ-015` | Procedural descriptors have a stable authored-content location. |
-| `REQ-016` | Scoped source import has an explicit source-media position. |
-| `REQ-017` | Project content roots and authoring mounts define asset identity. |
-| `REQ-018` | Cooked output roots are separated from authoring data. |
-| `REQ-019` | Cooked output is discoverable for refresh/mount without becoming an authoring root. |
-| `REQ-021` | Asset references preserve authored identity through mount tokens. |
-| `REQ-024` | Layout and mount failures can identify authoring-root, template, cooked-output, or browser-mapping cause. |
-| `REQ-036` | Content Browser navigation and creation targets are predictable. |
+| Requirement | Coverage                                                                                                  |
+| ----------- | --------------------------------------------------------------------------------------------------------- |
+| `GOAL-005`  | Source content, descriptors, cooked output, and mount state have a predictable user-facing layout.        |
+| `REQ-015`   | Procedural descriptors have a stable authored-content location.                                           |
+| `REQ-016`   | Scoped source import has an explicit source-media position.                                               |
+| `REQ-017`   | Project content roots and authoring mounts define asset identity.                                         |
+| `REQ-018`   | Cooked output roots are separated from authoring data.                                                    |
+| `REQ-019`   | Cooked output is discoverable for refresh/mount without becoming an authoring root.                       |
+| `REQ-021`   | Asset references preserve authored identity through mount tokens.                                         |
+| `REQ-024`   | Layout and mount failures can identify authoring-root, template, cooked-output, or browser-mapping cause. |
+| `REQ-036`   | Content Browser navigation and creation targets are predictable.                                          |
 
 ## 3. Architecture Links
 
@@ -52,7 +52,7 @@ This LLD does not own:
   refresh are distinct phases.
 - `PROJECT-LAYOUT.md`: repository source-module placement rules. This LLD does
   not use `PROJECT-LAYOUT.md` for user-created project folders.
-- `RULES.md`: cooked output is derived and not edited as authoring data; asset
+- [Oxygen rules](../../oxygen/RULES.md): cooked output is derived and not edited as authoring data; asset
   references preserve authoring intent.
 - `project-services.md`: project manifest services, active project context,
   authoring roots, local folder mounts, and cook-scope facts.
@@ -110,30 +110,30 @@ Every newly created V0.1 project has this shape:
 
 Folder requirements:
 
-| Folder | Required in template payload | Created or verified by project creation | Auto-created on first asset create | Browser group | Default creation target |
-| --- | --- | --- | --- | --- | --- |
-| `Project.oxy` | No; prohibited in predefined `SourceFolder` | Project creation writes final file | No | Project metadata | No |
-| `Content/` | Yes | Verified after payload copy | No | Authoring mount | Yes |
-| `Content/Scenes/` | Yes | Verified after payload copy | Yes, with layout warning if missing after project creation | Authoring mount | Scene |
-| `Content/Materials/` | Yes | Verified after payload copy | Yes, with layout warning if missing after project creation | Authoring mount | Material |
-| `Content/Geometry/` | Yes | Verified after payload copy | Yes, with layout warning if missing after project creation | Authoring mount | Geometry |
-| `Content/Textures/` | Yes | Verified after payload copy | Yes, with layout warning if missing after project creation | Authoring mount | Texture |
-| `Content/Audio/` | Yes | Verified after payload copy | Yes, with layout warning if missing after project creation | Authoring mount | Audio |
-| `Content/Video/` | Yes | Verified after payload copy | Yes, with layout warning if missing after project creation | Authoring mount | Video |
-| `Content/Scripts/` | Yes | Verified after payload copy | Yes, with layout warning if missing after project creation | Authoring mount | Script |
-| `Content/Prefabs/` | Yes | Verified after payload copy | Yes, with layout warning if missing after project creation | Authoring mount | Prefab |
-| `Content/Animations/` | Yes | Verified after payload copy | Yes, with layout warning if missing after project creation | Authoring mount | Animation |
-| `Content/SourceMedia/` | Yes | Verified after payload copy | Yes, with layout warning if missing after project creation | Authoring mount | Raw source media |
-| `Content/SourceMedia/Images/` | Yes | Verified after payload copy | Yes, with layout warning if missing after project creation | Authoring mount | Raw image source |
-| `Content/SourceMedia/Audio/` | Yes | Verified after payload copy | Yes, with layout warning if missing after project creation | Authoring mount | Raw audio source |
-| `Content/SourceMedia/Video/` | Yes | Verified after payload copy | Yes, with layout warning if missing after project creation | Authoring mount | Raw video source |
-| `Content/SourceMedia/DCC/` | Yes | Verified after payload copy | Yes, with layout warning if missing after project creation | Authoring mount | Raw DCC source |
-| `Config/` | Yes | Verified after payload copy | No; settings workflows create files inside it | Project configuration | No |
-| `Packages/` | No | No | Package workflow creates | Project packages | No |
-| `.cooked/` | No | No | Cook creates | Derived output | No |
-| `.imported/` | No | No | Import creates | Derived output | No |
-| `.build/` | No | No | Build/package creates | Derived output | No |
-| `.oxygen/` | No | No | Editor metadata workflow creates | Editor-local metadata | No |
+| Folder                        | Required in template payload                | Created or verified by project creation | Auto-created on first asset create                         | Browser group         | Default creation target |
+| ----------------------------- | ------------------------------------------- | --------------------------------------- | ---------------------------------------------------------- | --------------------- | ----------------------- |
+| `Project.oxy`                 | No; prohibited in predefined `SourceFolder` | Project creation writes final file      | No                                                         | Project metadata      | No                      |
+| `Content/`                    | Yes                                         | Verified after payload copy             | No                                                         | Authoring mount       | Yes                     |
+| `Content/Scenes/`             | Yes                                         | Verified after payload copy             | Yes, with layout warning if missing after project creation | Authoring mount       | Scene                   |
+| `Content/Materials/`          | Yes                                         | Verified after payload copy             | Yes, with layout warning if missing after project creation | Authoring mount       | Material                |
+| `Content/Geometry/`           | Yes                                         | Verified after payload copy             | Yes, with layout warning if missing after project creation | Authoring mount       | Geometry                |
+| `Content/Textures/`           | Yes                                         | Verified after payload copy             | Yes, with layout warning if missing after project creation | Authoring mount       | Texture                 |
+| `Content/Audio/`              | Yes                                         | Verified after payload copy             | Yes, with layout warning if missing after project creation | Authoring mount       | Audio                   |
+| `Content/Video/`              | Yes                                         | Verified after payload copy             | Yes, with layout warning if missing after project creation | Authoring mount       | Video                   |
+| `Content/Scripts/`            | Yes                                         | Verified after payload copy             | Yes, with layout warning if missing after project creation | Authoring mount       | Script                  |
+| `Content/Prefabs/`            | Yes                                         | Verified after payload copy             | Yes, with layout warning if missing after project creation | Authoring mount       | Prefab                  |
+| `Content/Animations/`         | Yes                                         | Verified after payload copy             | Yes, with layout warning if missing after project creation | Authoring mount       | Animation               |
+| `Content/SourceMedia/`        | Yes                                         | Verified after payload copy             | Yes, with layout warning if missing after project creation | Authoring mount       | Raw source media        |
+| `Content/SourceMedia/Images/` | Yes                                         | Verified after payload copy             | Yes, with layout warning if missing after project creation | Authoring mount       | Raw image source        |
+| `Content/SourceMedia/Audio/`  | Yes                                         | Verified after payload copy             | Yes, with layout warning if missing after project creation | Authoring mount       | Raw audio source        |
+| `Content/SourceMedia/Video/`  | Yes                                         | Verified after payload copy             | Yes, with layout warning if missing after project creation | Authoring mount       | Raw video source        |
+| `Content/SourceMedia/DCC/`    | Yes                                         | Verified after payload copy             | Yes, with layout warning if missing after project creation | Authoring mount       | Raw DCC source          |
+| `Config/`                     | Yes                                         | Verified after payload copy             | No; settings workflows create files inside it              | Project configuration | No                      |
+| `Packages/`                   | No                                          | No                                      | Package workflow creates                                   | Project packages      | No                      |
+| `.cooked/`                    | No                                          | No                                      | Cook creates                                               | Derived output        | No                      |
+| `.imported/`                  | No                                          | No                                      | Import creates                                             | Derived output        | No                      |
+| `.build/`                     | No                                          | No                                      | Build/package creates                                      | Derived output        | No                      |
+| `.oxygen/`                    | No                                          | No                                      | Editor metadata workflow creates                           | Editor-local metadata | No                      |
 
 Predefined template validation fails with a `ProjectTemplate` diagnostic when a
 folder marked `Required in template payload` is missing. After project
@@ -201,15 +201,15 @@ Rules:
 LLD adds the concrete layout and template rules that must be satisfied by that
 manifest version.
 
-| Field | Required | Rule |
-| --- | --- | --- |
-| `SchemaVersion` | Yes | Must equal the supported V0.1 project manifest version. |
-| `Id` | Yes | New non-empty GUID generated for each created project. |
-| `Name` | Yes | User-facing project name selected at creation. |
-| `Category` | Yes | Template/project category. |
-| `Thumbnail` | No | Project/template preview path when available. |
-| `AuthoringMounts` | Yes | Project-relative authoring mounts. Must include `Content -> Content`. |
-| `LocalFolderMounts` | No | Absolute external authored content mounts. Empty when not used. |
+| Field               | Required | Rule                                                                  |
+| ------------------- | -------- | --------------------------------------------------------------------- |
+| `SchemaVersion`     | Yes      | Must equal the supported V0.1 project manifest version.               |
+| `Id`                | Yes      | New non-empty GUID generated for each created project.                |
+| `Name`              | Yes      | User-facing project name selected at creation.                        |
+| `Category`          | Yes      | Template/project category.                                            |
+| `Thumbnail`         | No       | Project/template preview path when available.                         |
+| `AuthoringMounts`   | Yes      | Project-relative authoring mounts. Must include `Content -> Content`. |
+| `LocalFolderMounts` | No       | Absolute external authored content mounts. Empty when not used.       |
 
 `Project.oxy` must not persist:
 
@@ -289,17 +289,17 @@ asset:///StudioLibrary/Characters/Hero.ogeo.json
 
 Default create target rules are asset-kind-specific:
 
-| User selection | Scene target | Material target | Geometry target | Script target |
-| --- | --- | --- | --- | --- |
-| project root | `/Content/Scenes` | `/Content/Materials` | `/Content/Geometry` | `/Content/Scripts` |
-| `/<Mount>` authoring root | `/<Mount>/Scenes` | `/<Mount>/Materials` | `/<Mount>/Geometry` | `/<Mount>/Scripts` |
-| folder under an authoring mount and matching the asset kind | selected folder | selected folder | selected folder | selected folder |
-| folder under an authoring mount but not matching the asset kind | `/<Mount>/Scenes` | `/<Mount>/Materials` | `/<Mount>/Geometry` | `/<Mount>/Scripts` |
-| local mount root explicitly chosen as target | `/<Local>/Scenes` | `/<Local>/Materials` | `/<Local>/Geometry` | `/<Local>/Scripts` |
-| folder under an explicitly targeted local mount and matching the asset kind | selected folder | selected folder | selected folder | selected folder |
+| User selection                                                                  | Scene target      | Material target      | Geometry target     | Script target      |
+| ------------------------------------------------------------------------------- | ----------------- | -------------------- | ------------------- | ------------------ |
+| project root                                                                    | `/Content/Scenes` | `/Content/Materials` | `/Content/Geometry` | `/Content/Scripts` |
+| `/<Mount>` authoring root                                                       | `/<Mount>/Scenes` | `/<Mount>/Materials` | `/<Mount>/Geometry` | `/<Mount>/Scripts` |
+| folder under an authoring mount and matching the asset kind                     | selected folder   | selected folder      | selected folder     | selected folder    |
+| folder under an authoring mount but not matching the asset kind                 | `/<Mount>/Scenes` | `/<Mount>/Materials` | `/<Mount>/Geometry` | `/<Mount>/Scripts` |
+| local mount root explicitly chosen as target                                    | `/<Local>/Scenes` | `/<Local>/Materials` | `/<Local>/Geometry` | `/<Local>/Scripts` |
+| folder under an explicitly targeted local mount and matching the asset kind     | selected folder   | selected folder      | selected folder     | selected folder    |
 | folder under an explicitly targeted local mount but not matching the asset kind | `/<Local>/Scenes` | `/<Local>/Materials` | `/<Local>/Geometry` | `/<Local>/Scripts` |
-| folder under a local mount not explicitly chosen as target | `/Content/Scenes` | `/Content/Materials` | `/Content/Geometry` | `/Content/Scripts` |
-| `Config`, `Packages`, or derived roots | `/Content/Scenes` | `/Content/Materials` | `/Content/Geometry` | `/Content/Scripts` |
+| folder under a local mount not explicitly chosen as target                      | `/Content/Scenes` | `/Content/Materials` | `/Content/Geometry` | `/Content/Scripts` |
+| `Config`, `Packages`, or derived roots                                          | `/Content/Scenes` | `/Content/Materials` | `/Content/Geometry` | `/Content/Scripts` |
 
 Before creation, UI presents the effective target as both a virtual folder and
 resulting asset URI. Example:
@@ -383,15 +383,15 @@ The table lists positive ownership. Forbidden ownership edges are defined in
 [Dependency Rules](#13-dependency-rules); consumers must not infer authoring roots
 or target folders outside the project layout policy.
 
-| Owner | Responsibility |
-| --- | --- |
-| `Oxygen.Editor.Projects` | `Project.oxy`, mount validation, project creation layout validation, project cook-scope facts. |
-| `Oxygen.Editor.ProjectBrowser` | predefined template presentation and create-from-template workflow. |
-| `Oxygen.Editor.ContentBrowser` | user-facing projection of authoring, local, config, packages, and derived roots. |
-| `Oxygen.Editor.WorldEditor` | scene document create/open/save under `Content/Scenes`. |
-| `Oxygen.Editor.MaterialEditor` | material descriptor create/open/save under `Content/Materials` or selected material target. |
-| `Oxygen.Editor.ContentPipeline` | import/cook outputs under derived roots and cooked indexes. |
-| `Oxygen.Managed.Assets` | reusable asset URI, catalog, import, and cook primitives. |
+| Owner                           | Responsibility                                                                                 |
+| ------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `Oxygen.Editor.Projects`        | `Project.oxy`, mount validation, project creation layout validation, project cook-scope facts. |
+| `Oxygen.Editor.ProjectBrowser`  | predefined template presentation and create-from-template workflow.                            |
+| `Oxygen.Editor.ContentBrowser`  | user-facing projection of authoring, local, config, packages, and derived roots.               |
+| `Oxygen.Editor.WorldEditor`     | scene document create/open/save under `Content/Scenes`.                                        |
+| `Oxygen.Editor.MaterialEditor`  | material descriptor create/open/save under `Content/Materials` or selected material target.    |
+| `Oxygen.Editor.ContentPipeline` | import/cook outputs under derived roots and cooked indexes.                                    |
+| `Oxygen.Managed.Assets`         | reusable asset URI, catalog, import, and cook primitives.                                      |
 
 ## 7. Data Contracts
 
@@ -409,9 +409,7 @@ Each predefined template has a `Template.json` with this shape:
   "Icon": "Media/Icon.png",
   "Preview": "Media/Preview.png",
   "SourceFolder": ".",
-  "AuthoringMounts": [
-    { "Name": "Content", "RelativePath": "Content" }
-  ],
+  "AuthoringMounts": [{ "Name": "Content", "RelativePath": "Content" }],
   "LocalFolderMounts": [],
   "StarterScene": {
     "AssetUri": "asset:///Content/Scenes/Main.oscene.json",
@@ -449,11 +447,11 @@ Template metadata is not copied into `Project.oxy` as project identity.
 
 ### Predefined Templates
 
-| TemplateId | Category | DisplayName | Required media | Required payload | Starter scene | OpenOnCreate |
-| --- | --- | --- | --- | --- | --- | --- |
-| `Games/Blank` | `Games` | `Blank` | `Media/Icon.png`, `Media/Preview.png` | required folder skeleton, `Content/Scenes/Main.oscene.json`, default material | `asset:///Content/Scenes/Main.oscene.json` | Yes |
-| `Games/First Person` | `Games` | `First Person` | `Media/Icon.png`, `Media/Preview.png` | required folder skeleton, `Content/Scenes/FirstPerson.oscene.json`, default material, starter script folder | `asset:///Content/Scenes/FirstPerson.oscene.json` | Yes |
-| `Visualization/Blank` | `Visualization` | `Blank` | `Media/Icon.png`, `Media/Preview.png` | required folder skeleton, `Content/Scenes/Main.oscene.json`, default material | `asset:///Content/Scenes/Main.oscene.json` | Yes |
+| TemplateId            | Category        | DisplayName    | Required media                        | Required payload                                                                                            | Starter scene                                     | OpenOnCreate |
+| --------------------- | --------------- | -------------- | ------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------- | ------------ |
+| `Games/Blank`         | `Games`         | `Blank`        | `Media/Icon.png`, `Media/Preview.png` | required folder skeleton, `Content/Scenes/Main.oscene.json`, default material                               | `asset:///Content/Scenes/Main.oscene.json`        | Yes          |
+| `Games/First Person`  | `Games`         | `First Person` | `Media/Icon.png`, `Media/Preview.png` | required folder skeleton, `Content/Scenes/FirstPerson.oscene.json`, default material, starter script folder | `asset:///Content/Scenes/FirstPerson.oscene.json` | Yes          |
+| `Visualization/Blank` | `Visualization` | `Blank`        | `Media/Icon.png`, `Media/Preview.png` | required folder skeleton, `Content/Scenes/Main.oscene.json`, default material                               | `asset:///Content/Scenes/Main.oscene.json`        | Yes          |
 
 ### Created Project Manifest
 
@@ -466,9 +464,7 @@ After create-from-template, the project `Project.oxy` contains:
   "Name": "<user-project-name>",
   "Category": "<template-category>",
   "Thumbnail": "Media/Preview.png",
-  "AuthoringMounts": [
-    { "Name": "Content", "RelativePath": "Content" }
-  ],
+  "AuthoringMounts": [{ "Name": "Content", "RelativePath": "Content" }],
   "LocalFolderMounts": []
 }
 ```
@@ -610,17 +606,17 @@ It provides policy consumed by those systems:
 
 Layout-related failures use existing project/content domains:
 
-| Condition | Domain | Required diagnostic detail |
-| --- | --- | --- |
-| missing or invalid `Project.oxy` | `ProjectValidation` | manifest path and parse/validation reason |
-| missing/inaccessible authoring mount | `ProjectContentRoots` | mount name and resolved path |
-| invalid authoring mount path | `ProjectContentRoots` | mount name, raw path, validation rule |
-| invalid local folder mount path | `ProjectContentRoots` | mount name, absolute path, validation rule |
-| invalid template metadata | `ProjectTemplate` | template path and field name |
-| template copy or manifest rewrite failure | `ProjectTemplate` | source path, target path, exception type |
-| starter scene missing/outside mount | `ProjectTemplate` | starter scene URI and relative path |
-| derived cooked index invalid | `ContentPipeline` | mount name and index path |
-| browser cannot map selection to a mount | `AssetIdentity` | selection path and active mount list |
+| Condition                                 | Domain                | Required diagnostic detail                 |
+| ----------------------------------------- | --------------------- | ------------------------------------------ |
+| missing or invalid `Project.oxy`          | `ProjectValidation`   | manifest path and parse/validation reason  |
+| missing/inaccessible authoring mount      | `ProjectContentRoots` | mount name and resolved path               |
+| invalid authoring mount path              | `ProjectContentRoots` | mount name, raw path, validation rule      |
+| invalid local folder mount path           | `ProjectContentRoots` | mount name, absolute path, validation rule |
+| invalid template metadata                 | `ProjectTemplate`     | template path and field name               |
+| template copy or manifest rewrite failure | `ProjectTemplate`     | source path, target path, exception type   |
+| starter scene missing/outside mount       | `ProjectTemplate`     | starter scene URI and relative path        |
+| derived cooked index invalid              | `ContentPipeline`     | mount name and index path                  |
+| browser cannot map selection to a mount   | `AssetIdentity`       | selection path and active mount list       |
 
 ## 13. Dependency Rules
 
@@ -661,9 +657,9 @@ Project layout/template work is complete when these checks pass:
 9. Scene create resolves to `Content/Scenes/<Name>.oscene.json` and
    `asset:///Content/Scenes/<Name>.oscene.json`.
 10. Material create at project root resolves to `Content/Materials/<Name>.omat.json`
-   and `asset:///Content/Materials/<Name>.omat.json`.
+    and `asset:///Content/Materials/<Name>.omat.json`.
 11. Create actions under an extra authoring mount resolve to that mount's
-   asset-kind folder and URI.
+    asset-kind folder and URI.
 12. Create actions under a local mount use that mount only when the local mount
     is explicitly selected as the creation target; otherwise they resolve to
     the default `Content` asset-kind folder.

@@ -7,7 +7,7 @@ request identity, polling order and interpretation.
 The capability below is planned; [VX-IBL-01.S7](../milestones/VX-IBL-01/README.md#s7--reusable-infrastructure)
 owns adoption, implementation state and integration qualification.
 
-Read: [contract](#bounded-gpu-feedback), [C++ guidance](../RULES.md#c-for-shared-infrastructure).
+Read: [contract](#bounded-gpu-feedback), [C++ guidance](../../../../../design/oxygen/RULES.md#c).
 
 ## Bounded GPU feedback
 

@@ -72,7 +72,7 @@ passes native sky checks and the authoring timing gate.
 the other five extractions and integrated qualification remain.
 
 Read: [work items](#s7-work-items), [execution and exit](#s7-execution-and-exit),
-[C++ guidance](../../RULES.md#c-for-shared-infrastructure).
+[C++ guidance](../../../../../../design/oxygen/RULES.md#c).
 
 ### S7 work items
 
@@ -119,7 +119,7 @@ its scene-global generations and separately admitted captures.
 2. **Extract with consumers.** Implement the LLD contracts in the order above.
    Remove replaced local bodies in the same item; preserve existing Graphics
    receipts, registration ownership and diagnostic scope attribution. Apply the
-   [C++20/23 guidance](../../RULES.md#c-for-shared-infrastructure):
+   [C++20/23 guidance](../../../../../../design/oxygen/RULES.md#c):
    small value/span interfaces, move-only RAII, explicit errors, narrow templates
    and no new per-dispatch allocation or generic callback/policy framework.
 3. **Run focused checks per item.** Use existing CPU/fake/native fixtures. Add

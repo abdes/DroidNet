@@ -7,7 +7,7 @@ a bounded path for renderer-owned lookup products.
 The capability below is planned; [VX-IBL-01.S7](../milestones/VX-IBL-01/README.md#s7--reusable-infrastructure)
 owns adoption, implementation state and integration qualification.
 
-Read: [contract](#immutable-texture-initialization), [C++ guidance](../RULES.md#c-for-shared-infrastructure).
+Read: [contract](#immutable-texture-initialization), [C++ guidance](../../../../../design/oxygen/RULES.md#c).
 
 ## Immutable texture initialization
 

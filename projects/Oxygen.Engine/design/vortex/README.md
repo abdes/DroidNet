@@ -8,7 +8,7 @@ Start with the question you need to answer:
 | How is the renderer organized?                          | [Architecture](ARCHITECTURE.md), [design overview](DESIGN.md), [source layout](PROJECT-LAYOUT.md) |
 | What is a subsystem's contract?                         | [Low-level designs](lld/README.md)                                                                |
 | What was planned, delivered or deferred?                | [Milestone roadmap](PLAN.md)                                                                      |
-| What are the engineering and documentation conventions? | [Rules](RULES.md)                                                                                 |
+| What are the engineering and documentation conventions? | [Oxygen rules](../../../../design/oxygen/RULES.md)                                                |
 
 **Current progress:** [Milestone status](STATUS.md). **Unfinished work:** [Open items](OPEN_ITEMS.md).
 

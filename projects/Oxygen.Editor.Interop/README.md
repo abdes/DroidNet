@@ -105,7 +105,7 @@ The concrete-facade boundary is tracked in
 
 ## Build and test entry points
 
-Follow the repository's [editor verification rules](../../design/editor/RULES.md):
+Follow the repository's [editor verification rules](../../design/oxygen/RULES.md#validation-and-delivery):
 use parallel MSBuild and an existing compatible engine installation. Engine
 build/verification is a separate owner workflow.
 
@@ -130,7 +130,7 @@ test source is not evidence that a new checkout has been built or run.
 
 - [Live engine sync](../../design/editor/lld/live-engine-sync.md).
 - [Viewport and tools](../../design/editor/lld/viewport-and-tools.md).
-- [Property pipeline](../../design/editor/lld/property-pipeline-redesign.md).
+- [Property pipeline](../../design/editor/lld/property-pipeline.md).
 - [Implementation and validation status](../../design/editor/IMPLEMENTATION_STATUS.md).
 
 ## License

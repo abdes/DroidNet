@@ -9,17 +9,17 @@ and run real Oxygen scenes.
 
 ## Document Map
 
-| Document | Purpose |
-| --- | --- |
-| [PRD.md](./PRD.md) | Product requirements, non-goals, and workflow success criteria. |
-| [ARCHITECTURE.md](./ARCHITECTURE.md) | Stable system boundaries and ownership contracts. |
-| [DESIGN.md](./DESIGN.md) | Cross-cutting design contracts used by all subsystems. |
-| [PLAN.md](./PLAN.md) | Milestone roadmap, dependency order, and exit gates. |
-| [PROJECT-LAYOUT.md](./PROJECT-LAYOUT.md) | Authoritative project/file placement rules. |
+| Document                                               | Purpose                                                         |
+| ------------------------------------------------------ | --------------------------------------------------------------- |
+| [PRD.md](./PRD.md)                                     | Product requirements, non-goals, and workflow success criteria. |
+| [ARCHITECTURE.md](./ARCHITECTURE.md)                   | Stable system boundaries and ownership contracts.               |
+| [DESIGN.md](./DESIGN.md)                               | Cross-cutting design contracts used by all subsystems.          |
+| [PLAN.md](./PLAN.md)                                   | Milestone roadmap, dependency order, and exit gates.            |
+| [PROJECT-LAYOUT.md](./PROJECT-LAYOUT.md)               | Authoritative project/file placement rules.                     |
 | [IMPLEMENTATION_STATUS.md](./IMPLEMENTATION_STATUS.md) | Current state, milestone validation summaries, and known risks. |
-| [RULES.md](./RULES.md) | Non-negotiable engineering rules. |
-| [lld/README.md](./lld/README.md) | Low-level design index for active subsystems. |
-| [plan/README.md](./plan/README.md) | Detailed milestone plans with implementation slices. |
+| [Oxygen rules](../oxygen/RULES.md)                     | Non-negotiable engineering rules.                               |
+| [lld/README.md](./lld/README.md)                       | Low-level design index for active subsystems.                   |
+| [plan/README.md](./plan/README.md)                     | Detailed milestone plans with implementation slices.            |
 
 ## Operating Principle
 
