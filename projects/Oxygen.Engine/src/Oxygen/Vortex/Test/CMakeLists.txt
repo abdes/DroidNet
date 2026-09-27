@@ -594,6 +594,7 @@ if(WIN32)
       "${exposure_shader_root}/Vortex/Services/PostProcess/ToneMapping.hlsli"
       "${exposure_shader_root}/Vortex/Shared/ColorSpace.hlsli"
       "${exposure_shader_root}/Vortex/Shared/CubemapGeometry.hlsli"
+      "${exposure_shader_root}/Vortex/Shared/GroupReduction.hlsli"
     DEPFILE "${exposure_probe_output}.d"
     VERBATIM
   )

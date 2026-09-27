@@ -1,7 +1,8 @@
 # VX-IBL-01 validation
 
 **S1–S6 validated.** [S7 reusable infrastructure](README.md#s7--reusable-infrastructure)
-is in progress; its shared extractions and integrated qualification remain.
+is in progress. All six extractions and the performance gates pass; final
+capture, SDK and application qualification remain.
 [S8](README.md#s8--atmosphere-and-fog-correctness) adds seven source-confirmed
 atmosphere/fog regression cases; their fixes and runtime validation are planned. The [acceptance table](README.md#acceptance) links every
 required result. The [integrated audit](evidence/s6-integrated/run.json) checks
@@ -12,6 +13,45 @@ Read: [S7 checkpoints](#s7-checkpoints), [integrated results](#integrated-result
 [reproduce](#reproduce).
 
 ## S7 checkpoints
+
+### S7.5 group reductions
+
+All seven 64-lane specializations pass correctness qualification over `76cd94a`
+with S7.5 changes. Normal Debug/Release builds publish all 237 production modules.
+IBL convolution/lifetime/admission passes **43 Debug / 41 Release tests**; **13
+exposure/image tests** pass in each, including the **144-case material image
+matrix**. These exercise SH sum, max/validity, precision minimum, distant sky,
+and all three exposure tuples. Existing tolerances are unchanged.
+
+**Shader cost:** 233 Release DXIL payloads are byte-identical. Distant sky and
+exposure only reorder declarations; both SH shaders hoist an integer index add
+out of the inner term loop. Instruction counts, groupshared allocations and
+barriers are unchanged:
+
+| Entry                        | DXIL instructions before → after | Shared bytes |  Barriers per reduction |
+| ---------------------------- | -------------------------------: | -----------: | ----------------------: |
+| `IblShCS`                    |                        587 → 587 |       10,240 |                       7 |
+| `IblShReduceCS`              |                        556 → 556 |       10,240 |                       7 |
+| `VortexDistantSkyLightLutCS` |                        738 → 738 |          768 |                       6 |
+| `GatherSuitabilityMaximum`   |                    8,673 → 8,673 |        4,352 | 7 in each selected tree |
+
+Counts describe DXIL instructions, not device ISA or GPU cycles. IBL keeps its
+looped tree; exposure keeps three alternative unrolled trees. ShaderBake records
+the new include in 25 modules, and the native tone probe names it as a dependency.
+
+The [S7 performance qualification](#s7-performance-qualification) passes under
+the approved isolated/full-scene protocol. No sample counts, quality limits or
+production shader diagnostics changed.
+
+Reproduce with LightingGpuAbi filter `IblConvolutionGpuTest.*`. In Exposure, use
+`ExposureGpuTest.Filter*`, `HardwareFilter*`, `ProducerStoreBounds*`,
+`PreEnvironmentRange*`, `ProspectiveProductBounds*`, `ComposedSceneAdmission*`,
+`DistantSkyRadiance*`, `CapturedAtmosphere*` and `CaptureSkyLut*` (each prefixed with
+`ExposureGpuTest.`), plus
+`IblSurfaceGpuTest.ImagesAgreeAcrossPublishedAndOffscreenPaths`; join filters with
+`:`. For timing, use `IblUpdateBenchmark.DISABLED_AuthoringSunUpdates` and the
+[existing benchmark procedure](#earlier-slices). Compare ShaderBake module DXIL
+with `dxc -dumpbin`; keep disassemblies, timings and logs in ignored `out/`.
 
 ### Frame-start upload retirement
 
@@ -30,6 +70,44 @@ fix; the GPU power-policy qualification measures a separate effect.
 Reproduce with `Oxygen.Vortex.UploadCoordinator.Tests` and Graphics Common Queues
 filter `QueuesStrategy.Frame*`. Capture the isolated authoring workload in the
 Tracy build to inspect `Vortex.OnFrameStart` and `D3D12.FenceWait`.
+
+### S7 performance qualification
+
+RTX 3080 native Release, 2026-09-27, `76cd94a` plus S7.5 and poll-only upload
+retirement; 120 warmup + 1,800 frames at 60 Hz. All cost, latency and population
+gates pass. Isolated runs use stable base core clocks (1,440 MHz; observed memory
+9,501 MHz); 1920×1080 scene runs use default power. Formats, samples and limits
+follow [the performance contract](../../lld/captured-sky-ibl.md#43-performance-and-latency-gates).
+
+| Workload           | IBL GPU p95 / p99 (ms) | Whole-frame GPU p95 / p99 (ms) | First-use wall / IBL GPU (ms) |
+| ------------------ | ---------------------: | -----------------------------: | ----------------------------: |
+| Isolated authoring |          0.430 / 0.656 |                              — |                39.813 / 0.444 |
+| Isolated runtime   |          0.172 / 0.175 |                              — |                30.258 / 0.454 |
+| Static scene       |                  0 / 0 |                  8.581 / 9.726 |                88.156 / 0.376 |
+| Runtime scene      |          0.228 / 0.242 |                  8.739 / 9.652 |                88.871 / 0.330 |
+| Authoring scene    |          0.419 / 0.778 |                  8.858 / 9.994 |                89.606 / 0.377 |
+
+CPU recording p95 is 0.966/0.951 ms for isolated authoring/runtime. Whole-scene
+CPU p95 is 5.477/5.963/6.134 ms for static/runtime/authoring. First-use wall time
+includes initialization; scene geometry uploads may still be pending afterward.
+Runtime completes within three submitted frames with source age at most four;
+all 1,800 authoring updates publish in their submitted frame. Static work remains
+zero. Product memory/registrations remain constant: 9,125,888 bytes / 140 for
+static, and 18,235,392 bytes / 152 for either changing scene, with at most two
+product slots.
+
+The same-binary authoring control measures 4.653/11.876 ms p95/p99 under dynamic
+power versus 0.430/0.656 ms at stable base clocks. This establishes the isolated
+workload's power-state sensitivity; it does not change production power policy.
+The benchmark restores normal power at exit and records `stable_power` in its
+result. Its summary command returns failure when a cost or latency gate fails.
+
+Reproduce isolated authoring/runtime with `OXYGEN_IBL_STABLE_POWER=1` and the
+[existing benchmark commands](#earlier-slices). For default-power scenes run
+`IblSceneBenchmark.DISABLED_Static`, `DISABLED_Runtime` and `DISABLED_Authoring`
+separately, then `tools/vortex/SummarizeIblScene.py <run-directory>`.
+Use a fresh ignored output directory per run. Final capture, SDK C++20 and
+DemoShell/editor smoke qualification remain in the S7 exit.
 
 ### S7.6 cubemap geometry
 
@@ -168,19 +246,19 @@ cases** cover shared maps, retained reads and tight-budget fallback. Initial-vie
 failure/retry and concurrent initialization are checked in the registry's own
 suite. Bundles use Oxygen's special-member macros and are move-only.
 [RenderDoc](evidence/s7-resources/release/retained.json) verifies 1,024 retained
-cube values and 32 metadata bytes after renderer shutdown. Integrated S7 cost and
-SDK/editor gates remain open.
+cube values and 32 metadata bytes after renderer shutdown. Current integrated S7
+qualification is tracked in the [milestone](README.md#s7-execution-and-exit).
 
 [Distant-sky synchronization](evidence/s7-barrier/run.json): **six native sky/LUT
 tests** pass after adding the group barrier between offset-2 writes and the final
 lane-zero pair. ShaderBake publishes all **237** production modules. The isolated
 1,800-update authoring run measures **1.269 / 2.536 ms p95/p99**, inside the
-2/4-ms gates. The arithmetic tree is unchanged. S7.5 remains open for the shared
-reduction extraction; remaining S7 states are tracked in the milestone plan.
+2/4-ms gates. The arithmetic tree is unchanged. Current S7.5 extraction qualification is
+[above](#s75-group-reductions); integrated S7 gates remain in the milestone plan.
 
 ## Integrated results
 
-All seven acceptance areas pass. Source audit confirms **12 performance-critical
+**S1–S6 baseline.** All seven acceptance areas pass. Source audit confirms **12 performance-critical
 files** and **nine migration-core files** unchanged from their qualified snapshots.
 Native/editor ordinary runs and separate captured runs use the same production
 owners. Production shaders contain no added qualification probes; optional
@@ -667,7 +745,8 @@ with `OXYGEN_IBL_FACE_SIZE` set to 64, 128, 256 or 512 and a fresh
 [the retained runner](evidence/s6-integrated/run-scaling.py) executes all four serially.
 
 For the isolated timing workload, build `Oxygen.Vortex.Exposure.Benchmarks`
-in Release. Set `OXYGEN_IBL_TIMING_OUTPUT` to a new directory and run the binary
+in Release. Set `OXYGEN_IBL_STABLE_POWER=1` (Windows Developer Mode required)
+and `OXYGEN_IBL_TIMING_OUTPUT` to a new directory, then run the binary
 with `--gtest_also_run_disabled_tests`
 `--gtest_filter=IblUpdateBenchmark.DISABLED_CapturedSunUpdates -v=-1`.
 Run `tools/vortex/SummarizeIblUpdate.py <run-directory>` for CPU/GPU window

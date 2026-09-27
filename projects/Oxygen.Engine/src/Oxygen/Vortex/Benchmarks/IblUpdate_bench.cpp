@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <Windows.h> // IWYU pragma: keep
+
 #include <array>
 #include <chrono>
 #include <cmath>
@@ -12,6 +14,7 @@
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <unordered_map>
@@ -19,8 +22,13 @@
 
 #include <glm/geometric.hpp>
 #include <glm/vec3.hpp>
+#include <minwindef.h>
 #include <nlohmann/json.hpp>
+#include <processenv.h>
+#include <winerror.h>
+#include <winreg.h>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Types/TextureType.h>
@@ -44,6 +52,22 @@
 
 namespace oxygen::vortex::testing::exposure {
 namespace {
+  [[nodiscard]] auto ReadEnvironmentVariable(const wchar_t* name)
+    -> std::wstring
+  {
+    const auto capacity = GetEnvironmentVariableW(name, nullptr, 0U);
+    if (capacity == 0U) {
+      return {};
+    }
+    auto value = std::wstring(capacity, L'\0');
+    const auto length = GetEnvironmentVariableW(name, value.data(), capacity);
+    if (length >= capacity) {
+      throw std::runtime_error("Environment variable changed during read");
+    }
+    value.resize(length);
+    return value;
+  }
+
   class IblUpdateBenchmark : public ExposureGpuTest {
   protected:
     auto RunUpdates(bool scheduled, bool authoring = false,
@@ -142,12 +166,8 @@ namespace {
 
   NOLINT_TEST_F(IblUpdateBenchmark, DISABLED_SpecifiedCubeUpdates)
   {
-    char* value = nullptr;
-    std::size_t length = 0;
-    ASSERT_EQ(_dupenv_s(&value, &length, "OXYGEN_IBL_FACE_SIZE"), 0);
-    const auto owned
-      = std::unique_ptr<char, decltype(&std::free)>(value, &std::free);
-    ASSERT_NE(value, nullptr);
+    const auto value = ReadEnvironmentVariable(L"OXYGEN_IBL_FACE_SIZE");
+    ASSERT_FALSE(value.empty());
     const auto size = std::stoul(value);
     ASSERT_TRUE(size == 64U || size == 128U || size == 256U || size == 512U);
     RunUpdates(false, false, static_cast<unsigned>(size));
@@ -159,16 +179,35 @@ namespace {
 #ifndef NDEBUG
     GTEST_SKIP() << "Native timing requires Release";
 #endif
-    char* output = nullptr;
-    std::size_t length = 0;
-    ASSERT_EQ(_dupenv_s(&output, &length, "OXYGEN_IBL_TIMING_OUTPUT"), 0);
-    const auto owned
-      = std::unique_ptr<char, decltype(&std::free)>(output, &std::free);
-    ASSERT_NE(output, nullptr);
+    const auto output = ReadEnvironmentVariable(L"OXYGEN_IBL_TIMING_OUTPUT");
+    ASSERT_FALSE(output.empty());
     const auto directory = std::filesystem::path(output);
     ASSERT_FALSE(std::filesystem::exists(directory));
     std::filesystem::create_directories(directory);
+    const bool stable_power
+      = ReadEnvironmentVariable(L"OXYGEN_IBL_STABLE_POWER") == L"1";
+    if (stable_power) {
+      DWORD developer_mode {};
+      DWORD size = sizeof(developer_mode);
+      ASSERT_EQ(
+        RegGetValueW(HKEY_LOCAL_MACHINE,
+          L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\AppModelUnlock",
+          L"AllowDevelopmentWithoutDevLicense", RRF_RT_REG_DWORD, nullptr,
+          &developer_mode, &size),
+        ERROR_SUCCESS);
+      ASSERT_NE(developer_mode, 0U)
+        << "Stable GPU power requires Windows Developer Mode";
+      ASSERT_TRUE(
+        SUCCEEDED(Backend().GetCurrentDevice()->SetStablePowerState(TRUE)));
+    }
+    const ScopeGuard restore_power([&] noexcept -> void {
+      if (stable_power) {
+        CHECK_F(
+          SUCCEEDED(Backend().GetCurrentDevice()->SetStablePowerState(FALSE)));
+      }
+    });
     const bool specified = specified_face_size != 0U;
+    FailureBackend().SetRecorderNameCollectionEnabled(false);
     if (specified)
       FailureBackend().track_resources = true;
     auto memory = nlohmann::json::array();
@@ -385,7 +424,8 @@ namespace {
     auto manifest = std::ofstream(directory / "run.json");
     manifest << nlohmann::json { { "samples", samples }, { "warmup", warmup },
       { "hz", 60 }, { "first_use_wall_ms", first_use_wall_ms },
-      { "scheduled", scheduled }, { "authoring", authoring },
+      { "stable_power", stable_power }, { "scheduled", scheduled },
+      { "authoring", authoring },
       { "specified_face_size", specified_face_size }, { "memory", memory },
       { "scope",
         specified

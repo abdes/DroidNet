@@ -10,6 +10,7 @@
 #include "Vortex/Contracts/Environment/IblProductMetadata.hlsli"
 #include "Vortex/Contracts/Definitions/SceneDefinitions.hlsli"
 #include "Vortex/Shared/IblSampling.hlsli"
+#include "Vortex/Shared/GroupReduction.hlsli"
 #include "Vortex/Services/Environment/HeightFog.hlsli"
 #include "Vortex/Services/Environment/SkyRadiance.hlsli"
 #include "Vortex/Contracts/View/HdrIntervalMath.hlsli"
@@ -85,30 +86,21 @@ void IblInitializeCS()
     metadata[0] = value;
 }
 
-static void ReduceSum(uint lane, uint terms)
+static void CombineShTerms(uint left, uint right)
 {
-    GroupMemoryBarrierWithGroupSync();
-    for (uint offset = 32u; offset > 0u; offset >>= 1u) {
-        if (lane < offset) {
-            for (uint term = 0u; term < terms; ++term)
-                Shared[term][lane] += Shared[term][lane + offset];
-        }
-        GroupMemoryBarrierWithGroupSync();
+    for (uint term = 0u; term < 10u; ++term) {
+        Shared[term][left] += Shared[term][right];
     }
 }
+OXYGEN_DEFINE_GROUP_REDUCTION_64(ReduceShTerms, CombineShTerms)
 
 // Source adapter and range reduction share the same post-hemisphere FP32 values.
-static void ReduceMaximumAndValidity(uint lane)
+static void CombineMaximumAndValidity(uint left, uint right)
 {
-    GroupMemoryBarrierWithGroupSync();
-    for (uint offset = 32u; offset > 0u; offset >>= 1u) {
-        if (lane < offset) {
-            Shared[0][lane].x = max(Shared[0][lane].x, Shared[0][lane + offset].x);
-            Shared[0][lane].y = min(Shared[0][lane].y, Shared[0][lane + offset].y);
-        }
-        GroupMemoryBarrierWithGroupSync();
-    }
+    Shared[0][left].x = max(Shared[0][left].x, Shared[0][right].x);
+    Shared[0][left].y = min(Shared[0][left].y, Shared[0][right].y);
 }
+OXYGEN_DEFINE_GROUP_REDUCTION_64(ReduceMaximumAndValidity, CombineMaximumAndValidity)
 
 static void PrepareSource(uint3 id, uint3 group, uint lane, bool captured_sky)
 {
@@ -238,7 +230,7 @@ void IblShCS(uint3 id : SV_DispatchThreadID, uint3 group : SV_GroupID,
             Shared[coefficient][lane] = float4(weighted * basis[coefficient], 0.0);
         Shared[9][lane] = float4(weighted, weight);
     }
-    ReduceSum(lane, 10u);
+    ReduceShTerms(lane);
     if (lane == 0u) {
         uint groups = (w.source_size + 7u) / 8u;
         uint tile = (group.z * groups + group.y) * groups + group.x;
@@ -258,7 +250,7 @@ void IblShReduceCS(uint lane : SV_GroupIndex)
     for (uint tile = lane; tile < w.partial_count; tile += 64u)
         for (uint term = 0u; term < 10u; ++term)
             Shared[term][lane] += partials[tile * 10u + term];
-    ReduceSum(lane, 10u);
+    ReduceShTerms(lane);
     if (lane != 0u) return;
     float normalization = 4.0 * PI / Shared[9][0].w;
     for (uint term = 0u; term < 9u; ++term) Shared[term][0] *= normalization;
@@ -331,16 +323,11 @@ static uint PrecisionTileCount(uint source_size)
     return count;
 }
 
-static void ReducePrecisionMinimum(uint lane)
+static void CombinePrecisionMinimum(uint left, uint right)
 {
-    GroupMemoryBarrierWithGroupSync();
-    for (uint offset = 32u; offset > 0u; offset >>= 1u) {
-        if (lane < offset) {
-            Shared[0][lane] = min(Shared[0][lane], Shared[0][lane + offset]);
-        }
-        GroupMemoryBarrierWithGroupSync();
-    }
+    Shared[0][left] = min(Shared[0][left], Shared[0][right]);
 }
+OXYGEN_DEFINE_GROUP_REDUCTION_64(ReducePrecisionMinimum, CombinePrecisionMinimum)
 
 static float HalfTexelGain(float3 reference_min, float3 reference_max,
     float3 half_min, float3 half_max, float source_scale);

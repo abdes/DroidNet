@@ -9,6 +9,7 @@
 #include "Vortex/Services/Environment/AtmosphereParityCommon.hlsli"
 #include "Vortex/Services/Environment/AtmosphereUeMirrorCommon.hlsli"
 #include "Vortex/Shared/Geometry.hlsli"
+#include "Vortex/Shared/GroupReduction.hlsli"
 #include "Vortex/Shared/Math.hlsli"
 
 cbuffer RootConstants : register(b2, space0)
@@ -92,6 +93,12 @@ static void ComputeUniformSphereDirection(
 }
 
 groupshared float3 GroupSkyLuminanceSamples[64];
+
+static void CombineSkyLuminance(uint left, uint right)
+{
+    GroupSkyLuminanceSamples[left] += GroupSkyLuminanceSamples[right];
+}
+OXYGEN_DEFINE_GROUP_REDUCTION_64_TO_PAIR(ReduceSkyLuminanceToPair, CombineSkyLuminance)
 
 static float3 IntegrateSkyLuminanceForAtmosphereLights(
     GpuSkyAtmosphereParams atmosphere_parameters,
@@ -199,38 +206,7 @@ void VortexDistantSkyLightLutCS(
 
     GroupSkyLuminanceSamples[thread_linear_index]
         = sampled_sky_luminance * pass_constants.sky_luminance_factor_rgb.xyz;
-    GroupMemoryBarrierWithGroupSync();
-
-    if (thread_linear_index < 32u)
-    {
-        GroupSkyLuminanceSamples[thread_linear_index]
-            += GroupSkyLuminanceSamples[thread_linear_index + 32u];
-    }
-    GroupMemoryBarrierWithGroupSync();
-    if (thread_linear_index < 16u)
-    {
-        GroupSkyLuminanceSamples[thread_linear_index]
-            += GroupSkyLuminanceSamples[thread_linear_index + 16u];
-    }
-    GroupMemoryBarrierWithGroupSync();
-    if (thread_linear_index < 8u)
-    {
-        GroupSkyLuminanceSamples[thread_linear_index]
-            += GroupSkyLuminanceSamples[thread_linear_index + 8u];
-    }
-    GroupMemoryBarrierWithGroupSync();
-    if (thread_linear_index < 4u)
-    {
-        GroupSkyLuminanceSamples[thread_linear_index]
-            += GroupSkyLuminanceSamples[thread_linear_index + 4u];
-    }
-    GroupMemoryBarrierWithGroupSync();
-    if (thread_linear_index < 2u)
-    {
-        GroupSkyLuminanceSamples[thread_linear_index]
-            += GroupSkyLuminanceSamples[thread_linear_index + 2u];
-    }
-    GroupMemoryBarrierWithGroupSync();
+    ReduceSkyLuminanceToPair(thread_linear_index);
 
     if (thread_linear_index == 0u)
     {

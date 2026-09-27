@@ -15,6 +15,8 @@
 #include "Vortex/Services/PostProcess/ToneMappingBounds.hlsli"
 #include "Vortex/Services/PostProcess/ToneMappingFastBounds.hlsli"
 
+#include "Vortex/Shared/GroupReduction.hlsli"
+
 #define GROUP_SIZE 16
 #define HISTOGRAM_BINS 256
 #define HISTOGRAM_WORDS 264
@@ -1065,6 +1067,32 @@ groupshared uint2 s_FilterFlagsCount[64];
 groupshared uint s_FilterReferenceMaximum[64];
 groupshared uint4 s_CandidateBounds[64];
 
+static void CombineCandidateBounds(uint left, uint right)
+{
+    s_CandidateBounds[left] = max(s_CandidateBounds[left], s_CandidateBounds[right]);
+}
+OXYGEN_DEFINE_UNROLLED_GROUP_REDUCTION_64(ReduceCandidateBounds, CombineCandidateBounds)
+
+static void CombineFilterBounds(uint left, uint right)
+{
+    s_FilterRgbGradient[left] = max(s_FilterRgbGradient[left], s_FilterRgbGradient[right]);
+    s_FilterTransmissionGradient[left] = max(s_FilterTransmissionGradient[left], s_FilterTransmissionGradient[right]);
+    s_FilterFlagsCount[left].x |= s_FilterFlagsCount[right].x;
+    s_FilterFlagsCount[left].y += s_FilterFlagsCount[right].y;
+    s_FilterReferenceMaximum[left] = max(s_FilterReferenceMaximum[left], s_FilterReferenceMaximum[right]);
+}
+OXYGEN_DEFINE_UNROLLED_GROUP_REDUCTION_64(ReduceFilterBounds, CombineFilterBounds)
+
+static void CombinePreEnvironmentRange(uint left, uint right)
+{
+    const uint4 other = s_PreEnvironmentRange[right];
+    s_PreEnvironmentRange[left].x = max(s_PreEnvironmentRange[left].x, other.x);
+    s_PreEnvironmentRange[left].y |= other.y;
+    s_PreEnvironmentRange[left].z += other.z;
+    s_PreEnvironmentRange[left].w |= other.w;
+}
+OXYGEN_DEFINE_UNROLLED_GROUP_REDUCTION_64(ReducePreEnvironmentRange, CombinePreEnvironmentRange)
+
 static void GatherCandidateProductBounds(SuitabilityConstants pass, uint3 pixel, uint lane)
 {
     RWByteAddressBuffer status = ResourceDescriptorHeap[pass.report_uav];
@@ -1136,13 +1164,7 @@ static void GatherCandidateProductBounds(SuitabilityConstants pass, uint3 pixel,
         CheckPointSuitability(pass, pixel, sample, report, bounds, scene, proposed, restored, true);
     }
     s_CandidateBounds[lane] = asuint(result);
-    GroupMemoryBarrierWithGroupSync();
-    [unroll] for (uint stride = 32u; stride > 0u; stride >>= 1u) {
-        if (lane < stride) {
-            s_CandidateBounds[lane] = max(s_CandidateBounds[lane], s_CandidateBounds[lane + stride]);
-        }
-        GroupMemoryBarrierWithGroupSync();
-    }
+    ReduceCandidateBounds(lane);
     if (lane == 0u) {
         const uint offset = pass.product == 5u ? 304u : pass.product == 6u ? 320u : 336u;
         uint unused;
@@ -1226,17 +1248,7 @@ static void GatherFilterGradients(SuitabilityConstants pass, uint3 pixel, uint l
     s_FilterTransmissionGradient[lane] = transmission;
     s_FilterFlagsCount[lane] = flags_count;
     s_FilterReferenceMaximum[lane] = maximum;
-    GroupMemoryBarrierWithGroupSync();
-    [unroll] for (uint stride = 32u; stride > 0u; stride >>= 1u) {
-        if (lane < stride) {
-            s_FilterRgbGradient[lane] = max(s_FilterRgbGradient[lane], s_FilterRgbGradient[lane + stride]);
-            s_FilterTransmissionGradient[lane] = max(s_FilterTransmissionGradient[lane], s_FilterTransmissionGradient[lane + stride]);
-            s_FilterFlagsCount[lane].x |= s_FilterFlagsCount[lane + stride].x;
-            s_FilterFlagsCount[lane].y += s_FilterFlagsCount[lane + stride].y;
-            s_FilterReferenceMaximum[lane] = max(s_FilterReferenceMaximum[lane], s_FilterReferenceMaximum[lane + stride]);
-        }
-        GroupMemoryBarrierWithGroupSync();
-    }
+    ReduceFilterBounds(lane);
     if (lane == 0u) {
         const uint offset = FilterGradientOffset(pass.product);
         uint unused;
@@ -1282,17 +1294,7 @@ static void GatherPreEnvironmentRange(SuitabilityConstants pass, uint3 pixel, ui
         }
     }
     s_PreEnvironmentRange[lane] = value;
-    GroupMemoryBarrierWithGroupSync();
-    [unroll] for (uint stride = 32u; stride > 0u; stride >>= 1u) {
-        if (lane < stride) {
-            const uint4 other = s_PreEnvironmentRange[lane + stride];
-            s_PreEnvironmentRange[lane].x = max(s_PreEnvironmentRange[lane].x, other.x);
-            s_PreEnvironmentRange[lane].y |= other.y;
-            s_PreEnvironmentRange[lane].z += other.z;
-            s_PreEnvironmentRange[lane].w |= other.w;
-        }
-        GroupMemoryBarrierWithGroupSync();
-    }
+    ReducePreEnvironmentRange(lane);
     if (lane == 0u) {
         RWByteAddressBuffer status = ResourceDescriptorHeap[pass.report_uav];
         uint unused;

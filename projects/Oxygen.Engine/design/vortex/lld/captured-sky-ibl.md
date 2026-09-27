@@ -585,6 +585,12 @@ Qualification uses the existing RTX 3080 / Ryzen 9950X reference, Release, the
 128-face captured-source policy, and a 60-Hz scene workload. These are engineering
 acceptance targets for VX-IBL-01. Keep all formats and sample counts from section 3.
 
+Isolated cost gates use stable base GPU clocks; full-scene gates use the default
+power policy. Record the mode with every result. The isolated benchmark enables
+this explicitly with `OXYGEN_IBL_STABLE_POWER=1`, checks Windows Developer Mode,
+and restores normal power behavior at exit. Dynamic-power isolated runs remain
+diagnostic measurements; do not compare them as steady execution-cost baselines.
+
 | Measure                                              | Gate                                                                               |
 | ---------------------------------------------------- | ---------------------------------------------------------------------------------- |
 | Warm immediate update, additional GPU work p95 / p99 | ≤2.0 / ≤4.0 ms                                                                     |

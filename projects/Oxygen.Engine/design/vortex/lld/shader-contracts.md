@@ -866,14 +866,22 @@ BRDF follows Cook-Torrance / GGX.
 ## 11. Shared compute and geometry utilities
 
 These renderer-wide helpers belong to `Vortex/Shared/`, independent of a service
-ABI. The contracts below are planned; the milestone owns migration and status.
+ABI. The milestone owns migration and qualification status.
 
 ### 11.1 Group reductions
 
-**Owner:** compile-time helpers in shader `Vortex/Shared/GroupReduction.hlsli`.
-Migrate IBL's sum, max/validity and precision-min trees; the distant-sky sum;
-and only the three existing 64-lane suitability reductions in `Exposure.hlsl`.
-Leave exposure's histogram, wave operations and the light-grid scan unchanged.
+**Owner:** [`Vortex/Shared/GroupReduction.hlsli`](../../../src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Shared/GroupReduction.hlsli).
+It supplies the 64-lane tree for IBL's SH sum, max/validity and precision-min
+reductions, the distant-sky sum, and exposure's three suitability reductions.
+Exposure's histogram, wave operations and the light-grid scan remain separate.
+
+Define a barrier-free `Combine(left, right)` function beside the caller-owned
+shared arrays, then generate its tree with `OXYGEN_DEFINE_GROUP_REDUCTION_64`.
+Use `OXYGEN_DEFINE_UNROLLED_GROUP_REDUCTION_64` for the existing unrolled exposure
+trees and `OXYGEN_DEFINE_GROUP_REDUCTION_64_TO_PAIR` for distant sky's final pair.
+All 64 lanes must initialize their inputs and call the generated function;
+out-of-range lanes supply the operation's neutral value. Macro generation binds
+the actual groupshared storage without HLSL array-parameter copies.
 
 - Keep caller-owned groupshared storage, compile-time 64-lane participation and
   fixed operation order. Support fused per-pair work so ten SH terms and mixed

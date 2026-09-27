@@ -158,6 +158,8 @@ def main() -> None:
         json.dumps(summary, indent=2, allow_nan=False) + "\n",
         encoding="utf-8", newline="\n")
     print(json.dumps(summary["update_gpu_union_ms"], indent=2))
+    if "gates" in summary and not all(summary["gates"].values()):
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
