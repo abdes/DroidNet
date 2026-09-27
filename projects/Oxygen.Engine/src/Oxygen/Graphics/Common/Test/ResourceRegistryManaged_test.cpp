@@ -456,6 +456,47 @@ NOLINT_TEST_F(
 }
 
 NOLINT_TEST_F(
+  ManagedRegistryTest, ManualViewPreservesIndexAcrossDescriptorTransfer)
+{
+  Registry().Register(Resource());
+  auto description = Description();
+  description.view_type = ResourceViewType::kTexture_SRV;
+  description.visibility = DescriptorVisibility::kShaderVisible;
+  auto handle
+    = Allocator().AllocateRaw(description.view_type, description.visibility);
+  ASSERT_TRUE(handle.IsValid());
+  const auto expected_index = handle.GetBindlessHandle();
+
+  const auto [view, created] = Registry().AcquireViewRegistration(
+    *Resource(), std::move(handle), description);
+  EXPECT_TRUE(created);
+  EXPECT_TRUE(view->IsValid());
+
+  auto second_description = description;
+  ++second_description.id;
+  auto second_handle = Allocator().AllocateRaw(
+    second_description.view_type, second_description.visibility);
+  ASSERT_TRUE(second_handle.IsValid());
+  const auto second_index = second_handle.GetBindlessHandle();
+  ASSERT_NE(second_index, expected_index);
+  const auto [second_view, second_created] = Registry().AcquireViewRegistration(
+    *Resource(), std::move(second_handle), second_description);
+  EXPECT_TRUE(second_created);
+  EXPECT_TRUE(second_view->IsValid());
+
+  const auto stored_index
+    = Registry().FindShaderVisibleIndex(*Resource(), description);
+  EXPECT_EQ(stored_index, oxygen::ShaderVisibleIndex { expected_index.get() });
+  EXPECT_EQ(Registry().FindShaderVisibleIndex(*Resource(), second_description),
+    oxygen::ShaderVisibleIndex { second_index.get() });
+
+  Registry().UnRegisterView(*Resource(), view);
+  EXPECT_FALSE(Registry().FindShaderVisibleIndex(*Resource(), description));
+  EXPECT_EQ(Registry().FindShaderVisibleIndex(*Resource(), second_description),
+    oxygen::ShaderVisibleIndex { second_index.get() });
+}
+
+NOLINT_TEST_F(
   ManagedRegistryTest, EveryRawViewMutationRejectsBeforeNativeCreation)
 {
   auto lease = Registry().RegisterManaged(Resource());

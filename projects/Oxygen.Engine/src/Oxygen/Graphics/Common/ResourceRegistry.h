@@ -445,8 +445,9 @@ public:
     if (!view->IsValid()) {
       return { {}, false };
     }
-    AttachDescriptorWithView(key, view_handle.GetBindlessHandle(),
-      std::move(view_handle), view, std::any(desc), hash, QueryView(desc));
+    const auto index = view_handle.GetBindlessHandle();
+    AttachDescriptorWithView(key, index, std::move(view_handle), view,
+      std::any(desc), hash, QueryView(desc));
     return { view, true };
   }
   //! Register a pre-created view for advanced control over view lifecycle.
