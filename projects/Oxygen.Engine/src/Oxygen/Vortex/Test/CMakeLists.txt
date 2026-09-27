@@ -514,6 +514,7 @@ if(WIN32)
       "Exposure/FrameDomain_test.cpp"
       "Exposure/IblSurface_test.cpp"
       "Exposure/ImmutableLutUpload_test.cpp"
+      "Exposure/GpuFeedback_test.cpp"
       "Exposure/LightingRadiance_test.cpp"
       "Exposure/LocalFog_test.cpp"
       "Exposure/Masks_test.cpp"

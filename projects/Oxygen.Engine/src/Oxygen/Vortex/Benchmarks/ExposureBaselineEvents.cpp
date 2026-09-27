@@ -33,31 +33,55 @@
 
 namespace oxygen::vortex::testing::exposure {
 namespace {
+  constexpr unsigned kSeedFrame = 60U;
+  constexpr unsigned kCameraCutFrame = 120U;
+  constexpr unsigned kManualFrame = 180U;
+  constexpr unsigned kRestoreAutoFrame = 240U;
+  constexpr unsigned kSunStepFrame = 300U;
+  constexpr unsigned kRestoreSunFrame = 360U;
+  constexpr unsigned kShareMainFrame = 420U;
+  constexpr unsigned kRemoveSourceFrame = 480U;
+  constexpr unsigned kRecreateSourceFrame = 540U;
+  constexpr unsigned kIndependentSecondaryFrame = 600U;
+  constexpr unsigned kSwapLayoutFrame = 660U;
+  constexpr unsigned kRestoreLayoutFrame = 720U;
+  constexpr unsigned kRemoveSecondaryFrame = 780U;
+  constexpr unsigned kRecreateSecondaryFrame = 840U;
+  constexpr unsigned kDelayStatusFrame = 900U;
+  constexpr unsigned kRestoreStatusFrame = 906U;
+  constexpr unsigned kMainViewId = 500U;
+  constexpr unsigned kSecondaryViewId = kMainViewId + 1U;
+  constexpr unsigned kEventWindowFrames = 1200U;
+  constexpr unsigned kSettlingFrames = 30U;
+  constexpr float kSeedEv = 14.5F;
+  constexpr float kSunDefaultLux = 110000.0F;
+  constexpr float kSunStepLux = 4.0F * kSunDefaultLux;
+
   constexpr std::array event_frames {
-    60U,
-    120U,
-    180U,
-    240U,
-    300U,
-    360U,
-    420U,
-    480U,
-    540U,
-    600U,
-    660U,
-    720U,
-    780U,
-    840U,
-    900U,
-    906U,
+    kSeedFrame,
+    kCameraCutFrame,
+    kManualFrame,
+    kRestoreAutoFrame,
+    kSunStepFrame,
+    kRestoreSunFrame,
+    kShareMainFrame,
+    kRemoveSourceFrame,
+    kRecreateSourceFrame,
+    kIndependentSecondaryFrame,
+    kSwapLayoutFrame,
+    kRestoreLayoutFrame,
+    kRemoveSecondaryFrame,
+    kRecreateSecondaryFrame,
+    kDelayStatusFrame,
+    kRestoreStatusFrame,
   };
 
   auto IsCheckpoint(const unsigned frame) -> bool
   {
-    return frame == 903U
+    return frame == (kDelayStatusFrame + 3U)
       || std::ranges::any_of(
         event_frames, [frame](const unsigned event) -> bool {
-          return frame == event || frame == event + 30U;
+          return frame == event || frame == event + kSettlingFrames;
         });
   }
 
@@ -81,74 +105,76 @@ auto ExposureBaselineScenario::FinalizeRecording(const unsigned path_frame)
 auto ExposureBaselineScenario::ApplyEvent(const unsigned event_frame) -> void
 {
   const auto main = CompositionView::ViewStateHandle {
-    500U,
+    kMainViewId,
   };
   const char* operation = nullptr;
   switch (event_frame) {
-  case 60U:
-  case 900U: {
+  case kSeedFrame:
+  case kDelayStatusFrame: {
     const auto token = fixture_.renderer_->QueueExposureTransition(
-      main, ExposureTransitionPolicy::kSeedFromEv100, 14.5F);
+      main, ExposureTransitionPolicy::kSeedFromEv100, kSeedEv);
     CHECK_F(token.has_value());
-    operation = event_frame == 60U ? "seed" : "seed-delay-status";
+    operation = event_frame == kSeedFrame ? "seed" : "seed-delay-status";
     break;
   }
-  case 120U:
+  case kCameraCutFrame:
     CHECK_F(fixture_.renderer_
         ->NotifyViewDiscontinuity(main, ViewDiscontinuity::kCameraCut)
         .has_value());
     operation = "camera-cut";
     break;
-  case 180U:
+  case kManualFrame:
     view_settings.at(0).mode = engine::ExposureMode::kManual;
-    view_settings.at(0).manual_ev = 14.5F;
+    view_settings.at(0).manual_ev = kSeedEv;
     operation = "manual";
     break;
-  case 240U:
+  case kRestoreAutoFrame:
     view_settings.at(0) = fixture_.settings;
     operation = "restore-auto";
     break;
-  case 300U:
-  case 360U: {
-    CHECK_F(sun.EditLight<scene::DirectionalLight>([event_frame](auto& light) {
-      light.SetIntensityLux(event_frame == 300U ? 440000.0F : 110000.0F);
-    }));
-    operation = event_frame == 300U ? "sun-step" : "restore-sun";
+  case kSunStepFrame:
+  case kRestoreSunFrame: {
+    CHECK_F(sun.EditLight<scene::DirectionalLight>(
+      [event_frame](auto& light) -> void {
+        light.SetIntensityLux(
+          event_frame == kSunStepFrame ? kSunStepLux : kSunDefaultLux);
+      }));
+    operation = event_frame == kSunStepFrame ? "sun-step" : "restore-sun";
     // UpdatePath normally synchronizes before OnFrameStart; this operation
     // changes authored lighting afterward, so publish its dirty state now.
     fixture_.scene->Update();
     fixture_.scene->SyncObservers();
     break;
   }
-  case 420U:
+  case kShareMainFrame:
     secondary_source = ViewId {
-      500U,
+      kMainViewId,
     };
     operation = "share-main";
     break;
-  case 480U:
+  case kRemoveSourceFrame:
     fixture_.renderer_->RemovePublishedRuntimeView(fixture_.frame,
       ViewId {
-        500U,
+        kMainViewId,
       });
     enabled_views.at(0) = false;
     // Removal detaches borrowers. Republishing a missing source is invalid.
     secondary_source = kInvalidViewId;
     operation = "remove-source";
     break;
-  case 540U:
+  case kRecreateSourceFrame:
     enabled_views.at(0) = true;
     secondary_source = ViewId {
-      500U,
+      kMainViewId,
     };
     operation = "recreate-source";
     break;
-  case 600U:
+  case kIndependentSecondaryFrame:
     secondary_source = kInvalidViewId;
     operation = "independent-secondary";
     break;
-  case 660U:
-  case 720U:
+  case kSwapLayoutFrame:
+  case kRestoreLayoutFrame:
     std::swap(target_indices.at(0), target_indices.at(1));
     for (unsigned index = 0U; index < view_count; ++index) {
       auto lens = cameras.at(index).GetCameraAs<scene::PerspectiveCamera>();
@@ -158,21 +184,22 @@ auto ExposureBaselineScenario::ApplyEvent(const unsigned event_frame) -> void
       viewport.height = static_cast<float>(height >> target_indices.at(index));
       lens->get().SetViewport(viewport);
     }
-    operation = event_frame == 660U ? "swap-layout" : "restore-layout";
+    operation
+      = event_frame == kSwapLayoutFrame ? "swap-layout" : "restore-layout";
     break;
-  case 780U:
+  case kRemoveSecondaryFrame:
     fixture_.renderer_->RemovePublishedRuntimeView(fixture_.frame,
       ViewId {
-        501U,
+        kSecondaryViewId,
       });
     enabled_views.at(1) = false;
     operation = "remove-secondary";
     break;
-  case 840U:
+  case kRecreateSecondaryFrame:
     enabled_views.at(1) = true;
     operation = "recreate-secondary";
     break;
-  case 906U:
+  case kRestoreStatusFrame:
     operation = "restore-status-delivery";
     break;
   default:
@@ -219,7 +246,7 @@ auto ExposureBaselineScenario::ObserveEvent(const unsigned event_frame) -> void
       continue;
     }
     const auto handle = CompositionView::ViewStateHandle {
-      500U + index,
+      kMainViewId + index,
     };
     const auto state = Probe::ExposureStateForView(*service, handle);
     CHECK_NOTNULL_F(state.get());
@@ -231,26 +258,27 @@ auto ExposureBaselineScenario::ObserveEvent(const unsigned event_frame) -> void
       observation.phases.at(index) = static_cast<unsigned>(status->phase);
     }
   }
-  if (event_frame == 120U) {
+  if (event_frame == kCameraCutFrame) {
     // Camera-cut policy creates its request when controls are captured.
-    event_operations.back()["requested_generation"]
+    event_operations.back().at("requested_generation")
       = observation.requested.at(0);
-    event_operations.back()["lifetime"] = observation.lifetimes.at(0);
+    event_operations.back().at("lifetime") = observation.lifetimes.at(0);
   }
-  if (event_frame >= 900U && event_frame <= 905U) {
+  if (event_frame >= kDelayStatusFrame
+    && event_frame <= (kRestoreStatusFrame - 1U)) {
     held_statuses = Probe::TakeExposureStatusDelivery(*service,
       CompositionView::ViewStateHandle {
-        500U,
+        kMainViewId,
       });
-    CHECK_F(held_statuses.pending.size() <= frame::kFramesInFlight.get());
+    CHECK_F(held_statuses.PendingCount() <= frame::kFramesInFlight.get());
     const auto status = fixture_.renderer_->InspectExposureTransition(
       CompositionView::ViewStateHandle {
-        500U,
+        kMainViewId,
       });
     CHECK_F(status && status->phase == ExposureTransitionPhase::kQueued);
   }
   observation.held_status_jobs
-    = static_cast<unsigned>(held_statuses.pending.size());
+    = static_cast<unsigned>(held_statuses.PendingCount());
   observations.push_back(observation);
   if (capture_event) {
     checkpoints.push_back(std::move(current_checkpoint));
@@ -261,19 +289,19 @@ auto ExposureBaselineScenario::ObserveEvent(const unsigned event_frame) -> void
 auto ExposureBaselineScenario::MeasureEventWindows() -> void
 {
   FinalizeRecording(sample_count);
-  observations.reserve(1200U);
-  checkpoints.reserve(33U);
+  observations.reserve(kEventWindowFrames);
+  checkpoints.reserve((2U * event_frames.size()) + 1U);
   for (auto* window : {
          &matched,
          &events,
        }) {
-    window->samples.reserve(1200U);
+    window->samples.reserve(kEventWindowFrames);
     recording_path = window->gpu;
-    recording_frames = 1200U;
+    recording_frames = kEventWindowFrames;
     event_cycle = window == &events;
     auto started = Clock::now();
     auto previous_end = started;
-    for (unsigned index = 0U; index < 1200U; ++index) {
+    for (unsigned index = 0U; index < kEventWindowFrames; ++index) {
       capture_event = event_cycle && IsCheckpoint(index);
       current_checkpoint.event_frame = index;
       auto sample = RenderFrame(index == 0U, index);
@@ -286,7 +314,7 @@ auto ExposureBaselineScenario::MeasureEventWindows() -> void
       = std::chrono::duration<double>(Clock::now() - started).count();
     event_cycle = false;
     capture_event = false;
-    FinalizeRecording(1200U);
+    FinalizeRecording(kEventWindowFrames);
   }
   CHECK_F(held_statuses.pending.empty() && !held_statuses.deferred);
   recording_path = gpu_path;
@@ -350,7 +378,7 @@ auto ExposureBaselineScenario::SaveWindow(const Window& window) -> void
   output << records.dump(2) << '\n';
   output.close();
   ASSERT_TRUE(output.good());
-  acceptance_windows[window.name] = {
+  const auto window_record = nlohmann::json {
     {
       "gpu",
       window.gpu.filename().string(),
@@ -368,6 +396,7 @@ auto ExposureBaselineScenario::SaveWindow(const Window& window) -> void
       window.seconds,
     },
   };
+  acceptance_windows.update({ { window.name, window_record } });
 }
 
 auto ExposureBaselineScenario::SaveAcceptanceWindows() -> void
@@ -399,13 +428,15 @@ auto ExposureBaselineScenario::SaveAcceptanceWindows() -> void
       EXPECT_TRUE(std::isfinite(state.displayed_scale));
       EXPECT_GT(state.displayed_scale, 0.0F);
       if (index == 0U
-        && (checkpoint.event_frame == 60U || checkpoint.event_frame == 180U
-          || checkpoint.event_frame == 900U)) {
-        EXPECT_NEAR(state.displayed_scale, std::exp2(-14.5F), 1e-9F);
+        && (checkpoint.event_frame == kSeedFrame
+          || checkpoint.event_frame == kManualFrame
+          || checkpoint.event_frame == kDelayStatusFrame)) {
+        EXPECT_NEAR(state.displayed_scale, std::exp2(-kSeedEv), 1e-9F);
       }
       if (index == 0U
-        && (checkpoint.event_frame == 60U || checkpoint.event_frame == 120U
-          || checkpoint.event_frame == 900U)) {
+        && (checkpoint.event_frame == kSeedFrame
+          || checkpoint.event_frame == kCameraCutFrame
+          || checkpoint.event_frame == kDelayStatusFrame)) {
         const auto operation = std::ranges::find_if(
           event_operations, [&](const auto& event) -> bool {
             return event.at("event_frame") == checkpoint.event_frame;
@@ -415,15 +446,17 @@ auto ExposureBaselineScenario::SaveAcceptanceWindows() -> void
           operation->at("requested_generation").get<std::uint64_t>());
       }
       if (index == 1U
-        && (checkpoint.event_frame == 420U || checkpoint.event_frame == 450U
-          || checkpoint.event_frame == 540U
-          || checkpoint.event_frame == 570U)) {
+        && (checkpoint.event_frame == kShareMainFrame
+          || checkpoint.event_frame == (kShareMainFrame + kSettlingFrames)
+          || checkpoint.event_frame == kRecreateSourceFrame
+          || checkpoint.event_frame
+            == (kRecreateSourceFrame + kSettlingFrames))) {
         ASSERT_NE(exposure->selected_history, nullptr);
         const auto source = fixture_.Read<ExposureStateData>(
           *exposure->selected_history->buffer,
           graphics::ResourceStates::kShaderResource);
         EXPECT_FLOAT_EQ(state.displayed_scale, source.displayed_scale);
-        EXPECT_EQ(exposure->current_state->borrowed_from.get(), 500U);
+        EXPECT_EQ(exposure->current_state->borrowed_from.get(), kMainViewId);
       }
       gpu_checkpoints.push_back({
         {
@@ -466,13 +499,13 @@ auto ExposureBaselineScenario::SaveAcceptanceWindows() -> void
     }
   }
   EXPECT_NE(observations.at(479U).lifetimes.at(0),
-    observations.at(540U).lifetimes.at(0));
+    observations.at(kRecreateSourceFrame).lifetimes.at(0));
   EXPECT_NE(observations.at(779U).lifetimes.at(1),
-    observations.at(840U).lifetimes.at(1));
+    observations.at(kRecreateSecondaryFrame).lifetimes.at(1));
   for (const auto operation : {
-         60U,
-         120U,
-         900U,
+         kSeedFrame,
+         kCameraCutFrame,
+         kDelayStatusFrame,
        }) {
     const auto& issued = observations.at(operation);
     ASSERT_GT(issued.requested.at(0), 0U);
@@ -487,7 +520,8 @@ auto ExposureBaselineScenario::SaveAcceptanceWindows() -> void
     ASSERT_NE(completion, observations.end());
     for (auto& event : event_operations) {
       if (event.at("event_frame") == operation) {
-        event["completed_at_event_frame"] = completion->event_frame;
+        event.update(
+          { { "completed_at_event_frame", completion->event_frame } });
       }
     }
   }
@@ -552,7 +586,7 @@ auto ExposureBaselineScenario::SaveAcceptanceWindows() -> void
          << '\n';
   output.close();
   ASSERT_TRUE(output.good());
-  acceptance_windows["event_status"] = path.filename().string();
+  acceptance_windows.update({ { "event_status", path.filename().string() } });
   checkpoints.clear();
 }
 

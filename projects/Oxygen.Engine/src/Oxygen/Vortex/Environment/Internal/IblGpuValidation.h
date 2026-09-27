@@ -14,13 +14,11 @@
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Nexus/IndexReuse.h>
 #include <Oxygen/Vortex/Environment/Types/IblProductMetadata.h>
+#include <Oxygen/Vortex/Internal/GpuFeedback.h>
 #include <Oxygen/Vortex/Types/SkyLightRuntimeState.h>
 
 namespace oxygen {
 class Graphics;
-}
-namespace oxygen::graphics {
-class GpuBufferReadback;
 }
 namespace oxygen::vortex {
 class DiagnosticsService;
@@ -52,18 +50,19 @@ public:
   auto Poll() noexcept -> Observations;
   auto Request(const IblGpuProducts& products,
     DiagnosticsService& diagnostics) noexcept -> void;
-  auto Inspect(const IblGpuProducts& products, bool enabled) const
+  [[nodiscard]] auto Inspect(const IblGpuProducts& products, bool enabled) const
     -> SkyLightRuntimeState;
 
 private:
   struct Pending {
-    std::shared_ptr<graphics::GpuBufferReadback> readback;
+    vortex::internal::GpuFeedbackReservation feedback;
     std::optional<Observation> request;
   };
   auto Remember(const Observation& observation) noexcept -> void;
   // Readback objects contain a manager reference. The CPU owner keeps Graphics
   // alive until they are destroyed; submitted batches never retain this owner.
   std::shared_ptr<Graphics> graphics_;
+  vortex::internal::GpuFeedbackPool feedback_pool_;
   std::array<Pending, frame::kFramesInFlight.get()> pending_;
   std::optional<Observation> latest_;
   std::optional<Observation> last_submitted_;

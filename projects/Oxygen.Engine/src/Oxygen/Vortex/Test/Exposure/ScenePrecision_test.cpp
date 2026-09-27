@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <print>
@@ -95,7 +96,7 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
       .delta_time_seconds = 0.0F, });
     facade.SetSceneSource({ .scene = observer_ptr {
                               scene.get(),
-                            } });
+                            }, });
     facade.SetViewIntent(
       Renderer::OffscreenSceneViewInput::FromCamera("Status readback reuse",
         ViewId {
@@ -105,7 +106,7 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
         .SetViewStateHandle(handle));
     facade.SetOutputTarget({ .framebuffer = observer_ptr {
                                framebuffer.get(),
-                             } });
+                             }, });
     facade.SetPipeline(Renderer::OffscreenPipelineInput::Forward());
     auto session = facade.Finalize();
     if (!session.has_value()) {
@@ -125,8 +126,8 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
     return !left.owner_before(right) && !right.owner_before(left);
   };
   std::weak_ptr<const void> stable_pool;
-  std::vector<PublicationProbe::ExposureReadbackIdentity> identities;
-  unsigned reused_submissions = 0U;
+  std::vector<std::uint64_t> observed_frames;
+  std::size_t created_readbacks = 0U;
   PostProcessService* service = nullptr;
   constexpr auto stable_frames = 4U * frame::kFramesInFlight.get();
   for (unsigned iteration = 0U; iteration < stable_frames; ++iteration) {
@@ -139,32 +140,26 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
     const auto reuse
       = PublicationProbe::ExposureStatusReuseForView(*service, handle);
     ASSERT_FALSE(reuse.pool.expired());
-    ASSERT_GT(reuse.pending.size() + reuse.available.size(), 0U);
-    EXPECT_LE(reuse.pending.size() + reuse.available.size(),
-      frame::kFramesInFlight.get());
+    created_readbacks = reuse.transport.created_readbacks;
+    ASSERT_GT(created_readbacks, 0U);
+    EXPECT_LE(created_readbacks, frame::kFramesInFlight.get());
+    EXPECT_LE(reuse.transport.occupied, reuse.transport.capacity);
     if (iteration == 0U) {
       stable_pool = reuse.pool;
     } else {
       EXPECT_TRUE(same_owner(stable_pool, reuse.pool));
     }
-    for (const auto& current : reuse.pending) {
-      ASSERT_FALSE(current.readback.expired());
-      const auto seen
-        = std::ranges::find_if(identities, [&](const auto& prior) -> auto {
-            return same_owner(prior.readback, current.readback);
-          });
-      if (seen == identities.end()) {
-        identities.push_back(current);
-      } else if (current.frame_sequence > seen->frame_sequence) {
-        // A new ticket on the same ownership identity proves actual reuse,
-        // rather than observing one incomplete readback in successive frames.
-        ++reused_submissions;
-        seen->frame_sequence = current.frame_sequence;
+    for (const auto pending_frame : reuse.pending_frames) {
+      if (std::ranges::find(observed_frames, pending_frame)
+        == observed_frames.end()) {
+        observed_frames.push_back(pending_frame);
       }
     }
   }
-  EXPECT_GT(reused_submissions, 0U);
-  EXPECT_LE(identities.size(), frame::kFramesInFlight.get());
+  // More distinct requests than created readbacks proves actual transport
+  // reuse.
+  ASSERT_GT(observed_frames.size(), created_readbacks);
+  const auto reused_submissions = observed_frames.size() - created_readbacks;
   ASSERT_NE(service, nullptr);
   ASSERT_FALSE(stable_pool.expired());
 
@@ -177,8 +172,9 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
   EXPECT_TRUE(stable_pool.expired());
   ASSERT_FALSE(recovered.pool.expired());
   EXPECT_FALSE(same_owner(stable_pool, recovered.pool));
-  EXPECT_LE(recovered.pending.size() + recovered.available.size(),
-    frame::kFramesInFlight.get());
+  EXPECT_LE(
+    recovered.transport.created_readbacks, frame::kFramesInFlight.get());
+  EXPECT_LE(recovered.transport.occupied, recovered.transport.capacity);
 
   ASSERT_TRUE(renderer_->ReleaseOffscreenViewState(
     ViewId {
@@ -189,8 +185,8 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
   const auto removed
     = PublicationProbe::ExposureStatusReuseForView(*service, handle);
   EXPECT_TRUE(removed.pool.expired());
-  EXPECT_TRUE(removed.pending.empty());
-  EXPECT_TRUE(removed.available.empty());
+  EXPECT_TRUE(removed.pending_frames.empty());
+  EXPECT_EQ(removed.transport.created_readbacks, 0U);
   const auto remaining
     = PublicationProbe::ExposureStatusCounts(*service, handle);
   EXPECT_EQ(remaining.first, 0U);
@@ -200,7 +196,7 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
   RecordProperty(
     "status_readback_reused_submissions", static_cast<int>(reused_submissions));
   RecordProperty(
-    "status_readback_unique_identities", static_cast<int>(identities.size()));
+    "status_readback_created_objects", static_cast<int>(created_readbacks));
 }
 
 NOLINT_TEST_F(
@@ -256,7 +252,7 @@ NOLINT_TEST_F(
       // status bytes are fabricated, and at most two ticket batches coexist.
       held = Probe::TakeExposureStatuses(service, handle);
       ASSERT_EQ(held.size(), 1U);
-      ASSERT_NE(held.front().readback, nullptr);
+      ASSERT_TRUE(held.front().feedback);
       expected
         = ReferenceAdaptedGain(expected, UniformReferenceGain(.25F), .25);
       ++delayed_frames;

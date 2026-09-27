@@ -73,6 +73,7 @@ set_target_properties(
 set(
   OXYGEN_VORTEX_HEADERS
   "Internal/PerViewStructuredPublisher.h"
+  "Internal/GpuFeedback.h"
   "Internal/RigidTransformHistoryCache.h"
   "Lighting/Types/LightGridResources.h"
   "ScenePrep/Extractors.h"
@@ -309,6 +310,7 @@ set(
   "Internal/RenderScope.h"
   "Internal/MeshDepthPipeline.h"
   "Internal/MeshDepthPipeline.cpp"
+  "Internal/GpuFeedback.cpp"
   "Internal/RetainedTexturePool.cpp"
   "Internal/RetainedTexturePool.h"
   "Internal/ViewportClamp.h"

@@ -19,6 +19,7 @@
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Vortex/CompositionView.h>
+#include <Oxygen/Vortex/Internal/GpuFeedback.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/PostProcess/Types/PostProcessConfig.h>
 #include <Oxygen/Vortex/PostProcess/Types/PostProcessFrameBindings.h>
@@ -33,7 +34,6 @@ class Graphics;
 namespace oxygen::graphics {
 class Framebuffer;
 class Texture;
-class GpuBufferReadback;
 } // namespace oxygen::graphics
 
 namespace oxygen::graphics {
@@ -319,13 +319,11 @@ private:
     // Keep the manager's Graphics owner alive until its readbacks are released.
     std::shared_ptr<Graphics> graphics_owner;
     std::uint64_t lifetime { 0U };
-    std::vector<std::shared_ptr<graphics::GpuBufferReadback>> available;
+    std::unique_ptr<internal::GpuFeedbackPool> feedback;
   };
   struct PendingExposureStatus {
-    std::shared_ptr<Graphics> readback_graphics;
     postprocess::ExposurePass::StateLease state;
-    std::shared_ptr<graphics::GpuBufferReadback> readback;
-    std::weak_ptr<ExposureReadbackPool> reuse_pool;
+    internal::GpuFeedbackReservation feedback;
     std::optional<ExposureTransitionToken> token;
     CompositionView::ViewStateHandle handle {};
     std::uint64_t lifetime { 0U };
@@ -355,8 +353,7 @@ private:
     CompositionView::ViewStateHandle handle, std::uint64_t lifetime) const
     -> std::uint64_t;
   auto DeferExposureStatus(PendingExposureStatus job) -> void;
-  auto TryEnqueueExposureStatus(PendingExposureStatus job) -> bool;
-  auto RecycleExposureStatus(PendingExposureStatus& job) -> void;
+  auto TryEnqueueExposureStatus(PendingExposureStatus& job) -> bool;
   auto PollExposureStatus() -> void;
   OXGN_VRTX_API void EnqueueExposureStatus(graphics::CommandRecorder& recorder,
     const ExposureTransitionToken& token,

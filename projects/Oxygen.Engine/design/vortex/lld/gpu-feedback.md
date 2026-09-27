@@ -4,17 +4,33 @@ Renderer infrastructure owns bounded transport of asynchronous GPU results.
 Graphics owns readback execution and completion; each consuming service owns
 request identity, polling order and interpretation.
 
-The capability below is planned; [VX-IBL-01.S7](../milestones/VX-IBL-01/README.md#s7--reusable-infrastructure)
-owns adoption, implementation state and integration qualification.
+[`GpuFeedbackPool`](../../../src/Oxygen/Vortex/Internal/GpuFeedback.h) provides the
+transport below; [VX-IBL-01.S7](../milestones/VX-IBL-01/README.md#s7--reusable-infrastructure)
+owns adopter state and integration qualification.
 
 Read: [contract](#bounded-gpu-feedback), [C++ guidance](../../../../../design/oxygen/RULES.md#c).
 
 ## Bounded GPU feedback
 
 **Implementation home:** `Vortex/Internal/GpuFeedback.*`, above Graphics `ReadbackManager`.
-Migrate [`IblGpuValidation`](../../../src/Oxygen/Vortex/Environment/Internal/IblGpuValidation.cpp),
+Adopters are [`IblGpuValidation`](../../../src/Oxygen/Vortex/Environment/Internal/IblGpuValidation.cpp),
 [exposure status transport](../../../src/Oxygen/Vortex/PostProcess/PostProcessService.cpp)
 and [`SpatialLightGrid` demand](../../../src/Oxygen/Vortex/Lighting/Internal/SpatialLightGrid.cpp).
+
+`Reserve` returns a move-only `GpuFeedbackReservation`, distinguishing busy,
+unavailable, allocation and backend failures. `EnqueueCopy` uses the caller's
+recorder; `Commit` enables delivery after accepted submission. `IsReady` supports
+FIFO admission without mapping stale jobs. `Poll<T>` copies a trivially copyable
+payload into aligned CPU storage: an empty optional means pending, a value means
+ready, and a `ReadbackError` means transport failure. IBL requires exact payload
+size; exposure and light-grid accept at least their payload size. `Reset` or
+destruction relinquishes delivery. `InspectStats` reports capacity, occupied slots
+and created readbacks for bounded-reuse qualification.
+
+An opaque recording-use signal is attached before enqueueing, covering failures
+after partial recording. Callbacks retain only that signal. Payload readiness may
+precede Graphics' private completion; capacity recycling waits for use release.
+The helper never submits, waits, changes source identity or chooses a latest result.
 
 - Provide a fixed-capacity pool of reusable buffer-readback requests and typed
   polling for trivially copyable payloads. A move-only reservation separates

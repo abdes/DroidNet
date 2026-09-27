@@ -6,8 +6,6 @@
 
 #include <array>
 #include <cstdint>
-#include <cstring>
-#include <expected>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -17,6 +15,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Detail/FormatUtils.h>
 #include <Oxygen/Core/Types/Format.h>
@@ -28,7 +27,6 @@
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/ReadbackErrors.h>
 #include <Oxygen/Graphics/Common/ReadbackManager.h>
-#include <Oxygen/Graphics/Common/ReadbackTypes.h>
 #include <Oxygen/Graphics/Common/SubmissionCallback.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
@@ -41,6 +39,7 @@
 #include <Oxygen/Scene/ExposureSettings.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Vortex/Environment/SceneBackground.h>
+#include <Oxygen/Vortex/Internal/GpuFeedback.h>
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Vortex/PostProcess/Passes/BloomPass.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
@@ -1036,10 +1035,8 @@ auto PostProcessService::FinalizeScenePrecision(RenderContext& ctx,
     }
   });
   PublishExposureStatusOnSubmission(recorder,
-    PendingExposureStatus { .readback_graphics = {},
-      .state = prepared.exposure.state,
-      .readback = {},
-      .reuse_pool = {},
+    PendingExposureStatus { .state = prepared.exposure.state,
+      .feedback = {},
       .token = prepared.status_transition,
       .handle = prepared.handle,
       .lifetime = prepared.lifetime,
@@ -1215,10 +1212,8 @@ void PostProcessService::EnqueueExposureStatus(
 {
   PublishExposureStatusOnSubmission(recorder,
     PendingExposureStatus {
-      .readback_graphics = {},
       .state = std::move(state),
-      .readback = {},
-      .reuse_pool = {},
+      .feedback = {},
       .token = token,
       .handle = token.target,
       .lifetime = token.lifetime,
@@ -1280,11 +1275,13 @@ auto PostProcessService::QueueExposureStatus(PendingExposureStatus job) -> void
       return;
     }
   }
+  const auto handle = job.handle;
+  const auto frame_sequence = job.frame_sequence;
   if (!TryEnqueueExposureStatus(job)) {
     DeferExposureStatus(std::move(job));
-  } else if (const auto older = deferred_exposure_status_.find(job.handle);
+  } else if (const auto older = deferred_exposure_status_.find(handle);
     older != deferred_exposure_status_.end()
-    && older->second.frame_sequence <= job.frame_sequence) {
+    && older->second.frame_sequence <= frame_sequence) {
     deferred_exposure_status_.erase(older);
   }
 }
@@ -1334,8 +1331,7 @@ auto PostProcessService::DeferExposureStatus(PendingExposureStatus job) -> void
   if (!IsExposureStatusNeeded(job)) {
     return;
   }
-  job.readback.reset();
-  job.reuse_pool.reset();
+  job.feedback.Reset();
   const auto found = deferred_exposure_status_.find(job.handle);
   if (found == deferred_exposure_status_.end()
     || found->second.lifetime != job.lifetime
@@ -1344,14 +1340,11 @@ auto PostProcessService::DeferExposureStatus(PendingExposureStatus job) -> void
   }
 }
 
-auto PostProcessService::TryEnqueueExposureStatus(PendingExposureStatus job)
+auto PostProcessService::TryEnqueueExposureStatus(PendingExposureStatus& job)
   -> bool
 {
-  using oxygen::graphics::GpuBufferReadback;
   using oxygen::graphics::GpuEventScope;
   using oxygen::graphics::QueueRole;
-  using oxygen::graphics::ReadbackError;
-  using oxygen::graphics::ReadbackTicket;
 
   profiling::CpuProfileScope cpu_scope(
     "Vortex.PostProcess.TryEnqueueExposureStatus",
@@ -1374,14 +1367,12 @@ auto PostProcessService::TryEnqueueExposureStatus(PendingExposureStatus job)
     pool->graphics_owner = gfx;
     pool->lifetime = job.lifetime;
   }
-  std::shared_ptr<GpuBufferReadback> readback;
-  if (!pool->available.empty()) {
-    readback = std::move(pool->available.back());
-    pool->available.pop_back();
-  } else {
-    readback = manager->CreateBufferReadback("Exposure completed status");
+  if (!pool->feedback) {
+    pool->feedback = std::make_unique<internal::GpuFeedbackPool>(
+      gfx, frame::kFramesInFlight.get(), "Exposure completed status");
   }
-  if (!readback) {
+  auto reservation = pool->feedback->Reserve();
+  if (!reservation) {
     return false;
   }
   auto recorder = gfx->AcquireCommandRecorder(
@@ -1391,7 +1382,7 @@ auto PostProcessService::TryEnqueueExposureStatus(PendingExposureStatus job)
   }
   renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(*recorder);
   const auto recording = recorder->GetCommandListForInspection();
-  const auto ticket = [&] -> std::expected<ReadbackTicket, ReadbackError> {
+  const auto copied = [&] -> Result<void, graphics::ReadbackError> {
     GpuEventScope scope(*recorder, "Vortex.PostProcess.Exposure.StatusReadback",
       profiling::ProfileGranularity::kTelemetry,
       profiling::ProfileCategory::kSynchronization);
@@ -1399,35 +1390,17 @@ auto PostProcessService::TryEnqueueExposureStatus(PendingExposureStatus job)
       recorder->BeginTrackingResourceState(*job.state->status_buffer,
         graphics::ResourceStates::kCopySource, false);
     }
-    return readback->EnqueueCopy(*recorder, *job.state->status_buffer,
+    return reservation->EnqueueCopy(*recorder, *job.state->status_buffer,
       { 0U, sizeof(ExposureCompletedStatus) });
   }();
   std::ignore = recorder.Submit();
-  if (!ticket || !recording || !recording->IsSubmitted()) {
-    std::ignore = readback->Cancel();
+  if (!copied || !recording || !recording->IsSubmitted()
+    || !reservation->Commit()) {
     return false;
   }
-  job.readback_graphics = std::move(gfx);
-  job.readback = std::move(readback);
-  job.reuse_pool = pool;
+  job.feedback = std::move(*reservation);
   pending.push_back(std::move(job));
   return true;
-}
-
-auto PostProcessService::RecycleExposureStatus(PendingExposureStatus& job)
-  -> void
-{
-  const auto pool = job.reuse_pool.lock();
-  if (!pool || pool->lifetime != job.lifetime
-    || pool->graphics_owner != job.readback_graphics || !job.readback
-    || pool->available.size() >= frame::kFramesInFlight.get()) {
-    return;
-  }
-  // Poll's mapped guard has been destroyed before this call. Rearming never
-  // waits and refuses incomplete, cancelled, failed or still-mapped requests.
-  if (job.readback->ResetForReuse().has_value()) {
-    pool->available.push_back(std::move(job.readback));
-  }
 }
 
 auto PostProcessService::PollExposureStatus() -> void
@@ -1442,7 +1415,7 @@ auto PostProcessService::PollExposureStatus() -> void
   for (auto& [handle, pending] : pending_exposure_status_) {
     while (!pending.empty()) {
       auto& job = pending.front();
-      const auto ready = job.readback->IsReady();
+      const auto ready = job.feedback.IsReady();
       if (ready && !*ready) {
         break;
       }
@@ -1453,13 +1426,12 @@ auto PostProcessService::PollExposureStatus() -> void
         if (!ready) {
           return false;
         }
-        const auto mapped = job.readback->TryMap();
-        if (!mapped
-          || mapped->Bytes().size() < sizeof(ExposureCompletedStatus)) {
+        const auto packet = job.feedback.Poll<ExposureCompletedStatus>(
+          internal::FeedbackPayloadSize::kAtLeast);
+        if (!packet || !packet->has_value()) {
           return false;
         }
-        ExposureCompletedStatus status {};
-        std::memcpy(&status, mapped->Bytes().data(), sizeof(status));
+        const auto& status = **packet;
         auto requested_generation
           = job.precision ? job.precision->transition_generation : 0U;
         if (!job.precision && job.token) {
@@ -1525,7 +1497,7 @@ auto PostProcessService::PollExposureStatus() -> void
       if (!complete()) {
         DeferExposureStatus(std::move(job));
       } else {
-        RecycleExposureStatus(job);
+        job.feedback.Reset();
       }
       pending.pop_front();
     }

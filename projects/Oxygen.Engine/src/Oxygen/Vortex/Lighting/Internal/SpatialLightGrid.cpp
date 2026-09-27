@@ -6,28 +6,47 @@
 
 #include <algorithm>
 #include <array>
-#include <cstring>
+#include <cstdint>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <unordered_map>
+#include <utility>
 
+#include <glm/gtc/matrix_access.hpp>
+
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
+#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Core/Types/ShaderType.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/AllocationBudget.h>
+#include <Oxygen/Graphics/Common/AllocationBudgetTag.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
-#include <Oxygen/Graphics/Common/ReadbackManager.h>
+#include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
+#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
+#include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Vortex/Internal/BindlessRootBindings.h>
+#include <Oxygen/Vortex/Internal/GpuFeedback.h>
+#include <Oxygen/Vortex/Lighting/Internal/LightGridBuilder.h>
 #include <Oxygen/Vortex/Lighting/Internal/SpatialLightGrid.h>
 #include <Oxygen/Vortex/Lighting/Types/ClusterLightRange.h>
 #include <Oxygen/Vortex/Lighting/Types/LightGridBuildStatus.h>
 #include <Oxygen/Vortex/Lighting/Types/LightGridPassConstants.h>
+#include <Oxygen/Vortex/Lighting/Types/LightGridResources.h>
 #include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/Types/LightingFrameBindings.h>
 #include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
 
 namespace oxygen::vortex::lighting::internal {
@@ -43,14 +62,16 @@ namespace {
   {
     const auto roots = vortex::internal::BuildVortexRootBindings();
     return graphics::ComputePipelineDesc::Builder {}
-      .SetComputeShader({ .stage = ShaderType::kCompute,
+      .SetComputeShader({
+        .stage = ShaderType::kCompute,
         .source_path = "Vortex/Services/Lighting/SpatialLightGrid.hlsl",
-        .entry_point = "SpatialLightGridCS" })
+        .entry_point = "SpatialLightGridCS",
+      })
       .SetRootBindings(roots)
       .SetDebugName("Vortex.Lighting.SpatialGrid")
       .Build();
   }
-}
+} // namespace
 
 struct SpatialLightGrid::Impl {
   struct FrameResources {
@@ -59,19 +80,19 @@ struct SpatialLightGrid::Impl {
     GridBuffer counts;
     std::array<GridBuffer, 2> scan;
     GridBuffer status;
-    std::shared_ptr<graphics::GpuBufferReadback> demand_readback;
+    vortex::internal::GpuFeedbackReservation feedback;
     frame::SequenceNumber feedback_sequence { 0U };
-    bool feedback_pending { false };
   };
   struct ViewResources {
     frame::SequenceNumber last_used { 0U };
+    std::unique_ptr<vortex::internal::GpuFeedbackPool> feedback_pool;
     std::unordered_map<frame::Slot, FrameResources> frames;
     std::uint64_t measured_demand { 0U };
     frame::SequenceNumber feedback_sequence { 0U };
     bool have_demand { false };
     std::optional<CompletedLightGridBuild> completed;
   };
-  Renderer& renderer;
+  observer_ptr<Renderer> renderer;
   frame::SequenceNumber sequence { 0U };
   frame::Slot slot { frame::kInvalidSlot };
   std::uint32_t active_view_count { 1U };
@@ -79,7 +100,7 @@ struct SpatialLightGrid::Impl {
   upload::TransientStructuredBuffer constants;
 
   explicit Impl(Renderer& owner)
-    : renderer(owner)
+    : renderer(make_observer(&owner))
     , constants(observer_ptr { owner.GetGraphics().get() },
         owner.GetLightingStagingProvider(), sizeof(LightGridPassConstants),
         observer_ptr { &owner.GetInlineTransfersCoordinator() },
@@ -87,12 +108,13 @@ struct SpatialLightGrid::Impl {
   {
   }
 
-  void Retire(GridBuffer& resource)
+  void Retire(GridBuffer& resource) const
   {
-    auto gfx = renderer.GetGraphics();
+    auto gfx = renderer->GetGraphics();
     if (resource.buffer && gfx) {
       gfx->GetDeferredReclaimer().RegisterDeferredAction(
-        [owner = gfx.get(), buffer = std::move(resource.buffer)]() mutable {
+        [owner = gfx.get(),
+          buffer = std::move(resource.buffer)] mutable -> void {
           owner->ForgetKnownResourceState(*buffer);
           auto& registry = owner->GetResourceRegistry();
           if (registry.Contains(*buffer)) {
@@ -104,14 +126,14 @@ struct SpatialLightGrid::Impl {
     resource = {};
   }
 
-  void Retire(ViewResources& view)
+  void Retire(ViewResources& view) const
   {
     for (auto& [frame_slot, resources] : view.frames) {
       Retire(resources.ranges);
       Retire(resources.indices);
       Retire(resources.counts);
-      Retire(resources.scan[0]);
-      Retire(resources.scan[1]);
+      Retire(resources.scan.at(0));
+      Retire(resources.scan.at(1));
       Retire(resources.status);
     }
   }
@@ -119,53 +141,64 @@ struct SpatialLightGrid::Impl {
   void ReadDemand(ViewResources& view)
   {
     for (auto& [frame_slot, resources] : view.frames) {
-      if (!resources.feedback_pending || !resources.demand_readback) {
+      if (!resources.feedback) {
         continue;
       }
-      const auto ready = resources.demand_readback->IsReady();
-      if (!ready) {
-        resources.demand_readback->Reset();
-        resources.feedback_pending = false;
+      const auto packet = resources.feedback.Poll<LightGridBuildStatus>(
+        vortex::internal::FeedbackPayloadSize::kAtLeast);
+      if (packet && !packet->has_value()) {
         continue;
       }
-      if (!*ready) {
-        continue;
-      }
-      {
-        const auto mapped = resources.demand_readback->TryMap();
-        if (mapped && mapped->Bytes().size() >= sizeof(LightGridBuildStatus)) {
-          auto status = LightGridBuildStatus {};
-          std::memcpy(&status, mapped->Bytes().data(), sizeof(status));
-          if (!view.completed || resources.feedback_sequence > view.completed->sequence) {
-            view.completed = CompletedLightGridBuild { resources.feedback_sequence, status };
-          }
-          if (status.state == kLightGridBuildValid
-            && (!view.have_demand
-              || resources.feedback_sequence > view.feedback_sequence)) {
-            view.measured_demand = status.required_index_count[0]
-              | (static_cast<std::uint64_t>(status.required_index_count[1])
-                << 32U);
-            view.feedback_sequence = resources.feedback_sequence;
-            view.have_demand = true;
-          }
+      if (packet && packet->has_value()) {
+        const auto& status = **packet;
+        if (!view.completed
+          || resources.feedback_sequence > view.completed->sequence) {
+          view.completed = CompletedLightGridBuild {
+            .sequence = resources.feedback_sequence,
+            .status = status,
+          };
+        }
+        if (status.state == kLightGridBuildValid
+          && (!view.have_demand
+            || resources.feedback_sequence > view.feedback_sequence)) {
+          view.measured_demand = status.required_index_count.at(0)
+            | (static_cast<std::uint64_t>(status.required_index_count.at(1))
+              << 32U);
+          view.feedback_sequence = resources.feedback_sequence;
+          view.have_demand = true;
         }
       }
-      resources.feedback_pending = false;
-      if (!resources.demand_readback->ResetForReuse()) {
-        resources.demand_readback->Reset();
-      }
+      resources.feedback.Reset();
     }
+  }
+
+  auto EnsureCompactIndices(GridBuffer& indices, std::uint32_t capacity) const
+    -> std::uint32_t
+  {
+    if (capacity <= indices.count) {
+      return indices.count;
+    }
+    try {
+      Ensure(indices, capacity, sizeof(std::uint32_t),
+        "LightingService.GridIndices",
+        graphics::AllocationCategory::kCompactIndices);
+    } catch (const graphics::AllocationBudgetExceeded&) {
+      // A smaller existing allocation, or complete-list cells, preserves every
+      // light.
+      return indices.count;
+    }
+    return indices.count;
   }
 
   void Ensure(GridBuffer& target, std::uint32_t count, std::uint32_t stride,
     const char* name,
     graphics::AllocationCategory category
-    = graphics::AllocationCategory::kGeneral)
+    = graphics::AllocationCategory::kGeneral) const
   {
     if (target.buffer && target.count >= count) {
       return;
     }
-    auto gfx = renderer.GetGraphics();
+    auto gfx = renderer->GetGraphics();
     if (!gfx || count == 0U) {
       throw std::runtime_error("Invalid spatial grid allocation");
     }
@@ -176,8 +209,8 @@ struct SpatialLightGrid::Impl {
       .usage = graphics::BufferUsage::kStorage,
       .memory = graphics::BufferMemory::kDeviceLocal,
       .debug_name = name,
-      .allocation_budget = { .owner = renderer.GetLightingAllocationBudget(),
-        .category = category },
+      .allocation_budget = { .owner = renderer->GetLightingAllocationBudget(),
+        .category = category, },
     });
     if (!candidate.buffer) {
       throw std::runtime_error("Spatial grid buffer creation failed");
@@ -186,8 +219,10 @@ struct SpatialLightGrid::Impl {
     registry.Register(candidate.buffer);
     try {
       auto& allocator = gfx->GetDescriptorAllocator();
-      for (auto type : { graphics::ResourceViewType::kStructuredBuffer_SRV,
-             graphics::ResourceViewType::kStructuredBuffer_UAV }) {
+      for (auto type : {
+             graphics::ResourceViewType::kStructuredBuffer_SRV,
+             graphics::ResourceViewType::kStructuredBuffer_UAV,
+           }) {
         auto handle = type == graphics::ResourceViewType::kStructuredBuffer_SRV
           ? allocator.AllocateBindless(
               bindless::generated::kGlobalSrvDomain, type)
@@ -198,10 +233,12 @@ struct SpatialLightGrid::Impl {
         }
         const auto index = allocator.GetShaderVisibleIndex(handle);
         auto view = registry.RegisterView(*candidate.buffer, std::move(handle),
-          graphics::BufferViewDescription { .view_type = type,
+          graphics::BufferViewDescription {
+            .view_type = type,
             .visibility = graphics::DescriptorVisibility::kShaderVisible,
             .range = { 0U, static_cast<std::uint64_t>(count) * stride },
-            .stride = stride });
+            .stride = stride,
+          });
         if (!view->IsValid()) {
           throw std::runtime_error("Spatial grid view creation failed");
         }
@@ -257,17 +294,17 @@ void SpatialLightGrid::SetActiveViewCount(std::uint32_t count)
 auto SpatialLightGrid::Prepare(
   const BuiltLightGridView& view, LightingFrameBindings& bindings) -> bool
 {
-  auto& state = impl_->views[view.view_id];
+  auto& state = impl_->views.try_emplace(view.view_id).first->second;
   state.last_used = impl_->sequence;
-  auto& resources = state.frames[impl_->slot];
+  auto& resources = state.frames.try_emplace(impl_->slot).first->second;
   const auto count = bindings.cluster_count;
   impl_->Ensure(resources.ranges, count, sizeof(ClusterLightRange),
     "LightingService.GridRanges");
   impl_->Ensure(resources.counts, count, sizeof(std::uint32_t),
     "LightingService.GridCounts");
-  impl_->Ensure(resources.scan[0], count, 2U * sizeof(std::uint32_t),
+  impl_->Ensure(resources.scan.at(0), count, 2U * sizeof(std::uint32_t),
     "LightingService.GridScanA");
-  impl_->Ensure(resources.scan[1], count, 2U * sizeof(std::uint32_t),
+  impl_->Ensure(resources.scan.at(1), count, 2U * sizeof(std::uint32_t),
     "LightingService.GridScanB");
   impl_->Ensure(resources.status, 1U, sizeof(LightGridBuildStatus),
     "LightingService.GridStatus");
@@ -279,10 +316,11 @@ auto SpatialLightGrid::Prepare(
     = static_cast<std::uint64_t>(count) * (std::min)(bindings.local_count, 4U);
   const auto measured = state.have_demand
     ? (std::min)(state.measured_demand, maximum)
-      + (std::min)(state.measured_demand, maximum) / 4U
+      + ((std::min)(state.measured_demand, maximum) / 4U)
     : seed;
   const auto desired = (std::min)(maximum, (std::max)(seed, measured));
-  const auto budget = impl_->renderer.GetLightingAllocationBudget()->Snapshot();
+  const auto budget
+    = impl_->renderer->GetLightingAllocationBudget()->Snapshot();
   const auto share = budget.limits.compact_indices.get() / sizeof(std::uint32_t)
     / impl_->active_view_count / frame::kFramesInFlight.get();
   if (resources.indices.count > share
@@ -292,36 +330,35 @@ auto SpatialLightGrid::Prepare(
   const auto available = budget.limits.compact_indices.get()
     - (std::min)(budget.compact_indices.get(),
       budget.limits.compact_indices.get());
-  const auto capacity = static_cast<std::uint32_t>(
-    (std::min)({ desired, share, available / sizeof(std::uint32_t),
-      static_cast<std::uint64_t>(std::numeric_limits<std::uint32_t>::max()) }));
-  if (capacity > resources.indices.count) {
-    try {
-      impl_->Ensure(resources.indices, capacity, sizeof(std::uint32_t),
-        "LightingService.GridIndices",
-        graphics::AllocationCategory::kCompactIndices);
-    } catch (const graphics::AllocationBudgetExceeded&) {
-      // Keep an existing smaller allocation, or publish complete-list cells
-      // if no compact storage fits. No light is truncated.
-    }
-  }
+  const auto capacity = static_cast<std::uint32_t>((std::min)({
+    desired,
+    share,
+    available / sizeof(std::uint32_t),
+    static_cast<std::uint64_t>(std::numeric_limits<std::uint32_t>::max()),
+  }));
+  const auto admitted_capacity
+    = impl_->EnsureCompactIndices(resources.indices, capacity);
   bindings.cluster_ranges_srv = resources.ranges.srv;
   bindings.local_indices_srv = resources.indices.srv;
-  bindings.index_capacity = resources.indices.count;
+  bindings.index_capacity = admitted_capacity;
   bindings.build_status_srv = resources.status.srv;
-  if (!resources.demand_readback) {
-    if (auto manager = impl_->renderer.GetGraphics()->GetReadbackManager()) {
-      resources.demand_readback
-        = manager->CreateBufferReadback("Lighting.GridDemand");
+  if (!state.feedback_pool) {
+    if (auto graphics = impl_->renderer->GetGraphics();
+      graphics && graphics->GetReadbackManager()) {
+      state.feedback_pool = std::make_unique<vortex::internal::GpuFeedbackPool>(
+        graphics, frame::kFramesInFlight.get(), "Lighting.GridDemand");
     }
   }
   return true;
 }
 
-auto SpatialLightGrid::InspectCompleted(ViewId view) -> std::optional<CompletedLightGridBuild>
+auto SpatialLightGrid::InspectCompleted(ViewId view)
+  -> std::optional<CompletedLightGridBuild>
 {
   const auto found = impl_->views.find(view);
-  if (found == impl_->views.end()) return std::nullopt;
+  if (found == impl_->views.end()) {
+    return std::nullopt;
+  }
   impl_->ReadDemand(found->second);
   return found->second.completed;
 }
@@ -336,30 +373,40 @@ auto SpatialLightGrid::Inspect(ViewId view) const -> LightGridResources
   if (slot == found->second.frames.end()) {
     return {};
   }
-  return { slot->second.status.buffer, slot->second.ranges.buffer,
-    slot->second.indices.buffer };
+  return {
+    .status = slot->second.status.buffer,
+    .ranges = slot->second.ranges.buffer,
+    .indices = slot->second.indices.buffer,
+  };
 }
 
 auto SpatialLightGrid::Record(
   const BuiltLightGridView& view, ShaderVisibleIndex header) -> bool
 {
-  auto& resources = impl_->views.at(view.view_id).frames.at(impl_->slot);
-  auto gfx = impl_->renderer.GetGraphics();
+  auto& state = impl_->views.at(view.view_id);
+  auto& resources = state.frames.at(impl_->slot);
+  auto gfx = impl_->renderer->GetGraphics();
   auto recording = gfx->AcquireCommandRecorder(
     gfx->QueueKeyFor(graphics::QueueRole::kGraphics),
     "LightingService.SpatialGrid");
   if (!recording) {
     return false;
   }
-  impl_->renderer.GetDiagnosticsService().AttachGpuTimelineCollector(
+  impl_->renderer->GetDiagnosticsService().AttachGpuTimelineCollector(
     *recording);
+  auto pending_feedback = vortex::internal::GpuFeedbackReservation {};
   {
     graphics::GpuEventScope scope(*recording, "Vortex.Stage6.SpatialLightGrid",
       profiling::ProfileGranularity::kTelemetry,
       profiling::ProfileCategory::kPass);
-    const auto buffers
-      = std::array { &resources.ranges, &resources.indices, &resources.counts,
-          &resources.scan[0], &resources.scan[1], &resources.status };
+    const auto buffers = std::array {
+      &resources.ranges,
+      &resources.indices,
+      &resources.counts,
+      resources.scan.data(),
+      &resources.scan.at(1),
+      &resources.status,
+    };
     for (auto* item : buffers) {
       if (item->buffer && !recording->AdoptKnownResourceState(*item->buffer)) {
         recording->BeginTrackingResourceState(
@@ -368,21 +415,24 @@ auto SpatialLightGrid::Record(
     }
     static const auto pipeline = MakePipeline();
     recording->SetPipelineState(pipeline);
+    const auto depth_column = glm::column(view.projection, 2);
+    const auto translation_column = glm::column(view.projection, 3);
     auto pass = LightGridPassConstants {
       .lighting_bindings_srv = header,
       .ranges_uav = resources.ranges.uav,
       .indices_uav = resources.indices.uav,
       .status_uav = resources.status.uav,
       .counts_uav = resources.counts.uav,
-      .offsets_uav = resources.scan[0].uav,
+      .offsets_uav = resources.scan.at(0).uav,
       .work_count = view.bindings.cluster_count,
-      .scan_destination_uav = resources.scan[1].uav,
+      .scan_destination_uav = resources.scan.at(1).uav,
       .view_matrix = view.view_matrix,
       .inverse_projection = view.inverse_projection,
-      .depth_projection = { view.projection[2][2], view.projection[3][2],
-        view.projection[2][3], view.projection[3][3] },
+      .depth_projection = { depth_column.z, translation_column.z,
+        depth_column.w, translation_column.w, },
     };
-    const auto dispatch = [&](std::uint32_t phase, std::uint32_t groups) {
+    const auto dispatch
+      = [&](std::uint32_t phase, std::uint32_t groups) -> bool {
       pass.subpass = phase;
       for (auto* item : buffers) {
         if (item->buffer) {
@@ -423,12 +473,12 @@ auto SpatialLightGrid::Record(
       recording.Discard();
       return false;
     }
-    if (resources.demand_readback && !resources.feedback_pending) {
-      const auto copied = resources.demand_readback->EnqueueCopy(*recording,
-        *resources.status.buffer, { 0U, sizeof(LightGridBuildStatus) });
-      if (copied) {
-        resources.feedback_pending = true;
-        resources.feedback_sequence = impl_->sequence;
+    if (state.feedback_pool && !resources.feedback) {
+      auto feedback = state.feedback_pool->Reserve();
+      if (feedback
+        && feedback->EnqueueCopy(*recording, *resources.status.buffer,
+          { 0U, sizeof(LightGridBuildStatus) })) {
+        pending_feedback = std::move(*feedback);
       }
     }
     for (auto* item :
@@ -439,7 +489,12 @@ auto SpatialLightGrid::Record(
       }
     }
   }
-  return recording.Submit();
+  const auto submitted = recording.Submit();
+  if (submitted && pending_feedback && pending_feedback.Commit()) {
+    resources.feedback = std::move(pending_feedback);
+    resources.feedback_sequence = impl_->sequence;
+  }
+  return submitted;
 }
 
 } // namespace oxygen::vortex::lighting::internal

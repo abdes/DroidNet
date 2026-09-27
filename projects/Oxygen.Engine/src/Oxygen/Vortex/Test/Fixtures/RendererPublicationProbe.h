@@ -7,6 +7,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <deque>
 #include <iterator>
@@ -17,6 +18,7 @@
 #include <Oxygen/Vortex/Environment/EnvironmentLightingService.h>
 #include <Oxygen/Vortex/Environment/Passes/AtmosphereCameraAerialPerspectivePass.h>
 #include <Oxygen/Vortex/Environment/Passes/AtmosphereSkyViewLutPass.h>
+#include <Oxygen/Vortex/Internal/GpuFeedback.h>
 #include <Oxygen/Vortex/Internal/GpuTimelineProfiler.h>
 #include <Oxygen/Vortex/Internal/PreviousViewHistoryCache.h>
 #include <Oxygen/Vortex/Lighting/LightingService.h>
@@ -129,8 +131,9 @@ struct RendererPublicationProbe {
   static auto PublishedIblProducts(SceneRenderer& renderer, ViewId view)
     -> std::shared_ptr<const environment::internal::IblGpuProducts>
   {
-    if (!renderer.environment_)
+    if (!renderer.environment_) {
       return {};
+    }
     const auto& views = renderer.environment_->published_views_;
     const auto found = views.find(view);
     return found == views.end() ? nullptr : found->second.ibl;
@@ -259,15 +262,10 @@ struct RendererPublicationProbe {
   using ExposureStatusJobs
     = std::deque<PostProcessService::PendingExposureStatus>;
 
-  struct ExposureReadbackIdentity {
-    std::weak_ptr<graphics::GpuBufferReadback> readback;
-    std::uint64_t frame_sequence;
-  };
-
   struct ExposureStatusReuseState {
     std::weak_ptr<const void> pool;
-    std::vector<ExposureReadbackIdentity> pending;
-    std::vector<std::weak_ptr<graphics::GpuBufferReadback>> available;
+    internal::GpuFeedbackPool::Stats transport;
+    std::vector<std::uint64_t> pending_frames;
   };
 
   static auto ExposureStatusReuseForView(const PostProcessService& service,
@@ -277,17 +275,14 @@ struct RendererPublicationProbe {
     if (const auto pool = service.reusable_exposure_status_.find(handle);
       pool != service.reusable_exposure_status_.end()) {
       result.pool = pool->second;
-      for (const auto& readback : pool->second->available) {
-        result.available.emplace_back(readback);
+      if (pool->second->feedback) {
+        result.transport = pool->second->feedback->InspectStats();
       }
     }
     if (const auto pending = service.pending_exposure_status_.find(handle);
       pending != service.pending_exposure_status_.end()) {
       for (const auto& job : pending->second) {
-        result.pending.push_back({
-          .readback = job.readback,
-          .frame_sequence = job.frame_sequence,
-        });
+        result.pending_frames.push_back(job.frame_sequence);
       }
     }
     return result;
@@ -310,34 +305,35 @@ struct RendererPublicationProbe {
   }
 
   struct ExposureStatusDelivery {
-    ExposureStatusJobs pending;
-    std::optional<PostProcessService::PendingExposureStatus> deferred;
+    decltype(PostProcessService::pending_exposure_status_)::node_type pending;
+    decltype(PostProcessService::deferred_exposure_status_)::node_type deferred;
+    [[nodiscard]] auto PendingCount() const noexcept -> std::size_t
+    {
+      return pending.empty() ? 0U : pending.mapped().size();
+    }
   };
 
-  // Hide both queues across polling without giving a deferred retry an empty
-  // pending queue to allocate into. Restore before recording to retain
-  // capacity.
+  // Extract nodes to hold delivery without copying jobs or moving a deque.
   static auto TakeExposureStatusDelivery(PostProcessService& service,
     CompositionView::ViewStateHandle handle) -> ExposureStatusDelivery
   {
-    auto delivery = ExposureStatusDelivery {
-      .pending = TakeExposureStatuses(service, handle),
+    return {
+      .pending = service.pending_exposure_status_.extract(handle),
+      .deferred = service.deferred_exposure_status_.extract(handle),
     };
-    auto entry = service.deferred_exposure_status_.extract(handle);
-    if (!entry.empty()) {
-      delivery.deferred = std::move(entry.mapped());
-    }
-    return delivery;
   }
 
   static auto RestoreExposureStatusDelivery(PostProcessService& service,
     CompositionView::ViewStateHandle handle, ExposureStatusDelivery delivery)
     -> void
   {
-    RestoreExposureStatuses(service, handle, std::move(delivery.pending));
-    if (delivery.deferred) {
+    if (!delivery.pending.empty()) {
+      RestoreExposureStatuses(
+        service, handle, std::move(delivery.pending.mapped()));
+    }
+    if (!delivery.deferred.empty()) {
       service.deferred_exposure_status_.insert_or_assign(
-        handle, std::move(*delivery.deferred));
+        handle, std::move(delivery.deferred.mapped()));
     }
   }
 

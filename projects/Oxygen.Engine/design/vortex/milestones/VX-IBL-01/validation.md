@@ -13,6 +13,40 @@ Read: [S7 checkpoints](#s7-checkpoints), [integrated results](#integrated-result
 
 ## S7 checkpoints
 
+### S7.2 bounded GPU feedback
+
+The shared pool and IBL, exposure and light-grid adopters pass focused qualification
+on 2026-09-27 over `a037697d3` with S7.2 changes. Normal builds include the exposure
+benchmark harness; its event-frame constants and JSON schema are unchanged.
+
+| Check                                                    |        Debug |      Release |
+| -------------------------------------------------------- | -----------: | -----------: |
+| PostProcess / Lighting / Environment CPU suites          | 27 / 34 / 63 | 27 / 34 / 63 |
+| New native feedback regressions                          |            8 |            7 |
+| IBL diagnostics, exposure status and precision consumers |           17 |           16 |
+| Spatial-grid membership, growth and fallback             |            5 |            5 |
+
+The native cases cover moves, pool exhaustion, recorded/accepted abandonment,
+GPU-fence delay, failed enqueue, payload lengths, reverse polling and facade
+teardown. Debug additionally denies allocation during mapping. A failed new grid
+submission preserves an older pending copy. Consumer tests retain FIFO/epoch
+validation, retry, acknowledgements and stable readback creation. All modified C++
+passes oxytidy; the approved native-fixture downcast is the only new exception.
+
+Reproduce with the three owning CPU executables. In `Oxygen.Vortex.Exposure.Tests`,
+run `ExposureGpuTest.Feedback*`, `IblDiagnosticsGpuTest.*` and
+`ExposureLightingGpuTest.*Status*`. The remaining `ExposureGpuTest` cases are
+`PrecisionStatusRetriesTransportWithoutEarlyAdmission`,
+`CompletedPrecisionAdmissionTracksViewSettingsLayoutAndDiagnostics`,
+`BackloggedStatusAcknowledgesLatestSubmissionWithoutRenderingOwnerAgain`,
+`ServiceDiagnosticFramesDoNotAcknowledgePendingTransition`,
+`InactiveModeValidationCannotRejectAnObservedSubmission`,
+`InactiveDiagnosticOwnerPreservesPendingRequest` and
+`DiagnosticFramesDeferCameraCutUntilNormalExposureResumes`; join filters with `:`.
+Run `SpatialLightGridGpuTest.*:SpatialLightGridFallbackGpuTest.*` in
+`Oxygen.Vortex.LightingImageReference.Tests`. No shader diagnostics, copy submission
+or readback frequency was added. Integrated cost/SDK/application gates remain open.
+
 ### S7.3 retirement accounting
 
 The shared Nexus state and both production adopters pass focused qualification
