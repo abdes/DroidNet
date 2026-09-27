@@ -1,13 +1,22 @@
 # VX-IBL-01 validation
 
 **S1–S6 validated.** [S7 reusable infrastructure](README.md#s7--reusable-infrastructure)
-is planned; its implementation and validation have not started. The [acceptance table](README.md#acceptance) links every
+is in progress; its shared extractions and integrated qualification remain. The [acceptance table](README.md#acceptance) links every
 required result. The [integrated audit](evidence/s6-integrated/run.json) checks
 retained evidence against current production owners; prior measurements keep
 their original source/build provenance.
 
 Read: [integrated results](#integrated-results), [checkpoint evidence](#checkpoint-evidence),
 [reproduce](#reproduce).
+
+## S7 checkpoints
+
+[Distant-sky synchronization](evidence/s7-barrier/run.json): **six native sky/LUT
+tests** pass after adding the group barrier between offset-2 writes and the final
+lane-zero pair. ShaderBake publishes all **237** production modules. The isolated
+1,800-update authoring run measures **1.269 / 2.536 ms p95/p99**, inside the
+2/4-ms gates. The arithmetic tree is unchanged. S7.5 remains open for the shared
+reduction extraction; other S7 items remain planned.
 
 ## Integrated results
 

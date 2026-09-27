@@ -230,6 +230,7 @@ void VortexDistantSkyLightLutCS(
         GroupSkyLuminanceSamples[thread_linear_index]
             += GroupSkyLuminanceSamples[thread_linear_index + 2u];
     }
+    GroupMemoryBarrierWithGroupSync();
 
     if (thread_linear_index == 0u)
     {

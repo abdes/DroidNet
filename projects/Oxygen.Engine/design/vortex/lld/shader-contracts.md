@@ -882,14 +882,11 @@ Leave exposure's histogram, wave operations and the light-grid scan unchanged.
   groupshared arrays safely; no runtime operation selector or dispatch framework.
 - Preserve the 32/16/8/4/2/1 arithmetic tree and each caller's operand order,
   signedness, NaN/invalid handling, neutral values and output-lane contract.
-  Distant sky keeps its lane-zero final pair. Its current offset-2 writes have
-  no barrier before lane zero reads lane one's result. Add one unconditional
-  `GroupMemoryBarrierWithGroupSync` after offset 2, reached by all 64 lanes;
-  do not add an offset-1 shared-write stage. This synchronization correction is
-  the first S7 implementation commit, before the shared-code extractions, with
-  independent sky/LUT validation and its measured cost recorded. S7.5 remains
-  open until all reduction adopters migrate. No assumed wave width or new
-  subgroup-intrinsic dependency.
+  Distant sky keeps its lane-zero final pair, with an unconditional
+  `GroupMemoryBarrierWithGroupSync` after offset 2 reached by all 64 lanes.
+  Do not add an offset-1 shared-write stage or assume a wave width. The
+  synchronization correction retains independent sky/LUT validation and a
+  measured-cost record in the owning milestone.
 - Keep existing entry points, group sizes, bindings, precision flags and sample
   counts. No larger shared arrays, extra dispatches, standalone reduction pass
   or production test instrumentation. CPU/reference implementations stay
