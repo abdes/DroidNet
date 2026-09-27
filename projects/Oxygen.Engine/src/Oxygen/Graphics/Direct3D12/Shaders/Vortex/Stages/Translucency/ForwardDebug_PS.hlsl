@@ -8,6 +8,7 @@
 //! @brief Pixel shader for Forward+ diagnostic and LDR debug visualization
 //! modes.
 
+#include "Vortex/Shared/CubemapGeometry.hlsli"
 #include "Vortex/Services/Diagnostics/DebugHelpers.hlsli"
 #include "Vortex/Contracts/Draw/DrawHelpers.hlsli"
 #include "Vortex/Contracts/Draw/DrawMetadata.hlsli"
@@ -84,53 +85,11 @@ static inline float3 GetIblFaceColor(uint face_index)
   }
 }
 
-static inline void CubemapDirToFaceUv(
-  float3 dir, out uint face_index, out float2 uv)
-{
-  float3 a = abs(dir);
-  float s = 0.0;
-  float t = 0.0;
-
-  if (a.x >= a.y && a.x >= a.z) {
-    if (dir.x >= 0.0) {
-      face_index = 0u; // +X
-      s = -dir.z / a.x;
-      t = dir.y / a.x;
-    } else {
-      face_index = 1u; // -X
-      s = dir.z / a.x;
-      t = dir.y / a.x;
-    }
-  } else if (a.y >= a.x && a.y >= a.z) {
-    if (dir.y >= 0.0) {
-      face_index = 2u; // +Y
-      s = dir.x / a.y;
-      t = -dir.z / a.y;
-    } else {
-      face_index = 3u; // -Y
-      s = dir.x / a.y;
-      t = dir.z / a.y;
-    }
-  } else {
-    if (dir.z >= 0.0) {
-      face_index = 4u; // +Z
-      s = dir.x / a.z;
-      t = dir.y / a.z;
-    } else {
-      face_index = 5u; // -Z
-      s = -dir.x / a.z;
-      t = dir.y / a.z;
-    }
-  }
-
-  uv = float2(0.5 * (s + 1.0), 0.5 * (1.0 - t));
-}
-
 static inline float3 MakeIblDebugColor(float3 dir, bool include_grid)
 {
   uint face_index = 0u;
   float2 uv = 0.0;
-  CubemapDirToFaceUv(normalize(dir), face_index, uv);
+  CubemapFaceUvFromDirection(normalize(dir), face_index, uv);
 
   float3 base = GetIblFaceColor(face_index);
   float grid_line = 0.0;
@@ -306,7 +265,7 @@ static inline float3 MakeDepthMismatchHeatmap(float depth_error)
     {
       uint face_index = 0u;
       float2 uv = 0.0;
-      CubemapDirToFaceUv(normalize(cube_R), face_index, uv);
+      CubemapFaceUvFromDirection(normalize(cube_R), face_index, uv);
       debug_out = GetIblFaceColor(face_index);
       debug_handled = true;
     }

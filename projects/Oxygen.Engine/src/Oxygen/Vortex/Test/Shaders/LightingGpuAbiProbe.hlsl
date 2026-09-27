@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include "Vortex/Shared/CubemapGeometry.hlsli"
 #include "Vortex/Contracts/Lighting/LightGridData.hlsli"
 #include "Vortex/Contracts/Lighting/LightingFrameBindings.hlsli"
 #include "Vortex/Contracts/Lighting/DeferredLightConstants.hlsli"
@@ -27,6 +28,15 @@
 #include "Vortex/Services/Lighting/LocalLightAttenuation.hlsli"
 #include "Vortex/Services/Lighting/DeferredShadingCommon.hlsli"
 #include "Vortex/Stages/Translucency/ForwardPbr.hlsli"
+
+struct CubemapGeometryProbeInput {
+    float3 direction;
+    uint face;
+    float2 uv;
+    uint2 pixel;
+    uint size;
+    uint3 reserved;
+};
 
 struct ContactShadowProbeInput {
     float4x4 view;
@@ -172,7 +182,21 @@ void CS(uint3 thread : SV_DispatchThreadID) {
     RWByteAddressBuffer output = ResourceDescriptorHeap[args.y];
     uint element = args.w + thread.x;
     uint address = thread.x * args.z * 4;
-    if (g_RecordKind == 34) {
+    if (g_RecordKind == 39) {
+        StructuredBuffer<CubemapGeometryProbeInput> inputs = ResourceDescriptorHeap[args.x];
+        CubemapGeometryProbeInput value = inputs[element];
+        uint face;
+        float2 uv;
+        CubemapFaceUvFromDirection(value.direction, face, uv);
+        float3 direction = CubemapDirectionFromFaceUv(value.face, value.uv);
+        float3 cube_direction = CubemapSamplingDirFromOxygenWS(value.direction);
+        output.Store4(address, uint4(asuint(direction), face));
+        output.Store4(address + 16u, asuint(float4(uv,
+            CubemapTexelSolidAngle(value.pixel, value.size), 0.0)));
+        output.Store4(address + 32u, asuint(float4(cube_direction, 0.0)));
+        output.Store4(address + 48u, asuint(float4(
+            OxygenDirFromCubemapSamplingDir(cube_direction), 0.0)));
+    } else if (g_RecordKind == 34) {
         StructuredBuffer<HeightFogProbeInput> inputs = ResourceDescriptorHeap[args.x];
         HeightFogProbeInput value = inputs[element];
         float distance = value.mode == 2u ? value.distance : HeightFogDistantRayDistance(value.direction);

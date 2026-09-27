@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include "Vortex/Shared/CubemapGeometry.hlsli"
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
 #include "Vortex/Contracts/Environment/EnvironmentHelpers.hlsli"
 #include "Vortex/Contracts/Environment/IblProductMetadata.hlsli"
@@ -120,7 +121,7 @@ static void PrepareSource(uint3 id, uint3 group, uint lane, bool captured_sky)
     float maximum = 0.0;
     float valid = 1.0;
     if (all(id.xy < w.output_size)) {
-        float3 cube_direction = IblCubeDirection(id.z, (float2(id.xy) + 0.5) / w.output_size);
+        float3 cube_direction = CubemapDirectionFromFaceUv(id.z, (float2(id.xy) + 0.5) / w.output_size);
         float3 world = OxygenDirFromCubemapSamplingDir(cube_direction);
         float3 radiance;
         if (captured_sky) {
@@ -225,9 +226,9 @@ void IblShCS(uint3 id : SV_DispatchThreadID, uint3 group : SV_GroupID,
     RWStructuredBuffer<float4> partials = ResourceDescriptorHeap[w.partials_uav];
     for (uint term = 0u; term < 10u; ++term) Shared[term][lane] = 0.0.xxxx;
     if (all(id.xy < w.source_size)) {
-        float3 n = OxygenDirFromCubemapSamplingDir(IblCubeDirection(id.z,
+        float3 n = OxygenDirFromCubemapSamplingDir(CubemapDirectionFromFaceUv(id.z,
             (float2(id.xy) + 0.5) / w.source_size));
-        float weight = IblTexelSolidAngle(id.xy, w.source_size);
+        float weight = CubemapTexelSolidAngle(id.xy, w.source_size);
         float3 weighted = source[id].rgb * weight;
         float basis[9] = { 0.282095, -0.488603 * n.y, 0.488603 * n.z,
             -0.488603 * n.x, 1.092548 * n.x * n.y, -1.092548 * n.y * n.z,
@@ -293,7 +294,7 @@ void IblPrefilterCS(uint3 id : SV_DispatchThreadID)
     RWTexture2DArray<float4> output = ResourceDescriptorHeap[w.output_uav];
     RWStructuredBuffer<IblProductMetadata> metadata = ResourceDescriptorHeap[w.metadata_uav];
     SamplerState linear_clamp = SamplerDescriptorHeap[VORTEX_SAMPLER_LINEAR_CLAMP];
-    float3 n = IblCubeDirection(id.z, (float2(id.xy) + 0.5) / w.output_size);
+    float3 n = CubemapDirectionFromFaceUv(id.z, (float2(id.xy) + 0.5) / w.output_size);
     float3 radiance = IblPrefilter(source, linear_clamp, n,
         IblMipToRoughness(w.output_mip, w.maximum_mip), w.source_size, w.maximum_mip);
     if (!all(isfinite(radiance)) || any(radiance < 0.0)) {

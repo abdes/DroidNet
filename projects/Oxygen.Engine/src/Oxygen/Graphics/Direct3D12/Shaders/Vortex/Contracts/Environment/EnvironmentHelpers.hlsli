@@ -48,46 +48,6 @@ static inline bool LoadEnvironmentStaticData(out EnvironmentStaticData out_data)
     return false;
 }
 
-/**
- * Converts an Oxygen world-space direction (Z-up) to the direction used for
- * sampling GPU cubemaps (Y-up).
- *
- * Oxygen world convention (see `oxygen::space::move`):
- *   X = right, Y = back, Z = up  (so forward is -Y)
- * GPU cubemap convention used by our cooking/sampling path:
- *   X = right, Y = up, Z = forward
- *
- * Therefore:
- *   gpu.x = oxy.x
- *   gpu.y = oxy.z
- *   gpu.z = -oxy.y
- */
-static inline float3 CubemapSamplingDirFromOxygenWS(float3 dir_ws)
-{
-    // Oxygen Forward (-Y) -> Cubemap Front (+Z)
-    // Oxygen Up (+Z)      -> Cubemap Up (+Y)
-    return float3(dir_ws.x, dir_ws.z, -dir_ws.y);
-}
-
-/**
- * Converts a GPU Cubemap sampling direction (Y-up) back to Oxygen world-space direction (Z-up).
- * This is the inverse of CubemapSamplingDirFromOxygenWS.
- *
- * Use this when you have a direction relative to D3D cubemap faces (e.g. from SkyCapture view)
- * and need the corresponding Oxygen World Space direction.
- *
- * Mapping:
- *   oxy.x = gpu.x
- *   oxy.y = -gpu.z
- *   oxy.z = gpu.y
- */
-static inline float3 OxygenDirFromCubemapSamplingDir(float3 dir_d3d)
-{
-    // Cubemap Front (+Z) -> Oxygen Forward (-Y)
-    // Cubemap Up (+Y)    -> Oxygen Up (+Z)
-    return float3(dir_d3d.x, -dir_d3d.z, dir_d3d.y);
-}
-
 static float3 EvaluatePackedSkyDiffuseSh(StructuredBuffer<float4> sh, float3 normal_ws)
 {
     const float normal_len_sq = dot(normal_ws, normal_ws);

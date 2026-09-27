@@ -7,6 +7,7 @@
 #ifndef OXYGEN_VORTEX_IBL_EVALUATION_HLSLI
 #define OXYGEN_VORTEX_IBL_EVALUATION_HLSLI
 
+#include "Vortex/Shared/CubemapGeometry.hlsli"
 #include "Vortex/Contracts/Definitions/SceneDefinitions.hlsli"
 #include "Vortex/Contracts/Environment/EnvironmentHelpers.hlsli"
 #include "Vortex/Contracts/Environment/IblProductMetadata.hlsli"

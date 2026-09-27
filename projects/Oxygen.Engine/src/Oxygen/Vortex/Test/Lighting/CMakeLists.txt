@@ -92,6 +92,7 @@ gtest_program(
     "PhotometryGpu_test.cpp"
     "BrdfGpu_test.cpp"
     "IblProductsGpu_test.cpp"
+    "CubemapGeometryGpu_test.cpp"
     "HeightFogGpu_test.cpp"
     "IblConvolutionGpu_test.cpp"
     "Reference/GgxEnergyLookup.h"
@@ -187,6 +188,7 @@ add_custom_command(
   DEPENDS
     "${OXYGEN_DXC_EXECUTABLE}"
     "${lighting_probe_source}"
+    "${lighting_shader_root}/Vortex/Shared/CubemapGeometry.hlsli"
     "${lighting_shader_root}/Vortex/Contracts/Lighting/LightGridData.hlsli"
     "${lighting_shader_root}/Vortex/Contracts/Shadows/ShadowRecords.hlsli"
   DEPFILE "${lighting_probe_output}.d"

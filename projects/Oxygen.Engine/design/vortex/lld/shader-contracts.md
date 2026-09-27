@@ -5,7 +5,7 @@
 **Status:** `ready`
 
 Shared helper contracts: [group reductions](#111-group-reductions) and
-[cubemap geometry](#112-cubemap-geometry). Their implementation is planned in
+[cubemap geometry](#112-cubemap-geometry). Implementation state is tracked in
 [VX-IBL-01.S7](../milestones/VX-IBL-01/README.md#s7--reusable-infrastructure).
 
 ## Exposure ABI extension
@@ -901,11 +901,11 @@ Extraction must not trigger numerical retuning to improve invisible residuals.
 
 ### 11.2 Cubemap geometry
 
-**Owner:** shader `Vortex/Shared/CubemapGeometry.hlsli`. Move face/UV-to-direction
-and texel solid angle from `IblSampling.hlsli`, inverse face/UV mapping from
-`ForwardDebug_PS.hlsl`, and Oxygen↔cube direction conversion from
-`EnvironmentHelpers.hlsli`. Update all production callers and remove duplicate
-bodies; the shared header has no Environment ABI dependency.
+**Owner:** shader [`Vortex/Shared/CubemapGeometry.hlsli`](../../../src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Shared/CubemapGeometry.hlsli).
+It provides `CubemapDirectionFromFaceUv`, `CubemapFaceUvFromDirection`,
+`CubemapTexelSolidAngle` and the existing Oxygen↔cube direction conversions.
+IBL processing, visible sky, indirect evaluation and forward debug include it
+directly. The shared header has no Environment ABI dependency or resource access.
 
 Preserve face order +X/-X/+Y/-Y/+Z/-Z, top-down UVs, X→Y→Z axis tie-breaking,
 normalization placement and Oxygen +Z-up conversion `(x,z,-y)` with its inverse.
@@ -923,3 +923,7 @@ universal mip filter is introduced.
 solid-angle sums and production debug-face output; preserve source rotation,
 hemisphere and sky/IBL images. Use the existing test shader/probe pipeline and
 unchanged product/image tolerances.
+
+ShaderBake records the header through its existing include fingerprints. Native
+probe dependencies also name it explicitly. S7.6 qualification is recorded in the
+[milestone validation](../milestones/VX-IBL-01/validation.md#s76-cubemap-geometry).

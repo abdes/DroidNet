@@ -13,6 +13,30 @@ Read: [S7 checkpoints](#s7-checkpoints), [integrated results](#integrated-result
 
 ## S7 checkpoints
 
+### S7.6 cubemap geometry
+
+Shared cube geometry passes Debug/Release qualification over `82e20534c` with
+S7.6 changes. Two native tests cover **179 direction/face cases** and **1,093
+texel areas**, using independent signed face bases and spherical-triangle areas.
+Five existing IBL cases cover cube faces/mips, Oxygen axes, source rotation and
+hemisphere policy; the **144-case image matrix** passes in both configurations.
+Existing product/image tolerances are unchanged.
+
+All **237 Release production DXIL payloads are byte-identical** to the pre-change
+baseline, including forward debug-face variants. ShaderBake fingerprints the new
+include in **127 modules**; the production catalog still contains 237 modules.
+The new probe is test-only. No shader instruction or resource-cost retuning was
+needed; integrated S7 cost/SDK/application gates remain open.
+
+Reproduce geometry with LightingGpuAbi filter `LightingGpuAbiTest.CubemapGeometry*`;
+product filters are `IblConvolutionGpuTest.ConstantCubePreservesEveryFaceAndMip`,
+`IblConvolutionGpuTest.DirectionalCubeMatchesAnalyticDiffuseInOxygenAxes`,
+`*Rotation*` and `*Hemisphere*`. Run Exposure filter
+`IblSurfaceGpuTest.ImagesAgreeAcrossPublishedAndOffscreenPaths` for images.
+For shader identity, compare the `DXIL` chunks in ShaderBake's per-request module
+artifacts from normal Release builds of the baseline and this extraction.
+Keep generated artifacts in ignored `out/`.
+
 ### S7.2 bounded GPU feedback
 
 The shared pool and IBL, exposure and light-grid adopters pass focused qualification

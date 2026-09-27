@@ -20,36 +20,9 @@ static float IblMipToRoughness(uint mip, uint maximum_mip)
     return exp2((float(mip) + 2.0 - float(maximum_mip)) / 1.2);
 }
 
-// Standard hardware cube faces and top-down texels. World conversion remains
-// CubemapSamplingDirFromOxygenWS / OxygenDirFromCubemapSamplingDir.
-static float3 IblCubeDirection(uint face, float2 uv)
-{
-    float2 p = uv * 2.0 - 1.0;
-    float3 d;
-    switch (face) {
-    case 0u: d = float3(1.0, -p.y, -p.x); break;
-    case 1u: d = float3(-1.0, -p.y, p.x); break;
-    case 2u: d = float3(p.x, 1.0, p.y); break;
-    case 3u: d = float3(p.x, -1.0, -p.y); break;
-    case 4u: d = float3(p.x, -p.y, 1.0); break;
-    default: d = float3(-p.x, -p.y, -1.0); break;
-    }
-    return normalize(d);
-}
-
 static float2 IblHammersley(uint index, uint count)
 {
     return float2(float(index) / float(count), float(reversebits(index)) * 2.3283064365386963e-10);
-}
-
-static float IblTexelSolidAngle(uint2 pixel, uint size)
-{
-    float2 lo = 2.0 * float2(pixel) / float(size) - 1.0;
-    float2 hi = 2.0 * float2(pixel + 1u) / float(size) - 1.0;
-    return atan2(hi.x * hi.y, sqrt(dot(hi, hi) + 1.0))
-        - atan2(lo.x * hi.y, sqrt(lo.x * lo.x + hi.y * hi.y + 1.0))
-        - atan2(hi.x * lo.y, sqrt(hi.x * hi.x + lo.y * lo.y + 1.0))
-        + atan2(lo.x * lo.y, sqrt(dot(lo, lo) + 1.0));
 }
 
 static float3 IblPrefilter(TextureCube<float4> source, SamplerState cube_sampler,

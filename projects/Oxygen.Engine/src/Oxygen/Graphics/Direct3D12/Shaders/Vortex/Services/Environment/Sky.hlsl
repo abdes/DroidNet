@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include "Vortex/Shared/CubemapGeometry.hlsli"
 #include "Vortex/Contracts/Environment/EnvironmentHelpers.hlsli"
 #include "Vortex/Contracts/Environment/EnvironmentViewHelpers.hlsli"
 #include "Vortex/Contracts/View/FrameExposureHelpers.hlsli"

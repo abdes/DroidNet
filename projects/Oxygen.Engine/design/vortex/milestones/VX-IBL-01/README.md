@@ -2,11 +2,11 @@
 
 Status: `in_progress`
 
-| Field     | Summary                                                                                                                                                                                                                                                                         |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Outcome   | Atmosphere/height-fog and specified-cubemap diffuse/specular IBL, immediate authoring and budgeted runtime updates.                                                                                                                                                             |
-| Remaining | [S7 reusable infrastructure](#s7--reusable-infrastructure) has two extractions and integrated qualification remaining; [S8](#s8--atmosphere-and-fog-correctness) addresses seven confirmed atmosphere/fog defects. Track [VX-IBL-01](../../OPEN_ITEMS.md#p1--current-delivery). |
-| Evidence  | [Lighting acceptance](#acceptance) · [Validation](validation.md). S1–S6 remain validated; S7 distant-sky synchronization, S7.4, S7.1, S7.3 and S7.2 checks pass; two extractions and integrated qualification remain.                                                           |
+| Field     | Summary                                                                                                                                                                                                                                                                                 |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Outcome   | Atmosphere/height-fog and specified-cubemap diffuse/specular IBL, immediate authoring and budgeted runtime updates.                                                                                                                                                                     |
+| Remaining | [S7 reusable infrastructure](#s7--reusable-infrastructure) has shared group reductions and integrated qualification remaining; [S8](#s8--atmosphere-and-fog-correctness) addresses seven confirmed atmosphere/fog defects. Track [VX-IBL-01](../../OPEN_ITEMS.md#p1--current-delivery). |
+| Evidence  | [Lighting acceptance](#acceptance) · [Validation](validation.md). S1–S6 remain validated; S7 distant-sky synchronization, S7.1–S7.4 and S7.6 checks pass; shared group reductions and integrated qualification remain.                                                                  |
 
 Read: [scope](#scope-and-ownership), [delivery sequence](#delivery-sequence),
 [DemoShell UI](#demoshell-ui), [validation tools](#validation-tools),
@@ -73,8 +73,9 @@ passes native sky checks and the authoring timing gate.
 [S7.4 registry methods](evidence/s7-resources-final/run.json) and
 [S7.1 immutable uploads](validation.md#s71-immutable-lut-uploads) and
 [S7.3 retirement](validation.md#s73-retirement-accounting) and
-[S7.2 feedback](validation.md#s72-bounded-gpu-feedback) pass their focused checks;
-two extractions and integrated qualification remain.
+[S7.2 feedback](validation.md#s72-bounded-gpu-feedback) and
+[S7.6 cubemap geometry](validation.md#s76-cubemap-geometry) pass their focused checks;
+shared group reductions and integrated qualification remain.
 
 Read: [work items](#s7-work-items), [execution and exit](#s7-execution-and-exit),
 [C++ guidance](../../../../../../design/oxygen/RULES.md#c).
@@ -94,7 +95,7 @@ Each extraction lands as a buildable, reviewed commit with its adopters and chec
 | S7.3 | [Retirement accounting](../../../../src/Oxygen/Nexus/Docs/slot-retirement.md#10-owner-and-use-accounting) above Nexus IndexReuse; preserve family admission and Graphics completion. | IBL ProductVersion and shared-shadow ShadowSlotCore.                                                      | Ordinary ownership and retained pins drain independently; discard/fault/close and allocation-denied retirement pass in both families.                    | validated   |
 | S7.4 | [Managed resource/view setup](../../../../src/Oxygen/Graphics/Common/README.md#managed-resources-and-views); caller chooses allocation and view descriptors.                         | IBL allocations, captured-sky target setup and shared-shadow backing/initial SRV setup; S7.1 consumes it. | Transactional setup, domains, mip views and cleanup pass; shadow budget fallback and lazy DSVs stay intact.                                              | validated   |
 | S7.5 | [Shared group reductions](../../lld/shader-contracts.md#111-group-reductions); preserve fused trees and numerical contracts.                                                         | IBL reductions, distant-sky sum and three 64-lane exposure suitability reductions.                        | Native product/exposure checks pass with unchanged tolerances; distant sky gains the required offset-2 barrier; shader cost is inspected and measured.   | in_progress |
-| S7.6 | [Shared cubemap geometry](../../lld/shader-contracts.md#112-cubemap-geometry); pure coordinate/solid-angle math.                                                                     | IBL processing, environment conversions and forward debug face/UV mapping.                                | Face order, axis ties, seams, orientation and solid angles pass independent references; sky/material images remain qualified.                            | planned     |
+| S7.6 | [Shared cubemap geometry](../../lld/shader-contracts.md#112-cubemap-geometry); pure coordinate/solid-angle math.                                                                     | IBL processing, environment conversions and forward debug face/UV mapping.                                | Face order, axis ties, seams, orientation and solid angles pass independent references; sky/material images remain qualified.                            | validated   |
 
 These helpers have immediate reuse and useful future consumers:
 
