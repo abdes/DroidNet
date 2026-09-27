@@ -6,13 +6,14 @@
 - [Quick contract](#quick-contract-inputs--outputs--success)
 - [Core classes you must implement](#core-classes-you-must-implement)
 - [Descriptor Allocation Strategy](#descriptor-allocation-strategy)
-- [Commander Component and Command Coordination](#commander-component-and-command-coordination)
+- [Recording ownership and submission](#recording-ownership-and-submission)
 - [Optional / advanced](#optional--advanced)
 - [Important invariants & engine expectations](#important-invariants--engine-expectations)
 - [Practical tips and gotchas](#practical-tips-and-gotchas)
 - [Build / integration checklist](#build--integration-checklist)
 - [Testing & validation](#testing--validation)
 - [Next steps / further reading](#next-steps--further-reading)
+- [Managed resources and views](#managed-resources-and-views)
 
 ## Purpose
 
@@ -74,7 +75,7 @@ Implement concrete, backend-specific subclasses for at least the following
 - Resource types: `Buffer`, `Texture`, `Sampler`, `Framebuffer` (`Buffer.h`,
   `Texture.h`, `Sampler.h`)
   - Implement native resource creation, `GetNativeResource()`,
-    `GetDescriptor()`, and the various Create*View helpers
+    `GetDescriptor()`, and the various Create\*View helpers
     (`CreateShaderResourceView`, `CreateUnorderedAccessView`,
     `CreateRenderTargetView`, `CreateDepthStencilView`, etc.).
   - Implement CPU mapping, `Update()`, and GPU virtual address if supported for
@@ -330,3 +331,40 @@ value API. There is no hidden pending-submission queue or flush-all operation.
   `BindlessRenderingRootSignature.md` and `PipelineDesign.md`.
 - Inspect `Examples/D3D12-Renderer` for a sample backend wiring and sample usage
   patterns.
+
+## Managed resources and views
+
+**Implementation home:** `Graphics/Common/ResourceRegistry` methods
+`RegisterManagedTexture` and `RegisterManagedBuffer`, with request/bundle types
+in `Graphics/Common/ManagedResource.h`. The operation composes only Graphics
+registration and view services; renderer wrappers add no policy.
+First adopters are IBL's texture/buffer allocations, captured-sky target setup and
+[`ConventionalShadowTargetAllocator`](../../Vortex/Shadows/Internal/ConventionalShadowTargetAllocator.cpp).
+S7.1 uses these registry methods for LUT destinations and staging resources.
+
+- Accept a caller-created, previously unregistered `Texture` or `Buffer` and
+  an explicit list of typed view descriptions with the requested bindless domain. Return the resource,
+  internal `RegistrationOwner` and ordered `ManagedView` results in a move-only
+  bundle. No dimension inference from height, descriptor aliasing, resource cache or new allocator.
+- Claim a new registration under the registry lock; concurrent initializers
+  cannot share a claim. Existing single-resource `RegisterManaged` retains its
+  reuse semantics. The caller keeps the allocation private until setup returns.
+  Acquire initial views through the existing registry view cache.
+  Failure unwinds the candidate through managed retirement and exposes no partial
+  result. Existing identities/cache keys remain authoritative. An external
+  `RegistrationLease` is acquired explicitly only where the consumer needs it;
+  stored allocation bundles must not retain Graphics through that lease.
+- Resource creation remains at the caller so allocation-budget exceptions and
+  shadow chunk-size fallback retain their exact meaning. Preserve formats,
+  typeless depth/SRV compatibility, clear values, subresource ranges, domain and
+  visibility. IBL creates its per-mip UAVs; shadows retain lazy CPU-only DSV
+  acquisition for each used face rather than allocating all DSVs eagerly.
+- GPU state transitions and `RetainRegistration` remain at recording sites;
+  constructing a bundle does not establish a GPU use or transition a resource.
+  Do not migrate TextureBinder's stable-descriptor replacement or unrelated
+  output pools in this slice.
+
+**Checks:** failure at each initial-view index, retry/cleanup, correct domains,
+SRV/UAV mip ranges, typeless-depth SRV and lazy DSVs, backend close and resource
+retention after the family owner disappears. Registration populations and
+Lighting budget fallback match the existing native tests.

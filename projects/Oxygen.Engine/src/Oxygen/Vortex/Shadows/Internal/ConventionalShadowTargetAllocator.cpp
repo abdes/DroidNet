@@ -9,8 +9,8 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
-#include <limits>
 #include <memory>
+#include <mutex>
 #include <span>
 #include <stdexcept>
 #include <unordered_set>
@@ -25,25 +25,39 @@
 #include <Oxygen/Graphics/Common/AllocationBudget.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Graphics/Common/ManagedResource.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Scene/Light/LightCommon.h>
+#include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/Shadows/Internal/ConventionalShadowTargetAllocator.h>
+#include <Oxygen/Vortex/Shadows/Internal/LocalShadowRequest.h>
 #include <Oxygen/Vortex/Shadows/Internal/ShadowEligibility.h>
+#include <Oxygen/Vortex/Shadows/Internal/SharedShadowMap.h>
 #include <Oxygen/Vortex/Shadows/Types/CubeLocalShadowRecord.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
 #include <Oxygen/Vortex/Types/LightingIndices.h>
+#include <Oxygen/Vortex/Types/ShadowCasterSource.h>
 
 namespace oxygen::vortex::shadows::internal {
 
 namespace {
 
-  constexpr auto kDirectionalRequestedResolutions
-    = std::array { 1024U, 2048U, 3072U, 4096U };
+  constexpr std::uint32_t kLowDirectionalResolution = 1024U;
+  constexpr std::uint32_t kMediumDirectionalResolution = 2048U;
+  constexpr std::uint32_t kHighDirectionalResolution = 3072U;
+  constexpr std::uint32_t kUltraDirectionalResolution = 4096U;
+
+  constexpr auto kDirectionalRequestedResolutions = std::array {
+    kLowDirectionalResolution,
+    kMediumDirectionalResolution,
+    kHighDirectionalResolution,
+    kUltraDirectionalResolution,
+  };
   constexpr auto kLocalRequestedResolutions
     = std::array { 512U, 1024U, 2048U, 2048U };
 
@@ -71,15 +85,15 @@ namespace {
   {
     switch (quality_tier) {
     case ShadowQualityTier::kLow:
-      return 1024U;
+      return kLowDirectionalResolution;
     case ShadowQualityTier::kMedium:
-      return 2048U;
+      return kMediumDirectionalResolution;
     case ShadowQualityTier::kHigh:
-      return 3072U;
+      return kHighDirectionalResolution;
     case ShadowQualityTier::kUltra:
-      return 4096U;
+      return kUltraDirectionalResolution;
     default:
-      return 2048U;
+      return kMediumDirectionalResolution;
     }
   }
 
@@ -111,7 +125,7 @@ ConventionalShadowTargetAllocator::~ConventionalShadowTargetAllocator()
     Retire(allocations);
   }
   {
-    std::lock_guard lock(local_pool_->mutex);
+    std::scoped_lock lock(local_pool_->mutex);
     local_pool_->closed = true;
     local_pool_->reuse.Close();
   }
@@ -168,13 +182,13 @@ auto ConventionalShadowTargetAllocator::OnFrameStart(
       ++it;
     }
   }
-  std::erase_if(
-    local_content_, [](const auto& entry) { return entry.second.expired(); });
+  std::erase_if(local_content_,
+    [](const auto& entry) -> auto { return entry.second.expired(); });
   PruneLocalChunks();
   std::erase_if(observed_backings_,
-    [](const auto& item) { return item.texture.expired(); });
-  std::erase_if(
-    observed_versions_, [](const auto& item) { return item.expired(); });
+    [](const auto& item) -> auto { return item.texture.expired(); });
+  std::erase_if(observed_versions_,
+    [](const auto& item) -> auto { return item.expired(); });
   current_sequence_ = sequence;
 }
 
@@ -190,12 +204,9 @@ auto ConventionalShadowTargetAllocator::RetainLocalSources(ViewId view_id,
       active.insert(light.source_node);
     }
   }
-  std::erase_if(view.local_owners, [&](const auto& owner) {
-    if (view.scene_generation != scene_generation
-      || !active.contains(owner.first)) {
-      return true;
-    }
-    return false;
+  std::erase_if(view.local_owners, [&](const auto& owner) -> auto {
+    return static_cast<bool>(view.scene_generation != scene_generation
+      || !active.contains(owner.first));
   });
   view.scene_generation = scene_generation;
 }
@@ -337,7 +348,7 @@ ConventionalShadowTargetAllocator::LocalAcquisition::~LocalAcquisition()
     return;
   }
   auto& backing = *owner->version->slot->backing;
-  std::lock_guard lock(backing.mutex);
+  std::scoped_lock lock(backing.mutex);
   if (!backing.quarantined
     && owner->version->state != ShadowMapVersion::State::kSubmitted) {
     previous->version->accepting = true;
@@ -361,7 +372,7 @@ auto ConventionalShadowTargetAllocator::PrepareLocalFamily(
     }
   }
   std::ranges::sort(
-    requested_content_, {}, [](const auto* key) { return key->hash; });
+    requested_content_, {}, [](const auto* key) -> auto { return key->hash; });
 }
 auto ConventionalShadowTargetAllocator::IsRequested(
   const LocalShadowContentKey& key) const -> bool
@@ -370,7 +381,7 @@ auto ConventionalShadowTargetAllocator::IsRequested(
     return false;
   }
   auto first = std::ranges::lower_bound(requested_content_, key.hash, {},
-    [](const auto* item) { return item->hash; });
+    [](const auto* item) -> auto { return item->hash; });
   for (; first != requested_content_.end() && (*first)->hash == key.hash;
     ++first) {
     if (**first == key) {
@@ -413,28 +424,26 @@ auto ConventionalShadowTargetAllocator::CreateLocalBacking(
   if (!backing->texture) {
     throw std::runtime_error("Local shadow backing allocation failed");
   }
-  auto& registry = gfx->GetResourceRegistry();
-  auto lease = registry.RegisterManaged(backing->texture);
-  if (!lease) {
-    throw std::runtime_error("Local shadow registration failed");
-  }
-  const auto srv = registry.AcquireManagedView<graphics::Texture>(*lease,
-    graphics::TextureViewDescription {
-      .view_type = graphics::ResourceViewType::kTexture_SRV,
+  const auto views = std::array { graphics::TextureViewRequest {
+    .description={ .view_type = graphics::ResourceViewType::kTexture_SRV,
       .visibility = graphics::DescriptorVisibility::kShaderVisible,
       .format = Format::kR32Float,
-      .dimension = desc.texture_type });
-  if (!srv) {
-    throw std::runtime_error("Local shadow SRV creation failed");
+      .dimension = desc.texture_type, },
+    .domain={}, }, };
+  auto managed = gfx->GetResourceRegistry().RegisterManagedTexture(
+    backing->texture, views);
+  if (!managed) {
+    throw std::runtime_error("Local shadow registration/view creation failed");
   }
-  backing->srv = srv->shader_visible_index;
-  backing->registration = lease->AllocationOwner();
+  backing->srv = managed->views.front().shader_visible_index;
+  backing->registration = std::move(managed->registration);
   backing->resolution = resolution;
   backing->cube = cube;
   backing->map_capacity = desc.array_size / faces;
   backing->dsvs.resize(desc.array_size);
   backing->queues.reserve(4);
-  observed_backings_.push_back({ backing, backing->texture });
+  observed_backings_.push_back(
+    { .backing = backing, .texture = backing->texture });
   return backing;
 }
 auto ConventionalShadowTargetAllocator::EnsureSlotViews(
@@ -448,8 +457,8 @@ auto ConventionalShadowTargetAllocator::EnsureSlotViews(
   }
   const auto faces = slot.backing->cube ? 6U : 1U;
   for (uint32_t face = 0; face < faces; ++face) {
-    const auto layer = slot.offset * faces + face;
-    if (slot.backing->dsvs[layer]->IsValid()) {
+    const auto layer = (slot.offset * faces) + face;
+    if (slot.backing->dsvs.at(layer)->IsValid()) {
       continue;
     }
     const auto view = registry.AcquireManagedView<graphics::Texture>(*lease,
@@ -461,11 +470,11 @@ auto ConventionalShadowTargetAllocator::EnsureSlotViews(
         .sub_resources = { .base_mip_level = 0,
           .num_mip_levels = 1,
           .base_array_slice = layer,
-          .num_array_slices = 1 } });
+          .num_array_slices = 1, }, });
     if (!view) {
       throw std::runtime_error("Local shadow DSV creation failed");
     }
-    slot.backing->dsvs[layer] = view->view;
+    slot.backing->dsvs.at(layer) = view->view;
   }
 }
 auto ConventionalShadowTargetAllocator::AcquirePhysicalSlot(
@@ -481,13 +490,13 @@ auto ConventionalShadowTargetAllocator::AcquirePhysicalSlot(
     std::array<bool, 64> occupied {};
     for (const auto& weak : local_pool_->slots) {
       if (const auto slot = weak.lock(); slot && slot->backing == candidate) {
-        std::lock_guard lock(slot->mutex);
+        std::scoped_lock lock(slot->mutex);
         if (!slot->finalized) {
-          occupied[slot->offset] = true;
+          occupied.at(slot->offset) = true;
         }
       }
     }
-    for (offset = 0; offset < candidate->map_capacity && occupied[offset];
+    for (offset = 0; offset < candidate->map_capacity && occupied.at(offset);
       ++offset) { }
     if (offset < candidate->map_capacity) {
       backing = candidate;
@@ -508,7 +517,7 @@ auto ConventionalShadowTargetAllocator::AcquirePhysicalSlot(
   slot->offset = offset;
   ShadowSlotIndex index;
   {
-    std::lock_guard lock(local_pool_->mutex);
+    std::scoped_lock lock(local_pool_->mutex);
     if (local_pool_->closed) {
       throw std::logic_error("Shadow slot pool is closed");
     }
@@ -528,12 +537,12 @@ auto ConventionalShadowTargetAllocator::AcquirePhysicalSlot(
   try {
     slot->handle = local_pool_->reuse.ActivateSlot(index);
   } catch (...) {
-    std::lock_guard lock(local_pool_->mutex);
+    std::scoped_lock lock(local_pool_->mutex);
     local_pool_->free.push_back(index);
     throw;
   }
   slot->pool = local_pool_;
-  local_pool_->slots[index.get()] = slot;
+  local_pool_->slots.at(index.get()) = slot;
   EnsureSlotViews(*slot);
   if (new_chunk) {
     local_chunks_.push_back(slot->backing);
@@ -542,16 +551,16 @@ auto ConventionalShadowTargetAllocator::AcquirePhysicalSlot(
 }
 auto ConventionalShadowTargetAllocator::PruneLocalChunks() -> void
 {
-  std::erase_if(local_chunks_, [&](const auto& backing) {
-    for (const auto& weak : local_pool_->slots) {
-      if (const auto slot = weak.lock(); slot && slot->backing == backing) {
-        std::lock_guard lock(slot->mutex);
-        if (!slot->finalized) {
+  std::erase_if(local_chunks_, [&](const auto& backing) -> auto {
+    return std::ranges::none_of(
+      local_pool_->slots, [&](const auto& weak) -> bool {
+        const auto slot = weak.lock();
+        if (!slot || slot->backing != backing) {
           return false;
         }
-      }
-    }
-    return true;
+        std::scoped_lock lock(slot->mutex);
+        return !slot->finalized;
+      });
   });
 }
 auto ConventionalShadowTargetAllocator::AcquireLocalMap(
@@ -574,7 +583,7 @@ auto ConventionalShadowTargetAllocator::AcquireLocalMap(
         continue;
       }
       auto& version = *owner->version;
-      std::lock_guard lock(version.slot->backing->mutex);
+      std::scoped_lock lock(version.slot->backing->mutex);
       if (version.accepting
         && version.state == ShadowMapVersion::State::kSubmitted
         && !version.slot->backing->quarantined
@@ -618,7 +627,7 @@ auto ConventionalShadowTargetAllocator::AcquireLocalMap(
       local_content_.emplace(request.content.hash, acquired.owner);
     }
     if (acquired.in_place) {
-      std::lock_guard lock(alias->version->slot->backing->mutex);
+      std::scoped_lock lock(alias->version->slot->backing->mutex);
       alias->version->accepting = false;
     }
     return acquired;
@@ -645,8 +654,8 @@ auto ConventionalShadowTargetAllocator::InspectLocalSharing() const
     if (const auto version = weak.lock()) {
       ++result.live_versions;
       result.version_payload_bytes += sizeof(ShadowMapVersion)
-        + version->content.casters.capacity()
-          * sizeof(std::shared_ptr<const ShadowCasterRecord>);
+        + (version->content.casters.capacity()
+          * sizeof(std::shared_ptr<const ShadowCasterRecord>));
     }
   }
   for (const auto& item : observed_backings_) {
@@ -661,15 +670,20 @@ auto ConventionalShadowTargetAllocator::InspectLocalSharing() const
       std::uint64_t occupied = 0;
       for (const auto& weak : local_pool_->slots) {
         if (const auto slot = weak.lock(); slot && slot->backing == backing) {
-          std::lock_guard lock(slot->mutex);
+          std::scoped_lock lock(slot->mutex);
           occupied += slot->finalized ? 0U : 1U;
           closing = closing && slot->owners == 0;
         }
       }
       spare = (backing->map_capacity - occupied) * backing->resolution
-        * backing->resolution * sizeof(float) * (backing->cube ? 6U : 1U);
+        * backing->resolution * sizeof(float)
+        * (backing->cube ? CubeLocalShadowRecord::kFaceCount : 1U);
     }
-    result.backings.push_back({ std::move(texture), spare, closing });
+    result.backings.push_back({
+      .texture = std::move(texture),
+      .spare_texel_bytes = spare,
+      .closing = closing,
+    });
   }
   return result;
 }

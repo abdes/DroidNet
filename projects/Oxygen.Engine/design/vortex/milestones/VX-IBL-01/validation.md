@@ -11,6 +11,27 @@ Read: [integrated results](#integrated-results), [checkpoint evidence](#checkpoi
 
 ## S7 checkpoints
 
+[S7.4 final cleanup](evidence/s7-resources-final/run.json): the three requested
+source files pass oxytidy with **zero warnings/errors**, with all configured
+checks enabled. Oxyformat covers all pending C++ files. After cleanup,
+**80 Release / 83 Debug registry tests**, **50 shadow-service tests in each
+configuration**, **four native integration tests in each configuration** and
+**four Release native shadow tests** pass. Explicit default initializers in the
+registry receive a final Debug/Release build and registry-test pass. The preceding
+product/fault and retained-capture proof below preserves its exact tested sources.
+
+[Managed registration and views](evidence/s7-resources/run.json): S7.4 now uses
+Graphics `ResourceRegistry` methods, with no Vortex registration wrapper.
+**80 Release / 83 Debug registry tests**, **52 / 54 native product tests** and
+**four integration tests in each configuration** pass, including the 144-case
+image matrix. **50 Debug shadow-service tests** and **four native Release shadow
+cases** cover shared maps, retained reads and tight-budget fallback. Initial-view
+failure/retry and concurrent initialization are checked in the registry's own
+suite. Bundles use Oxygen's special-member macros and are move-only.
+[RenderDoc](evidence/s7-resources/release/retained.json) verifies 1,024 retained
+cube values and 32 metadata bytes after renderer shutdown. Integrated S7 cost and
+SDK/editor gates remain open.
+
 [Distant-sky synchronization](evidence/s7-barrier/run.json): **six native sky/LUT
 tests** pass after adding the group barrier between offset-2 writes and the final
 lane-zero pair. ShaderBake publishes all **237** production modules. The isolated

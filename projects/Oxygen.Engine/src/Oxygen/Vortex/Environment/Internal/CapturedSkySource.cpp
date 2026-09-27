@@ -4,29 +4,41 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
+#include <cstdint>
 #include <exception>
+#include <expected>
+#include <memory>
 #include <new>
+#include <utility>
 
 #include <Oxygen/Base/ScopeGuard.h>
+#include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
 #include <Oxygen/Core/Types/Atmosphere.h>
 #include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/CommandRecording.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Graphics/Common/ManagedResource.h>
+#include <Oxygen/Graphics/Common/Registration.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereState.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereView.h>
 #include <Oxygen/Vortex/Environment/Internal/CapturedSkySource.h>
+#include <Oxygen/Vortex/Environment/Internal/IblGpuProcessor.h>
 #include <Oxygen/Vortex/Environment/Passes/AtmosphereMultiScatteringLutPass.h>
 #include <Oxygen/Vortex/Environment/Passes/AtmosphereSkyViewLutPass.h>
 #include <Oxygen/Vortex/Environment/Passes/AtmosphereTransmittanceLutPass.h>
 #include <Oxygen/Vortex/Environment/Passes/DistantSkyLightLutPass.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/Types/EnvironmentStaticData.h>
 
 namespace oxygen::vortex::environment::internal {
 
@@ -66,8 +78,9 @@ auto CapturedSkySource::Process(RenderContext& ctx,
   -> std::expected<std::shared_ptr<const IblGpuProducts>, IblProcessError>
 {
   const auto source = Prepare(ctx, state, fog);
-  if (!source)
+  if (!source) {
     return std::unexpected(source.error());
+  }
   return processor.ProcessSky(*source, brdf, settings, revision);
 }
 
@@ -78,8 +91,9 @@ auto CapturedSkySource::Begin(RenderContext& ctx,
   -> std::expected<std::shared_ptr<IblGpuJob>, IblProcessError>
 {
   const auto source = Prepare(ctx, state, fog);
-  if (!source)
+  if (!source) {
     return std::unexpected(source.error());
+  }
   return processor.BeginSky(*source, brdf, settings, revision);
 }
 
@@ -89,9 +103,10 @@ auto CapturedSkySource::Prepare(RenderContext& ctx,
 try {
   auto& p = *impl_;
   bool accepted = false;
-  const ScopeGuard timing([&]() noexcept {
-    if (!accepted)
+  const ScopeGuard timing([&] noexcept -> void {
+    if (!accepted) {
       p.renderer.GetDiagnosticsService().InvalidateIblTiming();
+    }
   });
   if (p.sequence != ctx.frame_sequence || p.slot != ctx.frame_slot) {
     p.sequence = ctx.frame_sequence;
@@ -125,48 +140,71 @@ try {
   const auto distant = p.distant.Record(ctx, state, p.cache, true);
   if ((transmittance.requested && !transmittance.executed)
     || (multiple.requested && !multiple.executed)
-    || (distant.requested && !distant.executed) || !p.cache.IsFullyValid())
+    || (distant.requested && !distant.executed) || !p.cache.IsFullyValid()) {
     return std::unexpected(IblProcessError::kRecordingFailed);
+  }
   auto graphics = p.renderer.GetGraphics();
-  if (!graphics)
+  if (!graphics) {
     return std::unexpected(IblProcessError::kClosed);
+  }
   auto& registry = graphics->GetResourceRegistry();
   const auto& quality = p.cache.GetState().internal_parameters;
   if (!p.working_sky) {
-    p.working_sky = graphics->CreateTexture({ .width = quality.sky_view_width,
+    p.working_sky = graphics->CreateTexture({
+      .width = quality.sky_view_width,
       .height = quality.sky_view_height,
       .format = Format::kRGBA32Float,
       .texture_type = TextureType::kTexture2D,
       .debug_name = "Vortex.Environment.CaptureSkyViewLut",
       .is_shader_resource = true,
       .is_uav = true,
-      .initial_state = graphics::ResourceStates::kCommon });
-    if (!p.working_sky)
+      .initial_state = graphics::ResourceStates::kCommon,
+    });
+    if (!p.working_sky) {
       return std::unexpected(IblProcessError::kAllocationFailed);
-    auto registration = registry.RegisterManaged(p.working_sky);
-    if (!registration) {
+    }
+    const auto views = std::array {
+      graphics::TextureViewRequest {
+        .description = { .view_type = graphics::ResourceViewType::kTexture_SRV,
+          .format = Format::kRGBA32Float,
+          .dimension = TextureType::kTexture2D,
+          .sub_resources = graphics::TextureSubResourceSet::EntireTexture(), },
+        .domain = bindless::generated::kTexturesDomain, },
+      graphics::TextureViewRequest {
+        .description = { .view_type = graphics::ResourceViewType::kTexture_UAV,
+          .format = Format::kRGBA32Float,
+          .dimension = TextureType::kTexture2D,
+          .sub_resources = graphics::TextureSubResourceSet::EntireTexture(), },
+        .domain = {}, },
+    };
+    auto managed = registry.RegisterManagedTexture(p.working_sky, views);
+    if (!managed) {
       p.working_sky.reset();
       return std::unexpected(IblProcessError::kAllocationFailed);
     }
-    p.registration = registration->AllocationOwner();
+    p.registration = std::move(managed->registration);
   }
   auto registration = registry.AcquireManaged(p.registration.Identity());
-  if (!registration)
+  if (!registration) {
     return std::unexpected(IblProcessError::kAllocationFailed);
+  }
   auto recording = graphics->AcquireCommandRecorder(
     graphics->QueueKeyFor(graphics::QueueRole::kGraphics),
     "Vortex.Environment.IBL.CaptureSky", graphics::SubmissionPolicy::kExplicit);
-  if (!recording)
+  if (!recording) {
     return std::unexpected(IblProcessError::kRecordingFailed);
+  }
   p.renderer.GetDiagnosticsService().AttachGpuTimelineCollector(*recording);
   const auto sky = p.sky.RecordCapture(
     ctx, *recording, source.view, state, p.cache, p.working_sky, *registration);
-  if (!sky.executed)
+  if (!sky.executed) {
     return std::unexpected(IblProcessError::kRecordingFailed);
+  }
   const auto submitted = recording.SubmitWithReceipt();
   if (submitted.outcome != graphics::SubmissionOutcome::kSubmitted
-    || !submitted.receipt)
+    || !submitted.receipt) {
     return std::unexpected(IblProcessError::kSubmissionFailed);
+  }
   source.producer = *submitted.receipt;
   source.sky_view = sky.texture;
   source.distant_sky = p.cache.GetDistantSkyLightBuffer();

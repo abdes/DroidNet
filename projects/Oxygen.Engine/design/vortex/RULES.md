@@ -120,6 +120,18 @@ requires unique open-item IDs and an entry for each deferred editor capability.
 Apply this guidance when introducing or extracting shared engine utilities.
 It is not a requirement to retrofit unrelated existing code.
 
+Check Base before adding infrastructure: reuse `Macros.h`, `ScopeGuard`, `Result`,
+`observer_ptr`, `NamedType`, hashing and enum/container helpers where they fit.
+Use Oxygen's copy/move declaration macros for their established semantics.
+Extend the natural owning API rather than adding a policy-free wrapper layer.
+
+New and touched code must satisfy `readability-braces-around-statements`,
+`cppcoreguidelines-pro-type-member-init`, `readability-redundant-member-init`,
+`performance-enum-size` and `cppcoreguidelines-special-member-functions`.
+Use braces, initialize scalar state, avoid redundant class initialization, size
+enums explicitly and define the required special members. Do not suppress these
+checks or rely on repeated clang-tidy runs to repair avoidable code.
+
 The [engine toolchain](../../cmake/ToolchainRequirements.cmake) supports
 C++23; the editor's C++/CLI and native-command projects use C++20. Keep new helpers
 in engine/internal include graphs. Existing `IndexReuse` already uses

@@ -64,7 +64,8 @@ auto ResourceRegistry::InsertManualNoLock(std::shared_ptr<void> resource,
     resources_.emplace(key,
       ResourceEntry { .resource = std::move(resource),
         .native_resource = native_resource,
-        .descriptors = {} });
+        .descriptors = {},
+        .managed = nullptr });
   } catch (...) {
     if (native_inserted) {
       state_->native_ownership.erase(native_resource);
@@ -120,8 +121,9 @@ auto ResourceRegistry::MakeManagedLeaseNoLock(
     std::move(backend), RegistrationOwner(std::move(owner)));
 }
 
-auto ResourceRegistry::RegisterManaged(
-  std::shared_ptr<void> resource, TypeId type, NativeResource native_resource)
+auto ResourceRegistry::RegisterManaged(std::shared_ptr<void> resource,
+  TypeId type, NativeResource native_resource,
+  const ManagedRegistrationMode mode)
   -> std::expected<RegistrationLease, RegistrationError>
 {
   if (!state_->lifetime) {
@@ -139,7 +141,7 @@ auto ResourceRegistry::RegisterManaged(
     }
     const NativeResource key { resource.get(), type };
     if (const auto found = resources_.find(key); found != resources_.end()) {
-      if (!found->second.managed) {
+      if (mode == ManagedRegistrationMode::kNewOnly || !found->second.managed) {
         return std::unexpected(RegistrationError::kOwnershipConflict);
       }
       if (!found->second.managed->open) {

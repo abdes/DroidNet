@@ -8,6 +8,7 @@
 
 #include <any>
 #include <concepts>
+#include <cstdint>
 #include <expected>
 #include <functional>
 #include <memory>
@@ -22,9 +23,11 @@
 
 #include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
 #include <Oxygen/Graphics/Common/Concepts.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
+#include <Oxygen/Graphics/Common/ManagedResource.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/Registration.h>
 #include <Oxygen/Graphics/Common/api_export.h>
@@ -140,9 +143,9 @@ namespace detail {
 */
 class ResourceRegistry {
   struct ViewQuery {
-    const void* description;
-    bool (*matches)(const std::any&, const void*);
-    std::optional<bindless::DomainToken> domain {};
+    const void* description { nullptr };
+    bool (*matches)(const std::any&, const void*) { nullptr };
+    std::optional<bindless::DomainToken> domain;
   };
   template <typename Description>
   static auto QueryView(const Description& description) -> ViewQuery
@@ -161,6 +164,18 @@ public:
 
   OXYGEN_MAKE_NON_COPYABLE(ResourceRegistry)
   OXYGEN_MAKE_NON_MOVABLE(ResourceRegistry)
+
+  //! Initialize a new registration with all of its initial views.
+  //! A duplicate claim is rejected under the registry lock. Failure returns no
+  //! partial bundle; candidate registrations/views retire through normal
+  //! cleanup. The caller keeps the allocation private until initialization
+  //! returns.
+  OXGN_GFX_NDAPI auto RegisterManagedTexture(std::shared_ptr<Texture> resource,
+    std::span<const TextureViewRequest> views = {})
+    -> std::expected<ManagedTexture, RegistrationError>;
+  OXGN_GFX_NDAPI auto RegisterManagedBuffer(std::shared_ptr<Buffer> resource,
+    std::span<const BufferViewRequest> views = {})
+    -> std::expected<ManagedBuffer, RegistrationError>;
 
   template <SupportedResource Resource>
   auto RegisterManaged(const std::shared_ptr<Resource>& resource)
@@ -218,8 +233,7 @@ public:
   //! Owner-thread cleanup of eligible managed entries, independent of frame
   //! slots.
   OXGN_GFX_API auto PollManagedRetirements() noexcept -> void;
-  [[nodiscard]] OXGN_GFX_API auto HasManagedRegistrations() const noexcept
-    -> bool;
+  OXGN_GFX_NDAPI auto HasManagedRegistrations() const noexcept -> bool;
   //! Recovery closes affected backing identities; existing native pins survive.
   OXGN_GFX_API auto InvalidateManagedRegistrations(
     std::span<const RegistrationIdentity> identities) noexcept -> void;
@@ -737,6 +751,7 @@ public:
       .view_object = new_view,
       .view_description = std::any(desc),
       .descriptor_index = index,
+      .domain = std::nullopt,
     };
     const CacheKey new_cache_key {
       .resource = new_res_obj,
@@ -1336,8 +1351,18 @@ private:
   OXGN_GFX_API auto InstallManagedContext(std::weak_ptr<Graphics> owner,
     std::shared_ptr<BackendLifetime> lifetime,
     std::shared_ptr<void> native_lifetime) -> void;
-  OXGN_GFX_API auto RegisterManaged(
-    std::shared_ptr<void> resource, TypeId type, NativeResource native_resource)
+  enum class ManagedRegistrationMode : std::uint8_t {
+    kReuseExisting,
+    kNewOnly
+  };
+  template <typename Bundle, typename Resource, typename Request>
+  auto RegisterManagedViews(
+    std::shared_ptr<Resource> resource, std::span<const Request> requests)
+    -> std::expected<Bundle, RegistrationError>;
+
+  OXGN_GFX_API auto RegisterManaged(std::shared_ptr<void> resource, TypeId type,
+    NativeResource native_resource,
+    ManagedRegistrationMode mode = ManagedRegistrationMode::kReuseExisting)
     -> std::expected<RegistrationLease, RegistrationError>;
   using CreateManagedView
     = NativeView (*)(void*, const DescriptorAllocationHandle&, const void*);
@@ -1477,7 +1502,7 @@ private:
     NativeView view_object; //!< The native object holding the view.
     std::any view_description; //!< The original view description.
     bindless::HeapIndex descriptor_index { kInvalidBindlessHeapIndex };
-    std::optional<bindless::DomainToken> domain {};
+    std::optional<bindless::DomainToken> domain;
   };
 
   OXGN_GFX_NDAPI auto FindViewNoLock(const NativeResource& resource,
@@ -1551,7 +1576,9 @@ namespace detail {
       : core(std::move(value))
     {
     }
-    ~RegistrationAllocationOwner()
+    OXYGEN_MAKE_NON_COPYABLE(RegistrationAllocationOwner)
+    OXYGEN_MAKE_NON_MOVABLE(RegistrationAllocationOwner)
+    ~RegistrationAllocationOwner() noexcept
     {
       if (armed) {
         core->ReleaseOwner();

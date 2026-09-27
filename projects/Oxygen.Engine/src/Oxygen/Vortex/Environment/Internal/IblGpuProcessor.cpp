@@ -33,6 +33,7 @@
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/CommandRecording.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Graphics/Common/ManagedResource.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
@@ -115,54 +116,66 @@ namespace {
     ShaderVisibleIndex uav { kInvalidShaderVisibleIndex };
   };
 
-  auto MakeTexture(Graphics& graphics, std::uint32_t size, std::uint32_t mips,
-    Format format, const std::string& name, std::uint32_t height = 0U)
+  auto MakeTexture(Graphics& graphics, const graphics::TextureDesc& desc)
     -> TextureAllocation
   {
-    auto result = TextureAllocation {};
-    result.resource = graphics.CreateTexture({ .width = size,
-      .height = height != 0U ? height : size,
-      .array_size = height != 0U ? 1U : 6U,
-      .mip_levels = mips,
-      .format = format,
-      .texture_type
-      = height != 0U ? TextureType::kTexture2D : TextureType::kTextureCube,
-      .debug_name = name,
-      .is_shader_resource = true,
-      .is_uav = true,
-      .initial_state = ResourceStates::kCommon });
-    auto& registry = graphics.GetResourceRegistry();
-    auto registration = registry.RegisterManaged(result.resource);
-    if (!registration)
+    auto requests = std::vector<graphics::TextureViewRequest> {};
+    requests.reserve(desc.mip_levels + 1U);
+    requests.push_back({
+      .description = { .view_type = ResourceViewType::kTexture_SRV,
+        .format = desc.format,
+        .dimension = desc.texture_type,
+        .sub_resources = graphics::TextureSubResourceSet::EntireTexture(), },
+      .domain = bindless::generated::kTexturesDomain,
+    });
+    for (auto mip = 0U; mip < desc.mip_levels; ++mip) {
+      requests.push_back({
+        .description = { .view_type = ResourceViewType::kTexture_UAV,
+          .format = desc.format,
+          .dimension = desc.texture_type == TextureType::kTextureCube
+            ? TextureType::kTexture2DArray
+            : desc.texture_type,
+          .sub_resources = { .base_mip_level = mip,
+            .num_mip_levels = 1U,
+            .base_array_slice = 0U,
+            .num_array_slices = desc.array_size, }, },
+        .domain = std::nullopt,
+      });
+    }
+    auto managed = graphics.GetResourceRegistry().RegisterManagedTexture(
+      graphics.CreateTexture(desc), requests);
+    if (!managed) {
       throw std::bad_alloc {};
-    result.registration = registration->AllocationOwner();
-    const auto srv
-      = registry.AcquireManagedView<graphics::Texture>(*registration,
-        { .view_type = ResourceViewType::kTexture_SRV,
-          .format = format,
-          .dimension
-          = height != 0U ? TextureType::kTexture2D : TextureType::kTextureCube,
-          .sub_resources = graphics::TextureSubResourceSet::EntireTexture() },
-        bindless::generated::kTexturesDomain);
-    if (!srv)
-      throw std::bad_alloc {};
-    result.srv = srv->shader_visible_index;
-    for (auto mip = 0U; mip < mips; ++mip) {
-      const auto uav
-        = registry.AcquireManagedView<graphics::Texture>(*registration,
-          { .view_type = ResourceViewType::kTexture_UAV,
-            .format = format,
-            .dimension = height != 0U ? TextureType::kTexture2D
-                                      : TextureType::kTexture2DArray,
-            .sub_resources = { .base_mip_level = mip,
-              .num_mip_levels = 1U,
-              .base_array_slice = 0U,
-              .num_array_slices = height != 0U ? 1U : 6U } });
-      if (!uav)
-        throw std::bad_alloc {};
-      result.uavs.push_back(uav->shader_visible_index);
+    }
+    auto result = TextureAllocation {
+      .resource = std::move(managed->resource),
+      .registration = std::move(managed->registration),
+      .srv = managed->views.front().shader_visible_index,
+      .uavs = {},
+    };
+    result.uavs.reserve(desc.mip_levels);
+    for (auto mip = 0U; mip < desc.mip_levels; ++mip) {
+      result.uavs.push_back(managed->views.at(mip + 1U).shader_visible_index);
     }
     return result;
+  }
+
+  auto MakeCube(Graphics& graphics, std::uint32_t size, std::uint32_t mips,
+    Format format, const std::string& name) -> TextureAllocation
+  {
+    return MakeTexture(graphics,
+      {
+        .width = size,
+        .height = size,
+        .array_size = 6U,
+        .mip_levels = mips,
+        .format = format,
+        .texture_type = TextureType::kTextureCube,
+        .debug_name = name,
+        .is_shader_resource = true,
+        .is_uav = true,
+        .initial_state = ResourceStates::kCommon,
+      });
   }
 
   auto MakeBuffer(Graphics& graphics, std::uint32_t count, std::uint32_t stride,
@@ -170,37 +183,38 @@ namespace {
     graphics::BufferMemory memory = graphics::BufferMemory::kDeviceLocal)
     -> BufferAllocation
   {
-    auto result = BufferAllocation {};
     const auto upload = memory == graphics::BufferMemory::kUpload;
-    result.resource = graphics.CreateBuffer(
-      { .size_bytes = static_cast<std::uint64_t>(count) * stride,
+    const auto requests = std::array {
+      graphics::BufferViewRequest {
+        .description = { .view_type = ResourceViewType::kStructuredBuffer_SRV,
+          .stride = stride, },
+        .domain = bindless::generated::kGlobalSrvDomain,
+      },
+      graphics::BufferViewRequest {
+        .description = { .view_type = ResourceViewType::kStructuredBuffer_UAV,
+          .stride = stride, },
+        .domain = std::nullopt,
+      },
+    };
+    auto managed = graphics.GetResourceRegistry().RegisterManagedBuffer(
+      graphics.CreateBuffer({
+        .size_bytes = static_cast<std::uint64_t>(count) * stride,
         .usage = upload ? graphics::BufferUsage::kNone
                         : graphics::BufferUsage::kStorage,
         .memory = memory,
-        .debug_name = name });
-    auto& registry = graphics.GetResourceRegistry();
-    auto registration = registry.RegisterManaged(result.resource);
-    if (!registration)
+        .debug_name = name,
+      }),
+      std::span(requests).first(upload ? 1U : 2U));
+    if (!managed) {
       throw std::bad_alloc {};
-    result.registration = registration->AllocationOwner();
-    const auto srv
-      = registry.AcquireManagedView<graphics::Buffer>(*registration,
-        { .view_type = ResourceViewType::kStructuredBuffer_SRV,
-          .stride = stride },
-        bindless::generated::kGlobalSrvDomain);
-    if (!srv)
-      throw std::bad_alloc {};
-    result.srv = srv->shader_visible_index;
-    if (!upload) {
-      const auto uav
-        = registry.AcquireManagedView<graphics::Buffer>(*registration,
-          { .view_type = ResourceViewType::kStructuredBuffer_UAV,
-            .stride = stride });
-      if (!uav)
-        throw std::bad_alloc {};
-      result.uav = uav->shader_visible_index;
     }
-    return result;
+    return {
+      .resource = std::move(managed->resource),
+      .registration = std::move(managed->registration),
+      .srv = managed->views.front().shader_visible_index,
+      .uav = upload ? kInvalidShaderVisibleIndex
+                    : managed->views.at(1U).shader_visible_index,
+    };
   }
 
   template <typename Resource>
@@ -1106,15 +1120,15 @@ auto IblGpuProcessor::PrepareSource(
       registry.PollManagedRetirements();
       auto storage = std::make_shared<ProductStorage>();
       storage->size = size;
-      storage->scratch = MakeTexture(
+      storage->scratch = MakeCube(
         graphics, size, 1U, Format::kRGBA32Float, "IBL.SourceScratch");
-      storage->processed = MakeTexture(
+      storage->processed = MakeCube(
         graphics, size, mips, Format::kRGBA32Float, "IBL.ProcessedCube");
-      storage->specular = MakeTexture(
+      storage->specular = MakeCube(
         graphics, size, mips, Format::kRGBA32Float, "IBL.SpecularCube");
-      storage->processed_half = MakeTexture(
+      storage->processed_half = MakeCube(
         graphics, size, mips, Format::kRGBA16Float, "IBL.ProcessedHalfCube");
-      storage->specular_half = MakeTexture(
+      storage->specular_half = MakeCube(
         graphics, size, mips, Format::kRGBA16Float, "IBL.SpecularHalfCube");
       storage->sh = MakeBuffer(graphics, 8U, 16U, "IBL.DiffuseSH");
       storage->metadata
@@ -1161,11 +1175,20 @@ auto IblGpuProcessor::PrepareSource(
         const auto& desc = sky->sky_view->GetDescriptor();
         if (!sky_lut.resource
           || sky_lut.resource->GetDescriptor().width != desc.width
-          || sky_lut.resource->GetDescriptor().height != desc.height)
-          sky_lut = MakeTexture(graphics, desc.width, 1U, Format::kRGBA32Float,
-            "IBL.FrozenSkyView", desc.height);
-        if (!distant_lut.resource)
+          || sky_lut.resource->GetDescriptor().height != desc.height) {
+          sky_lut = MakeTexture(graphics,
+            { .width = desc.width,
+              .height = desc.height,
+              .format = Format::kRGBA32Float,
+              .texture_type = TextureType::kTexture2D,
+              .debug_name = "IBL.FrozenSkyView",
+              .is_shader_resource = true,
+              .is_uav = true,
+              .initial_state = ResourceStates::kCommon });
+        }
+        if (!distant_lut.resource) {
           distant_lut = MakeBuffer(graphics, 1U, 16U, "IBL.FrozenDistantSky");
+        }
         data.environment.atmosphere.sky_view_lut_slot = sky_lut.srv.get();
         data.environment.atmosphere.distant_sky_light_lut_slot
           = distant_lut.srv.get();
