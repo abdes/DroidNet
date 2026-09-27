@@ -66,7 +66,6 @@
 #include <Oxygen/Vortex/Resources/TextureBinder.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestEngine.h>
-#include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestGraphics.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestTags.h>
 #include <Oxygen/Vortex/Test/Fakes/AssetLoader.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
@@ -495,7 +494,7 @@ NOLINT_TEST_F(
                 .delta_time_seconds = 0, });
               facade.SetSceneSource({ .scene = observer_ptr {
                                         scene.get(),
-                                      } });
+                                      }, });
               facade.SetViewIntent(
                 Renderer::OffscreenSceneViewInput::FromCamera("Domain",
                   ViewId {
@@ -507,7 +506,7 @@ NOLINT_TEST_F(
                   }));
               facade.SetOutputTarget({ .framebuffer = observer_ptr {
                                          framebuffer.get(),
-                                       } });
+                                       }, });
               facade.SetPipeline(forward
                   ? Renderer::OffscreenPipelineInput::Forward()
                   : Renderer::OffscreenPipelineInput::Deferred());
@@ -667,6 +666,9 @@ NOLINT_TEST_F(
         vortex::internal::RendererTagFactory::Get(),
         frame::Slot { (attempt + 1U) % 3U });
       binder->OnFrameStart();
+      ctx_.frame_sequence = frame::SequenceNumber {
+        ctx_.frame_sequence.get() + 1U,
+      };
       ready = processor.RefreshSkyLightProducts(
         ready.probe_state, ctx_, stable, {}, binder);
     }
@@ -722,6 +724,9 @@ NOLINT_TEST_F(
     }
     stable.view_products.sky_light.cubemap_resource
       = content::ResourceKey { 991U };
+    ctx_.frame_sequence = frame::SequenceNumber {
+      ctx_.frame_sequence.get() + 1U,
+    };
     const auto pending = processor.RefreshSkyLightProducts(
       ready.probe_state, ctx_, stable, {}, binder);
     EXPECT_FALSE(pending.probe_state.valid);
@@ -729,7 +734,8 @@ NOLINT_TEST_F(
       kInvalidShaderVisibleIndex);
     EXPECT_EQ(pending.probe_state.probes.product_metadata_srv,
       kInvalidShaderVisibleIndex);
-    EXPECT_EQ(processor.GetPublishedProducts(), products);
+    // An unresolved replacement cannot publish the previous source's products.
+    EXPECT_EQ(processor.GetPublishedProducts(), nullptr);
     FlushBackend();
   }
 }
@@ -797,7 +803,10 @@ NOLINT_TEST_F(ExposureGpuTest,
     std::make_shared<data::TextureResource>(std::move(source)));
   auto processor = environment::internal::IblProcessor(*renderer_);
   auto stable = environment::internal::StableAtmosphereState {};
-  const auto refresh = [&](const EnvironmentProbeState& previous) {
+  const auto refresh = [&](const EnvironmentProbeState& previous) -> auto {
+    ctx_.frame_sequence = frame::SequenceNumber {
+      ctx_.frame_sequence.get() + 1U,
+    };
     stable.view_products.sky_light = model;
     return processor.RefreshSkyLightProducts(
       previous, ctx_, stable, {}, binder);
