@@ -7,6 +7,7 @@
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
 #include "Vortex/Contracts/Environment/EnvironmentStaticData.hlsli"
 #include "Vortex/Services/Environment/AtmosphereParityCommon.hlsli"
+#include "Vortex/Services/Environment/AtmosphereSampling.hlsli"
 #include "Vortex/Services/Environment/AtmosphereUeMirrorCommon.hlsli"
 #include "Vortex/Shared/Geometry.hlsli"
 #include "Vortex/Shared/GroupReduction.hlsli"
@@ -27,8 +28,8 @@ struct DistantSkyLightLutPassConstants
     uint transmittance_height;
     uint multi_scattering_width;
     uint multi_scattering_height;
-    uint active_light_count;
-    uint integration_sample_count;
+    uint light0_enabled;
+    uint light1_enabled;
     float planet_radius_km;
     float atmosphere_height_km;
     float sample_altitude_km;
@@ -81,17 +82,6 @@ static GpuSkyAtmosphereParams BuildAtmosphereParameters(
     return atmosphere_parameters;
 }
 
-static void ComputeUniformSphereDirection(
-    uint sample_index,
-    uint sample_count,
-    out float3 sample_direction)
-{
-    float phi = TWO_PI * (float(sample_index) + 0.5f) / float(sample_count);
-    float cos_theta = 1.0f - 2.0f * (float(sample_index) + 0.5f) / float(sample_count);
-    float sin_theta = sqrt(saturate(1.0f - cos_theta * cos_theta));
-    sample_direction = float3(sin_theta * cos(phi), sin_theta * sin(phi), cos_theta);
-}
-
 groupshared float3 GroupSkyLuminanceSamples[64];
 
 static void CombineSkyLuminance(uint left, uint right)
@@ -128,6 +118,8 @@ static float3 IntegrateSkyLuminanceForAtmosphereLights(
     sampling.MaxSampleCount = 1.0f;
     sampling.DistanceToSampleCountMaxInv = 0.0f;
     sampling.SampleSegmentOffset = kSegmentSampleOffset;
+    const bool primary_enabled = pass_constants.light0_enabled != 0u;
+    const bool secondary_enabled = pass_constants.light1_enabled != 0u;
     const VortexSingleScatteringResult scattering = VortexIntegrateSingleScatteredLuminance(
         0.0f.xx,
         sample_origin,
@@ -137,10 +129,10 @@ static float3 IntegrateSkyLuminanceForAtmosphereLights(
         sampling,
         false,
         true,
-        pass_constants.active_light_count > 0u ? normalize(pass_constants.light0_direction_ws.xyz) : float3(0.0f, 0.0f, 1.0f),
-        pass_constants.active_light_count > 1u ? normalize(pass_constants.light1_direction_ws.xyz) : float3(0.0f, 0.0f, 1.0f),
-        pass_constants.active_light_count > 0u ? pass_constants.light0_illuminance_rgb.xyz : 0.0f.xxx,
-        pass_constants.active_light_count > 1u ? pass_constants.light1_illuminance_rgb.xyz : 0.0f.xxx,
+        primary_enabled ? normalize(pass_constants.light0_direction_ws.xyz) : float3(0.0f, 0.0f, 1.0f),
+        secondary_enabled ? normalize(pass_constants.light1_direction_ws.xyz) : float3(0.0f, 0.0f, 1.0f),
+        primary_enabled ? pass_constants.light0_illuminance_rgb.xyz : 0.0f.xxx,
+        secondary_enabled ? pass_constants.light1_illuminance_rgb.xyz : 0.0f.xxx,
         1.0f,
         1.0f,
         atmosphere_parameters,
@@ -180,17 +172,16 @@ void VortexDistantSkyLightLutCS(
         = SamplerDescriptorHeap[kAtmosphereLinearClampSampler];
 
     const uint thread_linear_index = group_thread_id.y * 8u + group_thread_id.x;
-    const uint sphere_sample_count = max(pass_constants.integration_sample_count, 64u);
+    const uint sphere_sample_count = 64u;
     const float3 sample_origin = float3(
         0.0f,
         0.0f,
         atmosphere_parameters.planet_radius_km + pass_constants.sample_altitude_km);
 
-    float3 integration_direction;
-    ComputeUniformSphereDirection(thread_linear_index, sphere_sample_count, integration_direction);
+    const float3 integration_direction = VortexDistantSkySampleDirection(thread_linear_index);
 
     float3 sampled_sky_luminance = 0.0.xxx;
-    if (pass_constants.active_light_count > 0u)
+    if (pass_constants.light0_enabled != 0u || pass_constants.light1_enabled != 0u)
     {
         sampled_sky_luminance = IntegrateSkyLuminanceForAtmosphereLights(
             atmosphere_parameters,

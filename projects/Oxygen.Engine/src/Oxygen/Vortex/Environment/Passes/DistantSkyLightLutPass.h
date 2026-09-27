@@ -6,10 +6,13 @@
 
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <memory>
 
-#include <Oxygen/Core/Types/Atmosphere.h>
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
 #include <Oxygen/Vortex/api_export.h>
 
@@ -43,16 +46,12 @@ namespace environment {
     OXGN_VRTX_API explicit DistantSkyLightLutPass(Renderer& renderer);
     OXGN_VRTX_API ~DistantSkyLightLutPass();
 
-    DistantSkyLightLutPass(const DistantSkyLightLutPass&) = delete;
-    auto operator=(const DistantSkyLightLutPass&)
-      -> DistantSkyLightLutPass& = delete;
-    DistantSkyLightLutPass(DistantSkyLightLutPass&&) = delete;
-    auto operator=(DistantSkyLightLutPass&&)
-      -> DistantSkyLightLutPass& = delete;
+    OXYGEN_MAKE_NON_COPYABLE(DistantSkyLightLutPass)
+    OXYGEN_MAKE_NON_MOVABLE(DistantSkyLightLutPass)
 
     OXGN_VRTX_API auto OnFrameStart(
       frame::SequenceNumber sequence, frame::Slot slot) -> void;
-    [[nodiscard]] OXGN_VRTX_API auto Record(RenderContext& ctx,
+    OXGN_VRTX_NDAPI auto Record(RenderContext& ctx,
       const internal::StableAtmosphereState& stable_state,
       internal::AtmosphereLutCache& cache, bool capture = false) -> RecordState;
 
@@ -65,42 +64,34 @@ namespace environment {
       std::uint32_t transmittance_height { 0U };
       std::uint32_t multi_scattering_width { 0U };
       std::uint32_t multi_scattering_height { 0U };
-      std::uint32_t active_light_count { 0U };
-      std::uint32_t integration_sample_count { 64U };
-      float planet_radius_km { 6360.0F };
-      float atmosphere_height_km { 100.0F };
-      float sample_altitude_km { 1.0F };
-      float multi_scattering_factor { 1.0F };
-      float rayleigh_scale_height_km { 8.0F };
-      float mie_scale_height_km { 1.2F };
-      float mie_anisotropy { 0.8F };
-      float _pad0 { 0.0F };
-      float _pad1 { 0.0F };
-      float _pad2 { 0.0F };
-      float _pad3 { 0.0F };
-      float light0_direction_ws[4] { 0.0F, 0.0F, 1.0F, 0.0F };
-      float light1_direction_ws[4] { 0.0F, 0.0F, 1.0F, 0.0F };
-      float light0_illuminance_rgb[4] { 0.0F, 0.0F, 0.0F, 0.0F };
-      float light1_illuminance_rgb[4] { 0.0F, 0.0F, 0.0F, 0.0F };
-      float sky_luminance_factor_rgb[4] { 1.0F, 1.0F, 1.0F, 0.0F };
-      float ground_albedo_rgb[4] { 0.4F, 0.4F, 0.4F, 0.0F };
-      float rayleigh_scattering_per_km_rgb[4] {
-        5.8e-3F,
-        13.5e-3F,
-        33.1e-3F,
-        0.0F,
-      };
-      float mie_scattering_per_km_rgb[4] { 2.0e-2F, 2.0e-2F, 2.0e-2F, 0.0F };
-      float mie_absorption_per_km_rgb[4] { 4.4e-3F, 4.4e-3F, 4.4e-3F, 0.0F };
-      float ozone_absorption_per_km_rgb[4] {
-        0.65e-3F,
-        1.88e-3F,
-        0.08e-3F,
-        0.0F,
-      };
-      float ozone_density_layer0[4] { 25.0F, 0.0F, 0.0F, 0.0F };
-      float ozone_density_layer1[4] { 0.0F, 0.0F, 0.0F, 0.0F };
+      std::uint32_t light0_enabled { 0U };
+      std::uint32_t light1_enabled { 0U };
+      float planet_radius_km {};
+      float atmosphere_height_km {};
+      float sample_altitude_km {};
+      float multi_scattering_factor {};
+      float rayleigh_scale_height_km {};
+      float mie_scale_height_km {};
+      float mie_anisotropy {};
+      float _pad0 {};
+      float _pad1 {};
+      float _pad2 {};
+      float _pad3 {};
+      std::array<float, 4> light0_direction_ws {};
+      std::array<float, 4> light1_direction_ws {};
+      std::array<float, 4> light0_illuminance_rgb {};
+      std::array<float, 4> light1_illuminance_rgb {};
+      std::array<float, 4> sky_luminance_factor_rgb {};
+      std::array<float, 4> ground_albedo_rgb {};
+      std::array<float, 4> rayleigh_scattering_per_km_rgb {};
+      std::array<float, 4> mie_scattering_per_km_rgb {};
+      std::array<float, 4> mie_absorption_per_km_rgb {};
+      std::array<float, 4> ozone_absorption_per_km_rgb {};
+      std::array<float, 4> ozone_density_layer0 {};
+      std::array<float, 4> ozone_density_layer1 {};
     };
+    // Shader ABI size is an exact layout assertion, not a tuning parameter.
+    // NOLINTNEXTLINE(readability-magic-numbers)
     static_assert(sizeof(PassConstants) == 272U);
 
     Renderer& renderer_;

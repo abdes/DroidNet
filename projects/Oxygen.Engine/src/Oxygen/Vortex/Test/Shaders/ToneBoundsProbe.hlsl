@@ -13,6 +13,7 @@
 #include "Vortex/Services/PostProcess/HdrSceneComposition.hlsli"
 #include "Vortex/Services/Environment/TransmittanceMath.hlsli"
 #include "Vortex/Services/Environment/VolumetricFog.hlsl"
+#include "Vortex/Services/Environment/AtmosphereSampling.hlsli"
 #include "Vortex/Services/Shadows/PointShadowFiltering.hlsli"
 #include "Vortex/Services/Environment/ParityTransmittance.hlsli"
 
@@ -73,6 +74,12 @@ void CS(uint3 thread : SV_DispatchThreadID)
         return;
     }
     if (thread.x >= pass.count) {
+        return;
+    }
+    if (pass.reserved == 524288u) {
+        const float3 direction = VortexDistantSkySampleDirection(thread.x);
+        output.Store4(thread.x * 32u, asuint(float4(direction, FOUR_PI / 64.0f)));
+        output.Store4(thread.x * 32u + 16u, 0u.xxxx);
         return;
     }
     if (pass.reserved == 262144u) {

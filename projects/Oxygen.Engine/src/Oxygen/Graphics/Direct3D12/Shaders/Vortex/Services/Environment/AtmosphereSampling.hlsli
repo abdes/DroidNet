@@ -29,6 +29,16 @@
 #include "Vortex/Shared/Geometry.hlsli"
 #include "Vortex/Services/Environment/AtmosphereConstants.hlsli"
 
+// One fixed cell-center sample per equal-area stratum in the 64-ray sky integral.
+float3 VortexDistantSkySampleDirection(uint sample_index)
+{
+    const float2 uv = (float2(sample_index % 8u, sample_index / 8u) + 0.5f) / 8.0f;
+    const float phi = TWO_PI * uv.x;
+    const float cos_theta = 1.0f - 2.0f * uv.y;
+    const float sin_theta = sqrt(saturate(1.0f - cos_theta * cos_theta));
+    return float3(sin_theta * cos(phi), sin_theta * sin(phi), cos_theta);
+}
+
 //! Computes transmittance LUT UV from altitude and cos_zenith.
 //!
 //! @param cos_zenith Cosine of zenith angle (view direction dot up).

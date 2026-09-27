@@ -11,7 +11,7 @@ Read: [evaluation contracts](#atmosphere-and-fog-evaluation-contracts),
 ## Atmosphere and fog evaluation contracts
 
 [VX-IBL-01.S8](../milestones/VX-IBL-01/README.md#s8--atmosphere-and-fog-correctness)
-tracks seven confirmed deviations from these contracts; implementation is planned.
+owns delivery and regression coverage for these seven contracts.
 
 - The minus-sign HG helper takes the cosine between incident propagation and
   outgoing propagation. With directions toward the camera and light, pass their
@@ -20,7 +20,9 @@ tracks seven confirmed deviations from these contracts; implementation is planne
 - Distant-sky illumination preserves explicit Primary/Secondary slot participation.
   Apply the shared sky/aerial RGB factor to light illuminance and the sky-only RGB
   factor to the integrated result, each once. Integrate a two-dimensional,
-  equal-area sphere distribution with the existing fixed 64-ray budget.
+  equal-area sphere distribution with the existing fixed 64-ray budget. The 8×8
+  cell centers cancel first moments without a random stream; UE5.7’s fixed-seed
+  stratified pattern is the comparison reference.
 - Camera AP samples distance from the same ray origin as its volume producer:
   the camera for perspective, the reconstructed per-pixel near plane for
   orthographic. Scattering strength multiplies added radiance only; zero strength

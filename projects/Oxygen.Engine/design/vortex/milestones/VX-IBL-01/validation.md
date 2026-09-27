@@ -3,12 +3,61 @@
 **S1–S7 validated.** [S7 integrated qualification](#s7-integrated-qualification)
 closes the six extractions, performance, captures, installed SDK and applications.
 [S8](README.md#s8--atmosphere-and-fog-correctness) adds seven source-confirmed
-atmosphere/fog regression cases; their fixes and runtime validation are planned. The [acceptance table](README.md#acceptance) links every
+atmosphere/fog regression cases; [implementation is in progress](#s8-correctness). The [acceptance table](README.md#acceptance) links every
 required result. The [S1–S6 audit](evidence/s6-integrated/run.json) records
 baseline provenance; earlier measurements retain their original source/build scope.
 
-Read: [S7 qualification](#s7-integrated-qualification), [S7 checkpoints](#s7-checkpoints), [integrated results](#integrated-results), [checkpoint evidence](#checkpoint-evidence),
+Read: [S8 correctness](#s8-correctness), [S7 qualification](#s7-integrated-qualification), [S7 checkpoints](#s7-checkpoints), [integrated results](#integrated-results), [checkpoint evidence](#checkpoint-evidence),
 [reproduce](#reproduce).
+
+## S8 correctness
+
+**S8.1 passes:** the production volumetric shader now uses incident propagation
+for the HG cosine. The native regression covers positive/zero/negative anisotropy
+and both atmosphere-light slots. It reproduced reversed scattering before the
+fix; **18 fog tests pass in Debug and Release**, including shadow-source routing
+and unchanged extinction. The shared phase helper and local-fog caller are unchanged.
+
+**S8.2–S8.4 pass:** seven native sky/fog checks pass in each configuration.
+They exercise both explicit slots, none/both/disable/re-enable transitions,
+zero/scalar/RGB factors, unchanged-input reuse and actual volumetric fog ambient.
+The 272-byte CPU/HLSL constants preserve layout while replacing count-based
+participation with two enable flags. Shared sky/AP and sky-only factors apply once.
+
+The 64 native sample directions integrate constant/linear radiance without the
+former 14.18% linear bias. A 72-azimuth synthetic positive-cosine⁸ radiance lobe at 0.3 rad elevation
+has **1.98% maximum relative error**, versus **48.30%** for UE5.7’s fixed seed, against a
+32,768-direction reference. This qualifies angular quadrature, not atmospheric
+transport accuracy. Ray count, integration steps, LUT formats and dispatch count
+are unchanged. The probe stays outside the production shader archive.
+Reproduce with Exposure filters `ExposureGpuTest.DistantSky*`,
+`ExposureGpuTest.CapturedAtmosphere*`, `ExposureGpuTest.CaptureSkyLut*` and
+`IblSurfaceGpuTest.CapturedAtmosphereAndFogHalfMatchesCanonicalAcrossPaths`, plus
+`ExposureGpuTest.VolumetricPhaseScattersTowardEachAtmosphereLight`.
+
+S8.5–S8.7 and final scene/performance qualification remain open.
+
+The pre-S8 native Release baseline uses the S7 production code (`5d54e438f`),
+RTX 3080, 1920×1080, default power and unchanged benchmark settings. M01 records
+12,000 warmed frames; the IBL authoring scene records 1,800 at 60 Hz.
+
+| Workload / affected GPU scope         | Before mean / p95 (ms) |
+| ------------------------------------- | ---------------------: |
+| M01 / volumetric fog                  |          0.133 / 0.131 |
+| M01 / aerial-perspective volume       |          0.105 / 0.101 |
+| M01 / fog composition                 |          0.212 / 0.218 |
+| Authoring / distant sky               |          0.014 / 0.014 |
+| Authoring / captured distant sky      |          0.012 / 0.014 |
+| Authoring / aerial-perspective volume |          0.190 / 0.202 |
+
+Reproduce correctness with Exposure filter
+`*Fog*:ExposureGpuTest.VolumetricPhaseScattersTowardEachAtmosphereLight`.
+For timing, run `ExposureProfilingOverheadTest.DISABLED_ReleaseMixedBaseline`
+with `OXYGEN_EXPOSURE_BASELINE_CASE=M01`, `OXYGEN_EXPOSURE_BASELINE_FRAMES=12000`
+and a fresh `OXYGEN_EXPOSURE_BASELINE_RUN`; then run
+`IblSceneBenchmark.DISABLED_Authoring` with a fresh `OXYGEN_IBL_TIMING_OUTPUT`.
+Both use the Release Exposure.Benchmarks executable and
+`--gtest_also_run_disabled_tests`. Keep generated files under ignored `out/`.
 
 ## S7 checkpoints
 

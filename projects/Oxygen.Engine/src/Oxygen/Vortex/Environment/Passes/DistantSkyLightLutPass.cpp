@@ -5,7 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <cstdint>
-#include <limits>
+#include <memory>
 #include <span>
 #include <vector>
 
@@ -34,6 +34,7 @@
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
+#include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
 
 namespace oxygen::vortex::environment {
 
@@ -41,7 +42,8 @@ namespace {
 
   namespace bindless_d3d12 = oxygen::bindless::generated::d3d12;
 
-  constexpr std::uint32_t kThreadGroupSize = 8U;
+  constexpr auto kMinimumDirectionLengthSquared = 1.0e-6F;
+  constexpr std::uint64_t kCapturedConstantsTag = 0x49424c434f4e5354ULL;
 
   auto RangeTypeToViewType(const bindless_d3d12::RangeType type)
     -> graphics::ResourceViewType
@@ -80,10 +82,7 @@ namespace {
           table.view_type = RangeTypeToViewType(
             static_cast<bindless_d3d12::RangeType>(range.range_type));
           table.base_index = range.base_register;
-          table.count = range.num_descriptors
-              == (std::numeric_limits<std::uint32_t>::max)()
-            ? (std::numeric_limits<std::uint32_t>::max)()
-            : range.num_descriptors;
+          table.count = range.num_descriptors;
         }
         binding.data = table;
         break;
@@ -129,12 +128,11 @@ namespace {
       buffer, graphics::ResourceStates::kCommon, true);
   }
 
-  auto NormalizeOrFallback(const glm::vec3& vector, const glm::vec3& fallback)
-    -> glm::vec3
+  auto NormalizeLightDirection(const glm::vec3& vector) -> glm::vec3
   {
     const auto length_sq = glm::dot(vector, vector);
-    if (length_sq <= 1.0e-6F) {
-      return fallback;
+    if (length_sq <= kMinimumDirectionLengthSquared) {
+      return { 0.0F, 0.0F, 1.0F };
     }
     return glm::normalize(vector);
   }
@@ -186,12 +184,16 @@ auto DistantSkyLightLutPass::Record(RenderContext& ctx,
 
   const auto& atmosphere = stable_state.view_products.atmosphere;
   const auto& lights = stable_state.view_products.atmosphere_lights;
-  const auto light0_dir = lights[0].enabled
-    ? NormalizeOrFallback(lights[0].direction_to_light_ws, { 0.0F, 0.0F, 1.0F })
+  const auto light0_dir = lights.at(0).enabled
+    ? NormalizeLightDirection(lights.at(0).direction_to_light_ws)
     : glm::vec3 { 0.0F, 0.0F, 1.0F };
-  const auto light1_dir = lights[1].enabled
-    ? NormalizeOrFallback(lights[1].direction_to_light_ws, { 0.0F, 0.0F, 1.0F })
+  const auto light1_dir = lights.at(1).enabled
+    ? NormalizeLightDirection(lights.at(1).direction_to_light_ws)
     : glm::vec3 { 0.0F, 0.0F, 1.0F };
+  const auto light0_illuminance = lights.at(0).illuminance_rgb_lux
+    * atmosphere.sky_and_aerial_perspective_luminance_factor_rgb;
+  const auto light1_illuminance = lights.at(1).illuminance_rgb_lux
+    * atmosphere.sky_and_aerial_perspective_luminance_factor_rgb;
   const auto& cache_state = cache.GetState();
   const auto constants = PassConstants {
     .output_buffer_uav = cache_state.distant_sky_light_lut_uav.get(),
@@ -201,8 +203,8 @@ auto DistantSkyLightLutPass::Record(RenderContext& ctx,
     .transmittance_height = cache_state.internal_parameters.transmittance_height,
     .multi_scattering_width = cache_state.internal_parameters.multi_scattering_width,
     .multi_scattering_height = cache_state.internal_parameters.multi_scattering_height,
-    .active_light_count = stable_state.view_products.atmosphere_light_count,
-    .integration_sample_count = 64U,
+    .light0_enabled = lights.at(0).enabled ? 1U : 0U,
+    .light1_enabled = lights.at(1).enabled ? 1U : 0U,
     .planet_radius_km = engine::atmos::MetersToSkyUnit(
       atmosphere.planet_radius_m),
     .atmosphere_height_km = engine::atmos::MetersToSkyUnit(
@@ -221,15 +223,15 @@ auto DistantSkyLightLutPass::Record(RenderContext& ctx,
     .light0_direction_ws = { light0_dir.x, light0_dir.y, light0_dir.z, 0.0F },
     .light1_direction_ws = { light1_dir.x, light1_dir.y, light1_dir.z, 0.0F },
     .light0_illuminance_rgb = {
-      lights[0].illuminance_rgb_lux.x,
-      lights[0].illuminance_rgb_lux.y,
-      lights[0].illuminance_rgb_lux.z,
+      light0_illuminance.x,
+      light0_illuminance.y,
+      light0_illuminance.z,
       0.0F,
     },
     .light1_illuminance_rgb = {
-      lights[1].illuminance_rgb_lux.x,
-      lights[1].illuminance_rgb_lux.y,
-      lights[1].illuminance_rgb_lux.z,
+      light1_illuminance.x,
+      light1_illuminance.y,
+      light1_illuminance.z,
       0.0F,
     },
     .sky_luminance_factor_rgb = {
@@ -270,19 +272,19 @@ auto DistantSkyLightLutPass::Record(RenderContext& ctx,
     },
     .ozone_density_layer0 = {
       engine::atmos::MetersToSkyUnit(
-        atmosphere.ozone_density_profile.layers[0].width_m),
-      atmosphere.ozone_density_profile.layers[0].exp_term,
-      atmosphere.ozone_density_profile.layers[0].linear_term
+        atmosphere.ozone_density_profile.layers.at(0).width_m),
+      atmosphere.ozone_density_profile.layers.at(0).exp_term,
+      atmosphere.ozone_density_profile.layers.at(0).linear_term
         * engine::atmos::kSkyUnitToM,
-      atmosphere.ozone_density_profile.layers[0].constant_term,
+      atmosphere.ozone_density_profile.layers.at(0).constant_term,
     },
     .ozone_density_layer1 = {
       engine::atmos::MetersToSkyUnit(
-        atmosphere.ozone_density_profile.layers[1].width_m),
-      atmosphere.ozone_density_profile.layers[1].exp_term,
-      atmosphere.ozone_density_profile.layers[1].linear_term
+        atmosphere.ozone_density_profile.layers.at(1).width_m),
+      atmosphere.ozone_density_profile.layers.at(1).exp_term,
+      atmosphere.ozone_density_profile.layers.at(1).linear_term
         * engine::atmos::kSkyUnitToM,
-      atmosphere.ozone_density_profile.layers[1].constant_term,
+      atmosphere.ozone_density_profile.layers.at(1).constant_term,
     },
   };
   auto constants_alloc = pass_constants_buffer_->Allocate(1U);
@@ -299,8 +301,9 @@ auto DistantSkyLightLutPass::Record(RenderContext& ctx,
     return state;
   }
   renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(*recorder);
-  if (capture)
-    recorder->RetainOpaqueUse(pass_constants_buffer_, 0x49424c434f4e5354ULL);
+  if (capture) {
+    recorder->RetainOpaqueUse(pass_constants_buffer_, kCapturedConstantsTag);
+  }
 
   const auto& buffer = *cache.GetDistantSkyLightBuffer();
   TrackBufferFromKnownOrInitial(*recorder, buffer);
@@ -308,10 +311,11 @@ auto DistantSkyLightLutPass::Record(RenderContext& ctx,
     buffer, graphics::ResourceStates::kUnorderedAccess);
 
   recorder->SetPipelineState(BuildPipelineDesc());
-  if (!capture)
+  if (!capture) {
     recorder->SetComputeRootConstantBufferView(
       static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants),
       ctx.view_constants->GetGPUVirtualAddress());
+  }
   recorder->SetComputeRoot32BitConstant(
     static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants), 0U,
     0U);
@@ -333,8 +337,9 @@ auto DistantSkyLightLutPass::Record(RenderContext& ctx,
   }
   const auto submission = recorder.SubmitWithReceipt();
   if (submission.outcome != graphics::SubmissionOutcome::kSubmitted
-    || !submission.receipt)
+    || !submission.receipt) {
     return state;
+  }
   cache.MarkDistantSkyLightValid();
   state.executed = true;
   state.distant_sky_light_lut_srv = cache.GetState().distant_sky_light_lut_srv;

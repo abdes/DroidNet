@@ -171,8 +171,9 @@ static float3 EvaluateDirectionalContribution(
     }
 
     const float3 light_direction = normalize(direction_enabled.xyz);
+    // Both vectors point away from the voxel; HG uses incident propagation.
     const float phase = HenyeyGreensteinPhase(
-        dot(view_direction_to_camera, light_direction),
+        -dot(view_direction_to_camera, light_direction),
         scattering_distribution);
     return max(illuminance_rgb.xyz, 0.0f.xxx) * phase * saturate(shadow_visibility);
 }

@@ -347,4 +347,140 @@ NOLINT_TEST_F(ExposureGpuTest, FogShadowsFollowAtmosphereSourceIdentity)
   }
 }
 
+NOLINT_TEST_F(ExposureGpuTest, VolumetricPhaseScattersTowardEachAtmosphereLight)
+{
+  namespace root = oxygen::bindless::generated::d3d12;
+  using graphics::ResourceStates;
+  using graphics::ResourceViewType;
+  constexpr auto kIlluminanceLux = 100000.0F;
+  constexpr auto kDirectionalRadianceScale = 2.0e-5;
+  constexpr auto kTolerance = 1.0e-4;
+  auto output = CreateRegisteredTexture({
+    .width = 1U,
+    .height = 1U,
+    .depth = 1U,
+    .format = Format::kRGBA32Float,
+    .texture_type = TextureType::kTexture3D,
+    .is_shader_resource = true,
+    .is_uav = true,
+    .initial_state = ResourceStates::kCommon,
+  });
+  auto& allocator = renderer_->GetGraphics()->GetDescriptorAllocator();
+  auto handle = allocator.AllocateRaw(ResourceViewType::kTexture_UAV,
+    graphics::DescriptorVisibility::kShaderVisible);
+  const auto output_slot = allocator.GetShaderVisibleIndex(handle);
+  Backend().GetResourceRegistry().RegisterView(*output, std::move(handle),
+    graphics::TextureViewDescription {
+      .view_type = ResourceViewType::kTexture_UAV,
+      .format = Format::kRGBA32Float,
+      .dimension = TextureType::kTexture3D,
+    });
+  const auto pipeline
+    = graphics::ComputePipelineDesc::Builder {}
+        .SetComputeShader(graphics::ShaderRequest {
+          .stage = ShaderType::kCompute,
+          .source_path = "Vortex/Services/Environment/VolumetricFog.hlsl",
+          .entry_point = "VortexVolumetricFogCS",
+        })
+        .SetRootBindings(ExposureProbeRootBindings())
+        .Build();
+  // Identity view matrices place this cell on -Z, looking back toward +Z.
+  const auto view = ViewConstants::GpuData {};
+  auto view_buffer
+    = CreateUploadBuffer(SizeBytes { 256U }, graphics::BufferUsage::kConstant);
+  view_buffer->Update(&view, sizeof(view), 0U);
+  struct PhaseSample {
+    float anisotropy {};
+    float light_z {};
+    bool secondary {};
+  };
+  const auto sample = [&](const PhaseSample& input) -> auto {
+    auto params = RendererPublicationProbe::FogPassConstants {};
+    params.output_header = {
+      .output_texture_uav = output_slot.get(),
+      .output_width = 1U,
+      .output_height = 1U,
+      .output_depth = 1U,
+    };
+    params.grid = {
+      .start_distance_m = 1.0F,
+      .end_distance_m = 32.0F,
+      .global_extinction_scale = 1.0F,
+    };
+    params.grid_z = {
+      .grid_z_params = { 1.0F, 0.0F, 1.0F },
+      .directional_shadows_enabled = 0U,
+    };
+    params.height_fog0.primary_density = 1.0F;
+    params.height_fog1.match_height_fog_factor = 1.0F;
+    params.height_fog1.enabled = 1U;
+    params.media0.albedo_rgb[0] = 1.0F;
+    params.media0.scattering_distribution = input.anisotropy;
+    params.media1.static_lighting_scattering_intensity = 1.0F;
+    params.temporal_history1.frame_jitter_offsets[0][0] = 0.5F;
+    params.temporal_history1.frame_jitter_offsets[0][1] = 0.5F;
+    params.temporal_history1.frame_jitter_offsets[0][2] = 0.5F;
+    auto& direction = input.secondary ? params.light1_direction_enabled
+                                      : params.light0_direction_enabled;
+    auto& illuminance = input.secondary ? params.light1_illuminance_rgb
+                                        : params.light0_illuminance_rgb;
+    direction[2] = input.light_z;
+    direction[3] = 1.0F;
+    illuminance[0] = kIlluminanceLux;
+    const auto constants = PublishFixtureData(params);
+    {
+      auto recorder = AcquireRecorder("Volumetric phase production dispatch");
+      EnsureTracked(*recorder, output, ResourceStates::kCommon);
+      recorder->RequireResourceState(*output, ResourceStates::kUnorderedAccess);
+      recorder->FlushBarriers();
+      recorder->SetPipelineState(pipeline);
+      recorder->SetComputeRootConstantBufferView(
+        static_cast<unsigned>(root::RootParam::kViewConstants),
+        view_buffer->GetGPUVirtualAddress());
+      recorder->SetComputeRoot32BitConstant(
+        static_cast<unsigned>(root::RootParam::kRootConstants), 0U, 0U);
+      recorder->SetComputeRoot32BitConstant(
+        static_cast<unsigned>(root::RootParam::kRootConstants), constants.get(),
+        1U);
+      recorder->Dispatch(1U, 1U, 1U);
+    }
+    return ReadFloatTexture(*output);
+  };
+  const double transmission = std::exp(-(std::numbers::sqrt2 - 1.0));
+  for (const bool secondary : { false, true }) {
+    for (const float anisotropy : { -0.8F, 0.0F, 0.8F }) {
+      SCOPED_TRACE(::testing::Message()
+        << "secondary=" << secondary << " g=" << anisotropy);
+      const auto toward = sample({
+        .anisotropy = anisotropy,
+        .light_z = -1.0F,
+        .secondary = secondary,
+      });
+      const auto away = sample({
+        .anisotropy = anisotropy,
+        .light_z = 1.0F,
+        .secondary = secondary,
+      });
+      ASSERT_EQ(toward.size(), 1U);
+      ASSERT_EQ(away.size(), 1U);
+      const double g = anisotropy;
+      const double isotropic = (1.0 - transmission) * kIlluminanceLux
+        * kDirectionalRadianceScale / (4.0 * std::numbers::pi);
+      EXPECT_NEAR(toward.front().at(0),
+        isotropic * (1.0 - (g * g)) / std::pow(1.0 - g, 3.0), kTolerance);
+      EXPECT_NEAR(away.front().at(0),
+        isotropic * (1.0 - (g * g)) / std::pow(1.0 + g, 3.0), kTolerance);
+      EXPECT_NEAR(toward.front().at(3), transmission, kTolerance);
+      EXPECT_NEAR(away.front().at(3), transmission, kTolerance);
+      if (anisotropy > 0.0F) {
+        EXPECT_GT(toward.front().at(0), away.front().at(0));
+      } else if (anisotropy < 0.0F) {
+        EXPECT_LT(toward.front().at(0), away.front().at(0));
+      } else {
+        EXPECT_FLOAT_EQ(toward.front().at(0), away.front().at(0));
+      }
+    }
+  }
+}
+
 } // namespace oxygen::vortex::testing::exposure
