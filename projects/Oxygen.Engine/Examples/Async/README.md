@@ -1,157 +1,90 @@
-# Async Example
+# Async demo
 
-This small C++ example demonstrates asynchronous programming patterns used by the Oxygen Engine and includes a compact rendering demo driven by the engine's AsyncEngine. The example activates platform and graphics backends, registers engine modules (input, renderer, and the example's `MainModule`) and shows multi-phase frame execution with a camera drone, animated geometry and an optional ImGui-based debug overlay.
-
-## Purpose
-
-- Show how the engine schedules and runs small background/async tasks
-- Demonstrate the interplay between the example’s runtime loop and asynchronous work
-- Provide a compact, standalone area to prototype async patterns without opening the full engine/editor
-
-## Vortex Runtime Proof
-
-`Examples/Async` is a compact Vortex integration gate for the engine runtime,
-DemoShell/AppWindow UI, frame pacing, RenderDoc capture, ImGui overlay, and
-composition/presentation path. The current proof artifacts are written under:
-
-- `build/artifacts/vortex/phase-4/async/current/` by
-  `tools/vortex/Run-AsyncRuntimeValidation.ps1`
-
-Composition-specific retained boundaries on the Vortex path:
-
-- `ResolveSceneColor` remains the Stage 21 owner when the main scene view needs
-  a retained resolved handoff. It snapshots `ResolvedSceneColor` and
-  `ResolvedSceneDepth` before Stage 22 consumes the scene signal.
-- `PostRenderCleanup` remains the Stage 23 extraction/handoff owner. It
-  snapshots `PrevSceneDepth` and `PrevVelocity` after Stage 22 completes, then
-  finalizes the history handoff without taking presentation ownership.
-- Final presentation stays on the retained `Renderer` compositing/present path.
-  The Async proof pack inspects that path through the capture and products
-  reports in the `current/` artifact root.
-
-To run the current Vortex validation:
-
-```powershell
-powershell -NoProfile -File tools/vortex/Run-AsyncRuntimeValidation.ps1 `
-  -Output build/artifacts/vortex/phase-4/async/current
-```
-
-To re-run just the proof analysis on an existing capture:
-
-```powershell
-powershell -NoProfile -File tools/vortex/Verify-AsyncRuntimeProof.ps1 `
-  -CapturePath build/artifacts/vortex/phase-4/async/current/current_renderdoc.rdc
-```
-
-Successful composition/presentation closeout keeps these checks green in the
-generated reports:
-
-- `async_runtime_stage_order_valid=true`
-- `compositing_scope_present=true`
-- `stage22_tonemap_scope_present=true`
-- `final_present_nonzero=true`
-- `final_present_vs_tonemap_changed=true`
-
-These artifact checks are necessary but not sufficient for Phase 4 closeout.
-The migrated Async demo now also carries a debugger-backed `04-06` audit on the
-same runtime path. The clean closeout expectation is:
-
-- `cdb` reaches the Async `exit code: 0` line
-- no `D3D12 WARNING` or `D3D12 ERROR` lines appear in
-  `build/artifacts/vortex/phase-4/async/04-06.debug-layer.cdb.log`
-- the only accepted debugger-only shutdown noise is the documented
-  `DXGI WARNING: Live IDXGIFactory ...` line
-
-ImGui / DemoShell overlay correctness is tracked in
-`build/artifacts/vortex/phase-4/async/current/async_behaviors.md`. The required
-source-audit lines are:
-
-- `imgui_runtime_registered: pass`
-- `demoshell_ui_draw_path: pass`
-
-The retained debugger-backed audit artifacts live alongside the proof pack:
-
-- `build/artifacts/vortex/phase-4/async/04-06.debug-layer.cdb.log`
-- `build/artifacts/vortex/phase-4/async/04-06.debug-layer.report.txt`
-
-To rerun the debugger-backed audit:
-
-```powershell
-cdb.exe -G -g `
-  -logo build/artifacts/vortex/phase-4/async/04-06.debug-layer.cdb.log `
-  -cf build/artifacts/vortex/phase-4/async/04-06.debug-layer.cdb.commands.txt `
-  out/build-ninja/bin/Debug/Oxygen.Examples.Async.exe `
-  --frames 14 --fps 30 --vsync false --debug-layer true --capture-provider off
-```
-
-## Files
-
-- `CMakeLists.txt` — build configuration, target is `Oxygen.Examples.Async`
-- `main_impl.cpp` — program entry; builds the CLI, creates platform / graphics / async engine instances and coordinates startup/shutdown
-- `MainModule.cpp` / `MainModule.h` — graphics demo module: scene creation (animated spheres and a two-submesh quad), camera drone spline, per-phase rendering handlers, and ImGui debug panels
-
-## Requirements (Windows-focused)
-
-- Windows 10 / Windows 11 development environment
-- Visual Studio 2022 or newer with the "Desktop development with C++" workload
-  - MSVC toolset (v143 or newer) is recommended
-- CMake 3.29+
-- C++23 language support (this example uses cxx_std_23)
-
-## Build (Windows, Visual Studio / MSVC)
-
-This example is part of the Oxygen engine and is easiest to build from the engine root so CMake can configure engine modules correctly.
-
-From the `Oxygen.Engine` root (PowerShell):
-
-```powershell
-# Configure & build (release preset):
-cmake --preset oxygen-ninja-default
-cmake --build --preset oxygen-ninja-release --target oxygen-examples-async
-
-# Configure & build (debug preset):
-cmake --preset oxygen-ninja-default
-cmake --build --preset oxygen-ninja-debug --target oxygen-examples-async
-```
+A compact AsyncEngine scene showing frame phases, animated geometry and Vortex
+lighting. Start with [running](#run), [showcases](#showcases) or
+[validation](#validation).
 
 ## Run
 
-After building the example the binary will be placed in the build output folder (for example `out\build\bin\Release\Oxygen.Examples.Async.exe` when using the Visual Studio generator). Note: the CMake target name used by the build system is `oxygen-examples-async` (lowercase, hyphenated). The output executable name is `Oxygen.Examples.Async.exe` (as set by the target's OUTPUT_NAME).
-
-No external runtime libraries are required beyond what the engine build produces. On Windows ensure the engine runtime DLLs (if any) are discoverable via PATH or in the same folder as the executable.
-
-## Command-line arguments
-
-The example exposes a small, focused CLI (program name `async-sim`, version `0.1`). Use `--help` or `-h` for full usage.
-
-- `-f, --frames <count>` — Number of frames to simulate (default: `0` = run until exit)
-- `-r, --fps <rate>` — Target frames-per-second for the engine pacing loop (default: `100`)
-- `-d, --headless` — Run the example without creating a visible window (default: `false`)
-- `-F, --fullscreen` — Start window in fullscreen (boolean, default: `false`)
-- `-s, --vsync` — Enable vertical-sync (boolean, default: `true`)
-
-Examples:
+From `projects/Oxygen.Engine`, build the configured tree and launch:
 
 ```powershell
-# Interactive: create window, run until closed
-.\out\build\bin\Release\Oxygen.Examples.Async.exe
-
-# Headless: run a short simulation for 100 frames and exit
-.\out\build\bin\Release\Oxygen.Examples.Async.exe -f 100 -d
-
-# Run with a fixed target FPS, disable vsync
-.\out\build\bin\Release\Oxygen.Examples.Async.exe -r 60 --vsync false
+cmake --build out/build-ninja --config Release --target oxygen-examples-async
+./out/build-ninja/bin/Release/Oxygen.Examples.Async.exe --resolution 1280x720
 ```
 
-When run headless the example still initializes the engine and many subsystems but will use the headless graphics backend and skip creating a visible window and ImGui module (useful for automated runs and CI).
+Use `--frames 120 --fps 30 --vsync false` for a bounded run, `--headless` for
+execution without a visible window, and `--help` for capture/debug-layer options.
+Camera and environment preferences persist in this demo's `demo_settings.json`.
 
-## Implementation notes
+## Showcases
 
-- The program parses CLI options and constructs an `AsyncEngineApp` (see `../Common/AsyncEngineApp.h`) which aggregates platform, engine and graphics objects.
-- During startup the example:
-  - Activates the platform and graphics subsystems
-  - Creates `AsyncEngine` with configured target FPS/frame count
-  - Registers engine modules: `InputSystem`, example `MainModule` (graphics main module), `Renderer` and — when not headless — an ImGui module
-  - `MainModule` sets up procedural assets (sphere LODs and a two-submesh quad), camera drone paths, input bindings, and debug GUI panels for profiling and frame inspection
+- **Async phases:** the Async Demo panel shows actions and CPU callback durations
+  from the previous completed frame. Renderer CPU/GPU timings live in Diagnostics.
+- **Animated scene:** a separated 4×4 opaque material grid varies roughness along
+  +X and metalness along +Y. Four translucent dielectric spheres orbit outside
+  it. All spheres use two distance-selected LODs. A two-submesh quad
+  demonstrates independent visibility and material overrides. Pause with
+  **Animate scene** to inspect lighting without moving geometry.
+- **Camera:** fly/orbit controls and a figure-eight drone path are available in
+  Camera Controls. Startup preserves the saved mode and speed.
+- **Lighting:** a physical sun drives atmosphere and captured-sky IBL. Height fog
+  takes its ambient contribution from the atmosphere; the authored defaults add
+  no constant fog luminance or lower-hemisphere fill.
+- **Spotlight:** a camera-mounted 3,000 lm light with 60 m range starts with shadows enabled. Its lateral
+  offset makes cast shadows visible beside their occluders. Controls use lumens,
+  metres and cone angles; saved settings take precedence over defaults.
 
-- The engine uses structured concurrency via `oxygen::OxCo` primitives (nursery / co::Run) to coordinate lifetime and shutdown.
+To isolate spotlight shadows, pause animation, disable the sun in Environment,
+then compare **Cast Shadows** on/off in Async Demo. Use manual exposure for a
+fixed comparison; automatic exposure intentionally adapts to reduced lighting.
+Opaque spheres cast shadows; alpha-blended spheres demonstrate transparency and
+are not opaque shadow casters. Existing saved fog/sky colors can still contribute
+light after the sun is disabled.
+
+## Integration
+
+`SceneObserverSyncModule` publishes light/transform changes to scene observers
+after gameplay and before rendering. Without it, disabling the sun leaves stale
+atmosphere and IBL lighting.
+
+`AsyncScene` owns procedural content and animation. `MainModule` orchestrates
+frame phases and supplies a `CompositionView` to DemoModuleBase.
+The shared runtime owns HDR scene targets, tonemapped composition, GPU-safe target
+retirement and camera resolution. A persistent view-state identity retains
+exposure history. DemoShell applies rendering, fog, postprocess and grid controls
+through its normal main-view contract.
+
+`AsyncDemoVm` exposes scene controls; `AsyncDemoSettingsService` persists user
+choices. Frame-phase tracking is demo instrumentation, not a replacement for Tracy.
+
+## Validation
+
+With `OXYGEN_BUILD_UI_TESTS=ON`, the `async/lighting` UI test checks animation
+pause/resume, retained camera lens edits, applied exposure, the real sun checkbox
+and spotlight toggles.
+It requires isolated settings and optionally records RenderDoc captures of
+`daylight`, `spot-shadowed`, `spot-unshadowed` and `lights-off`:
+
+```powershell
+$env:OXYGEN_UI_TEST_OUTPUT = "$PWD/out/async-lighting"
+$env:OXYGEN_UI_TEST_SETTINGS = "$PWD/out/async-lighting/settings.json"
+$env:OXYGEN_UI_TEST_FILTER = "lighting"
+./out/build-ninja/bin/Release/Oxygen.Examples.Async.exe --frames 600 --fps 30 `
+  --resolution 1280x720 --vsync false --debug-layer true `
+  --capture-provider renderdoc --capture-load path `
+  --capture-library "C:/Program Files/RenderDoc/renderdoc.dll"
+```
+
+Create the output directory and seed `settings.json` with `{}` for authored
+lighting defaults. Never point test settings at the interactive settings file.
+Run `tools/vortex/AnalyzeRenderDocAsyncLighting.py` through
+`tools/shadows/Invoke-RenderDocUiAnalysis.ps1` for each capture to export scene
+color before the UI overlay and inspect the retained spot depth map. Compare
+the shadowed/unshadowed images in RenderDoc; check that lights-off contributes no surface illumination. Use a fixed
+camera, animation time and exposure for these comparisons. For performance work,
+measure native Release runs with Tracy; RenderDoc replay timing is not a benchmark.
+
+Drone regression tests cover true pause, nearest-route re-entry, vertical
+directions and invalid paths. Native-lifetime ownership keeps debug diagnostics
+alive until retained D3D12 allocations retire, so shutdown reports run afterward.

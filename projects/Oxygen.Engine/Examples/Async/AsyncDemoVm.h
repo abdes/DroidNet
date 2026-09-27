@@ -7,16 +7,15 @@
 #pragma once
 
 #include <chrono>
-#include <mutex>
+#include <functional>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "Async/AsyncDemoTypes.h"
 #include <glm/glm.hpp>
 
 #include <Oxygen/Base/ObserverPtr.h>
-
-#include "Async/AsyncDemoTypes.h"
 
 namespace oxygen::scene {
 class SceneNode;
@@ -53,6 +52,14 @@ public:
 
   [[nodiscard]] auto GetSphereCount() const -> size_t;
   [[nodiscard]] auto GetAnimationTime() const -> double;
+  [[nodiscard]] auto IsAnimationEnabled() const noexcept -> bool
+  {
+    return animation_enabled_;
+  }
+  auto SetAnimationEnabled(bool enabled) noexcept -> void
+  {
+    animation_enabled_ = enabled;
+  }
 
   // Get details string for a specific sphere (e.g. "Sphere 1: Speed 1.4,
   // Radius 10.0")
@@ -95,9 +102,6 @@ public:
   void SetAnimationTime(double time);
 
 private:
-  void Refresh();
-
-  mutable std::mutex mutex_;
   observer_ptr<AsyncDemoSettingsService> settings_;
   observer_ptr<scene::SceneNode> spotlight_node_;
   const FrameActionTracker* frame_tracker_;
@@ -106,12 +110,7 @@ private:
   EnsureSpotlightCallback ensure_spotlight_cb_;
 
   double anim_time_ { 0.0 };
-  std::uint64_t epoch_ { 0 };
-
-  // Cached values
-  bool scene_open_ { true };
-  bool spotlight_open_ { true };
-  bool profiler_open_ { true };
+  bool animation_enabled_ { true };
 };
 
 } // namespace oxygen::examples::async

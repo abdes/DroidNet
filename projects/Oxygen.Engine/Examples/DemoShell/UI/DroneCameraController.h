@@ -59,6 +59,11 @@ public:
   [[nodiscard]] auto GetPathPoints() const noexcept
     -> const std::vector<glm::vec3>&;
 
+  //! Distance around the closed route, in scene units.
+  [[nodiscard]] auto GetPathLength() const noexcept -> double;
+  //! Set normalized route progress; the next flying update blends toward it.
+  auto SetProgress(double progress) -> void;
+
   // --- Speed & Dynamics ---
 
   //! Set base travel speed in world units per second.
@@ -81,6 +86,10 @@ public:
   //! Set focus height (Z component of look-at target).
   void SetFocusHeight(float height);
   [[nodiscard]] auto GetFocusHeight() const noexcept -> float;
+
+  //! Blend travel direction (0) toward the focus target (1).
+  auto SetFocusStrength(float strength) -> void;
+  [[nodiscard]] auto GetFocusStrength() const noexcept -> float;
 
   // --- POI Slowdown ---
 

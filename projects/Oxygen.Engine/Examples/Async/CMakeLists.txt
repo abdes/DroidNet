@@ -36,6 +36,8 @@ add_executable(
   "AsyncDemoSettingsService.cpp"
   "AsyncDemoSettingsService.h"
   "AsyncDemoTypes.h"
+  "AsyncScene.cpp"
+  "AsyncScene.h"
   "AsyncDemoVm.cpp"
   "AsyncDemoVm.h"
   "main_impl.cpp"
@@ -53,7 +55,10 @@ set_target_properties(
 )
 
 target_compile_features(${META_MODULE_TARGET} PRIVATE cxx_std_23)
-target_compile_features(${META_MODULE_TARGET} PRIVATE cxx_std_23)
+
+if(OXYGEN_BUILD_UI_TESTS)
+  target_sources(${META_MODULE_TARGET} PRIVATE "Test/Lighting_ui.cpp")
+endif()
 
 target_include_directories(
   ${META_MODULE_TARGET}
@@ -81,6 +86,7 @@ target_link_libraries(
     oxygen::engine
     oxygen::data
     oxygen::scene
+    oxygen::scenesync
 )
 add_custom_command(
   TARGET ${META_MODULE_TARGET}

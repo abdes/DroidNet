@@ -5,20 +5,39 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
-
-#include <glm/gtc/constants.hpp>
-
-#include <Oxygen/Base/Logging.h>
-#include <Oxygen/Core/Constants.h>
-#include <Oxygen/Scene/SceneNode.h>
+#include <cstddef>
+#include <iterator>
+#include <limits>
+#include <memory>
+#include <utility>
+#include <vector>
 
 #include "DemoShell/UI/DroneCameraController.h"
+#include <glm/common.hpp>
+#include <glm/ext/quaternion_common.hpp>
+#include <glm/ext/quaternion_float.hpp>
+#include <glm/ext/quaternion_trigonometric.hpp>
+#include <glm/ext/vector_float2.hpp>
+#include <glm/ext/vector_float3.hpp>
+#include <glm/geometric.hpp>
+#include <glm/gtc/constants.hpp>
+#include <glm/gtc/quaternion.hpp>
+#include <glm/trigonometric.hpp>
+
+#include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Time/Types.h>
+#include <Oxygen/Scene/SceneNode.h>
 
 namespace oxygen::examples::ui {
 
 namespace {
 
+  constexpr double kMinimumPositiveControl = 0.1;
+  constexpr float kMinimumPoiRadius = 0.1F;
+  constexpr float kDirectionEpsilon = 1e-6F;
+  constexpr float kNearVertical = 0.9F;
   //! Evaluate a closed Catmull-Rom spline at parameter u in [0,1].
   auto EvalClosedCatmullRom(const std::vector<glm::vec3>& pts, double u)
     -> glm::vec3
@@ -28,7 +47,7 @@ namespace {
     }
     const auto n = static_cast<int>(pts.size());
     if (n == 1) {
-      return pts[0];
+      return pts.front();
     }
 
     // Wrap u to [0,1)
@@ -39,40 +58,24 @@ namespace {
 
     const double scaled = u * n;
     const int i = static_cast<int>(std::floor(scaled)) % n;
-    const float t = static_cast<float>(scaled - std::floor(scaled));
+    const auto t = static_cast<float>(scaled - std::floor(scaled));
 
     // Four control points with wrapping
-    const glm::vec3& p0 = pts[(i - 1 + n) % n];
-    const glm::vec3& p1 = pts[i];
-    const glm::vec3& p2 = pts[(i + 1) % n];
-    const glm::vec3& p3 = pts[(i + 2) % n];
+    const glm::vec3& p0 = pts.at((i - 1 + n) % n);
+    const glm::vec3& p1 = pts.at(i);
+    const glm::vec3& p2 = pts.at((i + 1) % n);
+    const glm::vec3& p3 = pts.at((i + 2) % n);
 
     // Catmull-Rom matrix multiplication
     const float t2 = t * t;
     const float t3 = t2 * t;
 
+    constexpr float kCubicThree = 3.0F;
+    constexpr float kCubicFive = 5.0F;
     return 0.5F
       * (2.0F * p1 + (-p0 + p2) * t
-        + (2.0F * p0 - 5.0F * p1 + 4.0F * p2 - p3) * t2
-        + (-p0 + 3.0F * p1 - 3.0F * p2 + p3) * t3);
-  }
-
-  //! Approximate total path length by sampling.
-  auto ApproximatePathLength(const std::vector<glm::vec3>& pts) -> double
-  {
-    if (pts.size() < 2) {
-      return 0.0;
-    }
-    constexpr int kSamples = 512;
-    double length = 0.0;
-    glm::vec3 prev = EvalClosedCatmullRom(pts, 0.0);
-    for (int i = 1; i <= kSamples; ++i) {
-      const double u = static_cast<double>(i) / kSamples;
-      const glm::vec3 curr = EvalClosedCatmullRom(pts, u);
-      length += glm::length(curr - prev);
-      prev = curr;
-    }
-    return length;
+        + (2.0F * p0 - kCubicFive * p1 + 4.0F * p2 - p3) * t2
+        + (-p0 + kCubicThree * p1 - kCubicThree * p2 + p3) * t3);
   }
 
   //! Build arc-length lookup table for constant-speed traversal.
@@ -128,17 +131,17 @@ namespace {
     }
 
     const auto idx = static_cast<size_t>(std::distance(s_samples.begin(), it));
-    const double s0 = s_samples[idx - 1];
-    const double s1 = s_samples[idx];
-    const double u0 = u_samples[idx - 1];
-    const double u1 = u_samples[idx];
+    const double s0 = s_samples.at(idx - 1);
+    const double s1 = s_samples.at(idx);
+    const double u0 = u_samples.at(idx - 1);
+    const double u1 = u_samples.at(idx);
 
     if (s1 <= s0) {
       return u0;
     }
 
     const double t = (s - s0) / (s1 - s0);
-    return u0 + t * (u1 - u0);
+    return u0 + (t * (u1 - u0));
   }
 
 } // namespace
@@ -170,6 +173,9 @@ struct DroneCameraController::Impl {
 
   // Focus target
   glm::vec3 focus_target { 0.0F, 0.0F, 0.8F };
+  float focus_strength { 0.8F };
+  glm::vec3 previous_tangent { 0.0F };
+  bool tangent_valid { false };
 
   // POI slowdown
   std::vector<glm::vec3> pois;
@@ -205,26 +211,56 @@ void DroneCameraController::SetPathGenerator(PathGenerator generator)
 {
   impl_->path_generator = std::move(generator);
 
-  // Generate path immediately
-  if (impl_->path_generator) {
-    impl_->path_points = impl_->path_generator();
-    impl_->path_length = ApproximatePathLength(impl_->path_points);
-    if (impl_->path_length <= 0.0) {
-      impl_->path_length = 1.0;
-    }
-
-    // Build arc-length LUT
-    constexpr int kLutSamples = 512;
-    BuildArcLengthLut(
-      impl_->path_points, kLutSamples, impl_->lut_u, impl_->lut_s);
-
-    impl_->path_s = 0.0;
-    impl_->initialized = false;
-
-    LOG_F(INFO,
-      "DroneCameraController: Path configured with {} points, length {:.1F}",
-      impl_->path_points.size(), impl_->path_length);
+  impl_->path_points = impl_->path_generator ? impl_->path_generator()
+                                             : std::vector<glm::vec3> {};
+  const bool finite
+    = std::ranges::all_of(impl_->path_points, [](const auto& point) -> auto {
+        return std::isfinite(point.x) && std::isfinite(point.y)
+          && std::isfinite(point.z);
+      });
+  impl_->lut_u.clear();
+  impl_->lut_s.clear();
+  impl_->path_length = 0.0;
+  impl_->path_s = 0.0;
+  impl_->tangent_valid = false;
+  if (!finite || impl_->path_points.size() < 2U) {
+    impl_->path_points.clear();
+    impl_->flying = false;
+    return;
   }
+  constexpr int kLutSamples = 512;
+  BuildArcLengthLut(
+    impl_->path_points, kLutSamples, impl_->lut_u, impl_->lut_s);
+  impl_->path_length = impl_->lut_s.back();
+  if (impl_->path_length <= std::numeric_limits<double>::epsilon()) {
+    impl_->flying = false;
+  }
+}
+
+auto DroneCameraController::GetPathLength() const noexcept -> double
+{
+  return impl_->path_length;
+}
+
+auto DroneCameraController::SetProgress(const double progress) -> void
+{
+  if (!std::isfinite(progress) || !HasPath()) {
+    return;
+  }
+  impl_->path_s = (progress - std::floor(progress)) * impl_->path_length;
+  impl_->tangent_valid = false;
+}
+
+auto DroneCameraController::SetFocusStrength(const float strength) -> void
+{
+  if (std::isfinite(strength)) {
+    impl_->focus_strength = std::clamp(strength, 0.0F, 1.0F);
+  }
+}
+
+auto DroneCameraController::GetFocusStrength() const noexcept -> float
+{
+  return impl_->focus_strength;
 }
 
 auto DroneCameraController::HasPath() const noexcept -> bool
@@ -240,7 +276,7 @@ auto DroneCameraController::GetPathPoints() const noexcept
 
 void DroneCameraController::SetSpeed(double units_per_sec)
 {
-  impl_->speed = std::max(0.1, units_per_sec);
+  impl_->speed = std::max(kMinimumPositiveControl, units_per_sec);
 }
 
 auto DroneCameraController::GetSpeed() const noexcept -> double
@@ -250,7 +286,7 @@ auto DroneCameraController::GetSpeed() const noexcept -> double
 
 void DroneCameraController::SetDamping(double factor)
 {
-  impl_->damping = std::max(0.1, factor);
+  impl_->damping = std::max(kMinimumPositiveControl, factor);
 }
 
 auto DroneCameraController::GetDamping() const noexcept -> double
@@ -290,7 +326,7 @@ void DroneCameraController::SetPOIs(std::vector<glm::vec3> pois)
 
 void DroneCameraController::SetPOISlowdownRadius(float radius)
 {
-  impl_->poi_radius = std::max(0.1F, radius);
+  impl_->poi_radius = std::max(kMinimumPoiRadius, radius);
 }
 
 auto DroneCameraController::GetPOISlowdownRadius() const noexcept -> float
@@ -320,7 +356,7 @@ auto DroneCameraController::GetBobAmplitude() const noexcept -> double
 
 void DroneCameraController::SetBobFrequency(double hz)
 {
-  impl_->bob_freq = std::max(0.1, hz);
+  impl_->bob_freq = std::max(kMinimumPositiveControl, hz);
 }
 
 auto DroneCameraController::GetBobFrequency() const noexcept -> double
@@ -360,6 +396,9 @@ auto DroneCameraController::GetMaxBank() const noexcept -> double
 
 void DroneCameraController::Start()
 {
+  if (!HasPath()) {
+    return;
+  }
   impl_->flying = true;
   impl_->ramp_elapsed = 0.0;
 }
@@ -401,18 +440,35 @@ void DroneCameraController::SyncFromTransform(scene::SceneNode& camera)
     impl_->current_rot = *rot;
   }
   impl_->initialized = true;
+  impl_->tangent_valid = false;
+  if (HasPath()) {
+    auto nearest_distance = std::numeric_limits<float>::max();
+    for (std::size_t index = 0U; index < impl_->lut_u.size(); ++index) {
+      const auto offset
+        = EvalClosedCatmullRom(impl_->path_points, impl_->lut_u.at(index))
+        - impl_->current_pos;
+      const auto distance = glm::dot(offset, offset);
+      if (distance < nearest_distance) {
+        nearest_distance = distance;
+        impl_->path_s = impl_->lut_s.at(index);
+      }
+    }
+  }
 }
 
 void DroneCameraController::Update(
   scene::SceneNode& camera, time::CanonicalDuration delta_time)
 {
-  if (!camera.IsAlive() || !HasPath()) {
+  if (!camera.IsAlive() || !HasPath() || !impl_->flying) {
     return;
   }
 
   const double dt
     = std::min(std::chrono::duration<double>(delta_time.get()).count(), 0.05);
 
+  if (!(dt > 0.0) || !std::isfinite(dt)) {
+    return;
+  }
   impl_->anim_time += dt;
 
   // Compute effective speed with POI slowdown
@@ -442,7 +498,7 @@ void DroneCameraController::Update(
   // Advance along path only if flying
   if (impl_->flying) {
     impl_->path_s
-      = std::fmod(impl_->path_s + effective_speed * dt, impl_->path_length);
+      = std::fmod(impl_->path_s + (effective_speed * dt), impl_->path_length);
     if (impl_->path_s < 0.0) {
       impl_->path_s += impl_->path_length;
     }
@@ -458,24 +514,29 @@ void DroneCameraController::Update(
     = ArcLengthToParamU(impl_->path_s + eps_s, impl_->lut_u, impl_->lut_s);
   const glm::vec3 p_ahead = EvalClosedCatmullRom(impl_->path_points, u_eps);
   glm::vec3 tangent = p_ahead - base_pos;
-  if (glm::length(tangent) > 1e-6f) {
+  if (glm::length(tangent) > kDirectionEpsilon) {
     tangent = glm::normalize(tangent);
   } else {
     tangent = space::move::Up;
   }
 
   // Apply vertical bob
-  const float bob_offset = static_cast<float>(impl_->bob_amp
+  const auto bob_offset = static_cast<float>(impl_->bob_amp
     * std::sin(impl_->anim_time * impl_->bob_freq * glm::two_pi<double>()));
   base_pos.z += bob_offset;
 
   // Apply lateral noise (smoothed)
-  const glm::vec3 right = glm::normalize(glm::cross(tangent, space::move::Up));
-  const float noise_target_x
+  auto right = glm::cross(tangent, space::move::Up);
+  if (glm::dot(right, right) <= std::numeric_limits<float>::epsilon()) {
+    right = impl_->current_rot * space::move::Right;
+  } else {
+    right = glm::normalize(right);
+  }
+  const auto noise_target_x
     = static_cast<float>(impl_->noise_amp * std::sin(impl_->anim_time * 2.3));
-  const float noise_target_y
+  const auto noise_target_y
     = static_cast<float>(impl_->noise_amp * std::cos(impl_->anim_time * 1.7));
-  const float noise_smooth = static_cast<float>(
+  const auto noise_smooth = static_cast<float>(
     glm::clamp(1.0 - std::exp(-dt * impl_->noise_response), 0.0, 1.0));
   impl_->noise_state.x
     = glm::mix(impl_->noise_state.x, noise_target_x, noise_smooth);
@@ -486,21 +547,21 @@ void DroneCameraController::Update(
 
   // Compute desired rotation toward focus target
   glm::vec3 focus_dir = impl_->focus_target - base_pos;
-  if (glm::length(focus_dir) > 1e-6f) {
+  if (glm::length(focus_dir) > kDirectionEpsilon) {
     focus_dir = glm::normalize(focus_dir);
   } else {
     focus_dir = tangent;
   }
 
   // Blend between tangent and focus direction
-  constexpr float focus_strength = 0.8F;
   constexpr float max_rot = glm::radians(180.0F);
   const float dotv = glm::clamp(glm::dot(tangent, focus_dir), -1.0F, 1.0F);
   const float ang = std::acos(dotv);
-  const float apply_angle = glm::min(max_rot, ang * focus_strength);
+  const float apply_angle = glm::min(max_rot, ang * impl_->focus_strength);
   glm::vec3 axis = glm::cross(tangent, focus_dir);
-  if (glm::length(axis) < 1e-6f) {
-    axis = (std::abs(tangent.z) > 0.9F) ? space::move::Right : space::move::Up;
+  if (glm::length(axis) < kDirectionEpsilon) {
+    axis = (std::abs(tangent.z) > kNearVertical) ? space::move::Right
+                                                 : space::move::Up;
   } else {
     axis = glm::normalize(axis);
   }
@@ -508,11 +569,13 @@ void DroneCameraController::Update(
   glm::vec3 final_fwd = glm::normalize(focus_rot * tangent);
 
   // Clamp pitch
-  auto ClampPitch = [](glm::vec3 fwd) {
+  auto ClampPitch = [](glm::vec3 fwd) -> glm::vec3 {
     constexpr float max_pitch = glm::radians(45.0F);
-    glm::vec3 horiz = glm::normalize(glm::vec3(fwd.x, fwd.y, 0.0F));
-    if (glm::length(horiz) < 1e-6f) {
-      return fwd;
+    auto horiz = glm::vec3(fwd.x, fwd.y, 0.0F);
+    if (glm::dot(horiz, horiz) <= std::numeric_limits<float>::epsilon()) {
+      horiz = space::move::Forward;
+    } else {
+      horiz = glm::normalize(horiz);
     }
     const float current_pitch = std::asin(glm::clamp(fwd.z, -1.0F, 1.0F));
     if (std::abs(current_pitch) <= max_pitch) {
@@ -528,20 +591,23 @@ void DroneCameraController::Update(
   constexpr glm::vec3 base_up = space::move::Up;
   glm::quat desired_rot = glm::quatLookAtRH(final_fwd, base_up);
 
-  // Apply banking based on lateral velocity
-  if (impl_->initialized && impl_->bank_factor > 0.0) {
-    const glm::vec3 velocity = base_pos - impl_->current_pos;
-    const float lateral_speed
-      = glm::dot(velocity, right) / static_cast<float>(dt);
-    float bank_angle = static_cast<float>(lateral_speed * impl_->bank_factor);
-    bank_angle = glm::clamp(bank_angle, static_cast<float>(-impl_->max_bank),
-      static_cast<float>(impl_->max_bank));
-    const glm::quat bank_rot = glm::angleAxis(bank_angle, final_fwd);
-    desired_rot = bank_rot * desired_rot;
+  // Bank with route curvature, not positional smoothing error.
+  if (impl_->tangent_valid && impl_->bank_factor > 0.0) {
+    const auto sine
+      = glm::dot(glm::cross(impl_->previous_tangent, tangent), base_up);
+    const auto cosine
+      = glm::clamp(glm::dot(impl_->previous_tangent, tangent), -1.0F, 1.0F);
+    const auto turn_rate = std::atan2(sine, cosine) / dt;
+    const auto bank_angle = static_cast<float>(
+      std::clamp(turn_rate * effective_speed * impl_->bank_factor,
+        -impl_->max_bank, impl_->max_bank));
+    desired_rot = glm::angleAxis(bank_angle, final_fwd) * desired_rot;
   }
+  impl_->previous_tangent = tangent;
+  impl_->tangent_valid = true;
 
   // Smooth position and rotation
-  const float smooth_t = static_cast<float>(
+  const auto smooth_t = static_cast<float>(
     glm::clamp(1.0 - std::exp(-dt * impl_->damping), 0.0, 1.0));
 
   if (!impl_->initialized) {

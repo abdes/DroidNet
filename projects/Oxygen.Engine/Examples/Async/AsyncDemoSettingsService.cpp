@@ -4,12 +4,23 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Base/Logging.h>
+#include <atomic>
+#include <cstdint>
 
 #include "Async/AsyncDemoSettingsService.h"
 #include "DemoShell/Services/SettingsService.h"
+#include <glm/ext/vector_float3.hpp>
+#include <glm/trigonometric.hpp>
+
+#include <Oxygen/Base/Logging.h>
 
 namespace oxygen::examples::async {
+namespace {
+  constexpr float kDefaultSpotlightFluxLm = 3000.0F;
+  constexpr float kDefaultSpotlightRangeMeters = 60.0F;
+  constexpr float kDefaultSpotlightInnerConeDegrees = 12.0F;
+  constexpr float kDefaultSpotlightOuterConeDegrees = 26.0F;
+} // namespace
 
 auto AsyncDemoSettingsService::GetSceneSectionOpen() const -> bool
 {
@@ -60,7 +71,8 @@ auto AsyncDemoSettingsService::GetSpotlightIntensity() const -> float
 {
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
-  return settings->GetFloat(kSpotlightIntensityKey).value_or(300.0F);
+  return settings->GetFloat(kSpotlightIntensityKey)
+    .value_or(kDefaultSpotlightFluxLm);
 }
 
 auto AsyncDemoSettingsService::SetSpotlightIntensity(float intensity) -> void
@@ -75,7 +87,8 @@ auto AsyncDemoSettingsService::GetSpotlightRange() const -> float
 {
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
-  return settings->GetFloat(kSpotlightRangeKey).value_or(35.0F);
+  return settings->GetFloat(kSpotlightRangeKey)
+    .value_or(kDefaultSpotlightRangeMeters);
 }
 
 auto AsyncDemoSettingsService::SetSpotlightRange(float range) -> void
@@ -93,7 +106,7 @@ auto AsyncDemoSettingsService::GetSpotlightColor() const -> glm::vec3
   const float r = settings->GetFloat(kSpotlightColorRKey).value_or(1.0F);
   const float g = settings->GetFloat(kSpotlightColorGKey).value_or(1.0F);
   const float b = settings->GetFloat(kSpotlightColorBKey).value_or(1.0F);
-  return glm::vec3(r, g, b);
+  return { r, g, b };
 }
 
 auto AsyncDemoSettingsService::SetSpotlightColor(glm::vec3 color) -> void
@@ -111,7 +124,7 @@ auto AsyncDemoSettingsService::GetSpotlightInnerCone() const -> float
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
   return settings->GetFloat(kSpotlightInnerConeKey)
-    .value_or(glm::radians(12.0F));
+    .value_or(glm::radians(kDefaultSpotlightInnerConeDegrees));
 }
 
 auto AsyncDemoSettingsService::SetSpotlightInnerCone(float angle_rad) -> void
@@ -127,7 +140,7 @@ auto AsyncDemoSettingsService::GetSpotlightOuterCone() const -> float
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
   return settings->GetFloat(kSpotlightOuterConeKey)
-    .value_or(glm::radians(26.0F));
+    .value_or(glm::radians(kDefaultSpotlightOuterConeDegrees));
 }
 
 auto AsyncDemoSettingsService::SetSpotlightOuterCone(float angle_rad) -> void
@@ -157,7 +170,7 @@ auto AsyncDemoSettingsService::GetSpotlightCastsShadows() const -> bool
 {
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
-  return settings->GetBool(kSpotlightShadowsKey).value_or(false);
+  return settings->GetBool(kSpotlightShadowsKey).value_or(true);
 }
 
 auto AsyncDemoSettingsService::SetSpotlightCastsShadows(bool casts_shadows)

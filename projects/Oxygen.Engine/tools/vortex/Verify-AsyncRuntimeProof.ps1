@@ -99,10 +99,10 @@ function Write-BehaviorSummary {
     "- final_present_vs_tonemap_changed: $(Get-VortexProofReportValue -Report $ProductsReport -Key 'final_present_vs_tonemap_changed' -Default 'unknown')"
     ''
     '## Supplemental Source Audit (Non-Blocking)'
-    "- main_view_with_atmosphere: $(if (Test-SourceContains -Path $asyncMainPath -Needle 'view_ctx.metadata.with_atmosphere = true;') { 'pass' } else { 'fail' })"
+    "- main_view_with_atmosphere: $(if (Test-SourceContains -Path $asyncMainPath -Needle 'composition.with_atmosphere = true;') { 'pass' } else { 'fail' })"
     "- spotlight_setup_present: $(if (Test-SourceContains -Path $asyncMainPath -Needle 'EnsureCameraSpotLight();') { 'pass' } else { 'fail' })"
     "- spotlight_node_present: $(if (Test-SourceContains -Path $asyncMainPath -Needle 'CameraSpotLight') { 'pass' } else { 'fail' })"
-    "- spotlight_shadows_default_off: $(if (Test-SourceContains -Path $asyncSettingsPath -Needle 'return settings->GetBool(kSpotlightShadowsKey).value_or(false);') { 'pass' } else { 'fail' })"
+    "- spotlight_shadows_default_on: $(if (Test-SourceContains -Path $asyncSettingsPath -Needle 'return settings->GetBool(kSpotlightShadowsKey).value_or(true);') { 'pass' } else { 'fail' })"
     ''
     '## Structural Notes'
     "- stage3_scope_present: $(Get-VortexProofReportValue -Report $CaptureReport -Key 'stage3_scope_present' -Default 'unknown')"

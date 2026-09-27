@@ -29,6 +29,7 @@ m_gtest_program(
 m_gtest_program(SkyboxService SOURCES "SkyboxService_test.cpp")
 
 m_gtest_program(OrbitCameraController SOURCES "OrbitCameraController_test.cpp")
+m_gtest_program(DroneCameraController SOURCES "DroneCameraController_test.cpp")
 
 m_gtest_program(
   EnvironmentSettingsService

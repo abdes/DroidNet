@@ -8,10 +8,10 @@
 
 #include <string_view>
 
+#include "DemoShell/UI/DemoPanel.h"
+
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
-
-#include "DemoShell/UI/DemoPanel.h"
 
 namespace oxygen::examples::async {
 

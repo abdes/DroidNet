@@ -7,66 +7,42 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
-#include <cstring>
-#include <random>
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
-#include <Oxygen/Base/logging.h>
-
-#define GLM_ENABLE_EXPERIMENTAL
 #include "Async/AsyncDemoPanel.h"
 #include "Async/AsyncDemoSettingsService.h"
 #include "Async/AsyncDemoVm.h"
 #include "Async/MainModule.h"
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
-#include "DemoShell/Services/DefaultSceneLighting.h"
 #include "DemoShell/UI/CameraRigController.h"
 #include "DemoShell/UI/DroneCameraController.h"
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/quaternion.hpp>
+#include <glm/ext/quaternion_trigonometric.hpp>
+#include <glm/ext/vector_float3.hpp>
+#include <glm/ext/vector_uint2.hpp>
+#include <glm/gtc/constants.hpp>
 
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/FrameContext.h>
-#include <Oxygen/Core/Types/Format.h>
-#include <Oxygen/Core/Types/Scissors.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Core/Types/ViewPort.h>
-#include <Oxygen/Data/AssetKey.h>
-#include <Oxygen/Data/GeometryAsset.h>
-#include <Oxygen/Data/MaterialAsset.h>
-#include <Oxygen/Data/PakFormat.h>
-#include <Oxygen/Data/ProceduralMeshes.h>
-#include <Oxygen/Data/ShaderReference.h>
-#include <Oxygen/Engine/AsyncEngine.h>
-#include <Oxygen/Graphics/Common/CommandRecorder.h>
-#include <Oxygen/Graphics/Common/Framebuffer.h>
-#include <Oxygen/Graphics/Common/Graphics.h>
-#include <Oxygen/Graphics/Common/Surface.h>
-#include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Platform/Window.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
-#include <Oxygen/Scene/Environment/Fog.h>
-#include <Oxygen/Scene/Environment/SceneEnvironment.h>
-#include <Oxygen/Scene/Environment/SkyAtmosphere.h>
-#include <Oxygen/Scene/Environment/SkyLight.h>
-#include <Oxygen/Scene/Light/DirectionalLight.h>
+#include <Oxygen/Scene/Light/LightCommon.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/Scene.h>
-#include <Oxygen/Scene/SceneFlags.h>
-#include <Oxygen/Scene/Types/RenderablePolicies.h>
-#include <Oxygen/Vortex/Renderer.h>
-#include <Oxygen/Vortex/SceneCameraViewResolver.h>
+#include <Oxygen/Vortex/CompositionView.h>
+#include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
 
-using WindowProps = oxygen::platform::window::Properties;
-using WindowEvent = oxygen::platform::window::Event;
-using oxygen::Scissors;
 using oxygen::ViewPort;
-using oxygen::data::Mesh;
-using oxygen::data::Vertex;
-using oxygen::scene::DistancePolicy;
 using oxygen::scene::PerspectiveCamera;
 
 namespace {
@@ -74,389 +50,6 @@ namespace {
 constexpr uint32_t kDefaultOffscreenWidth = 1280U;
 constexpr uint32_t kDefaultOffscreenHeight = 720U;
 constexpr glm::vec3 kSceneFocusPoint { 0.0F, 0.0F, 0.5F };
-constexpr glm::vec3 kSunPosition { 0.0F, -16.0F, 18.0F };
-constexpr float kGroundPlaneZ = -0.12F;
-constexpr float kSphereOrbitHeight = 6.0F;
-constexpr float kTwoSubmeshTrianglesHeight = 1.25F;
-constexpr double kSphereMaxOrbitInclination = 0.35;
-
-struct LocalTimeOfDay {
-  int hour = 0;
-  int minute = 0;
-  int second = 0;
-  double day_fraction = 0.0;
-};
-
-auto SetShadowParticipation(oxygen::scene::SceneNode& node,
-  const bool casts_shadows, const bool receives_shadows) -> void
-{
-  if (auto flags_ref = node.GetFlags(); flags_ref.has_value()) {
-    auto& flags = flags_ref->get();
-    flags = flags.SetFlag(oxygen::scene::SceneNodeFlags::kCastsShadows,
-      oxygen::scene::SceneFlag {}.SetEffectiveValueBit(casts_shadows));
-    flags = flags.SetFlag(oxygen::scene::SceneNodeFlags::kReceivesShadows,
-      oxygen::scene::SceneFlag {}.SetEffectiveValueBit(receives_shadows));
-  }
-}
-
-auto NormalizeOrFallback(const glm::vec3& direction, const glm::vec3& fallback)
-  -> glm::vec3
-{
-  const auto length_sq = glm::dot(direction, direction);
-  if (length_sq <= oxygen::math::Epsilon) {
-    return fallback;
-  }
-  return direction / std::sqrt(length_sq);
-}
-
-auto RotationFromDirToDir(const glm::vec3& from_dir,
-  const glm::vec3& fallback_dir, const glm::vec3& up_axis,
-  const glm::vec3& direction) -> glm::quat
-{
-  const auto to_dir = NormalizeOrFallback(direction, fallback_dir);
-  const auto cos_theta = std::clamp(glm::dot(from_dir, to_dir), -1.0F, 1.0F);
-
-  if (cos_theta >= 0.9999F) {
-    return glm::quat(1.0F, 0.0F, 0.0F, 0.0F);
-  }
-
-  if (cos_theta <= -0.9999F) {
-    return glm::angleAxis(oxygen::math::Pi, up_axis);
-  }
-
-  const auto axis = glm::normalize(glm::cross(from_dir, to_dir));
-  const auto angle = std::acos(cos_theta);
-  return glm::angleAxis(angle, axis);
-}
-
-auto LookRotation(const glm::vec3& position, const glm::vec3& target)
-  -> glm::quat
-{
-  return RotationFromDirToDir(oxygen::space::move::Forward,
-    oxygen::space::move::Forward, oxygen::space::move::Up, target - position);
-}
-
-// Helper: make a solid-color material asset snapshot
-auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
-  oxygen::data::MaterialDomain domain = oxygen::data::MaterialDomain::kOpaque,
-  bool double_sided = false, const float metalness = 0.0F,
-  const float roughness = 0.9F)
-{
-  // NOLINTBEGIN(*-magic-numbers)
-  namespace d = oxygen::data;
-  namespace pak = oxygen::data::pak;
-
-  pak::render::MaterialAssetDesc desc {};
-  desc.header.asset_type = static_cast<uint8_t>(
-    oxygen::data::AssetType::kMaterial); // MaterialAsset (for tooling/debug)
-  // Safe copy name
-  constexpr std::size_t maxn = sizeof(desc.header.name) - 1;
-  const std::size_t n = (std::min)(maxn, std::strlen(name));
-  std::memcpy(desc.header.name, name, n);
-  desc.header.name[n] = '\0';
-  desc.header.version = 1;
-  desc.header.streaming_priority = 255;
-  desc.material_domain = static_cast<uint8_t>(domain);
-  desc.flags = pak::render::kMaterialFlag_NoTextureSampling
-    | (double_sided ? pak::render::kMaterialFlag_DoubleSided : 0u);
-  desc.shader_stages = 0;
-  desc.base_color[0] = rgba.r;
-  desc.base_color[1] = rgba.g;
-  desc.base_color[2] = rgba.b;
-  desc.base_color[3] = rgba.a;
-  desc.normal_scale = 1.0F;
-  desc.metalness = d::Unorm16 { metalness };
-  desc.roughness = d::Unorm16 { roughness };
-  desc.ambient_occlusion = d::Unorm16 { 1.0F };
-  // Leave texture indices at default invalid (no textures)
-  const d::AssetKey asset_key = d::AssetKey::FromVirtualPath(
-    "/Engine/Examples/Async/Materials/" + std::string(name) + ".omat");
-  return std::make_shared<const d::MaterialAsset>(
-    asset_key, desc, std::vector<d::ShaderReference> {});
-  // NOLINTEND(*-magic-numbers)
-};
-
-//! Build a 2-LOD sphere GeometryAsset (high and low tessellation).
-auto BuildSphereLodAsset() -> std::shared_ptr<oxygen::data::GeometryAsset>
-{
-  // NOLINTBEGIN(*-magic-numbers)
-  using oxygen::data::MaterialAsset;
-  using oxygen::data::MeshBuilder;
-  using oxygen::data::pak::geometry::GeometryAssetDesc;
-  using oxygen::data::pak::geometry::MeshViewDesc;
-
-  // Diagnostic toggle: force single-LOD spheres to rule out LOD switch pops
-  // as a source of per-mesh stutter. Set to false to restore dual-LOD.
-  constexpr bool kUseSingleLodForTest = true;
-
-  // Semi-transparent material (transparent domain) with lower alpha to
-  // accentuate blending against background.
-  const auto glass = MakeSolidColorMaterial("Glass",
-    { 0.2F, 0.6F, 0.9F, 0.35F }, oxygen::data::MaterialDomain::kAlphaBlended);
-
-  // LOD 0: higher tessellation
-  auto lod0_data = oxygen::data::MakeSphereMeshAsset(64, 64);
-  CHECK_F(lod0_data.has_value());
-  auto mesh0
-    = MeshBuilder(0, "SphereLOD0")
-        .WithVertices(lod0_data->first)
-        .WithIndices(lod0_data->second)
-        .BeginSubMesh("full", glass)
-        .WithMeshView(MeshViewDesc {
-          .first_index = 0,
-          .index_count = static_cast<uint32_t>(lod0_data->second.size()),
-          .first_vertex = 0,
-          .vertex_count = static_cast<uint32_t>(lod0_data->first.size()),
-        })
-        .EndSubMesh()
-        .Build();
-
-  // Optionally create LOD1
-  std::shared_ptr<Mesh> mesh1;
-  if (!kUseSingleLodForTest) {
-    auto lod1_data = oxygen::data::MakeSphereMeshAsset(24, 24);
-    CHECK_F(lod1_data.has_value());
-    mesh1 = MeshBuilder(1, "SphereLOD1")
-              .WithVertices(lod1_data->first)
-              .WithIndices(lod1_data->second)
-              .BeginSubMesh("full", glass)
-              .WithMeshView(MeshViewDesc {
-                .first_index = 0,
-                .index_count = static_cast<uint32_t>(lod1_data->second.size()),
-                .first_vertex = 0,
-                .vertex_count = static_cast<uint32_t>(lod1_data->first.size()),
-              })
-              .EndSubMesh()
-              .Build();
-  }
-
-  // Use LOD0 bounds for asset bounds
-  GeometryAssetDesc geo_desc {};
-  geo_desc.lod_count = kUseSingleLodForTest ? 1 : 2;
-  const glm::vec3 bb_min = mesh0->BoundingBoxMin();
-  const glm::vec3 bb_max = mesh0->BoundingBoxMax();
-  geo_desc.bounding_box_min[0] = bb_min.x;
-  geo_desc.bounding_box_min[1] = bb_min.y;
-  geo_desc.bounding_box_min[2] = bb_min.z;
-  geo_desc.bounding_box_max[0] = bb_max.x;
-  geo_desc.bounding_box_max[1] = bb_max.y;
-  geo_desc.bounding_box_max[2] = bb_max.z;
-
-  if (kUseSingleLodForTest) {
-    return std::make_shared<oxygen::data::GeometryAsset>(
-      oxygen::data::AssetKey::FromVirtualPath(
-        "/Engine/Examples/Async/Geometry/SphereLod.ogeo"),
-      geo_desc, std::vector<std::shared_ptr<Mesh>> { std::move(mesh0) });
-  }
-
-  return std::make_shared<oxygen::data::GeometryAsset>(
-    oxygen::data::AssetKey::FromVirtualPath(
-      "/Engine/Examples/Async/Geometry/SphereLod.ogeo"),
-    geo_desc,
-    std::vector<std::shared_ptr<Mesh>> { std::move(mesh0), std::move(mesh1) });
-}
-
-//! Build a 1-LOD mesh with two submeshes (two triangles of a quad).
-auto BuildTwoSubmeshQuadAsset() -> std::shared_ptr<oxygen::data::GeometryAsset>
-{
-  using oxygen::data::MaterialAsset;
-  using oxygen::data::MeshBuilder;
-  using oxygen::data::pak::geometry::GeometryAssetDesc;
-  using oxygen::data::pak::geometry::MeshViewDesc;
-
-  // Simple quad (XY plane), two triangles
-  std::vector<Vertex> vertices;
-  vertices.reserve(4);
-  vertices.push_back(Vertex { .position = { -1, -1, 0 },
-    .normal = { 0, 0, 1 },
-    .texcoord = { 0, 1 },
-    .tangent = { 1, 0, 0 },
-    .bitangent = { 0, 1, 0 },
-    .color = { 1, 1, 1, 1 } });
-  vertices.push_back(Vertex { .position = { -1, 1, 0 },
-    .normal = { 0, 0, 1 },
-    .texcoord = { 0, 0 },
-    .tangent = { 1, 0, 0 },
-    .bitangent = { 0, 1, 0 },
-    .color = { 1, 1, 1, 1 } });
-  vertices.push_back(Vertex { .position = { 1, -1, 0 },
-    .normal = { 0, 0, 1 },
-    .texcoord = { 1, 1 },
-    .tangent = { 1, 0, 0 },
-    .bitangent = { 0, 1, 0 },
-    .color = { 1, 1, 1, 1 } });
-  vertices.push_back(Vertex { .position = { 1, 1, 0 },
-    .normal = { 0, 0, 1 },
-    .texcoord = { 1, 0 },
-    .tangent = { 1, 0, 0 },
-    .bitangent = { 0, 1, 0 },
-    .color = { 1, 1, 1, 1 } });
-  // Keep triangle winding consistent with the authored +Z normals. The
-  // previous ordering faced -Z, which made the double-sided shading path treat
-  // the visible side as a backface and flip the normal away from the light.
-  std::vector<uint32_t> indices { 0, 2, 1, 2, 3, 1 };
-
-  // Create two distinct solid-color materials
-  const auto red = MakeSolidColorMaterial("Red", { 1.0F, 0.1F, 0.1F, 1.0F },
-    oxygen::data::MaterialDomain::kOpaque, true);
-  const auto green = MakeSolidColorMaterial("Green", { 0.1F, 1.0F, 0.1F, 1.0F },
-    oxygen::data::MaterialDomain::kOpaque, true);
-
-  auto mesh = MeshBuilder(0, "Quad2SM")
-                .WithVertices(vertices)
-                .WithIndices(indices)
-                // Submesh 0: first triangle (opaque red)
-                .BeginSubMesh("tri0", red)
-                .WithMeshView(MeshViewDesc {
-                  .first_index = 0,
-                  .index_count = 3,
-                  .first_vertex = 0,
-                  .vertex_count = static_cast<uint32_t>(vertices.size()),
-                })
-                .EndSubMesh()
-                // Submesh 1: second triangle (opaque green restored)
-                .BeginSubMesh("tri1", green)
-                .WithMeshView(MeshViewDesc {
-                  .first_index = 3,
-                  .index_count = 3,
-                  .first_vertex = 0,
-                  .vertex_count = static_cast<uint32_t>(vertices.size()),
-                })
-                .EndSubMesh()
-                .Build();
-
-  // Geometry asset with 1 LOD
-  GeometryAssetDesc geo_desc {};
-  geo_desc.lod_count = 1;
-  const auto bb_min = mesh->BoundingBoxMin();
-  const auto bb_max = mesh->BoundingBoxMax();
-  geo_desc.bounding_box_min[0] = bb_min.x;
-  geo_desc.bounding_box_min[1] = bb_min.y;
-  geo_desc.bounding_box_min[2] = bb_min.z;
-  geo_desc.bounding_box_max[0] = bb_max.x;
-  geo_desc.bounding_box_max[1] = bb_max.y;
-  geo_desc.bounding_box_max[2] = bb_max.z;
-  return std::make_shared<oxygen::data::GeometryAsset>(
-    oxygen::data::AssetKey::FromVirtualPath(
-      "/Engine/Examples/Async/Geometry/Quad2SM.ogeo"),
-    geo_desc, std::vector<std::shared_ptr<Mesh>> { std::move(mesh) });
-  // NOLINTEND(*-magic-numbers)
-}
-
-auto BuildGroundPlaneAsset() -> std::shared_ptr<oxygen::data::GeometryAsset>
-{
-  using oxygen::data::MeshBuilder;
-  using oxygen::data::pak::geometry::GeometryAssetDesc;
-  using oxygen::data::pak::geometry::MeshViewDesc;
-
-  std::vector<Vertex> vertices;
-  vertices.reserve(4);
-  vertices.push_back(Vertex { .position = { -1, -1, 0 },
-    .normal = { 0, 0, 1 },
-    .texcoord = { 0, 1 },
-    .tangent = { 1, 0, 0 },
-    .bitangent = { 0, 1, 0 },
-    .color = { 1, 1, 1, 1 } });
-  vertices.push_back(Vertex { .position = { -1, 1, 0 },
-    .normal = { 0, 0, 1 },
-    .texcoord = { 0, 0 },
-    .tangent = { 1, 0, 0 },
-    .bitangent = { 0, 1, 0 },
-    .color = { 1, 1, 1, 1 } });
-  vertices.push_back(Vertex { .position = { 1, -1, 0 },
-    .normal = { 0, 0, 1 },
-    .texcoord = { 1, 1 },
-    .tangent = { 1, 0, 0 },
-    .bitangent = { 0, 1, 0 },
-    .color = { 1, 1, 1, 1 } });
-  vertices.push_back(Vertex { .position = { 1, 1, 0 },
-    .normal = { 0, 0, 1 },
-    .texcoord = { 1, 0 },
-    .tangent = { 1, 0, 0 },
-    .bitangent = { 0, 1, 0 },
-    .color = { 1, 1, 1, 1 } });
-
-  std::vector<uint32_t> indices { 0, 2, 1, 2, 3, 1 };
-  const auto material
-    = MakeSolidColorMaterial("GroundMat", { 0.48F, 0.50F, 0.46F, 1.0F },
-      oxygen::data::MaterialDomain::kOpaque, true, 0.0F, 0.92F);
-
-  auto mesh = MeshBuilder(0, "GroundPlane")
-                .WithVertices(vertices)
-                .WithIndices(indices)
-                .BeginSubMesh("surface", material)
-                .WithMeshView(MeshViewDesc {
-                  .first_index = 0,
-                  .index_count = static_cast<uint32_t>(indices.size()),
-                  .first_vertex = 0,
-                  .vertex_count = static_cast<uint32_t>(vertices.size()),
-                })
-                .EndSubMesh()
-                .Build();
-
-  GeometryAssetDesc geo_desc {};
-  geo_desc.lod_count = 1;
-  const auto bb_min = mesh->BoundingBoxMin();
-  const auto bb_max = mesh->BoundingBoxMax();
-  geo_desc.bounding_box_min[0] = bb_min.x;
-  geo_desc.bounding_box_min[1] = bb_min.y;
-  geo_desc.bounding_box_min[2] = bb_min.z;
-  geo_desc.bounding_box_max[0] = bb_max.x;
-  geo_desc.bounding_box_max[1] = bb_max.y;
-  geo_desc.bounding_box_max[2] = bb_max.z;
-
-  return std::make_shared<oxygen::data::GeometryAsset>(
-    oxygen::data::AssetKey::FromVirtualPath(
-      "/Engine/Examples/Async/Geometry/GroundPlane.ogeo"),
-    geo_desc, std::vector<std::shared_ptr<Mesh>> { std::move(mesh) });
-}
-
-// Convert hue [0,1] to an RGB color (simple H->RGB approx)
-auto ColorFromHue(double h) -> glm::vec3
-{
-  // NOLINTBEGIN(*-magic-numbers)
-  // h in [0,1)
-  const double hh = std::fmod(h, 1.0);
-  const double r = std::abs(hh * 6.0 - 3.0) - 1.0;
-  const double g = 2.0 - std::abs(hh * 6.0 - 2.0);
-  const double b = 2.0 - std::abs(hh * 6.0 - 4.0);
-  return glm::vec3(static_cast<float>(std::clamp(r, 0.0, 1.0)),
-    static_cast<float>(std::clamp(g, 0.0, 1.0)),
-    static_cast<float>(std::clamp(b, 0.0, 1.0)));
-  // NOLINTEND(*-magic-numbers)
-}
-
-// Orbit sphere around origin on XY plane with custom radius (Z-up).
-auto AnimateSphereOrbit(oxygen::scene::SceneNode& sphere_node, double angle,
-  double radius, double inclination, double spin_angle) -> void
-{
-  // Position in XY plane first (Z-up orbit, z=0)
-  const double x = radius * std::cos(angle);
-  const double y = radius * std::sin(angle);
-  // Tilt the orbital plane by applying a rotation around the X axis
-  const glm::dvec3 pos_local(x, y, 0.0);
-  const double ci = std::cos(inclination);
-  const double si = std::sin(inclination);
-  // Rotation matrix for tilt around X: [1 0 0; 0 ci -si; 0 si ci]
-  const glm::dvec3 pos_tilted(pos_local.x,
-    (pos_local.y * ci) - (pos_local.z * si),
-    (pos_local.y * si) + (pos_local.z * ci));
-  const glm::vec3 pos(static_cast<float>(pos_tilted.x),
-    static_cast<float>(pos_tilted.y),
-    static_cast<float>(pos_tilted.z) + kSphereOrbitHeight);
-
-  if (!sphere_node.IsAlive()) {
-    return;
-  }
-
-  // Set translation
-  sphere_node.GetTransform().SetLocalPosition(pos);
-
-  // Apply self-rotation (spin) around local Z axis
-  const glm::quat spin_quat
-    = glm::angleAxis(static_cast<float>(spin_angle), oxygen::space::move::Up);
-  sphere_node.GetTransform().SetLocalRotation(spin_quat);
-}
 
 } // namespace
 
@@ -464,33 +57,30 @@ namespace oxygen::examples::async {
 
 MainModule::MainModule(const DemoAppContext& app)
   : Base(app)
-  , app_(app)
 {
   DCHECK_NOTNULL_F(app_.platform);
   DCHECK_F(!app_.gfx_weak.expired());
-
-  // Record start time for animations (use time_point for robust delta)
-  start_time_ = std::chrono::steady_clock::now();
 }
 
 auto MainModule::OnAttachedImpl(
   oxygen::observer_ptr<oxygen::IAsyncEngine> engine) noexcept
   -> std::unique_ptr<DemoShell>
 {
-  DCHECK_NOTNULL_F(engine);
+  CHECK_NOTNULL_F(engine);
 
   auto shell = std::make_unique<DemoShell>();
 
   settings_service_ = std::make_shared<AsyncDemoSettingsService>();
   vm_ = std::make_shared<AsyncDemoVm>(observer_ptr { settings_service_.get() },
-    observer_ptr { &camera_spot_light_ }, &current_frame_tracker_, &spheres_);
-  vm_->SetEnsureSpotlightCallback([this]() { EnsureCameraSpotLight(); });
+    observer_ptr { &camera_spot_light_ }, &completed_frame_tracker_,
+    &scene_content_.Spheres());
+  vm_->SetEnsureSpotlightCallback([this] -> void { EnsureCameraSpotLight(); });
 
   async_panel_ = std::make_shared<AsyncDemoPanel>(observer_ptr { vm_.get() });
 
   DemoShellConfig shell_config;
-  shell_config.engine = observer_ptr { app_.engine.get() };
-  shell_config.enable_renderer_bound_panels = false;
+  shell_config.engine = engine;
+  shell_config.enable_renderer_bound_panels = true;
   shell_config.force_environment_override = false;
   shell_config.panel_config = DemoShellPanelConfig {
     .content_loader = false,
@@ -517,15 +107,10 @@ auto MainModule::OnAttachedImpl(
   // Create Main View ID
   main_view_id_ = GetOrCreateViewId("MainView");
 
-  // ConfigureDrone moved to OnFrameStart
-
-  initialized_ = true;
   return shell;
 }
 
-MainModule::~MainModule() { active_scene_ = {}; }
-
-// GetSupportedPhases moved to header
+MainModule::~MainModule() = default;
 
 auto MainModule::BuildDefaultWindowProperties() const
   -> oxygen::platform::window::Properties
@@ -551,9 +136,9 @@ auto MainModule::BuildDefaultWindowProperties() const
 
 void MainModule::OnShutdown() noexcept
 {
-  ReleasePublishedRuntimeView();
-  ClearSceneFramebuffer();
-
+#ifdef OXYGEN_BUILD_UI_TESTS
+  StopUiTests();
+#endif
   auto& shell = GetShell();
   shell.SetScene(std::unique_ptr<scene::Scene> {});
   active_scene_ = {};
@@ -561,11 +146,12 @@ void MainModule::OnShutdown() noexcept
   async_panel_.reset();
   vm_.reset();
   settings_service_.reset();
+  Base::OnShutdown();
 }
 
 auto MainModule::ClearBackbufferReferences() -> void
 {
-  ClearSceneFramebuffer();
+  // DemoModuleBase owns and retires scene targets during resize.
 }
 
 auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
@@ -599,7 +185,7 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
   Base::OnFrameStart(context);
 
   if (!HasRenderableWindow()) {
-    ReleasePublishedRuntimeView(context);
+    active_views_.clear();
     return;
   }
 
@@ -612,7 +198,7 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
   }
 
   if (app_window_ != nullptr && !app_window_->GetWindow()) {
-    ReleasePublishedRuntimeView(context);
+    active_views_.clear();
   }
 
   // Ensure drone is configured once the rig is available
@@ -633,6 +219,7 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
   if (app_window_ != nullptr && !app_window_->GetWindow()) {
     // Window invalid, skip update
     DLOG_F(1, "OnSceneMutation: no valid window - skipping");
+    active_views_.clear();
     TrackFrameAction("Scene mutation skipped - app window not available");
     TrackPhaseEnd();
     co_return;
@@ -640,7 +227,6 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
 
   LOG_SCOPE_F(3, "MainModule::OnSceneMutation");
   TrackPhaseStart("Scene Mutation");
-  current_frame_tracker_.scene_mutation_occurred = true;
   TrackFrameAction("Scene mutation phase started");
 
   EnsureExampleScene();
@@ -656,13 +242,10 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
 
   EnsureMainCamera(width, height);
   EnsureCameraSpotLight();
-  // Handle scene mutations (material overrides, visibility changes)
-  const auto now = context->GetFrameStartTime();
-  const float delta_time
-    = std::chrono::duration<float>(now - start_time_).count();
-  UpdateSceneMutations(delta_time);
+  scene_content_.UpdateMaterials(anim_time_);
 
   TrackFrameAction("Scene mutations updated");
+  co_await Base::OnSceneMutation(context);
 
   TrackPhaseEnd();
   co_return;
@@ -683,41 +266,31 @@ auto MainModule::EnsureCameraSpotLight() -> void
       return;
     }
     camera_spot_light_ = std::move(child_opt.value());
-    camera_spot_light_.GetTransform().SetLocalPosition(glm::vec3(0.0F));
-  }
+    // Offset the lamp from the eye so its cast shadows are visible.
+    camera_spot_light_.GetTransform().SetLocalPosition(
+      glm::vec3(2.0F, 0.5F, 0.0F));
 
-  if (camera_spot_light_.IsAlive()) {
     // Engine conventions:
     // - World/light forward = space::move::Forward (-Y).
     // - Camera look forward = space::look::Forward (-Z).
     // The camera spot light is a child of the camera, so we rotate the light
     // by +90deg about +X to map move::Forward to look::Forward while still
     // inheriting the camera's rotation.
-    constexpr float kPitch = glm::half_pi<float>();
+    constexpr auto kPitch = glm::half_pi<float>();
     camera_spot_light_.GetTransform().SetLocalRotation(
       glm::angleAxis(kPitch, space::move::Right));
   }
 
   if (camera_spot_light_.IsAlive() && !camera_spot_light_.HasLight()) {
     auto light = std::make_unique<scene::SpotLight>();
-    const float intensity
-      = settings_service_ ? settings_service_->GetSpotlightIntensity() : 300.0F;
-    const float range
-      = settings_service_ ? settings_service_->GetSpotlightRange() : 35.0F;
-    const glm::vec3 color = settings_service_
-      ? settings_service_->GetSpotlightColor()
-      : glm::vec3(1.0F, 1.0F, 1.0F);
-    const float inner_cone = settings_service_
-      ? settings_service_->GetSpotlightInnerCone()
-      : glm::radians(12.0F);
-    const float outer_cone = settings_service_
-      ? settings_service_->GetSpotlightOuterCone()
-      : glm::radians(26.0F);
-    const bool enabled
-      = settings_service_ ? settings_service_->GetSpotlightEnabled() : true;
-    const bool casts_shadows = settings_service_
-      ? settings_service_->GetSpotlightCastsShadows()
-      : false;
+    CHECK_NOTNULL_F(settings_service_);
+    const auto intensity = settings_service_->GetSpotlightIntensity();
+    const auto range = settings_service_->GetSpotlightRange();
+    const auto color = settings_service_->GetSpotlightColor();
+    const auto inner_cone = settings_service_->GetSpotlightInnerCone();
+    const auto outer_cone = settings_service_->GetSpotlightOuterCone();
+    const auto enabled = settings_service_->GetSpotlightEnabled();
+    const auto casts_shadows = settings_service_->GetSpotlightCastsShadows();
 
     light->Common().affects_world = enabled;
     light->Common().color_rgb = color;
@@ -727,8 +300,7 @@ auto MainModule::EnsureCameraSpotLight() -> void
     light->SetRange(range);
     const float clamped_inner = std::min(inner_cone, outer_cone);
     const float clamped_outer = std::max(inner_cone, outer_cone);
-    light->SetInnerConeAngleRadians(clamped_inner);
-    light->SetOuterConeAngleRadians(clamped_outer);
+    light->SetConeAnglesRadians(clamped_inner, clamped_outer);
     light->SetSourceRadius(0.0F);
 
     const bool attached = camera_spot_light_.ReplaceLight(std::move(light));
@@ -742,21 +314,15 @@ auto MainModule::OnGameplay(observer_ptr<engine::FrameContext> context)
   TrackPhaseStart("Gameplay");
   auto& shell = GetShell();
 
-  // Compute per-frame delta from engine frame timestamp for animations
-  const auto now = context->GetFrameStartTime();
-  double delta_seconds = 0.0;
-  if (last_frame_time_.time_since_epoch().count() == 0) {
-    last_frame_time_ = now;
-  } else {
-    delta_seconds
-      = std::chrono::duration<double>(now - last_frame_time_).count();
+  if (vm_->IsAnimationEnabled()) {
+    const auto seconds
+      = std::chrono::duration<double>(context->GetGameDeltaTime().get())
+          .count();
+    constexpr double kMaximumAnimationStep = 0.05;
+    anim_time_ += std::min(seconds, kMaximumAnimationStep);
+    scene_content_.Animate(anim_time_);
   }
-  // Cap delta to, e.g., 50ms to avoid teleporting when resuming from pause.
-  constexpr double kMaxDelta = 0.05;
-  delta_seconds = std::min(delta_seconds, kMaxDelta);
-
-  UpdateAnimations(delta_seconds);
-  last_frame_time_ = now;
+  vm_->SetAnimationTime(anim_time_);
 
   shell.Update(context->GetGameDeltaTime());
 
@@ -768,44 +334,24 @@ auto MainModule::OnPublishViews(observer_ptr<engine::FrameContext> context)
   -> co::Co<>
 {
   TrackPhaseStart("Publish Views");
-  auto& shell = GetShell();
+  co_await Base::OnPublishViews(context);
+  TrackFrameAction("Published Vortex scene view");
+  TrackPhaseEnd();
+}
 
-  auto renderer = ResolveVortexRenderer();
-  if (!renderer) {
-    TrackFrameAction("Publish views skipped - Vortex renderer unavailable");
-    TrackPhaseEnd();
-    co_return;
+auto MainModule::UpdateComposition(engine::FrameContext& context,
+  std::vector<vortex::CompositionView>& views) -> void
+{
+  if (!active_scene_.IsValid() || !main_camera_.IsAlive()
+    || !main_camera_.HasCamera()) {
+    return;
   }
-  if (!main_camera_.IsAlive()) {
-    ReleasePublishedRuntimeView(context);
-    TrackFrameAction("Publish views skipped - main camera not ready");
-    TrackPhaseEnd();
-    co_return;
-  }
-  if (app_window_ != nullptr
-    && (!app_window_->GetWindow() || app_window_->IsShuttingDown())) {
-    ReleasePublishedRuntimeView(context);
-    TrackFrameAction("Publish views skipped - app window not available");
-    TrackPhaseEnd();
-    co_return;
-  }
-
   const auto extent = ResolveViewExtent();
-  if (extent.x == 0 || extent.y == 0) {
-    ReleasePublishedRuntimeView(context);
-    TrackFrameAction("Publish views skipped - invalid extent");
-    TrackPhaseEnd();
-    co_return;
+  if (extent.x == 0U || extent.y == 0U) {
+    return;
   }
-
-  EnsureSceneFramebuffer(extent.x, extent.y);
-  if (!scene_fb_) {
-    TrackFrameAction("Publish views skipped - scene framebuffer unavailable");
-    TrackPhaseEnd();
-    co_return;
-  }
-
-  const auto main_viewport = ViewPort {
+  View view {};
+  view.viewport = ViewPort {
     .top_left_x = 0.0F,
     .top_left_y = 0.0F,
     .width = static_cast<float>(extent.x),
@@ -813,62 +359,16 @@ auto MainModule::OnPublishViews(observer_ptr<engine::FrameContext> context)
     .min_depth = 0.0F,
     .max_depth = 1.0F,
   };
-  engine::ViewContext view_ctx {};
-  view_ctx.view.viewport = main_viewport;
-  view_ctx.metadata.name = "MainView";
-  view_ctx.metadata.purpose = "primary";
-  view_ctx.metadata.is_scene_view = true;
-  view_ctx.metadata.with_atmosphere = true;
-  view_ctx.metadata.with_height_fog = true;
-  view_ctx.render_target = observer_ptr { scene_fb_.get() };
-  view_ctx.composite_source = observer_ptr { scene_fb_.get() };
-  shell.OnRuntimeMainViewReady(main_view_id_, main_camera_, main_viewport);
-
-  renderer->UpsertPublishedRuntimeView(*context, main_view_id_,
-    std::move(view_ctx), vortex::ShadingMode::kDeferred);
-  const auto published_view_id
-    = renderer->ResolvePublishedRuntimeViewId(main_view_id_);
-  if (published_view_id != kInvalidViewId) {
-    if (const auto resolved_view = BuildResolvedView(extent.x, extent.y);
-      resolved_view.has_value()) {
-      renderer->RegisterResolvedView(
-        published_view_id, std::move(*resolved_view));
-    }
-  }
-  TrackFrameAction("Published Vortex runtime view");
-
-  if (!app_.headless && app_window_ != nullptr && app_window_->GetWindow()
-    && !app_window_->IsShuttingDown()) {
-    auto target_fb = app_window_->GetCurrentFrameBuffer().lock();
-    auto surface = app_window_->GetSurface().lock();
-    if (target_fb && surface) {
-      if (published_view_id == kInvalidViewId) {
-        TrackFrameAction("Publish views skipped composition registration - "
-                         "published view unavailable");
-        TrackPhaseEnd();
-        co_return;
-      }
-      renderer->RegisterRuntimeComposition(
-        vortex::Renderer::RuntimeCompositionInput {
-          .layers = {
-            vortex::Renderer::RuntimeCompositionLayer {
-              .intent_view_id = main_view_id_,
-              .viewport = main_viewport,
-              .opacity = 1.0F,
-            },
-          },
-          .composite_target = std::move(target_fb),
-          .target_surface = std::move(surface),
-        });
-      TrackFrameAction("Registered Vortex composition submission");
-    } else {
-      TrackFrameAction(
-        "Publish views skipped composition registration - target unavailable");
-    }
-  }
-
-  TrackPhaseEnd();
-  co_return;
+  auto composition
+    = vortex::CompositionView::ForScene(main_view_id_, view, main_camera_);
+  composition.view_state_handle
+    = vortex::CompositionView::ViewStateHandle { main_view_id_.get() };
+  composition.shading_mode = vortex::ShadingMode::kDeferred;
+  composition.with_atmosphere = true;
+  composition.with_height_fog = GetShell().IsHeightFogPassRequested();
+  composition.with_local_fog = GetShell().IsLocalFogPassRequested();
+  GetShell().OnMainViewReady(context, composition);
+  views.push_back(std::move(composition));
 }
 
 auto MainModule::OnPreRender(observer_ptr<engine::FrameContext> context)
@@ -886,7 +386,6 @@ auto MainModule::OnPreRender(observer_ptr<engine::FrameContext> context)
 
   LOG_SCOPE_F(3, "MainModule::OnPreRender");
 
-  current_frame_tracker_.frame_graph_setup = true;
   TrackFrameAction("Pre-render setup started");
   TrackFrameAction("Vortex runtime seam prepared");
 
@@ -922,247 +421,34 @@ auto MainModule::OnGuiUpdate(observer_ptr<engine::FrameContext> context)
   co_return;
 }
 
-// OnRender removed - handled by Base and Renderer
-
-auto MainModule::OnFrameEnd(observer_ptr<engine::FrameContext> /*context*/)
-  -> void
+auto MainModule::OnFrameEnd(observer_ptr<engine::FrameContext> context) -> void
 {
   LOG_SCOPE_F(3, "MainModule::OnFrameEnd");
 
   TrackFrameAction("Frame ended");
   EndFrameTracking();
+#ifdef OXYGEN_BUILD_UI_TESTS
+  if (!active_views_.empty()) {
+    Base::OnFrameEnd(context);
+  }
+#else
+  static_cast<void>(context);
+#endif
 }
 
 auto MainModule::EnsureExampleScene() -> void
 {
-  constexpr size_t kDefaultSceneCapacity = 128;
-
-  // NOLINTBEGIN(*-magic-numbers)
   auto& shell = GetShell();
   if (active_scene_.IsValid() || shell.HasStagedScene()) {
     return;
   }
-  LOG_SCOPE_FUNCTION(INFO);
-
-  using scene::Scene;
-
-  auto scene = std::make_unique<Scene>("ExampleScene", kDefaultSceneCapacity);
+  constexpr std::size_t kSceneCapacity = 128U;
+  auto scene = std::make_unique<scene::Scene>("Async Showcase", kSceneCapacity);
   shell.StageScene(std::move(scene));
-  const auto staged_scene = shell.GetStagedScene();
-  CHECK_NOTNULL_F(staged_scene, "Async: staged scene not available");
-  auto* scene_raw = staged_scene.get();
-  EnsureExampleEnvironment(*scene_raw);
-
-  // Create a LOD sphere and a multi-submesh quad
-  auto sphere_geo = BuildSphereLodAsset();
-  auto quad2sm_geo = BuildTwoSubmeshQuadAsset();
-  auto ground_geo = BuildGroundPlaneAsset();
-
-  // Create multiple spheres; initial positions will be set by orbit.
-  // Diagnostic toggles:
-  constexpr bool kDisableSphereLodPolicy = true; // avoid LOD switch hitches
-  constexpr bool kForceOpaqueSpheres = false; // set true to avoid sorting
-  // Use a small number for performance while still demonstrating behavior.
-  constexpr std::size_t kNumSpheres = 16;
-  spheres_.reserve(kNumSpheres);
-  // Seeded RNG for reproducible variation across runs
-  std::mt19937 rng(123456789);
-  std::uniform_real_distribution<double> speed_dist(0.2, 1.2);
-  std::uniform_real_distribution<double> radius_dist(2.0, 8.0);
-  std::uniform_real_distribution<double> phase_jitter(-0.25, 0.25);
-  std::uniform_real_distribution<double> hue_dist(0.0, 1.0);
-  std::uniform_real_distribution<double> incl_dist(
-    -kSphereMaxOrbitInclination, kSphereMaxOrbitInclination);
-  std::uniform_real_distribution<double> spin_dist(-2.0, 2.0); // rad/s
-  std::uniform_real_distribution<double> transp_dist(0.0, 1.0);
-
-  for (std::size_t i = 0; i < kNumSpheres; ++i) {
-    const std::string name = std::string("Sphere_") + std::to_string(i);
-    auto node = scene_raw->CreateNode(name);
-    node.GetRenderable().SetGeometry(sphere_geo);
-    SetShadowParticipation(node, true, true);
-
-    // Enlarge sphere to better showcase transparency layering against
-    // background
-    if (node.IsAlive()) {
-      node.GetTransform().SetLocalScale(glm::vec3(3.0F));
-    }
-
-    // Configure LOD policy per-sphere (disabled during diagnostics)
-    if (!kDisableSphereLodPolicy) {
-      auto r = node.GetRenderable();
-      DistancePolicy pol;
-      pol.thresholds = { 6.2F }; // switch LOD0->1 around ~6.2
-      pol.hysteresis_ratio = 0.08F; // modest hysteresis to avoid flicker
-      r.SetLodPolicy(std::move(pol));
-    }
-
-    // Randomized parameters: seed ensures reproducible runs
-    constexpr double two_pi = glm::two_pi<float>();
-    const double base_phase
-      = (two_pi * static_cast<double>(i)) / static_cast<double>(kNumSpheres);
-    const double jitter = phase_jitter(rng);
-    const double init_angle = base_phase + jitter;
-    const double speed = speed_dist(rng);
-    const double radius = radius_dist(rng);
-
-    // Apply per-sphere material override (transparent glass-like)
-    auto r = node.GetRenderable();
-    const std::string mat_name = std::string("SphereMat_") + std::to_string(i);
-    const double hue = hue_dist(rng);
-    const auto rgb = ColorFromHue(hue);
-    const bool is_transparent
-      = kForceOpaqueSpheres ? false : (transp_dist(rng) < 0.5);
-    const float alpha = is_transparent ? 0.35F : 1.0F;
-    const auto domain = is_transparent ? data::MaterialDomain::kAlphaBlended
-                                       : data::MaterialDomain::kOpaque;
-    const glm::vec4 color(rgb.x, rgb.y, rgb.z, alpha);
-    const float roughness = 0.08F + (0.84F * static_cast<float>(i % 4) / 3.0F);
-    const float metalness = static_cast<float>((i / 4) % 4) / 3.0F;
-    const auto mat = MakeSolidColorMaterial(
-      mat_name.c_str(), color, domain, false, metalness, roughness);
-    // Apply override for submesh index 0 across all LODs so switching LOD
-    // retains the material override. Use EffectiveLodCount() to iterate.
-    const std::size_t lod_count
-      = static_cast<std::size_t>(r.EffectiveLodCount());
-    for (std::size_t lod = 0; lod < lod_count; ++lod) {
-      r.SetMaterialOverride(lod, 0, mat);
-    }
-
-    SphereState s;
-    s.node = node;
-    s.base_angle = init_angle;
-    s.speed = speed;
-    s.radius = radius;
-    s.inclination = incl_dist(rng);
-    s.spin_speed = spin_dist(rng);
-    s.base_spin_angle = 0.0;
-    spheres_.push_back(std::move(s));
-    // NOLINTEND(*-magic-numbers)
-  }
-
-  // Multi-submesh quad centered at origin facing +Z (already in XY plane)
-  multisubmesh_ = scene_raw->CreateNode("MultiSubmesh");
-  multisubmesh_.GetRenderable().SetGeometry(quad2sm_geo);
-  SetShadowParticipation(multisubmesh_, false, true);
-  multisubmesh_.GetTransform().SetLocalPosition(
-    glm::vec3(0.0F, 0.0F, kTwoSubmeshTrianglesHeight));
-  multisubmesh_.GetTransform().SetLocalRotation(glm::quat(1, 0, 0, 0));
-
-  auto ground = scene_raw->CreateNode("AsyncGroundPlane");
-  ground.GetRenderable().SetGeometry(ground_geo);
-  SetShadowParticipation(ground, false, true);
-  ground.GetTransform().SetLocalPosition(glm::vec3(0.0F, 0.0F, kGroundPlaneZ));
-  ground.GetTransform().SetLocalScale(glm::vec3(28.0F, 28.0F, 1.0F));
-
-  // Create and register staged main camera so publish can hand it to DemoShell.
-  main_camera_ = scene_raw->CreateNode("MainCamera");
-  {
-    auto camera = std::make_unique<PerspectiveCamera>();
-    const bool attached = main_camera_.AttachCamera(std::move(camera));
-    CHECK_F(attached, "Failed to attach PerspectiveCamera to MainCamera");
-    auto tf = main_camera_.GetTransform();
-    tf.SetLocalPosition(Vec3 { 0.0F, -6.0F, 3.0F });
-    tf.SetLocalRotation(glm::quat(glm::radians(Vec3 { -20.0F, 0.0F, 0.0F })));
-  }
-
+  scene_content_.Populate(*shell.GetStagedScene());
+  main_camera_ = scene_content_.Camera();
+  sun_light_ = scene_content_.Sun();
   shell.SetStagedMainCamera(main_camera_);
-
-  EnsureSunDirectionalLight(*scene_raw);
-}
-
-auto MainModule::EnsureExampleEnvironment(scene::Scene& scene) -> void
-{
-  scene.SetEnvironment(std::make_unique<scene::SceneEnvironment>());
-
-  const auto environment = scene.GetEnvironment();
-  if (environment == nullptr) {
-    return;
-  }
-
-  auto& atmosphere
-    = environment->AddSystem<scene::environment::SkyAtmosphere>();
-  atmosphere.SetEnabled(true);
-  atmosphere.SetTransformMode(scene::environment::SkyAtmosphereTransformMode::
-      kPlanetTopAtAbsoluteWorldOrigin);
-  atmosphere.SetRenderInMainPass(true);
-  atmosphere.SetPlanetRadiusMeters(engine::atmos::kDefaultPlanetRadiusM);
-  atmosphere.SetAtmosphereHeightMeters(
-    engine::atmos::kDefaultAtmosphereHeightM);
-  atmosphere.SetGroundAlbedoRgb({ 0.4F, 0.4F, 0.4F });
-  atmosphere.SetRayleighScatteringRgb(
-    engine::atmos::kDefaultRayleighScatteringRgb);
-  atmosphere.SetRayleighScaleHeightMeters(
-    engine::atmos::kDefaultRayleighScaleHeightM);
-  atmosphere.SetMieScatteringRgb(engine::atmos::kDefaultMieScatteringRgb);
-  atmosphere.SetMieAbsorptionRgb(engine::atmos::kDefaultMieAbsorptionRgb);
-  atmosphere.SetMieScaleHeightMeters(engine::atmos::kDefaultMieScaleHeightM);
-  atmosphere.SetMieAnisotropy(engine::atmos::kDefaultMieAnisotropyG);
-  atmosphere.SetOzoneAbsorptionRgb(engine::atmos::kDefaultOzoneAbsorptionRgb);
-  atmosphere.SetOzoneDensityProfile(engine::atmos::kDefaultOzoneDensityProfile);
-  atmosphere.SetMultiScatteringFactor(1.0F);
-  atmosphere.SetSkyLuminanceFactorRgb({ 1.0F, 1.0F, 1.0F });
-  atmosphere.SetSkyAndAerialPerspectiveLuminanceFactorRgb({ 1.0F, 1.0F, 1.0F });
-  atmosphere.SetSunDiskEnabled(true);
-  atmosphere.SetAerialPerspectiveDistanceScale(1.0F);
-  atmosphere.SetAerialPerspectiveStartDepthMeters(30.0F);
-  atmosphere.SetAerialScatteringStrength(0.45F);
-  atmosphere.SetHeightFogContribution(1.0F);
-  atmosphere.SetTraceSampleCountScale(1.0F);
-  atmosphere.SetTransmittanceMinLightElevationDeg(-90.0F);
-
-  auto& sky_light = environment->AddSystem<scene::environment::SkyLight>();
-  sky_light.SetEnabled(true);
-  sky_light.SetSource(scene::environment::SkyLightSource::kCapturedScene);
-  sky_light.SetIntensityMul(1.0F);
-  sky_light.SetTintRgb({ 1.0F, 1.0F, 1.0F });
-  sky_light.SetDiffuseIntensity(1.0F);
-  sky_light.SetSpecularIntensity(1.0F);
-  sky_light.SetLowerHemisphereColor({ 0.02F, 0.02F, 0.03F });
-  sky_light.SetVolumetricScatteringIntensity(1.0F);
-  sky_light.SetAffectReflections(true);
-
-  auto& fog = environment->AddSystem<scene::environment::Fog>();
-  fog.SetEnabled(true);
-  fog.SetEnableHeightFog(true);
-  fog.SetEnableVolumetricFog(false);
-  fog.SetRenderInMainPass(true);
-  fog.SetVisibleInReflectionCaptures(true);
-  fog.SetVisibleInRealTimeSkyCaptures(true);
-  fog.SetExtinctionSigmaTPerMeter(0.0007F);
-  fog.SetHeightFalloffPerMeter(0.08F);
-  fog.SetHeightOffsetMeters(0.0F);
-  fog.SetStartDistanceMeters(0.0F);
-  fog.SetMaxOpacity(0.65F);
-  fog.SetFogInscatteringLuminance({ 0.24F, 0.30F, 0.38F });
-  fog.SetSkyAtmosphereAmbientContributionColorScale({ 1.0F, 1.0F, 1.0F });
-  fog.SetDirectionalInscatteringLuminance({ 1.0F, 0.95F, 0.88F });
-  fog.SetDirectionalInscatteringExponent(8.0F);
-  fog.SetDirectionalInscatteringStartDistance(0.0F);
-}
-
-auto MainModule::EnsureSunDirectionalLight(scene::Scene& scene) -> void
-{
-  if (!sun_light_.IsAlive()) {
-    sun_light_ = scene.CreateNode("SunLight");
-    auto light = std::make_unique<scene::DirectionalLight>();
-    light->Common().affects_world = true;
-    light->Common().casts_shadows = true;
-    light->Common().shadow.bias = kDefaultDemoSunShadowBias;
-    light->Common().mobility = scene::LightMobility::kRealtime;
-    light->Common().color_rgb = { 1.0F, 0.97F, 0.92F };
-    light->SetAngularSizeRadians(glm::radians(0.53F));
-    light->SetIntensityLux(100000.0F);
-    light->SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kPrimary);
-    light->SetUsePerPixelAtmosphereTransmittance(true);
-    light->SetAtmosphereDiskLuminanceScale({ 1.0F, 0.95F, 0.9F });
-    CHECK_F(
-      sun_light_.AttachLight(std::move(light)), "Failed to attach SunLight");
-  }
-
-  sun_light_.GetTransform().SetLocalPosition(kSunPosition);
-  sun_light_.GetTransform().SetLocalRotation(
-    LookRotation(kSunPosition, kSceneFocusPoint));
 }
 
 auto MainModule::EnsureMainCamera(const int width, const int height) -> void
@@ -1178,19 +464,6 @@ auto MainModule::EnsureMainCamera(const int width, const int height) -> void
     return;
   }
 
-  if (!main_camera_.IsAlive()) {
-    main_camera_ = scene->CreateNode("MainCamera");
-  }
-
-  if (!main_camera_.HasCamera()) {
-    auto camera = std::make_unique<PerspectiveCamera>();
-    const bool attached = main_camera_.AttachCamera(std::move(camera));
-    CHECK_F(attached, "Failed to attach PerspectiveCamera to MainCamera");
-    auto tf = main_camera_.GetTransform();
-    tf.SetLocalPosition(Vec3 { 0.0F, -6.0F, 3.0F });
-    tf.SetLocalRotation(glm::quat(glm::radians(Vec3 { -20.0F, 0.0F, 0.0F })));
-  }
-
   // Configure camera params
   const auto cam_ref = main_camera_.GetCameraAs<PerspectiveCamera>();
   if (cam_ref) {
@@ -1198,16 +471,15 @@ auto MainModule::EnsureMainCamera(const int width, const int height) -> void
       ? (static_cast<float>(width) / static_cast<float>(height))
       : 1.0F;
     auto& cam = cam_ref->get();
-    cam.SetFieldOfView(glm::radians(45.0F));
     cam.SetAspectRatio(aspect);
-    cam.SetNearPlane(0.1F);
-    cam.SetFarPlane(600.0F);
-    cam.SetViewport(ViewPort { .top_left_x = 0.0F,
+    cam.SetViewport(ViewPort {
+      .top_left_x = 0.0F,
       .top_left_y = 0.0F,
       .width = static_cast<float>(width),
       .height = static_cast<float>(height),
       .min_depth = 0.0F,
-      .max_depth = 1.0F });
+      .max_depth = 1.0F,
+    });
   }
   // NOLINTEND(*-magic-numbers)
 }
@@ -1226,7 +498,7 @@ auto MainModule::ConfigureDrone() -> void
   }
 
   // Drone path uses world space (Z-up). Altitude must be Z, not Y.
-  drone_controller->SetPathGenerator([]() -> std::vector<glm::vec3> {
+  drone_controller->SetPathGenerator([] -> std::vector<glm::vec3> {
     constexpr int points = 96;
     constexpr float a = 36.0F;
     constexpr float altitude = 14.0F;
@@ -1237,76 +509,13 @@ auto MainModule::ConfigureDrone() -> void
       const float ang = t * glm::two_pi<float>();
       const float x = a * std::cos(ang);
       const float y = a * std::sin(ang) * std::cos(ang);
-      path.push_back(glm::vec3(x, y, altitude));
+      path.emplace_back(x, y, altitude);
     }
     return path;
   });
 
-  // Settings matching previous defaults
-  drone_controller->SetSpeed(6.0);
-  drone_controller->SetDamping(8.0);
-  drone_controller->SetRampTime(2.0);
-  drone_controller->SetBobAmplitude(0.06);
-  drone_controller->SetBobFrequency(1.6);
-  drone_controller->SetNoiseAmplitude(0.03);
-  drone_controller->SetBankFactor(0.045);
-  drone_controller->SetMaxBank(0.45);
-  drone_controller->SetFocusHeight(0.8F);
-
-  // Switch to drone mode
-  shell.GetCameraRig()->SetMode(
-    oxygen::examples::ui::CameraControlMode::kDrone);
-  drone_controller->Start();
+  drone_controller->SetFocusHeight(kSceneFocusPoint.z);
   // NOLINTEND(*-magic-numbers)
-}
-
-auto MainModule::ResolveVortexRenderer() -> observer_ptr<vortex::Renderer>
-{
-  if (app_.engine == nullptr) {
-    return nullptr;
-  }
-  if (auto renderer = app_.engine->GetModule<vortex::Renderer>()) {
-    return observer_ptr { &renderer->get() };
-  }
-  return nullptr;
-}
-
-auto MainModule::ReleasePublishedRuntimeView(
-  const observer_ptr<engine::FrameContext> context) -> void
-{
-  auto renderer = ResolveVortexRenderer();
-  if (!renderer || main_view_id_ == kInvalidViewId) {
-    return;
-  }
-
-  if (context != nullptr) {
-    renderer->RemovePublishedRuntimeView(*context, main_view_id_);
-  } else {
-    renderer->RemovePublishedRuntimeView(main_view_id_);
-  }
-}
-
-auto MainModule::BuildResolvedView(const uint32_t width, const uint32_t height)
-  -> std::optional<ResolvedView>
-{
-  if (!main_camera_.IsAlive() || !main_camera_.HasCamera()) {
-    return std::nullopt;
-  }
-
-  const auto viewport = ViewPort {
-    .top_left_x = 0.0F,
-    .top_left_y = 0.0F,
-    .width = static_cast<float>(width),
-    .height = static_cast<float>(height),
-    .min_depth = 0.0F,
-    .max_depth = 1.0F,
-  };
-  auto camera_node = main_camera_;
-  auto resolver = vortex::SceneCameraViewResolver {
-    [camera_node](const ViewId& /*unused*/) { return camera_node; },
-    viewport,
-  };
-  return resolver(main_view_id_);
 }
 
 auto MainModule::ResolveViewExtent() const noexcept -> glm::uvec2
@@ -1318,130 +527,6 @@ auto MainModule::ResolveViewExtent() const noexcept -> glm::uvec2
 
   return { kDefaultOffscreenWidth, kDefaultOffscreenHeight };
 }
-
-auto MainModule::EnsureSceneFramebuffer(
-  const uint32_t width, const uint32_t height) -> void
-{
-  if (scene_fb_ && scene_fb_width_ == width && scene_fb_height_ == height) {
-    return;
-  }
-
-  ClearSceneFramebuffer();
-
-  auto gfx = app_.gfx_weak.lock();
-  if (!gfx) {
-    return;
-  }
-
-  graphics::TextureDesc color_desc {};
-  color_desc.width = width;
-  color_desc.height = height;
-  color_desc.format = Format::kRGBA8UNorm;
-  color_desc.texture_type = TextureType::kTexture2D;
-  color_desc.is_render_target = true;
-  color_desc.is_shader_resource = true;
-  color_desc.initial_state = graphics::ResourceStates::kCommon;
-  color_desc.use_clear_value = true;
-  color_desc.clear_value = graphics::Color { 0.0F, 0.0F, 0.0F, 0.0F };
-  color_desc.debug_name = "Async.SceneColor";
-
-  auto color_texture = gfx->CreateTexture(color_desc);
-  CHECK_F(
-    static_cast<bool>(color_texture), "Failed to create Async scene texture");
-
-  auto framebuffer_desc = graphics::FramebufferDesc {};
-  framebuffer_desc.AddColorAttachment({ .texture = std::move(color_texture) });
-  scene_fb_ = gfx->CreateFramebuffer(framebuffer_desc);
-  CHECK_F(
-    static_cast<bool>(scene_fb_), "Failed to create Async scene framebuffer");
-
-  scene_fb_width_ = width;
-  scene_fb_height_ = height;
-}
-
-auto MainModule::ClearSceneFramebuffer() -> void
-{
-  scene_fb_.reset();
-  scene_fb_width_ = 0;
-  scene_fb_height_ = 0;
-}
-
-auto MainModule::UpdateAnimations(double delta_time) -> void
-{
-  // NOLINTBEGIN(*-magic-numbers)
-  // delta_time is the elapsed time since last frame in seconds (double).
-  // Clamp large deltas to avoid jumps after pause/hitch (50 ms max)
-  constexpr double kMaxDelta = 0.05;
-  const double effective_dt = (delta_time > kMaxDelta) ? kMaxDelta : delta_time;
-
-  constexpr double two_pi = glm::two_pi<float>();
-
-  // Absolute-time sampling for deterministic, jitter-free animation
-  anim_time_ += effective_dt;
-  for (auto& s : spheres_) {
-    const double angle
-      = std::fmod(s.base_angle + (s.speed * anim_time_), two_pi);
-    const double spin
-      = std::fmod(s.base_spin_angle + (s.spin_speed * anim_time_), two_pi);
-    AnimateSphereOrbit(s.node, angle, s.radius, s.inclination, spin);
-  }
-
-  if (multisubmesh_.IsAlive()) {
-    constexpr double kQuadSpinSpeed = 0.6; // radians/sec
-    const double quad_angle = std::fmod(anim_time_ * kQuadSpinSpeed, two_pi);
-    const glm::quat quad_rot
-      = glm::angleAxis(static_cast<float>(quad_angle), space::move::Up);
-    multisubmesh_.GetTransform().SetLocalRotation(quad_rot);
-  }
-
-  // Periodic lightweight logging
-  static int dbg_counter = 0;
-  ++dbg_counter;
-  if ((dbg_counter % 120) == 0) {
-    LOG_F(INFO, "[Anim] delta_time={}ms spheres={}", delta_time * 1000.0,
-      static_cast<int>(spheres_.size()));
-  }
-  // NOLINTEND(*-magic-numbers)
-}
-
-auto MainModule::UpdateSceneMutations(const float delta_time) -> void
-{
-  // NOLINTBEGIN(*-magic-numbers)
-  // Toggle per-submesh visibility and material override over time
-  if (multisubmesh_.IsAlive()) {
-    auto r = multisubmesh_.GetRenderable();
-    constexpr std::size_t lod = 0;
-
-    // Every 2 seconds, toggle submesh 0 visibility
-    int vis_phase = static_cast<int>(delta_time) / 2;
-    if (vis_phase != last_vis_toggle_) {
-      last_vis_toggle_ = vis_phase;
-      const bool visible = (vis_phase % 2) == 0;
-      r.SetSubmeshVisible(lod, 0, visible);
-      LOG_F(INFO, "[MultiSubmesh] Submesh 0 visibility -> {}", visible);
-    }
-
-    // Every second, toggle an override on submesh 1 (use blue instead of
-    // green)
-    int ovr_phase = static_cast<int>(delta_time);
-    if (ovr_phase != last_ovr_toggle_) {
-      last_ovr_toggle_ = ovr_phase;
-      const bool apply_override = (ovr_phase % 2) == 1;
-      if (apply_override) {
-        const auto blue = MakeSolidColorMaterial("BlueOverride",
-          { 0.2F, 0.3F, 1.0F, 1.0F }, data::MaterialDomain::kOpaque, true);
-        r.SetMaterialOverride(lod, 1, blue);
-      } else {
-        r.ClearMaterialOverride(lod, 1);
-      }
-      LOG_F(2, "[MultiSubmesh] Submesh 1 override -> {}",
-        apply_override ? "blue" : "clear");
-    }
-  }
-  // NOLINTEND(*-magic-numbers)
-}
-
-// DrawSpotLightPanel removed
 
 auto MainModule::TrackPhaseStart(const std::string& phase_name) -> void
 {
@@ -1491,11 +576,7 @@ auto MainModule::EndFrameTracking() -> void
       "Total Frame", total_duration);
   }
 
-  // Add to history and maintain size limit
-  frame_history_.push_back(current_frame_tracker_);
-  if (frame_history_.size() > kMaxFrameHistory) {
-    frame_history_.erase(frame_history_.begin());
-  }
+  completed_frame_tracker_ = current_frame_tracker_;
 }
 
 } // namespace oxygen::examples::async

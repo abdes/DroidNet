@@ -4,24 +4,22 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
+#include <cstddef>
+#include <string_view>
+
+#include "Async/AsyncDemoPanel.h"
+#include "Async/AsyncDemoVm.h"
 #include <fmt/format.h>
+#include <glm/trigonometric.hpp>
 #include <imgui.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
 
-#include <algorithm>
-
-#include "Async/AsyncDemoPanel.h"
-#include "Async/AsyncDemoVm.h"
-
 // ImGui
 // NOLINTBEGIN(cppcoreguidelines-pro-type-vararg)
-
-// Helper macros for formatted text
-#define IMGUI_TEXT_FMT(fmt_str, ...)                                           \
-  ImGui::TextUnformatted(fmt::format(fmt_str, __VA_ARGS__).c_str())
 
 namespace oxygen::examples::async {
 
@@ -38,7 +36,8 @@ auto AsyncDemoPanel::GetName() const noexcept -> std::string_view
 
 auto AsyncDemoPanel::GetPreferredWidth() const noexcept -> float
 {
-  return 360.0F;
+  constexpr float kPanelWidth = 360.0F;
+  return kPanelWidth;
 }
 
 auto AsyncDemoPanel::GetIcon() const noexcept -> std::string_view
@@ -65,20 +64,29 @@ void AsyncDemoPanel::DrawSceneInfo()
       vm_->SetSceneSectionOpen(true);
     }
 
+    bool animate = vm_->IsAnimationEnabled();
+    if (ImGui::Checkbox("Animate scene", &animate)) {
+      vm_->SetAnimationEnabled(animate);
+    }
     ImGui::Text("Animation Time: %.2F s", vm_->GetAnimationTime());
     ImGui::Text("Spheres: %zu", vm_->GetSphereCount());
+    ImGui::TextWrapped(
+      "Opaque grid: roughness increases along +X, metalness along +Y. "
+      "Translucent dielectrics orbit outside the grid.");
 
-    if (vm_->GetSphereCount() > 0) {
-      if (ImGui::TreeNode("Sphere Details")) {
-        for (size_t i = 0; i < vm_->GetSphereCount() && i < 5; ++i) {
-          ImGui::TextUnformatted(vm_->GetSphereInfo(i).c_str());
-        }
-        if (vm_->GetSphereCount() > 5) {
-          ImGui::TextDisabled("... and %zu more", vm_->GetSphereCount() - 5);
-        }
-        ImGui::TreePop();
+    constexpr std::size_t kVisibleSphereDetails = 5U;
+    if ((vm_->GetSphereCount() > 0) && ImGui::TreeNode("Sphere Details")) {
+      for (size_t i = 0; i < vm_->GetSphereCount() && i < kVisibleSphereDetails;
+        ++i) {
+        ImGui::TextUnformatted(vm_->GetSphereInfo(i).c_str());
       }
+      if (vm_->GetSphereCount() > kVisibleSphereDetails) {
+        ImGui::TextDisabled(
+          "... and %zu more", vm_->GetSphereCount() - kVisibleSphereDetails);
+      }
+      ImGui::TreePop();
     }
+
   } else {
     if (open) {
       vm_->SetSceneSectionOpen(false);
@@ -88,9 +96,13 @@ void AsyncDemoPanel::DrawSceneInfo()
 
 void AsyncDemoPanel::DrawSpotlightControls()
 {
-  ImGui::SetNextItemOpen(vm_->GetSpotlightSectionOpen());
-  if (ImGui::CollapsingHeader("Spotlight")) {
-    vm_->SetSpotlightSectionOpen(true);
+  const bool was_open = vm_->GetSpotlightSectionOpen();
+  ImGui::SetNextItemOpen(was_open);
+  const bool open = ImGui::CollapsingHeader("Spotlight");
+  if (open != was_open) {
+    vm_->SetSpotlightSectionOpen(open);
+  }
+  if (open) {
 
     if (!vm_->IsSpotlightAvailable()) {
       ImGui::TextColored(ImVec4(1, 1, 0, 1), "Spotlight not created yet.");
@@ -98,6 +110,8 @@ void AsyncDemoPanel::DrawSpotlightControls()
         vm_->EnsureSpotlight();
       }
     } else {
+      ImGui::TextWrapped("Follows the camera from an offset position so cast "
+                         "shadows remain visible.");
       bool enabled = vm_->GetSpotlightEnabled();
       if (ImGui::Checkbox("Enabled", &enabled)) {
         vm_->SetSpotlightEnabled(enabled);
@@ -108,13 +122,16 @@ void AsyncDemoPanel::DrawSpotlightControls()
         vm_->SetSpotlightCastsShadows(shadows);
       }
 
+      constexpr float kMaximumFluxLm = 50000.0F;
+      constexpr float kMaximumConeDegrees = 89.0F;
       float intensity = vm_->GetSpotlightIntensity();
-      if (ImGui::SliderFloat("Intensity", &intensity, 0.0F, 50000.0F)) {
+      if (ImGui::SliderFloat("Flux (lm)", &intensity, 0.0F, kMaximumFluxLm,
+            "%.0f lm", ImGuiSliderFlags_Logarithmic)) {
         vm_->SetSpotlightIntensity(intensity);
       }
 
       float range = vm_->GetSpotlightRange();
-      if (ImGui::SliderFloat("Range", &range, 1.0F, 100.0F)) {
+      if (ImGui::SliderFloat("Range", &range, 1.0F, 100.0F, "%.1f m")) {
         vm_->SetSpotlightRange(range);
       }
 
@@ -122,30 +139,38 @@ void AsyncDemoPanel::DrawSpotlightControls()
       float inner = glm::degrees(vm_->GetSpotlightInnerCone());
       float outer = glm::degrees(vm_->GetSpotlightOuterCone());
 
-      if (ImGui::SliderFloat("Inner Cone", &inner, 1.0F, 89.0F, "%.1F deg")) {
+      if (ImGui::SliderFloat(
+            "Inner Cone", &inner, 1.0F, kMaximumConeDegrees, "%.1F deg")) {
         inner = std::min(inner, outer);
         vm_->SetSpotlightInnerCone(glm::radians(inner));
       }
-      if (ImGui::SliderFloat("Outer Cone", &outer, 1.0F, 89.0F, "%.1F deg")) {
+      if (ImGui::SliderFloat(
+            "Outer Cone", &outer, 1.0F, kMaximumConeDegrees, "%.1F deg")) {
         outer = std::max(outer, inner);
         vm_->SetSpotlightOuterCone(glm::radians(outer));
       }
     }
-  } else {
-    vm_->SetSpotlightSectionOpen(false);
   }
 }
 
 void AsyncDemoPanel::DrawProfilingInfo()
 {
-  ImGui::SetNextItemOpen(vm_->GetProfilerSectionOpen());
-  if (ImGui::CollapsingHeader("Frame Profiling")) {
-    vm_->SetProfilerSectionOpen(true);
+  const bool was_open = vm_->GetProfilerSectionOpen();
+  ImGui::SetNextItemOpen(was_open);
+  const bool open = ImGui::CollapsingHeader("Frame Profiling");
+  if (open != was_open) {
+    vm_->SetProfilerSectionOpen(open);
+  }
+  if (open) {
+    ImGui::TextWrapped("Previous completed frame: demo CPU callbacks. Use "
+                       "Diagnostics for renderer CPU/GPU timings.");
 
     const auto& actions = vm_->GetFrameActions();
     if (!actions.empty()) {
       ImGui::Text("Frame Actions:");
-      ImGui::BeginChild("ActionLog", ImVec2(0, 100), true);
+      constexpr float kActionLogHeight = 100.0F;
+      ImGui::BeginChild(
+        "ActionLog", ImVec2(0, kActionLogHeight), ImGuiChildFlags_Borders);
       for (const auto& action : actions) {
         ImGui::TextUnformatted(action.c_str());
       }
@@ -156,8 +181,10 @@ void AsyncDemoPanel::DrawProfilingInfo()
     if (!timings.empty()) {
       ImGui::NewLine();
       ImGui::Text("Phase Timings:");
-      if (ImGui::BeginTable(
-            "Timings", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+      if (ImGui::BeginTable("Timings", 2,
+            static_cast<ImGuiTableFlags>(
+              static_cast<unsigned>(ImGuiTableFlags_Borders)
+              | static_cast<unsigned>(ImGuiTableFlags_RowBg)))) {
         ImGui::TableSetupColumn("Phase");
         ImGui::TableSetupColumn("Duration (us)");
         ImGui::TableHeadersRow();
@@ -167,13 +194,11 @@ void AsyncDemoPanel::DrawProfilingInfo()
           ImGui::TableNextColumn();
           ImGui::TextUnformatted(phase.c_str());
           ImGui::TableNextColumn();
-          IMGUI_TEXT_FMT("{}", duration.count());
+          ImGui::TextUnformatted(fmt::format("{}", duration.count()).c_str());
         }
         ImGui::EndTable();
       }
     }
-  } else {
-    vm_->SetProfilerSectionOpen(false);
   }
 }
 

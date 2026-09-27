@@ -6,28 +6,42 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cstdint>
+#include <cstdlib>
+#include <exception>
 #include <filesystem>
+#include <functional>
+#include <memory>
+#include <optional>
 #include <source_location>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <thread>
+#include <utility>
 
 #include "Async/MainModule.h"
 #include "Common/DemoCli.h"
+#include "Common/FrameCaptureCli.h"
 #include "Common/FrameCaptureCliOptions.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Services/SettingsService.h"
-#include <asio/signal_set.hpp>
+
+#include <Oxygen/Config/EngineConfig.h>
+#include <Oxygen/Config/PathFinderConfig.h>
+#include <Oxygen/Config/PlatformConfig.h>
+#include <Oxygen/Config/RendererConfig.h>
+#include <Oxygen/Console/StartupPlan.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#ifdef OXYGEN_BUILD_UI_TESTS
+#  include "DemoShell/Test/UiTestSession.h"
+#endif
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Clap/Cli.h>
 #include <Oxygen/Clap/Command.h>
-#include <Oxygen/Clap/CommandLineContext.h>
-#include <Oxygen/Clap/Fluent/DSL.h>
-#include <Oxygen/Clap/Fluent/OptionValueBuilder.h>
-#include <Oxygen/Clap/Option.h>
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
@@ -39,31 +53,36 @@
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Platform/Platform.h>
+#include <Oxygen/SceneSync/SceneObserverSyncModule.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
 
-using namespace oxygen;
-using namespace oxygen::engine;
-using namespace oxygen::graphics;
+namespace co = oxygen::co;
+namespace engine = oxygen::engine;
+using oxygen::AsyncEngine;
+using oxygen::EngineConfig;
+using oxygen::Graphics;
+using oxygen::GraphicsBackendLoader;
+using oxygen::GraphicsConfig;
+using oxygen::observer_ptr;
+using oxygen::PathFinderConfig;
+using oxygen::Platform;
+using oxygen::PlatformConfig;
+using oxygen::RendererImplementation;
 using oxygen::examples::SettingsService;
+using oxygen::graphics::BackendType;
+using oxygen::graphics::QueueRole;
 using namespace std::chrono_literals;
 
 namespace {
 
-//! Event loop tick: drives the engine's asio context (if supplied) and
-//! applies frame pacing + cooperative sleep when idle to avoid busy spinning.
+//! Pump platform work while AsyncEngine schedules and paces its frame phases.
 auto EventLoopRun(const oxygen::examples::DemoAppContext& app) -> void
 {
   while (app.running.load(std::memory_order_relaxed)) {
-
-    app.platform->Async().PollOne();
-    if (!app.headless) {
-      // Input Events (only if not headless platform)
-      app.platform->Events().PollOne();
-    }
-
-    if (!app.running.load(std::memory_order_relaxed)) {
-      // Additional gentle backoff before running starts.
+    const bool async_work = app.platform->Async().PollOne() != 0U;
+    const bool input_work = !app.headless && app.platform->Events().PollOne();
+    if (!async_work && !input_work) {
       std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
   }
@@ -97,7 +116,8 @@ auto RegisterEngineModules(oxygen::examples::DemoAppContext& app) -> void
   LOG_F(INFO, "Registering engine modules...");
 
   // Helper lambda to register modules with error checking
-  auto register_module = [&](std::unique_ptr<engine::EngineModule> module) {
+  auto register_module
+    = [&](std::unique_ptr<engine::EngineModule> module) -> void {
     const bool registered = app.engine->RegisterModule(std::move(module));
     if (!registered) {
       LOG_F(ERROR, "Failed to register module");
@@ -113,10 +133,14 @@ auto RegisterEngineModules(oxygen::examples::DemoAppContext& app) -> void
     register_module(std::move(input_sys));
 
     oxygen::RendererConfig renderer_config {
+      .path_finder_config = app.engine->GetEngineConfig().path_finder_config,
       .upload_queue_key = app.queue_strategy.KeyFor(QueueRole::kTransfer).get(),
       .enable_imgui = !app.headless,
     };
     register_module(std::make_unique<oxygen::examples::async::MainModule>(app));
+    register_module(
+      std::make_unique<oxygen::scenesync::SceneObserverSyncModule>(
+        engine::kSceneObserverSyncModulePriority));
 
     constexpr auto kAsyncVortexCapabilities
       = oxygen::vortex::RendererCapabilityFamily::kScenePreparation
@@ -132,46 +156,42 @@ auto RegisterEngineModules(oxygen::examples::DemoAppContext& app) -> void
   }
 }
 
-auto AsyncMain(oxygen::examples::DemoAppContext& app, uint32_t frames)
+auto StopOnLastWindowClosed(observer_ptr<oxygen::examples::DemoAppContext> app)
+  -> co::Co<>
+{
+  co_await app->platform->Windows().LastWindowClosed();
+  app->engine->Stop();
+}
+
+auto AsyncMain(observer_ptr<oxygen::examples::DemoAppContext> app)
   -> co::Co<int>
 {
   // Structured concurrency scope.
   OXCO_WITH_NURSERY(n)
   {
-    app.running.store(true, std::memory_order_relaxed);
+    app->running.store(true, std::memory_order_relaxed);
 
     // PLatform started and running is a prerequisite for many of the modules
     // and the other subsystems.
-    co_await n.Start(&Platform::ActivateAsync, std::ref(*app.platform));
-    app.platform->Run();
+    co_await n.Start(&Platform::ActivateAsync, std::ref(*app->platform));
+    app->platform->Run();
 
-    DCHECK_F(!app.gfx_weak.expired());
-    auto gfx = app.gfx_weak.lock();
+    DCHECK_F(!app->gfx_weak.expired());
+    auto gfx = app->gfx_weak.lock();
     co_await n.Start(&Graphics::ActivateAsync, std::ref(*gfx));
     gfx->Run();
 
-    co_await n.Start(&AsyncEngine::ActivateAsync, std::ref(*app.engine));
-    app.engine->Run();
+    co_await n.Start(&AsyncEngine::ActivateAsync, std::ref(*app->engine));
+    app->engine->Run();
 
     // Everything is started, now register modules
-    RegisterEngineModules(app);
+    RegisterEngineModules(*app);
 
-    // Application policy: when the last window closes, the application
-    // should shut down. Previously the engine handled this automatically;
-    // after we moved that responsibility to the application layer, ensure
-    // the example stops the engine and platform when there are no windows
-    // remaining.
-    n.Start([&app, &n]() -> co::Co<> {
-      co_await app.platform->Windows().LastWindowClosed();
-      LOG_F(INFO,
-        "Async example: last window closed -> shutting down engine then "
-        "platform");
+    if (!app->headless) {
+      n.Start(StopOnLastWindowClosed, app);
+    }
 
-      app.engine->Stop();
-      co_return;
-    });
-
-    co_await app.engine->Completed();
+    co_await app->engine->Completed();
 
     co_return co::kCancel;
   };
@@ -184,11 +204,14 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
 {
   using namespace oxygen::clap; // NOLINT
 
-  // Initialize settings service
+#ifdef OXYGEN_BUILD_UI_TESTS
+  oxygen::examples::testing::UiTestSession::InitializeSettings();
+#endif
   SettingsService::ForDemoApp();
 
   uint32_t frames = 0U;
-  uint32_t target_fps = 100U; // desired frame pacing
+  constexpr uint32_t kDefaultTargetFps = 100U;
+  uint32_t target_fps = kDefaultTargetFps; // desired frame pacing
   bool headless = false;
   bool enable_vsync = true;
   std::string resolution;
@@ -223,6 +246,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
     if (oxygen::examples::cli::HandleMetaCommand(context, default_command)) {
       return EXIT_SUCCESS;
     }
+    app.headless = headless;
     app.window_resolution = oxygen::examples::cli::ResolveWindowResolution(
       context, resolution, headless);
 
@@ -239,7 +263,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
     // Create the platform
     app.platform = std::make_shared<Platform>(PlatformConfig {
       .headless = headless,
-      .thread_pool_size = (std::min)(4u, std::thread::hardware_concurrency()),
+      .thread_pool_size = (std::min)(4U, std::thread::hardware_concurrency()),
     });
 
     const auto workspace_root
@@ -261,6 +285,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
       .enable_validation = false,
       .enable_aftermath = graphics_tooling_cli.enable_aftermath,
       .preferred_card_name = std::nullopt,
+      .preferred_card_device_id = std::nullopt,
       .headless = headless,
       .enable_vsync = enable_vsync,
       .frame_capture = frame_capture_config,
@@ -285,19 +310,23 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
         .renderer = {
           .implementation = RendererImplementation::kVortex,
         },
-        .application = { .name = "Async Example", .version = 1u, },
+        .application = { .name = "Async Example", .version = 1U, },
         .target_fps = target_fps,
         .frame_count = frames,
         .enable_asset_loader = true,
+        .asset_loader = {},
+        .physics = {},
+        .scripting = {},
         .path_finder_config = path_finder_config,
+        .graphics = gfx_config,
         .timing = {
           .pacing_safety_margin = 250us,
-        }
+        },
       },
       startup_cvars
     );
 
-    const auto rc = co::Run(app, AsyncMain(app, frames));
+    const auto rc = co::Run(app, AsyncMain(observer_ptr { &app }));
 
     app.platform->Stop();
     app.engine.reset();
@@ -316,7 +345,11 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
     // external log collectors (or test harnesses) receive the final messages.
     loguru::flush();
     loguru::shutdown();
+#ifdef OXYGEN_BUILD_UI_TESTS
+    return oxygen::examples::testing::UiTestSession::ExitCode(rc);
+#else
     return rc;
+#endif
   } catch (const oxygen::examples::cli::FrameCaptureCliError& e) {
     LOG_F(ERROR, "CLI parse error: {}", e.what());
     loguru::flush();
