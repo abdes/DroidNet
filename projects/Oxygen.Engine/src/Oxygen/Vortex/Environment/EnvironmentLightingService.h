@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <unordered_map>
@@ -281,10 +283,9 @@ public:
   };
   //! Describe required allocations before any view-dependent radiance is
   //! written.
-  [[nodiscard]] OXGN_VRTX_API auto DescribeViewRadianceLayout(
-    const RenderContext& ctx) -> ViewRadianceLayout;
-  [[nodiscard]] OXGN_VRTX_API auto BuildBindings(
-    ShaderVisibleIndex environment_static_slot,
+  OXGN_VRTX_NDAPI auto DescribeViewRadianceLayout(const RenderContext& ctx)
+    -> ViewRadianceLayout;
+  OXGN_VRTX_NDAPI auto BuildBindings(ShaderVisibleIndex environment_static_slot,
     ShaderVisibleIndex environment_view_slot,
     ShaderVisibleIndex environment_view_products_slot,
     const environment::EnvironmentViewProducts& view_products) const
@@ -298,62 +299,64 @@ public:
     graphics::CommandRecorder& recorder, const SceneTextures& scene_textures)
     -> void;
 
-  [[nodiscard]] OXGN_VRTX_API auto InspectBindings(ViewId view_id) const
+  OXGN_VRTX_NDAPI auto InspectBindings(ViewId view_id) const
     -> const EnvironmentFrameBindings*;
-  [[nodiscard]] OXGN_VRTX_API auto InspectEnvironmentViewData(
-    ViewId view_id) const -> const EnvironmentViewData*;
-  [[nodiscard]] OXGN_VRTX_API auto InspectEnvironmentStaticData(
-    ViewId view_id) const -> const EnvironmentStaticData*;
-  [[nodiscard]] OXGN_VRTX_API auto InspectEnvironmentViewProducts(
-    ViewId view_id) const -> const environment::EnvironmentViewProducts*;
-  [[nodiscard]] OXGN_VRTX_API auto InspectViewRadianceResources(
-    ViewId view_id) const -> const ViewRadianceResources*;
-  [[nodiscard]] OXGN_VRTX_API auto ResolveEnvironmentFrameSlot(
-    ViewId view_id) const -> ShaderVisibleIndex;
-  [[nodiscard]] OXGN_VRTX_NDAPI auto InspectProbeState() const noexcept
+  OXGN_VRTX_NDAPI auto InspectEnvironmentViewData(ViewId view_id) const
+    -> const EnvironmentViewData*;
+  OXGN_VRTX_NDAPI auto InspectEnvironmentStaticData(ViewId view_id) const
+    -> const EnvironmentStaticData*;
+  OXGN_VRTX_NDAPI auto InspectEnvironmentViewProducts(ViewId view_id) const
+    -> const environment::EnvironmentViewProducts*;
+  OXGN_VRTX_NDAPI auto InspectViewRadianceResources(ViewId view_id) const
+    -> const ViewRadianceResources*;
+  OXGN_VRTX_NDAPI auto ResolveEnvironmentFrameSlot(ViewId view_id) const
+    -> ShaderVisibleIndex;
+  OXGN_VRTX_NDAPI auto InspectProbeState() const noexcept
     -> const EnvironmentProbeState&
   {
     return probe_state_;
   }
-  [[nodiscard]] OXGN_VRTX_NDAPI auto GetLastProbeRefreshState() const noexcept
+  OXGN_VRTX_NDAPI auto GetLastProbeRefreshState() const noexcept
     -> const ProbeRefreshState&
   {
     return last_probe_refresh_state_;
   }
-  [[nodiscard]] OXGN_VRTX_NDAPI auto GetLastPublicationState() const noexcept
+  OXGN_VRTX_NDAPI auto GetLastPublicationState() const noexcept
     -> const PublicationState&
   {
     return last_publication_state_;
   }
-  [[nodiscard]] OXGN_VRTX_NDAPI auto
-  GetLastViewProductGenerationState() const noexcept
+  OXGN_VRTX_NDAPI auto GetLastViewProductGenerationState() const noexcept
     -> const ViewProductGenerationState&
   {
     return last_view_product_generation_state_;
   }
-  [[nodiscard]] OXGN_VRTX_NDAPI auto GetLastStage15State() const noexcept
+  OXGN_VRTX_NDAPI auto GetLastStage15State() const noexcept
     -> const Stage15State&
   {
     return last_stage15_state_;
   }
-  [[nodiscard]] OXGN_VRTX_NDAPI auto GetLastStage14State() const noexcept
+  OXGN_VRTX_NDAPI auto GetLastStage14State() const noexcept
     -> const Stage14State&
   {
     return last_stage14_state_;
   }
-  [[nodiscard]] OXGN_VRTX_API auto InspectAtmosphereState() const noexcept
+  OXGN_VRTX_NDAPI auto InspectAtmosphereState() const noexcept
     -> const environment::internal::StableAtmosphereState&;
-  [[nodiscard]] OXGN_VRTX_API auto InspectSkyLight(
-    const scene::Scene& scene) const -> SkyLightRuntimeState;
-  [[nodiscard]] OXGN_VRTX_API auto AcquireIblCapture(ViewId view)
+  OXGN_VRTX_NDAPI auto InspectSkyLight(const scene::Scene& scene) const
+    -> SkyLightRuntimeState;
+  OXGN_VRTX_NDAPI auto AcquireIblCapture(ViewId view)
     -> Result<environment::IblCaptureLease, environment::IblCaptureError>;
-  [[nodiscard]] OXGN_VRTX_API auto InspectAtmosphereLightState() const noexcept
+  OXGN_VRTX_NDAPI auto InspectAtmosphereLightState() const noexcept
     -> const environment::internal::ResolvedAtmosphereLightState&;
 
 private:
   friend struct testing::RendererPublicationProbe;
   struct PublishedView {
     ShaderVisibleIndex slot { kInvalidShaderVisibleIndex };
+    std::array<std::byte,
+      alignof(EnvironmentFrameBindings) - sizeof(ShaderVisibleIndex)>
+      slot_alignment_padding {};
     EnvironmentFrameBindings bindings {};
     EnvironmentStaticData static_data {};
     EnvironmentViewData view_data {};
@@ -361,14 +364,21 @@ private:
     ViewRadianceResources radiance;
     std::shared_ptr<const environment::internal::IblGpuProducts> ibl;
   };
+  static_assert(sizeof(PublishedView)
+    == sizeof(ShaderVisibleIndex)
+      + sizeof(PublishedView::slot_alignment_padding)
+      + sizeof(EnvironmentFrameBindings) + sizeof(EnvironmentStaticData)
+      + sizeof(EnvironmentViewData)
+      + sizeof(environment::EnvironmentViewProducts)
+      + sizeof(ViewRadianceResources)
+      + sizeof(std::shared_ptr<const environment::internal::IblGpuProducts>));
 
   auto EnsurePublishResources() -> bool;
   auto EnsureSkyTextureBinder() -> resources::TextureBinder*;
   auto PrepareLocalFogForStage14(RenderContext& ctx,
     graphics::CommandRecorder& recorder, const SceneTextures& scene_textures)
     -> const environment::internal::LocalFogVolumeState::ViewProducts&;
-  [[nodiscard]] OXGN_VRTX_API auto BuildEnvironmentStaticData(
-    const RenderContext& ctx,
+  OXGN_VRTX_NDAPI auto BuildEnvironmentStaticData(const RenderContext& ctx,
     const environment::EnvironmentViewProducts& view_products)
     -> EnvironmentStaticData;
   [[nodiscard]] auto BuildEnvironmentViewData(const RenderContext& ctx) const

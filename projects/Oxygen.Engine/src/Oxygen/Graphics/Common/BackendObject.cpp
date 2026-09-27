@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <cassert>
+#include <memory>
 #include <utility>
 
 #include <Oxygen/Graphics/Common/BackendObject.h>
@@ -33,9 +34,45 @@ namespace {
     std::shared_ptr<void> lifetime) -> std::shared_ptr<T>
   {
     assert(object != nullptr && destroy != nullptr);
-    return { object, BackendObjectDeleter { destroy, std::move(lifetime) } };
+    return {
+      object,
+      BackendObjectDeleter {
+        .destroy = destroy,
+        .lifetime = std::move(lifetime),
+      },
+    };
+  }
+
+  template <typename T>
+  auto Adopt(std::unique_ptr<T> object, std::shared_ptr<void> lifetime)
+    -> std::shared_ptr<T>
+  {
+    return Adopt(
+      object.release(),
+      [](void* pointer) noexcept -> void {
+        const auto owner = std::unique_ptr<T>(static_cast<T*>(pointer));
+      },
+      std::move(lifetime));
   }
 } // namespace
+
+auto AdoptBackendObject(std::unique_ptr<Graphics> object,
+  std::shared_ptr<void> lifetime) -> std::shared_ptr<Graphics>
+{
+  return Adopt(std::move(object), std::move(lifetime));
+}
+
+auto AdoptBackendObject(std::unique_ptr<Buffer> object,
+  std::shared_ptr<void> lifetime) -> std::shared_ptr<Buffer>
+{
+  return Adopt(std::move(object), std::move(lifetime));
+}
+
+auto AdoptBackendObject(std::unique_ptr<Texture> object,
+  std::shared_ptr<void> lifetime) -> std::shared_ptr<Texture>
+{
+  return Adopt(std::move(object), std::move(lifetime));
+}
 
 auto AdoptBackendObject(void* object, BackendObjectDestroy destroy,
   std::shared_ptr<void> lifetime) -> std::shared_ptr<void>

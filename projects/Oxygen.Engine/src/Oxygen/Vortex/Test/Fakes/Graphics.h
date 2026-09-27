@@ -993,7 +993,7 @@ public:
     return {};
   }
   [[nodiscard]] auto CreateSurfaceFromNative(
-    void* /*native_handle*/, observer_ptr<CommandQueue> /*command_queue*/) const
+    void* /*native_handle*/, observer_ptr<CommandQueue> /*command_queue*/)
     -> std::shared_ptr<graphics::Surface> override
   {
     return {};
@@ -1353,12 +1353,7 @@ public:
     Graphics::FlushCommandQueues();
     PollCompletedUses();
   }
-  auto AcquireCommandRecorder(const QueueKey& queue_key,
-    const std::string_view command_list_name) -> graphics::CommandRecording
-  {
-    return AcquireCommandRecorder(
-      queue_key, command_list_name, graphics::SubmissionPolicy::kOnScopeExit);
-  }
+  using oxygen::Graphics::AcquireCommandRecorder;
   auto AcquireCommandRecorder(const QueueKey& queue_key,
     std::string_view command_list_name, graphics::SubmissionPolicy policy)
     -> graphics::CommandRecording override

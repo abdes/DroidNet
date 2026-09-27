@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
+#include <memory>
 #include <stdexcept>
 #include <string>
 
@@ -12,13 +14,18 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/GraphicsConfig.h>
+#include <Oxygen/Graphics/Common/BackendLifetime.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Graphics/Common/NativeObject.h>
+#include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/ShaderByteCode.h>
+#include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Common/Surface.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Loader/Detail/PlatformServices.h>
 #include <Oxygen/Loader/GraphicsBackendLoader.h>
 #include <Oxygen/Testing/GTest.h>
@@ -56,7 +63,7 @@ public:
   MOCK_METHOD((const oxygen::graphics::DescriptorAllocator&), GetDescriptorAllocator, (), (const, override));
   MOCK_METHOD(std::shared_ptr<oxygen::graphics::IShaderByteCode>, GetShader, (const oxygen::graphics::ShaderRequest&), (const, override));
   MOCK_METHOD(std::unique_ptr<oxygen::graphics::Surface>, CreateSurface, (std::weak_ptr<oxygen::platform::Window>, oxygen::observer_ptr<oxygen::graphics::CommandQueue>), (const, override));
-  MOCK_METHOD(std::shared_ptr<oxygen::graphics::Surface>, CreateSurfaceFromNative, (void*, oxygen::observer_ptr<oxygen::graphics::CommandQueue>), (const, override));
+  MOCK_METHOD(std::shared_ptr<oxygen::graphics::Surface>, CreateSurfaceFromNative, (void*, oxygen::observer_ptr<oxygen::graphics::CommandQueue>), (override));
   MOCK_METHOD(std::shared_ptr<oxygen::graphics::CommandQueue>, CreateCommandQueue, (const oxygen::graphics::QueueKey&, oxygen::graphics::QueueRole), (override));
   MOCK_METHOD(std::unique_ptr<oxygen::graphics::CommandList>, CreateCommandListImpl, (oxygen::graphics::QueueRole, std::string_view), (override));
   MOCK_METHOD(std::unique_ptr<oxygen::graphics::CommandRecorder>, CreateCommandRecorder, (std::shared_ptr<oxygen::graphics::CommandList>, oxygen::observer_ptr<oxygen::graphics::CommandQueue>), (override));
@@ -122,8 +129,10 @@ protected:
   class MockBackend {
   public:
     MockBackend()
-      : mock_api { .CreateBackend = &MockBackend::CreateBackendStatic,
-        .DestroyBackend = &MockBackend::DestroyBackendStatic }
+      : mock_api {
+        .CreateBackend = &MockBackend::CreateBackendStatic,
+        .DestroyBackend = &MockBackend::DestroyBackendStatic,
+      }
     {
     }
 
@@ -531,42 +540,31 @@ NOLINT_TEST_F(GraphicsBackendLoaderTest, ConfigSerialization)
   std::string json_str(captured_mock->GetJsonData());
 
   // Check that the config contains our values
+  EXPECT_TRUE(json_str.contains(R"("backend_type": "Direct3D12")"));
+  EXPECT_TRUE(json_str.contains(R"("enable_debug_layer": false)"));
+  EXPECT_TRUE(json_str.contains(R"("enable_validation": true)"));
+  EXPECT_TRUE(json_str.contains(R"("enable_aftermath": true)"));
+  EXPECT_TRUE(json_str.contains(R"("headless": false)"));
+  EXPECT_TRUE(json_str.contains(R"("enable_imgui": true)"));
+  EXPECT_TRUE(json_str.contains(R"("preferred_card_name": "Test GPU")"));
+  EXPECT_TRUE(json_str.contains(R"("preferred_card_device_id": 1)"));
+  EXPECT_TRUE(json_str.contains(R"("provider": "renderdoc")"));
+  EXPECT_TRUE(json_str.contains(R"("init_mode": "path")"));
+  EXPECT_TRUE(json_str.contains(R"("from_frame": 1)"));
+  EXPECT_TRUE(json_str.contains(R"("frame_count": 1)"));
   EXPECT_TRUE(
-    json_str.find(R"("backend_type": "Direct3D12")") != std::string::npos);
+    json_str.contains(R"("module_path": "C:/tools/renderdoc/renderdoc.dll")"));
   EXPECT_TRUE(
-    json_str.find(R"("enable_debug_layer": false)") != std::string::npos);
-  EXPECT_TRUE(
-    json_str.find(R"("enable_validation": true)") != std::string::npos);
-  EXPECT_TRUE(
-    json_str.find(R"("enable_aftermath": true)") != std::string::npos);
-  EXPECT_TRUE(json_str.find(R"("headless": false)") != std::string::npos);
-  EXPECT_TRUE(json_str.find(R"("enable_imgui": true)") != std::string::npos);
-  EXPECT_TRUE(
-    json_str.find(R"("preferred_card_name": "Test GPU")") != std::string::npos);
-  EXPECT_TRUE(
-    json_str.find(R"("preferred_card_device_id": 1)") != std::string::npos);
-  EXPECT_TRUE(json_str.find(R"("provider": "renderdoc")") != std::string::npos);
-  EXPECT_TRUE(json_str.find(R"("init_mode": "path")") != std::string::npos);
-  EXPECT_TRUE(json_str.find(R"("from_frame": 1)") != std::string::npos);
-  EXPECT_TRUE(json_str.find(R"("frame_count": 1)") != std::string::npos);
-  EXPECT_TRUE(
-    json_str.find(R"("module_path": "C:/tools/renderdoc/renderdoc.dll")")
-    != std::string::npos);
-  EXPECT_TRUE(
-    json_str.find(R"("capture_file_template": "captures/render_scene")")
-    != std::string::npos);
-  EXPECT_TRUE(
-    json_str.find(R"("custom_key": "custom_value")") != std::string::npos);
-  EXPECT_TRUE(json_str.find(R"("another_key": 42)") != std::string::npos);
+    json_str.contains(R"("capture_file_template": "captures/render_scene")"));
+  EXPECT_TRUE(json_str.contains(R"("custom_key": "custom_value")"));
+  EXPECT_TRUE(json_str.contains(R"("another_key": 42)"));
 
   const std::string path_json(captured_mock->GetPathFinderJsonData());
+  EXPECT_TRUE(path_json.contains(R"("workspace_root_path": "F:/ws")"));
   EXPECT_TRUE(
-    path_json.find(R"("workspace_root_path": "F:/ws")") != std::string::npos);
+    path_json.contains(R"("shader_library_path": "bin/Oxygen/shaders.bin")"));
   EXPECT_TRUE(
-    path_json.find(R"("shader_library_path": "bin/Oxygen/shaders.bin")")
-    != std::string::npos);
-  EXPECT_TRUE(path_json.find(R"("cvars_archive_path": "bin/Oxygen/cvars.json")")
-    != std::string::npos);
+    path_json.contains(R"("cvars_archive_path": "bin/Oxygen/cvars.json")"));
 }
 
 NOLINT_TEST_F(GraphicsBackendLoaderTest, PixConfigSerialization)
@@ -593,17 +591,14 @@ NOLINT_TEST_F(GraphicsBackendLoaderTest, PixConfigSerialization)
   ASSERT_NE(mock_graphics, nullptr);
 
   const std::string json_str(mock_graphics->GetJsonData());
-  EXPECT_TRUE(json_str.find(R"("provider": "pix")") != std::string::npos);
-  EXPECT_TRUE(json_str.find(R"("init_mode": "search")") != std::string::npos);
-  EXPECT_TRUE(json_str.find(R"("from_frame": 1)") != std::string::npos);
-  EXPECT_TRUE(json_str.find(R"("frame_count": 1)") != std::string::npos);
-  EXPECT_TRUE(
-    json_str.find(
-      R"("module_path": "C:/Program Files/Microsoft PIX/2602.25/WinPixGpuCapturer.dll")")
-    != std::string::npos);
-  EXPECT_TRUE(
-    json_str.find(R"("capture_file_template": "captures/pix/render_scene")")
-    != std::string::npos);
+  EXPECT_TRUE(json_str.contains(R"("provider": "pix")"));
+  EXPECT_TRUE(json_str.contains(R"("init_mode": "search")"));
+  EXPECT_TRUE(json_str.contains(R"("from_frame": 1)"));
+  EXPECT_TRUE(json_str.contains(R"("frame_count": 1)"));
+  EXPECT_TRUE(json_str.contains(
+    R"("module_path": "C:/Program Files/Microsoft PIX/2602.25/WinPixGpuCapturer.dll")"));
+  EXPECT_TRUE(json_str.contains(
+    R"("capture_file_template": "captures/pix/render_scene")"));
 }
 
 NOLINT_TEST_F(
@@ -637,9 +632,8 @@ NOLINT_TEST_F(GraphicsBackendLoaderTest,
   const auto expected_shader_path
     = oxygen::PathFinderConfig::DefaultShaderLibraryPathForCurrentBuild()
         .generic_string();
-  EXPECT_TRUE(path_json.find(std::string(R"("shader_library_path": ")")
-                + expected_shader_path + "\"")
-    != std::string::npos);
+  EXPECT_TRUE(path_json.contains(
+    std::string(R"("shader_library_path": ")") + expected_shader_path + "\""));
 }
 
 } // namespace

@@ -5,7 +5,7 @@ additional capabilities through their owning milestone plans.
 
 | Priority                                                       | Focus                                                                           | Items |
 | -------------------------------------------------------------- | ------------------------------------------------------------------------------- | ----: |
-| [P1 — Current delivery](#p1--current-delivery)                 | ED-M08 integration, S7 reuse and S8 correctness                                 |     2 |
+| [P1 — Current delivery](#p1--current-delivery)                 | ED-M08 integration and S8 correctness                                           |     2 |
 | [P2 — Engineering follow-ups](#p2--engineering-follow-ups)     | Recommended review order: correctness, measured cost, qualification and tooling |     8 |
 | [P3 — Unscheduled capabilities](#p3--unscheduled-capabilities) | Feature extensions and design choices, grouped by subsystem                     |    34 |
 
@@ -16,10 +16,10 @@ Owners below are responsible subsystems. [Milestone status](STATUS.md) tracks de
 
 ## P1 — Current delivery
 
-| Item      | State        | Work and next step                                                                                                                                                                                                    | Owner / references                                                                                                                                                                                                      |
-| --------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| VX-ED-01  | `pending`    | **Editor integration.** Finish canonical data/slot provenance, native rendered gates, editor delivery, saved-input captures and comparisons. Follow the existing M08.1–M08.8 sequence.                                | [Editor delivery](../../../../design/editor/plan/ED-M08-runtime-parity-and-standalone-validation.md) · [Progress](../../../../design/editor/IMPLEMENTATION_STATUS.md#ed-m08---runtime-parity-and-standalone-validation) |
-| VX-IBL-01 | `incomplete` | **S7 reuse and S8 correctness.** Finish S7 capture, SDK and application checks; fix seven confirmed atmosphere/fog defects in S8 using the approved holdout contract. All six extractions and performance gates pass. | Nexus + Vortex · [S7](milestones/VX-IBL-01/README.md#s7--reusable-infrastructure) · [S8](milestones/VX-IBL-01/README.md#s8--atmosphere-and-fog-correctness)                                                             |
+| Item      | State        | Work and next step                                                                                                                                                                     | Owner / references                                                                                                                                                                                                      |
+| --------- | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| VX-ED-01  | `pending`    | **Editor integration.** Finish canonical data/slot provenance, native rendered gates, editor delivery, saved-input captures and comparisons. Follow the existing M08.1–M08.8 sequence. | [Editor delivery](../../../../design/editor/plan/ED-M08-runtime-parity-and-standalone-validation.md) · [Progress](../../../../design/editor/IMPLEMENTATION_STATUS.md#ed-m08---runtime-parity-and-standalone-validation) |
+| VX-IBL-01 | `incomplete` | **S8 correctness.** Fix seven confirmed atmosphere/fog defects using the approved holdout contract. S1–S7 are validated.                                                               | Vortex Environment · [S8](milestones/VX-IBL-01/README.md#s8--atmosphere-and-fog-correctness)                                                                                                                            |
 
 ## P2 — Engineering follow-ups
 

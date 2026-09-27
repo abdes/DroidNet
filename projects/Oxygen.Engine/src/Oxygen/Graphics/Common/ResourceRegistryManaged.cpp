@@ -4,7 +4,23 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#if defined(OXYGEN_WITH_TRACY)
+#include <cstdint>
+#include <expected>
+#include <memory>
+#include <mutex>
+#include <optional>
+#include <span>
+#include <stdexcept>
+#include <utility>
+
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Composition/Typed.h>
+#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Graphics/Common/BackendLifetime.h>
+#include <Oxygen/Graphics/Common/NativeObject.h>
+#include <Oxygen/Graphics/Common/Registration.h>
+#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
+#ifdef OXYGEN_WITH_TRACY
 #  include <Oxygen/Profiling/CpuProfileScope.h>
 #endif
 
@@ -20,7 +36,7 @@ auto ResourceRegistry::InstallManagedContext(std::weak_ptr<Graphics> owner,
   std::shared_ptr<BackendLifetime> lifetime,
   std::shared_ptr<void> native_lifetime) -> void
 {
-  std::lock_guard lock(registry_mutex_);
+  std::scoped_lock lock(registry_mutex_);
   if (closed_ || state_->lifetime) {
     throw std::logic_error(
       "Registry backend context already installed or closed");
@@ -31,18 +47,18 @@ auto ResourceRegistry::InstallManagedContext(std::weak_ptr<Graphics> owner,
 }
 
 auto ResourceRegistry::RequireManualNoLock(
-  const NativeResource& key, NativeResource native_resource) const -> void
+  const ManualResourceIdentity& identity) const -> void
 {
   if (closed_) {
     throw std::logic_error("Resource registry is closed");
   }
-  const auto found = resources_.find(key);
+  const auto found = resources_.find(identity.object);
   if (found != resources_.end() && found->second.managed) {
     throw std::logic_error(
       "Raw mutation of a managed registration is prohibited");
   }
-  if (native_resource->IsValid()) {
-    const auto native = state_->native_ownership.find(native_resource);
+  if (identity.backing->IsValid()) {
+    const auto native = state_->native_ownership.find(identity.backing);
     if (native != state_->native_ownership.end()
       && native->second.managed_id.get() != 0) {
       throw std::logic_error("Native resource already has managed ownership");
@@ -54,7 +70,7 @@ auto ResourceRegistry::InsertManualNoLock(std::shared_ptr<void> resource,
   TypeId type, NativeResource native_resource) -> void
 {
   const NativeResource key { resource.get(), type };
-  RequireManualNoLock(key, native_resource);
+  RequireManualNoLock({ .object = key, .backing = native_resource });
   bool native_inserted = false;
   if (native_resource->IsValid()) {
     native_inserted
@@ -62,10 +78,12 @@ auto ResourceRegistry::InsertManualNoLock(std::shared_ptr<void> resource,
   }
   try {
     resources_.emplace(key,
-      ResourceEntry { .resource = std::move(resource),
+      ResourceEntry {
+        .resource = std::move(resource),
         .native_resource = native_resource,
         .descriptors = {},
-        .managed = nullptr });
+        .managed = nullptr,
+      });
   } catch (...) {
     if (native_inserted) {
       state_->native_ownership.erase(native_resource);
@@ -111,14 +129,13 @@ auto ResourceRegistry::MakeManagedLeaseNoLock(
   const std::shared_ptr<detail::RegistrationCore>& core,
   std::shared_ptr<Graphics> backend) -> RegistrationLease
 {
-  if (core->allocation_owners == (std::numeric_limits<uint64_t>::max)()) {
+  if (core->allocation_owners == std::numeric_limits<uint64_t>::max()) {
     throw std::bad_alloc();
   }
   auto owner = std::make_shared<detail::RegistrationAllocationOwner>(core);
   ++core->allocation_owners;
   owner->armed = true;
-  return RegistrationLease(
-    std::move(backend), RegistrationOwner(std::move(owner)));
+  return { std::move(backend), RegistrationOwner(std::move(owner)) };
 }
 
 auto ResourceRegistry::RegisterManaged(std::shared_ptr<void> resource,
@@ -135,7 +152,7 @@ auto ResourceRegistry::RegisterManaged(std::shared_ptr<void> resource,
     if (!backend) {
       return std::unexpected(RegistrationError::kClosed);
     }
-    std::lock_guard lock(registry_mutex_);
+    std::scoped_lock lock(registry_mutex_);
     if (closed_) {
       return std::unexpected(RegistrationError::kClosed);
     }
@@ -149,7 +166,7 @@ auto ResourceRegistry::RegisterManaged(std::shared_ptr<void> resource,
       }
       return MakeManagedLeaseNoLock(found->second.managed, std::move(backend));
     }
-    if (state_->next_registration == (std::numeric_limits<uint64_t>::max)()) {
+    if (state_->next_registration == std::numeric_limits<uint64_t>::max()) {
       return std::unexpected(RegistrationError::kAllocationFailed);
     }
     if (native_resource->IsValid()
@@ -161,7 +178,10 @@ auto ResourceRegistry::RegisterManaged(std::shared_ptr<void> resource,
     core->state = state_;
     core->native_lifetime = state_->native_lifetime;
     core->resource = resource;
-    core->identity = { state_->lifetime->Id(), RegistrationId { id } };
+    core->identity = {
+      .backend = state_->lifetime->Id(),
+      .registration = RegistrationId { id },
+    };
     core->key = key;
     core->native_resource = native_resource;
     bool native_inserted = false;
@@ -170,14 +190,18 @@ auto ResourceRegistry::RegisterManaged(std::shared_ptr<void> resource,
         native_inserted = state_->native_ownership
                             .emplace(native_resource,
                               detail::ResourceRegistryState::NativeOwnership {
-                                0, RegistrationId { id } })
+                                .manual_entries = 0,
+                                .managed_id = RegistrationId { id },
+                              })
                             .second;
       }
       resources_.emplace(key,
-        ResourceEntry { .resource = std::move(resource),
+        ResourceEntry {
+          .resource = std::move(resource),
           .native_resource = native_resource,
           .descriptors = {},
-          .managed = core });
+          .managed = core,
+        });
       state_->managed_by_id.emplace(id, core);
       auto lease = MakeManagedLeaseNoLock(core, std::move(backend));
       core->published = true;
@@ -209,7 +233,7 @@ auto ResourceRegistry::AcquireManaged(RegistrationIdentity identity)
     if (!backend) {
       return std::unexpected(RegistrationError::kClosed);
     }
-    std::lock_guard lock(registry_mutex_);
+    std::scoped_lock lock(registry_mutex_);
     if (closed_) {
       return std::unexpected(RegistrationError::kClosed);
     }
@@ -265,7 +289,7 @@ auto ResourceRegistry::RetainUse(const RegistrationOwner& owner)
   try {
     const auto admission = state_->lifetime->AcquireOperation();
     std::unique_lock lock(registry_mutex_, std::defer_lock);
-#if defined(OXYGEN_WITH_TRACY)
+#ifdef OXYGEN_WITH_TRACY
     {
       static const profiling::CpuProfileScopeDesc kWait { .label
         = "Graphics.Registry.UsePin.LockWait",
@@ -284,7 +308,7 @@ auto ResourceRegistry::RetainUse(const RegistrationOwner& owner)
     if (!core) {
       return std::unexpected(core.error());
     }
-    if ((*core)->uses == (std::numeric_limits<uint64_t>::max)()) {
+    if ((*core)->uses == std::numeric_limits<uint64_t>::max()) {
       return std::unexpected(RegistrationError::kAllocationFailed);
     }
     ++(*core)->uses;
@@ -294,10 +318,9 @@ auto ResourceRegistry::RetainUse(const RegistrationOwner& owner)
   }
 }
 
-auto ResourceRegistry::AcquireManagedView(const RegistrationOwner& owner,
-  TypeId type, std::size_t hash, ResourceViewType view_type,
-  DescriptorVisibility visibility, ViewQuery query, CreateManagedView create,
-  CopyViewDescription copy) -> std::expected<ManagedView, RegistrationError>
+auto ResourceRegistry::AcquireManagedView(
+  const RegistrationOwner& owner, const ManagedViewRequest& request)
+  -> std::expected<ManagedView, RegistrationError>
 {
   if (!state_->lifetime) {
     return std::unexpected(RegistrationError::kClosed);
@@ -308,46 +331,56 @@ auto ResourceRegistry::AcquireManagedView(const RegistrationOwner& owner,
     if (!backend) {
       return std::unexpected(RegistrationError::kClosed);
     }
-    std::lock_guard lock(registry_mutex_);
+    std::scoped_lock lock(registry_mutex_);
     auto checked = GetManagedCoreNoLock(owner);
     if (!checked) {
       return std::unexpected(checked.error());
     }
     const auto& core = *checked;
-    if (core->key->OwnerTypeId() != type) {
+    if (core->key->OwnerTypeId() != request.resource_type) {
       return std::unexpected(RegistrationError::kStaleRegistration);
     }
     auto& allocator = backend->GetDescriptorAllocator();
-    if (const auto* cached = FindViewNoLock(core->key, hash, query)) {
+    if (const auto* cached
+      = FindViewNoLock(core->key, request.description_hash, request.query)) {
       const auto descriptor = core->descriptors.find(cached->descriptor_index);
       assert(descriptor != core->descriptors.end());
-      const auto index = visibility == DescriptorVisibility::kShaderVisible
+      const auto index
+        = request.visibility == DescriptorVisibility::kShaderVisible
         ? allocator.GetShaderVisibleIndex(descriptor->second.descriptor)
         : kInvalidShaderVisibleIndex;
-      return ManagedView { cached->view_object, index };
+      return ManagedView {
+        .view = cached->view_object,
+        .shader_visible_index = index,
+      };
     }
-    if (query.domain && visibility != DescriptorVisibility::kShaderVisible) {
+    if (request.query.domain
+      && request.visibility != DescriptorVisibility::kShaderVisible) {
       return std::unexpected(RegistrationError::kAllocationFailed);
     }
     // Allocation domain is part of view identity, including on cache hits.
-    auto description = copy(query.description);
-    auto descriptor = query.domain
-      ? allocator.AllocateBindless(*query.domain, view_type)
-      : allocator.AllocateRaw(view_type, visibility);
+    auto description = request.copy(request.query.description);
+    auto descriptor = request.query.domain
+      ? allocator.AllocateBindless(*request.query.domain, request.view_type)
+      : allocator.AllocateRaw(request.view_type, request.visibility);
     if (!descriptor.IsValid()) {
       return std::unexpected(RegistrationError::kAllocationFailed);
     }
-    const auto view
-      = create(core->resource.get(), descriptor, query.description);
+    const auto view = request.create(
+      core->resource.get(), descriptor, request.query.description);
     if (!view->IsValid()) {
       return std::unexpected(RegistrationError::kAllocationFailed);
     }
-    const auto shader_index = visibility == DescriptorVisibility::kShaderVisible
+    const auto shader_index
+      = request.visibility == DescriptorVisibility::kShaderVisible
       ? allocator.GetShaderVisibleIndex(descriptor)
       : kInvalidShaderVisibleIndex;
     const auto index = descriptor.GetBindlessHandle();
-    const auto [inserted, unique] = core->descriptors.emplace(
-      index, ResourceEntry::ViewEntry { view, std::move(descriptor) });
+    const auto [inserted, unique] = core->descriptors.emplace(index,
+      ResourceEntry::ViewEntry {
+        .view_object = view,
+        .descriptor = std::move(descriptor),
+      });
     assert(unique);
     bool mapped = false;
     try {
@@ -355,8 +388,17 @@ auto ResourceRegistry::AcquireManagedView(const RegistrationOwner& owner,
       if (!mapped) {
         throw std::logic_error("Descriptor identity already registered");
       }
-      view_cache_.emplace(CacheKey { core->key, hash },
-        ViewCacheEntry { view, std::move(description), index, query.domain });
+      view_cache_.emplace(
+        CacheKey {
+          .resource = core->key,
+          .view_desc_hash = request.description_hash,
+        },
+        ViewCacheEntry {
+          .view_object = view,
+          .view_description = std::move(description),
+          .descriptor_index = index,
+          .domain = request.query.domain,
+        });
     } catch (...) {
       if (mapped) {
         descriptor_to_resource_.erase(index);
@@ -364,7 +406,10 @@ auto ResourceRegistry::AcquireManagedView(const RegistrationOwner& owner,
       core->descriptors.erase(inserted);
       throw;
     }
-    return ManagedView { view, shader_index };
+    return ManagedView {
+      .view = view,
+      .shader_visible_index = shader_index,
+    };
   } catch (...) {
     return std::unexpected(
       state_->lifetime->State() == BackendLifecycle::kActive
@@ -376,7 +421,7 @@ auto ResourceRegistry::AcquireManagedView(const RegistrationOwner& owner,
 auto ResourceRegistry::InspectManagedIdentity(
   const NativeResource& resource) const -> std::optional<RegistrationIdentity>
 {
-  std::lock_guard lock(registry_mutex_);
+  std::scoped_lock lock(registry_mutex_);
   const auto found = resources_.find(resource);
   if (found == resources_.end() || !found->second.managed) {
     return {};
@@ -386,13 +431,13 @@ auto ResourceRegistry::InspectManagedIdentity(
 
 auto ResourceRegistry::HasManagedRegistrations() const noexcept -> bool
 {
-  std::lock_guard lock(registry_mutex_);
+  std::scoped_lock lock(registry_mutex_);
   return !state_->managed_by_id.empty();
 }
 
 auto ResourceRegistry::PollManagedRetirements() noexcept -> void
 {
-  std::lock_guard lock(registry_mutex_);
+  std::scoped_lock lock(registry_mutex_);
   while (auto* ready = state_->ready_head) {
     state_->ready_head = ready->ready_next;
     if (!state_->ready_head) {
@@ -425,7 +470,7 @@ auto ResourceRegistry::PollManagedRetirements() noexcept -> void
 auto ResourceRegistry::InvalidateManagedRegistrations(
   std::span<const RegistrationIdentity> identities) noexcept -> void
 {
-  std::lock_guard lock(registry_mutex_);
+  std::scoped_lock lock(registry_mutex_);
   for (const auto identity : identities) {
     if (!state_->lifetime || identity.backend != state_->lifetime->Id()) {
       continue;

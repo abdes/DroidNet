@@ -31,6 +31,7 @@ namespace {
       EXPECT_TRUE(facade_.expired());
       EXPECT_EQ(debug_layer_.expired(), !retained);
       retained_texture_.reset();
+      EXPECT_TRUE(texture_observer_.expired());
       EXPECT_TRUE(debug_layer_.expired());
     }
 
@@ -52,10 +53,16 @@ namespace {
       description.debug_name = "Retained native lifetime";
       retained_texture_ = Backend().CreateTexture(description);
       ASSERT_NE(retained_texture_, nullptr);
+      texture_observer_ = retained_texture_;
+      const auto self = retained_texture_->shared_from_this();
+      EXPECT_EQ(self.get(), retained_texture_.get());
+      EXPECT_FALSE(self.owner_before(retained_texture_));
+      EXPECT_FALSE(retained_texture_.owner_before(self));
     }
 
   private:
     std::shared_ptr<graphics::Texture> retained_texture_;
+    std::weak_ptr<graphics::Texture> texture_observer_;
     std::weak_ptr<Graphics> facade_;
     std::weak_ptr<DebugLayer> debug_layer_;
   };

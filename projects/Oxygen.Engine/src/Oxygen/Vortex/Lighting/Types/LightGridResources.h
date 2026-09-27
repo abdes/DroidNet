@@ -6,7 +6,10 @@
 
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
 #include <memory>
+
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Vortex/Lighting/Types/LightGridBuildStatus.h>
 
@@ -17,8 +20,15 @@ namespace oxygen::vortex {
 
 struct CompletedLightGridBuild {
   frame::SequenceNumber sequence { 0U };
+  std::uint64_t padding { 0U };
   LightGridBuildStatus status;
 };
+
+static_assert(offsetof(CompletedLightGridBuild, sequence) == 0U);
+static_assert(
+  offsetof(CompletedLightGridBuild, status) == alignof(LightGridBuildStatus));
+static_assert(sizeof(CompletedLightGridBuild)
+  == sizeof(LightGridBuildStatus) + alignof(LightGridBuildStatus));
 
 //! Retained current-view products for explicit diagnostics/readback.
 struct LightGridResources {

@@ -4,31 +4,65 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <Windows.h> // IWYU pragma: keep
+
 #include <algorithm>
+#include <array>
+#include <cstddef>
 #include <cstdint>
+#include <exception>
+#include <filesystem>
+#include <functional>
 #include <limits>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
 
+#include <combaseapi.h>
 #include <d3d12.h>
+#include <dxgiformat.h>
+#include <minwindef.h>
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 #include <winerror.h>
 #include <winnt.h>
+#include <wrl/client.h>
 
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Windows/ComError.h>
+#include <Oxygen/Composition/Component.h>
+#include <Oxygen/Composition/ComponentMacros.h>
+#include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Config/GraphicsConfig.h>
-#include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
+#include <Oxygen/Config/PathFinderConfig.h>
+#include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
 #include <Oxygen/Core/Types/ByteUnits.h>
 #include <Oxygen/Graphics/Common/AllocationBudget.h>
 #include <Oxygen/Graphics/Common/AllocationBudgetTag.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
 #include <Oxygen/Graphics/Common/BackendObject.h>
-#include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
+#include <Oxygen/Graphics/Common/Buffer.h>
+#include <Oxygen/Graphics/Common/CommandList.h>
+#include <Oxygen/Graphics/Common/CommandQueue.h>
+#include <Oxygen/Graphics/Common/CommandRecorder.h>
+#include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/FrameCaptureController.h>
+#include <Oxygen/Graphics/Common/ImGui/ImGuiGraphicsBackend.h>
+#include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
+#include <Oxygen/Graphics/Common/Queues.h>
+#include <Oxygen/Graphics/Common/ReadbackManager.h>
+#include <Oxygen/Graphics/Common/Shaders.h>
+#include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/TimestampQueryProvider.h>
+#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Graphics/Direct3D12/Allocator/D3D12MemAlloc.h>
 #include <Oxygen/Graphics/Direct3D12/Bindless/D3D12HeapAllocationStrategy.h>
@@ -38,6 +72,7 @@
 #include <Oxygen/Graphics/Direct3D12/CommandQueue.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/CompositionSurface.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/PipelineStateCache.h>
+#include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/WindowSurface.h>
 #include <Oxygen/Graphics/Direct3D12/Devices/DeviceManager.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
@@ -50,13 +85,13 @@
 #include <Oxygen/Graphics/Direct3D12/Shaders/EngineShaders.h>
 #include <Oxygen/Graphics/Direct3D12/Texture.h>
 #include <Oxygen/Graphics/Direct3D12/TimestampQueryBackend.h>
+#include <Oxygen/Platform/Window.h>
 
 //===----------------------------------------------------------------------===//
 // Internal implementation of the graphics backend module API.
 //===----------------------------------------------------------------------===//
 
 namespace {
-namespace bindless_d3d12 = oxygen::bindless::generated::d3d12;
 
 template <typename TDesc>
 auto ResolveIndirectRootParameterIndex(const TDesc& pipeline_desc,
@@ -138,27 +173,27 @@ auto ParseFrameCaptureConfig(const nlohmann::json& json_config)
     return config;
   }
 
-  const auto& frame_capture = json_config["frame_capture"];
+  const auto& frame_capture = json_config.at("frame_capture");
   if (frame_capture.contains("provider")) {
-    config.provider
-      = ParseFrameCaptureProvider(frame_capture["provider"].get<std::string>());
+    config.provider = ParseFrameCaptureProvider(
+      frame_capture.at("provider").get<std::string>());
   }
   if (frame_capture.contains("init_mode")) {
     config.init_mode = ParseFrameCaptureInitMode(
-      frame_capture["init_mode"].get<std::string>());
+      frame_capture.at("init_mode").get<std::string>());
   }
   if (frame_capture.contains("from_frame")) {
-    config.from_frame = frame_capture["from_frame"].get<uint64_t>();
+    config.from_frame = frame_capture.at("from_frame").get<uint64_t>();
   }
   if (frame_capture.contains("frame_count")) {
-    config.frame_count = frame_capture["frame_count"].get<uint32_t>();
+    config.frame_count = frame_capture.at("frame_count").get<uint32_t>();
   }
   if (frame_capture.contains("module_path")) {
-    config.module_path = frame_capture["module_path"].get<std::string>();
+    config.module_path = frame_capture.at("module_path").get<std::string>();
   }
   if (frame_capture.contains("capture_file_template")) {
     config.capture_file_template
-      = frame_capture["capture_file_template"].get<std::string>();
+      = frame_capture.at("capture_file_template").get<std::string>();
   }
   return config;
 }
@@ -175,15 +210,12 @@ auto CreateBackend(const oxygen::SerializedBackendConfig& config,
   auto& backend = GetBackendInternal();
   if (!backend) {
     try {
-      auto* instance
-        = new oxygen::graphics::d3d12::Graphics(config, path_finder_config);
+      auto instance = std::make_unique<oxygen::graphics::d3d12::Graphics>(
+        config, path_finder_config);
+      auto lifetime = instance->GetBackendLifetime();
       backend = std::static_pointer_cast<oxygen::graphics::d3d12::Graphics>(
         oxygen::graphics::AdoptBackendObject(
-          static_cast<oxygen::Graphics*>(instance),
-          [](void* object) noexcept {
-            delete static_cast<oxygen::Graphics*>(object);
-          },
-          instance->GetBackendLifetime()));
+          std::move(instance), std::move(lifetime)));
     } catch (const std::exception& ex) {
       LOG_F(ERROR, "Failed to create D3D12 backend: {}", ex.what());
       backend.reset();
@@ -258,12 +290,22 @@ protected:
     using oxygen::graphics::d3d12::DescriptorAllocator;
     using oxygen::graphics::d3d12::DeviceManager;
 
-    const auto& dm = static_cast<DeviceManager&>(
-      get_component(DeviceManager::ClassTypeId()));
-    auto* device = dm.Device();
-    DCHECK_NOTNULL_F(device, "DeviceManager not properly initialized");
-    allocator_ = std::make_shared<DescriptorAllocator>(
-      std::make_shared<D3D12HeapAllocationStrategy>(device), device);
+    oxygen::graphics::d3d12::dx::IDevice* device {};
+    try {
+      // OXYGEN_COMPONENT_REQUIRES guarantees this dependency's exact type;
+      // engine RTTI is disabled.
+      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
+      const auto& dm = static_cast<DeviceManager&>(
+        get_component(DeviceManager::ClassTypeId()));
+      device = dm.Device();
+      DCHECK_NOTNULL_F(device, "DeviceManager not properly initialized");
+      allocator_ = std::make_shared<DescriptorAllocator>(
+        std::make_shared<D3D12HeapAllocationStrategy>(device), device);
+
+    } catch (...) {
+      // Lookup/allocation failures cannot cross Component's noexcept hook.
+      std::terminate();
+    }
 
     // Ensure shader-visible heaps (CBV_SRV_UAV and SAMPLER) exist up-front.
     // Some pipelines expect directly-indexed sampler/srv heaps at pipeline
@@ -295,23 +337,18 @@ protected:
           oxygen::bindless::generated::kSamplersDomain,
           ResourceViewType::kSampler);
         if (default_sampler_.IsValid()) {
-          D3D12_SAMPLER_DESC sampler_desc {};
-          sampler_desc.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
-          sampler_desc.AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
-          sampler_desc.AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
-          sampler_desc.AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
-          sampler_desc.MipLODBias = 0.0f;
-          sampler_desc.MaxAnisotropy = 1;
-          // ComparisonFunc is only used with D3D12_FILTER_COMPARISON_*.
-          // Keep it as NEVER for non-comparison filters to avoid the DX12
-          // debug-layer warning CREATE_SAMPLER_COMPARISON_FUNC_IGNORED.
-          sampler_desc.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
-          sampler_desc.BorderColor[0] = 0.0f;
-          sampler_desc.BorderColor[1] = 0.0f;
-          sampler_desc.BorderColor[2] = 0.0f;
-          sampler_desc.BorderColor[3] = 0.0f;
-          sampler_desc.MinLOD = 0.0f;
-          sampler_desc.MaxLOD = D3D12_FLOAT32_MAX;
+          const auto sampler_desc = D3D12_SAMPLER_DESC {
+            .Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR,
+            .AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
+            .AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
+            .AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
+            .MipLODBias = 0.0F,
+            .MaxAnisotropy = 1,
+            .ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER,
+            .BorderColor = { 0.0F, 0.0F, 0.0F, 0.0F },
+            .MinLOD = 0.0F,
+            .MaxLOD = D3D12_FLOAT32_MAX,
+          };
 
           device->CreateSampler(
             &sampler_desc, allocator_->GetCpuHandle(default_sampler_));
@@ -325,21 +362,18 @@ protected:
           oxygen::bindless::generated::kSamplersDomain,
           ResourceViewType::kSampler);
         if (shadow_comparison_sampler_.IsValid()) {
-          D3D12_SAMPLER_DESC sampler_desc {};
-          sampler_desc.Filter
-            = D3D12_FILTER_COMPARISON_MIN_MAG_LINEAR_MIP_POINT;
-          sampler_desc.AddressU = D3D12_TEXTURE_ADDRESS_MODE_BORDER;
-          sampler_desc.AddressV = D3D12_TEXTURE_ADDRESS_MODE_BORDER;
-          sampler_desc.AddressW = D3D12_TEXTURE_ADDRESS_MODE_BORDER;
-          sampler_desc.MipLODBias = 0.0f;
-          sampler_desc.MaxAnisotropy = 1;
-          sampler_desc.ComparisonFunc = D3D12_COMPARISON_FUNC_GREATER_EQUAL;
-          sampler_desc.BorderColor[0] = 0.0f;
-          sampler_desc.BorderColor[1] = 0.0f;
-          sampler_desc.BorderColor[2] = 0.0f;
-          sampler_desc.BorderColor[3] = 0.0f;
-          sampler_desc.MinLOD = 0.0f;
-          sampler_desc.MaxLOD = D3D12_FLOAT32_MAX;
+          const auto sampler_desc = D3D12_SAMPLER_DESC {
+            .Filter = D3D12_FILTER_COMPARISON_MIN_MAG_LINEAR_MIP_POINT,
+            .AddressU = D3D12_TEXTURE_ADDRESS_MODE_BORDER,
+            .AddressV = D3D12_TEXTURE_ADDRESS_MODE_BORDER,
+            .AddressW = D3D12_TEXTURE_ADDRESS_MODE_BORDER,
+            .MipLODBias = 0.0F,
+            .MaxAnisotropy = 1,
+            .ComparisonFunc = D3D12_COMPARISON_FUNC_GREATER_EQUAL,
+            .BorderColor = { 0.0F, 0.0F, 0.0F, 0.0F },
+            .MinLOD = 0.0F,
+            .MaxLOD = D3D12_FLOAT32_MAX,
+          };
 
           device->CreateSampler(&sampler_desc,
             allocator_->GetCpuHandle(shadow_comparison_sampler_));
@@ -353,20 +387,18 @@ protected:
           oxygen::bindless::generated::kSamplersDomain,
           ResourceViewType::kSampler);
         if (point_clamp_sampler_.IsValid()) {
-          D3D12_SAMPLER_DESC sampler_desc {};
-          sampler_desc.Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
-          sampler_desc.AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
-          sampler_desc.AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
-          sampler_desc.AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
-          sampler_desc.MipLODBias = 0.0f;
-          sampler_desc.MaxAnisotropy = 1;
-          sampler_desc.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
-          sampler_desc.BorderColor[0] = 0.0f;
-          sampler_desc.BorderColor[1] = 0.0f;
-          sampler_desc.BorderColor[2] = 0.0f;
-          sampler_desc.BorderColor[3] = 0.0f;
-          sampler_desc.MinLOD = 0.0f;
-          sampler_desc.MaxLOD = D3D12_FLOAT32_MAX;
+          const auto sampler_desc = D3D12_SAMPLER_DESC {
+            .Filter = D3D12_FILTER_MIN_MAG_MIP_POINT,
+            .AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
+            .AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
+            .AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
+            .MipLODBias = 0.0F,
+            .MaxAnisotropy = 1,
+            .ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER,
+            .BorderColor = { 0.0F, 0.0F, 0.0F, 0.0F },
+            .MinLOD = 0.0F,
+            .MaxLOD = D3D12_FLOAT32_MAX,
+          };
 
           device->CreateSampler(
             &sampler_desc, allocator_->GetCpuHandle(point_clamp_sampler_));
@@ -384,20 +416,18 @@ protected:
           // atmosphere LUT family. Clamp is critical here: transmittance and
           // camera-aerial LUTs are non-periodic, so wrap pulls energy from the
           // opposite edge and causes visible horizon artifacts.
-          D3D12_SAMPLER_DESC sampler_desc {};
-          sampler_desc.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
-          sampler_desc.AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
-          sampler_desc.AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
-          sampler_desc.AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
-          sampler_desc.MipLODBias = 0.0f;
-          sampler_desc.MaxAnisotropy = 1;
-          sampler_desc.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
-          sampler_desc.BorderColor[0] = 0.0f;
-          sampler_desc.BorderColor[1] = 0.0f;
-          sampler_desc.BorderColor[2] = 0.0f;
-          sampler_desc.BorderColor[3] = 0.0f;
-          sampler_desc.MinLOD = 0.0f;
-          sampler_desc.MaxLOD = D3D12_FLOAT32_MAX;
+          const auto sampler_desc = D3D12_SAMPLER_DESC {
+            .Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR,
+            .AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
+            .AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
+            .AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP,
+            .MipLODBias = 0.0F,
+            .MaxAnisotropy = 1,
+            .ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER,
+            .BorderColor = { 0.0F, 0.0F, 0.0F, 0.0F },
+            .MinLOD = 0.0F,
+            .MaxLOD = D3D12_FLOAT32_MAX,
+          };
 
           device->CreateSampler(
             &sampler_desc, allocator_->GetCpuHandle(linear_clamp_sampler_));
@@ -412,11 +442,11 @@ protected:
   }
 
 private:
-  std::shared_ptr<oxygen::graphics::d3d12::DescriptorAllocator> allocator_ {};
-  oxygen::graphics::DescriptorAllocationHandle default_sampler_ {};
-  oxygen::graphics::DescriptorAllocationHandle shadow_comparison_sampler_ {};
-  oxygen::graphics::DescriptorAllocationHandle point_clamp_sampler_ {};
-  oxygen::graphics::DescriptorAllocationHandle linear_clamp_sampler_ {};
+  std::shared_ptr<oxygen::graphics::d3d12::DescriptorAllocator> allocator_;
+  oxygen::graphics::DescriptorAllocationHandle default_sampler_;
+  oxygen::graphics::DescriptorAllocationHandle shadow_comparison_sampler_;
+  oxygen::graphics::DescriptorAllocationHandle point_clamp_sampler_;
+  oxygen::graphics::DescriptorAllocationHandle linear_clamp_sampler_;
 };
 
 } // namespace
@@ -482,6 +512,11 @@ auto Graphics::GetAllocator() const -> D3D12MA::Allocator*
   return allocator;
 }
 
+Graphics::Graphics()
+  : Base("Dummy Graphics Backend")
+{
+}
+
 Graphics::~Graphics() { Close(); }
 
 Graphics::Graphics(const SerializedBackendConfig& config,
@@ -492,24 +527,23 @@ Graphics::Graphics(const SerializedBackendConfig& config,
 
   // Parse JSON configuration
   nlohmann::json jsonConfig
-    = nlohmann::json::parse(config.json_data, config.json_data + config.size);
+    = nlohmann::json::parse(std::string_view(config.json_data, config.size));
 
   oxygen::PathFinderConfig parsed_path_finder_config {};
   if (path_finder_config.json_data != nullptr && path_finder_config.size > 0U) {
-    const auto path_finder_json
-      = nlohmann::json::parse(path_finder_config.json_data,
-        path_finder_config.json_data + path_finder_config.size);
+    const auto path_finder_json = nlohmann::json::parse(
+      std::string_view(path_finder_config.json_data, path_finder_config.size));
     std::filesystem::path workspace_root;
     std::filesystem::path shader_library;
     std::filesystem::path cvars_archive;
 
     if (path_finder_json.contains("workspace_root_path")) {
       workspace_root
-        = path_finder_json["workspace_root_path"].get<std::string>();
+        = path_finder_json.at("workspace_root_path").get<std::string>();
     }
     if (path_finder_json.contains("shader_library_path")) {
       shader_library
-        = path_finder_json["shader_library_path"].get<std::string>();
+        = path_finder_json.at("shader_library_path").get<std::string>();
     }
 
     if (!workspace_root.empty() || !shader_library.empty()
@@ -530,18 +564,18 @@ Graphics::Graphics(const SerializedBackendConfig& config,
   DeviceManagerDesc desc {};
   const auto frame_capture_config = ParseFrameCaptureConfig(jsonConfig);
   if (jsonConfig.contains("enable_debug_layer")) {
-    desc.enable_debug_layer = jsonConfig["enable_debug_layer"].get<bool>();
+    desc.enable_debug_layer = jsonConfig.at("enable_debug_layer").get<bool>();
   } else if (jsonConfig.contains("enable_debug")) {
-    desc.enable_debug_layer = jsonConfig["enable_debug"].get<bool>();
+    desc.enable_debug_layer = jsonConfig.at("enable_debug").get<bool>();
     LOG_F(WARNING,
       "D3D12 Graphics: legacy serialized key 'enable_debug' detected; "
       "treating it as 'enable_debug_layer'");
   }
   if (jsonConfig.contains("enable_validation")) {
-    desc.enable_validation = jsonConfig["enable_validation"].get<bool>();
+    desc.enable_validation = jsonConfig.at("enable_validation").get<bool>();
   }
   if (jsonConfig.contains("enable_aftermath")) {
-    desc.enable_aftermath = jsonConfig["enable_aftermath"].get<bool>();
+    desc.enable_aftermath = jsonConfig.at("enable_aftermath").get<bool>();
   }
   if (!oxygen::AreGraphicsToolingOptionsMutuallyExclusive(
         desc.enable_debug_layer, desc.enable_aftermath)) {
@@ -560,7 +594,7 @@ Graphics::Graphics(const SerializedBackendConfig& config,
     static_cast<int>(frame_capture_config.provider));
   desc.frame_capture = frame_capture_config;
   if (jsonConfig.contains("enable_vsync")) {
-    enable_vsync_ = jsonConfig["enable_vsync"].get<bool>();
+    enable_vsync_ = jsonConfig.at("enable_vsync").get<bool>();
   }
   AddComponent<DeviceManager>(desc);
   if (frame_capture_config.provider
@@ -570,7 +604,7 @@ Graphics::Graphics(const SerializedBackendConfig& config,
   } else if (frame_capture_config.provider
     == oxygen::FrameCaptureProvider::kPix) {
     frame_capture_controller_
-      = CreatePixFrameCaptureController(*this, frame_capture_config);
+      = CreatePixFrameCaptureController(frame_capture_config);
   }
   AddComponent<EngineShaders>(std::move(parsed_path_finder_config));
   AddComponent<DescriptorAllocatorComponent>();
@@ -583,8 +617,10 @@ Graphics::Graphics(const SerializedBackendConfig& config,
   native_lifetime_
     = std::static_pointer_cast<NativeLifetime>(AdoptBackendObject(
       native.release(),
-      [](
-        void* object) noexcept { delete static_cast<NativeLifetime*>(object); },
+      [](void* object) noexcept -> void {
+        const auto owner = std::unique_ptr<NativeLifetime>(
+          static_cast<NativeLifetime*>(object));
+      },
       GetBackendLifetime()));
   SetNativeLifetimeToken(native_lifetime_);
   AddComponent<detail::PipelineStateCache>(this);
@@ -627,20 +663,22 @@ auto Graphics::CreateCommandRecorder(
 auto Graphics::GetFormatPlaneCount(DXGI_FORMAT format) const -> uint8_t
 {
   uint8_t& plane_count = dxgi_format_plane_count_cache_[format];
+  constexpr auto kUnsupportedPlaneCount = std::numeric_limits<uint8_t>::max();
   if (plane_count == 0) {
-    D3D12_FEATURE_DATA_FORMAT_INFO format_info = { format, 1 };
+    D3D12_FEATURE_DATA_FORMAT_INFO format_info
+      = { .Format = format, .PlaneCount = 1 };
     if (FAILED(GetCurrentDevice()->CheckFeatureSupport(
           D3D12_FEATURE_FORMAT_INFO, &format_info, sizeof(format_info)))) {
       // Format is not supported - store a special value in the cache to avoid
       // querying later
-      plane_count = 255;
+      plane_count = kUnsupportedPlaneCount;
     } else {
       // Format supported - store the plane count in the cache
       plane_count = format_info.PlaneCount;
     }
   }
 
-  if (plane_count == 255) {
+  if (plane_count == kUnsupportedPlaneCount) {
     return 0;
   }
 
@@ -654,6 +692,8 @@ auto Graphics::GetOrCreateIndirectCommandSignature(
 {
   detail::IndirectCommandSignatureKey key {
     .kind = command_desc.kind,
+    .inline_root_constants = std::nullopt,
+    .root_signature = nullptr,
   };
 
   if (command_desc.push_constants.has_value()) {
@@ -666,8 +706,8 @@ auto Graphics::GetOrCreateIndirectCommandSignature(
                                "require a bound pipeline state");
     }
 
-    auto& cache = GetComponent<detail::PipelineStateCache>();
-    const auto root_parameter_index = [&]() -> std::uint32_t {
+    const auto& cache = GetComponent<detail::PipelineStateCache>();
+    const auto root_parameter_index = [&] -> std::uint32_t {
       switch (command_desc.kind) {
       case graphics::CommandRecorder::IndirectCommandKind::kDraw:
         return ResolveIndirectRootParameterIndex(
@@ -695,29 +735,29 @@ auto Graphics::GetOrCreateIndirectCommandSignature(
     return it->second.Get();
   }
 
-  D3D12_INDIRECT_ARGUMENT_DESC args[2] {};
+  auto args = std::array<D3D12_INDIRECT_ARGUMENT_DESC, 2> {};
   UINT arg_count = 0U;
   UINT byte_stride = 0U;
 
   if (key.inline_root_constants.has_value()) {
     const auto& constants = *key.inline_root_constants;
-    args[arg_count].Type = D3D12_INDIRECT_ARGUMENT_TYPE_CONSTANT;
-    args[arg_count].Constant.RootParameterIndex
+    args.at(arg_count).Type = D3D12_INDIRECT_ARGUMENT_TYPE_CONSTANT;
+    args.at(arg_count).Constant.RootParameterIndex
       = constants.root_parameter_index;
-    args[arg_count].Constant.DestOffsetIn32BitValues
+    args.at(arg_count).Constant.DestOffsetIn32BitValues
       = constants.dest_offset_in_32bit_values;
-    args[arg_count].Constant.Num32BitValuesToSet = constants.value_count;
+    args.at(arg_count).Constant.Num32BitValuesToSet = constants.value_count;
     ++arg_count;
     byte_stride += sizeof(std::uint32_t) * constants.value_count;
   }
 
   switch (key.kind) {
   case graphics::CommandRecorder::IndirectCommandKind::kDraw:
-    args[arg_count].Type = D3D12_INDIRECT_ARGUMENT_TYPE_DRAW;
+    args.at(arg_count).Type = D3D12_INDIRECT_ARGUMENT_TYPE_DRAW;
     byte_stride += sizeof(D3D12_DRAW_ARGUMENTS);
     break;
   case graphics::CommandRecorder::IndirectCommandKind::kDispatch:
-    args[arg_count].Type = D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH;
+    args.at(arg_count).Type = D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH;
     byte_stride += sizeof(D3D12_DISPATCH_ARGUMENTS);
     break;
   }
@@ -726,7 +766,7 @@ auto Graphics::GetOrCreateIndirectCommandSignature(
   D3D12_COMMAND_SIGNATURE_DESC desc {};
   desc.ByteStride = byte_stride;
   desc.NumArgumentDescs = arg_count;
-  desc.pArgumentDescs = args;
+  desc.pArgumentDescs = args.data();
   desc.NodeMask = 0U;
 
   Microsoft::WRL::ComPtr<ID3D12CommandSignature> signature;
@@ -760,11 +800,11 @@ auto Graphics::CreateSurface(std::weak_ptr<platform::Window> window_weak,
       "Failed to create D3D12 window surface swap chain");
   }
   // Implicit upcast: unique_ptr<WindowSurface> → unique_ptr<Surface>
-  return std::unique_ptr<Surface>(std::move(surface));
+  return { std::move(surface) };
 }
 
 auto Graphics::CreateSurfaceFromNative(void* /*native_handle*/,
-  const observer_ptr<graphics::CommandQueue> command_queue) const
+  const observer_ptr<graphics::CommandQueue> command_queue)
   -> std::shared_ptr<Surface>
 {
   const auto admission = GetBackendLifetime()->AcquireOperation();
@@ -779,7 +819,7 @@ auto Graphics::CreateSurfaceFromNative(void* /*native_handle*/,
   // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
   const auto* queue = static_cast<CommandQueue*>(command_queue.get());
   const auto surface = std::make_shared<detail::CompositionSurface>(
-    queue->GetCommandQueue(), const_cast<Graphics*>(this));
+    queue->GetCommandQueue(), this);
   if (!surface->GetComponent<detail::CompositionSwapChain>().IsValid()) {
     throw std::runtime_error(
       "Failed to create D3D12 composition surface swap chain");
@@ -909,11 +949,7 @@ auto Graphics::CreateTexture(const TextureDesc& desc) const
 {
   const auto admission = GetBackendLifetime()->AcquireOperation();
   return AdoptBackendObject(
-    static_cast<graphics::Texture*>(new Texture(desc, this)),
-    [](void* object) noexcept {
-      delete static_cast<graphics::Texture*>(object);
-    },
-    GetNativeLifetimeToken());
+    std::make_unique<Texture>(desc, this), GetNativeLifetimeToken());
 }
 
 auto Graphics::CreateTextureFromNativeObject(const TextureDesc& desc,
@@ -921,11 +957,7 @@ auto Graphics::CreateTextureFromNativeObject(const TextureDesc& desc,
 {
   const auto admission = GetBackendLifetime()->AcquireOperation();
   return AdoptBackendObject(
-    static_cast<graphics::Texture*>(new Texture(desc, native, this)),
-    [](void* object) noexcept {
-      delete static_cast<graphics::Texture*>(object);
-    },
-    GetNativeLifetimeToken());
+    std::make_unique<Texture>(desc, native, this), GetNativeLifetimeToken());
 }
 
 auto Graphics::CreateBuffer(const BufferDesc& desc) const
@@ -933,10 +965,7 @@ auto Graphics::CreateBuffer(const BufferDesc& desc) const
 {
   const auto admission = GetBackendLifetime()->AcquireOperation();
   return AdoptBackendObject(
-    static_cast<graphics::Buffer*>(new Buffer(desc, this)),
-    [](
-      void* object) noexcept { delete static_cast<graphics::Buffer*>(object); },
-    GetNativeLifetimeToken());
+    std::make_unique<Buffer>(desc, this), GetNativeLifetimeToken());
 }
 
 auto Graphics::GetOrCreateGraphicsPipeline(GraphicsPipelineDesc desc,

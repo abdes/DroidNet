@@ -111,12 +111,14 @@ public:
   {
     return std::visit(
       Overloads {
-        [](const BufferBarrierDesc& desc) { return desc.before; },
-        [](const TextureBarrierDesc& desc) { return desc.before; },
-        [](const MemoryBarrierDesc&) {
+        [](const BufferBarrierDesc& desc) -> ResourceStates {
+          return desc.before;
+        },
+        [](const TextureBarrierDesc& desc) -> ResourceStates {
+          return desc.before;
+        },
+        [](const MemoryBarrierDesc&) -> ResourceStates {
           ABORT_F("Invalid use of GetStateBefore() for MemoryBarrierDesc");
-          // ReSharper disable once CppDFAUnreachableCode
-          return ResourceStates::kUnknown; // Unreachable
         },
       },
       descriptor_);
@@ -126,12 +128,14 @@ public:
   {
     return std::visit(
       Overloads {
-        [](const BufferBarrierDesc& desc) { return desc.after; },
-        [](const TextureBarrierDesc& desc) { return desc.after; },
-        [](const MemoryBarrierDesc&) {
+        [](const BufferBarrierDesc& desc) -> ResourceStates {
+          return desc.after;
+        },
+        [](const TextureBarrierDesc& desc) -> ResourceStates {
+          return desc.after;
+        },
+        [](const MemoryBarrierDesc&) -> ResourceStates {
           ABORT_F("Invalid use of GetStateAfter() for MemoryBarrierDesc");
-          // ReSharper disable once CppDFAUnreachableCode
-          return ResourceStates::kUnknown; // Unreachable
         },
       },
       descriptor_);
@@ -146,14 +150,14 @@ public:
   */
   auto UpdateStateAfter(ResourceStates state) -> void
   {
-    std::visit(Overloads {
-                 [state](BufferBarrierDesc& desc) { desc.after = state; },
-                 [state](TextureBarrierDesc& desc) { desc.after = state; },
-                 [](const MemoryBarrierDesc&) {
-                   ABORT_F(
-                     "Invalid use of UpdateStateAfter() for MemoryBarrierDesc");
-                 },
-               },
+    std::visit(
+      Overloads {
+        [state](BufferBarrierDesc& desc) -> void { desc.after = state; },
+        [state](TextureBarrierDesc& desc) -> void { desc.after = state; },
+        [](const MemoryBarrierDesc&) -> void {
+          ABORT_F("Invalid use of UpdateStateAfter() for MemoryBarrierDesc");
+        },
+      },
       descriptor_);
   }
 

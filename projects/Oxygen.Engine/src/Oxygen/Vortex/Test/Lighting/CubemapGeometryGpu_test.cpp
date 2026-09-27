@@ -185,8 +185,10 @@ NOLINT_TEST_F(LightingGpuAbiTest, CubemapGeometryFacesEdgesCornersAndAxisTies)
     EXPECT_NEAR(Float(result.at(offset + kUvWord + 1U)), inverse.uv.at(1),
       kCoordinateTolerance);
     const auto roundtrip = Direction(result.at(offset + 3U),
-      { Float(result.at(offset + kUvWord)),
-        Float(result.at(offset + kUvWord + 1U)) });
+      {
+        Float(result.at(offset + kUvWord)),
+        Float(result.at(offset + kUvWord + 1U)),
+      });
     EXPECT_NEAR(
       glm::dot(roundtrip, glm::normalize(source)), 1.0, kCoordinateTolerance);
     EXPECT_FLOAT_EQ(

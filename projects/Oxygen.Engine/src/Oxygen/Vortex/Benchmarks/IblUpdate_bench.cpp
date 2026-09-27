@@ -9,49 +9,79 @@
 #include <array>
 #include <chrono>
 #include <cmath>
-#include <cstdlib>
+#include <cstdint>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <ratio>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include <glm/geometric.hpp>
-#include <glm/vec3.hpp>
 #include <minwindef.h>
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 #include <processenv.h>
 #include <winerror.h>
 #include <winreg.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/ScopeGuard.h>
+#include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
+#include <Oxygen/Graphics/Common/Registration.h>
 #include <Oxygen/Graphics/Common/Texture.h>
-#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
+#include <Oxygen/Vortex/Diagnostics/DiagnosticsTypes.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereState.h>
 #include <Oxygen/Vortex/Environment/Internal/CapturedSkySource.h>
 #include <Oxygen/Vortex/Environment/Internal/IblGpuProcessor.h>
 #include <Oxygen/Vortex/Environment/Internal/IblProcessor.h>
 #include <Oxygen/Vortex/Environment/Types/IblProductMetadata.h>
+#include <Oxygen/Vortex/Environment/Types/SkyLightEnvironmentModel.h>
+#include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestGraphics.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestTags.h>
+#include <Oxygen/Vortex/Types/EnvironmentStaticData.h>
+#include <Oxygen/Vortex/Upload/Types.h>
 #include <Oxygen/Vortex/Upload/UploadPlanner.h>
 #include <Oxygen/Vortex/Upload/UploadPolicy.h>
 
 namespace oxygen::vortex::testing::exposure {
 namespace {
+  constexpr auto kCubeFaceCount = 6U;
+  constexpr auto kFramesPerSecond = 60U;
+  constexpr auto kScheduledScopeCapacity = 1024U;
+  constexpr auto kImmediateScopeCapacity = 128U;
+  constexpr auto kSecondaryIlluminance
+    = glm::vec3 { 1000.0F, 2000.0F, 4000.0F };
+  constexpr auto kPrimaryIlluminanceLux = 120000.0F;
+  constexpr auto kFogDensity = 0.01F;
+  constexpr auto kFogHeightFalloff = 0.001F;
+  constexpr auto kFogLuminance = glm::vec3 { 0.2F, 0.3F, 0.4F };
+  constexpr auto kInitialSunAngle = 0.2F;
+  constexpr auto kSunAngularStep = 0.0003F;
+  constexpr auto kSpecifiedBase = std::array { 0.2F, 0.3F, 0.5F };
+  constexpr auto kSpecifiedGradient = std::array { 0.6F, 0.3F, 0.01F };
+
   [[nodiscard]] auto ReadEnvironmentVariable(const wchar_t* name)
     -> std::wstring
   {
@@ -80,40 +110,57 @@ namespace {
     {
       using graphics::ResourceStates;
       using Pixel = std::array<float, 4>;
-      auto texture = Backend().CreateTexture({ .width = size,
+      auto texture = Backend().CreateTexture({
+        .width = size,
         .height = size,
-        .array_size = 6U,
+        .array_size = kCubeFaceCount,
         .format = Format::kRGBA32Float,
         .texture_type = TextureType::kTextureCube,
         .debug_name = "IBL.ScalingSource",
         .is_shader_resource = true,
-        .initial_state = ResourceStates::kCommon });
+        .initial_state = ResourceStates::kCommon,
+      });
       CHECK_NOTNULL_F(texture.get());
       auto registration
         = Backend().GetResourceRegistry().RegisterManaged(texture);
       CHECK_F(registration.has_value());
-      auto subresources = std::array<upload::UploadSubresource, 6> {};
-      for (auto face = 0U; face < 6U; ++face)
-        subresources[face].array_slice = face;
+      auto subresources
+        = std::array<upload::UploadSubresource, kCubeFaceCount> {};
+      for (auto face = 0U; face < kCubeFaceCount; ++face) {
+        subresources.at(face).array_slice = face;
+      }
       const auto plan = upload::UploadPlanner::PlanTexture2D({ .dst = texture },
         subresources, upload::UploadPolicy { QueueKeyFor() });
       CHECK_F(plan.has_value());
-      auto staging = CreateRegisteredBuffer({ .size_bytes = plan->total_bytes,
+      auto staging = CreateRegisteredBuffer({
+        .size_bytes = plan->total_bytes,
         .memory = graphics::BufferMemory::kUpload,
-        .debug_name = "IBL.ScalingUpload" });
+        .debug_name = "IBL.ScalingUpload",
+      });
       auto row = std::vector<Pixel>(size);
-      for (auto face = 0U; face < 6U; ++face) {
-        const auto& region = plan->regions[face];
+      for (auto face = 0U; face < kCubeFaceCount; ++face) {
+        const auto& region = plan->regions.at(face);
         for (auto y = 0U; y < size; ++y) {
-          for (auto x = 0U; x < size; ++x)
-            row[x] = { 0.2F + 0.6F * x / size, 0.3F + 0.3F * y / size,
-              0.5F + 0.01F * face, 1.0F };
+          for (auto x = 0U; x < size; ++x) {
+            row.at(x) = {
+              kSpecifiedBase.at(0)
+                + ((kSpecifiedGradient.at(0) * static_cast<float>(x))
+                  / static_cast<float>(size)),
+              kSpecifiedBase.at(1)
+                + ((kSpecifiedGradient.at(1) * static_cast<float>(y))
+                  / static_cast<float>(size)),
+              kSpecifiedBase.at(2)
+                + (kSpecifiedGradient.at(2) * static_cast<float>(face)),
+              1.0F,
+            };
+          }
           staging->Update(row.data(), row.size() * sizeof(Pixel),
-            region.buffer_offset + std::uint64_t(y) * region.buffer_row_pitch);
+            region.buffer_offset
+              + (static_cast<std::uint64_t>(y) * region.buffer_row_pitch));
         }
       }
       SubmitCommands(
-        "IBL scaling upload", [&](graphics::CommandRecorder& recorder) {
+        "IBL scaling upload", [&](graphics::CommandRecorder& recorder) -> void {
           CHECK_F(static_cast<bool>(recorder.RetainRegistration(
             Backend().GetResourceRegistry(), *registration)));
           EnsureTracked(recorder, staging, ResourceStates::kGenericRead);
@@ -121,12 +168,13 @@ namespace {
             *texture, ResourceStates::kCommon);
           recorder.RequireResourceState(*texture, ResourceStates::kCopyDest);
           recorder.FlushBarriers();
-          for (const auto& region : plan->regions)
+          for (const auto& region : plan->regions) {
             recorder.CopyBufferToTexture(*staging, region, *texture);
+          }
           recorder.RequireResourceStateFinal(
             *texture, ResourceStates::kShaderResource);
         });
-      return { texture, std::move(*registration) };
+      return { .texture = texture, .registration = std::move(*registration) };
     }
     auto SetUp() -> void override
     {
@@ -141,10 +189,10 @@ namespace {
           | RendererCapabilityFamily::kDiagnosticsAndProfiling);
     }
 
-    auto BackendConfigJson() const -> std::string override
+    [[nodiscard]] auto BackendConfigJson() const -> std::string override
     {
       auto config = nlohmann::json::parse(ExposureGpuTest::BackendConfigJson());
-      config["enable_debug_layer"] = false;
+      config.at("enable_debug_layer") = false;
       return config.dump();
     }
   };
@@ -208,18 +256,20 @@ namespace {
     });
     const bool specified = specified_face_size != 0U;
     FailureBackend().SetRecorderNameCollectionEnabled(false);
-    if (specified)
+    if (specified) {
       FailureBackend().track_resources = true;
+    }
     auto memory = nlohmann::json::array();
     auto& diagnostics = renderer_->GetDiagnosticsService();
     diagnostics.SetEnabledFeatures(DiagnosticsFeature::kGpuTimeline);
-    diagnostics.SetGpuTimelineMaxScopesPerFrame(scheduled ? 1024U : 128U);
+    diagnostics.SetGpuTimelineMaxScopesPerFrame(
+      scheduled ? kScheduledScopeCapacity : kImmediateScopeCapacity);
     diagnostics.SetGpuTimelineRetainLatestFrame(false);
     diagnostics.SetGpuTimelineEnabled(true);
     const auto verbosity = loguru::g_global_verbosity;
     loguru::g_global_verbosity = loguru::Verbosity_WARNING;
-    const auto restore
-      = ScopeGuard([&] noexcept { loguru::g_global_verbosity = verbosity; });
+    const auto restore = ScopeGuard(
+      [&] noexcept -> void { loguru::g_global_verbosity = verbosity; });
     namespace env = environment::internal;
     auto source = env::CapturedSkySource(*renderer_);
     auto processor = env::IblGpuProcessor(*renderer_);
@@ -244,26 +294,26 @@ namespace {
     state.view_products.sky_light.source
       = environment::kSkyLightSourceCapturedScene;
     if (scheduled) {
-      auto& secondary = state.view_products.atmosphere_lights[1];
+      auto& secondary = state.view_products.atmosphere_lights.at(1);
       secondary.enabled = true;
-      secondary.illuminance_rgb_lux = { 1000, 2000, 4000 };
+      secondary.illuminance_rgb_lux = kSecondaryIlluminance;
       secondary.disk_luminance_scale_rgb = glm::vec3(1.0F);
       state.view_products.height_fog.enabled = true;
-      state.view_products.height_fog.fog_density = 0.01F;
-      state.view_products.height_fog.fog_height_falloff = 0.001F;
-      state.view_products.height_fog.fog_inscattering_luminance
-        = { 0.2F, 0.3F, 0.4F };
+      state.view_products.height_fog.fog_density = kFogDensity;
+      state.view_products.height_fog.fog_height_falloff = kFogHeightFalloff;
+      state.view_products.height_fog.fog_inscattering_luminance = kFogLuminance;
     }
-    auto& light = state.view_products.atmosphere_lights[0];
+    auto& light = state.view_products.atmosphere_lights.at(0);
     light.enabled = true;
-    light.illuminance_rgb_lux = glm::vec3(120000.0F);
+    light.illuminance_rgb_lux = glm::vec3(kPrimaryIlluminanceLux);
     light.disk_luminance_scale_rgb = glm::vec3(1.0F);
     GpuFogParams fog {};
     fog.flags = kGpuFogFlagEnabled | kGpuFogFlagHeightFogEnabled
       | kGpuFogFlagVisibleInRealTimeSkyCaptures;
-    fog.primary_density = 0.01F;
-    fog.primary_height_falloff = 0.001F;
-    fog.fog_inscattering_luminance_rgb = { 0.2F, 0.3F, 0.4F };
+    fog.primary_density = kFogDensity;
+    fog.primary_height_falloff = kFogHeightFalloff;
+    fog.fog_inscattering_luminance_rgb
+      = { kFogLuminance.r, kFogLuminance.g, kFogLuminance.b };
     auto frame = engine::FrameContext {};
     constexpr unsigned warmup = 120U;
     constexpr unsigned samples = 1800U;
@@ -284,8 +334,9 @@ namespace {
         sequence, engine::internal::EngineTagFactory::Get());
       frame.SetFrameSlot(slot, engine::internal::EngineTagFactory::Get());
       renderer_->OnFrameStart(observer_ptr { &frame });
-      if (scheduler)
+      if (scheduler) {
         static_cast<void>(scheduler->OnFrameStart(sequence));
+      }
       if (index == 0U && scheduled) {
         ASSERT_TRUE(diagnostics.RequestGpuTimelineRecording(
           directory / "first-use-gpu.json", 1U));
@@ -297,14 +348,16 @@ namespace {
       ctx_.frame_sequence = sequence;
       ctx_.frame_slot = slot;
       ctx_.current_view.view_id = kInvalidViewId;
-      const float angle = 0.2F + float(index) * 0.0003F;
+      const float angle
+        = kInitialSunAngle + (static_cast<float>(index) * kSunAngularStep);
       light.direction_to_light_ws
         = glm::normalize(glm::vec3(std::cos(angle), 0.0F, std::sin(angle)));
       state.light_revision = index + 1U;
-      if (authoring)
+      if (authoring) {
         state.authoring_revision = index + 1U;
+      }
       if (scheduled) {
-        state.view_products.atmosphere_lights[1].direction_to_light_ws
+        state.view_products.atmosphere_lights.at(1).direction_to_light_ws
           = -light.direction_to_light_ws;
         source_frames.emplace(env::HashSkyCaptureInputs(state), index + 1U);
       }
@@ -328,8 +381,10 @@ namespace {
         }
       } else if (specified) {
         auto next = processor.Process(cube.texture, cube.registration, brdf,
-          { .face_size = specified_face_size,
-            .lower_hemisphere_solid_color = false },
+          {
+            .face_size = specified_face_size,
+            .lower_hemisphere_solid_color = false,
+          },
           index + 1U);
         ASSERT_TRUE(next.has_value()) << static_cast<int>(next.error());
         published = std::move(*next);
@@ -343,11 +398,7 @@ namespace {
         = std::chrono::duration<double, std::milli>(Clock::now() - begin)
             .count();
       auto loop = co::testing::TestEventLoop {};
-      // Run completes before the closure leaves scope. The normal compositing
-      // tail resolves GPU timestamps even when no surface is being rendered.
-      // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
-      co::Run(
-        loop, [&]() -> co::Co<void> { co_await renderer_->OnCompositing({}); });
+      co::Run(loop, renderer_->OnCompositing({}));
       renderer_->OnFrameEnd(observer_ptr { &frame });
       Backend().EndFrame(sequence, slot);
       if (index == 0U) {
@@ -358,27 +409,32 @@ namespace {
       }
       if (index >= warmup && index < warmup + samples) {
         cpu << index + 1U << ',' << elapsed << ',';
-        if (scheduled)
+        if (scheduled) {
           cpu << published->revision << ',' << source_age << ','
               << completion_frames << ',' << scheduler->GetTimingSampleCount()
               << '\n';
-        else {
+        } else {
           const auto stats = processor.GetStats();
           cpu << stats.storage_creations << ',' << stats.allocated << '\n';
         }
       }
       if (specified
         && (index + 1U == warmup || index + 1U == warmup + samples)) {
-        memory.push_back({ { "frame_seq", index + 1U },
+        memory.push_back({
+          { "frame_seq", index + 1U },
           { "storage_creations", processor.GetStats().storage_creations },
           { "allocated_slots", processor.GetStats().allocated },
-          { "registered_resources",
-            Backend().GetResourceRegistry().GetRegisteredResourceCount() },
-          { "resources", FailureBackend().MeasureTrackedPlacement() } });
+          {
+            "registered_resources",
+            Backend().GetResourceRegistry().GetRegisteredResourceCount(),
+          },
+          { "resources", FailureBackend().MeasureTrackedPlacement() },
+        });
       }
       std::this_thread::sleep_until(paced_begin
         + std::chrono::duration_cast<Clock::duration>(
-          std::chrono::duration<double>(double(index + 1U) / 60.0)));
+          std::chrono::duration<double>(
+            static_cast<double>(index + 1U) / kFramesPerSecond)));
     }
     WaitForQueueIdle();
     auto input = std::ifstream(directory / "gpu.json");
@@ -391,20 +447,22 @@ namespace {
       unsigned process_scopes = 0;
       for (const auto& scope : sample.at("scopes")) {
         ASSERT_EQ(scope.at("valid"), true);
-        if (scope.at("name") == "Vortex.Environment.IBL.Process")
+        if (scope.at("name") == "Vortex.Environment.IBL.Process") {
           ++process_scopes;
+        }
       }
       if (scheduled) {
         EXPECT_GE(process_scopes, 1U);
         EXPECT_LE(process_scopes, 2U);
-      } else
+      } else {
         EXPECT_EQ(process_scopes, 1U);
+      }
     }
     if (specified) {
       auto readback
         = GetReadbackManager()->CreateBufferReadback("IBL scaling validity");
-      SubmitCommands(
-        "IBL scaling validity", [&](graphics::CommandRecorder& recorder) {
+      SubmitCommands("IBL scaling validity",
+        [&](graphics::CommandRecorder& recorder) -> void {
           CHECK_F(published->Attach(recorder, Backend().GetResourceRegistry()));
           recorder.FlushBarriers();
           CHECK_F(readback
@@ -421,24 +479,28 @@ namespace {
         environment::kIblProductFinite | environment::kIblProductComplete);
       ASSERT_GT(metadata.average_brightness, 0.0F);
     }
+    auto scope = std::string_view {
+      "Isolated immediate atmosphere+fog capture/convolution; full-scene "
+      "acceptance remains open"
+    };
+    if (specified) {
+      scope
+        = "Isolated specified-cube immediate processing; size scaling report";
+    } else if (authoring) {
+      scope = "Isolated same-frame authoring updates with two atmosphere "
+              "lights and height fog";
+    } else if (scheduled) {
+      scope = "Isolated automatic runtime updates with two atmosphere lights "
+              "and height fog; native timings and source latency, no "
+              "full-scene acceptance claim";
+    }
     auto manifest = std::ofstream(directory / "run.json");
     manifest << nlohmann::json { { "samples", samples }, { "warmup", warmup },
-      { "hz", 60 }, { "first_use_wall_ms", first_use_wall_ms },
-      { "stable_power", stable_power }, { "scheduled", scheduled },
-      { "authoring", authoring },
+      { "hz", kFramesPerSecond }, { "first_use_wall_ms", first_use_wall_ms },
+      { "stable_power", stable_power },
+      { "scheduled", scheduled }, { "authoring", authoring },
       { "specified_face_size", specified_face_size }, { "memory", memory },
-      { "scope",
-        specified
-          ? "Isolated specified-cube immediate processing; size scaling report"
-          : authoring
-          ? "Isolated same-frame authoring updates with two atmosphere "
-            "lights and height fog"
-          : scheduled
-          ? "Isolated automatic runtime updates with two atmosphere "
-            "lights and height fog; native timings and source latency, "
-            "no full-scene acceptance claim"
-          : "Isolated immediate atmosphere+fog capture/convolution; "
-            "full-scene acceptance remains open" } }
+      { "scope", scope }, }
                   .dump(2)
              << '\n';
   }

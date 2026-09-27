@@ -14,10 +14,8 @@
 
 namespace oxygen::graphics::d3d12 {
 
-class Graphics;
-
 OXGN_D3D12_NDAPI auto CreatePixFrameCaptureController(
-  Graphics& graphics, const FrameCaptureConfig& config)
+  const FrameCaptureConfig& config)
   -> std::unique_ptr<graphics::FrameCaptureController>;
 
 } // namespace oxygen::graphics::d3d12

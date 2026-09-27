@@ -6,14 +6,13 @@
 
 #pragma once
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/ReadbackManager.h>
 #include <Oxygen/Graphics/Common/Surface.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::graphics::testing {
 
@@ -30,7 +29,7 @@ public:
   MOCK_METHOD((std::shared_ptr<CommandQueue>), CreateCommandQueue, (const QueueKey&, QueueRole), (override));
   MOCK_METHOD((const DescriptorAllocator&), GetDescriptorAllocator, (), (const, override));
   MOCK_METHOD((std::unique_ptr<Surface>), CreateSurface, (std::weak_ptr<platform::Window>, observer_ptr<CommandQueue>), (const, override));
-  MOCK_METHOD((std::shared_ptr<Surface>), CreateSurfaceFromNative, (void*, observer_ptr<CommandQueue>), (const, override));
+  MOCK_METHOD((std::shared_ptr<Surface>), CreateSurfaceFromNative, (void*, observer_ptr<CommandQueue>), (override));
   MOCK_METHOD((std::shared_ptr<IShaderByteCode>), GetShader, (const ShaderRequest&), (const, override));
   MOCK_METHOD((std::shared_ptr<Texture>), CreateTexture, (const TextureDesc&), (const, override));
   MOCK_METHOD((std::shared_ptr<Texture>), CreateTextureFromNativeObject, (const TextureDesc&, const NativeResource&), (const, override));

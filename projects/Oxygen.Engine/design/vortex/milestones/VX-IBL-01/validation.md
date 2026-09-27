@@ -1,18 +1,51 @@
 # VX-IBL-01 validation
 
-**S1–S6 validated.** [S7 reusable infrastructure](README.md#s7--reusable-infrastructure)
-is in progress. All six extractions and the performance gates pass; final
-capture, SDK and application qualification remain.
+**S1–S7 validated.** [S7 integrated qualification](#s7-integrated-qualification)
+closes the six extractions, performance, captures, installed SDK and applications.
 [S8](README.md#s8--atmosphere-and-fog-correctness) adds seven source-confirmed
 atmosphere/fog regression cases; their fixes and runtime validation are planned. The [acceptance table](README.md#acceptance) links every
-required result. The [integrated audit](evidence/s6-integrated/run.json) checks
-retained evidence against current production owners; prior measurements keep
-their original source/build provenance.
+required result. The [S1–S6 audit](evidence/s6-integrated/run.json) records
+baseline provenance; earlier measurements retain their original source/build scope.
 
-Read: [S7 checkpoints](#s7-checkpoints), [integrated results](#integrated-results), [checkpoint evidence](#checkpoint-evidence),
+Read: [S7 qualification](#s7-integrated-qualification), [S7 checkpoints](#s7-checkpoints), [integrated results](#integrated-results), [checkpoint evidence](#checkpoint-evidence),
 [reproduce](#reproduce).
 
 ## S7 checkpoints
+
+### S7 integrated qualification
+
+Validated on **2026-09-28**, implementation `5d54e438f`. All six owner migrations
+and their named production adopters are complete; S1–S6 tolerances are unchanged.
+
+| Gate                                 | Result                                                                                                                                                                                                                                                                   |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Debug/Release integration            | Engine, RenderScene, Async, Interop and editor builds pass. All modified C++ passes oxytidy; owning fixtures and exported C++20 APIs compile.                                                                                                                            |
+| Native regression                    | 84/81 registry tests, 29 upload tests and both backend-lifetime tests pass in Debug/Release. IBL passes 43/41 tests; 13 exposure/image tests per configuration include the 144-case material matrix.                                                                     |
+| Captured atmosphere                  | RenderDoc verifies 319,504 frozen LUT bytes, 2,097,120 product values and complete-generation publication.                                                                                                                                                               |
+| Incremental products and orientation | Five recorded batches contain 694 dispatches. Generation 980 stays complete while 981 remains pending until its final producer. All 24,576 labelled face/pixel values match exactly.                                                                                     |
+| Performance                          | The accepted [isolated/full-scene baseline](#s7-performance-qualification) passes cost, latency and resource-population gates.                                                                                                                                           |
+| Installed SDK                        | Matching dev/runtime/data components installed for Debug/Release. Actual Interop and native command consumers compile with `stdcpp20`; nine environment-command tests pass per configuration. Installed shader archives match the normal builds byte-for-byte.           |
+| Editor smoke                         | Real Inspector edits, Undo/Redo, view recreation, Save/reopen and scene replacement retain current, usable IBL products at source age zero. Paused publication followed by viewport destruction also passes. The native log loads the selected Debug SDK shader archive. |
+| DemoShell smoke                      | RenderScene's `ibl_controls` and `ibl_source_and_fog` widget cases pass using isolated settings; user settings remain byte-identical.                                                                                                                                    |
+
+The Release catalog contains 237 production modules, with no test-source entries
+or qualification defines. Earlier [LUT producer/consumer](#s71-immutable-lut-uploads)
+and [retained-reader captures](#s73-retirement-accounting) retain their stated
+scope; current native and image checks exercise their integrated consumers.
+
+Reproduce the added capture checks with Release tests
+`ExposureGpuTest.CapturedAtmosphereUsesGlobalAnchorAndIgnoresViewExposure`
+(`OXYGEN_EXPOSURE_CAPTURE`) and
+`IblConvolutionGpuTest.MultiFrameJobPublishesOnlyCompleteProducts`
+(`OXYGEN_IBL_CAPTURE`). Set each variable to an absolute prefix under ignored
+`out/`, then replay with `tools/shadows/Invoke-RenderDocUiAnalysis.ps1` and
+`AnalyzeRenderDocCapturedSky.py` / `AnalyzeRenderDocIblJobs.py` respectively.
+For the editor, build the app, Interop native tests and WorldEditor UI tests with
+`MSBuild.exe /m`; run `EnvironmentCommandCliTests` and the UI cases
+`CapturedSkyInspectorHistoryReopenAndViewRecreationUseCurrentProducts` and
+`PublicationPauseThenViewportDestructionKeepsNativeFrameAlive` using VS VSTest.
+DemoShell uses `OXYGEN_UI_TEST_FILTER` and `OXYGEN_UI_TEST_SETTINGS` to select the
+widget case and isolated settings. Captures, logs and test results stay in `out/`.
 
 ### S7.5 group reductions
 
@@ -106,8 +139,8 @@ Reproduce isolated authoring/runtime with `OXYGEN_IBL_STABLE_POWER=1` and the
 [existing benchmark commands](#earlier-slices). For default-power scenes run
 `IblSceneBenchmark.DISABLED_Static`, `DISABLED_Runtime` and `DISABLED_Authoring`
 separately, then `tools/vortex/SummarizeIblScene.py <run-directory>`.
-Use a fresh ignored output directory per run. Final capture, SDK C++20 and
-DemoShell/editor smoke qualification remain in the S7 exit.
+Use a fresh ignored output directory per run. The remaining integrated checks
+are recorded in [S7 qualification](#s7-integrated-qualification).
 
 ### S7.6 cubemap geometry
 
@@ -122,7 +155,7 @@ All **237 Release production DXIL payloads are byte-identical** to the pre-chang
 baseline, including forward debug-face variants. ShaderBake fingerprints the new
 include in **127 modules**; the production catalog still contains 237 modules.
 The new probe is test-only. No shader instruction or resource-cost retuning was
-needed; integrated S7 cost/SDK/application gates remain open.
+needed. See [integrated S7 qualification](#s7-integrated-qualification).
 
 Reproduce geometry with LightingGpuAbi filter `LightingGpuAbiTest.CubemapGeometry*`;
 product filters are `IblConvolutionGpuTest.ConstantCubePreservesEveryFaceAndMip`,
@@ -165,7 +198,8 @@ run `ExposureGpuTest.Feedback*`, `IblDiagnosticsGpuTest.*` and
 `DiagnosticFramesDeferCameraCutUntilNormalExposureResumes`; join filters with `:`.
 Run `SpatialLightGridGpuTest.*:SpatialLightGridFallbackGpuTest.*` in
 `Oxygen.Vortex.LightingImageReference.Tests`. No shader diagnostics, copy submission
-or readback frequency was added. Integrated cost/SDK/application gates remain open.
+or readback frequency was added. See
+[integrated S7 qualification](#s7-integrated-qualification).
 
 ### S7.3 retirement accounting
 
@@ -199,7 +233,8 @@ For capture, run Exposure filter
 with `OXYGEN_EXPOSURE_CAPTURE` under `out/`; replay with the existing wrapper and
 `AnalyzeRenderDocIblCaptureLease.py`, pass `IblCaptureLease`. Queued pressure uses
 `ExposureGpuTest.QueuedIblPreemptionKeepsPinnedCapturesAndBoundedStorage`.
-Integrated S7 performance, SDK and application qualification remain in the plan.
+Integrated performance, SDK and application results are
+[above](#s7-integrated-qualification).
 
 ### S7.1 immutable LUT uploads
 
@@ -217,8 +252,8 @@ RenderDoc separately checks exact texel readback and production shader reads.
 The analyzed captures cover deferred direct/indirect, opaque-forward and
 translucent LUT consumers in shader-resource state. The **144-case image matrix**
 and Async lighting/VortexBasic forward smoke runs pass. Oxytidy covers every
-changed C++ file; no check is disabled. Integrated S7 performance, SDK and editor
-gates remain in the [S7 exit](README.md#s7-execution-and-exit).
+changed C++ file; no check is disabled. Integrated performance, SDK and editor
+results are [above](#s7-integrated-qualification).
 
 Validated on 2026-09-27 using the normal Ninja Debug/Release builds;
 the S7.1 implementation is committed as `2e6bfb09f`.
@@ -254,7 +289,7 @@ tests** pass after adding the group barrier between offset-2 writes and the fina
 lane-zero pair. ShaderBake publishes all **237** production modules. The isolated
 1,800-update authoring run measures **1.269 / 2.536 ms p95/p99**, inside the
 2/4-ms gates. The arithmetic tree is unchanged. Current S7.5 extraction qualification is
-[above](#s75-group-reductions); integrated S7 gates remain in the milestone plan.
+[above](#s75-group-reductions); the [integrated S7 exit](#s7-integrated-qualification) passes.
 
 ## Integrated results
 

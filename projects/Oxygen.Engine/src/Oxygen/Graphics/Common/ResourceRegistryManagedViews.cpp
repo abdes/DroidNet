@@ -10,9 +10,11 @@
 #include <span>
 #include <utility>
 
+#include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/ManagedResource.h>
 #include <Oxygen/Graphics/Common/Registration.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
+#include <Oxygen/Graphics/Common/Texture.h>
 
 namespace oxygen::graphics {
 

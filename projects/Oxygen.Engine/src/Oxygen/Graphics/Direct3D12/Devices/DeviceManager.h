@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <Windows.h>
+
 #include <concepts>
 #include <cstdint>
 #include <memory>
@@ -15,7 +17,6 @@
 #include <type_traits>
 #include <vector>
 
-#include <Windows.h>
 #include <d3d12.h>
 #include <d3dcommon.h>
 #include <wrl/client.h>
@@ -176,9 +177,10 @@ public:
     -> bool
   {
     // Find the context matching the criteria
-    auto it = std::ranges::find_if(contexts_, [&](const Context& context) {
-      return std::forward<Pred>(criteria)(context.info);
-    });
+    auto it
+      = std::ranges::find_if(contexts_, [&](const Context& context) -> auto {
+          return std::forward<Pred>(criteria)(context.info);
+        });
 
     if (it == contexts_.end()) {
       return false;
@@ -198,7 +200,9 @@ public:
 
     // Otherwise, find and select the requested adapter
     return SelectAdapter(
-      [&](const AdapterInfo& adapter) { return adapter.UniqueId() == luid; },
+      [&](const AdapterInfo& adapter) -> auto {
+        return adapter.UniqueId() == luid;
+      },
       std::forward<Handler>(on_device_removed));
   }
 
@@ -213,7 +217,7 @@ public:
 
     // Otherwise, find and select the requested adapter
     return SelectAdapter(
-      [&](const AdapterInfo& adapter) { return adapter.IsBest(); },
+      [&](const AdapterInfo& adapter) -> auto { return adapter.IsBest(); },
       std::forward<Handler>(on_device_removed));
   }
 
@@ -257,11 +261,10 @@ private:
     // If the context we want to select is not active, initialize it
     auto context_is_active = new_context.IsActive();
     LOG_IF_F(INFO, !context_is_active, "(not active)");
-    if (!context_is_active) {
-      if (!InitializeContext(new_context)) {
-        return false;
-      }
+    if ((!context_is_active) && (!InitializeContext(new_context))) {
+      return false;
     }
+
     DCHECK_F(new_context.IsActive());
 
     // If we had a device loss, attempt to recover before you select the

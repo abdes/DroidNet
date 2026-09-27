@@ -34,7 +34,9 @@
 #include <Oxygen/Graphics/Common/Registration.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Test/Fakes/FakeResource.h>
-#include <Oxygen/Graphics/Common/Test/HeapAllocationFailure.h>
+#if defined(_MSC_VER) && defined(_DEBUG)
+#  include <Oxygen/Graphics/Common/Test/HeapAllocationFailure.h>
+#endif
 #include <Oxygen/Graphics/Common/Test/Mocks/MockGraphics.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>

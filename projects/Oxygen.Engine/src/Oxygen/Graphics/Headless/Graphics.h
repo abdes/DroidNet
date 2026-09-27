@@ -33,7 +33,7 @@ public:
   OXGN_HDLS_NDAPI auto GetReadbackManager() const
     -> observer_ptr<graphics::ReadbackManager> override;
 
-  [[nodiscard]] OXGN_HDLS_NDAPI auto CreateImGuiGraphicsBackend() const
+  OXGN_HDLS_NDAPI auto CreateImGuiGraphicsBackend() const
     -> std::unique_ptr<graphics::imgui::ImGuiGraphicsBackend> override;
 
   OXGN_HDLS_NDAPI auto CreateTexture(const TextureDesc& desc) const
@@ -50,8 +50,8 @@ public:
     observer_ptr<graphics::CommandQueue> command_queue) const
     -> std::unique_ptr<Surface> override;
 
-  OXGN_HDLS_NDAPI auto CreateSurfaceFromNative(void* native_handle,
-    observer_ptr<graphics::CommandQueue> command_queue) const
+  OXGN_HDLS_NDAPI auto CreateSurfaceFromNative(
+    void* native_handle, observer_ptr<graphics::CommandQueue> command_queue)
     -> std::shared_ptr<Surface> override;
 
   [[nodiscard]] auto GetShader(const ShaderRequest& request) const
@@ -71,7 +71,7 @@ protected:
     QueueRole role) -> std::shared_ptr<graphics::CommandQueue> override;
 
 private:
-  std::unique_ptr<HeadlessReadbackManager> readback_manager_ {};
+  std::unique_ptr<HeadlessReadbackManager> readback_manager_;
 };
 
 } // namespace oxygen::graphics::headless

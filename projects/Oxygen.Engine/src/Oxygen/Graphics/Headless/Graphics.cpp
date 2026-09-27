@@ -4,11 +4,30 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <memory>
+#include <utility>
+
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Composition/Component.h>
+#include <Oxygen/Composition/ComponentMacros.h>
+#include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Graphics/Common/BackendObject.h>
+#include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
+#include <Oxygen/Graphics/Common/CommandQueue.h>
+#include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/ImGui/ImGuiGraphicsBackend.h>
+#include <Oxygen/Graphics/Common/NativeObject.h>
+#include <Oxygen/Graphics/Common/Queues.h>
+#include <Oxygen/Graphics/Common/ReadbackManager.h>
+#include <Oxygen/Graphics/Common/ShaderByteCode.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
+#include <Oxygen/Graphics/Common/Surface.h>
+#include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Graphics/Headless/Bindless/AllocationStrategy.h>
 #include <Oxygen/Graphics/Headless/Bindless/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Headless/Buffer.h>
@@ -20,6 +39,7 @@
 #include <Oxygen/Graphics/Headless/ReadbackManager.h>
 #include <Oxygen/Graphics/Headless/Surface.h>
 #include <Oxygen/Graphics/Headless/Texture.h>
+#include <Oxygen/Platform/Window.h>
 
 //===----------------------------------------------------------------------===//
 // DescriptorAllocator Component
@@ -36,10 +56,12 @@ public:
   explicit DescriptorAllocatorComponent(std::shared_ptr<void> lifetime)
     : allocator_(std::static_pointer_cast<hb::DescriptorAllocator>(
         oxygen::graphics::AdoptBackendObject(
-          new hb::DescriptorAllocator(
-            std::make_shared<hb::AllocationStrategy>()),
-          [](void* object) noexcept {
-            delete static_cast<hb::DescriptorAllocator*>(object);
+          std::make_unique<hb::DescriptorAllocator>(
+            std::make_shared<hb::AllocationStrategy>())
+            .release(),
+          [](void* object) noexcept -> void {
+            const auto owner = std::unique_ptr<hb::DescriptorAllocator>(
+              static_cast<hb::DescriptorAllocator*>(object));
           },
           std::move(lifetime))))
   {
@@ -105,11 +127,7 @@ auto Graphics::CreateTexture(const TextureDesc& desc) const
 {
   const auto admission = GetBackendLifetime()->AcquireOperation();
   return AdoptBackendObject(
-    static_cast<graphics::Texture*>(new Texture(desc)),
-    [](void* object) noexcept {
-      delete static_cast<graphics::Texture*>(object);
-    },
-    GetNativeLifetimeToken());
+    std::make_unique<Texture>(desc), GetNativeLifetimeToken());
 }
 
 auto Graphics::CreateTextureFromNativeObject(const TextureDesc& desc,
@@ -123,10 +141,7 @@ auto Graphics::CreateBuffer(const BufferDesc& desc) const
 {
   const auto admission = GetBackendLifetime()->AcquireOperation();
   return AdoptBackendObject(
-    static_cast<graphics::Buffer*>(new Buffer(desc)),
-    [](
-      void* object) noexcept { delete static_cast<graphics::Buffer*>(object); },
-    GetNativeLifetimeToken());
+    std::make_unique<Buffer>(desc), GetNativeLifetimeToken());
 }
 
 auto Graphics::CreateCommandQueue(const QueueKey& queue_key, QueueRole role)
@@ -144,7 +159,7 @@ auto Graphics::CreateSurface(std::weak_ptr<platform::Window> /*window_weak*/,
 }
 
 auto Graphics::CreateSurfaceFromNative(void* /*native_handle*/,
-  observer_ptr<graphics::CommandQueue> /*command_queue*/) const
+  observer_ptr<graphics::CommandQueue> /*command_queue*/)
   -> std::shared_ptr<Surface>
 {
   const auto admission = GetBackendLifetime()->AcquireOperation();
@@ -154,7 +169,7 @@ auto Graphics::CreateSurfaceFromNative(void* /*native_handle*/,
 auto Graphics::GetShader(const ShaderRequest& request) const
   -> std::shared_ptr<IShaderByteCode>
 {
-  auto& shaders = GetComponent<internal::EngineShaders>();
+  const auto& shaders = GetComponent<internal::EngineShaders>();
   return shaders.GetShader(request);
 }
 

@@ -14,7 +14,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Composition/Composition.h>
-#include <Oxygen/Composition/ObjectMetadata.h>
+#include <Oxygen/Composition/ObjectMetaData.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/BackendLifetime.h>
 #include <Oxygen/Graphics/Common/CommandRecording.h>
@@ -133,15 +133,14 @@ public:
   OXGN_GFX_API auto PollCompletedUses() -> void;
   //! Drain and reconcile a submission fault; closes the backend on failed
   //! proof.
-  [[nodiscard]] OXGN_GFX_API auto RecoverSubmissionFault() -> bool;
+  OXGN_GFX_NDAPI auto RecoverSubmissionFault() -> bool;
 
   //! Stop admission and drain on the owner thread, even without an async
   //! nursery.
   OXGN_GFX_API auto Close() noexcept -> void;
   OXGN_GFX_API auto InstallBackendOwner(std::weak_ptr<Graphics> owner,
     graphics::BackendIncarnationId id, std::shared_ptr<void> module) -> void;
-  [[nodiscard]] OXGN_GFX_API auto RetainBackendOwner()
-    -> std::shared_ptr<Graphics>;
+  OXGN_GFX_NDAPI auto RetainBackendOwner() -> std::shared_ptr<Graphics>;
   [[nodiscard]] auto GetBackendLifetime() const noexcept
     -> const std::shared_ptr<graphics::BackendLifetime>&
   {
@@ -170,22 +169,20 @@ public:
    VSync toggling.
   */
   OXGN_GFX_API virtual auto SetVSyncEnabled(bool enabled) -> void;
-  [[nodiscard]] OXGN_GFX_NDAPI virtual auto IsVSyncEnabled() const noexcept
-    -> bool;
+  OXGN_GFX_NDAPI virtual auto IsVSyncEnabled() const noexcept -> bool;
   OXGN_GFX_API auto RegisterConsoleBindings(
     observer_ptr<console::Console> console) noexcept -> void;
   OXGN_GFX_API auto ApplyConsoleCVars(const console::Console& console) -> void;
 
   //=== Global & pooled objects ===-----------------------------------------//
 
-  [[nodiscard]] virtual OXGN_GFX_API auto CreateSurface(
+  OXGN_GFX_NDAPI virtual auto CreateSurface(
     std::weak_ptr<platform::Window> window_weak,
     observer_ptr<graphics::CommandQueue> command_queue) const
     -> std::unique_ptr<graphics::Surface> = 0;
 
-  [[nodiscard]] virtual OXGN_GFX_API auto CreateSurfaceFromNative(
-    void* native_handle,
-    observer_ptr<graphics::CommandQueue> command_queue) const
+  OXGN_GFX_NDAPI virtual auto CreateSurfaceFromNative(
+    void* native_handle, observer_ptr<graphics::CommandQueue> command_queue)
     -> std::shared_ptr<graphics::Surface> = 0;
 
   //! Initialize command queues using the provided queue management strategy.
@@ -205,7 +202,7 @@ public:
   OXGN_GFX_NDAPI virtual auto GetCommandQueue(graphics::QueueRole role) const
     -> observer_ptr<graphics::CommandQueue>;
 
-  OXGN_GFX_NDAPI virtual auto FlushCommandQueues() -> void;
+  OXGN_GFX_API virtual auto FlushCommandQueues() -> void;
 
   //! Return the agreed resource state across all queues that track it.
   /*! No state is returned when no queue tracks the resource, a tracked state
@@ -216,16 +213,21 @@ public:
     -> std::optional<graphics::ResourceStates>;
 
   //! Begins an owned recording; ordinary scope exit submits by default.
+  [[nodiscard]] auto AcquireCommandRecorder(const graphics::QueueKey& queue_key,
+    std::string_view command_list_name) -> graphics::CommandRecording
+  {
+    return AcquireCommandRecorder(
+      queue_key, command_list_name, graphics::SubmissionPolicy::kOnScopeExit);
+  }
   OXGN_GFX_NDAPI virtual auto AcquireCommandRecorder(
     const graphics::QueueKey& queue_key, std::string_view command_list_name,
-    graphics::SubmissionPolicy policy
-    = graphics::SubmissionPolicy::kOnScopeExit) -> graphics::CommandRecording;
+    graphics::SubmissionPolicy policy) -> graphics::CommandRecording;
 
   OXGN_GFX_NDAPI auto AcquireCommandList(
     graphics::QueueRole queue_role, std::string_view command_list_name)
     -> std::shared_ptr<graphics::CommandList>;
 
-  [[nodiscard]] virtual OXGN_GFX_API auto GetShader(
+  OXGN_GFX_NDAPI virtual auto GetShader(
     const graphics::ShaderRequest& request) const
     -> std::shared_ptr<graphics::IShaderByteCode> = 0;
 
@@ -242,21 +244,21 @@ public:
   OXGN_GFX_NDAPI auto GetDeferredReclaimer()
     -> graphics::detail::DeferredReclaimer&;
 
-  [[nodiscard]] OXGN_GFX_API virtual auto GetReadbackManager() const
+  OXGN_GFX_NDAPI virtual auto GetReadbackManager() const
     -> observer_ptr<graphics::ReadbackManager>;
 
-  [[nodiscard]] OXGN_GFX_API virtual auto GetTimestampQueryProvider() const
+  OXGN_GFX_NDAPI virtual auto GetTimestampQueryProvider() const
     -> observer_ptr<graphics::TimestampQueryProvider>;
 
-  [[nodiscard]] OXGN_GFX_API virtual auto GetFrameCaptureController() const
+  OXGN_GFX_NDAPI virtual auto GetFrameCaptureController() const
     -> observer_ptr<graphics::FrameCaptureController>;
 
-  [[nodiscard]] OXGN_GFX_API virtual auto CreateImGuiGraphicsBackend() const
+  OXGN_GFX_NDAPI virtual auto CreateImGuiGraphicsBackend() const
     -> std::unique_ptr<graphics::imgui::ImGuiGraphicsBackend>;
 
   //! Register a surface for deferred release so the final release occurs
   //! inside the engine's render/frame timeline via DeferredReclaimer.
-  OXGN_GFX_NDAPI auto RegisterDeferredRelease(
+  OXGN_GFX_API auto RegisterDeferredRelease(
     std::shared_ptr<graphics::Surface> surface) -> void;
 
   template <typename T>

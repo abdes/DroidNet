@@ -4,9 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <Windows.h> // IWYU pragma: keep
+
+#include <algorithm>
+#include <array>
 #include <cctype>
+#include <cstdint>
 #include <cwctype>
 #include <filesystem>
+#include <memory>
 #include <mutex>
 #include <sstream>
 #include <string>
@@ -14,15 +20,19 @@
 #include <system_error>
 #include <utility>
 
-#include <windows.h>
-
 #include <fmt/format.h>
+#include <libloaderapi.h>
+#include <minwindef.h>
+#include <strsafe.h>
+#include <windef.h>
+#include <winnt.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/GraphicsConfig.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/FrameCaptureController.h>
 #include <Oxygen/Graphics/Common/Surface.h>
-#include <Oxygen/Graphics/Direct3D12/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/PixFrameCaptureController.h>
 
 #if defined(USE_PIX) && __has_include(<pix3.h>)
@@ -47,7 +57,7 @@ auto InitModeText(const oxygen::FrameCaptureInitMode init_mode)
   return "disabled";
 }
 
-constexpr wchar_t kPixGpuCapturerModuleName[] = L"WinPixGpuCapturer.dll";
+constexpr auto* kPixGpuCapturerModuleName = L"WinPixGpuCapturer.dll";
 
 constexpr auto kPixSupportedFeatures
   = oxygen::graphics::FrameCaptureFeature::kTriggerNextFrame
@@ -65,7 +75,7 @@ constexpr auto IsPixMarkersBuildAvailable() noexcept -> bool
 
 constexpr auto IsPixGpuCaptureDiscoveryAvailable() noexcept -> bool
 {
-#if defined(OXYGEN_PIX_GPU_CAPTURE_AVAILABLE)
+#ifdef OXYGEN_PIX_GPU_CAPTURE_AVAILABLE
   return true;
 #else
   return false;
@@ -74,7 +84,7 @@ constexpr auto IsPixGpuCaptureDiscoveryAvailable() noexcept -> bool
 
 constexpr auto IsPixTimingCaptureDiscoveryAvailable() noexcept -> bool
 {
-#if defined(OXYGEN_PIX_TIMING_CAPTURE_AVAILABLE)
+#ifdef OXYGEN_PIX_TIMING_CAPTURE_AVAILABLE
   return true;
 #else
   return false;
@@ -83,7 +93,7 @@ constexpr auto IsPixTimingCaptureDiscoveryAvailable() noexcept -> bool
 
 constexpr auto IsPixUiAvailable() noexcept -> bool
 {
-#if defined(OXYGEN_PIX_UI_AVAILABLE)
+#ifdef OXYGEN_PIX_UI_AVAILABLE
   return true;
 #else
   return false;
@@ -92,7 +102,7 @@ constexpr auto IsPixUiAvailable() noexcept -> bool
 
 auto PixInstallRoot() -> std::string_view
 {
-#if defined(OXYGEN_PIX_INSTALL_ROOT_PATH)
+#ifdef OXYGEN_PIX_INSTALL_ROOT_PATH
   return OXYGEN_PIX_INSTALL_ROOT_PATH;
 #else
   return {};
@@ -120,8 +130,10 @@ auto NormalizePathForComparison(std::filesystem::path path) -> std::wstring
   }
   path = path.lexically_normal();
   auto normalized = path.native();
-  std::ranges::transform(normalized, normalized.begin(),
-    [](const wchar_t ch) { return static_cast<wchar_t>(std::towlower(ch)); });
+  std::ranges::transform(
+    normalized, normalized.begin(), [](const wchar_t ch) -> wchar_t {
+      return static_cast<wchar_t>(std::towlower(ch));
+    });
   return normalized;
 }
 
@@ -161,23 +173,27 @@ auto SanitizeCaptureLabel(std::string_view label) -> std::string
 
 auto ResolveModulePath(const HMODULE module) -> std::string
 {
-  wchar_t buffer[MAX_PATH] {};
-  const auto length = ::GetModuleFileNameW(module, buffer, MAX_PATH);
+  auto buffer = std::array<wchar_t, MAX_PATH> {};
+  const auto length = ::GetModuleFileNameW(
+    module, buffer.data(), static_cast<DWORD>(buffer.size()));
   if (length == 0U) {
     return {};
   }
-  return NarrowPath(std::filesystem::path(buffer));
+  return NarrowPath(
+    std::filesystem::path(std::wstring_view(buffer.data(), length)));
 }
 
 #if defined(USE_PIX) && __has_include(<pix3.h>)
 
+// The SDK macro uses signed (1 << 1); retain its value as an unsigned flag.
+// NOLINTNEXTLINE(bugprone-signed-bitwise)
+constexpr auto kGpuCaptureFlag = static_cast<DWORD>(PIX_CAPTURE_GPU);
+
 class PixFrameCaptureController final
   : public oxygen::graphics::FrameCaptureController {
 public:
-  PixFrameCaptureController(oxygen::graphics::d3d12::Graphics& graphics,
-    oxygen::FrameCaptureConfig config)
-    : graphics_(graphics)
-    , config_(std::move(config))
+  explicit PixFrameCaptureController(oxygen::FrameCaptureConfig config)
+    : config_(std::move(config))
   {
     Initialize();
   }
@@ -272,7 +288,7 @@ private:
       return false;
     }
 
-    const auto target_window
+    auto* const target_window
       = surface != nullptr ? ResolveTargetWindow(surface) : nullptr;
     if (target_window != nullptr) {
       last_target_window_ = target_window;
@@ -287,7 +303,7 @@ private:
     PIXCaptureParameters capture_params {};
     capture_params.GpuCaptureParameters.FileName = capture_path.c_str();
 
-    const auto hr = PIXBeginCapture(PIX_CAPTURE_GPU, &capture_params);
+    const auto hr = PIXBeginCapture(kGpuCaptureFlag, &capture_params);
     if (FAILED(hr)) {
       status_message_ = HResultMessage("PIXBeginCapture", hr);
       LOG_F(WARNING, "PIX manual capture failed: {}", status_message_);
@@ -368,7 +384,7 @@ private:
     scheduled_capture_from_frame_ = 0;
     scheduled_capture_frame_count_ = 0;
 
-    const auto label = requested_frame_count == 1 ? "frame" : "frames";
+    const auto* const label = requested_frame_count == 1 ? "frame" : "frames";
     const auto action = fmt::format(
       "PIX configured frame-range capture requested from frame {} for {} "
       "frame(s)",
@@ -445,7 +461,7 @@ private:
       status_message_ = "initialization disabled";
       return false;
     case oxygen::FrameCaptureInitMode::kAttachedOnly: {
-      if (const auto attached = ::GetModuleHandleW(kPixGpuCapturerModuleName);
+      if (auto* const attached = ::GetModuleHandleW(kPixGpuCapturerModuleName);
         attached != nullptr) {
         return BindCapturerModuleUnlocked(
           attached, "attached PIX GPU capturer");
@@ -454,7 +470,7 @@ private:
       return false;
     }
     case oxygen::FrameCaptureInitMode::kSearchPath: {
-      if (const auto module = ::GetModuleHandleW(kPixGpuCapturerModuleName);
+      if (auto* const module = ::GetModuleHandleW(kPixGpuCapturerModuleName);
         module != nullptr) {
         return BindCapturerModuleUnlocked(
           module, "bootstrapped PIX GPU capturer");
@@ -469,7 +485,7 @@ private:
         status_message_ = "explicit PIX GPU capturer path not provided";
         return false;
       }
-      if (const auto module = ::GetModuleHandleW(kPixGpuCapturerModuleName);
+      if (auto* const module = ::GetModuleHandleW(kPixGpuCapturerModuleName);
         module != nullptr) {
         const auto loaded_module_path
           = std::filesystem::path(ResolveModulePath(module));
@@ -541,7 +557,7 @@ private:
       return false;
     }
     const auto capture_state = PIXGetCaptureState();
-    return (capture_state & PIX_CAPTURE_GPU) != 0U || manual_capture_active_;
+    return (capture_state & kGpuCaptureFlag) != 0U || manual_capture_active_;
   }
 
   auto ApplyTargetWindowUnlocked() -> bool
@@ -599,7 +615,7 @@ private:
   }
 
   [[nodiscard]] auto BuildCaptureFilePathUnlocked(
-    const std::string_view capture_label)
+    const std::string_view capture_label) -> std::wstring
   {
     const auto serial = ++capture_request_serial_;
     const auto label = SanitizeCaptureLabel(capture_label);
@@ -648,14 +664,13 @@ private:
     return static_cast<HWND>(handles.window_handle);
   }
 
-  oxygen::graphics::d3d12::Graphics& graphics_;
   oxygen::FrameCaptureConfig config_;
   HMODULE module_handle_ { nullptr };
   bool manual_capture_active_ { false };
-  std::string resolved_module_path_ {};
-  std::string status_message_ {};
-  std::string last_capture_file_path_ {};
-  mutable std::mutex mutex_ {};
+  std::string resolved_module_path_;
+  std::string status_message_;
+  std::string last_capture_file_path_;
+  mutable std::mutex mutex_;
   HWND last_target_window_ { nullptr };
   uint64_t scheduled_capture_from_frame_ { 0 };
   uint32_t scheduled_capture_frame_count_ { 0 };
@@ -667,8 +682,7 @@ private:
 class PixFrameCaptureController final
   : public oxygen::graphics::FrameCaptureController {
 public:
-  PixFrameCaptureController(oxygen::graphics::d3d12::Graphics& /*graphics*/,
-    oxygen::FrameCaptureConfig config)
+  explicit PixFrameCaptureController(oxygen::FrameCaptureConfig config)
     : config_(std::move(config))
   {
     status_message_ = "PIX support unavailable in this build";
@@ -788,11 +802,10 @@ private:
 
 namespace oxygen::graphics::d3d12 {
 
-auto CreatePixFrameCaptureController(
-  Graphics& graphics, const FrameCaptureConfig& config)
+auto CreatePixFrameCaptureController(const FrameCaptureConfig& config)
   -> std::unique_ptr<graphics::FrameCaptureController>
 {
-  return std::make_unique<PixFrameCaptureController>(graphics, config);
+  return std::make_unique<PixFrameCaptureController>(config);
 }
 
 } // namespace oxygen::graphics::d3d12

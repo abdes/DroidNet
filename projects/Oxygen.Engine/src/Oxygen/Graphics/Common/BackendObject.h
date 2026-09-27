@@ -30,24 +30,32 @@ using BackendObjectDestroy = void (*)(void*) noexcept;
  including when control-block allocation fails. The object and destroy function
  must be non-null. Typed overloads preserve Texture's shared_from_this contract.
 */
-[[nodiscard]] OXGN_GFX_API auto AdoptBackendObject(
+OXGN_GFX_NDAPI auto AdoptBackendObject(
   void* object, BackendObjectDestroy destroy, std::shared_ptr<void> lifetime)
   -> std::shared_ptr<void>;
-[[nodiscard]] OXGN_GFX_API auto AdoptBackendObject(Graphics* object,
+OXGN_GFX_NDAPI auto AdoptBackendObject(Graphics* object,
   BackendObjectDestroy destroy, std::shared_ptr<void> lifetime)
   -> std::shared_ptr<Graphics>;
-[[nodiscard]] OXGN_GFX_API auto AdoptBackendObject(
+OXGN_GFX_NDAPI auto AdoptBackendObject(
   Buffer* object, BackendObjectDestroy destroy, std::shared_ptr<void> lifetime)
   -> std::shared_ptr<Buffer>;
-[[nodiscard]] OXGN_GFX_API auto AdoptBackendObject(
+OXGN_GFX_NDAPI auto AdoptBackendObject(
   Texture* object, BackendObjectDestroy destroy, std::shared_ptr<void> lifetime)
   -> std::shared_ptr<Texture>;
 
-[[nodiscard]] OXGN_GFX_API auto AdoptBackendObject(GpuBufferReadback* object,
+OXGN_GFX_NDAPI auto AdoptBackendObject(GpuBufferReadback* object,
   BackendObjectDestroy destroy, std::shared_ptr<void> lifetime)
   -> std::shared_ptr<GpuBufferReadback>;
-[[nodiscard]] OXGN_GFX_API auto AdoptBackendObject(GpuTextureReadback* object,
+OXGN_GFX_NDAPI auto AdoptBackendObject(GpuTextureReadback* object,
   BackendObjectDestroy destroy, std::shared_ptr<void> lifetime)
   -> std::shared_ptr<GpuTextureReadback>;
+
+//! Transfer public polymorphic ownership into the Common control block.
+OXGN_GFX_NDAPI auto AdoptBackendObject(std::unique_ptr<Graphics> object,
+  std::shared_ptr<void> lifetime) -> std::shared_ptr<Graphics>;
+OXGN_GFX_NDAPI auto AdoptBackendObject(std::unique_ptr<Buffer> object,
+  std::shared_ptr<void> lifetime) -> std::shared_ptr<Buffer>;
+OXGN_GFX_NDAPI auto AdoptBackendObject(std::unique_ptr<Texture> object,
+  std::shared_ptr<void> lifetime) -> std::shared_ptr<Texture>;
 
 } // namespace oxygen::graphics

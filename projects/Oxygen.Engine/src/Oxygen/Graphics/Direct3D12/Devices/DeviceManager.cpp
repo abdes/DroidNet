@@ -4,26 +4,36 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <Windows.h> // IWYU pragma: keep
+
 #include <algorithm>
 #include <array>
+#include <cstddef>
 #include <exception>
 #include <memory>
 #include <span>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
-#include "DeviceManager.h"
+#include <combaseapi.h>
 #include <d3d12.h>
+#include <d3dcommon.h>
+#include <dxgi.h>
+#include <dxgi1_3.h>
 #include <dxgi1_6.h>
 #include <fmt/format.h>
+#include <minwindef.h>
+#include <winerror.h>
 #include <wrl/client.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/StringUtils.h>
 #include <Oxygen/Base/Unreachable.h>
 #include <Oxygen/Base/Windows/ComError.h>
+#include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Graphics/Direct3D12/Allocator/D3D12MemAlloc.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
 #include <Oxygen/Graphics/Direct3D12/Devices/DebugLayer.h>
@@ -103,10 +113,11 @@ auto GetMaxFeatureLevel(
     D3D_FEATURE_LEVEL_11_0,
   };
 
-  D3D12_FEATURE_DATA_FEATURE_LEVELS feature_level_info = {};
-  feature_level_info.NumFeatureLevels
-    = static_cast<UINT>(feature_levels.size());
-  feature_level_info.pFeatureLevelsRequested = feature_levels.data();
+  auto feature_level_info = D3D12_FEATURE_DATA_FEATURE_LEVELS {
+    .NumFeatureLevels = static_cast<UINT>(feature_levels.size()),
+    .pFeatureLevelsRequested = feature_levels.data(),
+    .MaxSupportedFeatureLevel = D3D_FEATURE_LEVEL_11_0,
+  };
 
   if (SUCCEEDED(device->CheckFeatureSupport(D3D12_FEATURE_FEATURE_LEVELS,
         &feature_level_info, sizeof(feature_level_info)))) {
@@ -163,7 +174,7 @@ void DeviceManager::DiscoverAdapters()
       DXGI_ADAPTER_DESC1 desc;
       ThrowOnFailed(adapter->GetDesc1(&desc));
 
-      if ((desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) != 0U) {
+      if ((desc.Flags & static_cast<UINT>(DXGI_ADAPTER_FLAG_SOFTWARE)) != 0U) {
         // Don't select the Basic Render Driver adapter.
         ++adapter_index;
         continue;
@@ -200,7 +211,7 @@ void DeviceManager::DiscoverAdapters()
       contexts_.emplace_back(std::move(adapter_info), adapter);
       ++adapter_index;
     }
-  } catch (std::exception ex) {
+  } catch (const std::exception& ex) {
     LOG_F(ERROR, "discovery cancelled due to exception: {}", ex.what());
     contexts_.clear();
     throw;
@@ -210,10 +221,10 @@ void DeviceManager::DiscoverAdapters()
     "Best adapter index out of bounds");
 
   if (!contexts_.empty()) {
-    contexts_[best_adapter_index].info.is_best = true;
+    contexts_.at(best_adapter_index).info.is_best = true;
   }
 
-  std::ranges::for_each(Adapters(), [](const AdapterInfo& a) {
+  std::ranges::for_each(Adapters(), [](const AdapterInfo& a) -> void {
     LOG_F(INFO, "[{}] {} {} ({}-{})", "+", a.Name(), a.MemoryAsString(),
       a.VendorId(), a.DeviceId());
     LOG_F(1, "  Meets Feature Level   : {}", a.MeetsFeatureLevel());
@@ -244,7 +255,8 @@ auto DeviceManager::GetAdapterScore(AdapterInfo& adapter) const -> int
   constexpr int kMegaShift
     = 20; // 1 megabyte (MB) is equal to 1,048,576 bytes (2^20 bytes)
   score += static_cast<int>(adapter.Memory()
-    / (static_cast<size_t>(1) << kMegaShift)); // Convert bytes to MB
+    / (std::size_t { 1U } << static_cast<unsigned>(
+         kMegaShift))); // Convert bytes to MB
 
   return score;
 }
@@ -275,8 +287,11 @@ auto DeviceManager::InitializeContext(Context& context) const -> bool
     // Initialize the command queues
     LOG_F(INFO, "Command Queues");
     context.commandQueues_.clear();
-    for (D3D12_COMMAND_LIST_TYPE type : { D3D12_COMMAND_LIST_TYPE_DIRECT,
-           D3D12_COMMAND_LIST_TYPE_COMPUTE, D3D12_COMMAND_LIST_TYPE_COPY }) {
+    for (D3D12_COMMAND_LIST_TYPE type : {
+           D3D12_COMMAND_LIST_TYPE_DIRECT,
+           D3D12_COMMAND_LIST_TYPE_COMPUTE,
+           D3D12_COMMAND_LIST_TYPE_COPY,
+         }) {
       ComPtr<ID3D12CommandQueue> commandQueue;
       D3D12_COMMAND_QUEUE_DESC queueDesc = {};
       queueDesc.Type = type;
@@ -360,7 +375,7 @@ auto DeviceManager::RecoverFromDeviceLoss(Context& context) -> bool
 }
 
 DeviceManager::DeviceManager(DeviceManagerDesc desc)
-  : props_(desc)
+  : props_(std::move(desc))
 {
   LOG_SCOPE_F(INFO, "DeviceManager init");
 
@@ -421,7 +436,7 @@ auto DeviceManager::GetCommandQueue(D3D12_COMMAND_LIST_TYPE type) const
   }
 
   auto it = std::ranges::find_if(current_context_->commandQueues_,
-    [type](const ComPtr<ID3D12CommandQueue>& queue) {
+    [type](const ComPtr<ID3D12CommandQueue>& queue) -> bool {
       auto desc = queue->GetDesc();
       return desc.Type == type;
     });

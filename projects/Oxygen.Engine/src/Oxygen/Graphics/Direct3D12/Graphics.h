@@ -15,6 +15,7 @@
 
 #include <wrl/client.h>
 
+#include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Core/Types/Frame.h>
@@ -39,8 +40,8 @@ class PipelineStateCache;
 
 // ReSharper disable once CppInconsistentNaming
 namespace D3D12MA {
-class Allocator;
-// D3D12MA allocations are destroyed by Release(), not public deletion.
+// D3D12MA objects are destroyed by Release(), not public deletion.
+class Allocator; // NOLINT(cppcoreguidelines-virtual-class-destructor)
 class Allocation; // NOLINT(cppcoreguidelines-virtual-class-destructor)
 struct ALLOCATION_DESC;
 } // namespace D3D12MA
@@ -62,9 +63,9 @@ namespace detail {
 
   struct IndirectCommandSignatureKey {
     graphics::CommandRecorder::IndirectCommandKind kind {
-      graphics::CommandRecorder::IndirectCommandKind::kDraw
+      graphics::CommandRecorder::IndirectCommandKind::kDraw,
     };
-    std::optional<InlineRootConstantsDesc> inline_root_constants {};
+    std::optional<InlineRootConstantsDesc> inline_root_constants;
     ID3D12RootSignature* root_signature { nullptr };
 
     auto operator==(const IndirectCommandSignatureKey&) const -> bool = default;
@@ -74,23 +75,15 @@ namespace detail {
     auto operator()(const IndirectCommandSignatureKey& key) const noexcept
       -> std::size_t
     {
-      auto combine = [](std::size_t& seed, const std::size_t value) {
-        seed ^= value + 0x9e3779b9U + (seed << 6U) + (seed >> 2U);
-      };
-
-      std::size_t seed = std::hash<int> {}(static_cast<int>(key.kind));
-      combine(seed,
-        std::hash<std::uintptr_t> {}(
-          reinterpret_cast<std::uintptr_t>(key.root_signature)));
-      combine(seed, std::hash<bool> {}(key.inline_root_constants.has_value()));
-
+      std::size_t seed {};
+      HashCombine(seed, key.kind);
+      HashCombine(seed, key.root_signature);
+      HashCombine(seed, key.inline_root_constants.has_value());
       if (key.inline_root_constants.has_value()) {
         const auto& constants = *key.inline_root_constants;
-        combine(
-          seed, std::hash<std::uint32_t> {}(constants.root_parameter_index));
-        combine(seed,
-          std::hash<std::uint32_t> {}(constants.dest_offset_in_32bit_values));
-        combine(seed, std::hash<std::uint32_t> {}(constants.value_count));
+        HashCombine(seed, constants.root_parameter_index);
+        HashCombine(seed, constants.dest_offset_in_32bit_values);
+        HashCombine(seed, constants.value_count);
       }
 
       return seed;
@@ -118,16 +111,16 @@ public:
   OXGN_D3D12_NDAPI auto GetDescriptorAllocator() const
     -> const graphics::DescriptorAllocator& override;
 
-  [[nodiscard]] OXGN_D3D12_NDAPI auto GetTimestampQueryProvider() const
+  OXGN_D3D12_NDAPI auto GetTimestampQueryProvider() const
     -> observer_ptr<graphics::TimestampQueryProvider> override;
 
   OXGN_D3D12_NDAPI auto GetReadbackManager() const
     -> observer_ptr<graphics::ReadbackManager> override;
 
-  [[nodiscard]] OXGN_D3D12_NDAPI auto GetFrameCaptureController() const
+  OXGN_D3D12_NDAPI auto GetFrameCaptureController() const
     -> observer_ptr<graphics::FrameCaptureController> override;
 
-  [[nodiscard]] OXGN_D3D12_NDAPI auto CreateImGuiGraphicsBackend() const
+  OXGN_D3D12_NDAPI auto CreateImGuiGraphicsBackend() const
     -> std::unique_ptr<graphics::imgui::ImGuiGraphicsBackend> override;
 
   //! Get the V-Sync setting.
@@ -145,8 +138,8 @@ public:
     observer_ptr<graphics::CommandQueue> command_queue) const
     -> std::unique_ptr<Surface> override;
 
-  OXGN_D3D12_NDAPI auto CreateSurfaceFromNative(void* native_handle,
-    observer_ptr<graphics::CommandQueue> command_queue) const
+  OXGN_D3D12_NDAPI auto CreateSurfaceFromNative(
+    void* native_handle, observer_ptr<graphics::CommandQueue> command_queue)
     -> std::shared_ptr<Surface> override;
 
   OXGN_D3D12_NDAPI auto CreateTexture(const TextureDesc& desc) const
@@ -203,10 +196,7 @@ protected:
 
   // Default constructor that does not initialize the backend. Used for testing
   // purposes.
-  Graphics()
-    : Base("Dummy Graphics Backend")
-  {
-  }
+  OXGN_D3D12_API Graphics();
 
   OXGN_D3D12_NDAPI auto CreateCommandQueue(const QueueKey& queue_key,
     QueueRole role) -> std::shared_ptr<graphics::CommandQueue> override;
@@ -226,16 +216,15 @@ private:
     -> ID3D12CommandSignature*;
 
   mutable std::unordered_map<DXGI_FORMAT, uint8_t>
-    dxgi_format_plane_count_cache_ {};
+    dxgi_format_plane_count_cache_;
   bool enable_vsync_ { true };
   mutable std::unordered_map<detail::IndirectCommandSignatureKey,
     Microsoft::WRL::ComPtr<ID3D12CommandSignature>,
     detail::IndirectCommandSignatureKeyHash>
-    indirect_command_signatures_ {};
-  std::unique_ptr<graphics::FrameCaptureController>
-    frame_capture_controller_ {};
-  std::unique_ptr<TimestampQueryBackend> timestamp_query_backend_ {};
-  std::unique_ptr<D3D12ReadbackManager> readback_manager_ {};
+    indirect_command_signatures_;
+  std::unique_ptr<graphics::FrameCaptureController> frame_capture_controller_;
+  std::unique_ptr<TimestampQueryBackend> timestamp_query_backend_;
+  std::unique_ptr<D3D12ReadbackManager> readback_manager_;
 };
 
-}
+} // namespace oxygen::graphics::d3d12

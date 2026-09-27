@@ -13,7 +13,9 @@
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/CommandRecording.h>
 #include <Oxygen/Graphics/Common/Queues.h>
-#include <Oxygen/Graphics/Common/Test/HeapAllocationFailure.h>
+#if defined(_MSC_VER) && defined(_DEBUG)
+#  include <Oxygen/Graphics/Common/Test/HeapAllocationFailure.h>
+#endif
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Testing/GTest.h>
