@@ -89,6 +89,11 @@ must be retained. `IWYU pragma: keep` alone does not prevent sorting; formatting
 markers alone do not prevent unused-include removal. Keep each exception limited
 to the required block or header.
 
+Oxygen's style places `Windows.h` before Win32 leaf headers because it initializes
+SDK architecture macros. Both formatting and tidy fixes reject include rewrites
+that remove this bootstrap or place known Win32 leaf headers before it. Rejected
+formatting leaves the file unchanged; rejected tidy batches write no files.
+
 References: [Clang formatting markers](https://releases.llvm.org/23.1.0/tools/clang/docs/ClangFormatStyleOptions.html#disabling-formatting-on-a-piece-of-code)
 and [Include Cleaner annotations](https://clangd.llvm.org/design/include-cleaner#iwyu-pragmas).
 

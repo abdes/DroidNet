@@ -10,7 +10,7 @@ from pathlib import Path
 
 from oxytools.common import ToolError, file_hash, path_key
 from oxytools.files import atomic_write
-from oxytools.includes import prepare_includes
+from oxytools.includes import prepare_includes, validate_windows_bootstrap
 
 from .scope import Scope
 
@@ -130,6 +130,11 @@ def plan_fixes(
                     f"Conflicting replacements in {path} at byte {edit['offset']}"
                 )
             previous = edit
+        updated, _ = replaced_bytes(original, group)
+        try:
+            validate_windows_bootstrap(original, updated)
+        except ToolError as error:
+            raise ToolError(f"{path}: {error}") from error
     return edits, skipped
 
 
@@ -185,6 +190,10 @@ def apply_fixes(
         content, ranges = replaced_bytes(original, group)
         if formatter:
             content = formatter(path, content, ranges)
+        try:
+            validate_windows_bootstrap(original, content)
+        except ToolError as error:
+            raise ToolError(f"{path}: {error}") from error
         if content == original:
             continue
         originals[name], prepared[name] = original, content

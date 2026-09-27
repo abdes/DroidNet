@@ -15,7 +15,7 @@ from pathlib import Path
 
 from oxytools.common import ToolError, yaml_documents
 from oxytools.files import atomic_write
-from oxytools.includes import prepare_includes
+from oxytools.includes import prepare_includes, validate_windows_bootstrap
 from oxytools.llvm import REQUIRED_LLVM_MAJOR, require_version
 from oxytools.process import WindowsJob
 
@@ -173,6 +173,7 @@ class Formatter:
                 )
             if self.root_style.read_bytes() != self.original_style:
                 raise ToolError("Root .clang-format changed during the run")
+            validate_windows_bootstrap(original, formatted)
             if formatted == original:
                 return Result(path, "unchanged")
             if not self.fix:

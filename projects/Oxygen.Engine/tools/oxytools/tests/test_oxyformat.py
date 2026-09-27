@@ -132,6 +132,19 @@ class WriteTests(Fixture):
         style = self.root / ".clang-format"
         return Formatter("unused", style, style, style.read_bytes(), fix, processes)
 
+    def test_windows_bootstrap_cannot_be_removed_or_sorted_after_leaf_headers(self):
+        original = b"#include <Windows.h>\n#include <winnt.h>\n"
+        for output in (
+            b"#include <winnt.h>\n",
+            b"#include <winnt.h>\n#include <Windows.h>\n",
+        ):
+            with self.subTest(output=output):
+                path = self.write("src/a.cpp", original)
+                result = self.formatter(path, lambda *_: output).format(path)
+                self.assertEqual(result.status, "failed")
+                self.assertIn("Windows.h", result.error)
+                self.assertEqual(path.read_bytes(), original)
+
     def test_concurrent_source_edit_is_not_overwritten(self):
         path = self.write("src/a.cpp", "int  x;\n")
 
@@ -221,6 +234,22 @@ class WriteTests(Fixture):
 
 @unittest.skipUnless(LLVM, "clang-format 23 is required")
 class LLVMTests(Fixture):
+    def test_project_style_keeps_windows_before_sdk_leaf_headers(self):
+        project_style = PROJECT.parents[1] / ".clang-format"
+        self.write(".clang-format", project_style.read_bytes())
+        for header in ("<Windows.h>", '"windows.h"', "<WINDOWS.h>"):
+            with self.subTest(header=header):
+                bootstrap = f"#include {header} // IWYU pragma: keep"
+                path = self.write(
+                    "src/a.cpp",
+                    f"#include <combaseapi.h>\n#include <winnt.h>\n{bootstrap}\n",
+                )
+                code, _, error = self.invoke("src/a.cpp", "--fix")
+                self.assertEqual(code, 0, error)
+                self.assertEqual(path.read_text().splitlines()[0], bootstrap)
+                code, _, error = self.invoke("src/a.cpp")
+                self.assertEqual(code, 0, error)
+
     def test_oxygen_include_spelling_is_checked_and_fixed(self):
         path = self.write("src/a.cpp", '#include "Oxygen/Alpha.h"\n')
         code, _, _ = self.invoke("src/a.cpp")

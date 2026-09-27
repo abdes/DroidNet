@@ -502,6 +502,183 @@ class ScopeAndFixTests(Fixture):
             edits[path_key(header)][0]["text"], "#include <Oxygen/Alpha.h>\n"
         )
 
+    def test_windows_bootstrap_deletion_is_rejected(self):
+        for directive in (
+            "#include <Windows.h>\n",
+            '#include "windows.h"\n',
+            "# include \\\r\n<WINDOWS.h>\r\n",
+        ):
+            with self.subTest(directive=directive):
+                prefix = "\ufeff// clang-format off\n"
+                original = prefix + directive + "// clang-format on\nint value;\n"
+                header = self.write("src/a.h", original)
+                records = [
+                    self.diagnostic(
+                        [
+                            self.edit(
+                                offset=len(prefix.encode()),
+                                length=len(directive.encode()),
+                                text="",
+                            )
+                        ]
+                    )
+                ]
+                with self.assertRaisesRegex(ToolError, "cannot remove Windows.h"):
+                    plan_fixes(records, self.scope("src"), fingerprint([header]))
+                self.assertEqual(header.read_bytes(), original.encode())
+
+    def test_win32_leaf_insertion_requires_prior_bootstrap(self):
+        for original, offset in (
+            ("#include <d3d12.h>\nint value;\n", 0),
+            ("#include <Windows.h>\nint value;\n", 0),
+        ):
+            with self.subTest(original=original):
+                header = self.write("src/a.h", original)
+                records = [
+                    self.diagnostic(
+                        [
+                            self.edit(
+                                offset=offset, length=0, text="#include <winnt.h>\n"
+                            )
+                        ]
+                    )
+                ]
+                with self.assertRaisesRegex(ToolError, "Windows.h before winnt.h"):
+                    plan_fixes(records, self.scope("src"), fingerprint([header]))
+                self.assertEqual(header.read_text(), original)
+
+    def test_win32_leaf_after_bootstrap_is_allowed(self):
+        prefix = "#include <Windows.h> // IWYU pragma: keep\n"
+        header = self.write("src/a.h", prefix + "int value;\n")
+        snapshot = fingerprint([header])
+        records = [
+            self.diagnostic(
+                [self.edit(offset=len(prefix), length=0, text="#include <winnt.h>\n")]
+            )
+        ]
+        edits, _ = plan_fixes(records, self.scope("src"), snapshot)
+        apply_fixes(edits, snapshot)
+        self.assertEqual(
+            header.read_text(), prefix + "#include <winnt.h>\nint value;\n"
+        )
+
+    def test_windows_bootstrap_must_be_active_in_the_leaf_branch(self):
+        for prefix, suffix in (
+            ("#if USE_WINDOWS\n#include <Windows.h>\n#endif\n", ""),
+            ("#if USE_WINDOWS\n#include <Windows.h>\n#else\n", "#endif\n"),
+            ("#if USE_WINDOWS\n#include <Windows.h>\n#elifdef USE_LEAF\n", "#endif\n"),
+            ("#if USE_WINDOWS\n#include <Windows.h>\n#elifndef USE_LEAF\n", "#endif\n"),
+            ("#if USE_WINDOWS\n#include <Windows.h>\n#elif USE_LEAF\n", "#endif\n"),
+            (
+                "#if USE_WINDOWS\n#include <Windows.h>\n#endif\n#if USE_LEAF\n",
+                "#endif\n",
+            ),
+        ):
+            with self.subTest(prefix=prefix):
+                original = prefix + suffix
+                header = self.write("src/a.h", original)
+                records = [
+                    self.diagnostic(
+                        [
+                            self.edit(
+                                offset=len(prefix),
+                                length=0,
+                                text="#include <winnt.h>\n",
+                            )
+                        ]
+                    )
+                ]
+                with self.assertRaisesRegex(ToolError, "Windows.h before winnt.h"):
+                    plan_fixes(records, self.scope("src"), fingerprint([header]))
+                self.assertEqual(header.read_bytes(), original.encode())
+
+    def test_windows_bootstrap_protects_same_and_nested_branches(self):
+        for prefix in (
+            "#ifdef _WIN32\n#include <Windows.h>\n",
+            "#include <Windows.h>\n#ifdef _WIN32\n",
+            "#ifdef _WIN32\n#include <Windows.h>\n#if USE_LEAF\n",
+        ):
+            with self.subTest(prefix=prefix):
+                suffix = "#endif\n" * prefix.count("#if")
+                header = self.write("src/a.h", prefix + suffix)
+                snapshot = fingerprint([header])
+                records = [
+                    self.diagnostic(
+                        [
+                            self.edit(
+                                offset=len(prefix),
+                                length=0,
+                                text="#include <winnt.h>\n",
+                            )
+                        ]
+                    )
+                ]
+                edits, _ = plan_fixes(records, self.scope("src"), snapshot)
+                apply_fixes(edits, snapshot)
+                self.assertEqual(
+                    header.read_text(), prefix + "#include <winnt.h>\n" + suffix
+                )
+
+    def test_formatter_cannot_remove_bootstrap_or_partially_apply_batch(self):
+        bootstrap = "#include <Windows.h>\n"
+        header = self.write("src/a.h", bootstrap + "int value;\n")
+        other = self.write("src/b.h", "int other;\n")
+        snapshot = fingerprint([header, other])
+        records = [
+            self.diagnostic(
+                [
+                    self.edit(path="src/b.h", offset=4, length=5, text="renamed"),
+                    self.edit(offset=len(bootstrap) + 4, length=5, text="renamed"),
+                ]
+            )
+        ]
+        edits, _ = plan_fixes(records, self.scope("src"), snapshot)
+        with self.assertRaisesRegex(ToolError, "cannot remove Windows.h"):
+            apply_fixes(
+                edits,
+                snapshot,
+                formatter=lambda path, data, ranges: data.replace(
+                    bootstrap.encode(), b""
+                ),
+            )
+        self.assertEqual(header.read_text(), bootstrap + "int value;\n")
+        self.assertEqual(other.read_text(), "int other;\n")
+
+    def test_windows_include_text_in_comments_is_not_a_bootstrap(self):
+        directive = "#include <Windows.h>\n"
+        header = self.write("src/a.h", "/*\n" + directive + "*/\nint value;\n")
+        snapshot = fingerprint([header])
+        edits, _ = plan_fixes(
+            [self.diagnostic([self.edit(offset=3, length=len(directive), text="")])],
+            self.scope("src"),
+            snapshot,
+        )
+        apply_fixes(edits, snapshot)
+        self.assertEqual(header.read_text(), "/*\n*/\nint value;\n")
+
+    def test_application_api_headers_do_not_require_windows(self):
+        header = self.write("src/a.h", "int value;\n")
+        snapshot = fingerprint([header])
+        edits, _ = plan_fixes(
+            [self.diagnostic([self.edit(length=0, text='#include "myapi.h"\n')])],
+            self.scope("src"),
+            snapshot,
+        )
+        apply_fixes(edits, snapshot)
+        self.assertEqual(header.read_text(), '#include "myapi.h"\nint value;\n')
+
+    def test_self_contained_sdk_headers_do_not_require_windows(self):
+        original = "#include <strsafe.h>\n#include <winerror.h>\n"
+        header = self.write("src/a.h", original)
+        snapshot = fingerprint([header])
+        edits, _ = plan_fixes(
+            [self.diagnostic([self.edit(length=0, text="#include <vector>\n")])],
+            self.scope("src"),
+            snapshot,
+        )
+        apply_fixes(edits, snapshot)
+        self.assertEqual(header.read_text(), "#include <vector>\n" + original)
+
     def test_include_deletion_and_insertions_become_one_replacement(self):
         for newline, bom in [(b"\n", b""), (b"\r\n", b"\xef\xbb\xbf")]:
             with self.subTest(newline=newline, bom=bom):
@@ -757,13 +934,17 @@ class ExecutionTests(Fixture):
         foreign = self.root / "foreign"
         for path in (owned, foreign):
             venv.EnvBuilder(with_pip=False).create(path)
-        site = owned / ("Lib/site-packages" if os.name == "nt"
-                        else f"lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages")
+        site = owned / (
+            "Lib/site-packages"
+            if os.name == "nt"
+            else f"lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages"
+        )
         module = site / "oxytidy"
         module.mkdir(parents=True)
         (module / "__init__.py").write_text("")
         (module / "__main__.py").write_text(
-            "import json,sys,os\nprint(json.dumps({'args':sys.argv[1:],'cwd':os.getcwd(),'prefix':sys.prefix}))\nraise SystemExit(7)\n")
+            "import json,sys,os\nprint(json.dumps({'args':sys.argv[1:],'cwd':os.getcwd(),'prefix':sys.prefix}))\nraise SystemExit(7)\n"
+        )
         arguments = [
             "src/a.h",
             "--checks=-*,modernize-*",
@@ -780,16 +961,32 @@ class ExecutionTests(Fixture):
         environment = {**os.environ, "VIRTUAL_ENV": str(foreign), "UV_OFFLINE": "1"}
         command = ["pwsh", "-NoProfile", "-File", str(launcher), *arguments]
         for _ in range(2):
-            result = subprocess.run(command, cwd=self.root, env=environment,
-                                    capture_output=True, text=True, timeout=15, check=False)
+            result = subprocess.run(
+                command,
+                cwd=self.root,
+                env=environment,
+                capture_output=True,
+                text=True,
+                timeout=15,
+                check=False,
+            )
             self.assertEqual(result.returncode, 7, result.stderr)
-            self.assertEqual(json.loads(result.stdout),
-                             {"args": arguments, "cwd": str(self.root), "prefix": str(owned)})
+            self.assertEqual(
+                json.loads(result.stdout),
+                {"args": arguments, "cwd": str(self.root), "prefix": str(owned)},
+            )
             self.assertEqual(result.stderr, "")
         # A foreign active environment is never used as fallback.
         (self.root / "uv.lock").unlink()
-        result = subprocess.run(command, cwd=self.root, env=environment,
-                                capture_output=True, text=True, timeout=15, check=False)
+        result = subprocess.run(
+            command,
+            cwd=self.root,
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
         self.assertEqual(result.returncode, 2)
         self.assertIn("No repository Python workspace", result.stderr)
 

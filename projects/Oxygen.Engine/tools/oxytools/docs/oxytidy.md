@@ -395,6 +395,11 @@ other clang-tidy fixes. Add `// IWYU pragma: keep` to each intentional prerequis
 include that include-cleaner must retain. The two annotations serve different
 purposes and may be used together. No custom suppression syntax is needed.
 
+Windows SDK bootstrap protection also rejects removal of `Windows.h` or placement
+of known Win32 leaf headers before it, before writing any file in the batch.
+Retain the bootstrap with `// IWYU pragma: keep`; see
+[include ordering](oxyformat.md#order-sensitive-include-blocks).
+
 `--export-fixes PATH` writes a reviewable JSON plan with replacements, skipped
 reasons, and content hashes, without editing sources. Existing exports are not
 overwritten. LLVM YAML exports remain available per context in both modes.
