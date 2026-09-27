@@ -8,7 +8,8 @@ a bounded path for renderer-owned lookup products.
 owns implementation state, adopter migration and integration qualification.
 
 Read: [immutable initialization](#immutable-texture-initialization),
-[async ownership](#async-request-ownership), [C++ guidance](../../../../../design/oxygen/RULES.md#c).
+[async ownership](#async-request-ownership), [frame retirement](#frame-retirement),
+[C++ guidance](../../../../../design/oxygen/RULES.md#c).
 
 ## Immutable texture initialization
 
@@ -67,3 +68,15 @@ tracker lock.
 
 `Shutdown` drains ticketed submissions. Prepared immutable uploads belong to
 their caller's recording and retire through Graphics submission receipts.
+
+## Frame retirement
+
+`UploadCoordinator::OnFrameStart` runs after `Graphics::BeginFrame`, which waits
+for the recycled slot across every queue. This protects staging partition reuse.
+The coordinator polls the upload queue's completed fence; it never flushes newer
+work merely to retire uploads. Device-loss fence values are rejected before
+publishing completion or recycling staging.
+
+`Shutdown` polls until the last ticketed submission completes, including tickets
+already removed by slot cleanup or cancellation. Its timeout bounds that wait;
+ordinary frame retirement does not wait for unrelated queued work.

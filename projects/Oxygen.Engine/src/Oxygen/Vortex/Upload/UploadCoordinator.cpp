@@ -12,8 +12,10 @@
 #include <expected>
 #include <functional>
 #include <iterator>
+#include <limits>
 #include <memory>
 #include <span>
+#include <stdexcept>
 #include <thread>
 #include <utility>
 #include <variant>
@@ -685,11 +687,14 @@ auto UploadCoordinator::Shutdown(std::chrono::milliseconds timeout)
 
 auto UploadCoordinator::RetireCompleted() -> void
 {
-  // Poll the upload queue configured in the policy.
+  // Poll completed work only. Graphics::BeginFrame already waits for the
+  // recycled frame slot; flushing here also drains newer frames on this queue.
   const auto& key = policy_.upload_queue_key;
   if (auto q = gfx_->GetCommandQueue(key); q) {
-    q->Flush();
     const auto completed = FenceValue { q->GetCompletedValue() };
+    if (completed.get() == std::numeric_limits<std::uint64_t>::max()) {
+      throw std::runtime_error("Device lost while polling upload completion");
+    }
     tracker_.MarkFenceCompleted(completed);
     // Allow providers to recycle now that fence advanced
     auto tag = internal::UploaderTagFactory::Get();

@@ -344,6 +344,7 @@ m_gtest_program(
     "Fixtures/UploadCoordinatorTest.h"
     "Upload/UploadCoordinator_buffer_test.cpp"
     "Upload/UploadCoordinator_async_test.cpp"
+    "Upload/UploadCoordinator_retirement_test.cpp"
     "Upload/ImmutableTextureUpload_test.cpp"
     "Upload/UploadCoordinator_texture2d_test.cpp"
     "Upload/UploadCoordinator_texture3d_test.cpp"

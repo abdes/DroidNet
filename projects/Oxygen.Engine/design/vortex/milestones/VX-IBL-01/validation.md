@@ -13,6 +13,24 @@ Read: [S7 checkpoints](#s7-checkpoints), [integrated results](#integrated-result
 
 ## S7 checkpoints
 
+### Frame-start upload retirement
+
+Upload retirement polls the completed fence instead of draining the queue at
+every frame start. Graphics still waits for recycled frame slots across all
+queues before staging reuse. Device loss remains an error, and shutdown still
+waits for the last submitted upload fence.
+
+**29 upload tests and two frame-slot tests pass in Debug and Release.** New
+cases cover unrelated pending work, pending-upload results and device-loss
+rejection. All changed C++ is oxytidy-clean with no added suppressions.
+Tracy's 1,924-frame comparison removes **1,924 frame-start fence waits**; CPU
+frame-start p95 falls from **3.259 ms to 0.257 ms**. This is a CPU synchronization
+fix; the GPU power-policy qualification measures a separate effect.
+
+Reproduce with `Oxygen.Vortex.UploadCoordinator.Tests` and Graphics Common Queues
+filter `QueuesStrategy.Frame*`. Capture the isolated authoring workload in the
+Tracy build to inspect `Vortex.OnFrameStart` and `D3D12.FenceWait`.
+
 ### S7.6 cubemap geometry
 
 Shared cube geometry passes Debug/Release qualification over `82e20534c` with
