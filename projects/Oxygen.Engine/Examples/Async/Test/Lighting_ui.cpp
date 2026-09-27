@@ -4,16 +4,23 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
+#include <cstddef>
+#include <cstdlib>
 #include <filesystem>
 #include <string>
 
 #include "Async/AsyncDemoVm.h"
+#include "Async/AsyncShowcase.h"
 #include "Async/MainModule.h"
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
+#include "DemoShell/Services/SettingsService.h"
 #include "DemoShell/Test/UiTestSession.h"
 #include "DemoShell/UI/CameraControlPanel.h"
 #include "DemoShell/UI/CameraRigController.h"
+#include <glm/ext/quaternion_geometric.hpp>
+#include <glm/geometric.hpp>
 #include <imgui_te_context.h>
 #include <imgui_te_engine.h>
 
@@ -24,6 +31,7 @@
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/Environment/SkyLight.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Light/DirectionalLightResolver.h>
 #include <Oxygen/Scene/Scene.h>
@@ -33,6 +41,11 @@ namespace oxygen::examples::async {
 
 auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
 {
+  constexpr float kTourWarningSeconds = 90.0F;
+  constexpr float kTourTimeoutSeconds = 120.0F;
+  auto& test_io = ImGuiTestEngine_GetIO(engine);
+  test_io.ConfigWatchdogWarning = kTourWarningSeconds;
+  test_io.ConfigWatchdogKillTest = kTourTimeoutSeconds;
   auto* test = IM_REGISTER_TEST(engine, "async", "lighting");
   test->UserData = this;
   test->TestFunc = [](ImGuiTestContext* ctx) -> void {
@@ -127,6 +140,130 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
     app.vm_->SetAnimationEnabled(true);
     ctx->Yield(3);
     IM_CHECK_GT(app.vm_->GetAnimationTime(), time);
+  };
+  test = IM_REGISTER_TEST(engine, "async", "tour_controls");
+  test->UserData = this;
+  test->TestFunc = [](ImGuiTestContext* ctx) -> void {
+    auto& app = *static_cast<MainModule*>(ctx->Test->UserData);
+    IM_CHECK(testing::UiTestSession::UsesIsolatedSettings());
+    constexpr unsigned kReadyFrames = 120U;
+    constexpr int kControlSettleFrames = 6;
+    for (unsigned wait = 0U; wait < kReadyFrames && !app.showcase_; ++wait) {
+      ctx->Yield();
+    }
+    IM_CHECK(app.showcase_);
+    auto& show = *app.showcase_;
+    const auto original_position
+      = app.main_camera_.GetTransform().GetLocalPosition().value();
+    const auto original_rotation
+      = app.main_camera_.GetTransform().GetLocalRotation().value();
+    const auto original_mode
+      = SettingsService::ForDemoApp()->GetString("camera_rig.MainCamera.mode");
+    const auto original_flux = app.vm_->GetSpotlightIntensity();
+    const auto original_range = app.vm_->GetSpotlightRange();
+    const auto scene = app.GetShell().TryGetScene();
+    IM_CHECK(scene);
+    const auto sky
+      = scene->GetEnvironment()->TryGetSystem<scene::environment::SkyLight>();
+    IM_CHECK(sky);
+    const bool original_sky = sky->IsEnabled();
+    ctx->SetRef("//Async Demo");
+    ctx->ItemClick("Play tour");
+    ctx->Yield(kControlSettleFrames);
+    IM_CHECK(show.IsPlaying());
+    ctx->SetRef("//Async presentation");
+    ctx->ItemClick("Pause");
+    const auto paused_progress = show.Progress();
+    const auto paused_position
+      = app.main_camera_.GetTransform().GetLocalPosition();
+    ctx->Yield(kControlSettleFrames);
+    IM_CHECK(show.IsPaused());
+    IM_CHECK_EQ(show.Progress(), paused_progress);
+    IM_CHECK(
+      app.main_camera_.GetTransform().GetLocalPosition() == paused_position);
+    ctx->MouseMove("Hold: direct light only");
+    ctx->MouseDown();
+    ctx->Yield(3);
+    IM_CHECK(!sky->IsEnabled());
+    ctx->MouseUp();
+    ctx->Yield(2);
+    IM_CHECK_EQ(sky->IsEnabled(), original_sky);
+    ctx->ItemClick("Resume");
+    ctx->Yield(kControlSettleFrames);
+    IM_CHECK_GT(show.Progress(), paused_progress);
+    ctx->ItemClick("Spotlight##LightingPreset");
+    ctx->Yield(4);
+    const auto sun = app.sun_light_.GetLightAs<scene::DirectionalLight>();
+    IM_CHECK(sun && !sun->get().Common().affects_world);
+    IM_CHECK(app.vm_->GetSpotlightEnabled());
+    ctx->MouseMove("Hold: no shadows");
+    ctx->MouseDown();
+    ctx->Yield(3);
+    IM_CHECK(!app.vm_->GetSpotlightCastsShadows());
+    ctx->MouseUp();
+    ctx->Yield(2);
+    IM_CHECK(app.vm_->GetSpotlightCastsShadows());
+    ctx->ItemClick("Explore");
+    ctx->Yield(3);
+    IM_CHECK(!show.IsActive());
+    constexpr float kPoseTolerance = 0.0001F;
+    IM_CHECK_LT(
+      glm::distance(app.main_camera_.GetTransform().GetLocalPosition().value(),
+        original_position),
+      kPoseTolerance);
+    IM_CHECK_GT(std::abs(glm::dot(
+                  app.main_camera_.GetTransform().GetLocalRotation().value(),
+                  original_rotation)),
+      1.0F - kPoseTolerance);
+    IM_CHECK_EQ(app.vm_->GetSpotlightIntensity(), original_flux);
+    IM_CHECK_EQ(app.vm_->GetSpotlightRange(), original_range);
+    IM_CHECK(
+      SettingsService::ForDemoApp()->GetString("camera_rig.MainCamera.mode")
+      == original_mode);
+  };
+
+  test = IM_REGISTER_TEST(engine, "async", "tour_playback");
+  test->UserData = this;
+  test->TestFunc = [](ImGuiTestContext* ctx) -> void {
+    auto& app = *static_cast<MainModule*>(ctx->Test->UserData);
+    IM_CHECK(testing::UiTestSession::UsesIsolatedSettings());
+    constexpr unsigned kReadyFrames = 120U;
+    for (unsigned wait = 0U; wait < kReadyFrames && !app.showcase_; ++wait) {
+      ctx->Yield();
+    }
+    IM_CHECK(app.showcase_);
+    app.showcase_->Play();
+    const auto graphics = app.app_.gfx_weak.lock();
+    IM_CHECK(graphics);
+    const auto capture = graphics->GetFrameCaptureController();
+    constexpr std::array kCaptureProgress { 0.15F, 0.5F, 0.85F };
+    constexpr std::array kCaptureNames {
+      "tour-daylight",
+      "tour-sunset",
+      "tour-spotlight",
+    };
+    std::size_t next_capture = 0U;
+    constexpr unsigned kMaximumFrames = 30000U;
+    for (unsigned frame = 0U;
+      frame < kMaximumFrames && app.showcase_->IsPlaying(); ++frame) {
+      if (next_capture < kCaptureProgress.size()
+        && app.showcase_->Progress() >= kCaptureProgress.at(next_capture)) {
+        if (capture && capture->IsAvailable()) {
+          const auto path
+            = app.UiTestOutputDirectory() / kCaptureNames.at(next_capture);
+          IM_CHECK(capture->SetCaptureFileTemplate(path.string()));
+          IM_CHECK(capture->TriggerNextFrame());
+          ctx->Yield(8);
+        }
+        ++next_capture;
+      }
+      ctx->Yield();
+    }
+    IM_CHECK(app.showcase_->IsPaused());
+    IM_CHECK_EQ(app.showcase_->Progress(), 1.0F);
+    IM_CHECK_EQ(next_capture, kCaptureProgress.size());
+    app.showcase_->Explore();
+    IM_CHECK(!app.showcase_->IsActive());
   };
 }
 

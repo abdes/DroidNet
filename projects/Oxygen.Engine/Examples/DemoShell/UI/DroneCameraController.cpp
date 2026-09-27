@@ -299,6 +299,11 @@ void DroneCameraController::SetRampTime(double seconds)
   impl_->ramp_time = std::max(0.0, seconds);
 }
 
+auto DroneCameraController::GetRampTime() const noexcept -> double
+{
+  return impl_->ramp_time;
+}
+
 void DroneCameraController::SetFocusTarget(glm::vec3 target)
 {
   impl_->focus_target = target;

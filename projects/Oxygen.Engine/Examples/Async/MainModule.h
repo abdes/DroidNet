@@ -32,6 +32,7 @@ namespace oxygen::examples::async {
 class AsyncDemoPanel;
 class AsyncDemoVm;
 class AsyncDemoSettingsService;
+class AsyncShowcase;
 
 //! Async frame phases, animated LODs/materials and camera lighting on Vortex.
 class MainModule final : public DemoModuleBase {
@@ -112,6 +113,7 @@ private:
   std::chrono::steady_clock::time_point phase_start_time_;
   std::string current_phase_name_;
   AsyncScene scene_content_;
+  std::unique_ptr<AsyncShowcase> showcase_;
   scene::SceneNode main_camera_;
   scene::SceneNode camera_spot_light_;
   scene::SceneNode sun_light_;

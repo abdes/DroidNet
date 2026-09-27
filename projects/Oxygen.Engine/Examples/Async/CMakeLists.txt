@@ -38,6 +38,8 @@ add_executable(
   "AsyncDemoTypes.h"
   "AsyncScene.cpp"
   "AsyncScene.h"
+  "AsyncShowcase.cpp"
+  "AsyncShowcase.h"
   "AsyncDemoVm.cpp"
   "AsyncDemoVm.h"
   "main_impl.cpp"

@@ -2,7 +2,7 @@
 
 A compact AsyncEngine scene showing frame phases, animated geometry and Vortex
 lighting. Start with [running](#run), [showcases](#showcases) or
-[validation](#validation).
+[the tour](#tour), then [validation](#validation).
 
 ## Run
 
@@ -41,6 +41,18 @@ fixed comparison; automatic exposure intentionally adapts to reduced lighting.
 Opaque spheres cast shadows; alpha-blended spheres demonstrate transparency and
 are not opaque shadow casters. Existing saved fog/sky colors can still contribute
 light after the sun is disabled.
+
+## Tour
+
+**Play tour** follows one authored 60-second route through daylight, sunset and
+spotlight lighting. The rotating metallic torus shows changing reflections;
+eight slats make shadow direction and length easy to read.
+
+The overlay shows the engine frame sequence for reporting visual defects.
+**Pause** freezes the camera, lighting and animation; **Restart** repeats the
+route. Lighting buttons preview individual modes. Hold the comparison button to
+remove IBL in daylight/sunset or spotlight shadows at night. **Explore** restores
+the previous environment, exposure, camera pose and drone settings.
 
 ## Integration
 
@@ -84,6 +96,10 @@ color before the UI overlay and inspect the retained spot depth map. Compare
 the shadowed/unshadowed images in RenderDoc; check that lights-off contributes no surface illumination. Use a fixed
 camera, animation time and exposure for these comparisons. For performance work,
 measure native Release runs with Tracy; RenderDoc replay timing is not a benchmark.
+
+The `tour_controls` filter checks pause/resume, comparisons and restoration.
+`tour_playback` runs the complete route and optionally captures all three lighting
+modes; allow at least 6,500 frames at 100 FPS or 2,000 at 30 FPS.
 
 Drone regression tests cover true pause, nearest-route re-entry, vertical
 directions and invalid paths. Native-lifetime ownership keeps debug diagnostics

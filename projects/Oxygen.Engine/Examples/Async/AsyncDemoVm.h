@@ -24,6 +24,7 @@ class SceneNode;
 namespace oxygen::examples::async {
 
 class AsyncDemoSettingsService;
+class AsyncShowcase;
 
 //! View model for the Async Demo panel.
 /*!
@@ -36,6 +37,15 @@ public:
     observer_ptr<scene::SceneNode> spotlight_node,
     const FrameActionTracker* frame_tracker,
     const std::vector<SphereState>* spheres);
+
+  auto BindShowcase(observer_ptr<AsyncShowcase> showcase) noexcept -> void
+  {
+    showcase_ = showcase;
+  }
+  [[nodiscard]] auto GetShowcase() const noexcept -> observer_ptr<AsyncShowcase>
+  {
+    return showcase_;
+  }
 
   // --- Panel Sections ---
 
@@ -102,6 +112,7 @@ public:
   void SetAnimationTime(double time);
 
 private:
+  observer_ptr<AsyncShowcase> showcase_;
   observer_ptr<AsyncDemoSettingsService> settings_;
   observer_ptr<scene::SceneNode> spotlight_node_;
   const FrameActionTracker* frame_tracker_;

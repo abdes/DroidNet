@@ -359,6 +359,42 @@ auto BuildGroundPlaneAsset() -> std::shared_ptr<oxygen::data::GeometryAsset>
     geo_desc, std::vector<std::shared_ptr<Mesh>> { std::move(mesh) });
 }
 
+using MeshBuffers = std::pair<std::vector<Vertex>, std::vector<std::uint32_t>>;
+
+auto BuildPrimitive(const std::string& name, MeshBuffers buffers,
+  const std::shared_ptr<const oxygen::data::MaterialAsset>& material)
+  -> std::shared_ptr<oxygen::data::GeometryAsset>
+{
+  using oxygen::data::pak::geometry::MeshViewDesc;
+  auto mesh
+    = oxygen::data::MeshBuilder(0U, name)
+        .WithVertices(buffers.first)
+        .WithIndices(buffers.second)
+        .BeginSubMesh("surface", material)
+        .WithMeshView(MeshViewDesc {
+          .first_index = 0U,
+          .index_count = static_cast<std::uint32_t>(buffers.second.size()),
+          .first_vertex = 0U,
+          .vertex_count = static_cast<std::uint32_t>(buffers.first.size()),
+        })
+        .EndSubMesh()
+        .Build();
+  auto description = oxygen::data::pak::geometry::GeometryAssetDesc {};
+  description.lod_count = 1U;
+  const auto minimum = mesh->BoundingBoxMin();
+  const auto maximum = mesh->BoundingBoxMax();
+  description.bounding_box_min[0] = minimum.x;
+  description.bounding_box_min[1] = minimum.y;
+  description.bounding_box_min[2] = minimum.z;
+  description.bounding_box_max[0] = maximum.x;
+  description.bounding_box_max[1] = maximum.y;
+  description.bounding_box_max[2] = maximum.z;
+  return std::make_shared<oxygen::data::GeometryAsset>(
+    oxygen::data::AssetKey::FromVirtualPath(
+      "/Engine/Examples/Async/Geometry/" + name + ".ogeo"),
+    description, std::vector<std::shared_ptr<Mesh>> { std::move(mesh) });
+}
+
 // Convert hue [0,1] to an RGB color (simple H->RGB approx)
 auto ColorFromHue(double h) -> glm::vec3
 {
@@ -535,6 +571,34 @@ auto AsyncScene::Populate(scene::Scene& scene) -> void
   ground.GetTransform().SetLocalScale(
     glm::vec3(kGroundHalfExtent, kGroundHalfExtent, 1.0F));
 
+  const auto hero_material = MakeSolidColorMaterial("HeroCopper",
+    { 0.95F, 0.64F, 0.54F, 1.0F }, data::MaterialDomain::kOpaque, false,
+    { .metalness = 1.0F, .roughness = 0.18F });
+  auto torus = data::MakeTorusMeshAsset();
+  CHECK_F(torus.has_value());
+  hero_ = scene.CreateNode("Copper torus");
+  hero_.GetRenderable().SetGeometry(
+    BuildPrimitive("Torus", std::move(torus).value(), hero_material));
+  hero_.GetTransform().SetLocalPosition({ -11.0F, 0.0F, 8.0F });
+  hero_.GetTransform().SetLocalScale(glm::vec3(5.0F));
+  SetShadowParticipation(hero_, true, true);
+
+  const auto slat_material
+    = MakeSolidColorMaterial("ShadowScreen", { 0.24F, 0.27F, 0.30F, 1.0F });
+  auto cube = data::MakeCubeMeshAsset();
+  CHECK_F(cube.has_value());
+  const auto slat_geometry
+    = BuildPrimitive("Slat", std::move(cube).value(), slat_material);
+  constexpr unsigned kSlatCount = 8U;
+  for (unsigned index = 0U; index < kSlatCount; ++index) {
+    auto slat = scene.CreateNode("Shadow slat " + std::to_string(index));
+    slat.GetRenderable().SetGeometry(slat_geometry);
+    slat.GetTransform().SetLocalPosition(
+      { -7.0F + (2.0F * static_cast<float>(index)), 12.0F, 3.0F });
+    slat.GetTransform().SetLocalScale({ 0.35F, 0.45F, 6.0F });
+    SetShadowParticipation(slat, true, true);
+  }
+
   // Create and register staged main camera so publish can hand it to DemoShell.
   main_camera_ = scene.CreateNode("MainCamera");
   {
@@ -621,6 +685,13 @@ auto AsyncScene::Animate(const double elapsed_seconds) -> void
     AnimateSphereOrbit(s, anim_time_);
   }
 
+  if (hero_.IsAlive()) {
+    constexpr double kHeroAngularSpeed = 0.3;
+    const auto angle = static_cast<float>(elapsed_seconds * kHeroAngularSpeed);
+    hero_.GetTransform().SetLocalRotation(
+      glm::angleAxis(angle, oxygen::space::move::Right)
+      * glm::angleAxis(angle, oxygen::space::move::Up));
+  }
   if (multisubmesh_.IsAlive()) {
     constexpr double kQuadSpinSpeed = 0.6; // radians/sec
     const double quad_angle = std::fmod(anim_time_ * kQuadSpinSpeed, two_pi);

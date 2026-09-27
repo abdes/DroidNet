@@ -12,6 +12,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Types/Frame.h>
 
 namespace oxygen::examples::async {
 
@@ -31,6 +32,7 @@ public:
   OXYGEN_MAKE_NON_MOVABLE(AsyncDemoPanel)
 
   auto DrawContents() -> void override;
+  auto DrawPresentation(frame::SequenceNumber frame_sequence) -> void;
 
   [[nodiscard]] auto GetName() const noexcept -> std::string_view override;
   [[nodiscard]] auto GetPreferredWidth() const noexcept -> float override;
@@ -40,6 +42,7 @@ public:
   auto OnUnloaded() -> void override { }
 
 private:
+  auto DrawShowcaseControls() -> void;
   void DrawSceneInfo();
   void DrawSpotlightControls();
   void DrawProfilingInfo();

@@ -17,6 +17,7 @@
 #include "Async/AsyncDemoPanel.h"
 #include "Async/AsyncDemoSettingsService.h"
 #include "Async/AsyncDemoVm.h"
+#include "Async/AsyncShowcase.h"
 #include "Async/MainModule.h"
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
@@ -139,6 +140,7 @@ void MainModule::OnShutdown() noexcept
 #ifdef OXYGEN_BUILD_UI_TESTS
   StopUiTests();
 #endif
+  showcase_.reset();
   auto& shell = GetShell();
   shell.SetScene(std::unique_ptr<scene::Scene> {});
   active_scene_ = {};
@@ -242,6 +244,16 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
 
   EnsureMainCamera(width, height);
   EnsureCameraSpotLight();
+  if (!showcase_ && camera_spot_light_.HasLight()) {
+    showcase_ = std::make_unique<AsyncShowcase>(GetShell(),
+      AsyncShowcase::SceneBindings {
+        .scene = GetShell().TryGetScene(),
+        .camera = main_camera_,
+        .sun = sun_light_,
+        .spotlight = camera_spot_light_,
+      });
+    vm_->BindShowcase(observer_ptr { showcase_.get() });
+  }
   scene_content_.UpdateMaterials(anim_time_);
 
   TrackFrameAction("Scene mutations updated");
@@ -314,10 +326,14 @@ auto MainModule::OnGameplay(observer_ptr<engine::FrameContext> context)
   TrackPhaseStart("Gameplay");
   auto& shell = GetShell();
 
-  if (vm_->IsAnimationEnabled()) {
-    const auto seconds
-      = std::chrono::duration<double>(context->GetGameDeltaTime().get())
-          .count();
+  const auto seconds
+    = std::chrono::duration<double>(context->GetGameDeltaTime().get()).count();
+  if (showcase_) {
+    showcase_->Update(seconds);
+  }
+  const bool paused = showcase_ && showcase_->IsPaused();
+  if (!paused
+    && (vm_->IsAnimationEnabled() || (showcase_ && showcase_->IsPlaying()))) {
     constexpr double kMaximumAnimationStep = 0.05;
     anim_time_ += std::min(seconds, kMaximumAnimationStep);
     scene_content_.Animate(anim_time_);
@@ -414,7 +430,11 @@ auto MainModule::OnGuiUpdate(observer_ptr<engine::FrameContext> context)
   LOG_SCOPE_F(3, "MainModule::OnGuiUpdate");
 
   auto& shell = GetShell();
-  shell.Draw(context);
+  if (showcase_ && showcase_->IsActive()) {
+    async_panel_->DrawPresentation(context->GetFrameSequenceNumber());
+  } else {
+    shell.Draw(context);
+  }
 
   TrackFrameAction("GUI overlay built");
   TrackPhaseEnd();

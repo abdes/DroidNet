@@ -41,8 +41,9 @@ private:
   scene::SceneNode multisubmesh_;
   scene::SceneNode main_camera_;
   scene::SceneNode sun_light_;
+  scene::SceneNode hero_;
   std::shared_ptr<const data::MaterialAsset> blue_override_;
   int last_vis_toggle_ { -1 };
   int last_ovr_toggle_ { -1 };
 };
-}
+} // namespace oxygen::examples::async

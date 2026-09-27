@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include <chrono>
 #include <functional>
 #include <memory>
 #include <vector>
@@ -76,6 +75,7 @@ public:
 
   //! Set ramp-up time for smooth motion start.
   void SetRampTime(double seconds);
+  [[nodiscard]] auto GetRampTime() const noexcept -> double;
 
   // --- Focus Target ---
 

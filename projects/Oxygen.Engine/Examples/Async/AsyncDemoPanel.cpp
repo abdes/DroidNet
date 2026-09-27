@@ -10,12 +10,14 @@
 
 #include "Async/AsyncDemoPanel.h"
 #include "Async/AsyncDemoVm.h"
+#include "Async/AsyncShowcase.h"
 #include <fmt/format.h>
 #include <glm/trigonometric.hpp>
 #include <imgui.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
 
 // ImGui
@@ -48,9 +50,91 @@ auto AsyncDemoPanel::GetIcon() const noexcept -> std::string_view
 
 auto AsyncDemoPanel::DrawContents() -> void
 {
+  DrawShowcaseControls();
   DrawSceneInfo();
   DrawSpotlightControls();
   DrawProfilingInfo();
+}
+
+auto AsyncDemoPanel::DrawShowcaseControls() -> void
+{
+  const auto showcase = vm_->GetShowcase();
+  if (!showcase) {
+    return;
+  }
+  const char* playback_label = "Play tour";
+  if (showcase->IsPlaying()) {
+    playback_label = "Pause";
+  } else if (showcase->IsPaused()) {
+    playback_label = "Resume";
+  }
+  if (ImGui::Button(playback_label)) {
+    if (showcase->IsPlaying() || showcase->IsPaused()) {
+      showcase->Pause();
+    } else {
+      showcase->Play();
+    }
+  }
+  if (showcase->IsActive()) {
+    ImGui::SameLine();
+    if (ImGui::Button("Restart")) {
+      showcase->Play();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Explore")) {
+      showcase->Explore();
+    }
+    ImGui::SetItemTooltip("Restore your scene and camera settings");
+  }
+  if (ImGui::Button("Daylight")) {
+    showcase->Preview(ShowcaseLighting::kDaylight);
+  }
+  ImGui::SameLine();
+  if (ImGui::Button("Sunset")) {
+    showcase->Preview(ShowcaseLighting::kSunset);
+  }
+  ImGui::SameLine();
+  if (ImGui::Button("Spotlight##LightingPreset")) {
+    showcase->Preview(ShowcaseLighting::kSpotlight);
+  }
+}
+
+auto AsyncDemoPanel::DrawPresentation(
+  const frame::SequenceNumber frame_sequence) -> void
+{
+  const auto showcase = vm_->GetShowcase();
+  if (!showcase || !showcase->IsActive()) {
+    return;
+  }
+  if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+    showcase->Explore();
+    return;
+  }
+  constexpr float kPadding = 16.0F;
+  constexpr float kMaximumWidth = 700.0F;
+  constexpr float kHeightInTextLines = 8.0F;
+  const auto* viewport = ImGui::GetMainViewport();
+  ImGui::SetNextWindowPos(
+    { viewport->WorkPos.x + kPadding, viewport->WorkPos.y + kPadding });
+  ImGui::SetNextWindowSize(
+    { std::min(kMaximumWidth, viewport->WorkSize.x - (2.0F * kPadding)),
+      ImGui::GetTextLineHeightWithSpacing() * kHeightInTextLines });
+  if (ImGui::Begin(
+        "Async presentation", nullptr, ImGuiWindowFlags_NoDecoration)) {
+    ImGui::TextUnformatted(
+      fmt::format("Frame sequence: {}", frame_sequence.get()).c_str());
+    ImGui::PushTextWrapPos();
+    ImGui::TextUnformatted(showcase->Caption());
+    ImGui::PopTextWrapPos();
+    DrawShowcaseControls();
+    ImGui::Button(showcase->ComparisonLabel());
+    showcase->SetComparisonHeld(ImGui::IsItemActive());
+    if (showcase->IsPlaying() || showcase->IsPaused()) {
+      ImGui::ProgressBar(
+        showcase->Progress(), { -1.0F, 0.0F }, "60-second tour");
+    }
+  }
+  ImGui::End();
 }
 
 void AsyncDemoPanel::DrawSceneInfo()

@@ -42,6 +42,20 @@ def build_report(controller, report, capture_path, report_path):
         raise RuntimeError("Scene-color export failed")
     report.append("scene_color={}".format(image_path))
 
+    composite = [
+        action for action in actions
+        if action.flags & rd.ActionFlags.Drawcall
+        and "Vortex.CompositingTask[label=Composite Blend Texture" in action.path
+    ]
+    if composite:
+        controller.SetFrameEvent(composite[-1].event_id, True)
+        save.resourceId = controller.GetPipelineState().GetOutputTargets()[0].resource
+        save.mip = 0
+        save.slice.sliceIndex = 0
+        presented_path = report_path.with_name(report_path.stem + "-presented.png")
+        controller.SaveTexture(save, str(presented_path))
+        report.append("presented_color={}".format(presented_path))
+
     spot_draws = [
         action for action in actions
         if action.flags & rd.ActionFlags.Drawcall
