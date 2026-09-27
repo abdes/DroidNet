@@ -575,6 +575,7 @@ Graphics::Graphics(const SerializedBackendConfig& config,
   AddComponent<EngineShaders>(std::move(parsed_path_finder_config));
   AddComponent<DescriptorAllocatorComponent>();
   auto native = std::make_unique<NativeLifetime>();
+  native->debug_layer = GetComponent<DeviceManager>().ShareDebugLayer();
   native->device = GetCurrentDevice();
   native->memory_allocator = GetAllocator();
   native->descriptors

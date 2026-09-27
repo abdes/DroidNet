@@ -133,6 +133,13 @@ public:
 
   [[nodiscard]] auto Factory() const -> dx::IFactory* { return factory_.Get(); }
 
+  //! Keep diagnostics active until the last retained native allocation retires.
+  [[nodiscard]] auto ShareDebugLayer() const noexcept
+    -> std::shared_ptr<DebugLayer>
+  {
+    return debug_layer_;
+  }
+
   [[nodiscard]] auto Device() const -> dx::IDevice*
   {
     if (current_context_ == nullptr) {
@@ -284,7 +291,7 @@ private:
 
   Context* current_context_ { nullptr };
   std::vector<Context> contexts_;
-  std::unique_ptr<DebugLayer> debug_layer_;
+  std::shared_ptr<DebugLayer> debug_layer_;
 };
 
 } // namespace oxygen::graphics::d3d12

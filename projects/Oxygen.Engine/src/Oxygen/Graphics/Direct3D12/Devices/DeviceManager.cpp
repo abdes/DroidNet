@@ -14,13 +14,12 @@
 #include <type_traits>
 #include <vector>
 
+#include "DeviceManager.h"
 #include <d3d12.h>
 #include <dxgi1_6.h>
+#include <fmt/format.h>
 #include <wrl/client.h>
 
-#include <fmt/format.h>
-
-#include "DeviceManager.h"
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/StringUtils.h>
 #include <Oxygen/Base/Unreachable.h>
@@ -395,7 +394,7 @@ DeviceManager::DeviceManager(DeviceManagerDesc desc)
   if (props_.enable_debug_layer || props_.enable_aftermath
     || props_.frame_capture.provider != oxygen::FrameCaptureProvider::kNone) {
     // The DebugLayer object also owns runtime debug-tool integration state.
-    debug_layer_ = std::make_unique<DebugLayer>(
+    debug_layer_ = std::make_shared<DebugLayer>(
       props_.enable_debug_layer, props_.enable_validation);
   }
 

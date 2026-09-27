@@ -15,9 +15,13 @@
 #include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
 
 namespace oxygen::graphics::d3d12 {
+class DebugLayer;
 //! Device allocations and heaps survive the Graphics facade until last use.
 struct NativeLifetime {
-  // Destruction order: descriptor allocator, memory allocator, then device.
+  // Report live objects only after all retained native allocations are
+  // released.
+  std::shared_ptr<DebugLayer> debug_layer;
+  // Destruction order: descriptors, memory allocator, device, then debug layer.
   Microsoft::WRL::ComPtr<dx::IDevice> device;
   Microsoft::WRL::ComPtr<D3D12MA::Allocator> memory_allocator;
   std::shared_ptr<graphics::DescriptorAllocator> descriptors;

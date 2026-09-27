@@ -244,3 +244,10 @@ m_gtest_program(
     "TimestampQueryBackend_test.cpp"
     ${D3D12_TEST_FIXTURES}
 )
+m_gtest_program(
+  NativeLifetime
+  GPU
+  SOURCES
+    "NativeLifetime_test.cpp"
+    ${D3D12_TEST_FIXTURES}
+)
