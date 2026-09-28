@@ -722,7 +722,7 @@ public:
   public:
     EvictionNotificationScope(AnyCache& cache, EvictionCallbackFunction cb)
       : cache_(&cache)
-      , prev_([&] -> auto {
+      , prev_([&]() -> auto {
         std::swap(cache.on_eviction_, cb);
         return std::move(cb);
       }())

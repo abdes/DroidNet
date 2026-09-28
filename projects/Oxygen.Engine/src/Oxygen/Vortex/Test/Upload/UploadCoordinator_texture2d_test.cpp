@@ -117,10 +117,8 @@ NOLINT_TEST_F(
     1,
   });
 
-  auto complete_result = uploader.IsComplete(ticket);
-  ASSERT_TRUE(complete_result.has_value()) << "IsComplete failed";
-  EXPECT_TRUE(complete_result.value());
-  auto res = uploader.TryGetResult(ticket);
+  EXPECT_TRUE(ticket.TryGetResult().has_value());
+  auto res = ticket.TryGetResult();
   if (!res.has_value()) {
     FAIL() << "Expected completed upload result";
   }
@@ -207,10 +205,8 @@ NOLINT_TEST_F(
   });
 
   // Ticket completion
-  auto complete_result = uploader.IsComplete(ticket);
-  ASSERT_TRUE(complete_result.has_value()) << "IsComplete failed";
-  EXPECT_TRUE(complete_result.value());
-  auto res = uploader.TryGetResult(ticket);
+  EXPECT_TRUE(ticket.TryGetResult().has_value());
+  auto res = ticket.TryGetResult();
   if (!res.has_value()) {
     FAIL() << "Expected completed upload result";
   }
@@ -289,10 +285,8 @@ NOLINT_TEST_F(
     1,
   });
 
-  auto complete_result = uploader.IsComplete(ticket);
-  ASSERT_TRUE(complete_result.has_value()) << "IsComplete failed";
-  EXPECT_TRUE(complete_result.value());
-  auto res = uploader.TryGetResult(ticket);
+  EXPECT_TRUE(ticket.TryGetResult().has_value());
+  auto res = ticket.TryGetResult();
   if (!res.has_value()) {
     FAIL() << "Expected completed upload result";
   }
@@ -355,10 +349,8 @@ NOLINT_TEST_F(UploadCoordinatorTest, Texture2D_FullUpload_ProducerFails_NoCopy)
     1,
   });
 
-  auto complete_result = uploader.IsComplete(ticket);
-  ASSERT_TRUE(complete_result.has_value()) << "IsComplete failed";
-  ASSERT_TRUE(complete_result.value());
-  auto res = uploader.TryGetResult(ticket);
+  EXPECT_TRUE(ticket.TryGetResult().has_value());
+  auto res = ticket.TryGetResult();
   if (!res.has_value()) {
     FAIL() << "Expected completed upload result";
   }

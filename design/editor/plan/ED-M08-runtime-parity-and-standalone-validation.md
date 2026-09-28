@@ -153,6 +153,18 @@ until .9 passes. The separately planned [M08.F1 format milestone](ED-M08.F1-desc
 then precedes M08.2. Each format change owns its own migration and recook;
 M08.1.4 verification is not deferred until F1.
 
+M08.1.4 closes in small reviewed checkpoints:
+
+| Checkpoint                   | Status      | Exit check                                                                                                                                                                                         |
+| ---------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Retained upload results      | validated   | Debug/Release full engine builds; 103/102 upload, geometry and texture tests; delayed consumers, reentrant close/progress, cancellation, device loss and Debug allocation failure.                 |
+| Bounded resource maintenance | planned     | Pending-only publication, immediate logical geometry invalidation, bounded LOD reclamation and resource-local view-cache unlinking; stale reload/fairness tests and large-unload CPU measurements. |
+| SDK/editor workflows         | in_progress | Refresh installed SDK; qualify normal project open, automatic publication, scene replacement and empty-scene Save/reopen.                                                                          |
+
+The [upload owner](../../../projects/Oxygen.Engine/design/vortex/lld/upload.md#result-ownership)
+defines lifetime and maintenance contracts. Each checkpoint keeps its tests and
+owner documentation with the code; no expiry workaround or GPU wait is introduced.
+
 Qualify the engine and all maintained examples before editor validation: finish
 native content migration, retained reimport, loose/PAK loading and bounded runtime
 checks first. Keep the existing IBL rendering and performance contracts intact.

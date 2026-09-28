@@ -65,7 +65,7 @@ public:
    effectively eliminate the need to do any validation over a returned
    Allocation object.
 
-   @see UploadCoordinator::Submit(), UploadTracker::IsComplete()
+   @see UploadCoordinator::Submit(), UploadTicket::TryGetResult()
   */
   //! Represents an allocation of upload memory.
   class Allocation final {

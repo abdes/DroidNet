@@ -6,7 +6,6 @@
 
 #include <algorithm>
 #include <array>
-#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
@@ -54,6 +53,7 @@
 #include <Oxygen/Vortex/Upload/StagingProvider.h>
 #include <Oxygen/Vortex/Upload/Types.h>
 #include <Oxygen/Vortex/Upload/UploadCoordinator.h>
+#include <Oxygen/Vortex/Upload/UploadTicket.h>
 
 namespace oxygen::vortex::resources {
 
@@ -225,7 +225,7 @@ namespace {
       for (std::uint32_t mip = 0; mip < mip_count; ++mip) {
         const std::size_t idx
           = (static_cast<std::size_t>(layer) * mip_count) + mip;
-        const auto& sr_layout = layouts[idx];
+        const auto& sr_layout = layouts.subspan(idx, 1U).front();
 
         const auto mip_w = (std::max)(desc.width >> mip, 1U);
         const auto mip_h = (std::max)(desc.height >> mip, 1U);
@@ -1198,7 +1198,7 @@ auto TextureBinder::Impl::OnFrameStart() -> void
     }
 
     const auto ticket = *entry.pending_ticket;
-    const auto maybe_result = uploader_->TryGetResult(ticket);
+    const auto maybe_result = ticket.TryGetResult();
     if (!maybe_result.has_value()) {
       // Not completed yet
       continue;
@@ -1206,13 +1206,13 @@ auto TextureBinder::Impl::OnFrameStart() -> void
 
     DLOG_SCOPE_F(4, "Upload completion");
     DLOG_F(4, "resource: {}", resource_key);
-    DLOG_F(4, "ticket: {}", ticket.id);
+    DLOG_F(4, "ticket: {}", ticket.Id());
     DLOG_F(
       4, "descriptor_index: {}", entry.descriptor_handle.ToBindlessHandle());
     DLOG_F(4, "is_placeholder: {}", entry.is_placeholder);
     DLOG_F(4, "load_failed: {}", entry.load_failed);
 
-    DLOG_F(2, "Upload ticket {} completed for resource key {}", ticket.id,
+    DLOG_F(2, "Upload ticket {} completed for resource key {}", ticket.Id(),
       resource_key);
 
     const auto& result = *maybe_result;
@@ -1226,7 +1226,7 @@ auto TextureBinder::Impl::OnFrameStart() -> void
       LOG_F(WARNING,
         "Texture upload failed for resource entry (ticket={}): keeping "
         "placeholder",
-        ticket.id);
+        ticket.Id());
 
       entry.load_failed = true;
       entry.is_placeholder = true;
@@ -1256,7 +1256,7 @@ auto TextureBinder::Impl::OnFrameStart() -> void
       if (!updated) {
         LOG_F(ERROR,
           "Failed to update SRV view after upload completion (ticket={})",
-          ticket.id);
+          ticket.Id());
         entry.load_failed = true;
         entry.is_placeholder = true;
         entry.pending_ticket.reset();
@@ -1267,7 +1267,7 @@ auto TextureBinder::Impl::OnFrameStart() -> void
       ++content_revisions_[entry.srv_index];
       LOG_F(INFO,
         "Repointed descriptor {} to final texture for resource {} (ticket={})",
-        entry.descriptor_handle.ToBindlessHandle(), resource_key, ticket.id);
+        entry.descriptor_handle.ToBindlessHandle(), resource_key, ticket.Id());
 
       if (entry.placeholder_texture
         && entry.placeholder_texture != entry.texture
@@ -1352,7 +1352,7 @@ auto TextureBinder::Impl::DumpEstimatedTextureMemory(
     PrettyBytes(total_bytes).c_str(), count, emit_count);
 
   for (std::size_t i = 0U; i < emit_count; ++i) {
-    const auto& r = records[i];
+    const auto& r = records.at(i);
     LOG_F(INFO, "  #{} {}: {} ({}, {}x{}x{}, mips={}, layers={})", i + 1U,
       r.key, PrettyBytes(r.bytes).c_str(), to_string(r.desc.format),
       r.desc.width, r.desc.height, r.desc.depth, r.desc.mip_levels,
@@ -1720,7 +1720,10 @@ auto TextureBinder::Impl::SubmitQueuedTextureUploads(
         LOG_F(ERROR, "CreateTexture returned null during async load");
         break;
       case PrepareTexture2DUploadFailure::Reason::kLayoutFailure: {
-        DCHECK_F(failure.layout_failure.has_value());
+        if (!failure.layout_failure.has_value()) {
+          LOG_F(ERROR, "Texture upload layout validation failed");
+          break;
+        }
         const auto& lf = *failure.layout_failure;
 
         switch (lf.reason) {
@@ -2013,7 +2016,7 @@ auto TextureBinder::Impl::SubmitTextureUpload(
 
   ++total_upload_submissions_;
 
-  DLOG_F(3, "ticket: {}", upload_result->id);
+  DLOG_F(3, "ticket: {}", upload_result->Id());
 
   // Register the created texture so the ResourceRegistry can manage it and
   // allow us to UpdateView later when upload completes.
@@ -2033,7 +2036,7 @@ auto TextureBinder::Impl::SubmitTextureUpload(
   entry.is_placeholder = true;
   entry.load_failed = false;
   DLOG_F(3, "InitiateAsyncLoad: submitted upload ticket {} for resource {}",
-    entry.pending_ticket->id, resource_key);
+    entry.pending_ticket->Id(), resource_key);
 }
 
 /*!

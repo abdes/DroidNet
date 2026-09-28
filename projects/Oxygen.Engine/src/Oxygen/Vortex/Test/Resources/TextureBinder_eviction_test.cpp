@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <limits>
 #include <ranges>
 #include <span>
 #include <string>
@@ -15,7 +14,6 @@
 
 #include <Oxygen/Content/EvictionEvents.h>
 #include <Oxygen/Content/ResourceKey.h>
-#include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
@@ -80,12 +78,10 @@ NOLINT_TEST_F(TextureBinderEvictionTest, EvictionRepointsToFallback)
   const auto srv_index = TexBinder().GetOrAllocate(key);
   const auto u_srv_index = srv_index.get();
 
-  auto q
-    = GfxPtr()->GetCommandQueue(oxygen::graphics::SingleQueueStrategy().KeyFor(
-      oxygen::graphics::QueueRole::kTransfer));
+  auto q = Gfx().GetFakeCommandQueue(oxygen::graphics::QueueRole::kTransfer);
   ASSERT_NE(q, nullptr);
 
-  q->Signal(std::numeric_limits<std::uint64_t>::max());
+  q->CompleteThrough(q->GetCurrentValue());
 
   TexBinder().OnFrameStart();
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
@@ -128,12 +124,11 @@ NOLINT_TEST_F(TextureBinderEvictionTest, InFlightCompletionIsDiscarded)
   const auto srv_index = TexBinder().GetOrAllocate(key);
   const auto u_srv_index = srv_index.get();
 
-  auto q
-    = GfxPtr()->GetCommandQueue(oxygen::graphics::SingleQueueStrategy().KeyFor(
-      oxygen::graphics::QueueRole::kTransfer));
+  auto q = Gfx().GetFakeCommandQueue(oxygen::graphics::QueueRole::kTransfer);
   ASSERT_NE(q, nullptr);
 
-  q->Signal(0);
+  q->SetAutoComplete(false);
+  q->CompleteThrough(0);
   TexBinder().OnFrameStart();
 
   const auto creations_after_submit
@@ -147,7 +142,7 @@ NOLINT_TEST_F(TextureBinderEvictionTest, InFlightCompletionIsDiscarded)
     = CountSrvViewCreationsForIndex(Gfx(), u_srv_index);
   ASSERT_GT(creations_after_eviction, creations_after_submit);
 
-  q->Signal(std::numeric_limits<std::uint64_t>::max());
+  q->CompleteThrough(q->GetCurrentValue());
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot {
       2,
@@ -181,12 +176,10 @@ NOLINT_TEST_F(TextureBinderEvictionTest, EvictionThenReloadRepoints)
   const auto srv_index = TexBinder().GetOrAllocate(key);
   const auto u_srv_index = srv_index.get();
 
-  auto q
-    = GfxPtr()->GetCommandQueue(oxygen::graphics::SingleQueueStrategy().KeyFor(
-      oxygen::graphics::QueueRole::kTransfer));
+  auto q = Gfx().GetFakeCommandQueue(oxygen::graphics::QueueRole::kTransfer);
   ASSERT_NE(q, nullptr);
 
-  q->Signal(std::numeric_limits<std::uint64_t>::max());
+  q->CompleteThrough(q->GetCurrentValue());
   TexBinder().OnFrameStart();
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot {
@@ -205,7 +198,7 @@ NOLINT_TEST_F(TextureBinderEvictionTest, EvictionThenReloadRepoints)
 
   (void)TexBinder().GetOrAllocate(key);
 
-  q->Signal(std::numeric_limits<std::uint64_t>::max());
+  q->CompleteThrough(q->GetCurrentValue());
   TexBinder().OnFrameStart();
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot {
@@ -237,12 +230,10 @@ NOLINT_TEST_F(TextureBinderEvictionTest, EvictionIsIdempotent)
   const auto srv_index = TexBinder().GetOrAllocate(key);
   const auto u_srv_index = srv_index.get();
 
-  auto q
-    = GfxPtr()->GetCommandQueue(oxygen::graphics::SingleQueueStrategy().KeyFor(
-      oxygen::graphics::QueueRole::kTransfer));
+  auto q = Gfx().GetFakeCommandQueue(oxygen::graphics::QueueRole::kTransfer);
   ASSERT_NE(q, nullptr);
 
-  q->Signal(std::numeric_limits<std::uint64_t>::max());
+  q->CompleteThrough(q->GetCurrentValue());
   TexBinder().OnFrameStart();
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot {
@@ -277,10 +268,9 @@ NOLINT_TEST_F(
   const auto srv = TexBinder().GetOrAllocate(key);
   EXPECT_EQ(TexBinder().AcquireReadyTexture(key), nullptr);
   auto queue
-    = GfxPtr()->GetCommandQueue(oxygen::graphics::SingleQueueStrategy().KeyFor(
-      oxygen::graphics::QueueRole::kTransfer));
+    = Gfx().GetFakeCommandQueue(oxygen::graphics::QueueRole::kTransfer);
   ASSERT_NE(queue, nullptr);
-  queue->Signal(std::numeric_limits<std::uint64_t>::max());
+  queue->CompleteThrough(queue->GetCurrentValue());
   TexBinder().OnFrameStart();
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot {

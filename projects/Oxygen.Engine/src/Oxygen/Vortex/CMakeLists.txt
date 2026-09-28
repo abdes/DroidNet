@@ -271,6 +271,7 @@ set(
   "Upload/UploadHelpers.h"
   "Upload/UploadPlanner.h"
   "Upload/UploadPolicy.h"
+  "Upload/UploadTicket.h"
   "Upload/UploadTracker.h"
   "Upload/Types.h"
   "Upload/UploaderTag.h"
@@ -439,6 +440,8 @@ set(
   "Upload/UploadHelpers.cpp"
   "Upload/UploadPlanner.cpp"
   "Upload/UploadPolicy.cpp"
+  "Upload/Internal/UploadTimeline.h"
+  "Upload/UploadTicket.cpp"
   "Upload/UploadTracker.cpp"
 )
 

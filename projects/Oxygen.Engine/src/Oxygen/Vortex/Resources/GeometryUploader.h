@@ -29,7 +29,7 @@ struct GeometryRef;
 namespace oxygen::vortex::upload {
 class StagingProvider;
 class UploadCoordinator;
-struct UploadTicket;
+class UploadTicket;
 } // namespace oxygen::vortex::upload
 
 namespace oxygen::data {

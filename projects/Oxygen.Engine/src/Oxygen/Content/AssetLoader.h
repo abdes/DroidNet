@@ -832,10 +832,10 @@ public:
 
     const auto origin = ResolveResourceSource(key);
     BeginAcceptedLoad();
-    auto completion = Finally([this] noexcept -> auto { EndAcceptedLoad(); });
+    auto completion = Finally([this]() noexcept -> auto { EndAcceptedLoad(); });
     nursery_->Start(
       [this, key, request, origin, completion = std::move(completion),
-        on_complete = std::move(on_complete)] mutable -> co::Co<> {
+        on_complete = std::move(on_complete)]() mutable -> co::Co<> {
         static_cast<void>(completion);
         static_cast<void>(origin);
         std::shared_ptr<T> result;
@@ -882,12 +882,12 @@ public:
     }
 
     BeginAcceptedLoad();
-    auto completion = Finally([this] noexcept -> auto { EndAcceptedLoad(); });
+    auto completion = Finally([this]() noexcept -> auto { EndAcceptedLoad(); });
     nursery_->Start(
       [this, key = cooked.key,
         bytes = std::vector<uint8_t>(cooked.bytes.begin(), cooked.bytes.end()),
         request, completion = std::move(completion),
-        on_complete = std::move(on_complete)] mutable -> co::Co<> {
+        on_complete = std::move(on_complete)]() mutable -> co::Co<> {
         static_cast<void>(completion);
         std::shared_ptr<T> result;
         try {
@@ -1305,11 +1305,11 @@ private:
     }
     const auto exact_source = SourceKeyForId(*target);
     BeginAcceptedLoad();
-    auto completion = Finally([this] noexcept -> auto { EndAcceptedLoad(); });
+    auto completion = Finally([this]() noexcept -> auto { EndAcceptedLoad(); });
     nursery_->Start(
       [this, key, request, origin, exact_source,
         completion = std::move(completion),
-        on_complete = std::move(on_complete)] mutable -> co::Co<> {
+        on_complete = std::move(on_complete)]() mutable -> co::Co<> {
         static_cast<void>(completion);
         static_cast<void>(origin);
         std::shared_ptr<T> result;
@@ -1333,7 +1333,7 @@ private:
   {
     BeginAcceptedLoad();
     const auto completion
-      = Finally([this] noexcept -> auto { EndAcceptedLoad(); });
+      = Finally([this]() noexcept -> auto { EndAcceptedLoad(); });
     request = NormalizeLoadRequest(request);
     if constexpr (std::is_same_v<T, data::MaterialAsset>) {
       co_return co_await LoadMaterialAssetAsyncImpl(key, source_id, request);

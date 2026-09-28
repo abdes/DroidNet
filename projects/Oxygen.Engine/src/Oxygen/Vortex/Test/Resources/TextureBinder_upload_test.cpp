@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <limits>
 #include <ranges>
 #include <span>
 #include <string>
@@ -15,7 +14,6 @@
 #include <vector>
 
 #include <Oxygen/Content/ResourceKey.h>
-#include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Testing/GTest.h>
@@ -128,9 +126,7 @@ NOLINT_TEST_F(TextureBinderUploadTest, RepointOccursOnlyAfterCompletion)
   const auto srv_index = TexBinder().GetOrAllocate(key);
   const auto u_srv_index = srv_index.get();
 
-  auto q
-    = GfxPtr()->GetCommandQueue(oxygen::graphics::SingleQueueStrategy().KeyFor(
-      oxygen::graphics::QueueRole::kTransfer));
+  auto q = Gfx().GetFakeCommandQueue(oxygen::graphics::QueueRole::kTransfer);
   ASSERT_NE(q, nullptr);
 
   const auto creations_after_allocate
@@ -144,7 +140,8 @@ NOLINT_TEST_F(TextureBinderUploadTest, RepointOccursOnlyAfterCompletion)
     GetTextureDebugName(texture_before_completion), expected_placeholder_name);
 
   // Simulate that the transfer queue has NOT completed yet.
-  q->Signal(0);
+  q->SetAutoComplete(false);
+  q->CompleteThrough(0);
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot {
       2,
@@ -157,9 +154,9 @@ NOLINT_TEST_F(TextureBinderUploadTest, RepointOccursOnlyAfterCompletion)
   EXPECT_EQ(CountSrvViewCreationsForIndex(Gfx(), u_srv_index),
     creations_after_allocate);
 
-  // Now simulate completion by advancing the queue's completed fence beyond
-  // any possible registered upload fence.
-  q->Signal(std::numeric_limits<std::uint64_t>::max());
+  // Complete exactly the submitted uploads; the maximum fence means device
+  // loss.
+  q->CompleteThrough(q->GetCurrentValue());
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot {
       3,
@@ -203,9 +200,7 @@ NOLINT_TEST_F(TextureBinderUploadTest, CompletionNotObservedWithoutOnFrameStart)
 
   const auto expected_placeholder_name = MakePlaceholderDebugName(key);
 
-  auto q
-    = GfxPtr()->GetCommandQueue(oxygen::graphics::SingleQueueStrategy().KeyFor(
-      oxygen::graphics::QueueRole::kTransfer));
+  auto q = Gfx().GetFakeCommandQueue(oxygen::graphics::QueueRole::kTransfer);
   ASSERT_NE(q, nullptr);
 
   const auto creations_after_allocate
@@ -213,7 +208,7 @@ NOLINT_TEST_F(TextureBinderUploadTest, CompletionNotObservedWithoutOnFrameStart)
   ASSERT_GE(creations_after_allocate, 1U);
 
   // Simulate completion but do NOT call TexBinder().OnFrameStart().
-  q->Signal(std::numeric_limits<std::uint64_t>::max());
+  q->CompleteThrough(q->GetCurrentValue());
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot {
       2,
@@ -274,9 +269,7 @@ NOLINT_TEST_F(
       1,
     });
 
-  auto q
-    = GfxPtr()->GetCommandQueue(oxygen::graphics::SingleQueueStrategy().KeyFor(
-      oxygen::graphics::QueueRole::kTransfer));
+  auto q = Gfx().GetFakeCommandQueue(oxygen::graphics::QueueRole::kTransfer);
   ASSERT_NE(q, nullptr);
 
   // Act
@@ -299,7 +292,7 @@ NOLINT_TEST_F(
     MakePlaceholderDebugName(normal_key));
 
   // Drive completion and drain.
-  q->Signal(std::numeric_limits<std::uint64_t>::max());
+  q->CompleteThrough(q->GetCurrentValue());
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot {
       2,
@@ -340,9 +333,7 @@ NOLINT_TEST_F(TextureBinderUploadTest, TightPackedPayload_UploadsAndRepoints)
       1,
     });
 
-  auto q
-    = GfxPtr()->GetCommandQueue(oxygen::graphics::SingleQueueStrategy().KeyFor(
-      oxygen::graphics::QueueRole::kTransfer));
+  auto q = Gfx().GetFakeCommandQueue(oxygen::graphics::QueueRole::kTransfer);
   ASSERT_NE(q, nullptr);
 
   Gfx().srv_view_log_.events.clear();
@@ -360,7 +351,7 @@ NOLINT_TEST_F(TextureBinderUploadTest, TightPackedPayload_UploadsAndRepoints)
   EXPECT_EQ(GetTextureDebugName(texture_before), expected_placeholder_name);
 
   // Drive completion and drain.
-  q->Signal(std::numeric_limits<std::uint64_t>::max());
+  q->CompleteThrough(q->GetCurrentValue());
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot {
       2,
@@ -397,9 +388,7 @@ NOLINT_TEST_F(TextureBinderUploadTest, Bc7MipChain_UploadsAndRepoints)
       1,
     });
 
-  auto q
-    = GfxPtr()->GetCommandQueue(oxygen::graphics::SingleQueueStrategy().KeyFor(
-      oxygen::graphics::QueueRole::kTransfer));
+  auto q = Gfx().GetFakeCommandQueue(oxygen::graphics::QueueRole::kTransfer);
   ASSERT_NE(q, nullptr);
 
   Gfx().srv_view_log_.events.clear();
@@ -417,7 +406,7 @@ NOLINT_TEST_F(TextureBinderUploadTest, Bc7MipChain_UploadsAndRepoints)
   EXPECT_EQ(GetTextureDebugName(texture_before), expected_placeholder_name);
 
   // Drive completion and drain.
-  q->Signal(std::numeric_limits<std::uint64_t>::max());
+  q->CompleteThrough(q->GetCurrentValue());
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot {
       2,
@@ -453,9 +442,7 @@ NOLINT_TEST_F(TextureBinderUploadTest, ReservedKeysDoNotAllocateAndDoNotRepoint)
       1,
     });
 
-  auto q
-    = GfxPtr()->GetCommandQueue(oxygen::graphics::SingleQueueStrategy().KeyFor(
-      oxygen::graphics::QueueRole::kTransfer));
+  auto q = Gfx().GetFakeCommandQueue(oxygen::graphics::QueueRole::kTransfer);
   ASSERT_NE(q, nullptr);
 
   // Act
@@ -489,7 +476,7 @@ NOLINT_TEST_F(TextureBinderUploadTest, ReservedKeysDoNotAllocateAndDoNotRepoint)
   EXPECT_EQ(GetTextureDebugName(placeholder_texture_before), "FallbackTexture");
 
   // Drive completion and drain.
-  q->Signal(std::numeric_limits<std::uint64_t>::max());
+  q->CompleteThrough(q->GetCurrentValue());
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot {
       2,
@@ -564,9 +551,7 @@ NOLINT_TEST_F(TextureBinderBacklogTest,
   const auto keys = MakeSyntheticTextureKeys(
     Loader(), std::span(payload.data(), payload.size()), key_count);
 
-  auto q
-    = GfxPtr()->GetCommandQueue(oxygen::graphics::SingleQueueStrategy().KeyFor(
-      oxygen::graphics::QueueRole::kTransfer));
+  auto q = Gfx().GetFakeCommandQueue(oxygen::graphics::QueueRole::kTransfer);
   ASSERT_NE(q, nullptr);
 
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
@@ -584,7 +569,7 @@ NOLINT_TEST_F(TextureBinderBacklogTest,
         slot,
       });
     TexBinder().OnFrameStart();
-    q->Signal(std::numeric_limits<std::uint64_t>::max());
+    q->CompleteThrough(q->GetCurrentValue());
   }
 
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),

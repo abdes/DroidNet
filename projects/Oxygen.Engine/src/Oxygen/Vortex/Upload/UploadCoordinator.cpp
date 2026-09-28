@@ -14,6 +14,7 @@
 #include <iterator>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <span>
 #include <stdexcept>
 #include <thread>
@@ -36,7 +37,6 @@
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/OxCo/Co.h>
-#include <Oxygen/OxCo/Value.h>
 #include <Oxygen/Vortex/RendererTag.h>
 #include <Oxygen/Vortex/Upload/Errors.h>
 #include <Oxygen/Vortex/Upload/RingBufferStaging.h>
@@ -45,6 +45,7 @@
 #include <Oxygen/Vortex/Upload/UploadCoordinator.h>
 #include <Oxygen/Vortex/Upload/UploadPlanner.h>
 #include <Oxygen/Vortex/Upload/UploadPolicy.h>
+#include <Oxygen/Vortex/Upload/UploadTicket.h>
 #include <Oxygen/Vortex/Upload/UploadTracker.h>
 #include <Oxygen/Vortex/Upload/UploaderTag.h>
 
@@ -322,8 +323,7 @@ auto SubmitBuffer(oxygen::Graphics& gfx, const UploadRequest& req,
     }
     std::span<std::byte> dst(staging.Ptr(), size);
     if (!producer(dst)) {
-      return tracker.RegisterFailedImmediate(
-        req.debug_name, UploadError::kProducerFailed);
+      return tracker.RegisterFailedImmediate(UploadError::kProducerFailed);
     }
   } else {
     return std::unexpected(UploadError::kInvalidRequest);
@@ -362,7 +362,7 @@ auto SubmitBuffer(oxygen::Graphics& gfx, const UploadRequest& req,
   const auto fence_raw = queue->Signal();
   recorder->RecordQueueSignal(fence_raw);
 
-  return tracker.Register(FenceValue { fence_raw }, size, req.debug_name);
+  return tracker.Register(FenceValue { fence_raw }, size);
 }
 
 auto SubmitTexture2D(oxygen::Graphics& gfx, const UploadRequest& req,
@@ -413,8 +413,7 @@ auto SubmitTexture2D(oxygen::Graphics& gfx, const UploadRequest& req,
     }
     std::span<std::byte> dst(staging.Ptr(), total_bytes);
     if (!producer(dst)) {
-      return tracker.RegisterFailedImmediate(
-        req.debug_name, UploadError::kProducerFailed);
+      return tracker.RegisterFailedImmediate(UploadError::kProducerFailed);
     }
   } else {
     return std::unexpected(UploadError::kInvalidRequest);
@@ -460,8 +459,7 @@ auto SubmitTexture2D(oxygen::Graphics& gfx, const UploadRequest& req,
 
   const auto fence_raw = queue->Signal();
   recorder->RecordQueueSignal(fence_raw);
-  return tracker.Register(
-    FenceValue { fence_raw }, total_bytes, req.debug_name);
+  return tracker.Register(FenceValue { fence_raw }, total_bytes);
 }
 
 auto SubmitTexture3D(oxygen::Graphics& gfx, const UploadRequest& req,
@@ -508,8 +506,7 @@ auto SubmitTexture3D(oxygen::Graphics& gfx, const UploadRequest& req,
     }
     std::span<std::byte> dst(staging.Ptr(), total_bytes);
     if (!producer(dst)) {
-      return tracker.RegisterFailedImmediate(
-        req.debug_name, UploadError::kProducerFailed);
+      return tracker.RegisterFailedImmediate(UploadError::kProducerFailed);
     }
   } else {
     return std::unexpected(UploadError::kInvalidRequest);
@@ -550,8 +547,7 @@ auto SubmitTexture3D(oxygen::Graphics& gfx, const UploadRequest& req,
 
   const auto fence_raw = queue->Signal();
   recorder->RecordQueueSignal(fence_raw);
-  return tracker.Register(
-    FenceValue { fence_raw }, total_bytes, req.debug_name);
+  return tracker.Register(FenceValue { fence_raw }, total_bytes);
 }
 
 } // namespace
@@ -653,29 +649,22 @@ auto UploadCoordinator::Shutdown(std::chrono::milliseconds timeout)
   constexpr auto kMaximumBackoff = std::chrono::milliseconds { 50 };
   std::chrono::milliseconds backoff { 1 };
 
-  // Capture the highest fence value registered so far. This ensures that we
-  // will wait for any recorded submissions even if individual ticket
-  // entries are later erased by frame-slot cleanup.
-  const auto target_fence = tracker_.LastRegisteredFence();
+  const auto target_fence = tracker_.LastSubmittedFence();
+  const auto queue = gfx_->GetCommandQueue(policy_.upload_queue_key);
+  if (!queue) {
+    return std::unexpected(UploadError::kSubmitFailed);
+  }
 
-  // Loop and politely poll the queue, using exponential backoff to avoid a
-  // hot spin. We primarily wait until either there are no tracked pending
-  // entries or the completed fence advances to the last observed fence.
-  while (tracker_.HasPending() || tracker_.CompletedFence() < target_fence) {
-    RetireCompleted();
-
-    if (!(tracker_.HasPending() || tracker_.CompletedFence() < target_fence)) {
-      break; // work finished after retire
-    }
-
+  // Defer coroutine notifications until the final member access. A resumed
+  // consumer may destroy the coordinator.
+  while (queue->GetCompletedValue() < target_fence.get()) {
     if (std::chrono::steady_clock::now() - start > timeout) {
       LOG_F(WARNING, "UploadCoordinator::Shutdown timed out after {}ms",
         timeout.count());
+      RetireCompleted();
       return std::unexpected(UploadError::kSubmitFailed);
     }
-
     std::this_thread::sleep_for(backoff);
-    // Exponential backoff with a small ceiling to remain responsive.
     backoff = (std::min)(backoff * 2, kMaximumBackoff);
   }
 
@@ -685,7 +674,8 @@ auto UploadCoordinator::Shutdown(std::chrono::milliseconds timeout)
   return {};
 }
 
-auto UploadCoordinator::RetireCompleted() -> void
+auto UploadCoordinator::RetireCompleted(const std::optional<frame::Slot> slot)
+  -> void
 {
   // Poll completed work only. Graphics::BeginFrame already waits for the
   // recycled frame slot; flushing here also drains newer frames on this queue.
@@ -693,19 +683,24 @@ auto UploadCoordinator::RetireCompleted() -> void
   if (auto q = gfx_->GetCommandQueue(key); q) {
     const auto completed = FenceValue { q->GetCompletedValue() };
     if (completed.get() == std::numeric_limits<std::uint64_t>::max()) {
+      tracker_.Close(UploadError::kDeviceLost);
       throw std::runtime_error("Device lost while polling upload completion");
     }
-    tracker_.MarkFenceCompleted(completed);
     // Allow providers to recycle now that fence advanced
     auto tag = internal::UploaderTagFactory::Get();
     for (auto it = providers_.begin(); it != providers_.end();) {
       if (auto sp = it->lock()) {
         sp->RetireCompleted(tag, completed);
+        if (slot) {
+          sp->OnFrameStart(tag, *slot);
+        }
         ++it;
       } else {
         it = providers_.erase(it);
       }
     }
+    // Notify last: resumed consumers may release the coordinator.
+    tracker_.MarkFenceCompleted(completed);
   }
 }
 
@@ -713,20 +708,7 @@ auto UploadCoordinator::RetireCompleted() -> void
 auto UploadCoordinator::OnFrameStart(
   vortex::RendererTag /*tag*/, frame::Slot slot) -> void
 {
-  static auto tag = internal::UploaderTagFactory::Get();
-
-  RetireCompleted();
-
-  tracker_.OnFrameStart(tag, slot);
-
-  for (auto it = providers_.begin(); it != providers_.end();) {
-    if (auto sp = it->lock()) {
-      sp->OnFrameStart(tag, slot);
-      ++it;
-    } else {
-      it = providers_.erase(it);
-    }
-  }
+  RetireCompleted(slot);
 }
 
 auto UploadCoordinator::SubmitAsync(UploadRequest req,
@@ -745,13 +727,7 @@ auto UploadCoordinator::SubmitAsync(UploadRequest req,
       .error = submit_result.error(),
     };
   }
-  auto t = submit_result.value();
-  co_await AwaitAsync(t);
-  auto result = TryGetResult(t);
-  DCHECK_F(result.has_value(),
-    "Ticket result must be available after successful await");
-  co_return result.value_or(
-    UploadResult { .success = false, .error = UploadError::kTicketNotFound });
+  co_return co_await submit_result->AwaitGpuCompletionAsync();
 }
 
 auto UploadCoordinator::SubmitManyAsync(
@@ -772,42 +748,23 @@ auto UploadCoordinator::SubmitManyAsync(
       },
     };
   }
-  auto tickets = submit_result.value();
-  co_await AwaitAllAsync(tickets);
+  auto tickets = std::move(submit_result).value();
+  if (!tickets.empty()) {
+    const auto last
+      = std::ranges::max_element(tickets, {}, &UploadTicket::Fence);
+    (void)co_await last->AwaitGpuCompletionAsync();
+  }
   std::vector<UploadResult> out;
   out.reserve(tickets.size());
-  for (auto t : tickets) {
-    auto result = TryGetResult(t);
-    DCHECK_F(result.has_value(),
-      "Ticket result must be available after successful AwaitAll");
-    out.emplace_back(result.value_or(UploadResult {
-      .success = false,
-      .error = UploadError::kTicketNotFound,
-    }));
+  for (const auto& ticket : tickets) {
+    const auto result = ticket.TryGetResult();
+    if (!result) {
+      throw std::logic_error(
+        "Upload batch wait resumed before completion or close");
+    }
+    out.push_back(*result);
   }
   co_return out;
-}
-
-auto UploadCoordinator::AwaitAsync(UploadTicket t) -> co::Co<void>
-{
-  co_await Until(tracker_.CompletedFenceValue() >= t.fence);
-  co_return; // result can be queried if needed
-}
-
-auto UploadCoordinator::AwaitAllAsync(std::span<const UploadTicket> tickets)
-  -> co::Co<void>
-{
-  if (tickets.empty()) {
-    co_return;
-  }
-  FenceValue max_fence { 0 };
-  for (const auto& t : tickets) {
-    if (max_fence < t.fence) {
-      max_fence = t.fence;
-    }
-  }
-  co_await Until(tracker_.CompletedFenceValue() >= max_fence);
-  co_return;
 }
 
 //=== SubmitMany decomposition helpers ------------------------------------//
@@ -835,7 +792,7 @@ auto UploadCoordinator::SubmitRun(
       return RecordBufferRun(opt, run, allocation)
         .and_then([&](graphics::FenceValue fence)
                     -> std::expected<std::vector<UploadTicket>, UploadError> {
-          return MakeTicketsForPlan(plan, run, fence);
+          return MakeTicketsForPlan(plan, fence);
         });
     });
 }
@@ -958,12 +915,12 @@ auto UploadCoordinator::RecordBufferRun(const BufferUploadPlan& optimized,
 
   const auto fence_raw = queue->Signal();
   recorder->RecordQueueSignal(fence_raw);
+  tracker_.RecordSubmission(FenceValue { fence_raw });
   return graphics::FenceValue { fence_raw };
 }
 
 auto UploadCoordinator::MakeTicketsForPlan(
-  const BufferUploadPlan& original_plan, std::span<const UploadRequest> run,
-  graphics::FenceValue fence)
+  const BufferUploadPlan& original_plan, graphics::FenceValue fence)
   -> std::expected<std::vector<UploadTicket>, UploadError>
 {
   std::vector<UploadTicket> tickets;
@@ -972,10 +929,7 @@ auto UploadCoordinator::MakeTicketsForPlan(
     if (it.request_indices.empty()) {
       return std::unexpected(UploadError::kInvalidRequest);
     }
-    const auto rep = it.request_indices.front();
-    const auto& r = run.subspan(rep, 1U).front();
-    tickets.emplace_back(
-      tracker_.Register(fence, it.region.size, r.debug_name));
+    tickets.emplace_back(tracker_.Register(fence, it.region.size));
   }
   return tickets;
 }

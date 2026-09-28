@@ -6,8 +6,11 @@
 
 #pragma once
 
+#include <atomic>
+#include <chrono>
 #include <expected>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string_view>
 #include <vector>
@@ -15,12 +18,12 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/OxCo/Co.h>
-#include <Oxygen/OxCo/Value.h>
 #include <Oxygen/Vortex/RendererTag.h>
 #include <Oxygen/Vortex/Upload/ImmutableTextureUpload.h>
 #include <Oxygen/Vortex/Upload/StagingProvider.h>
 #include <Oxygen/Vortex/Upload/Types.h>
 #include <Oxygen/Vortex/Upload/UploadPolicy.h>
+#include <Oxygen/Vortex/Upload/UploadTicket.h>
 #include <Oxygen/Vortex/Upload/UploadTracker.h>
 #include <Oxygen/Vortex/api_export.h>
 
@@ -38,6 +41,7 @@ inline constexpr float kDefaultRingBufferStagingSlack = 0.25F;
 // Forward declaration to avoid including UploadPlanner.h in the header
 struct BufferUploadPlan;
 
+//! Submission, frame progress and shutdown run on the upload-owner thread.
 class UploadCoordinator {
 public:
   static constexpr std::chrono::milliseconds kDefaultShutdownTimeout { 3000 };
@@ -52,7 +56,7 @@ public:
     observer_ptr<Graphics> gfx, UploadPolicy policy = DefaultUploadPolicy());
 
   OXYGEN_MAKE_NON_COPYABLE(UploadCoordinator)
-  OXYGEN_DEFAULT_MOVABLE(UploadCoordinator)
+  OXYGEN_MAKE_NON_MOVABLE(UploadCoordinator)
 
   ~UploadCoordinator() = default;
 
@@ -93,27 +97,6 @@ public:
   OXGN_VRTX_API auto Shutdown(std::chrono::milliseconds timeout
     = kDefaultShutdownTimeout) -> std::expected<void, UploadError>;
 
-  auto IsComplete(UploadTicket t) const -> std::expected<bool, UploadError>
-  {
-    return tracker_.IsComplete(t.id);
-  }
-
-  auto TryGetResult(UploadTicket t) const -> std::optional<UploadResult>
-  {
-    return tracker_.TryGetResult(t.id);
-  }
-
-  auto Await(UploadTicket t) -> std::expected<UploadResult, UploadError>
-  {
-    return tracker_.Await(t.id);
-  }
-
-  auto AwaitAll(std::span<const UploadTicket> tickets)
-    -> std::expected<std::vector<UploadResult>, UploadError>
-  {
-    return tracker_.AwaitAll(tickets);
-  }
-
   /*!
    * All staging providers must be created via UploadCoordinator factory
    * methods. This ensures correct lifecycle management, frame notifications,
@@ -122,12 +105,6 @@ public:
    */
   OXGN_VRTX_API auto OnFrameStart(vortex::RendererTag tag, frame::Slot slot)
     -> void;
-
-  // Best-effort cancellation; may not prevent GPU copy if already submitted.
-  OXGN_VRTX_API auto Cancel(UploadTicket t) -> std::expected<bool, UploadError>
-  {
-    return tracker_.Cancel(t.id);
-  }
 
   // OxCo helpers
   //! Lazy submission owns its request/provider. Source byte views remain
@@ -139,13 +116,9 @@ public:
     std::vector<UploadRequest> reqs, std::shared_ptr<StagingProvider> provider)
     -> co::Co<std::vector<UploadResult>>;
 
-  OXGN_VRTX_NDAPI auto AwaitAsync(UploadTicket t) -> co::Co<void>;
-
-  OXGN_VRTX_NDAPI auto AwaitAllAsync(std::span<const UploadTicket> tickets)
-    -> co::Co<void>;
-
 private:
-  OXGN_VRTX_API auto RetireCompleted() -> void;
+  OXGN_VRTX_API auto RetireCompleted(
+    std::optional<frame::Slot> slot = std::nullopt) -> void;
 
   observer_ptr<Graphics> gfx_;
   UploadPolicy policy_;
@@ -173,8 +146,8 @@ private:
     -> std::expected<graphics::FenceValue, UploadError>;
 
   //! Issue per-request tickets based on the original (pre-optimized) plan.
-  auto MakeTicketsForPlan(const BufferUploadPlan& original_plan,
-    std::span<const UploadRequest> run, graphics::FenceValue fence)
+  auto MakeTicketsForPlan(
+    const BufferUploadPlan& original_plan, graphics::FenceValue fence)
     -> std::expected<std::vector<UploadTicket>, UploadError>;
 
   //! Helper: Execute the buffer-run pipeline end-to-end.

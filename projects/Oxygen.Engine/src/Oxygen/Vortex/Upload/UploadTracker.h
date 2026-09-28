@@ -6,108 +6,39 @@
 
 #pragma once
 
-#include <condition_variable>
-#include <expected>
-#include <mutex>
-#include <optional>
-#include <string>
-#include <string_view>
-#include <unordered_map>
-#include <vector>
+#include <cstdint>
+#include <memory>
 
-#include <Oxygen/Core/Types/Frame.h>
-#include <Oxygen/OxCo/Value.h>
-#include <Oxygen/Vortex/Upload/Types.h>
-#include <Oxygen/Vortex/Upload/UploaderTag.h>
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Vortex/Upload/UploadTicket.h>
 #include <Oxygen/Vortex/api_export.h>
 
 namespace oxygen::vortex::upload {
 
-// Tracks submitted uploads by TicketId against a monotonic GPU fence value.
-// Provides both coroutine-friendly waiting via co::Value<FenceValue> and
-// blocking waits for synchronous paths.
+//! Owns upload progress, without retaining individual ticket records.
 class UploadTracker {
 public:
   OXGN_VRTX_API UploadTracker();
-
-  OXYGEN_MAKE_NON_COPYABLE(UploadTracker)
-  OXYGEN_DEFAULT_MOVABLE(UploadTracker)
-
   OXGN_VRTX_API ~UploadTracker();
+  OXYGEN_MAKE_NON_COPYABLE(UploadTracker)
+  OXYGEN_MAKE_NON_MOVABLE(UploadTracker)
 
-  // Register a new ticket that will complete when the given fence value is
-  // reached. Returns the assigned TicketId and the same fence.
-  OXGN_VRTX_API auto Register(FenceValue fence, uint64_t bytes,
-    std::string_view debug_name) -> UploadTicket;
+  OXGN_VRTX_NDAPI auto Register(FenceValue fence, std::uint64_t bytes)
+    -> UploadTicket;
+  OXGN_VRTX_NDAPI auto RegisterFailedImmediate(UploadError error)
+    -> UploadTicket;
 
-  // Register an immediate failed ticket (used when planning/fill fails).
-  // The ticket is marked completed with the provided error/message.
-  OXGN_VRTX_API auto RegisterFailedImmediate(
-    std::string_view debug_name, UploadError error) -> UploadTicket;
-
-  // Advance completed fence and mark all eligible tickets as completed.
+  //! Record issued GPU work before any subsequent allocation can fail.
+  OXGN_VRTX_API auto RecordSubmission(FenceValue fence) -> void;
+  //! Owner-thread progress/close may resume coroutine consumers inline.
   OXGN_VRTX_API auto MarkFenceCompleted(FenceValue completed) -> void;
-
-  // Queries
-  OXGN_VRTX_API auto IsComplete(TicketId id) const
-    -> std::expected<bool, UploadError>;
-  OXGN_VRTX_API auto TryGetResult(TicketId id) const
-    -> std::optional<UploadResult>;
-  OXGN_VRTX_API auto Await(TicketId id)
-    -> std::expected<UploadResult, UploadError>;
-  OXGN_VRTX_API auto AwaitAll(std::span<const UploadTicket> tickets)
-    -> std::expected<std::vector<UploadResult>, UploadError>;
-
-  // Wait for all currently pending (non-completed) tickets tracked by the
-  // UploadTracker. This is a best-effort helper for shutdown: it collects
-  // the set of outstanding tickets and waits until they complete. If ticket
-  // entries are erased while waiting (frame lifecycle cleanup), the method
-  // will retry until no pending tickets remain.
-  OXGN_VRTX_API auto AwaitAllPending()
-    -> std::expected<std::vector<UploadResult>, UploadError>;
-
-  // Coroutine helper accessors
-  OXGN_VRTX_API auto CompletedFence() const noexcept -> FenceValue;
-  OXGN_VRTX_API auto CompletedFenceValue() noexcept
-    -> oxygen::co::Value<FenceValue>&;
-
-  // Best-effort cancellation: if found and not yet completed, mark canceled.
-  OXGN_VRTX_API auto Cancel(TicketId id) -> std::expected<bool, UploadError>;
-  // Query whether there are any pending (not yet completed) entries.
-  OXGN_VRTX_API auto HasPending() const -> bool;
-  // Returns the highest fence value that has been registered. Use during
-  // shutdown to wait for any recorded submissions even when per-ticket
-  // entries are erased due to frame lifecycle cleanup.
-  OXGN_VRTX_API auto LastRegisteredFence() const -> FenceValue;
-  // Frame lifecycle management: cleanup entries for cycling slot
-  OXGN_VRTX_API auto OnFrameStart(UploaderTag, frame::Slot slot) -> void;
+  OXGN_VRTX_API auto Close(UploadError error = UploadError::kTrackerShutdown)
+    -> void;
+  OXGN_VRTX_NDAPI auto CompletedFence() const -> FenceValue;
+  OXGN_VRTX_NDAPI auto LastSubmittedFence() const -> FenceValue;
 
 private:
-  struct Entry {
-    FenceValue fence { oxygen::graphics::fence::kInvalidValue };
-    uint64_t bytes { 0 };
-    std::string name;
-    bool completed { false };
-    UploadResult result {};
-    frame::Slot creation_slot { frame::kInvalidSlot };
-  };
-
-  auto MarkEntryCompleted(Entry& e) -> void;
-
-  mutable std::mutex mu_;
-  std::condition_variable cv_;
-
-  // Monotonic completed fence for coroutine waits.
-  oxygen::co::Value<FenceValue> completed_fence_ { FenceValue { 0 } };
-
-  // Last fence value observed during registration. This allows shutdown to
-  // wait for any recorded submissions even if individual ticket entries are
-  // later removed due to frame-slot cleanup.
-  std::atomic<std::uint64_t> last_registered_fence_raw_ { 0 };
-
-  TicketId next_ticket_ { 1 };
-  std::unordered_map<TicketId, Entry> entries_;
-  frame::Slot current_slot_ { frame::kInvalidSlot };
+  std::shared_ptr<internal::UploadTimeline> timeline_;
 };
 
 } // namespace oxygen::vortex::upload

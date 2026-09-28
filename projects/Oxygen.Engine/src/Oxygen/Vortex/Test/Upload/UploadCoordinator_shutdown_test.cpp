@@ -7,6 +7,7 @@
 #include <array>
 #include <chrono>
 #include <cstddef>
+#include <expected>
 #include <span>
 #include <thread>
 
@@ -35,8 +36,6 @@ using oxygen::vortex::upload::UploadDataView;
 using oxygen::vortex::upload::UploadError;
 using oxygen::vortex::upload::UploadKind;
 using oxygen::vortex::upload::UploadRequest;
-using oxygen::vortex::upload::UploadResult;
-using oxygen::vortex::upload::UploadTicket;
 using oxygen::vortex::upload::testing::UploadCoordinatorTest;
 
 // Ensure that Shutdown succeeds when there are no outstanding uploads.
@@ -72,7 +71,7 @@ NOLINT_TEST_F(UploadCoordinatorTest, Shutdown_WaitsForOutstandingUploads)
 
   auto& uploader = Uploader();
 
-  // Ensure frame slot set so ticket has a creation slot
+  // Begin the frame used by the staging provider
   uploader.OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot {
       1,
@@ -93,17 +92,17 @@ NOLINT_TEST_F(UploadCoordinatorTest, Shutdown_WaitsForOutstandingUploads)
   // Clear completion to simulate work in-flight
   q->Signal(0);
 
-  // Advance the retirable slot so the tracker will erase entries created in
-  // this slot (simulate frame cleanup) — entries are now erased but the
-  // last_registered_fence is still set which Shutdown must honor.
-  uploader.OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot {
-      1,
-    });
+  // Logical cancellation must not remove the physical shutdown dependency.
+  ASSERT_TRUE(ticket.Cancel());
+  for (const auto slot : { 1U, 2U, 0U, 1U }) {
+    uploader.OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
+      oxygen::frame::Slot { slot });
+  }
+  EXPECT_EQ(ticket.Await().error, UploadError::kCanceled);
 
   // After a brief delay, signal the queue completion to allow Shutdown to
   // observe progress and finish.
-  const auto fence = ticket.fence.get();
+  const auto fence = ticket.Fence().get();
   std::jthread completion_thread([q, fence] -> void {
     std::this_thread::sleep_for(20ms);
     q->Signal(fence);
@@ -121,7 +120,8 @@ NOLINT_TEST_F(UploadCoordinatorTest, Shutdown_WaitsForOutstandingUploads)
 }
 
 // CPU frame retirement cannot substitute for the last submitted GPU fence.
-NOLINT_TEST_F(UploadCoordinatorTest, ShutdownWaitsForFenceAfterFrameCleanup)
+NOLINT_TEST_F(
+  UploadCoordinatorTest, ShutdownWaitsForFenceAfterAllTicketsAreDropped)
 {
   BufferDesc dst_desc {
     .size_bytes = 256,
@@ -150,8 +150,11 @@ NOLINT_TEST_F(UploadCoordinatorTest, ShutdownWaitsForFenceAfterFrameCleanup)
   auto ticket_res = uploader.Submit(req, Staging());
   ASSERT_TRUE(ticket_res.has_value());
 
-  // Hide completion before the tracker can observe it, then recycle the CPU
-  // slot. The submitted fence must remain a shutdown dependency.
+  const auto fence = ticket_res->Fence().get();
+  ticket_res = std::unexpected(UploadError::kCanceled);
+
+  // Dropping every result handle must preserve the physical shutdown
+  // dependency.
   auto q
     = GfxPtr()->GetCommandQueue(oxygen::graphics::SingleQueueStrategy().KeyFor(
       oxygen::graphics::QueueRole::kTransfer));
@@ -164,7 +167,7 @@ NOLINT_TEST_F(UploadCoordinatorTest, ShutdownWaitsForFenceAfterFrameCleanup)
   });
   ASSERT_FALSE(res.has_value());
   EXPECT_EQ(res.error(), UploadError::kSubmitFailed);
-  q->Signal(ticket_res->fence.get());
+  q->Signal(fence);
   EXPECT_TRUE(uploader.Shutdown(std::chrono::milliseconds { 5 }));
 }
 

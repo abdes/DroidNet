@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -37,6 +38,7 @@
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Nexus/FrameDrivenIndexReuse.h>
+#include <Oxygen/Nexus/IndexReuse.h>
 #include <Oxygen/Vortex/RendererTag.h>
 #include <Oxygen/Vortex/Resources/GeometryUploader.h>
 #include <Oxygen/Vortex/ScenePrep/GeometryRef.h>
@@ -71,7 +73,7 @@ constexpr oxygen::vortex::upload::Priority kCriticalUploadPriority { 1 };
 
   // Check for finite vertex data
   for (std::size_t i = 0; i < vertex_count; ++i) {
-    const auto& vertex = vertices[i];
+    const auto& vertex = vertices.subspan(i, 1U).front();
 
     if (!std::isfinite(vertex.position.x) || !std::isfinite(vertex.position.y)
       || !std::isfinite(vertex.position.z)) {
@@ -108,20 +110,20 @@ constexpr oxygen::vortex::upload::Priority kCriticalUploadPriority { 1 };
     if (index_buffer.type == oxygen::data::detail::IndexType::kUInt16) {
       const auto indices = index_buffer.AsU16();
       for (std::size_t i = 0; i < indices.size(); ++i) {
-        if (indices[i] > max_vertex_index) {
+        if (indices.subspan(i, 1U).front() > max_vertex_index) {
           error_msg = "Index " + std::to_string(i) + " ("
-            + std::to_string(indices[i]) + ") exceeds vertex count ("
-            + std::to_string(vertex_count) + ")";
+            + std::to_string(indices.subspan(i, 1U).front())
+            + ") exceeds vertex count (" + std::to_string(vertex_count) + ")";
           return false;
         }
       }
     } else if (index_buffer.type == oxygen::data::detail::IndexType::kUInt32) {
       const auto indices = index_buffer.AsU32();
       for (std::size_t i = 0; i < indices.size(); ++i) {
-        if (indices[i] > max_vertex_index) {
+        if (indices.subspan(i, 1U).front() > max_vertex_index) {
           error_msg = "Index " + std::to_string(i) + " ("
-            + std::to_string(indices[i]) + ") exceeds vertex count ("
-            + std::to_string(vertex_count) + ")";
+            + std::to_string(indices.subspan(i, 1U).front())
+            + ") exceeds vertex count (" + std::to_string(vertex_count) + ")";
           return false;
         }
       }
@@ -442,7 +444,7 @@ auto GeometryUploader::Impl::TryGetCurrentEntry_(
   if (idx >= geometry_entries_.size()) {
     return nullptr;
   }
-  auto& entry = geometry_entries_[idx];
+  auto& entry = geometry_entries_.at(idx);
   if (entry.mesh == nullptr || entry.evicted) {
     return nullptr;
   }
@@ -465,7 +467,7 @@ auto GeometryUploader::Impl::TryGetCurrentEntry_(
   if (idx >= geometry_entries_.size()) {
     return nullptr;
   }
-  const auto& entry = geometry_entries_[idx];
+  const auto& entry = geometry_entries_.at(idx);
   if (entry.mesh == nullptr || entry.evicted) {
     return nullptr;
   }
@@ -598,7 +600,7 @@ auto GeometryUploader::Impl::GetOrAllocate(
   const auto u_handle = handle.get();
 
   // Initialize or update per-handle entry
-  auto& entry = geometry_entries_[u_handle];
+  auto& entry = geometry_entries_.at(u_handle);
   entry.asset_key = geometry.asset_key;
   entry.lod_index = geometry.lod_index;
   frame_resources_ensured_ = false;
@@ -783,7 +785,7 @@ auto GeometryUploader::Impl::ProcessEvictions() -> void
     std::size_t matched_entries = 0U;
     for (std::size_t entry_index = 0; entry_index < geometry_entries_.size();
       ++entry_index) {
-      auto& entry = geometry_entries_[entry_index];
+      auto& entry = geometry_entries_.at(entry_index);
       if (entry.asset_key != eviction.asset_key) {
         continue;
       }
@@ -1008,6 +1010,7 @@ auto GeometryUploader::Impl::UploadVertexBuffer(GeometryEntry& dirty_entry)
         .size_bytes = buffer_size,
         .dst_offset = 0,
     },
+    .subresources = {},
     .data = vortex::upload::UploadDataView { vertex_bytes },
   };
 }
@@ -1062,6 +1065,7 @@ auto GeometryUploader::Impl::UploadIndexBuffer(GeometryEntry& dirty_entry)
         .size_bytes = buffer_size,
         .dst_offset = 0,
     },
+    .subresources = {},
     .data = vortex::upload::UploadDataView { index_bytes },
   };
 }
@@ -1124,47 +1128,27 @@ auto GeometryUploader::Impl::RetireCompletedUploads() -> void
     }
 
     const auto ticket = *ticket_opt;
-    const auto u_ticket_id = ticket.id.get();
-    const auto is_complete = uploader_->IsComplete(ticket);
-    if (!is_complete.has_value()) {
-      ++error_count;
-      const std::error_code ec = is_complete.error();
-      LOG_F(ERROR, "GeometryUploader: IsComplete failed for ticket {}: [{}] {}",
-        u_ticket_id, ec.category().name(), ec.message());
-
-      // TicketNotFound is terminal in practice (tracker frame-slot cleanup).
-      if (is_complete.error() == vortex::upload::UploadError::kTicketNotFound) {
-        LOG_F(WARNING,
-          "GeometryUploader: Dropping unknown ticket {} (TicketNotFound)",
-          u_ticket_id);
-        ticket_opt.reset();
-        entry.is_dirty = true;
-      }
+    const auto u_ticket_id = ticket.Id().get();
+    const auto result = ticket.TryGetResult();
+    if (!result) {
       return;
     }
-
-    if (!is_complete.value()) {
-      return;
-    }
-
     ++completed_count;
-
-    if (const auto result = uploader_->TryGetResult(ticket)) {
-      if (!result->success) {
-        ++error_count;
-        DCHECK_F(result->error.has_value());
-        const std::error_code ec = *(result->error);
-        LOG_F(ERROR, "GeometryUploader: Upload failed for ticket {}: [{}] {}",
-          u_ticket_id, ec.category().name(), ec.message());
-        entry.is_dirty = true;
-      } else {
-        // Only publish indices after data is known good.
-        if (pending.IsValid()) {
-          published = pending;
-        }
-        DLOG_F(2, "GeometryUploader: Upload completed successfully ({} bytes)",
-          result->bytes_uploaded);
+    if (!result->success) {
+      ++error_count;
+      DCHECK_F(result->error.has_value());
+      const std::error_code ec
+        = result->error.value_or(vortex::upload::UploadError::kSubmitFailed);
+      LOG_F(ERROR, "GeometryUploader: Upload failed for ticket {}: [{}] {}",
+        u_ticket_id, ec.category().name(), ec.message());
+      entry.is_dirty = true;
+    } else {
+      // Only publish indices after data is known good.
+      if (pending.IsValid()) {
+        published = pending;
       }
+      DLOG_F(2, "GeometryUploader: Upload completed successfully ({} bytes)",
+        result->bytes_uploaded);
     }
 
     ticket_opt.reset();

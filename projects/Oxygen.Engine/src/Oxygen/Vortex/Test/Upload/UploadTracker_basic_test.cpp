@@ -4,466 +4,254 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <array>
 #include <chrono>
-#include <expected>
+#include <cstdint>
 #include <future>
-#include <span>
-#include <thread>
-#include <vector>
+#include <limits>
+#include <memory>
+#include <tuple>
+#include <utility>
 
-#include <Oxygen/Core/Types/Frame.h>
+#if defined(_MSC_VER) && defined(_DEBUG)
+#  include <new>
+
+#  include <Oxygen/Graphics/Common/Test/HeapAllocationFailure.h>
+#endif
+
+#include <Oxygen/Graphics/Common/Types/FenceValue.h>
+#include <Oxygen/OxCo/Algorithms.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Run.h>
+#include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Upload/Errors.h>
-#include <Oxygen/Vortex/Upload/Types.h>
+#include <Oxygen/Vortex/Upload/UploadTicket.h>
 #include <Oxygen/Vortex/Upload/UploadTracker.h>
-#include <Oxygen/Vortex/Upload/UploaderTag.h>
-
-namespace oxygen::vortex::upload::internal {
-auto UploaderTagFactory::Get() noexcept -> UploaderTag
-{
-  return UploaderTag {};
-}
-} // namespace oxygen::vortex::upload::internal
 
 namespace {
-
-using oxygen::frame::Slot;
+using namespace std::chrono_literals;
 using oxygen::vortex::upload::FenceValue;
-using oxygen::vortex::upload::TicketId;
 using oxygen::vortex::upload::UploadError;
+using oxygen::vortex::upload::UploadResult;
 using oxygen::vortex::upload::UploadTicket;
 using oxygen::vortex::upload::UploadTracker;
-using oxygen::vortex::upload::internal::UploaderTagFactory;
 
-//! Verify registration and marking fence completion propagates to tickets.
 NOLINT_TEST(UploadTrackerTest, RegisterAndComplete)
 {
-  // Arrange
   UploadTracker tracker;
-  constexpr FenceValue f1 {
-    5,
-  };
-  constexpr FenceValue f2 {
-    7,
-  };
-
-  // Act
-  const auto t1 = tracker.Register(f1, /*bytes*/ 128, "t1");
-  const auto t2 = tracker.Register(f2, /*bytes*/ 256, "t2");
-
-  // Assert pre-completion
-  {
-    const auto is_t1 = tracker.IsComplete(t1.id);
-    ASSERT_TRUE(is_t1.has_value());
-    EXPECT_FALSE(is_t1.value());
-  }
-  {
-    const auto is_t2 = tracker.IsComplete(t2.id);
-    ASSERT_TRUE(is_t2.has_value());
-    EXPECT_FALSE(is_t2.value());
-  }
-  EXPECT_FALSE(tracker.TryGetResult(t1.id).has_value());
-
-  // Act: complete up to f1
-  tracker.MarkFenceCompleted(FenceValue {
-    5,
-  });
-
-  // Assert: t1 completed, t2 pending
-  {
-    const auto is_t1 = tracker.IsComplete(t1.id);
-    ASSERT_TRUE(is_t1.has_value());
-    EXPECT_TRUE(is_t1.value());
-  }
-  {
-    const auto is_t2 = tracker.IsComplete(t2.id);
-    ASSERT_TRUE(is_t2.has_value());
-    EXPECT_FALSE(is_t2.value());
-  }
-  const auto r1 = tracker.TryGetResult(t1.id);
-  if (!r1.has_value()) {
-    FAIL() << "Expected result for t1 after completion";
-  }
-  EXPECT_TRUE(r1->success);
-  EXPECT_EQ(r1->bytes_uploaded, 128U);
-
-  // Act: complete up to f2
-  tracker.MarkFenceCompleted(FenceValue {
-    7,
-  });
-
-  // Assert: t2 completed
-  {
-    const auto is_t2 = tracker.IsComplete(t2.id);
-    ASSERT_TRUE(is_t2.has_value());
-    EXPECT_TRUE(is_t2.value());
-  }
-  const auto r2 = tracker.TryGetResult(t2.id);
-  if (!r2.has_value()) {
-    FAIL() << "Expected result for t2 after completion";
-  }
-  EXPECT_TRUE(r2->success);
-  EXPECT_EQ(r2->bytes_uploaded, 256U);
+  const auto first = tracker.Register(FenceValue { 5 }, 128);
+  const auto second = tracker.Register(FenceValue { 7 }, 256);
+  EXPECT_FALSE(first.TryGetResult());
+  EXPECT_FALSE(second.TryGetResult());
+  tracker.MarkFenceCompleted(first.Fence());
+  EXPECT_TRUE(first.Await().success);
+  EXPECT_EQ(first.Await().bytes_uploaded, 128U);
+  EXPECT_FALSE(second.TryGetResult());
+  tracker.MarkFenceCompleted(second.Fence());
+  EXPECT_EQ(second.Await().bytes_uploaded, 256U);
+  EXPECT_FALSE(second.Cancel());
 }
 
-//! Await(id) blocks until completion and returns the populated result.
-NOLINT_TEST(UploadTrackerTest, AwaitSingle)
+NOLINT_TEST(UploadTrackerTest, CopiesRetainResultsAcrossProgressAndDestruction)
 {
-  // Arrange
-  UploadTracker tracker;
-  const auto t = tracker.Register(
-    FenceValue {
-      10,
-    },
-    42, "single");
-
-  // Act (pre): in another thread, mark completion after a brief delay
-  std::jthread worker([&tracker] -> void {
-    std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    tracker.MarkFenceCompleted(FenceValue {
-      10,
-    });
-  });
-
-  // Assert: Await returns populated result
-  const auto await_result = tracker.Await(t.id);
-  ASSERT_TRUE(await_result.has_value());
-  const auto r = await_result.value();
-  EXPECT_TRUE(r.success);
-  EXPECT_EQ(r.bytes_uploaded, 42U);
-
-  worker.join();
+  auto tracker = std::make_unique<UploadTracker>();
+  auto original = tracker->Register(FenceValue { 5 }, 128);
+  const auto copy = original;
+  auto moved = std::move(original);
+  EXPECT_EQ(original.Await().error, UploadError::kTicketNotFound);
+  EXPECT_FALSE(original.Cancel());
+  EXPECT_EQ(copy.Id(), moved.Id());
+  for (auto fence = 0U; fence < 1000U; ++fence) {
+    tracker->MarkFenceCompleted(FenceValue { fence });
+  }
+  tracker.reset();
+  EXPECT_TRUE(copy.Await().success);
+  EXPECT_EQ(moved.Await().bytes_uploaded, 128U);
 }
 
-//! AwaitAll waits for the max fence across tickets and returns in-order
-//! results.
-NOLINT_TEST(UploadTrackerTest, AwaitAllMaxFence)
+NOLINT_TEST(UploadTrackerTest, EqualIdsFromDifferentTrackersStayIndependent)
 {
-  // Arrange
-  UploadTracker tracker;
-  const auto t1 = tracker.Register(
-    FenceValue {
-      2,
-    },
-    10, "a");
-  const auto t2 = tracker.Register(
-    FenceValue {
-      5,
-    },
-    20, "b");
-  const std::array<UploadTicket, 2> tickets {
-    t1,
-    t2,
-  };
-
-  // Act: complete first, ensure not all done yet
-  tracker.MarkFenceCompleted(FenceValue {
-    2,
-  });
-  {
-    const auto is_t1 = tracker.IsComplete(t1.id);
-    ASSERT_TRUE(is_t1.has_value());
-    EXPECT_TRUE(is_t1.value());
-  }
-  {
-    const auto is_t2 = tracker.IsComplete(t2.id);
-    ASSERT_TRUE(is_t2.has_value());
-    EXPECT_FALSE(is_t2.value());
-  }
-
-  // In another thread, complete later
-  std::jthread worker([&tracker] -> void {
-    std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    tracker.MarkFenceCompleted(FenceValue {
-      5,
-    });
-  });
-
-  const auto await_all_result
-    = tracker.AwaitAll(std::span<const UploadTicket>(tickets));
-  ASSERT_TRUE(await_all_result.has_value());
-  const auto& results = await_all_result.value();
-  ASSERT_EQ(results.size(), tickets.size());
-  EXPECT_EQ(results.at(0).bytes_uploaded, 10U);
-  EXPECT_EQ(results.at(1).bytes_uploaded, 20U);
-  EXPECT_TRUE(results.at(0).success);
-  EXPECT_TRUE(results.at(1).success);
-
-  worker.join();
+  UploadTracker first_tracker;
+  UploadTracker second_tracker;
+  const auto first = first_tracker.Register(FenceValue { 5 }, 32);
+  const auto second = second_tracker.Register(FenceValue { 5 }, 64);
+  ASSERT_EQ(first.Id(), second.Id());
+  first_tracker.MarkFenceCompleted(first.Fence());
+  EXPECT_TRUE(first.Await().success);
+  EXPECT_FALSE(second.TryGetResult());
+  EXPECT_TRUE(second.Cancel());
+  EXPECT_TRUE(first.Await().success);
 }
 
-//! Await should unblock with TicketNotFound if slot cleanup erases the ticket
-//! while another thread is waiting for completion.
-NOLINT_TEST(UploadTrackerTest, AwaitReturnsNotFoundWhenEntryIsErasedDuringWait)
+NOLINT_TEST(UploadTrackerTest, BlockingWaitWakesOnCompletion)
 {
   UploadTracker tracker;
-  tracker.OnFrameStart(UploaderTagFactory::Get(),
-    Slot {
-      1,
-    });
-  const auto ticket = tracker.Register(
-    FenceValue {
-      10,
-    },
-    42, "await-erased");
-
-  auto future = std::async(std::launch::async,
-    [&] -> std::expected<oxygen::vortex::upload::UploadResult, UploadError> {
-      return tracker.Await(ticket.id);
-    });
-
-  EXPECT_EQ(future.wait_for(std::chrono::milliseconds {
-              5,
-            }),
-    std::future_status::timeout);
-
-  tracker.OnFrameStart(UploaderTagFactory::Get(),
-    Slot {
-      1,
-    });
-
-  const auto result = future.get();
-  ASSERT_FALSE(result.has_value());
-  EXPECT_EQ(result.error(), UploadError::kTicketNotFound);
+  const auto ticket = tracker.Register(FenceValue { 10 }, 42);
+  auto future
+    = std::async(std::launch::async, [ticket]() { return ticket.Await(); });
+  EXPECT_EQ(future.wait_for(0ms), std::future_status::timeout);
+  tracker.MarkFenceCompleted(ticket.Fence());
+  EXPECT_EQ(future.get().bytes_uploaded, 42U);
 }
 
-//! AwaitAll should not recreate erased entries or hang when slot cleanup
-//! removes a tracked ticket during the wait.
+NOLINT_TEST(UploadTrackerTest, BlockingWaitWakesOnOwnerDestruction)
+{
+  auto tracker = std::make_unique<UploadTracker>();
+  const auto ticket = tracker->Register(FenceValue { 10 }, 42);
+  auto future
+    = std::async(std::launch::async, [ticket]() { return ticket.Await(); });
+  tracker.reset();
+  EXPECT_EQ(future.get().error, UploadError::kTrackerShutdown);
+  EXPECT_FALSE(ticket.Cancel());
+}
+
+NOLINT_TEST(UploadTrackerTest, CancellationWakesLogicalWaitAndSurvivesClose)
+{
+  UploadTracker tracker;
+  const auto ticket = tracker.Register(FenceValue { 10 }, 42);
+  const auto copy = ticket;
+  auto future
+    = std::async(std::launch::async, [ticket]() { return ticket.Await(); });
+  EXPECT_TRUE(copy.Cancel());
+  EXPECT_FALSE(ticket.Cancel());
+  EXPECT_EQ(future.get().error, UploadError::kCanceled);
+  tracker.MarkFenceCompleted(ticket.Fence());
+  tracker.Close();
+  EXPECT_EQ(ticket.Await().error, UploadError::kCanceled);
+}
+
+NOLINT_TEST(UploadTrackerTest, CompletedAndFailedResultsSurviveClose)
+{
+  UploadTracker tracker;
+  const auto complete = tracker.Register(FenceValue { 5 }, 128);
+  const auto pending = tracker.Register(FenceValue { 10 }, 256);
+  const auto failed
+    = tracker.RegisterFailedImmediate(UploadError::kProducerFailed);
+  tracker.MarkFenceCompleted(complete.Fence());
+  tracker.Close();
+  tracker.MarkFenceCompleted(pending.Fence());
+  EXPECT_TRUE(complete.Await().success);
+  EXPECT_EQ(failed.Await().error, UploadError::kProducerFailed);
+  EXPECT_EQ(pending.Await().error, UploadError::kTrackerShutdown);
+  EXPECT_EQ(tracker.CompletedFence(), complete.Fence());
+}
+
+NOLINT_TEST(UploadTrackerTest, DeviceLossDoesNotInventSuccessfulCompletion)
+{
+  UploadTracker tracker;
+  const auto complete = tracker.Register(FenceValue { 5 }, 128);
+  const auto pending = tracker.Register(FenceValue { 10 }, 256);
+  tracker.MarkFenceCompleted(complete.Fence());
+  tracker.MarkFenceCompleted(
+    FenceValue { std::numeric_limits<std::uint64_t>::max() });
+  EXPECT_TRUE(complete.Await().success);
+  EXPECT_EQ(pending.Await().error, UploadError::kDeviceLost);
+  EXPECT_EQ(tracker.CompletedFence(), complete.Fence());
+}
+
 NOLINT_TEST(
-  UploadTrackerTest, AwaitAllReturnsNotFoundWhenEntryIsErasedDuringWait)
+  UploadTrackerTest, SubmissionHighwaterSurvivesDroppedAndOutOfOrderTickets)
 {
   UploadTracker tracker;
-  tracker.OnFrameStart(UploaderTagFactory::Get(),
-    Slot {
-      2,
-    });
-  const auto ticket = tracker.Register(
-    FenceValue {
-      20,
-    },
-    64, "await-all-erased");
-
-  auto future = std::async(std::launch::async,
-    [&] -> std::expected<std::vector<oxygen::vortex::upload::UploadResult>,
-          UploadError> {
-      const std::array tickets {
-        ticket,
-      };
-      return tracker.AwaitAll(std::span<const UploadTicket> {
-        tickets,
-      });
-    });
-
-  EXPECT_EQ(future.wait_for(std::chrono::milliseconds {
-              5,
-            }),
-    std::future_status::timeout);
-
-  tracker.OnFrameStart(UploaderTagFactory::Get(),
-    Slot {
-      2,
-    });
-
-  const auto result = future.get();
-  ASSERT_FALSE(result.has_value());
-  EXPECT_EQ(result.error(), UploadError::kTicketNotFound);
+  (void)tracker.Register(FenceValue { 100 }, 32);
+  (void)tracker.Register(FenceValue { 50 }, 16);
+  tracker.MarkFenceCompleted(FenceValue { 77 });
+  (void)tracker.RegisterFailedImmediate(UploadError::kProducerFailed);
+  EXPECT_EQ(tracker.LastSubmittedFence().get(), 100U);
+  tracker.MarkFenceCompleted(FenceValue { 50 });
+  EXPECT_EQ(tracker.CompletedFence().get(), 77U);
 }
 
-//! AwaitAllPending should recover cleanly when slot cleanup erases pending
-//! entries while it is blocked in AwaitAll().
 NOLINT_TEST(
-  UploadTrackerTest, AwaitAllPendingReturnsEmptyAfterCleanupErasesEntries)
+  UploadTrackerTest, TemporaryTicketIsRetainedBeforeCoroutineExecution)
 {
   UploadTracker tracker;
-  tracker.OnFrameStart(UploaderTagFactory::Get(),
-    Slot {
-      3,
-    });
-  const auto ticket = tracker.Register(
-    FenceValue {
-      30,
-    },
-    96, "await-all-pending-erased");
-
-  auto future = std::async(std::launch::async,
-    [&] -> std::expected<std::vector<oxygen::vortex::upload::UploadResult>,
-          UploadError> { return tracker.AwaitAllPending(); });
-
-  EXPECT_EQ(future.wait_for(std::chrono::milliseconds {
-              5,
-            }),
-    std::future_status::timeout);
-
-  tracker.OnFrameStart(UploaderTagFactory::Get(),
-    Slot {
-      3,
-    });
-
-  const auto result = future.get();
-  ASSERT_TRUE(result.has_value());
-  EXPECT_TRUE(result->empty());
-  EXPECT_FALSE(tracker.IsComplete(ticket.id).has_value());
+  auto wait = tracker.Register(FenceValue { 5 }, 64).AwaitGpuCompletionAsync();
+  tracker.MarkFenceCompleted(FenceValue { 5 });
+  oxygen::co::testing::TestEventLoop loop;
+  const auto result = oxygen::co::Run(loop, std::move(wait));
+  EXPECT_TRUE(result.success);
+  EXPECT_EQ(result.bytes_uploaded, 64U);
 }
 
-//! CompletedFenceValue is monotonic and never regresses on lower values.
-NOLINT_TEST(UploadTrackerTest, CompletedFenceMonotonic)
+NOLINT_TEST(UploadTrackerTest, AsyncCancellationStillWaitsForPhysicalCompletion)
 {
-  // Arrange
   UploadTracker tracker;
-  EXPECT_EQ(tracker.CompletedFence().get(), 0U);
-
-  // Act + Assert
-  tracker.MarkFenceCompleted(FenceValue {
-    1,
+  const auto ticket = tracker.Register(FenceValue { 5 }, 64);
+  oxygen::co::testing::TestEventLoop loop;
+  bool physically_completed = false;
+  loop.Schedule(1ms, [ticket]() { EXPECT_TRUE(ticket.Cancel()); });
+  loop.Schedule(2ms, [&]() {
+    physically_completed = true;
+    tracker.MarkFenceCompleted(ticket.Fence());
   });
-  EXPECT_EQ(tracker.CompletedFence().get(), 1U);
-
-  tracker.MarkFenceCompleted(FenceValue {
-    3,
-  });
-  EXPECT_EQ(tracker.CompletedFence().get(), 3U);
-
-  // Lower values should not regress
-  tracker.MarkFenceCompleted(FenceValue {
-    2,
-  });
-  EXPECT_EQ(tracker.CompletedFence().get(), 3U);
+  const auto result = oxygen::co::Run(loop, ticket.AwaitGpuCompletionAsync());
+  EXPECT_TRUE(physically_completed);
+  EXPECT_EQ(result.error, UploadError::kCanceled);
 }
 
-//! LastRegisteredFence reflects the last fence value registered by
-//! Track/Register
-NOLINT_TEST(UploadTrackerTest, LastRegisteredFence_TracksRegister)
+auto CloseAfterCompletion(UploadTicket ticket,
+  std::unique_ptr<UploadTracker>& tracker) -> oxygen::co::Co<UploadResult>
 {
-  // Arrange
-  UploadTracker tracker;
-
-  // Initially zero
-  EXPECT_EQ(tracker.LastRegisteredFence().get(), 0U);
-
-  // Register two tickets and assert LastRegisteredFence reflects the most
-  // recently registered fence value.
-  (void)tracker.Register(
-    FenceValue {
-      5,
-    },
-    10, "r1");
-  EXPECT_EQ(tracker.LastRegisteredFence().get(), 5U);
-
-  (void)tracker.Register(
-    FenceValue {
-      12,
-    },
-    20, "r2");
-  EXPECT_EQ(tracker.LastRegisteredFence().get(), 12U);
+  const auto result = co_await ticket.AwaitGpuCompletionAsync();
+  tracker.reset();
+  co_return result;
 }
 
-//! RegisterFailedImmediate should update last-registered fence to the
-//! tracker's completed fence value.
-NOLINT_TEST(UploadTrackerTest, LastRegisteredFence_UpdatedOnFailedImmediate)
+auto AdvanceAfterCompletion(UploadTicket ticket, UploadTracker& tracker)
+  -> oxygen::co::Co<UploadResult>
 {
-  UploadTracker tracker;
-
-  // Simulate some completion in the past and verify RegisterFailedImmediate
-  // stores the completed fence value.
-  tracker.MarkFenceCompleted(FenceValue {
-    77,
-  });
-
-  const auto failed = tracker.RegisterFailedImmediate(
-    "failing", oxygen::vortex::upload::UploadError::kCanceled);
-
-  EXPECT_EQ(tracker.LastRegisteredFence().get(), 77U);
-  // And ensure the returned ticket's fence matches the recorded completed fence
-  EXPECT_EQ(failed.fence.get(), 77U);
+  const auto result = co_await ticket.AwaitGpuCompletionAsync();
+  tracker.MarkFenceCompleted(FenceValue { 20 });
+  co_return result;
 }
 
-//! Verify OnFrameStart erases entries created in the same frame slot.
-NOLINT_TEST(UploadTrackerTest, OnFrameStart_CleansEntries)
+NOLINT_TEST(UploadTrackerTest, ReentrantDestructionWakesLaterFenceWaiter)
 {
-  // Arrange
+  auto tracker = std::make_unique<UploadTracker>();
+  const auto first = tracker->Register(FenceValue { 5 }, 32);
+  const auto later = tracker->Register(FenceValue { 20 }, 64);
+  oxygen::co::testing::TestEventLoop loop;
+  loop.Schedule(1ms, [&]() { tracker->MarkFenceCompleted(first.Fence()); });
+  const auto results = oxygen::co::Run(loop,
+    oxygen::co::AllOf(
+      CloseAfterCompletion(first, tracker), later.AwaitGpuCompletionAsync()));
+  EXPECT_FALSE(tracker);
+  EXPECT_TRUE(std::get<0>(results).success);
+  EXPECT_EQ(std::get<1>(results).error, UploadError::kTrackerShutdown);
+}
+
+NOLINT_TEST(UploadTrackerTest, ReentrantProgressWakesLaterFenceWaiter)
+{
   UploadTracker tracker;
+  const auto first = tracker.Register(FenceValue { 5 }, 32);
+  const auto later = tracker.Register(FenceValue { 20 }, 64);
+  oxygen::co::testing::TestEventLoop loop;
+  loop.Schedule(1ms, [&]() { tracker.MarkFenceCompleted(first.Fence()); });
+  const auto results = oxygen::co::Run(loop,
+    oxygen::co::AllOf(
+      AdvanceAfterCompletion(first, tracker), later.AwaitGpuCompletionAsync()));
+  EXPECT_TRUE(std::get<0>(results).success);
+  EXPECT_TRUE(std::get<1>(results).success);
+}
 
-  // Register two tickets in different slots by simulating frame starts.
-  tracker.OnFrameStart(UploaderTagFactory::Get(),
-    Slot {
-      1,
-    });
-  const auto t1 = tracker.Register(
-    FenceValue {
-      10,
-    },
-    11, "slot1");
-
-  tracker.OnFrameStart(UploaderTagFactory::Get(),
-    Slot {
-      2,
-    });
-  const auto t2 = tracker.Register(
-    FenceValue {
-      20,
-    },
-    22, "slot2");
-
-  // Pre-condition: both tickets exist
+#if defined(_MSC_VER) && defined(_DEBUG)
+NOLINT_TEST(
+  UploadTrackerTest, FailedResultAllocationPreservesSubmissionHighwater)
+{
+  UploadTracker tracker;
+  bool failed = false;
   {
-    const auto is_t1 = tracker.IsComplete(t1.id);
-    ASSERT_TRUE(is_t1.has_value());
+    const oxygen::graphics::testing::HeapAllocationFailure deny_allocations;
+    try {
+      (void)tracker.Register(FenceValue { 100 }, 32);
+    } catch (const std::bad_alloc&) {
+      failed = true;
+    }
   }
-  {
-    const auto is_t2 = tracker.IsComplete(t2.id);
-    ASSERT_TRUE(is_t2.has_value());
-  }
-
-  // Act: start frame for slot 1 again which should erase entries created in
-  // slot 1 per OnFrameStart implementation.
-  tracker.OnFrameStart(UploaderTagFactory::Get(),
-    Slot {
-      1,
-    });
-
-  // Assert
-  // t1 should be erased: IsComplete should return UploadError::kTicketNotFound
-  const auto is_t1 = tracker.IsComplete(t1.id);
-  ASSERT_FALSE(is_t1.has_value());
-  EXPECT_EQ(
-    is_t1.error(), oxygen::vortex::upload::UploadError::kTicketNotFound);
-
-  // t2 should still exist (not erased)
-  const auto is_t2 = tracker.IsComplete(t2.id);
-  ASSERT_TRUE(is_t2.has_value());
+  EXPECT_TRUE(failed);
+  EXPECT_EQ(tracker.LastSubmittedFence().get(), 100U);
 }
-
-//! Best-effort cancellation should mark a pending ticket as canceled.
-NOLINT_TEST(UploadTrackerTest, Cancel_Pending_MarksCanceled)
-{
-  // Arrange
-  UploadTracker tracker;
-  const auto t = tracker.Register(
-    FenceValue {
-      100,
-    },
-    123, "to-cancel");
-
-  // Act
-  const auto cancel_result = tracker.Cancel(t.id);
-
-  // Assert
-  ASSERT_TRUE(cancel_result.has_value());
-  const bool canceled = cancel_result.value();
-  EXPECT_TRUE(canceled);
-  {
-    const auto is_complete = tracker.IsComplete(t.id);
-    ASSERT_TRUE(is_complete.has_value());
-    EXPECT_TRUE(is_complete.value());
-  }
-  const auto r = tracker.TryGetResult(t.id);
-  if (!r.has_value()) {
-    FAIL() << "Expected result after cancellation";
-  }
-  EXPECT_FALSE(r->success);
-  EXPECT_EQ(r->error, oxygen::vortex::upload::UploadError::kCanceled);
-  EXPECT_EQ(r->bytes_uploaded, 0U);
-}
+#endif
 
 } // namespace
