@@ -48,7 +48,7 @@ public:
     std::unordered_map<data::AssetKey, std::unordered_map<uint16_t, uint64_t>>&;
 
   auto AssertConsistency(std::string_view context,
-    const std::unordered_map<uint16_t, size_t>& source_id_to_index,
+    const std::function<bool(uint16_t)>& is_known_source,
     const std::function<uint64_t(const data::AssetKey&, uint16_t)>&
       hash_asset_key_with_source) const -> void;
 

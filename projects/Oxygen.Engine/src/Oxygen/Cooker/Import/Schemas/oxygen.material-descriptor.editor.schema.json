@@ -95,17 +95,27 @@
           "x-editor-soft-max": 4.0,
           "x-editor-tooltip": "Scale applied to the sampled tangent-space normal."
         },
-        "emissive_factor": {
-          "x-editor-label": "Emissive",
+        "emissive_color": {
+          "x-editor-label": "Emission Color",
           "x-editor-group": "Surface",
           "x-editor-order": 5,
-          "x-editor-renderer": "color-rgb-hdr",
-          "x-editor-tooltip": "Emissive factor (HDR RGB). Multiplied by the emissive texture, if present."
+          "x-editor-renderer": "color-rgb",
+          "x-editor-tooltip": "Linear emission color, retained when intensity is zero."
+        },
+        "emissive_intensity": {
+          "x-editor-label": "Emission Intensity",
+          "x-editor-group": "Surface",
+          "x-editor-order": 6,
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 0.1,
+          "x-editor-soft-min": 0.0,
+          "x-editor-soft-max": 100.0,
+          "x-editor-tooltip": "Relative HDR multiplier applied to emission color and the optional emissive texture."
         },
         "alpha_cutoff": {
           "x-editor-label": "Alpha Cutoff",
           "x-editor-group": "Surface",
-          "x-editor-order": 6,
+          "x-editor-order": 7,
           "x-editor-renderer": "slider",
           "x-editor-step": 0.01,
           "x-editor-soft-min": 0.0,
@@ -115,7 +125,7 @@
         "ior": {
           "x-editor-label": "Index of Refraction",
           "x-editor-group": "Advanced",
-          "x-editor-order": 7,
+          "x-editor-order": 8,
           "x-editor-renderer": "numberbox",
           "x-editor-step": 0.01,
           "x-editor-soft-min": 1.0,
@@ -126,7 +136,7 @@
         "specular_factor": {
           "x-editor-label": "Specular",
           "x-editor-group": "Advanced",
-          "x-editor-order": 8,
+          "x-editor-order": 9,
           "x-editor-renderer": "slider",
           "x-editor-step": 0.01,
           "x-editor-soft-min": 0.0,
@@ -137,7 +147,7 @@
         "sheen_color_factor": {
           "x-editor-label": "Sheen Color",
           "x-editor-group": "Advanced",
-          "x-editor-order": 9,
+          "x-editor-order": 10,
           "x-editor-renderer": "color-rgb",
           "x-editor-advanced": true,
           "x-editor-tooltip": "Sheen color factor for cloth-like materials."
@@ -145,7 +155,7 @@
         "clearcoat_factor": {
           "x-editor-label": "Clearcoat",
           "x-editor-group": "Advanced",
-          "x-editor-order": 10,
+          "x-editor-order": 11,
           "x-editor-renderer": "slider",
           "x-editor-step": 0.01,
           "x-editor-soft-min": 0.0,
@@ -156,7 +166,7 @@
         "clearcoat_roughness": {
           "x-editor-label": "Clearcoat Roughness",
           "x-editor-group": "Advanced",
-          "x-editor-order": 11,
+          "x-editor-order": 12,
           "x-editor-renderer": "slider",
           "x-editor-step": 0.01,
           "x-editor-soft-min": 0.0,
@@ -167,7 +177,7 @@
         "transmission_factor": {
           "x-editor-label": "Transmission",
           "x-editor-group": "Advanced",
-          "x-editor-order": 12,
+          "x-editor-order": 13,
           "x-editor-renderer": "slider",
           "x-editor-step": 0.01,
           "x-editor-soft-min": 0.0,
@@ -178,7 +188,7 @@
         "thickness_factor": {
           "x-editor-label": "Thickness",
           "x-editor-group": "Advanced",
-          "x-editor-order": 13,
+          "x-editor-order": 14,
           "x-editor-renderer": "numberbox",
           "x-editor-step": 0.01,
           "x-editor-soft-min": 0.0,
@@ -188,7 +198,7 @@
         "attenuation_color": {
           "x-editor-label": "Attenuation Color",
           "x-editor-group": "Advanced",
-          "x-editor-order": 14,
+          "x-editor-order": 15,
           "x-editor-renderer": "color-rgb",
           "x-editor-advanced": true,
           "x-editor-tooltip": "Volumetric attenuation color."
@@ -196,7 +206,7 @@
         "attenuation_distance": {
           "x-editor-label": "Attenuation Distance",
           "x-editor-group": "Advanced",
-          "x-editor-order": 15,
+          "x-editor-order": 16,
           "x-editor-renderer": "numberbox",
           "x-editor-step": 0.01,
           "x-editor-soft-min": 0.0,
@@ -206,21 +216,21 @@
         "double_sided": {
           "x-editor-label": "Double Sided",
           "x-editor-group": "Surface",
-          "x-editor-order": 20,
+          "x-editor-order": 21,
           "x-editor-renderer": "checkbox",
           "x-editor-tooltip": "Disable back-face culling for this material."
         },
         "unlit": {
           "x-editor-label": "Unlit",
           "x-editor-group": "Surface",
-          "x-editor-order": 21,
+          "x-editor-order": 22,
           "x-editor-renderer": "checkbox",
           "x-editor-tooltip": "Skip lighting; output base color directly."
         },
         "roughness_as_glossiness": {
           "x-editor-label": "Roughness Is Glossiness",
           "x-editor-group": "Advanced",
-          "x-editor-order": 22,
+          "x-editor-order": 23,
           "x-editor-renderer": "checkbox",
           "x-editor-advanced": true,
           "x-editor-tooltip": "Interpret the roughness channel as glossiness (1 - roughness)."
@@ -230,55 +240,55 @@
     "textures": {
       "x-editor-label": "Textures",
       "x-editor-group": "Textures",
-      "x-editor-order": 20,
+      "x-editor-order": 21,
       "x-editor-renderer": "section",
       "properties": {
         "base_color": {
           "x-editor-label": "Base Color",
           "x-editor-group": "Textures",
-          "x-editor-order": 0,
+          "x-editor-order": 1,
           "x-editor-renderer": "asset-picker",
           "x-editor-tooltip": "Base color (albedo) texture."
         },
         "normal": {
           "x-editor-label": "Normal",
           "x-editor-group": "Textures",
-          "x-editor-order": 1,
+          "x-editor-order": 2,
           "x-editor-renderer": "asset-picker",
           "x-editor-tooltip": "Tangent-space normal map."
         },
         "metallic": {
           "x-editor-label": "Metallic",
           "x-editor-group": "Textures",
-          "x-editor-order": 2,
+          "x-editor-order": 3,
           "x-editor-renderer": "asset-picker",
           "x-editor-tooltip": "Metallic mask."
         },
         "roughness": {
           "x-editor-label": "Roughness",
           "x-editor-group": "Textures",
-          "x-editor-order": 3,
+          "x-editor-order": 4,
           "x-editor-renderer": "asset-picker",
           "x-editor-tooltip": "Roughness mask."
         },
         "ambient_occlusion": {
           "x-editor-label": "Ambient Occlusion",
           "x-editor-group": "Textures",
-          "x-editor-order": 4,
+          "x-editor-order": 5,
           "x-editor-renderer": "asset-picker",
           "x-editor-tooltip": "Ambient occlusion mask."
         },
         "emissive": {
           "x-editor-label": "Emissive",
           "x-editor-group": "Textures",
-          "x-editor-order": 5,
+          "x-editor-order": 6,
           "x-editor-renderer": "asset-picker",
           "x-editor-tooltip": "Emissive texture."
         },
         "specular": {
           "x-editor-label": "Specular",
           "x-editor-group": "Textures",
-          "x-editor-order": 6,
+          "x-editor-order": 7,
           "x-editor-renderer": "asset-picker",
           "x-editor-advanced": true,
           "x-editor-tooltip": "Dielectric specular mask."
@@ -286,7 +296,7 @@
         "sheen_color": {
           "x-editor-label": "Sheen Color",
           "x-editor-group": "Textures",
-          "x-editor-order": 7,
+          "x-editor-order": 8,
           "x-editor-renderer": "asset-picker",
           "x-editor-advanced": true,
           "x-editor-tooltip": "Sheen color texture."
@@ -294,7 +304,7 @@
         "clearcoat": {
           "x-editor-label": "Clearcoat",
           "x-editor-group": "Textures",
-          "x-editor-order": 8,
+          "x-editor-order": 9,
           "x-editor-renderer": "asset-picker",
           "x-editor-advanced": true,
           "x-editor-tooltip": "Clearcoat intensity texture."
@@ -302,7 +312,7 @@
         "clearcoat_normal": {
           "x-editor-label": "Clearcoat Normal",
           "x-editor-group": "Textures",
-          "x-editor-order": 9,
+          "x-editor-order": 10,
           "x-editor-renderer": "asset-picker",
           "x-editor-advanced": true,
           "x-editor-tooltip": "Clearcoat normal map."
@@ -310,7 +320,7 @@
         "transmission": {
           "x-editor-label": "Transmission",
           "x-editor-group": "Textures",
-          "x-editor-order": 10,
+          "x-editor-order": 11,
           "x-editor-renderer": "asset-picker",
           "x-editor-advanced": true,
           "x-editor-tooltip": "Transmission factor texture."
@@ -318,7 +328,7 @@
         "thickness": {
           "x-editor-label": "Thickness",
           "x-editor-group": "Textures",
-          "x-editor-order": 11,
+          "x-editor-order": 12,
           "x-editor-renderer": "asset-picker",
           "x-editor-advanced": true,
           "x-editor-tooltip": "Volume thickness texture."
@@ -328,7 +338,7 @@
     "shaders": {
       "x-editor-label": "Shaders",
       "x-editor-group": "Shaders",
-      "x-editor-order": 30,
+      "x-editor-order": 31,
       "x-editor-renderer": "section",
       "x-editor-advanced": true,
       "x-editor-tooltip": "Custom shader stage overrides."

@@ -239,7 +239,7 @@ def _parse_geometry_variable_blob(
                 sm_name = (
                     sm_desc[:64].split(b"\x00", 1)[0].decode("utf-8", "ignore")
                 )
-                sm_mv_count = struct.unpack_from("<I", sm_desc, 80)[0]
+                sm_mv_count = struct.unpack_from("<I", sm_desc, 96)[0]
                 # Skip mesh view descriptors
                 mv_size = MESH_VIEW_DESC_SIZE * sm_mv_count
                 offset += mv_size

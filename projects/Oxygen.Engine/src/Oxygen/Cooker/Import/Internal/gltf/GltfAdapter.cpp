@@ -8,36 +8,72 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <ios>
 #include <limits>
 #include <memory>
+#include <new>
 #include <numbers>
 #include <numeric>
 #include <optional>
 #include <span>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
 
+#include <glm/common.hpp>
+#include <glm/ext/matrix_float4x4.hpp>
+#include <glm/ext/quaternion_float.hpp>
+#include <glm/ext/vector_float2.hpp>
+#include <glm/ext/vector_float3.hpp>
+#include <glm/ext/vector_float4.hpp>
+#include <glm/ext/vector_uint4.hpp>
+#include <glm/geometric.hpp>
+#include <glm/gtc/matrix_access.hpp>
+#include <glm/gtc/quaternion.hpp>
+#include <glm/gtc/type_ptr.hpp>
+#include <glm/matrix.hpp>
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Base/Span.h>
+#include <Oxygen/Cooker/Import/IAsyncFileReader.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/Internal/AdapterTypes.h>
+#include <Oxygen/Cooker/Import/Internal/ImportSourceSnapshot.h>
 #include <Oxygen/Cooker/Import/Internal/ImportedLightSemantics.h>
 #include <Oxygen/Cooker/Import/Internal/MeshTransformBake.h>
-#include <Oxygen/Cooker/Import/Internal/Pipelines/GeometryPipeline.h>
+#include <Oxygen/Cooker/Import/Internal/Pipelines/MaterialPipeline.h>
+#include <Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h>
+#include <Oxygen/Cooker/Import/Internal/Pipelines/ScenePipeline.h>
+#include <Oxygen/Cooker/Import/Internal/Pipelines/TexturePipeline.h>
 #include <Oxygen/Cooker/Import/Internal/SceneNodeImportDefaults.h>
+#include <Oxygen/Cooker/Import/Internal/SourceLayoutHash.h>
 #include <Oxygen/Cooker/Import/Internal/StaticScalarSourceValidation.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Import/Internal/gltf/GltfAdapter.h>
 #include <Oxygen/Cooker/Import/Internal/gltf/cgltf.h>
+#include <Oxygen/Cooker/Import/Naming.h>
+#include <Oxygen/Cooker/Import/SceneSourceInspection.h>
 #include <Oxygen/Cooker/Import/TextureImportPresets.h>
+#include <Oxygen/Cooker/Import/TextureImportTypes.h>
 #include <Oxygen/Core/Transforms/Decompose.h>
+#include <Oxygen/Core/Types/CameraAspectMode.h>
+#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/MaterialDomain.h>
+#include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat.h>
 
 namespace oxygen::content::import::adapters {
@@ -224,6 +260,70 @@ namespace {
 
   using CgltfDataPtr = std::unique_ptr<cgltf_data, decltype(&cgltf_free)>;
 
+  auto Utf8Path(const std::filesystem::path& path) -> std::string
+  {
+    const auto text = path.u8string();
+    return { text.begin(), text.end() };
+  }
+
+  auto PathFromUtf8(const std::string_view text) -> std::filesystem::path
+  {
+    return { std::u8string(text.begin(), text.end()) };
+  }
+
+  // cgltf owns successful reads until file.release; failures retain local RAII.
+  auto ReadCgltfFile(const cgltf_memory_options*, const cgltf_file_options*,
+    const char* path, cgltf_size* size, void** data) noexcept -> cgltf_result
+  {
+    if (path == nullptr || size == nullptr || data == nullptr) {
+      return cgltf_result_invalid_options;
+    }
+    *data = nullptr;
+    try {
+      std::ifstream file(base::ToNativePath(PathFromUtf8(path)),
+        std::ios::binary | std::ios::ate);
+      if (!file) {
+        return cgltf_result_file_not_found;
+      }
+      const auto length = static_cast<std::streamoff>(file.tellg());
+      if (length < 0 || !std::in_range<cgltf_size>(length)) {
+        return cgltf_result_io_error;
+      }
+      const auto requested
+        = *size == 0U ? static_cast<cgltf_size>(length) : *size;
+      if (requested > static_cast<cgltf_size>(length)
+        || !std::in_range<std::streamsize>(requested)) {
+        return cgltf_result_io_error;
+      }
+      auto bytes = std::make_unique_for_overwrite<char[]>(requested);
+      file.seekg(0);
+      if (!file.read(bytes.get(), static_cast<std::streamsize>(requested))) {
+        return cgltf_result_io_error;
+      }
+      *size = requested;
+      *data = bytes.release();
+      return cgltf_result_success;
+    } catch (const std::bad_alloc&) {
+      return cgltf_result_out_of_memory;
+    } catch (...) {
+      return cgltf_result_io_error;
+    }
+  }
+
+  auto ReleaseCgltfFile(const cgltf_memory_options*, const cgltf_file_options*,
+    void* data, cgltf_size) noexcept -> void
+  {
+    const std::unique_ptr<char[]> bytes(static_cast<char*>(data));
+  }
+
+  auto MakeCgltfOptions() -> cgltf_options
+  {
+    cgltf_options options {};
+    options.file.read = &ReadCgltfFile;
+    options.file.release = &ReleaseCgltfFile;
+    return options;
+  }
+
   [[nodiscard]] auto LoadDataFromFile(const std::filesystem::path& path,
     const AdapterInput& input, std::vector<ImportDiagnostic>& diagnostics,
     const bool load_external_buffers = true) -> CgltfDataPtr
@@ -235,10 +335,10 @@ namespace {
       return { nullptr, &cgltf_free };
     }
 
-    cgltf_options options {};
+    const auto options = MakeCgltfOptions();
     cgltf_data* data = nullptr;
     const auto parse_result
-      = cgltf_parse_file(&options, path.string().c_str(), &data);
+      = cgltf_parse_file(&options, Utf8Path(path).c_str(), &data);
     if (parse_result != cgltf_result_success) {
       LOG_F(ERROR, "glTF parse failed: path='{}' result='{}'", path.string(),
         ResultToMessage(parse_result));
@@ -252,7 +352,7 @@ namespace {
     }
 
     const auto load_result
-      = cgltf_load_buffers(&options, data, path.string().c_str());
+      = cgltf_load_buffers(&options, data, Utf8Path(path).c_str());
     if (load_result != cgltf_result_success) {
       LOG_F(ERROR, "glTF buffer load failed: path='{}' result='{}'",
         path.string(), ResultToMessage(load_result));
@@ -276,7 +376,7 @@ namespace {
       return { nullptr, &cgltf_free };
     }
 
-    cgltf_options options {};
+    const auto options = MakeCgltfOptions();
     cgltf_data* data = nullptr;
     const auto parse_result
       = cgltf_parse(&options, bytes.data(), bytes.size(), &data);
@@ -289,7 +389,7 @@ namespace {
     }
 
     const auto load_result
-      = cgltf_load_buffers(&options, data, source_path.string().c_str());
+      = cgltf_load_buffers(&options, data, Utf8Path(source_path).c_str());
     if (load_result != cgltf_result_success) {
       LOG_F(ERROR, "glTF buffer load failed (memory): result='{}'",
         ResultToMessage(load_result));
@@ -300,6 +400,34 @@ namespace {
     }
 
     return { data, &cgltf_free };
+  }
+
+  auto RecordExternalBuffers(const cgltf_data& data,
+    const std::filesystem::path& source_path, const AdapterInput& input) -> void
+  {
+    if (!input.source_snapshot) {
+      return;
+    }
+    for (const auto& buffer : std::span(data.buffers, data.buffers_count)) {
+      if (!buffer.uri || !buffer.data
+        || std::string_view(buffer.uri).starts_with("data:")) {
+        continue;
+      }
+      auto uri = std::string(buffer.uri);
+      uri.resize(cgltf_decode_uri(uri.data()));
+      auto path_text = Utf8Path(source_path);
+      const auto separator = path_text.find_last_of("/\\");
+      path_text.resize(separator == std::string::npos ? 0U : separator + 1U);
+      path_text += uri;
+      input.source_snapshot->RecordConsumed(PathFromUtf8(path_text),
+        std::span(static_cast<const std::byte*>(buffer.data), buffer.size),
+        ReadOptions {
+          .offset = 0U,
+          .max_bytes = buffer.size,
+          .size_hint = 0U,
+          .alignment = 0U,
+        });
+    }
   }
 
   [[nodiscard]] auto ReadVec2(const cgltf_accessor* accessor)
@@ -313,9 +441,9 @@ namespace {
     for (cgltf_size i = 0; i < accessor->count; ++i) {
       cgltf_float v[4] = {};
       cgltf_accessor_read_float(accessor, i, v, 4);
-      out[i] = glm::vec2 {
-        (v[0]),
-        (v[1]),
+      out.at(i) = glm::vec2 {
+        v[0],
+        v[1],
       };
     }
     return out;
@@ -332,10 +460,10 @@ namespace {
     for (cgltf_size i = 0; i < accessor->count; ++i) {
       cgltf_float v[4] = {};
       cgltf_accessor_read_float(accessor, i, v, 4);
-      out[i] = glm::vec3 {
-        (v[0]),
-        (v[1]),
-        (v[2]),
+      out.at(i) = glm::vec3 {
+        v[0],
+        v[1],
+        v[2],
       };
     }
     return out;
@@ -352,11 +480,11 @@ namespace {
     for (cgltf_size i = 0; i < accessor->count; ++i) {
       cgltf_float v[4] = {};
       cgltf_accessor_read_float(accessor, i, v, 4);
-      out[i] = glm::vec4 {
-        (v[0]),
-        (v[1]),
-        (v[2]),
-        (v[3]),
+      out.at(i) = glm::vec4 {
+        v[0],
+        v[1],
+        v[2],
+        v[3],
       };
     }
     return out;
@@ -373,7 +501,7 @@ namespace {
     for (cgltf_size i = 0; i < accessor->count; ++i) {
       cgltf_uint v[4] = {};
       cgltf_accessor_read_uint(accessor, i, v, 4);
-      out[i] = glm::uvec4 { v[0], v[1], v[2], v[3] };
+      out.at(i) = glm::uvec4 { v[0], v[1], v[2], v[3] };
     }
     return out;
   }
@@ -389,7 +517,7 @@ namespace {
     for (cgltf_size i = 0; i < accessor->count; ++i) {
       cgltf_float v[16] = {};
       cgltf_accessor_read_float(accessor, i, v, 16);
-      out[i] = glm::mat4 {
+      out.at(i) = glm::mat4 {
         glm::vec4 { v[0], v[1], v[2], v[3] },
         glm::vec4 { v[4], v[5], v[6], v[7] },
         glm::vec4 { v[8], v[9], v[10], v[11] },
@@ -408,7 +536,7 @@ namespace {
 
     std::vector<uint32_t> out(accessor->count);
     for (cgltf_size i = 0; i < accessor->count; ++i) {
-      out[i] = static_cast<uint32_t>(cgltf_accessor_read_index(accessor, i));
+      out.at(i) = static_cast<uint32_t>(cgltf_accessor_read_index(accessor, i));
     }
     return out;
   }
@@ -671,7 +799,8 @@ namespace {
     std::vector<ImportDiagnostic>& diagnostics, std::string_view source_id)
     -> std::shared_ptr<std::vector<std::byte>>
   {
-    std::ifstream file(path, std::ios::binary | std::ios::ate);
+    std::ifstream file(
+      base::ToNativePath(path), std::ios::binary | std::ios::ate);
     if (!file) {
       diagnostics.push_back(MakeWarningDiagnostic("gltf.image.load_failed",
         "Failed to open glTF image file", source_id, path.string()));
@@ -738,7 +867,7 @@ namespace {
       bits += 6;
       if (bits >= 8) {
         bits -= 8;
-        const auto byte = static_cast<std::byte>((accum >> bits) & 0xFFu);
+        const auto byte = static_cast<std::byte>((accum >> bits) & 0xFFU);
         bytes->push_back(byte);
       }
     }
@@ -776,7 +905,7 @@ namespace {
 
   struct ResolvedTextureSource final {
     TexturePipeline::SourceBytes bytes;
-    std::filesystem::path source_path;
+    std::filesystem::path source_path {};
   };
 
   [[nodiscard]] auto ResolveImageBytes(const cgltf_image& image,
@@ -786,7 +915,7 @@ namespace {
     std::span<const AdapterInput::ExternalTextureBytes> external_texture_bytes)
     -> std::optional<ResolvedTextureSource>
   {
-    const auto make_placeholder = []() -> ResolvedTextureSource {
+    const auto make_placeholder = [] -> ResolvedTextureSource {
       auto bytes = std::make_shared<std::vector<std::byte>>();
       return ResolvedTextureSource {
         .bytes = TexturePipeline::SourceBytes {
@@ -943,9 +1072,8 @@ namespace {
     auto converted = c * m * glm::transpose(c);
     const auto scale = ComputeUnitScale(policy);
     if (scale != 1.0F) {
-      converted[3].x *= scale;
-      converted[3].y *= scale;
-      converted[3].z *= scale;
+      converted = glm::column(converted, 3,
+        glm::column(converted, 3) * glm::vec4(scale, scale, scale, 1.0F));
     }
     return converted;
   }
@@ -956,7 +1084,7 @@ namespace {
     std::vector<internal::MeshBakeNode> nodes(data.nodes_count);
     std::vector<uint8_t> emit_mesh(data.meshes_count);
     for (size_t index = 0; index < data.meshes_count; ++index) {
-      emit_mesh[index] = data.meshes[index].primitives_count != 0;
+      emit_mesh.at(index) = data.meshes[index].primitives_count != 0;
     }
     std::unordered_set<const cgltf_node*> animated_or_joint;
     for (const auto& animation :
@@ -976,15 +1104,11 @@ namespace {
       if (node.mesh == nullptr) {
         continue;
       }
-      auto& input = nodes[index];
+      auto& input = nodes.at(index);
       input.mesh_index = static_cast<size_t>(node.mesh - data.meshes);
       cgltf_float matrix[16] {};
       cgltf_node_transform_local(&node, matrix);
-      for (int column = 0; column < 4; ++column) {
-        for (int row = 0; row < 4; ++row) {
-          input.local_transform[column][row] = matrix[column * 4 + row];
-        }
-      }
+      input.local_transform = glm::make_mat4(matrix);
       input.local_transform
         = ConvertGltfTransform(input.local_transform, policy);
       if (node.children_count != 0 || node.camera != nullptr
@@ -995,7 +1119,7 @@ namespace {
         input.retain_reason = "animation or skinning transform";
       } else if (std::ranges::any_of(std::span(node.mesh->primitives,
                                        node.mesh->primitives_count),
-                   [](const cgltf_primitive& primitive) {
+                   [](const cgltf_primitive& primitive) -> bool {
                      return primitive.targets_count != 0;
                    })) {
         input.retain_reason = "morph target transform";
@@ -1003,6 +1127,54 @@ namespace {
     }
     return internal::BuildMeshBakePlan(
       nodes, emit_mesh, policy.bake_transforms_into_meshes);
+  }
+
+  auto GltfSourceLayoutWitness(const cgltf_mesh& mesh,
+    const std::unordered_map<const cgltf_material*, uint32_t>& material_index)
+    -> std::optional<base::Sha256Digest>
+  {
+    SourceLayoutHash hash("oxygen.gltf-source-layout/v1");
+    hash.AddCount(mesh.primitives_count);
+    for (const auto& primitive :
+      std::span(mesh.primitives, mesh.primitives_count)) {
+      hash.Add(static_cast<uint32_t>(primitive.type));
+      const auto material = material_index.find(primitive.material);
+      hash.Add(material == material_index.end()
+          ? std::numeric_limits<uint32_t>::max()
+          : material->second);
+      const cgltf_accessor* positions = nullptr;
+      for (const auto& attribute :
+        std::span(primitive.attributes, primitive.attributes_count)) {
+        if (attribute.type == cgltf_attribute_type_position
+          && attribute.index == 0) {
+          positions = attribute.data;
+          break;
+        }
+      }
+      hash.AddCount(positions != nullptr ? positions->count : 0);
+      if (positions != nullptr) {
+        for (cgltf_size index = 0; index < positions->count; ++index) {
+          std::array<cgltf_float, 3> position {};
+          if (!cgltf_accessor_read_float(
+                positions, index, position.data(), position.size())) {
+            return std::nullopt;
+          }
+          for (const auto component : position) {
+            hash.AddFloat(component);
+          }
+        }
+      }
+      hash.Add(primitive.indices != nullptr ? 1U : 0U);
+      hash.AddCount(
+        primitive.indices != nullptr ? primitive.indices->count : 0);
+      if (primitive.indices != nullptr) {
+        for (cgltf_size index = 0; index < primitive.indices->count; ++index) {
+          hash.Add(static_cast<uint64_t>(
+            cgltf_accessor_read_index(primitive.indices, index)));
+        }
+      }
+    }
+    return hash.Finish();
   }
 
   [[nodiscard]] auto StreamWorkItemsFromData(const cgltf_data& data,
@@ -1028,7 +1200,10 @@ namespace {
     CHECK_F(input.naming_service != nullptr, "NamingService must not be null");
 
     const auto scene_name = input.request.GetSceneName();
+    const auto source_path_text = input.request.source_path.string();
     uint32_t mesh_ordinal = 0;
+    std::vector<std::optional<base::Sha256Digest>> source_witnesses(
+      data.meshes_count);
 
     struct PrimitiveInfo {
       const cgltf_primitive* prim = nullptr;
@@ -1052,11 +1227,11 @@ namespace {
     const auto bake_plan
       = BuildGltfBakePlan(data, input.request.options.coordinate);
     for (size_t index = 0; index < bake_plan.retained_reasons.size(); ++index) {
-      if (!bake_plan.retained_reasons[index].empty()) {
+      if (!bake_plan.retained_reasons.at(index).empty()) {
         result.diagnostics.push_back(
           MakeWarningDiagnostic("mesh.transform_bake_retained",
             "Retained authored node transform: "
-              + bake_plan.retained_reasons[index],
+              + bake_plan.retained_reasons.at(index),
             input.source_id_prefix, "/nodes/" + std::to_string(index)));
       }
     }
@@ -1074,7 +1249,7 @@ namespace {
         .kind = ImportNameKind::kMesh,
         .ordinal = static_cast<uint32_t>(mesh_i),
         .parent_name = {},
-        .source_id = input.request.source_path.string(),
+        .source_id = source_path_text,
         .scene_namespace = scene_name,
       };
       const std::string mesh_name
@@ -1189,7 +1364,7 @@ namespace {
             }
           }
 
-          cgltf_size fallback_uv_set = (std::numeric_limits<cgltf_size>::max)();
+          cgltf_size fallback_uv_set = std::numeric_limits<cgltf_size>::max();
           for (const auto& [uv_set, accessor] : texcoords_by_index) {
             (void)accessor;
             fallback_uv_set = (std::min)(fallback_uv_set, uv_set);
@@ -1307,9 +1482,9 @@ namespace {
         any_colors = any_colors || has_colors;
         any_skin = any_skin || has_skin;
 
-        const auto material_slot = [&]() -> uint32_t {
+        const auto material_slot = [&] -> uint32_t {
           if (prim.material == nullptr) {
-            return 0;
+            return static_cast<uint32_t>(data.materials_count);
           }
           if (const auto it = material_index.find(prim.material);
             it != material_index.end()) {
@@ -1318,7 +1493,7 @@ namespace {
           return 0;
         }();
 
-        if (!input.material_keys.empty()
+        if (prim.material != nullptr && !input.material_keys.empty()
           && material_slot >= input.material_keys.size()) {
           result.diagnostics.push_back(
             MakeWarningDiagnostic("mesh.material_slot_oob",
@@ -1384,6 +1559,19 @@ namespace {
       }
 
       MeshBuildPipeline::WorkItem item;
+      auto& witness = source_witnesses.at(mesh_i);
+      if (!witness.has_value()) {
+        witness = GltfSourceLayoutWitness(*mesh, material_index);
+      }
+      if (!witness.has_value()) {
+        result.diagnostics.push_back(
+          MakeErrorDiagnostic("mesh.source_layout_invalid",
+            "Could not read the source-native glTF positions",
+            input.source_id_prefix, mesh_name));
+        result.success = false;
+        return result;
+      }
+      item.source_layout_witness = *witness;
       item.source_id
         = BuildSourceId(input.source_id_prefix, mesh_name, mesh_ordinal++);
       item.mesh_name = mesh_name;
@@ -1497,9 +1685,8 @@ namespace {
             auto texcoords_vec = ReadVec2(prim_info.texcoords);
             if (!texcoords_vec.empty()) {
               bool has_invalid_uv = false;
-              auto min_uv = glm::vec2 { (std::numeric_limits<float>::max)() };
-              auto max_uv
-                = glm::vec2 { (std::numeric_limits<float>::lowest)() };
+              auto min_uv = glm::vec2 { std::numeric_limits<float>::max() };
+              auto max_uv = glm::vec2 { std::numeric_limits<float>::lowest() };
               for (const auto& uv : texcoords_vec) {
                 if (!std::isfinite(uv.x) || !std::isfinite(uv.y)) {
                   has_invalid_uv = true;
@@ -1564,7 +1751,7 @@ namespace {
               joint_weights_vec.begin(), joint_weights_vec.end());
           } else {
             owner->joint_indices.insert(
-              owner->joint_indices.end(), positions_vec.size(), glm::uvec4(0u));
+              owner->joint_indices.end(), positions_vec.size(), glm::uvec4(0U));
             owner->joint_weights.insert(owner->joint_weights.end(),
               positions_vec.size(), glm::vec4(0.0F));
           }
@@ -1576,8 +1763,8 @@ namespace {
             const auto normal_offset
               = owner->normals.size() - positions_vec.size();
             for (size_t i = 0; i < tangents_vec.size(); ++i) {
-              const auto& t = tangents_vec[i];
-              const auto& n = owner->normals[normal_offset + i];
+              const auto& t = tangents_vec.at(i);
+              const auto& n = owner->normals.at(normal_offset + i);
               const auto tangent
                 = ConvertGltfDirection(glm::vec3 { t.x, t.y, t.z });
               owner->tangents.push_back(tangent);
@@ -1600,7 +1787,7 @@ namespace {
               input.source_id_prefix, mesh_name));
           indices_vec.resize(positions_vec.size());
           for (size_t i = 0; i < indices_vec.size(); ++i) {
-            indices_vec[i] = static_cast<uint32_t>(i);
+            indices_vec.at(i) = static_cast<uint32_t>(i);
           }
         }
 
@@ -1644,6 +1831,9 @@ namespace {
 
         owner->ranges.push_back(TriangleRange {
           .material_slot = prim_info.material_slot,
+          .source_slot = prim_info.prim->material != nullptr
+            ? prim_info.material_slot
+            : std::numeric_limits<uint32_t>::max(),
           .first_index = first_index,
           .index_count = static_cast<uint32_t>(indices_vec.size()),
         });
@@ -1688,7 +1878,7 @@ namespace {
         }
 
         owner->joint_remap.resize(joint_count);
-        std::iota(owner->joint_remap.begin(), owner->joint_remap.end(), 0u);
+        std::iota(owner->joint_remap.begin(), owner->joint_remap.end(), 0U);
       }
 
       std::optional<Bounds3> bounds3;
@@ -1734,13 +1924,21 @@ namespace {
 
         std::vector<uint8_t> used(max_slot + 1, 0);
         for (const auto& range : owner->ranges) {
-          used[range.material_slot] = static_cast<uint8_t>(1);
+          used.at(range.material_slot) = static_cast<uint8_t>(1);
         }
 
         item.material_slots_used.clear();
         for (uint32_t i = 0; i < used.size(); ++i) {
-          if (used[i] != 0U) {
+          if (used.at(i) != 0U) {
             item.material_slots_used.push_back(i);
+            const auto* label
+              = i < data.materials_count ? data.materials[i].name : nullptr;
+            item.material_slot_names.emplace(i < data.materials_count
+                ? i
+                : std::numeric_limits<uint32_t>::max(),
+              label != nullptr
+                ? label
+                : (i < data.materials_count ? "Material" : "Default"));
           }
         }
       }
@@ -1837,6 +2035,13 @@ auto GltfAdapter::Parse(const std::filesystem::path& source_path,
     return result;
   }
 
+  if (input.source_snapshot) {
+    input.source_snapshot->RecordConsumed(source_path,
+      std::span(
+        static_cast<const std::byte*>(data->file_data), data->file_size));
+  }
+  RecordExternalBuffers(*data, source_path, input);
+
   if (input.request.options.scene_content_policy
       == SceneContentPolicy::kStaticScalar
     && !internal::ValidateStaticScalarSource(
@@ -1868,6 +2073,8 @@ auto GltfAdapter::Parse(const std::span<const std::byte> source_bytes,
     result.success = false;
     return result;
   }
+
+  RecordExternalBuffers(*data, input.request.source_path, input);
 
   if (input.request.options.scene_content_policy
       == SceneContentPolicy::kStaticScalar
@@ -1920,6 +2127,7 @@ auto GltfAdapter::BuildWorkItems(MaterialWorkTag, MaterialWorkItemSink& sink,
   }
 
   const auto scene_name = input.request.GetSceneName();
+  const auto source_path_text = input.request.source_path.string();
   const auto& data = *impl_->data_owner;
   const uint32_t material_count = static_cast<uint32_t>(data.materials_count);
   for (uint32_t i = 0; i < material_count; ++i) {
@@ -1929,7 +2137,7 @@ auto GltfAdapter::BuildWorkItems(MaterialWorkTag, MaterialWorkItemSink& sink,
       .kind = ImportNameKind::kMaterial,
       .ordinal = i,
       .parent_name = {},
-      .source_id = input.request.source_path.string(),
+      .source_id = source_path_text,
       .scene_namespace = scene_name,
     };
     const auto material_name
@@ -2134,8 +2342,8 @@ auto GltfAdapter::BuildWorkItems(TextureWorkTag, TextureWorkItemSink& sink,
 
   std::unordered_map<std::string, TexturePipeline::WorkItem> work_items;
 
-  auto register_texture = [&](const cgltf_texture_view& view,
-                            const TextureUsage usage) {
+  auto register_texture
+    = [&](const cgltf_texture_view& view, const TextureUsage usage) -> void {
     if (view.texture == nullptr) {
       return;
     }
@@ -2288,35 +2496,35 @@ auto GltfAdapter::CollectExternalTextureSources(
   std::unordered_set<std::string> seen_ids;
 
   auto register_texture
-    = [&](const cgltf_texture_view& view, const TextureUsage usage) {
-        if (view.texture == nullptr || view.texture->image == nullptr) {
-          return;
-        }
+    = [&](const cgltf_texture_view& view, const TextureUsage usage) -> void {
+    if (view.texture == nullptr || view.texture->image == nullptr) {
+      return;
+    }
 
-        const auto source_id = BuildTextureSourceId(
-          input.source_id_prefix, data, *view.texture, usage);
-        if (!seen_ids.insert(source_id).second) {
-          return;
-        }
+    const auto source_id = BuildTextureSourceId(
+      input.source_id_prefix, data, *view.texture, usage);
+    if (!seen_ids.insert(source_id).second) {
+      return;
+    }
 
-        const auto& image = *view.texture->image;
-        if (image.buffer_view != nullptr) {
-          return;
-        }
-        if (image.uri == nullptr || *image.uri == '\0') {
-          return;
-        }
+    const auto& image = *view.texture->image;
+    if (image.buffer_view != nullptr) {
+      return;
+    }
+    if (image.uri == nullptr || *image.uri == '\0') {
+      return;
+    }
 
-        std::string_view uri(image.uri);
-        if (uri.rfind("data:", 0) == 0) {
-          return;
-        }
+    std::string_view uri(image.uri);
+    if (uri.rfind("data:", 0) == 0) {
+      return;
+    }
 
-        sources.push_back(ExternalTextureSource {
-          .texture_id = source_id,
-          .resolved_path = base_dir / std::filesystem::path(std::string(uri)),
-        });
-      };
+    sources.push_back(ExternalTextureSource {
+      .texture_id = source_id,
+      .resolved_path = base_dir / std::filesystem::path(std::string(uri)),
+    });
+  };
 
   for (cgltf_size i = 0; i < data.materials_count; ++i) {
     if (input.stop_token.stop_requested()) {
@@ -2364,6 +2572,7 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
   const auto& request = *input.request;
 
   const auto bake_plan = BuildGltfBakePlan(data, request.options.coordinate);
+  const auto source_path_text = request.source_path.string();
 
   if (!input.geometry_keys.empty()
     && input.geometry_keys.size() < bake_plan.variants.size()) {
@@ -2375,7 +2584,7 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
   const auto scene_name = request.GetSceneName();
 
   std::vector<NodeInput> nodes;
-  nodes.reserve(data.nodes_count > 0 ? data.nodes_count : 1u);
+  nodes.reserve(data.nodes_count > 0 ? data.nodes_count : 1U);
 
   const auto kInvalidParent = std::numeric_limits<uint32_t>::max();
   const auto apply_node
@@ -2392,7 +2601,7 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
       .kind = ImportNameKind::kSceneNode,
       .ordinal = ordinal,
       .parent_name = parent_name,
-      .source_id = request.source_path.string(),
+      .source_id = source_path_text,
       .scene_namespace = scene_name,
     };
     const auto base_name
@@ -2400,19 +2609,14 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
 
     cgltf_float local_matrix_data[16] = {};
     cgltf_node_transform_local(node, local_matrix_data);
-    glm::mat4 local_matrix(1.0F);
-    for (int c = 0; c < 4; ++c) {
-      for (int r = 0; r < 4; ++r) {
-        local_matrix[c][r] = local_matrix_data[c * 4 + r];
-      }
-    }
+    auto local_matrix = glm::make_mat4(local_matrix_data);
 
     local_matrix
       = ConvertGltfTransform(local_matrix, request.options.coordinate);
     const auto source_node_index = static_cast<size_t>(node - data.nodes);
-    const auto variant_index = bake_plan.node_variant[source_node_index];
+    const auto variant_index = bake_plan.node_variant.at(source_node_index);
     if (variant_index < bake_plan.variants.size()
-      && bake_plan.variants[variant_index].transform.has_value()) {
+      && bake_plan.variants.at(variant_index).transform.has_value()) {
       local_matrix = glm::mat4(1.0F);
     }
     const auto world_matrix = parent_world * local_matrix;
@@ -2472,7 +2676,7 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
 
   if (request.options.node_pruning == NodePruningPolicy::kDropEmptyNodes) {
     for (uint32_t i = 0; i < nodes.size(); ++i) {
-      const auto& node = nodes[i];
+      const auto& node = nodes.at(i);
       if (node.has_renderable || node.has_camera || node.has_light) {
         kept_indices.push_back(i);
       }
@@ -2498,19 +2702,19 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
 
   std::vector old_to_new(nodes.size(), -1);
   for (uint32_t new_index = 0; new_index < kept_indices.size(); ++new_index) {
-    old_to_new[kept_indices[new_index]] = static_cast<int32_t>(new_index);
+    old_to_new.at(kept_indices.at(new_index)) = static_cast<int32_t>(new_index);
   }
 
   std::vector<NodeInput> pruned_nodes;
   pruned_nodes.reserve(kept_indices.size());
 
   for (uint32_t new_index = 0; new_index < kept_indices.size(); ++new_index) {
-    const auto old_index = kept_indices[new_index];
-    auto node = nodes[old_index];
+    const auto old_index = kept_indices.at(new_index);
+    auto node = nodes.at(old_index);
 
     uint32_t parent = node.parent_index;
-    while (parent < nodes.size() && old_to_new[parent] < 0) {
-      const auto next_parent = nodes[parent].parent_index;
+    while (parent < nodes.size() && old_to_new.at(parent) < 0) {
+      const auto next_parent = nodes.at(parent).parent_index;
       if (next_parent == parent) {
         break;
       }
@@ -2518,15 +2722,15 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
     }
 
     uint32_t new_parent_index = new_index;
-    if (parent < nodes.size() && old_to_new[parent] >= 0) {
-      new_parent_index = static_cast<uint32_t>(old_to_new[parent]);
+    if (parent < nodes.size() && old_to_new.at(parent) >= 0) {
+      new_parent_index = static_cast<uint32_t>(old_to_new.at(parent));
     }
 
     // A retained parent needs only index remapping, never transform
     // reparenting.
     if (new_parent_index != new_index && parent != node.parent_index) {
-      const auto parent_old_index = kept_indices[new_parent_index];
-      const auto& parent_world = nodes[parent_old_index].world_matrix;
+      const auto parent_old_index = kept_indices.at(new_parent_index);
+      const auto& parent_world = nodes.at(parent_old_index).world_matrix;
 
       glm::vec3 parent_translation {};
       glm::vec3 parent_scale { 1.0F, 1.0F, 1.0F };
@@ -2604,7 +2808,7 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
   };
 
   for (uint32_t i = 0; i < pruned_nodes.size(); ++i) {
-    auto& node = pruned_nodes[i];
+    auto& node = pruned_nodes.at(i);
     const auto& name = node.base_name;
 
     glm::vec3 translation {};
@@ -2620,7 +2824,8 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
         input.source_id, name));
     }
 
-    const auto matrix_translation = glm::vec3(node.local_matrix[3]);
+    const auto matrix_translation
+      = glm::vec3(glm::column(node.local_matrix, 3));
     const auto translation_delta
       = glm::length(translation - matrix_translation);
     if (translation_delta > 1e-3F) {
@@ -2653,11 +2858,12 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
     if (gltf_node != nullptr && gltf_node->mesh != nullptr) {
       const auto source_node_index
         = static_cast<size_t>(gltf_node - data.nodes);
-      const auto key_index = bake_plan.node_variant[source_node_index];
+      const auto key_index = bake_plan.node_variant.at(source_node_index);
       if (key_index < input.geometry_keys.size()) {
         build.renderables.push_back(RenderableRecord {
           .node_index = i,
-          .geometry_key = input.geometry_keys[key_index],
+          .geometry_key
+          = oxygen::base::CheckedAt(input.geometry_keys, key_index),
           .visible = 1,
         });
       }
@@ -2680,11 +2886,11 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
         const float fov_y = perspective.yfov;
         const float aspect_ratio = perspective.has_aspect_ratio
           ? static_cast<float>(perspective.aspect_ratio)
-          : 1.0F;
+          : kDefaultCameraAspectRatio;
         const float near_plane = perspective.znear * unit_scale;
         const float far_plane = perspective.has_zfar
           ? static_cast<float>(perspective.zfar) * unit_scale
-          : near_plane + 1000.0F * unit_scale;
+          : near_plane + (1000.0F * unit_scale);
 
         build.perspective_cameras.push_back(PerspectiveCameraRecord {
           .node_index = camera_node_index,
@@ -2692,6 +2898,8 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
           .aspect_ratio = aspect_ratio,
           .near_plane = near_plane,
           .far_plane = far_plane,
+          .aspect_mode = perspective.has_aspect_ratio ? CameraAspectMode::kFixed
+                                                      : CameraAspectMode::kAuto,
         });
       } else if (cam.type == cgltf_camera_type_orthographic) {
         const auto& ortho = cam.data.orthographic;
@@ -2735,9 +2943,11 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
           = append_attachment(node, i, "Light", glm::quat(0, 0, 0, 1));
       }
       float local_range = request.options.gltf_omitted_light_range_m;
-      if (light.type == cgltf_light_type_point || light.type == cgltf_light_type_spot) {
+      if (light.type == cgltf_light_type_point
+        || light.type == cgltf_light_type_spot) {
         if (light.has_range) {
-          local_range = light.range * ComputeUnitScale(request.options.coordinate);
+          local_range
+            = light.range * ComputeUnitScale(request.options.coordinate);
         }
         if (!std::isfinite(local_range) || local_range <= 0.0F
           || !std::isfinite(1.0F / local_range)) {

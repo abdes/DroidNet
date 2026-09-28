@@ -48,13 +48,20 @@ set(
   OXYGEN_SERIO_HEADERS
   "api_export.h"
   "AlignmentGuard.h"
+  "AtomicFile.h"
   "FileStream.h"
+  "FileLock.h"
   "MemoryStream.h"
   "Stream.h"
   "Reader.h"
   "Writer.h"
 )
-set(OXYGEN_SERIO_PRIVATE_SOURCES "MemoryStream.cpp")
+set(
+  OXYGEN_SERIO_PRIVATE_SOURCES
+  "MemoryStream.cpp"
+  "AtomicFile.cpp"
+  "FileLock.cpp"
+)
 
 target_sources(
   ${META_MODULE_TARGET}

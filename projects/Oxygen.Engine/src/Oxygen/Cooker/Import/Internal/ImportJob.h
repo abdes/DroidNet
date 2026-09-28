@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <filesystem>
 #include <memory>
 #include <stop_token>
 #include <string>
@@ -41,6 +42,8 @@ class LooseCookedIndexRegistry;
 
 namespace oxygen::content::import::detail {
 
+class ImportSourceSnapshot;
+
 //! Base class for one import job executing on the import thread.
 /*!
  Owns job-scoped state and defines the job lifetime boundary.
@@ -59,6 +62,7 @@ public:
    @param params Parameters for creating the job.
   */
   OXGN_COOK_API explicit ImportJob(ImportJobParams params);
+  OXGN_COOK_API ~ImportJob() override;
 
   OXYGEN_MAKE_NON_COPYABLE(ImportJob)
   OXYGEN_MAKE_NON_MOVABLE(ImportJob)
@@ -89,6 +93,11 @@ public:
   OXGN_COOK_API void SetName(std::string_view name) noexcept override;
 
 protected:
+  //! Keeps the caller's session alive until generation-local callback writes
+  //! finish, including when its work is cancelled or throws.
+  OXGN_COOK_NDAPI auto RunWithWriteDrain(co::Co<ImportReport> work)
+    -> co::Co<ImportReport>;
+
   //! Execute the job-specific import work.
   /*!
    Concrete jobs must implement this method and return a complete report.
@@ -105,9 +114,16 @@ protected:
   //! Ensure the request has a concrete cooked root on disk.
   OXGN_COOK_API auto EnsureCookedRoot() -> void;
 
-  //! Access the async file writer.
+  //! Access the async file reader.
   OXGN_COOK_NDAPI auto FileReader() const noexcept
     -> observer_ptr<IAsyncFileReader>;
+
+  //! Retain the input observer while parser workers consume external data.
+  [[nodiscard]] auto SourceSnapshot() const noexcept
+    -> std::shared_ptr<ImportSourceSnapshot>
+  {
+    return source_snapshot_;
+  }
 
   //! Access the async file writer.
   OXGN_COOK_NDAPI auto FileWriter() const noexcept
@@ -186,6 +202,9 @@ protected:
     std::string item_kind, std::string item_name) -> void;
 
 private:
+  [[nodiscard]] auto WritableCookedRoot() const -> std::filesystem::path;
+  [[nodiscard]] auto DrainGenerationWrites() -> co::Co<>;
+  [[nodiscard]] auto ExecuteAndPublishAsync() -> co::Co<ImportReport>;
   [[nodiscard]] auto MainAsync() -> co::Co<>;
 
   [[nodiscard]] auto MakeCancelledReport(const ImportRequest& request) const
@@ -199,14 +218,19 @@ private:
   ImportCompletionCallback on_complete_;
   ProgressEventCallback on_progress_;
   std::shared_ptr<co::Event> cancel_event_;
-  observer_ptr<IAsyncFileReader> file_reader_ {};
-  observer_ptr<IAsyncFileWriter> file_writer_ {};
-  observer_ptr<co::ThreadPool> thread_pool_ {};
-  observer_ptr<ResourceTableRegistry> table_registry_ {};
-  observer_ptr<LooseCookedIndexRegistry> index_registry_ {};
+  observer_ptr<IAsyncFileReader> file_reader_;
+  observer_ptr<IAsyncFileWriter> file_writer_;
+  observer_ptr<co::ThreadPool> thread_pool_;
+  observer_ptr<ResourceTableRegistry> table_registry_;
+  observer_ptr<LooseCookedIndexRegistry> index_registry_;
   ImportConcurrency concurrency_ {};
-  AsyncImportService::ScriptCompileCallback script_compile_callback_ {};
+  AsyncImportService::ScriptCompileCallback script_compile_callback_;
   std::stop_token stop_token_;
+  std::shared_ptr<RetainedModelImport> retained_import_;
+  std::shared_ptr<ImportSourceSnapshot> source_snapshot_;
+  std::unique_ptr<IAsyncFileWriter> generation_writer_;
+  std::unique_ptr<ResourceTableRegistry> generation_tables_;
+  std::unique_ptr<LooseCookedIndexRegistry> generation_index_;
 
   std::string name_;
 

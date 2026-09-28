@@ -70,6 +70,7 @@ def test_build_pak_with_scene_asset(tmp_path: Path):
                         "mesh_type": 0,
                         "submeshes": [
                             {
+                                "slot_id": "d3c129d9-7d3f-5784-9684-cd9c14d139c5",
                                 "material": "MatA",
                                 "bounding_box_min": [0.0, 0.0, 0.0],
                                 "bounding_box_max": [1.0, 1.0, 1.0],
@@ -98,7 +99,7 @@ def test_build_pak_with_scene_asset(tmp_path: Path):
                     {
                         "node_index": 1,
                         "geometry": "GeoA",
-                        "material": "MatA",
+
                         "visible": True,
                     }
                 ],
@@ -138,17 +139,15 @@ def test_build_pak_with_scene_asset(tmp_path: Path):
     assert seen_scene
 
     scene_desc = _extract_scene_descriptor(data)
-    assert scene_desc[65] == 8
+    assert scene_desc[65] == 9
 
     tables = _extract_scene_component_tables(scene_desc)
     assert len(tables) == 1
     renderable_table = tables[0]
     assert renderable_table["count"] == 1
-    assert renderable_table["entry_size"] == 40
+    assert renderable_table["entry_size"] == 24
     record_offset = renderable_table["table_offset"]
-    assert scene_desc[record_offset + 20 : record_offset + 36] == bytes.fromhex(
-        "11" * 16
-    )
+    assert struct.unpack_from("<I", scene_desc, record_offset + 20)[0] == 1
 
 
 def test_build_pak_with_current_environment_and_local_fog_scene_asset(tmp_path: Path):
@@ -164,7 +163,7 @@ def test_build_pak_with_current_environment_and_local_fog_scene_asset(tmp_path: 
                 "type": "scene",
                 "name": "SceneEnvironmentV3",
                 "asset_key": "33" * 16,
-                "version": 8,
+                "version": 9,
                 "nodes": [
                     {"name": "Root", "parent": None},
                     {"name": "FogNode", "parent": 0},
@@ -252,7 +251,7 @@ def test_build_pak_with_current_environment_and_local_fog_scene_asset(tmp_path: 
     build_pak(BuildOptions(input_spec=spec_path, output_path=out_path))
     scene_desc = _extract_scene_descriptor(out_path.read_bytes())
 
-    assert scene_desc[65] == 8
+    assert scene_desc[65] == 9
     assert b"LFOG" in scene_desc
 
 

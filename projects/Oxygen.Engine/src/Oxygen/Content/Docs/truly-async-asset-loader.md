@@ -65,7 +65,8 @@ in-flight dedup safe.
 
 ### Identity is stable; access is ephemeral
 
-- `AssetKey` and `ResourceKey` are stable identities.
+- AssetKey names an authored asset; its decoded identity includes the source.
+- ResourceKey is stable within one loader lifetime and is never persisted.
 - Locators/readers/paths are transient access state and must not be stored in
   caches or dependency graphs.
 
@@ -81,9 +82,12 @@ portable.
 `ResourceKey` embeds a 16-bit source id. The runtime uses a codified segregation
 contract to keep namespaces disjoint:
 
-- Mounted PAK sources use dense ids starting at `0`.
+- PAK source IDs increase from `0` and are never recycled during loader lifetime.
 - Mounted loose cooked roots use a reserved high range starting at `0x8000`.
 - Synthetic/buffer-provided resources use the reserved sentinel `0xFFFF`.
+
+Retired sources keep their runtime IDs and tokens; namespace exhaustion is a
+capacity error. Loaded owners retain their source independently of active lookup.
 
 These constants live in `Oxygen/Content/Constants.h` and must remain consistent
 with `ResourceKey` packing.
@@ -117,7 +121,7 @@ Responsibilities:
 - Own the mount registry and source-id/token maps.
 - Orchestrate async load pipelines (resolve/read/decode/publish).
 - Maintain caches and the dependency graph.
-- Provide in-flight request deduplication keyed by `AssetKey` / `ResourceKey`.
+- Deduplicate in-flight requests by source-qualified cache identity.
 
 ### `internal::IContentSource`
 
@@ -210,8 +214,8 @@ Synthetic keys for this path must use the synthetic source id (`0xFFFF`).
 
 The runtime dependency graph is identity-only:
 
-- Asset → Asset: `AssetKey` depends on `AssetKey`.
-- Asset → Resource: `AssetKey` depends on `ResourceKey`.
+- Asset → Asset: a source-qualified asset cache identity depends on another.
+- Asset → Resource: a source-qualified asset cache identity depends on ResourceKey.
 
 Resources are treated as leaf nodes.
 
@@ -249,7 +253,7 @@ Decode-time dependency recording uses `DependencyCollector`:
 
 ## Caching and Concurrency
 
-- Assets and resources are cached by identity (`AssetKey` / `ResourceKey`).
+- Assets and resources are cached by their source-qualified identities.
 - In-flight request deduplication ensures concurrent loads of the same identity
   join a single underlying task.
 - Cache publication and dependency-graph mutation occur during the owning-thread

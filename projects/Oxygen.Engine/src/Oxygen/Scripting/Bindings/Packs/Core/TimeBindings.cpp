@@ -9,6 +9,7 @@
 #include <lua.h>
 #include <lualib.h>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/TimeBindings.h>
@@ -22,7 +23,6 @@ namespace {
     const auto frame_context = GetActiveFrameContext(state);
     if (frame_context == nullptr) {
       (void)luaL_error(state, "oxygen.time requires active FrameContext");
-      return nullptr;
     }
     return frame_context;
   }

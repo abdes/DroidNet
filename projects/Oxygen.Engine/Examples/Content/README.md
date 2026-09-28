@@ -94,6 +94,49 @@ The cooking script's `-ContentRoot` option selects another directory containing
 executable; the default uses this SDK. Preset/build-tree switches are for engine
 source checkouts, not installed SDK use.
 
+### Retain and reimport an external model
+
+RenderScene creates `Content/imports/<name>.import.json` when importing a model.
+The ImportTool provides the same workflow:
+
+```powershell
+.\bin\Oxygen.Cooker.ImportTool.exe gltf C:/Models/town.glb --content-root .\share\oxygen\Content --record .\share\oxygen\Content\imports\town.import.json
+.\bin\Oxygen.Cooker.ImportTool.exe gltf --record .\share\oxygen\Content\imports\town.import.json
+```
+
+Use `fbx` for FBX sources. The first command creates the record and cooks the
+model; the second reimports using the saved settings and identities. To change
+settings or relocate a source, apply a single-model manifest to the same record:
+
+```powershell
+.\bin\Oxygen.Cooker.ImportTool.exe gltf --recipe town.recipe.json --record .\share\oxygen\Content\imports\town.import.json --content-root .\share\oxygen\Content
+```
+
+| Record field               | Purpose                                                                  |
+| -------------------------- | ------------------------------------------------------------------------ |
+| `recipe`                   | Source location and native import settings                               |
+| `material_slot_provenance` | Stable source/geometry/slot identities and mappings retained on reimport |
+| `published_generation`     | The successfully validated cooked generation selected for loading        |
+| `content_root`             | Content destination relative to the record                               |
+
+Let the importer maintain provenance and generation selection. Keep the record
+when deleting cooked output: recooking from it preserves material-slot identity.
+Large models can have large provenance tables; these are identity data, not logs.
+Each source identity has one record; duplicating a record is not a way to create
+an independent asset.
+
+For shared project content, version the record with its raw sources and recipes.
+Sources inside the Content root are stored as relative paths. Imports from a
+developer's external asset directory retain machine-specific paths: keep those
+records local unless the team deliberately adopts that content and source layout.
+The importer never writes metadata beside external originals.
+
+Cooked generations live under `Content/.cooked/imports` and stay out of Git.
+Reimport publishes a new generation atomically; failed imports keep the previous
+one. Automatic reclamation preserves selected, mounted and in-flight generations.
+Editor project imports use their own project settings and publication transaction;
+do not create these demo records by hand for editor assets.
+
 ## Troubleshooting
 
 - **Missing source:** inspect the manifest's relative path and copy all referenced

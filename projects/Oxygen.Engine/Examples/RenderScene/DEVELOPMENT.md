@@ -1,8 +1,7 @@
 # Source-checkout development reference
 
 These notes concern engine contributors working from a checkout. SDK recipients
-should use [README.md](README.md). Historical validation records describe the
-referenced work, not a certification of a newly installed SDK.
+should use [README.md](README.md).
 
 # RenderScene
 
@@ -28,10 +27,8 @@ in build and executable paths. Use tools from the same checkout/configuration.
 
 ### Refresh all authored example content
 
-Close applications using the content. For a **full clean refresh**, back up
-`Examples/Content/.cooked` and `Examples/Content/pak` outside those roots, then
-start with an empty cooked root. Incremental cooking does not remove stale
-outputs from previous formats or recipes.
+Cook maintained scene manifests into `Examples/Content/.cooked`, then rebuild
+their shared PAK. Close applications that have this mutable library mounted.
 
 ```powershell
 .\Examples\Content\cook_scenes.ps1 -All -NoTUI -ToolPath .\out\build-ninja\bin\Debug\Oxygen.Cooker.ImportTool.exe
@@ -39,22 +36,19 @@ outputs from previous formats or recipes.
 ```
 
 Require both commands to succeed and review their diagnostics. The current scope
-is **13 manifests, 140 jobs, and 16 scenes**, including materials, textures,
+is **16 manifests and 22 scenes**, including materials, textures,
 scripts, inputs, and physics dependencies. Five raw FBXs and nine standalone
 images are separate interactive demo inputs. See the [content guide](../Content/README.md)
 for inventory and single-scene cooking. Preserve the script's stable PAK source
 key when rebuilding.
 
-### Reimport RenderScene's own content
+### Reimport external models
 
-`Examples/RenderScene/.cooked` is a separate, local library of previously
-imported models. `Content/cook_scenes.ps1 -All` does **not** refresh it. Before
-using that library after an importer or cooked-format change, reimport its
-original glTF/GLB/FBX sources with the current native importer.
-
-The local library refreshed on 2026-09-15 contains these four scenes. Original
-files are external inputs; configure their machine-local locations in the source
-list rather than assuming a path from another checkout:
+External models have retained records under `Examples/Content/imports` and
+immutable cooked generations under `Examples/Content/.cooked/imports`.
+`Content/cook_scenes.ps1 -All` refreshes scene manifests; use the retained import
+script below for external models. Configure original inputs in a machine-local
+source list:
 
 | Cooked scene              | Original input                                                    |
 | ------------------------- | ----------------------------------------------------------------- |
@@ -63,24 +57,17 @@ list rather than assuming a path from another checkout:
 | `town4new`                | `town4new.glb`                                                    |
 | `rgb_cubes`               | `rgb_cubes.fbx`                                                   |
 
-1. Close RenderScene and other consumers. Preserve settings; the reimport script
-   stages a clean root and retains the previous local generation separately
-   from the shared `Examples/Content` backup.
-2. Verify each original source and every external dependency. An `.oscene`,
-   `.ogeo`, or `.omat` file is cooked output, not a substitute source for this
-   reimport.
-3. Configure the source list and invoke the script below. It records the native
-   manifest and reimports each original with the selected current policy.
-4. Verify successful reports, the new index, all expected scenes and dependencies,
-   and fresh content hashes **before launching against the replaced library**.
-   Then select its own `container.index.bin` through **Library → Select Index**.
+1. Configure each original glTF/GLB/FBX source and its external dependencies.
+2. Run the script below. Each successful import publishes a validated generation;
+   existing readers retain their current generation until they switch.
+3. Open its `.import.json` record through **Library → Select Library**. DemoShell
+   remembers the record and resolves its selected generation on restart.
 
 The recorded refresh policy is **BC7 compression with full mip chains**, all
 content enabled, meter normalization, transform baking, generation of missing
 normals/tangents, retained nodes, normalized naming, and content hashing. Color
-textures use BC7 sRGB; data textures use linear BC7. This reimports original
-source data with recorded current settings. Historical per-source settings were
-not retained, so it is not a replay of unknown historical options.
+textures use BC7 sRGB; data textures use linear BC7. The native retained record
+stores this profile with the source identity for replay.
 
 Use [reimport_scenes.ps1](reimport_scenes.ps1), which invokes the existing native
 ImportTool and Inspector. It selects an available built pair from CMake presets,
@@ -101,12 +88,13 @@ From the engine root, run:
 
 `-Help` and `-h` display usage without a source list or initialized tools.
 The script delegates executable-set resolution, runtime environment, logging,
-and invocation to the same library as `oxyrun`. Manifest generation, validation
-and content recovery remain the workflow's responsibility.
+and invocation to the same library as `oxyrun`. Native Cooker owns recipe
+validation, provenance and publication.
 
 The defaults are **BC7 + Full**. Use `-BuildTree`, `-Config` or `-Preset` to
 constrain automatic tool selection, or `-ToolPath` for an explicit executable;
-Inspector defaults to the same directory. `-CookedRoot` selects the live target.
+Inspector defaults to the same directory. `-ContentRoot` selects the authored
+Content directory; the default is shared `Examples/Content`.
 Relative sources resolve against the source-list file, tree paths against the
 engine root, and other relative paths against the working directory. Use PowerShell 7.4 or newer.
 
@@ -123,27 +111,17 @@ engine root, and other relative paths against the working directory. Use PowerSh
 ./Examples/RenderScene/reimport_scenes.ps1 -SourceList ./Examples/RenderScene/reimport-sources.local.json -Compression None -MipPolicy Max -MaxMipLevels 5
 ```
 
-The script validates source-list structure and original file existence, then uses
-native manifest/schema preflight. It preserves the previous directory under the
-build tree and cooks directly into `.cooked` with explicit virtual root
-`/.cooked`. Successful completion requires successful
-jobs, Inspector validation, expected scene outputs, descriptor sizes/SHA256, and
-the requested texture formats/mip counts. The reserved fallback texture keeps
-its native 1×1 RGBA8 format and is checked separately from imported textures.
-Missing external model dependencies
-are diagnosed by the native importer; any failure prevents publication.
+The script validates the source list and original paths, then applies one native
+recipe per source. Records live under `Content/imports/<name>.import.json` and
+select immutable generations under `Content/.cooked/imports`. Virtual asset paths
+remain rooted at `/.cooked`.
 
-The script never deletes old or failed generations. It rejects unsafe paths and
-simultaneous runs against the same target. Close all consumers first. A failed
-cook or validation moves failed output into the recovery directory and restores the
-previous root. The output and recovery backup must be on the same volume.
-
-Each run retains its exact manifest, native report/logs, source/tool hashes,
-output hashes, and `result.json` under `out/renderscene-reimport/`.
-Failures exit nonzero and preserve evidence and failed output. Inspect reported warnings
-and then perform native visual validation; successful cooking does not prove
-rendered appearance. Run `Get-Help ./Examples/RenderScene/reimport_scenes.ps1 -Full`
-for all parameters and error behavior.
+Each source publishes independently after native root/provenance validation.
+Failed or canceled imports keep that source's previous selection. Existing
+readers retain their generation; the native publisher reclaims unused generations.
+Temporary recipe and report files are deleted on exit. Camera and environment
+settings are preserved. Use the published record paths when mounting retained
+imports in DemoShell.
 
 Camera navigation has no separate default-input cook: DemoShell creates its
 camera actions and mapping contexts in C++. Scene-authored input contexts are

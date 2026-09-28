@@ -11,6 +11,7 @@
 
 #include <Oxygen/Composition/Component.h>
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Types/CameraAspectMode.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Scene/Camera/CameraExposure.h>
 #include <Oxygen/Scene/Detail/TransformComponent.h>
@@ -96,10 +97,10 @@ public:
   */
   OXGN_SCN_NDAPI auto GetFieldOfView() const -> float { return fov_y_; }
 
-  //! Sets the aspect ratio (width/height) of the camera's view.
+  //! Sets the retained Fixed aspect ratio (width/height).
   /*!
-   Sets the aspect ratio (width/height) of the camera's view. The aspect ratio
-   should match the output image or viewport.
+   Auto derives its effective ratio from each target. This value is retained
+   when switching modes and is never overwritten by viewport resizing.
    @param aspect Width divided by height.
    @return None
    @note Aspect ratio affects the shape of the frustum.
@@ -113,6 +114,17 @@ public:
    @see SetAspectRatio
   */
   OXGN_SCN_NDAPI auto GetAspectRatio() const -> float { return aspect_; }
+
+  //! Sets framing policy without changing the retained Fixed ratio.
+  auto SetAspectMode(const CameraAspectMode mode) noexcept -> void
+  {
+    aspect_mode_ = mode;
+  }
+
+  OXGN_SCN_NDAPI auto GetAspectMode() const noexcept -> CameraAspectMode
+  {
+    return aspect_mode_;
+  }
 
   //! Sets the near clipping plane distance.
   /*!
@@ -226,19 +238,25 @@ public:
   //! canonical).
   OXGN_SCN_NDAPI auto ProjectionMatrix() const -> Mat4;
 
+  //! Resolves Auto against this target while preserving authored camera state.
+  OXGN_SCN_NDAPI auto ProjectionMatrix(const ViewPort& target) const -> Mat4;
+
 protected:
   OXGN_SCN_API auto UpdateDependencies(
     const std::function<Component&(TypeId)>& get_component) noexcept
     -> void override;
 
 private:
+  auto ResolveAspectRatio(const ViewPort& target) const -> float;
+
   static constexpr float kDefaultNearPlane = 0.1F;
   static constexpr float kDefaultFarPlane = 1000.0F;
 
   float fov_y_ = 1.0F;
-  float aspect_ = 1.0F;
+  float aspect_ = kDefaultCameraAspectRatio;
   float near_ = kDefaultNearPlane;
   float far_ = kDefaultFarPlane;
+  CameraAspectMode aspect_mode_ = CameraAspectMode::kAuto;
   CameraExposure exposure_ {};
   std::optional<ViewPort> viewport_;
   detail::TransformComponent* transform_ { nullptr };

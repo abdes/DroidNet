@@ -3,7 +3,7 @@
     {
       "alignment": 16,
       "descriptor_offset": 5632,
-      "descriptor_size": 357,
+      "descriptor_size": 363,
       "key": "00000000000000000000000000000000",
       "name": "mat_a",
       "type": "material",
@@ -13,7 +13,7 @@
     {
       "alignment": 16,
       "descriptor_offset": 6000,
-      "descriptor_size": 357,
+      "descriptor_size": 363,
       "key": "00000000000000000000000000000000",
       "name": "mat_b",
       "type": "material",
@@ -22,28 +22,28 @@
     },
     {
       "alignment": 1,
-      "descriptor_offset": 6357,
+      "descriptor_offset": 6363,
       "descriptor_size": 131,
       "key": "00000000000000000000000000000000",
       "name": "geo_a",
       "type": "geometry",
-      "variable_extra_size": 269,
+      "variable_extra_size": 285,
       "warnings": []
     },
     {
       "alignment": 1,
-      "descriptor_offset": 6757,
+      "descriptor_offset": 6779,
       "descriptor_size": 131,
       "key": "00000000000000000000000000000000",
       "name": "geo_b",
       "type": "geometry",
-      "variable_extra_size": 269,
+      "variable_extra_size": 285,
       "warnings": []
     }
   ],
   "browse_index": {
     "entry_count": 4,
-    "offset": 7424,
+    "offset": 7456,
     "padding_before": 0,
     "size": 140,
     "string_table_size": 24
@@ -52,23 +52,23 @@
   "deterministic": true,
   "directory": {
     "asset_count": 4,
-    "offset": 7168,
-    "padding_before": 11,
+    "offset": 7200,
+    "padding_before": 5,
     "size": 256
   },
-  "file_size": 7820,
+  "file_size": 7852,
   "footer": {
-    "offset": 7564,
+    "offset": 7596,
     "size": 256
   },
   "padding": {
     "by_section": {
-      "asset_material": 11,
+      "asset_material": 5,
       "assets_region": 25,
-      "directory": 11,
+      "directory": 5,
       "table_buffer": 11
     },
-    "total": 58
+    "total": 46
   },
   "regions": [
     {
@@ -119,7 +119,7 @@
       "scripts": 0,
       "total": 4
     },
-    "variable_extra_total": 538
+    "variable_extra_total": 570
   },
   "tables": [
     {

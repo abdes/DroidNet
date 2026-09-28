@@ -97,8 +97,12 @@ namespace {
       = asset_loader_->ResolveTextureResourceKey(first_locator);
     const auto second_key
       = asset_loader_->ResolveTextureResourceKey(second_locator);
-    ASSERT_TRUE(first_key.has_value());
-    ASSERT_TRUE(second_key.has_value());
+    if (!first_key.has_value()) {
+      FAIL() << "Expected first_key to contain a value";
+    }
+    if (!second_key.has_value()) {
+      FAIL() << "Expected second_key to contain a value";
+    }
     EXPECT_NE(*first_key, *second_key);
     WriteSidecar(second / "Textures/Meter.otex", first_descriptor);
     EXPECT_THROW(static_cast<void>(
@@ -153,8 +157,8 @@ namespace {
   }
 
 } // namespace
-NOLINT_TEST_F(
-  AssetLoaderBasicTest, TextureSourceIdentityRemainsReloadableAfterRefresh)
+NOLINT_TEST_F(AssetLoaderBasicTest,
+  TextureSourceIdentityRebindsToFreshRuntimeKeyAfterRefresh)
 {
   const auto root = temp_dir_ / "source";
   static_cast<void>(WriteSource(root, { .identity = 1U, .width = 1U }));
@@ -170,9 +174,12 @@ NOLINT_TEST_F(
   EXPECT_FALSE(asset_loader_->MakeTextureResourceKey(
     source.source_key, data::pak::core::ResourceIndexT { 2U }));
   asset_loader_->AddLooseCookedRoot(root);
-  EXPECT_EQ(key,
-    asset_loader_->MakeTextureResourceKey(
-      source.source_key, data::pak::core::ResourceIndexT { 1U }));
+  const auto refreshed = asset_loader_->MakeTextureResourceKey(
+    source.source_key, data::pak::core::ResourceIndexT { 1U });
+  ASSERT_TRUE(refreshed);
+  EXPECT_NE(key, refreshed);
+  EXPECT_EQ(refreshed,
+    asset_loader_->ResolveTextureResourceKey({ root, "Textures/Meter.otex" }));
   asset_loader_->ClearMounts();
   EXPECT_FALSE(asset_loader_->MakeTextureResourceKey(
     source.source_key, data::pak::core::ResourceIndexT { 1U }));

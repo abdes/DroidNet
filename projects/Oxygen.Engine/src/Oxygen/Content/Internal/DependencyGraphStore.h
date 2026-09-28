@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <functional>
 #include <optional>
 #include <string_view>
@@ -13,41 +14,37 @@
 #include <unordered_set>
 
 #include <Oxygen/Content/ResourceKey.h>
-#include <Oxygen/Data/AssetKey.h>
 
 namespace oxygen::content::internal {
 
+//! Edges use the same source-qualified identities as the asset cache.
 class DependencyGraphStore final {
 public:
   using AssetDepsMap
-    = std::unordered_map<data::AssetKey, std::unordered_set<data::AssetKey>>;
+    = std::unordered_map<uint64_t, std::unordered_set<uint64_t>>;
   using ResourceDepsMap
-    = std::unordered_map<data::AssetKey, std::unordered_set<ResourceKey>>;
+    = std::unordered_map<uint64_t, std::unordered_set<ResourceKey>>;
 
   auto Clear() -> void;
 
-  auto AddAssetDependency(
-    const data::AssetKey& dependent, const data::AssetKey& dependency) -> bool;
-  auto AddResourceDependency(
-    const data::AssetKey& dependent, ResourceKey resource_key) -> bool;
+  auto AddAssetDependency(uint64_t dependent, uint64_t dependency) -> bool;
+  auto AddResourceDependency(uint64_t dependent, ResourceKey resource_key)
+    -> bool;
 
-  auto FindAssetDependencies(const data::AssetKey& key) const
-    -> const std::unordered_set<data::AssetKey>*;
-  auto FindResourceDependencies(const data::AssetKey& key) const
+  auto FindAssetDependencies(uint64_t key) const
+    -> const std::unordered_set<uint64_t>*;
+  auto FindResourceDependencies(uint64_t key) const
     -> const std::unordered_set<ResourceKey>*;
 
-  auto RemoveAssetDependencies(const data::AssetKey& key)
-    -> std::optional<std::unordered_set<data::AssetKey>>;
-  auto RemoveResourceDependencies(const data::AssetKey& key)
+  auto RemoveAssetDependencies(uint64_t key)
+    -> std::optional<std::unordered_set<uint64_t>>;
+  auto RemoveResourceDependencies(uint64_t key)
     -> std::optional<std::unordered_set<ResourceKey>>;
 
   [[nodiscard]] auto AssetDependencies() const -> const AssetDepsMap&;
   [[nodiscard]] auto ResourceDependencies() const -> const ResourceDepsMap&;
 
   auto AssertEdgeRefcountSymmetry(std::string_view context,
-    const std::function<std::optional<uint64_t>(const data::AssetKey&)>&
-      resolve_asset_hash,
-    const std::function<uint64_t(const data::AssetKey&)>& hash_asset_fallback,
     const std::function<uint64_t(ResourceKey)>& hash_resource,
     const std::function<uint32_t(uint64_t)>& get_checkout_count) const -> void;
 

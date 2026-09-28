@@ -13,12 +13,18 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <ios>
+#include <memory>
+#include <optional>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <thread>
+#include <utility>
 #include <vector>
 
-#include <Oxygen/Testing/GTest.h>
+#include "./AssetLoader_test.h"
+#include "Fixtures/LooseCookedTestLayout.h"
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/AssetLoader.h>
@@ -27,7 +33,9 @@
 #include <Oxygen/Content/Internal/PakFileSource.h>
 #include <Oxygen/Content/Loaders/SceneLoader.h>
 #include <Oxygen/Content/Loaders/ScriptLoader.h>
+#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
@@ -36,11 +44,11 @@
 #include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Event.h>
+#include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
-
-#include "./AssetLoader_test.h"
-#include "Fixtures/LooseCookedTestLayout.h"
+#include <Oxygen/OxCo/ThreadPool.h>
+#include <Oxygen/Testing/GTest.h>
 
 using ::testing::NotNull;
 
@@ -60,12 +68,12 @@ namespace {
 auto FillTestGuid(oxygen::data::loose_cooked::IndexHeader& header) -> void
 {
   for (uint8_t i = 0; i < 16; ++i) {
-    header.source_identity[i] = static_cast<uint8_t>(i + 1);
+    header.source_identity.at(i) = static_cast<uint8_t>(i + 1);
   }
-  header.source_identity[6]
-    = static_cast<uint8_t>((header.source_identity[6] & 0x0FU) | 0x70U);
-  header.source_identity[8]
-    = static_cast<uint8_t>((header.source_identity[8] & 0x3FU) | 0x80U);
+  header.source_identity.at(6)
+    = static_cast<uint8_t>((header.source_identity.at(6) & 0x0FU) | 0x70U);
+  header.source_identity.at(8)
+    = static_cast<uint8_t>((header.source_identity.at(8) & 0x3FU) | 0x80U);
 }
 
 auto HexNibble(const char c) -> uint8_t
@@ -98,9 +106,9 @@ auto AssetKeyFromHex(std::string_view input) -> oxygen::data::AssetKey
 
   auto key_bytes = std::array<uint8_t, oxygen::data::AssetKey::kSizeBytes> {};
   for (size_t i = 0; i < key_bytes.size(); ++i) {
-    const uint8_t hi = HexNibble(hex[2 * i]);
-    const uint8_t lo = HexNibble(hex[2 * i + 1]);
-    key_bytes[i] = static_cast<uint8_t>((hi << 4) | lo);
+    const uint8_t hi = HexNibble(hex.at(2 * i));
+    const uint8_t lo = HexNibble(hex.at((2 * i) + 1));
+    key_bytes.at(i) = static_cast<uint8_t>((hi << 4) | lo);
   }
   return oxygen::data::AssetKey::FromBytes(key_bytes);
 }
@@ -213,7 +221,7 @@ auto WriteLooseCookedScriptAsset(const std::filesystem::path& cooked_root,
   header.asset_count = 1;
   header.asset_entry_size = sizeof(AssetEntry);
   header.file_records_offset
-    = header.asset_entries_offset + sizeof(AssetEntry) * header.asset_count;
+    = header.asset_entries_offset + (sizeof(AssetEntry) * header.asset_count);
   header.file_record_count = 2;
   header.file_record_size = sizeof(FileRecord);
 
@@ -461,7 +469,7 @@ NOLINT_TEST_F(AssetLoaderScriptingTest,
   WriteLooseCookedScriptAsset(cooked_root, script_key);
 
   TestEventLoop el;
-  (oxygen::co::Run)(el, [&]() -> Co<> {
+  oxygen::co::Run(el, [&] -> Co<> {
     oxygen::co::ThreadPool pool(el, 2);
     AssetLoaderConfig config {};
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
@@ -481,7 +489,7 @@ NOLINT_TEST_F(AssetLoaderScriptingTest,
       EXPECT_THAT(script_asset, NotNull());
 
       const auto key = loader.MakeScriptResourceKeyForAsset(
-        script_key, oxygen::data::pak::core::ResourceIndexT { 0 });
+        *script_asset, oxygen::data::pak::core::ResourceIndexT { 0 });
       EXPECT_TRUE(key.has_value());
       if (!key.has_value()) {
         loader.Stop();
@@ -510,7 +518,7 @@ NOLINT_TEST_F(AssetLoaderScriptingTest,
   WriteLooseCookedSceneWithScripting(cooked_root, scene_key);
 
   TestEventLoop el;
-  (oxygen::co::Run)(el, [&]() -> Co<> {
+  oxygen::co::Run(el, [&] -> Co<> {
     oxygen::co::ThreadPool pool(el, 2);
     AssetLoaderConfig config {};
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
@@ -524,7 +532,7 @@ NOLINT_TEST_F(AssetLoaderScriptingTest,
       loader.AddLooseCookedRoot(cooked_root);
 
       // Desired behavior contract (currently failing): scene scripting
-      // dependencies should not require source_pak when mounted from
+      // dependencies use the owning source when mounted from
       // loose-cooked sources.
       const auto scene = co_await loader.LoadAssetAsync<SceneAsset>(scene_key);
       EXPECT_THAT(scene, NotNull());
@@ -547,7 +555,7 @@ NOLINT_TEST_F(AssetLoaderScriptingTest,
     = AssetKeyFromHex("11111111-1111-1111-1111-111111111111");
 
   TestEventLoop el;
-  (oxygen::co::Run)(el, [&]() -> Co<> {
+  oxygen::co::Run(el, [&] -> Co<> {
     oxygen::co::ThreadPool pool(el, 2);
     AssetLoaderConfig config {};
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
@@ -575,7 +583,7 @@ NOLINT_TEST_F(AssetLoaderScriptingTest,
 
       auto subscription = loader.SubscribeScriptReload(
         [callback_called, callback_event](const oxygen::data::AssetKey&,
-          std::shared_ptr<const ScriptResource>) {
+          std::shared_ptr<const ScriptResource>) -> void {
           const auto prior = callback_called->exchange(true);
           if (!prior) {
             callback_event->Trigger();
@@ -586,7 +594,7 @@ NOLINT_TEST_F(AssetLoaderScriptingTest,
       loader.ReloadAllScripts();
 
       auto timeout_task
-        = pool.Run([](oxygen::co::ThreadPool::CancelToken token) {
+        = pool.Run([](oxygen::co::ThreadPool::CancelToken token) -> bool {
             using namespace std::chrono_literals;
             auto remaining = 1500ms;
             while (!token.Peek() && remaining.count() > 0) {
@@ -610,39 +618,21 @@ NOLINT_TEST_F(AssetLoaderScriptingTest,
   });
 }
 
-// P0.1.4: Refresh graph coherence characterization on loose refresh.
-#if !defined(NDEBUG)
+#ifndef NDEBUG
 NOLINT_TEST_F(
-  AssetLoaderScriptingTest, LoadAssetLooseRefreshExpectedToClearDependencyGraph)
+  AssetLoaderScriptingTest, MutableLooseRefreshClearsLoadedDependencyGraph)
 {
-  const auto cooked_root = temp_dir_ / "loose_refresh_graph";
-  WriteMinimalLooseCookedIndex(cooked_root);
-  asset_loader_->AddLooseCookedRoot(cooked_root);
-
-  const auto dependent
-    = AssetKeyFromHex("aaaaaaaa-0000-0000-0000-000000000001");
-  const auto dependency
-    = AssetKeyFromHex("bbbbbbbb-0000-0000-0000-000000000002");
-  asset_loader_->AddAssetDependency(dependent, dependency);
-
-  // Refresh same loose root. Current implementation clears cache/maps but does
-  // not clear dependency graphs in this code path.
-  asset_loader_->AddLooseCookedRoot(cooked_root);
-
-  size_t dependent_count = 0;
-  asset_loader_->ForEachDependent(
-    dependency, [&](const oxygen::data::AssetKey&) { ++dependent_count; });
-
-  // Desired behavior contract (currently failing): loose refresh should clear
-  // dependency edges for replaced mount state.
-  EXPECT_EQ(dependent_count, 0U);
-}
-#else
-NOLINT_TEST_F(AssetLoaderScriptingTest,
-  DISABLED_LoadAssetLooseRefreshExpectedToClearDependencyGraph)
-{
-  // Debug-only test: requires dependency graph introspection API that is not
-  // part of release builds.
+  const auto root = temp_dir_ / "loose_refresh_graph";
+  TestEventLoop loop;
+  oxygen::co::Run(loop,
+    oxygen::content::testing::CheckLoadedMaterialGraph(
+      &loop, root, [root](auto& loader, const auto& assets) -> auto {
+        loader.AddAssetDependency(
+          assets.at(0)->GetAssetKey(), assets.at(1)->GetAssetKey());
+        EXPECT_FALSE(loader.GetDebugAssetDependencyMap().empty());
+        loader.AddLooseCookedRoot(root);
+        EXPECT_TRUE(loader.GetDebugAssetDependencyMap().empty());
+      }));
 }
 #endif
 
@@ -658,7 +648,8 @@ NOLINT_TEST_F(AssetLoaderScriptingTest,
   oxygen::content::internal::PakFileSource pak_source(pak_path, false);
   oxygen::content::internal::LooseCookedSource loose_source(cooked_root, false);
 
-  auto assert_common = [&](oxygen::content::internal::IContentSource& source) {
+  auto assert_common
+    = [&](oxygen::content::internal::IContentSource& source) -> void {
     EXPECT_TRUE(source.HasAsset(scene_key));
 
     const auto header_opt = ReadAssetHeader(source, scene_key);
@@ -674,8 +665,8 @@ NOLINT_TEST_F(AssetLoaderScriptingTest,
     const auto slots = source.ReadScriptSlotRecords(0, 1);
     ASSERT_EQ(slots.size(), 1U);
     const auto params = source.ReadScriptParamRecords(
-      slots[0].params_array_offset, slots[0].params_count);
-    EXPECT_EQ(params.size(), slots[0].params_count);
+      slots.front().params_array_offset, slots.front().params_count);
+    EXPECT_EQ(params.size(), slots.front().params_count);
 
     const auto vpath = source.ResolveVirtualPath(scene_key);
     EXPECT_TRUE(vpath.has_value());
@@ -694,7 +685,7 @@ NOLINT_TEST_F(
     = AssetKeyFromHex("22222222-2222-2222-2222-222222222222");
 
   TestEventLoop el;
-  (oxygen::co::Run)(el, [&]() -> Co<> {
+  oxygen::co::Run(el, [&] -> Co<> {
     oxygen::co::ThreadPool pool(el, 2);
     AssetLoaderConfig config {};
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };

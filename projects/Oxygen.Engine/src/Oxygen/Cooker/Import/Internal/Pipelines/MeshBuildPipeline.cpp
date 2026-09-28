@@ -6,33 +6,55 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <limits>
+#include <map>
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
-#include <glm/glm.hpp>
+#include <glm/ext/matrix_float3x3.hpp>
+#include <glm/ext/matrix_float4x4.hpp>
+#include <glm/ext/vector_float3.hpp>
+#include <glm/ext/vector_float4.hpp>
+#include <glm/ext/vector_uint4.hpp>
+#include <glm/geometric.hpp>
+#include <glm/matrix.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Span.h>
+#include <Oxygen/Cooker/Import/BufferImportTypes.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/ImportReport.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
+#include <Oxygen/Cooker/Import/Internal/MaterialSlotAllocation.h>
 #include <Oxygen/Cooker/Import/Internal/MeshTransformBake.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/GeometryPipeline_tangents.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/StringUtils.h>
+#include <Oxygen/Cooker/Import/MaterialSlotProvenance.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/BufferResource.h>
+#include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/Vertex.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
+#include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/Serio/MemoryStream.h>
-#include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Serio/Writer.h>
 
 namespace oxygen::content::import {
@@ -41,20 +63,21 @@ namespace {
 
   using WorkItem = MeshBuildPipeline::WorkItem;
 
-  constexpr uint32_t kGeomAttr_Normal = 1u << 0u;
-  constexpr uint32_t kGeomAttr_Tangent = 1u << 1u;
-  constexpr uint32_t kGeomAttr_Bitangent = 1u << 2u;
-  constexpr uint32_t kGeomAttr_Texcoord0 = 1u << 3u;
-  constexpr uint32_t kGeomAttr_Color0 = 1u << 4u;
-  constexpr uint32_t kGeomAttr_JointWeights = 1u << 5u;
-  constexpr uint32_t kGeomAttr_JointIndices = 1u << 6u;
+  constexpr uint32_t kGeomAttr_Normal = 1U << 0U;
+  constexpr uint32_t kGeomAttr_Tangent = 1U << 1U;
+  constexpr uint32_t kGeomAttr_Bitangent = 1U << 2U;
+  constexpr uint32_t kGeomAttr_Texcoord0 = 1U << 3U;
+  constexpr uint32_t kGeomAttr_Color0 = 1U << 4U;
+  constexpr uint32_t kGeomAttr_JointWeights = 1U << 5U;
+  constexpr uint32_t kGeomAttr_JointIndices = 1U << 6U;
 
   constexpr uint32_t kDefaultStaticUsageFlags
     = static_cast<uint32_t>(data::BufferResource::UsageFlags::kStatic);
 
   struct SubmeshBucket {
     uint32_t scene_material_index = 0;
-    data::AssetKey material_key {};
+    uint32_t source_slot = 0;
+    data::AssetKey material_key;
     std::vector<uint32_t> indices;
   };
 
@@ -104,32 +127,33 @@ namespace {
 
   auto ExpandBounds(Bounds3& bounds, const glm::vec3& p) -> void
   {
-    bounds.min[0] = (std::min)(bounds.min[0], p.x);
-    bounds.min[1] = (std::min)(bounds.min[1], p.y);
-    bounds.min[2] = (std::min)(bounds.min[2], p.z);
-    bounds.max[0] = (std::max)(bounds.max[0], p.x);
-    bounds.max[1] = (std::max)(bounds.max[1], p.y);
-    bounds.max[2] = (std::max)(bounds.max[2], p.z);
+    bounds.min.at(0) = (std::min)(bounds.min.at(0), p.x);
+    bounds.min.at(1) = (std::min)(bounds.min.at(1), p.y);
+    bounds.min.at(2) = (std::min)(bounds.min.at(2), p.z);
+    bounds.max.at(0) = (std::max)(bounds.max.at(0), p.x);
+    bounds.max.at(1) = (std::max)(bounds.max.at(1), p.y);
+    bounds.max.at(2) = (std::max)(bounds.max.at(2), p.z);
   }
 
   [[nodiscard]] auto MakeEmptyBounds() -> Bounds3
   {
     return Bounds3 {
-      .min = { (std::numeric_limits<float>::max)(),
-        (std::numeric_limits<float>::max)(),
-        (std::numeric_limits<float>::max)(), },
-      .max = { (std::numeric_limits<float>::lowest)(),
-        (std::numeric_limits<float>::lowest)(),
-        (std::numeric_limits<float>::lowest)(), },
+      .min = { std::numeric_limits<float>::max(),
+        std::numeric_limits<float>::max(),
+        std::numeric_limits<float>::max(), },
+      .max = { std::numeric_limits<float>::lowest(),
+        std::numeric_limits<float>::lowest(),
+        std::numeric_limits<float>::lowest(), },
     };
   }
 
   [[nodiscard]] auto HasAnyError(
     const std::vector<ImportDiagnostic>& diagnostics) -> bool
   {
-    return std::ranges::any_of(diagnostics, [](const ImportDiagnostic& diag) {
-      return diag.severity == ImportSeverity::kError;
-    });
+    return std::ranges::any_of(
+      diagnostics, [](const ImportDiagnostic& diag) -> bool {
+        return diag.severity == ImportSeverity::kError;
+      });
   }
 
   auto BuildBucketsForRanges(const std::span<const TriangleRange> ranges,
@@ -140,28 +164,29 @@ namespace {
     buckets.reserve(ranges.size());
 
     for (const auto& range : ranges) {
-      const auto existing
-        = std::ranges::find_if(buckets, [&](const SubmeshBucket& bucket) {
-            return bucket.scene_material_index == range.material_slot;
-          });
+      const auto existing = std::ranges::find_if(
+        buckets, [&](const SubmeshBucket& bucket) -> bool {
+          return bucket.source_slot == range.source_slot;
+        });
       if (existing != buckets.end()) {
         continue;
       }
 
       const auto material_key = (range.material_slot < material_keys.size())
-        ? material_keys[range.material_slot]
+        ? material_keys.at(range.material_slot)
         : default_material_key;
 
       buckets.push_back(SubmeshBucket {
         .scene_material_index = range.material_slot,
+        .source_slot = range.source_slot,
         .material_key = material_key,
         .indices = {},
       });
     }
 
     std::ranges::sort(
-      buckets, [](const SubmeshBucket& a, const SubmeshBucket& b) {
-        return a.scene_material_index < b.scene_material_index;
+      buckets, [](const SubmeshBucket& a, const SubmeshBucket& b) -> bool {
+        return a.source_slot < b.source_slot;
       });
 
     return buckets;
@@ -179,37 +204,37 @@ namespace {
     for (const auto& bucket : buckets) {
       const auto tri_count = bucket.indices.size() / 3;
       for (size_t tri = 0; tri < tri_count; ++tri) {
-        const auto i0 = bucket.indices[tri * 3 + 0];
-        const auto i1 = bucket.indices[tri * 3 + 1];
-        const auto i2 = bucket.indices[tri * 3 + 2];
+        const auto i0 = bucket.indices.at((tri * 3) + 0);
+        const auto i1 = bucket.indices.at((tri * 3) + 1);
+        const auto i2 = bucket.indices.at((tri * 3) + 2);
         if (i0 >= vertices.size() || i1 >= vertices.size()
           || i2 >= vertices.size()) {
           continue;
         }
 
-        const auto& v0 = vertices[i0].position;
-        const auto& v1 = vertices[i1].position;
-        const auto& v2 = vertices[i2].position;
+        const auto& v0 = vertices.at(i0).position;
+        const auto& v1 = vertices.at(i1).position;
+        const auto& v2 = vertices.at(i2).position;
 
         const auto e1 = v1 - v0;
         const auto e2 = v2 - v0;
         const auto n = glm::cross(e1, e2);
 
-        normals[i0] += n;
-        normals[i1] += n;
-        normals[i2] += n;
+        normals.at(i0) += n;
+        normals.at(i1) += n;
+        normals.at(i2) += n;
       }
     }
 
     for (size_t i = 0; i < vertices.size(); ++i) {
-      auto n = normals[i];
+      auto n = normals.at(i);
       const auto len = glm::length(n);
       if (len > 1e-8F) {
         n /= len;
       } else {
         n = glm::vec3(0.0F, 1.0F, 0.0F);
       }
-      vertices[i].normal = n;
+      vertices.at(i).normal = n;
     }
   }
 
@@ -307,7 +332,7 @@ namespace {
 
     for (const auto& lod : lods) {
       MeshDesc mesh_desc {};
-      const std::string_view name_view = [&]() -> std::string_view {
+      const std::string_view name_view = [&] -> std::string_view {
         if (lods.size() <= 1U) {
           return mesh_name;
         }
@@ -372,8 +397,8 @@ namespace {
       }
 
       for (size_t i = 0; i < lod.submeshes.size(); ++i) {
-        const auto& sm = lod.submeshes[i];
-        const auto& view = lod.views[i];
+        const auto& sm = lod.submeshes.at(i);
+        const auto& view = lod.views.at(i);
 
         const auto pos = writer.Position();
         if (!pos) {
@@ -385,7 +410,7 @@ namespace {
         const auto offset
           = pos.value() + offsetof(SubMeshDesc, material_asset_key);
         if (offset
-          > (std::numeric_limits<data::pak::core::DataBlobSizeT>::max)()) {
+          > std::numeric_limits<data::pak::core::DataBlobSizeT>::max()) {
           diagnostics.push_back(MakeErrorDiagnostic("mesh.serialize_failed",
             "Submesh material patch offset exceeds supported range", source_id,
             mesh_name));
@@ -393,7 +418,7 @@ namespace {
         }
         material_patch_offsets.push_back(
           MeshBuildPipeline::MaterialSlotPatchOffset {
-            .slot = lod.submesh_slots[i],
+            .slot = lod.submesh_slots.at(i),
             .material_key_offset
             = static_cast<data::pak::core::DataBlobSizeT>(offset),
           });
@@ -417,7 +442,7 @@ namespace {
     }
 
     const auto data = stream.Data();
-    return std::vector(data.begin(), data.end());
+    return { data.begin(), data.end() };
   }
 
   [[nodiscard]] auto ResolveGeometryKey(const ImportRequest& request,
@@ -470,11 +495,11 @@ namespace {
     const bool has_joints = joint_ids.size() == positions.size();
     const bool has_weights = joint_wts.size() == positions.size();
 
-    auto find_bucket = [&](const uint32_t material_slot) -> SubmeshBucket* {
-      const auto it
-        = std::ranges::find_if(buckets, [&](const SubmeshBucket& bucket) {
-            return bucket.scene_material_index == material_slot;
-          });
+    auto find_bucket = [&](const uint32_t source_slot) -> SubmeshBucket* {
+      const auto it = std::ranges::find_if(
+        buckets, [&](const SubmeshBucket& bucket) -> bool {
+          return bucket.source_slot == source_slot;
+        });
       if (it == buckets.end()) {
         return nullptr;
       }
@@ -499,7 +524,7 @@ namespace {
         return;
       }
 
-      auto* bucket = find_bucket(range.material_slot);
+      auto* bucket = find_bucket(range.source_slot);
       if (bucket == nullptr) {
         diagnostics.push_back(MakeWarningDiagnostic("mesh.invalid_range",
           "Triangle range references unknown material slot; skipping range",
@@ -534,30 +559,31 @@ namespace {
         = tangent_policy == GeometryAttributePolicy::kPreserveIfPresent
         || tangent_policy == GeometryAttributePolicy::kGenerateMissing;
 
-      auto emit_vertex = [&](const uint32_t source_index) {
+      auto emit_vertex = [&](const uint32_t source_index) -> void {
         data::Vertex vertex {};
         PopulateVertexDefaults(vertex);
 
-        vertex.position = positions[source_index];
+        vertex.position = oxygen::base::CheckedAt(positions, source_index);
 
         if (preserve_authored_normals && has_normals) {
-          vertex.normal = glm::normalize(normals[source_index]);
+          vertex.normal
+            = glm::normalize(oxygen::base::CheckedAt(normals, source_index));
         }
 
         if (has_uvs) {
-          vertex.texcoord = texcoords[source_index];
+          vertex.texcoord = oxygen::base::CheckedAt(texcoords, source_index);
         }
 
         if (preserve_authored_tangents && has_tangents) {
-          vertex.tangent = tangents[source_index];
+          vertex.tangent = oxygen::base::CheckedAt(tangents, source_index);
         }
 
         if (preserve_authored_tangents && has_bitangents) {
-          vertex.bitangent = bitangents[source_index];
+          vertex.bitangent = oxygen::base::CheckedAt(bitangents, source_index);
         }
 
         if (has_colors) {
-          vertex.color = colors[source_index];
+          vertex.color = oxygen::base::CheckedAt(colors, source_index);
         }
 
         vertices.push_back(vertex);
@@ -565,19 +591,23 @@ namespace {
         bucket->indices.push_back(next_index);
         ++next_index;
 
-        if (mesh.mesh_type == data::MeshType::kSkinned) {
-          if (has_joints && has_weights) {
-            joint_indices.push_back(joint_ids[source_index]);
-            joint_weights.push_back(joint_wts[source_index]);
-          }
+        if ((mesh.mesh_type == data::MeshType::kSkinned)
+          && (has_joints && has_weights)) {
+          joint_indices.push_back(
+            oxygen::base::CheckedAt(joint_ids, source_index));
+          joint_weights.push_back(
+            oxygen::base::CheckedAt(joint_wts, source_index));
         }
       };
 
       size_t skipped_triangles = 0;
       for (uint32_t i = 0; i < range_count; i += 3) {
-        const auto idx0 = mesh.indices[range.first_index + i + 0];
-        const auto idx1 = mesh.indices[range.first_index + i + 1];
-        const auto idx2 = mesh.indices[range.first_index + i + 2];
+        const auto idx0
+          = oxygen::base::CheckedAt(mesh.indices, range.first_index + i + 0);
+        const auto idx1
+          = oxygen::base::CheckedAt(mesh.indices, range.first_index + i + 1);
+        const auto idx2
+          = oxygen::base::CheckedAt(mesh.indices, range.first_index + i + 2);
         if (idx0 >= positions.size() || idx1 >= positions.size()
           || idx2 >= positions.size()) {
           ++skipped_triangles;
@@ -596,18 +626,19 @@ namespace {
       }
     }
 
-    if (mesh.mesh_type == data::MeshType::kSkinned) {
-      if (!has_joints || !has_weights) {
-        diagnostics.push_back(MakeErrorDiagnostic("mesh.missing_skinning",
-          "Skinned mesh requires joint indices and weights", source_id,
-          object_path));
-        return;
-      }
+    if ((mesh.mesh_type == data::MeshType::kSkinned)
+      && (!has_joints || !has_weights)) {
+      diagnostics.push_back(MakeErrorDiagnostic("mesh.missing_skinning",
+        "Skinned mesh requires joint indices and weights", source_id,
+        object_path));
+      return;
     }
   }
 
   auto BuildSubmeshDescriptors(const std::vector<data::Vertex>& vertices,
     const std::vector<SubmeshBucket>& buckets,
+    const MaterialSlotGeometryProvenance& allocation,
+    const std::map<uint32_t, std::string>& slot_names,
     std::vector<data::pak::geometry::SubMeshDesc>& submeshes,
     std::vector<uint32_t>& submesh_slots,
     std::vector<data::pak::geometry::MeshViewDesc>& views,
@@ -642,18 +673,22 @@ namespace {
         if (vi >= vertices.size()) {
           continue;
         }
-        ExpandBounds(submesh_bounds, vertices[vi].position);
-        ExpandBounds(mesh_bounds, vertices[vi].position);
+        ExpandBounds(submesh_bounds, vertices.at(vi).position);
+        ExpandBounds(mesh_bounds, vertices.at(vi).position);
         min_vertex = (std::min)(min_vertex, vi);
         max_vertex = (std::max)(max_vertex, vi);
       }
 
-      const auto name = "mat_" + std::to_string(bucket.scene_material_index);
+      const auto named = slot_names.find(bucket.source_slot);
+      const auto name = named != slot_names.end()
+        ? named->second
+        : "Slot " + std::to_string(bucket.source_slot);
 
       SubMeshDesc submesh {};
       util::TruncateAndNullTerminate(
         submesh.name, std::size(submesh.name), name);
       submesh.material_asset_key = bucket.material_key;
+      submesh.slot_id = allocation.allocations.at(bucket.source_slot);
       submesh.mesh_view_count = 1;
       std::copy_n(submesh_bounds.min.data(), 3, submesh.bounding_box_min);
       std::copy_n(submesh_bounds.max.data(), 3, submesh.bounding_box_max);
@@ -674,7 +709,7 @@ namespace {
       views.push_back(MeshViewDesc {
         .first_index = first_index,
         .index_count = index_count,
-        .first_vertex = (min_vertex),
+        .first_vertex = min_vertex,
         .vertex_count = static_cast<MeshViewDesc::BufferIndexT>(vertex_count),
       });
 
@@ -689,6 +724,7 @@ namespace {
 
   [[nodiscard]] auto BuildLodData(const TriangleMesh& mesh,
     const MeshLod& lod_source, const WorkItem& item,
+    const MaterialSlotGeometryProvenance& allocation,
     const uint64_t max_data_blob_bytes,
     std::vector<ImportDiagnostic>& diagnostics, uint32_t& attr_mask)
     -> std::optional<LodBuildData>
@@ -829,20 +865,23 @@ namespace {
       const auto& transform = *item.bake_transform;
       const auto linear = glm::mat3(transform);
       const auto normal_matrix = glm::transpose(glm::inverse(linear));
-      const auto finite = [](const glm::vec3& value) {
+      const auto finite = [](const glm::vec3& value) -> bool {
         return std::isfinite(value.x) && std::isfinite(value.y)
           && std::isfinite(value.z);
       };
       const auto normalize_direction
-        = [&finite](const glm::vec3& value, glm::vec3& normalized) {
-            const auto largest = (std::max)({ std::abs(value.x),
-              std::abs(value.y), std::abs(value.z) });
-            if (!finite(value) || largest == 0.0F) {
-              return false;
-            }
-            normalized = glm::normalize(value / largest);
-            return finite(normalized);
-          };
+        = [&finite](const glm::vec3& value, glm::vec3& normalized) -> bool {
+        const auto largest = (std::max)({
+          std::abs(value.x),
+          std::abs(value.y),
+          std::abs(value.z),
+        });
+        if (!finite(value) || largest == 0.0F) {
+          return false;
+        }
+        normalized = glm::normalize(value / largest);
+        return finite(normalized);
+      };
       for (auto& vertex : lod.vertices) {
         vertex.position
           = glm::vec3(transform * glm::vec4(vertex.position, 1.0F));
@@ -862,14 +901,16 @@ namespace {
       if (glm::determinant(linear) < 0.0F) {
         for (auto& bucket : buckets) {
           for (size_t index = 0; index < bucket.indices.size(); index += 3) {
-            std::swap(bucket.indices[index + 1], bucket.indices[index + 2]);
+            std::swap(
+              bucket.indices.at(index + 1), bucket.indices.at(index + 2));
           }
         }
       }
     }
 
     const auto computed_bounds = BuildSubmeshDescriptors(lod.vertices, buckets,
-      lod.submeshes, lod.submesh_slots, lod.views, lod.indices);
+      allocation, item.material_slot_names, lod.submeshes, lod.submesh_slots,
+      lod.views, lod.indices);
     DLOG_F(INFO, "Mesh '{}' LOD '{}' submesh_count={} view_count={}",
       item.mesh_name, lod.lod_name, lod.submeshes.size(), lod.views.size());
     std::size_t views_with_base_vertex = 0;
@@ -902,7 +943,7 @@ namespace {
       return std::nullopt;
     }
 
-    const auto max_u32 = (std::numeric_limits<uint32_t>::max)();
+    const auto max_u32 = std::numeric_limits<uint32_t>::max();
     if (lod.vertices.size() > max_u32 || lod.indices.size() > max_u32
       || lod.submeshes.size() > max_u32 || lod.views.size() > max_u32) {
       diagnostics.push_back(MakeErrorDiagnostic("mesh.count_overflow",
@@ -972,7 +1013,7 @@ namespace {
         }
 
         const auto max_u16
-          = static_cast<uint32_t>((std::numeric_limits<uint16_t>::max)());
+          = static_cast<uint32_t>(std::numeric_limits<uint16_t>::max());
         lod.joint_count
           = static_cast<uint16_t>((std::min)(required_joint_count, max_u16));
         lod.influences_per_vertex = 4;
@@ -988,8 +1029,8 @@ namespace {
   struct GeometryBuildOutcome {
     std::string source_id;
     const void* source_key = nullptr;
-    std::optional<MeshBuildPipeline::CookedGeometryPayload> cooked;
-    std::vector<ImportDiagnostic> diagnostics;
+    std::optional<MeshBuildPipeline::CookedGeometryPayload> cooked {};
+    std::vector<ImportDiagnostic> diagnostics {};
     bool canceled = false;
     bool success = false;
   };
@@ -1130,9 +1171,11 @@ namespace {
     auto geom_bounds = MakeEmptyBounds();
     for (const auto& lod : lods) {
       ExpandBounds(geom_bounds,
-        glm::vec3(lod.bounds.min[0], lod.bounds.min[1], lod.bounds.min[2]));
+        glm::vec3(
+          lod.bounds.min.at(0), lod.bounds.min.at(1), lod.bounds.min.at(2)));
       ExpandBounds(geom_bounds,
-        glm::vec3(lod.bounds.max[0], lod.bounds.max[1], lod.bounds.max[2]));
+        glm::vec3(
+          lod.bounds.max.at(0), lod.bounds.max.at(1), lod.bounds.max.at(2)));
     }
 
     auto material_patch_offsets
@@ -1194,6 +1237,16 @@ namespace {
     auto lods = std::vector<LodBuildData> {};
     lods.reserve(item.lods.size());
 
+    MaterialSlotGeometryProvenance allocation;
+    try {
+      allocation = AllocateMaterialSlots(item);
+    } catch (const std::exception& error) {
+      out.diagnostics.push_back(
+        MakeErrorDiagnostic("mesh.slot_provenance_invalid", error.what(),
+          item.source_id, item.mesh_name));
+      return out;
+    }
+
     uint32_t attr_mask = 0;
     for (const auto& lod : item.lods) {
       if (item.stop_token.stop_requested()) {
@@ -1202,7 +1255,7 @@ namespace {
       }
 
       const auto& triangle_mesh = lod.source;
-      auto lod_data = BuildLodData(triangle_mesh, lod, item,
+      auto lod_data = BuildLodData(triangle_mesh, lod, item, allocation,
         max_data_blob_bytes, out.diagnostics, attr_mask);
       if (!lod_data.has_value()) {
         return out;
@@ -1218,13 +1271,14 @@ namespace {
       return out;
     }
 
-    const auto cooked_payload = BuildCookedGeometryPayload(
+    auto cooked_payload = BuildCookedGeometryPayload(
       item, lods, attr_mask, with_content_hashing, canceled, out.diagnostics);
     if (!cooked_payload.has_value()) {
       return out;
     }
 
     out.cooked = std::move(*cooked_payload);
+    out.cooked->material_slot_provenance = std::move(allocation);
     out.success = true;
     return out;
   }
@@ -1258,7 +1312,7 @@ auto MeshBuildPipeline::Start(co::Nursery& nursery) -> void
 
   const auto worker_count = std::max(1U, config_.worker_count);
   for (uint32_t i = 0; i < worker_count; ++i) {
-    nursery.Start([this]() -> co::Co<> { co_await Worker(); });
+    nursery.Start([this] -> co::Co<> { co_await Worker(); });
   }
 }
 

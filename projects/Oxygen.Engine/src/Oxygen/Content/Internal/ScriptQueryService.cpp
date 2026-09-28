@@ -4,11 +4,20 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
 #include <cstring>
+#include <memory>
+#include <optional>
 #include <span>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Content/Internal/ScriptQueryService.h>
+#include <Oxygen/Content/ResourceKey.h>
+#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/PakFormat_scripting.h>
+#include <Oxygen/Data/ScriptResource.h>
 
 namespace oxygen::content::internal {
 
@@ -37,7 +46,7 @@ auto ScriptQueryService::ReadScriptResourceForAsset(
     return nullptr;
   }
 
-  const auto* source = callbacks.resolve_source_for_id(*source_id);
+  auto source = callbacks.resolve_source_for_id(*source_id);
   if (source == nullptr) {
     return nullptr;
   }
@@ -80,7 +89,15 @@ auto ScriptQueryService::ReadScriptResourceForAsset(
     }
   }
 
-  return std::make_shared<data::ScriptResource>(desc, std::move(data_buffer));
+  auto resource
+    = std::make_unique<data::ScriptResource>(desc, std::move(data_buffer));
+  auto* pointer = resource.get();
+  return { pointer,
+    [source = std::move(source), resource = std::move(resource)](
+      const data::ScriptResource*) mutable -> void {
+      resource.reset();
+      source.reset();
+    } };
 }
 
 } // namespace oxygen::content::internal

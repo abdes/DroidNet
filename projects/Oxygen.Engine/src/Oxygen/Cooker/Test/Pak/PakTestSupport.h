@@ -49,7 +49,7 @@ struct AssetSpec final {
   std::string virtual_path;
   uint64_t descriptor_size = 0U;
   std::array<uint8_t, lc::kSha256Size> descriptor_sha {};
-  std::vector<std::byte> descriptor_payload;
+  std::vector<std::byte> descriptor_payload {};
 };
 
 //! A minimal current-format scene for planner tests that do not need nodes.
@@ -188,10 +188,10 @@ private:
 {
   auto bytes = std::array<uint8_t, data::SourceKey::kSizeBytes> {};
   for (auto i = size_t { 0U }; i < bytes.size(); ++i) {
-    bytes[i] = static_cast<uint8_t>(seed + static_cast<uint8_t>(i));
+    bytes.at(i) = static_cast<uint8_t>(seed + static_cast<uint8_t>(i));
   }
-  bytes[6] = static_cast<uint8_t>((bytes[6] & 0x0FU) | 0x70U);
-  bytes[8] = static_cast<uint8_t>((bytes[8] & 0x3FU) | 0x80U);
+  bytes.at(6) = static_cast<uint8_t>((bytes.at(6) & 0x0FU) | 0x70U);
+  bytes.at(8) = static_cast<uint8_t>((bytes.at(8) & 0x3FU) | 0x80U);
   return data::SourceKey::FromBytes(bytes).value();
 }
 
@@ -305,13 +305,13 @@ private:
     header.flags |= static_cast<uint32_t>(lc::kHasFileRecords);
   }
   for (size_t i = 0; i < std::size(header.source_identity); ++i) {
-    header.source_identity[i]
+    header.source_identity.at(i)
       = static_cast<uint8_t>(guid_seed + static_cast<uint8_t>(i + 1U));
   }
-  header.source_identity[6]
-    = static_cast<uint8_t>((header.source_identity[6] & 0x0FU) | 0x70U);
-  header.source_identity[8]
-    = static_cast<uint8_t>((header.source_identity[8] & 0x3FU) | 0x80U);
+  header.source_identity.at(6)
+    = static_cast<uint8_t>((header.source_identity.at(6) & 0x0FU) | 0x70U);
+  header.source_identity.at(8)
+    = static_cast<uint8_t>((header.source_identity.at(8) & 0x3FU) | 0x80U);
   header.string_table_offset = sizeof(lc::IndexHeader);
   header.string_table_size = static_cast<uint64_t>(strings.size());
   header.asset_entries_offset

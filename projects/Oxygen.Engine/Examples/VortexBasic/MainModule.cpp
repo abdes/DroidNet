@@ -12,7 +12,10 @@
 #include <cstring>
 #include <limits>
 #include <memory>
+#include <optional>
+#include <random>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "DemoShell/Runtime/AppWindow.h"
@@ -20,27 +23,45 @@
 #include "DemoShell/Services/DefaultSceneLighting.h"
 #include "VortexBasic/MainModule.h"
 #include "VortexBasic/NormalMapValidationTexture.h"
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
+#include <glm/ext/matrix_float4x4.hpp>
+#include <glm/ext/quaternion_float.hpp>
+#include <glm/ext/quaternion_geometric.hpp>
+#include <glm/ext/quaternion_trigonometric.hpp>
+#include <glm/ext/vector_float3.hpp>
+#include <glm/ext/vector_float4.hpp>
+#include <glm/ext/vector_uint2.hpp>
+#include <glm/geometric.hpp>
 #include <glm/gtc/quaternion.hpp>
+#include <glm/trigonometric.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Types/Atmosphere.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/PostProcess.h>
+#include <Oxygen/Core/Types/ResolvedView.h>
+#include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Data/ShaderReference.h>
+#include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Engine/AsyncEngine.h>
+#include <Oxygen/Engine/ModuleEvent.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
-#include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Platform/Window.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Environment/Fog.h>
@@ -55,10 +76,13 @@
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Scene/Types/Flags.h>
-#include <Oxygen/SceneSync/RuntimeMotionProducerModule.h>
+#include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/SceneCameraViewResolver.h>
+#include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
+#include <Oxygen/Vortex/ShaderDebugMode.h>
 #include <Oxygen/Vortex/Types/CompositingTask.h>
+#include <Oxygen/Vortex/Types/GroundGridConfig.h>
 
 using oxygen::ViewPort;
 using oxygen::data::Vertex;
@@ -124,7 +148,7 @@ auto RotationFromDirToDir(const glm::vec3& from_dir,
   const auto cos_theta = std::clamp(glm::dot(from_dir, to_dir), -1.0F, 1.0F);
 
   if (cos_theta >= 0.9999F) {
-    return glm::quat(1.0F, 0.0F, 0.0F, 0.0F);
+    return { 1.0F, 0.0F, 0.0F, 0.0F };
   }
 
   if (cos_theta <= -0.9999F) {
@@ -181,10 +205,8 @@ auto CameraLookRotation(const glm::vec3& position, const glm::vec3& target,
   const auto right = right_raw / std::sqrt(right_len2);
   const auto up = glm::cross(right, forward);
 
-  glm::mat4 look_matrix(1.0F);
-  look_matrix[0] = glm::vec4(right, 0.0F);
-  look_matrix[1] = glm::vec4(up, 0.0F);
-  look_matrix[2] = glm::vec4(-forward, 0.0F);
+  const glm::mat4 look_matrix { glm::vec4(right, 0.0F), glm::vec4(up, 0.0F),
+    glm::vec4(-forward, 0.0F), glm::vec4(0.0F, 0.0F, 0.0F, 1.0F) };
   return glm::quat_cast(look_matrix);
 }
 
@@ -227,9 +249,9 @@ auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
   desc.metalness = d::Unorm16 { metalness };
   desc.roughness = d::Unorm16 { roughness };
   desc.ambient_occlusion = d::Unorm16 { 1.0F };
-  desc.emissive_factor[0] = d::HalfFloat { emissive.r };
-  desc.emissive_factor[1] = d::HalfFloat { emissive.g };
-  desc.emissive_factor[2] = d::HalfFloat { emissive.b };
+  desc.emissive_factor[0] = emissive.r;
+  desc.emissive_factor[1] = emissive.g;
+  desc.emissive_factor[2] = emissive.b;
   const auto key = d::AssetKey::FromVirtualPath(
     "/Engine/Examples/VortexBasic/Materials/" + std::string(name) + ".omat");
   return std::make_shared<const d::MaterialAsset>(key, desc,
@@ -378,8 +400,10 @@ auto MainModule::OnAttached(observer_ptr<IAsyncEngine> engine) noexcept -> bool
         : "Vortex Basic Example");
     constexpr uint32_t kWidth = 1920U;
     constexpr uint32_t kHeight = 1440U;
-    props.extent = { .width = validation_.sidedness_scene ? 1600U : kWidth,
-      .height = validation_.sidedness_scene ? 1000U : kHeight };
+    props.extent = {
+      .width = validation_.sidedness_scene ? 1600U : kWidth,
+      .height = validation_.sidedness_scene ? 1000U : kHeight,
+    };
     props.flags = {
       .hidden = false,
       .always_on_top = false,
@@ -403,7 +427,7 @@ auto MainModule::OnAttached(observer_ptr<IAsyncEngine> engine) noexcept -> bool
 
   // Subscribe to Vortex Renderer attachment so we can hold an observer.
   renderer_subscription_ = engine->SubscribeModuleAttached(
-    [this](const engine::ModuleEvent& event) {
+    [this](const engine::ModuleEvent& event) -> void {
       if (event.type_id != vortex::Renderer::ClassTypeId()) {
         return;
       }
@@ -485,7 +509,8 @@ auto MainModule::BuildResolvedView(const uint32_t width, const uint32_t height)
   };
   auto camera_node = camera_node_;
   auto resolver = vortex::SceneCameraViewResolver {
-    [camera_node](const ViewId& /*unused*/) { return camera_node; },
+    [camera_node](
+      const ViewId& /*unused*/) -> scene::SceneNode { return camera_node; },
     viewport,
   };
   return resolver(main_view_id_);
@@ -516,7 +541,7 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
     if (last_surface_) {
       const auto surfaces = context->GetSurfaces();
       for (size_t i = 0; i < surfaces.size(); ++i) {
-        if (surfaces[i] == last_surface_) {
+        if (surfaces.at(i) == last_surface_) {
           context->RemoveSurfaceAt(i);
           break;
         }
@@ -537,8 +562,8 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
   auto surface = app_window_->GetSurface().lock();
   if (surface) {
     auto surfaces = context->GetSurfaces();
-    const bool already_registered = std::ranges::any_of(
-      surfaces, [&](const auto& s) { return s.get() == surface.get(); });
+    const bool already_registered = std::ranges::any_of(surfaces,
+      [&](const auto& s) -> auto { return s.get() == surface.get(); });
     if (!already_registered) {
       context->AddSurface(observer_ptr { surface.get() });
     }
@@ -915,30 +940,37 @@ auto MainModule::BuildSidednessScene() -> void
 
   validation_root_ = scene_->CreateNode("SidednessChart");
   const auto make_child
-    = [this](scene::SceneNode& parent, const std::string& name) {
-        auto node = scene_->CreateChildNode(parent, name);
-        CHECK_F(node.has_value(), "Failed to create validation node {}", name);
-        return *node;
-      };
+    = [this](scene::SceneNode& parent,
+        const std::string& name) -> oxygen::scene::SceneNode {
+    auto node = scene_->CreateChildNode(parent, name);
+    CHECK_F(node.has_value(), "Failed to create validation node {}", name);
+    return *node;
+  };
   const auto vertices = std::vector<Vertex> {
-    { .position = { -0.75F, 0.0F, -0.7F },
+    {
+      .position = { -0.75F, 0.0F, -0.7F },
       .normal = { 0.0F, -1.0F, 0.0F },
       .texcoord = { 0.0F, 0.0F },
       .tangent = { 1.0F, 0.0F, 0.0F },
       .bitangent = { 0.0F, 0.0F, 1.0F },
-      .color = { 1.0F, 1.0F, 1.0F, 1.0F } },
-    { .position = { 0.75F, 0.0F, -0.7F },
+      .color = { 1.0F, 1.0F, 1.0F, 1.0F },
+    },
+    {
+      .position = { 0.75F, 0.0F, -0.7F },
       .normal = { 0.0F, -1.0F, 0.0F },
       .texcoord = { 1.0F, 0.0F },
       .tangent = { 1.0F, 0.0F, 0.0F },
       .bitangent = { 0.0F, 0.0F, 1.0F },
-      .color = { 1.0F, 1.0F, 1.0F, 1.0F } },
-    { .position = { -0.35F, 0.0F, 0.8F },
+      .color = { 1.0F, 1.0F, 1.0F, 1.0F },
+    },
+    {
+      .position = { -0.35F, 0.0F, 0.8F },
       .normal = { 0.0F, -1.0F, 0.0F },
       .texcoord = { 0.0F, 1.0F },
       .tangent = { 1.0F, 0.0F, 0.0F },
       .bitangent = { 0.0F, 0.0F, 1.0F },
-      .color = { 1.0F, 1.0F, 1.0F, 1.0F } },
+      .color = { 1.0F, 1.0F, 1.0F, 1.0F },
+    },
   };
   // Asymmetric silhouette makes the mirror observable. Every non-double-sided
   // column in a row shares the same geometry, including opposite determinants.
@@ -954,13 +986,17 @@ auto MainModule::BuildSidednessScene() -> void
     "ParentMirrorFront",
     "TwoMirrorsFront",
   };
-  constexpr auto domains = std::array { d::MaterialDomain::kOpaque,
-    d::MaterialDomain::kMasked, d::MaterialDomain::kAlphaBlended };
+  constexpr auto domains = std::array {
+    d::MaterialDomain::kOpaque,
+    d::MaterialDomain::kMasked,
+    d::MaterialDomain::kAlphaBlended,
+  };
   constexpr auto rows = std::array { "Opaque", "Masked", "Translucent" };
-  constexpr auto colors
-    = std::array { glm::vec4 { 0.82F, 0.055F, 0.025F, 1.0F },
-        glm::vec4 { 0.10F, 0.74F, 0.045F, 1.0F },
-        glm::vec4 { 0.015F, 0.5F, 0.9F, 0.55F } };
+  constexpr auto colors = std::array {
+    glm::vec4 { 0.82F, 0.055F, 0.025F, 1.0F },
+    glm::vec4 { 0.10F, 0.74F, 0.045F, 1.0F },
+    glm::vec4 { 0.015F, 0.5F, 0.9F, 0.55F },
+  };
   auto panel_geometry = BuildCubeGeometry(
     "SidednessPanel", "SidednessPanel", { 0.20F, 0.22F, 0.25F, 1.0F });
   const auto normal_map = validation_normal_map_ ? validation_normal_map_->Key()
@@ -968,20 +1004,20 @@ auto MainModule::BuildSidednessScene() -> void
 
   for (size_t row = 0; row < rows.size(); ++row) {
     const auto flags = row == 1 ? pak::render::kMaterialFlag_AlphaTest : 0U;
-    const auto single_name = std::string(rows[row]) + "Single";
-    const auto double_name = std::string(rows[row]) + "Double";
+    const auto single_name = std::string(rows.at(row)) + "Single";
+    const auto double_name = std::string(rows.at(row)) + "Double";
     auto single_geometry = BuildPrimitiveGeometry(single_name.c_str(),
-      single_name.c_str(), vertices, { 0U, 1U, 2U }, colors[row], 0.75F, 0.0F,
-      domains[row], glm::vec3 { 0.0F }, flags, false, normal_map);
+      single_name.c_str(), vertices, { 0U, 1U, 2U }, colors.at(row), 0.75F,
+      0.0F, domains.at(row), glm::vec3 { 0.0F }, flags, false, normal_map);
     auto double_geometry = BuildPrimitiveGeometry(double_name.c_str(),
-      double_name.c_str(), vertices, { 0U, 1U, 2U }, colors[row], 0.75F, 0.0F,
-      domains[row], glm::vec3 { 0.0F }, flags, true, normal_map);
+      double_name.c_str(), vertices, { 0U, 1U, 2U }, colors.at(row), 0.75F,
+      0.0F, domains.at(row), glm::vec3 { 0.0F }, flags, true, normal_map);
 
     for (size_t column = 0; column < columns.size(); ++column) {
-      const auto name = std::string(rows[row]) + "_" + columns[column];
+      const auto name = std::string(rows.at(row)) + "_" + columns.at(column);
       const auto position
         = glm::vec3 { (static_cast<float>(column) - 4.5F) * 2.3F, 0.0F,
-            3.8F - static_cast<float>(row) * 2.7F };
+            3.8F - (static_cast<float>(row) * 2.7F) };
       auto parent = validation_root_;
       if (column >= 8) {
         parent = make_child(validation_root_, name + "_Parent");
@@ -1249,7 +1285,8 @@ auto MainModule::UpdateValidationScene(
       * oxygen::math::TwoPi;
     const auto spot_position = kSceneFocusPoint
       + glm::vec3 { -3.0F,
-          -5.0F + std::sin(spot_phase) * kSpotlightOscillationAmplitude, 4.0F };
+          -5.0F + (std::sin(spot_phase) * kSpotlightOscillationAmplitude),
+          4.0F };
     spot_light_node_.GetTransform().SetLocalPosition(spot_position);
     spot_light_node_.GetTransform().SetLocalRotation(
       LookRotation(spot_position, kSceneFocusPoint));

@@ -4,12 +4,19 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
 #include <cstring>
+#include <optional>
 #include <stdexcept>
 #include <string>
 
 #include <Oxygen/Content/Internal/PhysicsQueryService.h>
+#include <Oxygen/Content/ResourceKey.h>
+#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/PakFormat_physics.h>
+#include <Oxygen/Data/SourceKey.h>
 
 namespace oxygen::content::internal {
 
@@ -51,7 +58,7 @@ auto PhysicsQueryService::MakePhysicsResourceKeyForAsset(
   if (!source_id.has_value()) {
     return std::nullopt;
   }
-  const auto* source = callbacks.resolve_source_for_id(*source_id);
+  const auto source = callbacks.resolve_source_for_id(*source_id);
   if (source == nullptr) {
     return std::nullopt;
   }
@@ -99,7 +106,7 @@ auto PhysicsQueryService::ReadCollisionShapeAssetDescForAsset(
     return std::nullopt;
   }
 
-  const auto* source = callbacks.resolve_source_for_id(*source_id);
+  const auto source = callbacks.resolve_source_for_id(*source_id);
   if (source == nullptr) {
     return std::nullopt;
   }
@@ -135,7 +142,7 @@ auto PhysicsQueryService::ReadPhysicsMaterialAssetDescForAsset(
     return std::nullopt;
   }
 
-  const auto* source = callbacks.resolve_source_for_id(*source_id);
+  const auto source = callbacks.resolve_source_for_id(*source_id);
   if (source == nullptr) {
     return std::nullopt;
   }
@@ -169,7 +176,7 @@ auto PhysicsQueryService::FindPhysicsSidecarAssetKeyForScene(
     return std::nullopt;
   }
 
-  const auto* source = callbacks.resolve_source_for_id(*source_id);
+  const auto source = callbacks.resolve_source_for_id(*source_id);
   if (source == nullptr) {
     return std::nullopt;
   }

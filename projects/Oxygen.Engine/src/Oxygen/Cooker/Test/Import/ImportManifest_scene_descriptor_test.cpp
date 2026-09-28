@@ -6,13 +6,16 @@
 
 #include <filesystem>
 #include <fstream>
+#include <ios>
 #include <optional>
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <vector>
 
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
@@ -50,7 +53,7 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
   const auto path = MakeManifestPath("context_roots");
   const auto root = path.parent_path();
   WriteTextFile(root / "scene.json",
-    R"({"version":8,"name":"Scene","nodes":[{"name":"Root"}]})");
+    R"({"version":9,"name":"Scene","nodes":[{"name":"Root"}]})");
   WriteTextFile(path, R"({
     "version":1,"output":"out",
     "defaults":{"scene_descriptor":{"cooked_context_roots":["Libraries/Low"]}},
@@ -61,26 +64,44 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
     ]})");
   auto errors = std::ostringstream {};
   const auto manifest = ImportManifest::Load(path, std::nullopt, errors);
-  ASSERT_TRUE(manifest.has_value()) << errors.str();
-  const auto inherited = manifest->jobs[0].BuildRequest(errors);
-  const auto overridden = manifest->jobs[1].BuildRequest(errors);
-  ASSERT_TRUE(inherited.has_value()) << errors.str();
-  ASSERT_TRUE(overridden.has_value()) << errors.str();
+  if (!manifest.has_value()) {
+    FAIL() << "Expected manifest to contain a value" << errors.str();
+  }
+  const auto inherited = manifest->jobs.at(0).BuildRequest(errors);
+  const auto overridden = manifest->jobs.at(1).BuildRequest(errors);
+  if (!inherited.has_value()) {
+    FAIL() << "Expected inherited to contain a value" << errors.str();
+  }
+  if (!overridden.has_value()) {
+    FAIL() << "Expected overridden to contain a value" << errors.str();
+  }
   ASSERT_EQ(inherited->cooked_context_roots.size(), 1U);
-  EXPECT_EQ(inherited->cooked_context_roots[0], root / "Libraries/Low");
+  EXPECT_EQ(inherited->cooked_context_roots.at(0), root / "Libraries/Low");
   ASSERT_EQ(overridden->cooked_context_roots.size(), 2U);
-  EXPECT_EQ(overridden->cooked_context_roots[0], root / "Libraries/High");
-  EXPECT_EQ(overridden->cooked_context_roots[1], root / "out");
+  EXPECT_EQ(overridden->cooked_context_roots.at(0), root / "Libraries/High");
+  EXPECT_EQ(overridden->cooked_context_roots.at(1), root / "out");
 }
 
 NOLINT_TEST(ImportManifestSceneDescriptorTest, RejectsInvalidContextRootValues)
 {
   const auto path = MakeManifestPath("invalid_context_roots");
   for (const auto& roots : std::vector<json> {
-         json("root"), json::array({ 42 }), json::array({ "" }) }) {
-    const auto document = json { { "jobs",
-      json::array({ json { { "type", "scene-descriptor" },
-        { "source", "scene.json" }, { "cooked_context_roots", roots } } }) } };
+         json("root"),
+         json::array({ 42 }),
+         json::array({ "" }),
+       }) {
+    const auto document = json {
+      {
+        "jobs",
+        json::array({
+          json {
+            { "type", "scene-descriptor" },
+            { "source", "scene.json" },
+            { "cooked_context_roots", roots },
+          },
+        }),
+      },
+    };
     WriteTextFile(path, document.dump());
     auto errors = std::ostringstream {};
     EXPECT_FALSE(ImportManifest::Load(path, std::nullopt, errors).has_value());
@@ -96,7 +117,7 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
   const auto descriptor_path = root / "Scenes" / "demo.scene.json";
   WriteTextFile(descriptor_path,
     R"({
-      "version": 8,
+      "version": 9,
       "name": "DemoScene",
       "content_hashing": false,
       "nodes": [
@@ -133,16 +154,24 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
   auto errors = std::ostringstream {};
   const auto manifest
     = ImportManifest::Load(manifest_path, std::nullopt, errors);
-  ASSERT_TRUE(manifest.has_value()) << errors.str();
+  if (!manifest.has_value()) {
+    FAIL() << "Expected manifest to contain a value" << errors.str();
+  }
   ASSERT_EQ(manifest->jobs.size(), 1U);
 
   auto request_errors = std::ostringstream {};
-  const auto request = manifest->jobs[0].BuildRequest(request_errors);
-  ASSERT_TRUE(request.has_value()) << request_errors.str();
-  ASSERT_TRUE(request->cooked_root.has_value());
+  const auto request = manifest->jobs.at(0).BuildRequest(request_errors);
+  if (!request.has_value()) {
+    FAIL() << "Expected request to contain a value" << request_errors.str();
+  }
+  if (!request->cooked_root.has_value()) {
+    FAIL() << "Expected request->cooked_root to contain a value";
+  }
   EXPECT_EQ(request->source_path, descriptor_path.lexically_normal());
   EXPECT_EQ(request->job_name, std::optional<std::string> { "demo-scene-job" });
-  ASSERT_TRUE(request->scene_descriptor.has_value());
+  if (!request->scene_descriptor.has_value()) {
+    FAIL() << "Expected request->scene_descriptor to contain a value";
+  }
 
   EXPECT_EQ(request->options.with_content_hashing,
     EffectiveContentHashingEnabled(false));
@@ -160,7 +189,7 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
   const auto descriptor_path = root / "Scenes" / "demo.scene.json";
   WriteTextFile(descriptor_path,
     R"({
-      "version": 8,
+      "version": 9,
       "name": "DemoScene",
       "nodes": [ { "name": "Root" } ]
     })");
@@ -187,19 +216,25 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
   auto errors = std::ostringstream {};
   const auto manifest
     = ImportManifest::Load(manifest_path, std::nullopt, errors);
-  ASSERT_TRUE(manifest.has_value()) << errors.str();
+  if (!manifest.has_value()) {
+    FAIL() << "Expected manifest to contain a value" << errors.str();
+  }
   ASSERT_EQ(manifest->jobs.size(), 2U);
-  EXPECT_EQ(manifest->jobs[1].id, "scene.demo");
-  ASSERT_EQ(manifest->jobs[1].depends_on.size(), 1U);
-  EXPECT_EQ(manifest->jobs[1].depends_on[0], "geo.cube");
+  EXPECT_EQ(manifest->jobs.at(1).id, "scene.demo");
+  ASSERT_EQ(manifest->jobs.at(1).depends_on.size(), 1U);
+  EXPECT_EQ(manifest->jobs.at(1).depends_on.at(0), "geo.cube");
 
   auto request_errors = std::ostringstream {};
-  const auto request = manifest->jobs[1].BuildRequest(request_errors);
-  ASSERT_TRUE(request.has_value()) << request_errors.str();
-  ASSERT_TRUE(request->orchestration.has_value());
+  const auto request = manifest->jobs.at(1).BuildRequest(request_errors);
+  if (!request.has_value()) {
+    FAIL() << "Expected request to contain a value" << request_errors.str();
+  }
+  if (!request->orchestration.has_value()) {
+    FAIL() << "Expected request->orchestration to contain a value";
+  }
   EXPECT_EQ(request->orchestration->job_id, "scene.demo");
   ASSERT_EQ(request->orchestration->depends_on.size(), 1U);
-  EXPECT_EQ(request->orchestration->depends_on[0], "geo.cube");
+  EXPECT_EQ(request->orchestration->depends_on.at(0), "geo.cube");
 }
 
 NOLINT_TEST(ImportManifestSceneDescriptorTest,

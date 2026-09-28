@@ -6,12 +6,15 @@
 
 #include <filesystem>
 #include <fstream>
+#include <ios>
 #include <optional>
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <system_error>
 
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
@@ -63,7 +66,7 @@ NOLINT_TEST(SceneDescriptorImportRequestBuilderTest,
   const auto descriptor_path = dir / "Scenes" / "demo.scene.json";
   WriteTextFile(descriptor_path,
     R"({
-      "version": 8,
+      "version": 9,
       "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.scene-descriptor.schema.json",
       "name": "DemoScene",
       "content_hashing": false,
@@ -81,15 +84,21 @@ NOLINT_TEST(SceneDescriptorImportRequestBuilderTest,
 
   const auto request = BuildSceneDescriptorRequest(settings, errors);
 
-  ASSERT_TRUE(request.has_value()) << errors.str();
+  if (!request.has_value()) {
+    FAIL() << "Expected request to contain a value" << errors.str();
+  }
   EXPECT_TRUE(errors.str().empty());
-  ASSERT_TRUE(request->cooked_root.has_value());
+  if (!request->cooked_root.has_value()) {
+    FAIL() << "Expected request->cooked_root to contain a value";
+  }
   EXPECT_TRUE(request->cooked_root->is_absolute());
   EXPECT_EQ(request->source_path, descriptor_path.lexically_normal());
   EXPECT_EQ(request->job_name, std::optional<std::string> { "manifest-scene" });
   EXPECT_EQ(request->options.with_content_hashing,
     EffectiveContentHashingEnabled(false));
-  ASSERT_TRUE(request->scene_descriptor.has_value());
+  if (!request->scene_descriptor.has_value()) {
+    FAIL() << "Expected request->scene_descriptor to contain a value";
+  }
 
   const auto normalized
     = json::parse(request->scene_descriptor->normalized_descriptor_json);
@@ -102,7 +111,7 @@ NOLINT_TEST(SceneDescriptorImportRequestBuilderTest,
   const auto dir = MakeTempDir("context_root_order");
   const auto descriptor = dir / "scene.json";
   WriteTextFile(
-    descriptor, R"({"version":8,"name":"Scene","nodes":[{"name":"Root"}]})");
+    descriptor, R"({"version":9,"name":"Scene","nodes":[{"name":"Root"}]})");
   auto settings = MakeBaseSettings(descriptor);
   settings.cooked_context_roots = { "relative/root" };
   auto errors = std::ostringstream {};
@@ -110,13 +119,15 @@ NOLINT_TEST(SceneDescriptorImportRequestBuilderTest,
   const auto library = dir / "library";
   settings.cooked_context_roots = { library.string(), settings.cooked_root };
   const auto request = BuildSceneDescriptorRequest(settings, errors);
-  ASSERT_TRUE(request.has_value()) << errors.str();
+  if (!request.has_value()) {
+    FAIL() << "Expected request to contain a value" << errors.str();
+  }
   const auto roots
     = oxygen::content::import::internal::BuildUniqueMountedCookedRoots(
       *request);
   ASSERT_EQ(roots.size(), 2U);
-  EXPECT_EQ(roots[0], library);
-  EXPECT_EQ(roots[1], std::filesystem::path(settings.cooked_root));
+  EXPECT_EQ(roots.at(0), library);
+  EXPECT_EQ(roots.at(1), std::filesystem::path(settings.cooked_root));
 }
 
 NOLINT_TEST(SceneDescriptorImportRequestBuilderTest,
@@ -126,7 +137,7 @@ NOLINT_TEST(SceneDescriptorImportRequestBuilderTest,
   const auto descriptor_path = dir / "Scenes" / "bad.scene.json";
   WriteTextFile(descriptor_path,
     R"({
-      "version": 8,
+      "version": 9,
       "name": "BadScene",
       "nodes": [
         { "name": "Root", "unexpected": true }
@@ -163,7 +174,7 @@ NOLINT_TEST(SceneDescriptorImportRequestBuilderTest, RejectsRelativeCookedRoot)
   const auto descriptor_path = dir / "Scenes" / "ok.scene.json";
   WriteTextFile(descriptor_path,
     R"({
-      "version": 8,
+      "version": 9,
       "name": "DemoScene",
       "nodes": [ { "name": "Root" } ]
     })");

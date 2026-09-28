@@ -1,5 +1,5 @@
 {
-  "version": 8,
+  "version": 9,
   "name": "VsmBug1LargeThinCube",
   "nodes": [
     {
@@ -67,6 +67,7 @@
         "node": 3,
         "fov_y": 0.7854,
         "aspect_ratio": 1.7778,
+        "aspect_mode": "fixed",
         "near_plane": 0.1,
         "far_plane": 2000.0
       }

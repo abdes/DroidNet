@@ -9,6 +9,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <ios>
+#include <memory>
 #include <span>
 #include <string>
 #include <string_view>
@@ -17,21 +19,38 @@
 
 #include "PakTestSupport.h"
 
+#include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Base/Span.h>
 #include <Oxygen/Content/PakFile.h>
+#include <Oxygen/Cooker/Pak/PakBuildReport.h>
+#include <Oxygen/Cooker/Pak/PakBuildRequest.h>
+#include <Oxygen/Cooker/Pak/PakPlan.h>
 #include <Oxygen/Cooker/Pak/PakPlanBuilder.h>
 #include <Oxygen/Cooker/Pak/PakWriter.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/CookedSource.h>
+#include <Oxygen/Data/LooseCookedIndexFormat.h>
+#include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormatSerioLoaders.h>
 #include <Oxygen/Data/PakFormatSerioWriters.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
+#include <Oxygen/Data/PakFormat_world.h>
+#include <Oxygen/Data/PhysicsSceneAsset.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Serio/FileStream.h>
+#include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
+#include <Oxygen/Serio/Writer.h>
 #include <Oxygen/Testing/GTest.h>
+
+using oxygen::base::CheckedAt;
 
 namespace {
 namespace data = oxygen::data;
@@ -43,8 +62,8 @@ namespace physics = oxygen::data::pak::physics;
 namespace render = oxygen::data::pak::render;
 namespace script = oxygen::data::pak::scripting;
 
-using AssetSpec = paktest::AssetSpec;
-using FileSpec = paktest::FileSpec;
+using paktest::AssetSpec;
+using paktest::FileSpec;
 
 auto MakeNonZeroSourceKey(const uint8_t seed) -> data::SourceKey
 {
@@ -71,8 +90,8 @@ auto FindTable(const pak::PakPlan& plan, const std::string_view name)
   -> const pak::PakTablePlan*
 {
   const auto tables = plan.Tables();
-  const auto it = std::ranges::find_if(
-    tables, [name](const auto& table) { return table.table_name == name; });
+  const auto it = std::ranges::find_if(tables,
+    [name](const auto& table) -> auto { return table.table_name == name; });
   if (it == tables.end()) {
     return nullptr;
   }
@@ -106,65 +125,83 @@ auto ExpectPlansEquivalent(const pak::PakPlan& lhs, const pak::PakPlan& rhs)
   const auto rhs_regions = rhs.Regions();
   ASSERT_EQ(lhs_regions.size(), rhs_regions.size());
   for (size_t i = 0; i < lhs_regions.size(); ++i) {
-    EXPECT_EQ(lhs_regions[i].region_name, rhs_regions[i].region_name);
-    EXPECT_EQ(lhs_regions[i].offset, rhs_regions[i].offset);
-    EXPECT_EQ(lhs_regions[i].size_bytes, rhs_regions[i].size_bytes);
-    EXPECT_EQ(lhs_regions[i].alignment, rhs_regions[i].alignment);
+    EXPECT_EQ(CheckedAt(lhs_regions, i).region_name,
+      CheckedAt(rhs_regions, i).region_name);
+    EXPECT_EQ(
+      CheckedAt(lhs_regions, i).offset, CheckedAt(rhs_regions, i).offset);
+    EXPECT_EQ(CheckedAt(lhs_regions, i).size_bytes,
+      CheckedAt(rhs_regions, i).size_bytes);
+    EXPECT_EQ(
+      CheckedAt(lhs_regions, i).alignment, CheckedAt(rhs_regions, i).alignment);
   }
 
   const auto lhs_tables = lhs.Tables();
   const auto rhs_tables = rhs.Tables();
   ASSERT_EQ(lhs_tables.size(), rhs_tables.size());
   for (size_t i = 0; i < lhs_tables.size(); ++i) {
-    EXPECT_EQ(lhs_tables[i].table_name, rhs_tables[i].table_name);
-    EXPECT_EQ(lhs_tables[i].offset, rhs_tables[i].offset);
-    EXPECT_EQ(lhs_tables[i].size_bytes, rhs_tables[i].size_bytes);
-    EXPECT_EQ(lhs_tables[i].count, rhs_tables[i].count);
-    EXPECT_EQ(lhs_tables[i].entry_size, rhs_tables[i].entry_size);
     EXPECT_EQ(
-      lhs_tables[i].expected_entry_size, rhs_tables[i].expected_entry_size);
-    EXPECT_EQ(lhs_tables[i].alignment, rhs_tables[i].alignment);
+      CheckedAt(lhs_tables, i).table_name, CheckedAt(rhs_tables, i).table_name);
+    EXPECT_EQ(CheckedAt(lhs_tables, i).offset, CheckedAt(rhs_tables, i).offset);
     EXPECT_EQ(
-      lhs_tables[i].index_zero_required, rhs_tables[i].index_zero_required);
+      CheckedAt(lhs_tables, i).size_bytes, CheckedAt(rhs_tables, i).size_bytes);
+    EXPECT_EQ(CheckedAt(lhs_tables, i).count, CheckedAt(rhs_tables, i).count);
     EXPECT_EQ(
-      lhs_tables[i].index_zero_present, rhs_tables[i].index_zero_present);
+      CheckedAt(lhs_tables, i).entry_size, CheckedAt(rhs_tables, i).entry_size);
+    EXPECT_EQ(CheckedAt(lhs_tables, i).expected_entry_size,
+      CheckedAt(rhs_tables, i).expected_entry_size);
     EXPECT_EQ(
-      lhs_tables[i].index_zero_forbidden, rhs_tables[i].index_zero_forbidden);
+      CheckedAt(lhs_tables, i).alignment, CheckedAt(rhs_tables, i).alignment);
+    EXPECT_EQ(CheckedAt(lhs_tables, i).index_zero_required,
+      CheckedAt(rhs_tables, i).index_zero_required);
+    EXPECT_EQ(CheckedAt(lhs_tables, i).index_zero_present,
+      CheckedAt(rhs_tables, i).index_zero_present);
+    EXPECT_EQ(CheckedAt(lhs_tables, i).index_zero_forbidden,
+      CheckedAt(rhs_tables, i).index_zero_forbidden);
   }
 
   const auto lhs_assets = lhs.Assets();
   const auto rhs_assets = rhs.Assets();
   ASSERT_EQ(lhs_assets.size(), rhs_assets.size());
   for (size_t i = 0; i < lhs_assets.size(); ++i) {
-    EXPECT_EQ(lhs_assets[i].asset_key, rhs_assets[i].asset_key);
-    EXPECT_EQ(lhs_assets[i].asset_type, rhs_assets[i].asset_type);
-    EXPECT_EQ(lhs_assets[i].offset, rhs_assets[i].offset);
-    EXPECT_EQ(lhs_assets[i].size_bytes, rhs_assets[i].size_bytes);
-    EXPECT_EQ(lhs_assets[i].alignment, rhs_assets[i].alignment);
     EXPECT_EQ(
-      lhs_assets[i].reserved_bytes_zeroed, rhs_assets[i].reserved_bytes_zeroed);
+      CheckedAt(lhs_assets, i).asset_key, CheckedAt(rhs_assets, i).asset_key);
+    EXPECT_EQ(
+      CheckedAt(lhs_assets, i).asset_type, CheckedAt(rhs_assets, i).asset_type);
+    EXPECT_EQ(CheckedAt(lhs_assets, i).offset, CheckedAt(rhs_assets, i).offset);
+    EXPECT_EQ(
+      CheckedAt(lhs_assets, i).size_bytes, CheckedAt(rhs_assets, i).size_bytes);
+    EXPECT_EQ(
+      CheckedAt(lhs_assets, i).alignment, CheckedAt(rhs_assets, i).alignment);
+    EXPECT_EQ(CheckedAt(lhs_assets, i).reserved_bytes_zeroed,
+      CheckedAt(rhs_assets, i).reserved_bytes_zeroed);
   }
 
   const auto lhs_resources = lhs.Resources();
   const auto rhs_resources = rhs.Resources();
   ASSERT_EQ(lhs_resources.size(), rhs_resources.size());
   for (size_t i = 0; i < lhs_resources.size(); ++i) {
-    EXPECT_EQ(lhs_resources[i].resource_kind, rhs_resources[i].resource_kind);
-    EXPECT_EQ(lhs_resources[i].resource_index, rhs_resources[i].resource_index);
-    EXPECT_EQ(lhs_resources[i].region_name, rhs_resources[i].region_name);
-    EXPECT_EQ(lhs_resources[i].offset, rhs_resources[i].offset);
-    EXPECT_EQ(lhs_resources[i].size_bytes, rhs_resources[i].size_bytes);
-    EXPECT_EQ(lhs_resources[i].alignment, rhs_resources[i].alignment);
-    EXPECT_EQ(lhs_resources[i].reserved_bytes_zeroed,
-      rhs_resources[i].reserved_bytes_zeroed);
+    EXPECT_EQ(CheckedAt(lhs_resources, i).resource_kind,
+      CheckedAt(rhs_resources, i).resource_kind);
+    EXPECT_EQ(CheckedAt(lhs_resources, i).resource_index,
+      CheckedAt(rhs_resources, i).resource_index);
+    EXPECT_EQ(CheckedAt(lhs_resources, i).region_name,
+      CheckedAt(rhs_resources, i).region_name);
+    EXPECT_EQ(
+      CheckedAt(lhs_resources, i).offset, CheckedAt(rhs_resources, i).offset);
+    EXPECT_EQ(CheckedAt(lhs_resources, i).size_bytes,
+      CheckedAt(rhs_resources, i).size_bytes);
+    EXPECT_EQ(CheckedAt(lhs_resources, i).alignment,
+      CheckedAt(rhs_resources, i).alignment);
+    EXPECT_EQ(CheckedAt(lhs_resources, i).reserved_bytes_zeroed,
+      CheckedAt(rhs_resources, i).reserved_bytes_zeroed);
   }
 
   EXPECT_EQ(lhs.Directory().offset, rhs.Directory().offset);
   EXPECT_EQ(lhs.Directory().size_bytes, rhs.Directory().size_bytes);
   ASSERT_EQ(lhs.Directory().entries.size(), rhs.Directory().entries.size());
   for (size_t i = 0; i < lhs.Directory().entries.size(); ++i) {
-    const auto& lhs_entry = lhs.Directory().entries[i];
-    const auto& rhs_entry = rhs.Directory().entries[i];
+    const auto& lhs_entry = lhs.Directory().entries.at(i);
+    const auto& rhs_entry = rhs.Directory().entries.at(i);
     EXPECT_EQ(lhs_entry.asset_key, rhs_entry.asset_key);
     EXPECT_EQ(lhs_entry.asset_type, rhs_entry.asset_type);
     EXPECT_EQ(lhs_entry.entry_offset, rhs_entry.entry_offset);
@@ -177,8 +214,8 @@ auto ExpectPlansEquivalent(const pak::PakPlan& lhs, const pak::PakPlan& rhs)
   EXPECT_EQ(lhs.BrowseIndex().size_bytes, rhs.BrowseIndex().size_bytes);
   ASSERT_EQ(lhs.BrowseIndex().entries.size(), rhs.BrowseIndex().entries.size());
   for (size_t i = 0; i < lhs.BrowseIndex().entries.size(); ++i) {
-    const auto& lhs_entry = lhs.BrowseIndex().entries[i];
-    const auto& rhs_entry = rhs.BrowseIndex().entries[i];
+    const auto& lhs_entry = lhs.BrowseIndex().entries.at(i);
+    const auto& rhs_entry = rhs.BrowseIndex().entries.at(i);
     EXPECT_EQ(lhs_entry.asset_key, rhs_entry.asset_key);
     EXPECT_EQ(lhs_entry.virtual_path, rhs_entry.virtual_path);
   }
@@ -192,12 +229,17 @@ auto ExpectPlansEquivalent(const pak::PakPlan& lhs, const pak::PakPlan& rhs)
   const auto rhs_slots = rhs.ScriptSlots();
   ASSERT_EQ(lhs_slots.size(), rhs_slots.size());
   for (size_t i = 0; i < lhs_slots.size(); ++i) {
-    EXPECT_EQ(lhs_slots[i].slot_index, rhs_slots[i].slot_index);
-    EXPECT_EQ(lhs_slots[i].script_asset_key, rhs_slots[i].script_asset_key);
-    EXPECT_EQ(lhs_slots[i].params_array_index, rhs_slots[i].params_array_index);
-    EXPECT_EQ(lhs_slots[i].params_count, rhs_slots[i].params_count);
-    EXPECT_EQ(lhs_slots[i].execution_order, rhs_slots[i].execution_order);
-    EXPECT_EQ(lhs_slots[i].flags, rhs_slots[i].flags);
+    EXPECT_EQ(
+      CheckedAt(lhs_slots, i).slot_index, CheckedAt(rhs_slots, i).slot_index);
+    EXPECT_EQ(CheckedAt(lhs_slots, i).script_asset_key,
+      CheckedAt(rhs_slots, i).script_asset_key);
+    EXPECT_EQ(CheckedAt(lhs_slots, i).params_array_index,
+      CheckedAt(rhs_slots, i).params_array_index);
+    EXPECT_EQ(CheckedAt(lhs_slots, i).params_count,
+      CheckedAt(rhs_slots, i).params_count);
+    EXPECT_EQ(CheckedAt(lhs_slots, i).execution_order,
+      CheckedAt(rhs_slots, i).execution_order);
+    EXPECT_EQ(CheckedAt(lhs_slots, i).flags, CheckedAt(rhs_slots, i).flags);
   }
 }
 
@@ -209,13 +251,58 @@ auto ExpectCatalogsEquivalent(
   EXPECT_EQ(lhs.catalog_digest, rhs.catalog_digest);
   ASSERT_EQ(lhs.entries.size(), rhs.entries.size());
   for (size_t i = 0; i < lhs.entries.size(); ++i) {
-    EXPECT_EQ(lhs.entries[i].asset_key, rhs.entries[i].asset_key);
-    EXPECT_EQ(lhs.entries[i].asset_type, rhs.entries[i].asset_type);
+    EXPECT_EQ(lhs.entries.at(i).asset_key, rhs.entries.at(i).asset_key);
+    EXPECT_EQ(lhs.entries.at(i).asset_type, rhs.entries.at(i).asset_type);
     EXPECT_EQ(
-      lhs.entries[i].descriptor_digest, rhs.entries[i].descriptor_digest);
-    EXPECT_EQ(lhs.entries[i].transitive_resource_digest,
-      rhs.entries[i].transitive_resource_digest);
+      lhs.entries.at(i).descriptor_digest, rhs.entries.at(i).descriptor_digest);
+    EXPECT_EQ(lhs.entries.at(i).transitive_resource_digest,
+      rhs.entries.at(i).transitive_resource_digest);
   }
+}
+
+auto EnableDescriptorHash(std::vector<std::byte>& bytes) -> void
+{
+  const auto digest = oxygen::base::ComputeSha256(bytes);
+  auto field = std::span(bytes).subspan(
+    offsetof(core::AssetHeader, content_hash), digest.size());
+  std::memcpy(field.data(), digest.data(), digest.size());
+}
+
+auto ExpectDescriptorHash(const std::span<const std::byte> bytes) -> void
+{
+  auto header = core::AssetHeader {};
+  ASSERT_GE(bytes.size(), sizeof(header));
+  std::memcpy(&header, bytes.data(), sizeof(header));
+  auto unhashed = std::vector<std::byte>(bytes.begin(), bytes.end());
+  std::ranges::fill(
+    std::span(unhashed).subspan(
+      offsetof(core::AssetHeader, content_hash), sizeof(header.content_hash)),
+    std::byte { 0 });
+  EXPECT_EQ(header.content_hash, oxygen::base::ComputeSha256(unhashed));
+}
+
+auto MakePhysicsSidecarSpec(const uint8_t seed, const AssetSpec& scene)
+  -> AssetSpec
+{
+  auto descriptor = physics::PhysicsSceneAssetDesc {};
+  descriptor.header.asset_type
+    = static_cast<uint8_t>(data::AssetType::kPhysicsScene);
+  descriptor.header.version = physics::kPhysicsSceneAssetVersion;
+  descriptor.target_scene_key = scene.key;
+  const auto digest = oxygen::base::ComputeSha256(scene.descriptor_payload);
+  std::ranges::copy(digest, std::begin(descriptor.target_scene_content_hash));
+  const auto view = std::as_bytes(std::span { &descriptor, 1U });
+  auto bytes = std::vector<std::byte>(view.begin(), view.end());
+  EnableDescriptorHash(bytes);
+  return AssetSpec {
+    .key = MakeAssetKey(seed),
+    .asset_type = data::AssetType::kPhysicsScene,
+    .descriptor_relpath = "Physics.opscene",
+    .virtual_path = "/Game/Physics" + std::to_string(seed) + ".opscene",
+    .descriptor_size = bytes.size(),
+    .descriptor_sha = oxygen::base::ComputeSha256(bytes),
+    .descriptor_payload = std::move(bytes),
+  };
 }
 
 class PakPlanBuilderTest : public paktest::TempDirFixture { };
@@ -247,7 +334,7 @@ NOLINT_TEST_F(PakPlanBuilderTest,
     .descriptor_size = kDescriptorSize,
     .descriptor_sha = {},
   };
-  asset_a.descriptor_sha[0] = kShaA;
+  asset_a.descriptor_sha.at(0) = kShaA;
 
   auto asset_z = AssetSpec {
     .key = MakeAssetKey(kAssetSeed),
@@ -258,7 +345,7 @@ NOLINT_TEST_F(PakPlanBuilderTest,
     .descriptor_sha = {},
     .descriptor_payload = paktest::MakeEmptySceneDescriptor(),
   };
-  asset_z.descriptor_sha[0] = kShaZ;
+  asset_z.descriptor_sha.at(0) = kShaZ;
 
   ASSERT_TRUE(
     paktest::WriteLooseIndex(source_a, std::span<const AssetSpec>(&asset_a, 1U),
@@ -311,20 +398,24 @@ NOLINT_TEST_F(PakPlanBuilderTest,
 
   ASSERT_FALSE(HasError(result_a.diagnostics));
   ASSERT_FALSE(HasError(result_b.diagnostics));
-  ASSERT_TRUE(result_a.plan.has_value());
-  ASSERT_TRUE(result_b.plan.has_value());
+  if (!result_a.plan.has_value()) {
+    FAIL() << "Expected result_a.plan to contain a value";
+  }
+  if (!result_b.plan.has_value()) {
+    FAIL() << "Expected result_b.plan to contain a value";
+  }
 
   ExpectPlansEquivalent(*result_a.plan, *result_b.plan);
   ExpectCatalogsEquivalent(result_a.output_catalog, result_b.output_catalog);
 
   const auto assets = result_a.plan->Assets();
   ASSERT_EQ(assets.size(), 1U);
-  EXPECT_EQ(assets[0].asset_type, data::AssetType::kScene);
+  EXPECT_EQ(CheckedAt(assets, 0).asset_type, data::AssetType::kScene);
   ASSERT_EQ(result_a.output_catalog.entries.size(), 1U);
   EXPECT_EQ(
-    result_a.output_catalog.entries[0].asset_key, MakeAssetKey(kAssetSeed));
+    result_a.output_catalog.entries.at(0).asset_key, MakeAssetKey(kAssetSeed));
   EXPECT_EQ(
-    result_a.output_catalog.entries[0].asset_type, data::AssetType::kScene);
+    result_a.output_catalog.entries.at(0).asset_type, data::AssetType::kScene);
 }
 
 NOLINT_TEST_F(PakPlanBuilderTest, FullModeIncludesAllLiveAssetsAndResources)
@@ -352,7 +443,7 @@ NOLINT_TEST_F(PakPlanBuilderTest, FullModeIncludesAllLiveAssetsAndResources)
     .descriptor_size = kDescriptorSizeA,
     .descriptor_sha = {},
   };
-  material_asset.descriptor_sha[0] = 0xAAU;
+  material_asset.descriptor_sha.at(0) = 0xAAU;
 
   auto script_asset = AssetSpec {
     .key = MakeAssetKey(0x20U),
@@ -362,7 +453,7 @@ NOLINT_TEST_F(PakPlanBuilderTest, FullModeIncludesAllLiveAssetsAndResources)
     .descriptor_size = kDescriptorSizeB,
     .descriptor_sha = {},
   };
-  script_asset.descriptor_sha[0] = 0xBBU;
+  script_asset.descriptor_sha.at(0) = 0xBBU;
 
   const auto files = std::array<FileSpec, 8> {
     FileSpec {
@@ -433,7 +524,9 @@ NOLINT_TEST_F(PakPlanBuilderTest, FullModeIncludesAllLiveAssetsAndResources)
 
   const auto result = PakPlanBuilder {}.Build(request);
   ASSERT_FALSE(HasError(result.diagnostics));
-  ASSERT_TRUE(result.plan.has_value());
+  if (!result.plan.has_value()) {
+    FAIL() << "Expected result.plan to contain a value";
+  }
 
   EXPECT_EQ(result.plan->Assets().size(), 2U);
   EXPECT_EQ(result.plan->Resources().size(), 4U);
@@ -504,7 +597,7 @@ NOLINT_TEST_F(PakPlanBuilderTest, FullModeIncludesInputAssetsFromLooseSource)
   const auto request = pak::PakBuildRequest {
     .mode = BuildMode::kFull,
     .sources = { CookedSource {
-      .kind = CookedSourceKind::kLooseCooked, .path = source } },
+      .kind = CookedSourceKind::kLooseCooked, .path = source, }, },
     .output_pak_path = Root() / "full_include_input_assets.pak",
     .output_manifest_path = {},
     .content_version = 1U,
@@ -516,7 +609,9 @@ NOLINT_TEST_F(PakPlanBuilderTest, FullModeIncludesInputAssetsFromLooseSource)
 
   const auto result = PakPlanBuilder {}.Build(request);
   ASSERT_FALSE(HasError(result.diagnostics));
-  ASSERT_TRUE(result.plan.has_value());
+  if (!result.plan.has_value()) {
+    FAIL() << "Expected result.plan to contain a value";
+  }
 
   const auto plan_assets = result.plan->Assets();
   ASSERT_EQ(plan_assets.size(), assets.size());
@@ -580,7 +675,7 @@ NOLINT_TEST_F(
     .descriptor_sha = {},
     .descriptor_payload = paktest::MakeEmptySceneDescriptor(),
   };
-  scene_asset.descriptor_sha[0] = 0x33U;
+  scene_asset.descriptor_sha.at(0) = 0x33U;
 
   auto slot = script::ScriptSlotRecord {};
   slot.script_asset_key = MakeAssetKey(0x44U);
@@ -614,7 +709,7 @@ NOLINT_TEST_F(
   const auto request = pak::PakBuildRequest {
     .mode = BuildMode::kFull,
     .sources = { CookedSource {
-      .kind = CookedSourceKind::kLooseCooked, .path = source } },
+      .kind = CookedSourceKind::kLooseCooked, .path = source, }, },
     .output_pak_path = Root() / "script_slot_ok.pak",
     .output_manifest_path = {},
     .content_version = 1U,
@@ -626,7 +721,9 @@ NOLINT_TEST_F(
 
   const auto result = PakPlanBuilder {}.Build(request);
   ASSERT_FALSE(HasError(result.diagnostics));
-  ASSERT_TRUE(result.plan.has_value());
+  if (!result.plan.has_value()) {
+    FAIL() << "Expected result.plan to contain a value";
+  }
 
   const auto* script_slot_table = FindTable(*result.plan, "script_slot_table");
   const auto* script_resource_table
@@ -640,10 +737,10 @@ NOLINT_TEST_F(
 
   const auto slots = result.plan->ScriptSlots();
   ASSERT_EQ(slots.size(), 1U);
-  EXPECT_EQ(slots[0].slot_index, 0U);
-  EXPECT_EQ(slots[0].script_asset_key, MakeAssetKey(0x44U));
-  EXPECT_EQ(slots[0].params_array_index, kParamsOffsetRecords);
-  EXPECT_EQ(slots[0].params_count, kParamsCount);
+  EXPECT_EQ(CheckedAt(slots, 0).slot_index, 0U);
+  EXPECT_EQ(CheckedAt(slots, 0).script_asset_key, MakeAssetKey(0x44U));
+  EXPECT_EQ(CheckedAt(slots, 0).params_array_index, kParamsOffsetRecords);
+  EXPECT_EQ(CheckedAt(slots, 0).params_count, kParamsCount);
 }
 
 NOLINT_TEST_F(PakPlanBuilderTest, ScriptSlotOutOfBoundsIsRejected)
@@ -668,7 +765,7 @@ NOLINT_TEST_F(PakPlanBuilderTest, ScriptSlotOutOfBoundsIsRejected)
     .descriptor_sha = {},
     .descriptor_payload = paktest::MakeEmptySceneDescriptor(),
   };
-  scene_asset.descriptor_sha[0] = 0x35U;
+  scene_asset.descriptor_sha.at(0) = 0x35U;
 
   auto slot = script::ScriptSlotRecord {};
   slot.script_asset_key = MakeAssetKey(0x46U);
@@ -702,7 +799,7 @@ NOLINT_TEST_F(PakPlanBuilderTest, ScriptSlotOutOfBoundsIsRejected)
   const auto request = pak::PakBuildRequest {
     .mode = BuildMode::kFull,
     .sources = { CookedSource {
-      .kind = CookedSourceKind::kLooseCooked, .path = source } },
+      .kind = CookedSourceKind::kLooseCooked, .path = source, }, },
     .output_pak_path = Root() / "script_slot_invalid.pak",
     .output_manifest_path = {},
     .content_version = 1U,
@@ -738,7 +835,7 @@ NOLINT_TEST_F(PakPlanBuilderTest, IndexZeroPolicyAppliedForResourceTables)
     .descriptor_size = kDescriptorSize,
     .descriptor_sha = {},
   };
-  script_asset.descriptor_sha[0] = 0x55U;
+  script_asset.descriptor_sha.at(0) = 0x55U;
 
   const auto files = std::array<FileSpec, 4> {
     FileSpec {
@@ -770,7 +867,7 @@ NOLINT_TEST_F(PakPlanBuilderTest, IndexZeroPolicyAppliedForResourceTables)
   const auto request = pak::PakBuildRequest {
     .mode = BuildMode::kFull,
     .sources = { CookedSource {
-      .kind = CookedSourceKind::kLooseCooked, .path = source } },
+      .kind = CookedSourceKind::kLooseCooked, .path = source, }, },
     .output_pak_path = Root() / "index0.pak",
     .output_manifest_path = {},
     .content_version = 1U,
@@ -782,7 +879,9 @@ NOLINT_TEST_F(PakPlanBuilderTest, IndexZeroPolicyAppliedForResourceTables)
 
   const auto result = PakPlanBuilder {}.Build(request);
   ASSERT_FALSE(HasError(result.diagnostics));
-  ASSERT_TRUE(result.plan.has_value());
+  if (!result.plan.has_value()) {
+    FAIL() << "Expected result.plan to contain a value";
+  }
 
   const auto* texture_table = FindTable(*result.plan, "texture_table");
   const auto* script_resource_table
@@ -827,7 +926,7 @@ NOLINT_TEST_F(
     .descriptor_size = kDescriptorSize,
     .descriptor_sha = {},
   };
-  asset_a.descriptor_sha[0] = 0x61U;
+  asset_a.descriptor_sha.at(0) = 0x61U;
 
   auto asset_b = AssetSpec {
     .key = MakeAssetKey(0x62U),
@@ -837,7 +936,7 @@ NOLINT_TEST_F(
     .descriptor_size = kDescriptorSize,
     .descriptor_sha = {},
   };
-  asset_b.descriptor_sha[0] = 0x62U;
+  asset_b.descriptor_sha.at(0) = 0x62U;
 
   const auto assets = std::array<AssetSpec, 2> { asset_a, asset_b };
   ASSERT_TRUE(paktest::WriteLooseIndex(source,
@@ -865,12 +964,15 @@ NOLINT_TEST_F(
 
   const auto result = PakPlanBuilder {}.Build(request);
   ASSERT_FALSE(HasError(result.diagnostics));
-  ASSERT_TRUE(result.plan.has_value());
+  if (!result.plan.has_value()) {
+    FAIL() << "Expected result.plan to contain a value";
+  }
 
   const auto& browse = result.plan->BrowseIndex();
   ASSERT_TRUE(browse.enabled);
   ASSERT_EQ(browse.entries.size(), 2U);
-  EXPECT_LT(browse.entries[0].virtual_path, browse.entries[1].virtual_path);
+  EXPECT_LT(
+    browse.entries.at(0).virtual_path, browse.entries.at(1).virtual_path);
 
   const auto expected_payload_size
     = ComputeExpectedBrowsePayloadSize(std::span<const pak::PakBrowseEntryPlan>(
@@ -901,7 +1003,9 @@ NOLINT_TEST_F(PakPlanBuilderTest, SceneMaskIndicesRemapAcrossCookedSources)
   ASSERT_TRUE(scene_writer.Write(descriptor));
   ASSERT_TRUE(scene_writer.Write(environment));
   ASSERT_TRUE(serio::Store(scene_writer, post));
-  const auto scene_bytes = scene_stream.Data();
+  auto scene_bytes = std::vector<std::byte>(
+    scene_stream.Data().begin(), scene_stream.Data().end());
+  EnableDescriptorHash(scene_bytes);
 
   serio::MemoryStream texture_stream;
   serio::Writer texture_writer(texture_stream);
@@ -925,21 +1029,25 @@ NOLINT_TEST_F(PakPlanBuilderTest, SceneMaskIndicesRemapAcrossCookedSources)
   for (const auto seed : { uint8_t { 1U }, uint8_t { 2U } }) {
     const auto root = Root() / std::to_string(seed);
     const auto asset = AssetSpec {
-      .key = MakeAssetKey(seed),
+      .key = MakeAssetKey(static_cast<uint8_t>(seed * 10U)),
       .asset_type = data::AssetType::kScene,
       .descriptor_relpath = "Scene.oscene",
       .virtual_path = "/Game/Scene" + std::to_string(seed) + ".oscene",
       .descriptor_size = scene_bytes.size(),
-      .descriptor_sha = paktest::MakeDigest(seed),
+      .descriptor_sha = oxygen::base::ComputeSha256(scene_bytes),
       .descriptor_payload = { scene_bytes.begin(), scene_bytes.end() },
     };
     const auto files = std::array {
-      FileSpec { .kind = lc::FileKind::kTexturesTable,
+      FileSpec {
+        .kind = lc::FileKind::kTexturesTable,
         .relpath = "textures.table",
-        .payload = { texture_table.begin(), texture_table.end() } },
-      FileSpec { .kind = lc::FileKind::kTexturesData,
+        .payload = { texture_table.begin(), texture_table.end() },
+      },
+      FileSpec {
+        .kind = lc::FileKind::kTexturesData,
         .relpath = "textures.data",
-        .payload = std::vector<std::byte>(4U, static_cast<std::byte>(seed)) },
+        .payload = std::vector<std::byte>(4U, static_cast<std::byte>(seed)),
+      },
     };
     auto material = render::MaterialAssetDesc {};
     material.header.asset_type
@@ -951,17 +1059,20 @@ NOLINT_TEST_F(PakPlanBuilderTest, SceneMaskIndicesRemapAcrossCookedSources)
     const auto material_packed = material_writer.ScopedAlignment(1);
     ASSERT_TRUE(
       material_writer.WriteBlob(std::as_bytes(std::span { &material, 1U })));
-    const auto material_bytes = material_stream.Data();
+    auto material_bytes = std::vector<std::byte>(
+      material_stream.Data().begin(), material_stream.Data().end());
+    EnableDescriptorHash(material_bytes);
     const auto material_asset = AssetSpec {
       .key = MakeAssetKey(static_cast<uint8_t>(seed + 10U)),
       .asset_type = data::AssetType::kMaterial,
       .descriptor_relpath = "Material.omat",
       .virtual_path = "/Game/Material" + std::to_string(seed) + ".omat",
       .descriptor_size = material_bytes.size(),
-      .descriptor_sha = paktest::MakeDigest(seed),
+      .descriptor_sha = oxygen::base::ComputeSha256(material_bytes),
       .descriptor_payload = { material_bytes.begin(), material_bytes.end() },
     };
-    const auto source_assets = std::array { asset, material_asset };
+    const auto sidecar = MakePhysicsSidecarSpec(seed, asset);
+    const auto source_assets = std::array { asset, material_asset, sidecar };
     ASSERT_TRUE(paktest::WriteLooseIndex(root, source_assets, files, seed));
     sources.push_back(
       { .kind = data::CookedSourceKind::kLooseCooked, .path = root });
@@ -975,18 +1086,20 @@ NOLINT_TEST_F(PakPlanBuilderTest, SceneMaskIndicesRemapAcrossCookedSources)
   };
   const auto result = pak::PakPlanBuilder {}.Build(request);
   ASSERT_FALSE(HasError(result.diagnostics));
-  ASSERT_TRUE(result.plan.has_value());
+  if (!result.plan.has_value()) {
+    FAIL() << "Expected result.plan to contain a value";
+  }
   const auto assets = result.plan->Assets();
   const auto payloads = result.plan->AssetPayloadSources();
-  ASSERT_EQ(assets.size(), 4U);
+  ASSERT_EQ(assets.size(), 6U);
   bool found_second_scene = false;
   for (size_t index = 0; index < assets.size(); ++index) {
-    if (assets[index].asset_key != MakeAssetKey(2U)) {
+    if (CheckedAt(assets, index).asset_key != MakeAssetKey(20U)) {
       continue;
     }
-    ASSERT_FALSE(payloads[index].inline_bytes.empty());
-    const auto scene
-      = data::SceneAsset(assets[index].asset_key, payloads[index].inline_bytes);
+    ASSERT_FALSE(CheckedAt(payloads, index).inline_bytes.empty());
+    const auto scene = data::SceneAsset(CheckedAt(assets, index).asset_key,
+      CheckedAt(payloads, index).inline_bytes);
     const auto remapped = scene.TryGetPostProcessVolumeEnvironment();
     ASSERT_TRUE(remapped.has_value());
     // Each source contributes its null record and its real texture.
@@ -998,11 +1111,32 @@ NOLINT_TEST_F(PakPlanBuilderTest, SceneMaskIndicesRemapAcrossCookedSources)
   const auto written = pak::PakWriter {}.Write(request, *result.plan);
   ASSERT_FALSE(HasError(written.diagnostics));
 
+  auto unchanged_request = request;
+  unchanged_request.mode = pak::BuildMode::kPatch;
+  unchanged_request.sources = {
+    {
+      .kind = data::CookedSourceKind::kPak,
+      .path = request.output_pak_path,
+    },
+  };
+  unchanged_request.output_pak_path = Root() / "unchanged.pak";
+  unchanged_request.output_manifest_path = Root() / "unchanged.manifest.json";
+  unchanged_request.source_key = MakeNonZeroSourceKey(6U);
+  unchanged_request.base_catalogs = { result.output_catalog };
+  const auto unchanged = pak::PakPlanBuilder {}.Build(unchanged_request);
+  ASSERT_FALSE(HasError(unchanged.diagnostics));
+  ASSERT_TRUE(unchanged.plan.has_value());
+  EXPECT_TRUE(unchanged.plan->Assets().empty());
+
   for (const auto mode : { pak::BuildMode::kFull, pak::BuildMode::kPatch }) {
     auto repack = request;
     repack.mode = mode;
-    repack.sources = { { .kind = data::CookedSourceKind::kPak,
-      .path = request.output_pak_path } };
+    repack.sources = {
+      {
+        .kind = data::CookedSourceKind::kPak,
+        .path = request.output_pak_path,
+      },
+    };
     repack.output_pak_path
       = Root() / (mode == pak::BuildMode::kFull ? "repacked.pak" : "patch.pak");
     repack.source_key = MakeNonZeroSourceKey(4U);
@@ -1026,12 +1160,26 @@ NOLINT_TEST_F(PakPlanBuilderTest, SceneMaskIndicesRemapAcrossCookedSources)
     auto archive = oxygen::content::PakFile(repack.output_pak_path);
     archive.ValidateCrc32Integrity();
     for (const auto seed : { uint8_t { 1U }, uint8_t { 2U } }) {
-      const auto entry = archive.FindEntry(MakeAssetKey(seed));
+      const auto entry
+        = archive.FindEntry(MakeAssetKey(static_cast<uint8_t>(seed * 10U)));
       ASSERT_TRUE(entry.has_value());
       auto descriptor_reader = archive.CreateReader(*entry);
       const auto bytes = descriptor_reader.ReadBlob(entry->desc_size);
       ASSERT_TRUE(bytes.has_value());
       const auto scene = data::SceneAsset(entry->asset_key, *bytes);
+      ExpectDescriptorHash(*bytes);
+      const auto sidecar_entry = archive.FindEntry(MakeAssetKey(seed));
+      ASSERT_TRUE(sidecar_entry.has_value());
+      auto sidecar_reader = archive.CreateReader(*sidecar_entry);
+      const auto sidecar_bytes
+        = sidecar_reader.ReadBlob(sidecar_entry->desc_size);
+      ASSERT_TRUE(sidecar_bytes.has_value());
+      const auto sidecar = data::PhysicsSceneAsset(
+        sidecar_entry->asset_key, std::span<const std::byte>(*sidecar_bytes));
+      EXPECT_EQ(sidecar.GetTargetSceneKey(), entry->asset_key);
+      EXPECT_TRUE(std::ranges::equal(sidecar.GetTargetSceneContentHash(),
+        oxygen::base::ComputeSha256(*bytes)));
+      ExpectDescriptorHash(*sidecar_bytes);
       const auto post_process = scene.TryGetPostProcessVolumeEnvironment();
       ASSERT_TRUE(post_process.has_value());
       const auto expected_index = seed == 1U ? 1U
@@ -1059,8 +1207,104 @@ NOLINT_TEST_F(PakPlanBuilderTest, SceneMaskIndicesRemapAcrossCookedSources)
       auto material = render::MaterialAssetDesc {};
       const auto material_payload = material_reader.ReadBlob(sizeof(material));
       ASSERT_TRUE(material_payload.has_value());
+      ExpectDescriptorHash(*material_payload);
       std::memcpy(&material, material_payload->data(), sizeof(material));
       EXPECT_EQ(material.base_color_texture.get(), expected_index);
+    }
+  }
+}
+
+NOLINT_TEST_F(PakPlanBuilderTest, RejectsInvalidPhysicsScenePairs)
+{
+  const auto scene_bytes = paktest::MakeEmptySceneDescriptor();
+  const auto scene = AssetSpec {
+    .key = MakeAssetKey(10U),
+    .asset_type = data::AssetType::kScene,
+    .descriptor_relpath = "Scene.oscene",
+    .virtual_path = "/Game/Scene.oscene",
+    .descriptor_size = scene_bytes.size(),
+    .descriptor_sha = oxygen::base::ComputeSha256(scene_bytes),
+    .descriptor_payload = scene_bytes,
+  };
+  const auto source = Root() / "invalid-pair";
+  const auto request = pak::PakBuildRequest {
+    .mode = pak::BuildMode::kFull,
+    .sources
+    = { { .kind = data::CookedSourceKind::kLooseCooked, .path = source } },
+    .output_pak_path = Root() / "invalid-pair.pak",
+    .content_version = 1U,
+    .source_key = MakeNonZeroSourceKey(2U),
+  };
+  const auto expect_rejected
+    = [&](const std::span<const AssetSpec> assets) -> void {
+    ASSERT_TRUE(paktest::WriteLooseIndex(source, assets, {}, 1U));
+    const auto result = pak::PakPlanBuilder {}.Build(request);
+    EXPECT_FALSE(result.plan.has_value());
+    EXPECT_TRUE(HasDiagnosticCode(
+      result.diagnostics, "pak.plan.physics_scene_pair_invalid"));
+  };
+  auto sidecar = MakePhysicsSidecarSpec(1U, scene);
+  sidecar.descriptor_payload.at(offsetof(physics::PhysicsSceneAssetDesc,
+    target_scene_content_hash)) ^= std::byte { 1 };
+  expect_rejected(std::array { scene, sidecar });
+
+  sidecar = MakePhysicsSidecarSpec(1U, scene);
+  auto duplicate = MakePhysicsSidecarSpec(2U, scene);
+  duplicate.descriptor_relpath = "Duplicate.opscene";
+  expect_rejected(std::array { scene, sidecar, duplicate });
+
+  sidecar.descriptor_payload.at(offsetof(
+    physics::PhysicsSceneAssetDesc, target_node_count)) = std::byte { 1 };
+  expect_rejected(std::array { scene, sidecar });
+}
+
+NOLINT_TEST_F(PakPlanBuilderTest, PatchIncludesBothMembersOfPhysicsScenePair)
+{
+  const auto scene_bytes = paktest::MakeEmptySceneDescriptor();
+  const auto scene = AssetSpec {
+    .key = MakeAssetKey(10U),
+    .asset_type = data::AssetType::kScene,
+    .descriptor_relpath = "Scene.oscene",
+    .virtual_path = "/Game/Scene.oscene",
+    .descriptor_size = scene_bytes.size(),
+    .descriptor_sha = oxygen::base::ComputeSha256(scene_bytes),
+    .descriptor_payload = scene_bytes,
+  };
+  const auto sidecar = MakePhysicsSidecarSpec(1U, scene);
+  const auto source = Root() / "pair";
+  ASSERT_TRUE(
+    paktest::WriteLooseIndex(source, std::array { scene, sidecar }, {}, 1U));
+  auto request = pak::PakBuildRequest {
+    .mode = pak::BuildMode::kFull,
+    .sources
+    = { { .kind = data::CookedSourceKind::kLooseCooked, .path = source } },
+    .output_pak_path = Root() / "pair.pak",
+    .content_version = 1U,
+    .source_key = MakeNonZeroSourceKey(2U),
+  };
+  const auto baseline = pak::PakPlanBuilder {}.Build(request);
+  ASSERT_TRUE(baseline.plan.has_value());
+  request.mode = pak::BuildMode::kPatch;
+  request.source_key = MakeNonZeroSourceKey(3U);
+  request.output_manifest_path = Root() / "patch.manifest.json";
+  for (const auto changed_key : { scene.key, sidecar.key }) {
+    auto base = baseline.output_catalog;
+    const auto changed = std::ranges::find(
+      base.entries, changed_key, &data::PakCatalogEntry::asset_key);
+    ASSERT_NE(changed, base.entries.end());
+    changed->descriptor_digest.front() ^= 1U;
+    request.base_catalogs = { std::move(base) };
+    const auto patch = pak::PakPlanBuilder {}.Build(request);
+    for (const auto& diagnostic : patch.diagnostics) {
+      EXPECT_NE(diagnostic.severity, pak::PakDiagnosticSeverity::kError)
+        << diagnostic.message;
+    }
+    if (!patch.plan.has_value()) {
+      FAIL() << "Expected patch.plan to contain a value";
+    }
+    EXPECT_EQ(patch.plan->Assets().size(), 2U);
+    for (const auto& action : patch.plan->PatchActions()) {
+      EXPECT_EQ(action.action, pak::PakPatchAction::kReplace);
     }
   }
 }

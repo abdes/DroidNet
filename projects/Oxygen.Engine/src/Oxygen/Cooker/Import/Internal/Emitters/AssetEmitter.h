@@ -18,6 +18,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Import/FileError.h>
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
@@ -178,16 +179,17 @@ public:
   /*!
    This method waits for all pending async writes to complete.
 
-   @return True if all writes succeeded, false if any errors occurred.
+   @return Success or the first I/O failure, including its path and system
+   error.
 
    ### Errors
 
    If any I/O errors occurred during `Emit()` calls, this method returns
-   false. The caller should check `ErrorCount()` for details.
+   the first failure. The caller should check `ErrorCount()` for details.
 
    @note Must be called from the import thread.
   */
-  OXGN_COOK_NDAPI auto Finalize() -> co::Co<bool>;
+  OXGN_COOK_NDAPI auto Finalize() -> co::Co<Result<void, FileErrorInfo>>;
 
 private:
   struct DescriptorWriteState {
@@ -222,6 +224,7 @@ private:
   std::vector<EmittedAssetRecord> records_;
   std::atomic<size_t> pending_count_ { 0 };
   std::atomic<size_t> error_count_ { 0 };
+  std::optional<FileErrorInfo> first_error_ {}; // Import-thread callbacks.
 };
 
 } // namespace oxygen::content::import

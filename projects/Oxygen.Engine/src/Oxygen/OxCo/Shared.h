@@ -148,7 +148,7 @@ public:
   void SetExecutor(Executor* ex) noexcept;
   auto Suspend(AwaiterBase* ptr) -> detail::Handle;
   auto Cancel(AwaiterBase* ptr) noexcept;
-  auto MustResume() const noexcept;
+  auto MustResume() noexcept;
   template <class Ret> Ret ResultAs();
 
 private:
@@ -198,7 +198,7 @@ auto Shared<Awaitable>::State::Ready() const noexcept -> bool
   // bypass the queue and try to call result() before the operation
   // officially completes; it's possible that ready() will become true
   // before the handle passed to suspend() is resumed.
-  return result_.index() != Incomplete
+  return (result_.index() != Incomplete && result_.index() != CancelPending)
     || (parents_.Empty() && awaiter_.await_ready());
 }
 
@@ -358,8 +358,7 @@ auto Shared<Awaitable>::State::Cancel(AwaiterBase* ptr) noexcept
   }
 }
 
-template <class Awaitable>
-auto Shared<Awaitable>::State::MustResume() const noexcept
+template <class Awaitable> auto Shared<Awaitable>::State::MustResume() noexcept
 {
   // This is called after an individual parent's cancellation did not succeed
   // synchronously. Early cancellation of not-the-first parent, and regular
@@ -381,6 +380,9 @@ auto Shared<Awaitable>::State::MustResume() const noexcept
   // and need to check the underlying await_must_resume().
   bool ret = result_.index() == CancelPending ? awaiter_.await_must_resume()
                                               : result_.index() != Cancelled;
+  if (!ret && result_.index() == CancelPending) {
+    result_.template emplace<Cancelled>();
+  }
   if constexpr (detail::CancelAlwaysSucceeds<WrappedAwaiter>) {
     DCHECK_EQ_F(ret, false);
     return std::false_type {};

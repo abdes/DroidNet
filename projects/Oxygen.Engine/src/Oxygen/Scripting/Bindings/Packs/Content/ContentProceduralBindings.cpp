@@ -7,16 +7,27 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <limits>
+#include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 #include <lua.h>
 #include <lualib.h>
 
+#include <Oxygen/Core/Constants.h>
+#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/PakFormat_geometry.h>
+#include <Oxygen/Data/PakFormat_render.h>
+#include <Oxygen/Data/ProceduralMeshDefaults.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Scripting/Bindings/Packs/Content/ContentBindingsCommon.h>
@@ -79,7 +90,6 @@ namespace {
       luaL_error(state,
         "assets.create_procedural_geometry option '%s' must be an integer",
         field);
-      return fallback_value;
     }
 
     const double raw = lua_tonumber(state, -1);
@@ -91,7 +101,6 @@ namespace {
         "assets.create_procedural_geometry option '%s' is outside its "
         "unsigned integer range",
         field);
-      return fallback_value;
     }
     return static_cast<unsigned int>(raw);
   }
@@ -108,7 +117,6 @@ namespace {
       lua_pop(state, 1);
       luaL_error(state,
         "assets.create_procedural_geometry option '%s' must be numeric", field);
-      return fallback_value;
     }
     const double value = lua_tonumber(state, -1);
     lua_pop(state, 1);
@@ -118,7 +126,6 @@ namespace {
         "assets.create_procedural_geometry option '%s' must be a finite "
         "float32 value",
         field);
-      return fallback_value;
     }
     return static_cast<float>(value);
   }

@@ -9,6 +9,11 @@
 #include <memory>
 #include <string_view>
 
+#include "DemoShell/ActiveScene.h"
+#include "DemoShell/DemoShell.h"
+#include "DemoShell/Runtime/DemoAppContext.h"
+#include "DemoShell/Runtime/DemoModuleBase.h"
+#include "InputSystem/InputDebugPanel.h"
 #include <glm/glm.hpp>
 
 #include <Oxygen/Base/Macros.h>
@@ -18,12 +23,6 @@
 #include <Oxygen/Platform/Window.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
-
-#include "DemoShell/ActiveScene.h"
-#include "DemoShell/DemoShell.h"
-#include "DemoShell/Runtime/DemoAppContext.h"
-#include "DemoShell/Runtime/DemoModuleBase.h"
-#include "InputSystem/InputDebugPanel.h"
 
 namespace oxygen::vortex {
 struct CompositionView;
@@ -106,7 +105,6 @@ protected:
     -> co::Co<> override;
   auto OnPreRender(observer_ptr<engine::FrameContext> context)
     -> co::Co<> override;
-  auto OnFrameEnd(observer_ptr<engine::FrameContext> context) -> void override;
 
 private:
   auto StageInitialScene(DemoShell& shell) -> void;

@@ -4,17 +4,32 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
-
-#include <Oxygen/Testing/GTest.h>
+#include <ios>
+#include <memory>
+#include <span>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+#include <system_error>
+#include <vector>
 
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/AssetEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/WindowsFileWriter.h>
+#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
+#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetType.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
+#include <Oxygen/Testing/GTest.h>
 
 using namespace oxygen::content::import;
 using namespace oxygen::co;
@@ -32,10 +47,10 @@ auto MakeAssetKey(uint32_t id) -> AssetKey
 {
   std::array<uint8_t, 16> key_bytes {};
   // Put the ID in the first 4 bytes for easy identification
-  key_bytes[0] = static_cast<uint8_t>((id >> 24) & 0xFF);
-  key_bytes[1] = static_cast<uint8_t>((id >> 16) & 0xFF);
-  key_bytes[2] = static_cast<uint8_t>((id >> 8) & 0xFF);
-  key_bytes[3] = static_cast<uint8_t>(id & 0xFF);
+  key_bytes.at(0) = static_cast<uint8_t>((id >> 24) & 0xFF);
+  key_bytes.at(1) = static_cast<uint8_t>((id >> 16) & 0xFF);
+  key_bytes.at(2) = static_cast<uint8_t>((id >> 8) & 0xFF);
+  key_bytes.at(3) = static_cast<uint8_t>(id & 0xFF);
   return AssetKey::FromBytes(key_bytes);
 }
 
@@ -65,7 +80,7 @@ auto ReadBinaryFile(const std::filesystem::path& path) -> std::vector<std::byte>
 auto ReadFileAsString(const std::filesystem::path& path) -> std::string
 {
   const auto bytes = ReadBinaryFile(path);
-  return std::string(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+  return { reinterpret_cast<const char*>(bytes.data()), bytes.size() };
 }
 
 //=== Test Fixture ===--------------------------------------------------------//
@@ -110,10 +125,10 @@ NOLINT_TEST_F(AssetEmitterTest, EmitSingleMaterialCreatesFile)
   const auto bytes = MakeDescriptorBytes("material-descriptor-content");
 
   // Act
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     emitter.Emit(key, AssetType::kMaterial, "/.cooked/Materials/Wood.omat",
       "Materials/Wood.omat", bytes);
-    co_await emitter.Finalize();
+    EXPECT_TRUE((co_await emitter.Finalize()).has_value());
   });
 
   // Assert: File exists with correct content
@@ -129,7 +144,7 @@ NOLINT_TEST_F(AssetEmitterTest, EmitMultipleAssetsCreatesAllFiles)
   AssetEmitter emitter(*writer_, Layout(), test_dir_);
 
   // Act
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     emitter.Emit(MakeAssetKey(1), AssetType::kMaterial,
       "/.cooked/Materials/Wood.omat", "Materials/Wood.omat",
       MakeDescriptorBytes("wood-material"));
@@ -142,7 +157,7 @@ NOLINT_TEST_F(AssetEmitterTest, EmitMultipleAssetsCreatesAllFiles)
       "/.cooked/Scenes/Level1.oscene", "Scenes/Level1.oscene",
       MakeDescriptorBytes("level1-scene"));
 
-    co_await emitter.Finalize();
+    EXPECT_TRUE((co_await emitter.Finalize()).has_value());
   });
 
   // Assert: All files exist with correct content
@@ -164,7 +179,7 @@ NOLINT_TEST_F(AssetEmitterTest, CountTracksEmittedAssets)
   EXPECT_EQ(emitter.Count(), 0);
 
   // Act & Assert
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     for (uint32_t i = 1; i <= 5; ++i) {
       emitter.Emit(MakeAssetKey(i), AssetType::kMaterial,
         "/.cooked/Materials/Mat" + std::to_string(i) + ".omat",
@@ -192,21 +207,21 @@ NOLINT_TEST_F(AssetEmitterTest, RecordsContainsCorrectMetadata)
   const auto bytes = MakeDescriptorBytes("test-content");
 
   // Act
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     emitter.Emit(key, AssetType::kGeometry, "/.cooked/Geometry/MyMesh.ogeo",
       "Geometry/MyMesh.ogeo", bytes);
-    co_await emitter.Finalize();
+    EXPECT_TRUE((co_await emitter.Finalize()).has_value());
   });
 
   // Assert
   const auto& records = emitter.Records();
   ASSERT_EQ(records.size(), 1);
 
-  EXPECT_EQ(records[0].key, key);
-  EXPECT_EQ(records[0].asset_type, AssetType::kGeometry);
-  EXPECT_EQ(records[0].virtual_path, "/.cooked/Geometry/MyMesh.ogeo");
-  EXPECT_EQ(records[0].descriptor_relpath, "Geometry/MyMesh.ogeo");
-  EXPECT_EQ(records[0].descriptor_size, static_cast<uint64_t>(bytes.size()));
+  EXPECT_EQ(records.at(0).key, key);
+  EXPECT_EQ(records.at(0).asset_type, AssetType::kGeometry);
+  EXPECT_EQ(records.at(0).virtual_path, "/.cooked/Geometry/MyMesh.ogeo");
+  EXPECT_EQ(records.at(0).descriptor_relpath, "Geometry/MyMesh.ogeo");
+  EXPECT_EQ(records.at(0).descriptor_size, static_cast<uint64_t>(bytes.size()));
 }
 
 //! Verify emitting the same key twice updates the record and overwrites file.
@@ -220,20 +235,20 @@ NOLINT_TEST_F(AssetEmitterTest, EmitSameKeyTwiceUpdatesRecordAndOverwrites)
   const auto bytes_v2 = MakeDescriptorBytes("v2-content-longer");
 
   // Act
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     emitter.Emit(key, AssetType::kMaterial, "/.cooked/Materials/Wood.omat",
       "Materials/Wood.omat", bytes_v1);
     emitter.Emit(key, AssetType::kMaterial, "/.cooked/Materials/Wood.omat",
       "Materials/Wood.omat", bytes_v2);
-    co_await emitter.Finalize();
+    EXPECT_TRUE((co_await emitter.Finalize()).has_value());
   });
 
   // Assert
   EXPECT_EQ(emitter.Count(), 1);
   ASSERT_EQ(emitter.Records().size(), 1);
-  EXPECT_EQ(emitter.Records()[0].key, key);
-  EXPECT_EQ(emitter.Records()[0].descriptor_relpath, "Materials/Wood.omat");
-  EXPECT_EQ(emitter.Records()[0].descriptor_size,
+  EXPECT_EQ(emitter.Records().at(0).key, key);
+  EXPECT_EQ(emitter.Records().at(0).descriptor_relpath, "Materials/Wood.omat");
+  EXPECT_EQ(emitter.Records().at(0).descriptor_size,
     static_cast<uint64_t>(bytes_v2.size()));
 
   const auto file_path = test_dir_ / "Materials" / "Wood.omat";
@@ -259,7 +274,8 @@ NOLINT_TEST_F(AssetEmitterTest, EmitVirtualPathConflictBetweenKeysThrows)
     std::runtime_error);
 
   bool success = false;
-  co::Run(*loop_, [&]() -> Co<> { success = co_await emitter.Finalize(); });
+  co::Run(*loop_,
+    [&] -> Co<> { success = (co_await emitter.Finalize()).has_value(); });
   EXPECT_TRUE(success);
 }
 
@@ -278,7 +294,8 @@ NOLINT_TEST_F(AssetEmitterTest, EmitDescriptorPathConflictBetweenKeysThrows)
     std::runtime_error);
 
   bool success = false;
-  co::Run(*loop_, [&]() -> Co<> { success = co_await emitter.Finalize(); });
+  co::Run(*loop_,
+    [&] -> Co<> { success = (co_await emitter.Finalize()).has_value(); });
   EXPECT_TRUE(success);
   EXPECT_EQ(ReadFileAsString(test_dir_ / "Materials" / "Shared.omat"), "a");
 }
@@ -290,7 +307,7 @@ NOLINT_TEST_F(
   AssetEmitter emitter(*writer_, Layout(), test_dir_);
   const auto shared_key = MakeAssetKey(7);
 
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     emitter.Emit(shared_key, AssetType::kMaterial, "/.cooked/Materials/A.omat",
       "Materials/A.omat", MakeDescriptorBytes("a-v1"));
     emitter.Emit(shared_key, AssetType::kMaterial, "/.cooked/Materials/B.omat",
@@ -304,8 +321,8 @@ NOLINT_TEST_F(
 
   EXPECT_EQ(emitter.Count(), 2);
   ASSERT_EQ(emitter.Records().size(), 2);
-  EXPECT_EQ(emitter.Records()[0].descriptor_relpath, "Materials/B.omat");
-  EXPECT_EQ(emitter.Records()[1].descriptor_relpath, "Materials/A.omat");
+  EXPECT_EQ(emitter.Records().at(0).descriptor_relpath, "Materials/B.omat");
+  EXPECT_EQ(emitter.Records().at(1).descriptor_relpath, "Materials/A.omat");
   EXPECT_EQ(ReadFileAsString(test_dir_ / "Materials" / "B.omat"), "b-v2");
   EXPECT_EQ(ReadFileAsString(test_dir_ / "Materials" / "A.omat"), "a-v3");
 }
@@ -317,7 +334,7 @@ NOLINT_TEST_F(AssetEmitterTest, RecordsPreservesEmissionOrder)
   AssetEmitter emitter(*writer_, Layout(), test_dir_);
 
   // Act
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     emitter.Emit(MakeAssetKey(1), AssetType::kMaterial,
       "/.cooked/Materials/A.omat", "Materials/A.omat",
       MakeDescriptorBytes("a"));
@@ -325,15 +342,15 @@ NOLINT_TEST_F(AssetEmitterTest, RecordsPreservesEmissionOrder)
       "/.cooked/Geometry/B.ogeo", "Geometry/B.ogeo", MakeDescriptorBytes("b"));
     emitter.Emit(MakeAssetKey(3), AssetType::kScene, "/.cooked/Scenes/C.oscene",
       "Scenes/C.oscene", MakeDescriptorBytes("c"));
-    co_await emitter.Finalize();
+    EXPECT_TRUE((co_await emitter.Finalize()).has_value());
   });
 
   // Assert: Order preserved
   const auto& records = emitter.Records();
   ASSERT_EQ(records.size(), 3);
-  EXPECT_EQ(records[0].asset_type, AssetType::kMaterial);
-  EXPECT_EQ(records[1].asset_type, AssetType::kGeometry);
-  EXPECT_EQ(records[2].asset_type, AssetType::kScene);
+  EXPECT_EQ(records.at(0).asset_type, AssetType::kMaterial);
+  EXPECT_EQ(records.at(1).asset_type, AssetType::kGeometry);
+  EXPECT_EQ(records.at(2).asset_type, AssetType::kScene);
 }
 
 //=== Finalization Tests
@@ -345,7 +362,7 @@ NOLINT_TEST_F(AssetEmitterTest, FinalizeWaitsForPendingIO)
   // Arrange
   AssetEmitter emitter(*writer_, Layout(), test_dir_);
 
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     emitter.Emit(MakeAssetKey(1), AssetType::kMaterial,
       "/.cooked/Materials/Mat1.omat", "Materials/Mat1.omat",
       MakeDescriptorBytes("content-1"));
@@ -371,7 +388,8 @@ NOLINT_TEST_F(AssetEmitterTest, FinalizeNoAssetsSucceeds)
 
   // Act
   bool success = false;
-  co::Run(*loop_, [&]() -> Co<> { success = co_await emitter.Finalize(); });
+  co::Run(*loop_,
+    [&] -> Co<> { success = (co_await emitter.Finalize()).has_value(); });
 
   // Assert
   EXPECT_TRUE(success);
@@ -385,7 +403,7 @@ NOLINT_TEST_F(AssetEmitterTest, EmitAfterFinalizeThrows)
   AssetEmitter emitter(*writer_, Layout(), test_dir_);
 
   // Act & Assert
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     const auto success = co_await emitter.Finalize();
     EXPECT_TRUE(success);
 
@@ -408,15 +426,15 @@ NOLINT_TEST_F(AssetEmitterTest, FinalizeFileContentMatchesEmittedBytes)
   // Create bytes with specific binary pattern
   std::vector<std::byte> expected_bytes(256);
   for (size_t i = 0; i < expected_bytes.size(); ++i) {
-    expected_bytes[i] = static_cast<std::byte>(i & 0xFF);
+    expected_bytes.at(i) = static_cast<std::byte>(i & 0xFF);
   }
 
   // Act
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     emitter.Emit(MakeAssetKey(1), AssetType::kMaterial,
       "/.cooked/Materials/Binary.omat", "Materials/Binary.omat",
       expected_bytes);
-    co_await emitter.Finalize();
+    EXPECT_TRUE((co_await emitter.Finalize()).has_value());
   });
 
   // Assert: File content matches exactly
@@ -436,11 +454,11 @@ NOLINT_TEST_F(AssetEmitterTest, EmitCreatesNestedDirectories)
   AssetEmitter emitter(*writer_, Layout(), test_dir_);
 
   // Act
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     emitter.Emit(MakeAssetKey(1), AssetType::kGeometry,
       "/.cooked/Deep/Nested/Path/Mesh.ogeo", "Deep/Nested/Path/Mesh.ogeo",
       MakeDescriptorBytes("nested-mesh"));
-    co_await emitter.Finalize();
+    EXPECT_TRUE((co_await emitter.Finalize()).has_value());
   });
 
   // Assert: Nested file exists
@@ -461,13 +479,13 @@ NOLINT_TEST_F(AssetEmitterTest, PendingCountReflectsQueuedWrites)
   // Act
   bool had_pending = false;
   bool success = false;
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     emitter.Emit(MakeAssetKey(1), AssetType::kMaterial,
       "/.cooked/Materials/Mat.omat", "Materials/Mat.omat",
       MakeDescriptorBytes("content"));
     had_pending = emitter.PendingCount() > 0;
 
-    success = co_await emitter.Finalize();
+    success = (co_await emitter.Finalize()).has_value();
   });
 
   // Assert
@@ -482,14 +500,14 @@ NOLINT_TEST_F(AssetEmitterTest, ErrorCountZeroAfterSuccessfulWrites)
   AssetEmitter emitter(*writer_, Layout(), test_dir_);
 
   // Act
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     for (uint32_t i = 1; i <= 10; ++i) {
       emitter.Emit(MakeAssetKey(i), AssetType::kMaterial,
         "/.cooked/Materials/Mat" + std::to_string(i) + ".omat",
         "Materials/Mat" + std::to_string(i) + ".omat",
         MakeDescriptorBytes("content-" + std::to_string(i)));
     }
-    co_await emitter.Finalize();
+    EXPECT_TRUE((co_await emitter.Finalize()).has_value());
   });
 
   // Assert
@@ -506,10 +524,10 @@ NOLINT_TEST_F(AssetEmitterTest, EmitEmptyBytesCreatesEmptyFile)
   std::vector<std::byte> empty_bytes;
 
   // Act
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     emitter.Emit(MakeAssetKey(1), AssetType::kMaterial,
       "/.cooked/Materials/Empty.omat", "Materials/Empty.omat", empty_bytes);
-    co_await emitter.Finalize();
+    EXPECT_TRUE((co_await emitter.Finalize()).has_value());
   });
 
   // Assert: File exists but is empty
@@ -528,14 +546,14 @@ NOLINT_TEST_F(AssetEmitterTest, EmitLargeDescriptorWrittenCorrectly)
   constexpr size_t kLargeSize = 100 * 1024;
   std::vector<std::byte> large_bytes(kLargeSize);
   for (size_t i = 0; i < kLargeSize; ++i) {
-    large_bytes[i] = static_cast<std::byte>(i & 0xFF);
+    large_bytes.at(i) = static_cast<std::byte>(i & 0xFF);
   }
 
   // Act
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     emitter.Emit(MakeAssetKey(1), AssetType::kScene,
       "/.cooked/Scenes/Large.oscene", "Scenes/Large.oscene", large_bytes);
-    co_await emitter.Finalize();
+    EXPECT_TRUE((co_await emitter.Finalize()).has_value());
   });
 
   // Assert: File has correct size and content
@@ -683,7 +701,8 @@ NOLINT_TEST_F(AssetEmitterTest, EmitVirtualPathWithCustomMountRootAccepted)
     "/Custom/Materials/Wood.omat", "Materials/Wood.omat", bytes));
 
   bool success = false;
-  co::Run(*loop_, [&]() -> Co<> { success = co_await emitter.Finalize(); });
+  co::Run(*loop_,
+    [&] -> Co<> { success = (co_await emitter.Finalize()).has_value(); });
 
   // Assert
   EXPECT_TRUE(success);
@@ -729,17 +748,20 @@ NOLINT_TEST_F(AssetEmitterTest, RecordsContainsSha256Hash)
     std::span<const std::byte>(bytes.data(), bytes.size()));
 
   // Act
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     emitter.Emit(MakeAssetKey(1), AssetType::kMaterial,
       "/.cooked/Materials/Hashed.omat", "Materials/Hashed.omat", bytes);
-    co_await emitter.Finalize();
+    EXPECT_TRUE((co_await emitter.Finalize()).has_value());
   });
 
   // Assert
   const auto& records = emitter.Records();
   ASSERT_EQ(records.size(), 1);
-  ASSERT_TRUE(records[0].descriptor_sha256.has_value());
-  EXPECT_EQ(records[0].descriptor_sha256.value(), expected_hash);
+  const auto& hash = records.at(0).descriptor_sha256;
+  if (!hash) {
+    FAIL() << "Expected descriptor hash";
+  }
+  EXPECT_EQ(*hash, expected_hash);
 }
 
 //! Verify SHA-256 is omitted when disabled.
@@ -750,16 +772,16 @@ NOLINT_TEST_F(AssetEmitterTest, RecordsSha256DisabledLeavesHashEmpty)
   const auto bytes = MakeDescriptorBytes("test-content");
 
   // Act
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     emitter.Emit(MakeAssetKey(1), AssetType::kMaterial,
       "/.cooked/Materials/NoHash.omat", "Materials/NoHash.omat", bytes);
-    co_await emitter.Finalize();
+    EXPECT_TRUE((co_await emitter.Finalize()).has_value());
   });
 
   // Assert
   const auto& records = emitter.Records();
   ASSERT_EQ(records.size(), 1);
-  EXPECT_FALSE(records[0].descriptor_sha256.has_value());
+  EXPECT_FALSE(records.at(0).descriptor_sha256.has_value());
 }
 
 //! Verify each record has unique SHA-256 for different content.
@@ -771,21 +793,23 @@ NOLINT_TEST_F(AssetEmitterTest, RecordsDifferentContentHasDifferentHash)
   const auto bytes2 = MakeDescriptorBytes("content-two");
 
   // Act
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     emitter.Emit(MakeAssetKey(1), AssetType::kMaterial,
       "/.cooked/Materials/One.omat", "Materials/One.omat", bytes1);
     emitter.Emit(MakeAssetKey(2), AssetType::kMaterial,
       "/.cooked/Materials/Two.omat", "Materials/Two.omat", bytes2);
-    co_await emitter.Finalize();
+    EXPECT_TRUE((co_await emitter.Finalize()).has_value());
   });
 
   // Assert
   const auto& records = emitter.Records();
   ASSERT_EQ(records.size(), 2);
-  ASSERT_TRUE(records[0].descriptor_sha256.has_value());
-  ASSERT_TRUE(records[1].descriptor_sha256.has_value());
-  EXPECT_NE(
-    records[0].descriptor_sha256.value(), records[1].descriptor_sha256.value());
+  const auto& first_hash = records.at(0).descriptor_sha256;
+  const auto& second_hash = records.at(1).descriptor_sha256;
+  if (!first_hash || !second_hash) {
+    FAIL() << "Expected both descriptor hashes";
+  }
+  EXPECT_NE(*first_hash, *second_hash);
 }
 
 } // namespace

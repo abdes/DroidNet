@@ -7,11 +7,17 @@
 #include <algorithm>
 #include <atomic>
 #include <cctype>
+#include <cstddef>
+#include <cstdint>
 #include <exception>
 #include <filesystem>
-#include <source_location>
+#include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
+#include <system_error>
+#include <utility>
+#include <vector>
 
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
@@ -22,29 +28,32 @@
 #include "DemoShell/UI/ContentVm.h"
 #include "RenderScene/MainModule.h"
 #include "RenderScene/RuntimePaths.h"
-#include <glm/common.hpp>
-#include <glm/gtc/quaternion.hpp>
+#include <glm/ext/quaternion_float.hpp>
+#include <glm/trigonometric.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Base/StringUtils.h>
 #include <Oxygen/Config/PathFinder.h>
 #include <Oxygen/Config/PathFinderConfig.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/InputContextHydration.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/InputMappingContextAsset.h>
+#include <Oxygen/Data/PakFormat_input.h>
+#include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Engine/AsyncEngine.h>
-#include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Input/InputMappingContext.h>
 #include <Oxygen/Input/InputSystem.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/Platform/Window.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
-#include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/SkyLight.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scene/Types/Flags.h>
 #include <Oxygen/Vortex/CompositionView.h>
 
 using oxygen::scene::SceneNodeFlags;
@@ -68,9 +77,10 @@ namespace {
 
   auto ToLowerAscii(std::string value) -> std::string
   {
-    std::ranges::transform(value, value.begin(), [](const unsigned char ch) {
-      return static_cast<char>(std::tolower(ch));
-    });
+    std::ranges::transform(
+      value, value.begin(), [](const unsigned char ch) -> char {
+        return static_cast<char>(std::tolower(ch));
+      });
     return value;
   }
 
@@ -91,7 +101,8 @@ namespace {
     const auto normalized = runtime::NormalizePath(pak_path);
     const auto mounted = asset_loader.EnumerateMountedSources();
     return std::ranges::any_of(mounted,
-      [&normalized](const content::IAssetLoader::MountedSourceEntry& source) {
+      [&normalized](
+        const content::IAssetLoader::MountedSourceEntry& source) -> bool {
         return source.source_kind
           == content::IAssetLoader::ContentSourceKind::kPak
           && runtime::NormalizePath(source.source_path) == normalized;
@@ -104,7 +115,8 @@ namespace {
     const auto normalized = runtime::NormalizePath(root_path);
     const auto mounted = asset_loader.EnumerateMountedSources();
     return std::ranges::any_of(mounted,
-      [&normalized](const content::IAssetLoader::MountedSourceEntry& source) {
+      [&normalized](
+        const content::IAssetLoader::MountedSourceEntry& source) -> bool {
         return source.source_kind
           == content::IAssetLoader::ContentSourceKind::kLooseCooked
           && runtime::NormalizePath(source.source_path) == normalized;
@@ -153,7 +165,7 @@ namespace {
     const std::vector<data::SourceKey>& source_keys) -> bool
   {
     return std::ranges::any_of(source_keys,
-      [&](const data::SourceKey& key) { return key == source_key; });
+      [&](const data::SourceKey& key) -> bool { return key == source_key; });
   }
 
   auto HydrateMountedInputContextsForSource(content::AssetLoader& asset_loader,
@@ -188,7 +200,7 @@ namespace {
 
       auto context_asset
         = co_await asset_loader.LoadAssetAsync<data::InputMappingContextAsset>(
-          entry.asset_key);
+          entry.asset_key, entry.source_key);
       if (!context_asset) {
         LOG_F(WARNING,
           "RenderScene: Failed to load mounted input context asset {}",
@@ -202,7 +214,7 @@ namespace {
         LOG_F(WARNING,
           "RenderScene: Failed to hydrate mounted input context asset {}",
           data::to_string(entry.asset_key));
-        (void)asset_loader.ReleaseAsset(entry.asset_key);
+        (void)asset_loader.ReleaseAsset(*context_asset);
         continue;
       }
 
@@ -213,7 +225,7 @@ namespace {
         input_system->ActivateMappingContext(hydrated);
       }
 
-      (void)asset_loader.ReleaseAsset(entry.asset_key);
+      (void)asset_loader.ReleaseAsset(*context_asset);
     }
 
     co_return;
@@ -260,15 +272,19 @@ auto MainModule::BuildDefaultWindowProperties() const
   constexpr uint32_t kDefaultHeight = 1400;
 
   platform::window::Properties props("Oxygen :: Examples :: RenderScene");
-  props.extent = platform::window::ExtentT { .width = kDefaultWidth,
-    .height = kDefaultHeight };
-  props.flags = { .hidden = false,
+  props.extent = platform::window::ExtentT {
+    .width = kDefaultWidth,
+    .height = kDefaultHeight,
+  };
+  props.flags = {
+    .hidden = false,
     .always_on_top = false,
     .full_screen = app_.fullscreen,
     .maximized = false,
     .minimized = false,
     .resizable = true,
-    .borderless = false };
+    .borderless = false,
+  };
   return props;
 }
 
@@ -288,8 +304,10 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
   shell_config.engine = observer_ptr { engine.get() };
   const auto runtime_paths = ResolveRuntimePaths();
   const auto& demo_root = runtime_paths.showcase;
-  shell_config.content_roots = { .content_root = runtime_paths.content,
-    .cooked_root = demo_root / ".cooked" };
+  shell_config.content_roots = {
+    .content_root = runtime_paths.content,
+    .cooked_root = demo_root / ".cooked",
+  };
   shell_config.panel_config.content_loader = true;
   shell_config.panel_config.camera_controls = true;
   shell_config.panel_config.lighting = true;
@@ -303,8 +321,10 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
   shell_config.initial_environment_profile = environment_profile_;
   shell_config.startup_skybox_path = app_.startup_skybox_path;
   shell_config.initial_preview_sun_enabled = preview_sun_enabled_;
-  shell_config.preview_scene_ready = [this] { return loaded_scene_active_; };
-  shell_config.on_scene_load_requested = [this](const ui::SceneEntry& entry) {
+  shell_config.preview_scene_ready
+    = [this] -> bool { return loaded_scene_active_; };
+  shell_config.on_scene_load_requested
+    = [this](const ui::SceneEntry& entry) -> void {
     pending_scene_load_ = SceneLoadRequest {
       .key = entry.key,
       .source_kind = entry.source.kind,
@@ -313,37 +333,50 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
     };
   };
   shell_config.on_scene_load_cancel_requested
-    = [this]() { scene_load_cancel_requested_ = true; };
-  shell_config.on_dump_texture_memory = [this](const std::size_t /*top_n*/) {
+    = [this] -> void { scene_load_cancel_requested_ = true; };
+  shell_config.on_dump_texture_memory
+    = [this](const std::size_t /*top_n*/) -> void {
     LOG_F(INFO,
       "RenderScene: Vortex runtime path does not expose legacy texture-memory "
       "dump telemetry");
   };
   shell_config.get_last_released_scene_key
-    = [this]() { return last_released_scene_key_; };
-  shell_config.on_force_trim = [this]() {
+    = [this] -> std::optional<data::AssetKey> {
+    return last_released_scene_key_;
+  };
+  shell_config.on_force_trim = [this] -> void {
     pending_source_requests_.push_back(PendingSourceRequest {
       .action = PendingSourceAction::kTrimCache,
     });
   };
-  shell_config.on_clear_mounts = [this]() {
+  shell_config.on_clear_mounts = [this] -> void {
     pending_source_requests_.push_back(PendingSourceRequest {
       .action = PendingSourceAction::kClear,
     });
   };
-  shell_config.on_pak_mounted = [this](const std::filesystem::path& path) {
+  shell_config.on_pak_mounted
+    = [this](const std::filesystem::path& path) -> void {
     pending_source_requests_.push_back(PendingSourceRequest {
       .action = PendingSourceAction::kMountPak,
       .path = path,
     });
   };
   shell_config.on_loose_index_loaded
-    = [this](const std::filesystem::path& path) {
-        pending_source_requests_.push_back(PendingSourceRequest {
-          .action = PendingSourceAction::kMountIndex,
-          .path = path,
-        });
-      };
+    = [this](const std::filesystem::path& path) -> void {
+    pending_source_requests_.push_back(PendingSourceRequest {
+      .action = PendingSourceAction::kMountIndex,
+      .path = path,
+    });
+  };
+
+  shell_config.on_generation_published
+    = [this](const ui::GenerationPublication& publication) -> void {
+    pending_source_requests_.push_back(PendingSourceRequest {
+      .action = PendingSourceAction::kMountGeneration,
+      .path = publication.cooked_root,
+      .previous_root = publication.previous_root,
+    });
+  };
 
   if (!shell->Initialize(shell_config)) {
     LOG_F(WARNING, "RenderScene: DemoShell initialization failed");
@@ -520,6 +553,56 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
         } else if (action == PendingSourceAction::kTrimCache) {
           asset_loader->TrimCache();
           refresh_library = true;
+        } else if (action == PendingSourceAction::kMountGeneration) {
+          const auto normalized = runtime::NormalizePath(path);
+          try {
+            std::optional<data::SourceKey> previous;
+            std::vector<data::SourceKey> older;
+            bool selected_is_mounted = false;
+            for (const auto& source : asset_loader->EnumerateMountedSources()) {
+              const auto mounted = runtime::NormalizePath(source.source_path);
+              if (source.source_kind
+                  == content::IAssetLoader::ContentSourceKind::kLooseCooked
+                && mounted == normalized) {
+                selected_is_mounted = true;
+              }
+              if (source.source_kind
+                  == content::IAssetLoader::ContentSourceKind::kLooseCooked
+                && mounted != normalized
+                && ((request.previous_root
+                      && mounted
+                        == runtime::NormalizePath(*request.previous_root))
+                  || mounted.parent_path() == normalized.parent_path())) {
+                previous = source.source_key;
+                older.push_back(source.source_key);
+              }
+            }
+            if (selected_is_mounted) {
+              previous.reset();
+            }
+            static_cast<void>(
+              asset_loader->MountLooseCookedGeneration(normalized, previous));
+            for (const auto key : older) {
+              if (!previous || key != *previous) {
+                static_cast<void>(
+                  asset_loader->RetireLooseCookedGeneration(key));
+              }
+            }
+            if (const auto write_time
+              = TryGetLastWriteTime(LooseIndexPathForRoot(normalized))) {
+              mounted_loose_index_write_times_.insert_or_assign(
+                normalized, *write_time);
+            }
+            refresh_library = true;
+          } catch (const std::system_error& error) {
+            if (error.code() == std::errc::device_or_resource_busy) {
+              pending_source_requests_.push_front(request);
+              break;
+            }
+            LOG_F(ERROR, "Retained generation mount failed: {}", error.what());
+          } catch (const std::exception& error) {
+            LOG_F(ERROR, "Retained generation mount failed: {}", error.what());
+          }
         } else if (action == PendingSourceAction::kMountPak) {
           const auto normalized = runtime::NormalizePath(path);
           try {
@@ -700,6 +783,7 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
           .source_path = scene.source.path,
           .scene_name = scene.name,
         };
+
         startup_scene_load_requested_ = true;
         LOG_F(INFO,
           "RenderScene: Resolved startup scene override '{}' to scene='{}' "
@@ -898,9 +982,11 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
       LOG_F(INFO, "RenderScene: Building staged scene (scene_key={})",
         data::to_string(swap.scene_key));
 
-      const bool same_scene_key = current_scene_key_.has_value()
-        && swap.scene_key == *current_scene_key_;
-      if (!same_scene_key) {
+      const bool same_scene_source = active_scene_asset_pin_ && swap.asset
+        && swap.asset->GetAssetKey() == active_scene_asset_pin_->GetAssetKey()
+        && swap.asset->GetSourceKey()
+          == active_scene_asset_pin_->GetSourceKey();
+      if (!same_scene_source) {
         ReleaseCurrentSceneAsset("scene swap");
       }
 
@@ -980,10 +1066,8 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
       }
       active_scene_load_key_.reset();
       scene_loader_.reset();
-    } else if (scene_loader_->IsConsumed()) {
-      if (scene_loader_->Tick()) {
-        scene_loader_.reset();
-      }
+    } else if ((scene_loader_->IsConsumed()) && (scene_loader_->Tick())) {
+      scene_loader_.reset();
     }
   }
 
@@ -1024,8 +1108,7 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
 
 auto MainModule::ReleaseCurrentSceneAsset(const char* reason) -> void
 {
-  // Drop active scene pin before releasing cache ownership for this scene key.
-  active_scene_asset_pin_.reset();
+  const auto retained_asset = std::move(active_scene_asset_pin_);
 
   if (!current_scene_key_.has_value()) {
     return;
@@ -1041,7 +1124,9 @@ auto MainModule::ReleaseCurrentSceneAsset(const char* reason) -> void
   LOG_F(INFO, "RenderScene: Releasing scene asset (reason={} key={})", reason,
     data::to_string(*current_scene_key_));
   last_released_scene_key_ = current_scene_key_;
-  (void)asset_loader->ReleaseAsset(*current_scene_key_);
+  if (retained_asset) {
+    (void)asset_loader->ReleaseAsset(*retained_asset);
+  }
   current_scene_key_.reset();
 }
 
@@ -1091,7 +1176,7 @@ auto MainModule::UpdateComposition(engine::FrameContext& context,
   // Also render our tools layer
   const auto imgui_view_id = GetOrCreateViewId("ImGuiView");
   views.push_back(vortex::CompositionView::ForImGui(
-    imgui_view_id, view, [](graphics::CommandRecorder&) { }));
+    imgui_view_id, view, [](graphics::CommandRecorder&) -> void { }));
 }
 
 auto MainModule::ResetMainViewState(

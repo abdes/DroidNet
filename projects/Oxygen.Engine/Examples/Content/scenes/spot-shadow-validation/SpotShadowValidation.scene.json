@@ -1,5 +1,5 @@
 {
-  "version": 8,
+  "version": 9,
   "name": "SpotShadowValidation",
   "nodes": [
     {
@@ -115,6 +115,7 @@
         "node": 5,
         "fov_y": 1.0,
         "aspect_ratio": 1.777778,
+        "aspect_mode": "fixed",
         "near_plane": 0.1,
         "far_plane": 1200.0
       }

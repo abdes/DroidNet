@@ -4,17 +4,22 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
+#include <cmath>
+#include <functional>
 
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
-#include <glm/gtx/matrix_decompose.hpp>
+#include <glm/ext/matrix_float4x4.hpp>
+#include <glm/ext/vector_float4.hpp>
+#include <glm/matrix.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Composition/Component.h>
+#include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Types/CameraAspectMode.h>
 #include <Oxygen/Core/Types/ViewHelpers.h>
+#include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
+#include <Oxygen/Scene/Detail/TransformComponent.h>
 
 namespace oxygen::scene {
 
@@ -32,10 +37,23 @@ namespace oxygen::scene {
 */
 auto PerspectiveCamera::ProjectionMatrix() const -> Mat4
 {
+  return ProjectionMatrix(ActiveViewport());
+}
+
+auto PerspectiveCamera::ProjectionMatrix(const ViewPort& target) const -> Mat4
+{
   // Engine canonical projection: right-handed, z in [0,1], reversed-Z.
-  const auto proj
-    = MakeReversedZPerspectiveProjectionRH_ZO(fov_y_, aspect_, near_, far_);
+  const auto proj = MakeReversedZPerspectiveProjectionRH_ZO(
+    fov_y_, ResolveAspectRatio(target), near_, far_);
   return proj;
+}
+
+auto PerspectiveCamera::ResolveAspectRatio(const ViewPort& target) const
+  -> float
+{
+  return aspect_mode_ == CameraAspectMode::kAuto && target.IsValid()
+    ? target.width / target.height
+    : aspect_;
 }
 
 inline auto PerspectiveCamera::UpdateDependencies(
@@ -66,7 +84,14 @@ auto PerspectiveCamera::ScreenToWorld(const Vec2& p, const Vec4& viewport) const
   const glm::vec4 ndc(x, y, 1.0F, 1.0F);
   // Compute inverse view-projection matrix
   const glm::mat4 view = glm::inverse(transform_->GetWorldMatrix());
-  const Mat4 proj = ProjectionMatrix();
+  const Mat4 proj = ProjectionMatrix(ViewPort {
+    .top_left_x = viewport.x,
+    .top_left_y = viewport.y,
+    .width = viewport.z,
+    .height = viewport.w,
+    .min_depth = 0.0F,
+    .max_depth = 1.0F,
+  });
   const glm::mat4 inv_vp = glm::inverse(proj * view);
   glm::vec4 world = inv_vp * ndc;
   if (world.w != 0.0F) {
@@ -91,7 +116,14 @@ auto PerspectiveCamera::WorldToScreen(const Vec2& p, const Vec4& viewport) const
   DCHECK_NOTNULL_F(transform_);
   const glm::vec4 world(p.x, p.y, 0.0F, 1.0F);
   const glm::mat4 view = glm::inverse(transform_->GetWorldMatrix());
-  const Mat4 proj = ProjectionMatrix();
+  const Mat4 proj = ProjectionMatrix(ViewPort {
+    .top_left_x = viewport.x,
+    .top_left_y = viewport.y,
+    .width = viewport.z,
+    .height = viewport.w,
+    .min_depth = 0.0F,
+    .max_depth = 1.0F,
+  });
   glm::vec4 clip = proj * view * world;
   if (clip.w != 0.0F) {
     clip /= clip.w;
@@ -128,7 +160,7 @@ auto PerspectiveCamera::ClippingRectangle() const -> Vec4
   // Return the horizontal/vertical FOV extents at the near plane in view space
   const float tan_half_fov = std::tan(fov_y_ * 0.5F);
   const float nh = near_ * tan_half_fov;
-  const float nw = nh * aspect_;
+  const float nw = nh * ResolveAspectRatio(ActiveViewport());
   // (left, bottom, right, top) at near plane
   return { -nw, -nh, nw, nh };
 }

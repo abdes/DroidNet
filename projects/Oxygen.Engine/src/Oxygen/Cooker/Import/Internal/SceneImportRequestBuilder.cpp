@@ -5,14 +5,26 @@
 //===----------------------------------------------------------------------===//
 
 #include <cmath>
+#include <exception>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
+#include <memory>
 #include <optional>
+#include <ostream>
 #include <string>
+#include <string_view>
+#include <utility>
 
+#include <Oxygen/Base/Filesystem.h>
+#include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/SceneImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ImportSettingsUtils.h>
+#include <Oxygen/Cooker/Import/MaterialSlotProvenance.h>
 #include <Oxygen/Cooker/Import/Naming.h>
+#include <Oxygen/Cooker/Import/SceneImportSettings.h>
 
 namespace oxygen::content::import::internal {
 
@@ -116,6 +128,56 @@ auto BuildSceneRequest(const SceneImportSettings& settings,
 
   ImportRequest request {};
   request.source_path = settings.source_path;
+  auto provenance_json = settings.material_slot_provenance_json;
+  if (!settings.material_slot_provenance_path.empty()) {
+    if (!provenance_json.empty()) {
+      error_stream << "ERROR: supply material-slot provenance inline or by "
+                      "file, not both\n";
+      return std::nullopt;
+    }
+    std::ifstream input(
+      base::ToNativePath(settings.material_slot_provenance_path));
+    if (!input) {
+      error_stream << "ERROR: cannot open material-slot provenance file\n";
+      return std::nullopt;
+    }
+    provenance_json.assign(std::istreambuf_iterator<char>(input), {});
+  }
+  try {
+    if (!provenance_json.empty()) {
+      request.material_slot_provenance
+        = MaterialSlotProvenance::Parse(provenance_json);
+    }
+    if (!settings.material_slot_source_identity.empty()) {
+      const auto identity
+        = Uuid::FromString(settings.material_slot_source_identity);
+      if (!identity) {
+        error_stream << "ERROR: material_slot_source_identity must be a "
+                        "canonical UUIDv7\n";
+        return std::nullopt;
+      }
+      if (request.material_slot_provenance
+        && request.material_slot_provenance->SourceIdentity()
+          != identity.value()) {
+        error_stream << "ERROR: material-slot provenance belongs to another "
+                        "source identity\n";
+        return std::nullopt;
+      }
+      if (!request.material_slot_provenance) {
+        request.material_slot_provenance
+          = std::make_shared<const MaterialSlotProvenance>(identity.value());
+      }
+    }
+    if (!request.material_slot_provenance) {
+      error_stream << "ERROR: model import requires retained material-slot "
+                      "provenance or source identity\n";
+      return std::nullopt;
+    }
+  } catch (const std::exception& error) {
+    error_stream << "ERROR: invalid material-slot provenance: " << error.what()
+                 << '\n';
+    return std::nullopt;
+  }
 
   std::filesystem::path root(settings.cooked_root);
   if (!root.is_absolute()) {

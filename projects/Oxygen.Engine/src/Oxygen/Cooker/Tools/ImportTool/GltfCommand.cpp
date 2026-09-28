@@ -4,19 +4,21 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <iostream>
-#include <sstream>
+#include <expected>
+#include <memory>
+#include <string>
+#include <string_view>
+#include <system_error>
+#include <utility>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Clap/Command.h>
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
-#include <Oxygen/Cooker/Import/Internal/SceneImportRequestBuilder.h>
 #include <Oxygen/Cooker/Tools/ImportTool/GltfCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/ImportRunner.h>
-#include <Oxygen/Cooker/Tools/ImportTool/MessageWriter.h>
 
 namespace oxygen::content::import::tool {
 
@@ -34,8 +36,8 @@ auto GltfCommand::BuildCommand() -> std::shared_ptr<clap::Command>
 {
   auto source_path = Option::Positional("source")
                        .About("Path to the source glTF/GLB file")
-                       .Required()
                        .WithValue<std::string>()
+                       .DefaultValue(std::string {})
                        .StoreTo(&options_.source_path)
                        .Build();
 
@@ -69,6 +71,45 @@ auto GltfCommand::BuildCommand() -> std::shared_ptr<clap::Command>
                               .StoreTo(&no_import_textures_)
                               .Build();
 
+  auto record = Option::WithKey("record")
+                  .Long("record")
+                  .About("Authored retained import record; omit source to "
+                         "replay its saved recipe")
+                  .WithValue<std::string>()
+                  .StoreTo(&options_.retained_record_path)
+                  .Build();
+  auto content_root
+    = Option::WithKey("content-root")
+        .Long("content-root")
+        .About(
+          "Owned Content area for retained records and immutable generations")
+        .WithValue<std::string>()
+        .StoreTo(&options_.content_root)
+        .Build();
+
+  auto source_identity
+    = Option::WithKey("material-slot-source-identity")
+        .Long("material-slot-source-identity")
+        .About("Retained UUIDv7 namespace; required when importing geometry")
+        .WithValue<std::string>()
+        .StoreTo(&options_.material_slot_source_identity)
+        .Build();
+  auto provenance = Option::WithKey("material-slot-provenance")
+                      .Long("material-slot-provenance")
+                      .About("JSON file containing retained material-slot "
+                             "provenance from an earlier import")
+                      .WithValue<std::string>()
+                      .StoreTo(&options_.material_slot_provenance_path)
+                      .Build();
+
+  auto recipe
+    = Option::WithKey("recipe")
+        .About("Apply a single-job native manifest to a retained record")
+        .Long("recipe")
+        .WithValue<std::string>()
+        .StoreTo(&options_.recipe_path)
+        .Build();
+
   auto no_import_materials = Option::WithKey("no-import-materials")
                                .About("Disable material import")
                                .Long("no-import-materials")
@@ -101,18 +142,19 @@ auto GltfCommand::BuildCommand() -> std::shared_ptr<clap::Command>
                       .About("Custom unit scale when unit-policy=custom")
                       .Long("unit-scale")
                       .WithValue<float>()
-                      .CallOnEachValue([this](const float value) {
+                      .CallOnEachValue([this](const float value) -> void {
                         options_.unit_scale = value;
                         options_.unit_scale_set = true;
                       })
                       .Build();
 
-  auto omitted_light_range = Option::WithKey("omitted-light-range")
-    .About("Range in meters for glTF lights without a range (default 4096)")
-    .Long("omitted-light-range")
-    .WithValue<float>()
-    .StoreTo(&options_.gltf_omitted_light_range_m)
-    .Build();
+  auto omitted_light_range
+    = Option::WithKey("omitted-light-range")
+        .About("Range in meters for glTF lights without a range (default 4096)")
+        .Long("omitted-light-range")
+        .WithValue<float>()
+        .StoreTo(&options_.gltf_omitted_light_range_m)
+        .Build();
 
   auto no_bake_transforms = Option::WithKey("no-bake-transforms")
                               .About("Disable transform baking into meshes")
@@ -158,6 +200,11 @@ auto GltfCommand::BuildCommand() -> std::shared_ptr<clap::Command>
     .WithOption(std::move(cooked_root))
     .WithOption(std::move(job_name))
     .WithOption(std::move(report))
+    .WithOption(std::move(record))
+    .WithOption(std::move(recipe))
+    .WithOption(std::move(content_root))
+    .WithOption(std::move(source_identity))
+    .WithOption(std::move(provenance))
     .WithOption(std::move(no_import_textures))
     .WithOption(std::move(no_import_materials))
     .WithOption(std::move(no_import_geometry))
@@ -180,7 +227,6 @@ auto GltfCommand::Run() -> std::expected<void, std::error_code>
   }
   DCHECK_F(global_options_ != nullptr && global_options_->writer,
     "Global message writer must be set by main");
-  auto writer = global_options_->writer;
 
   settings.import_textures = !no_import_textures_;
   settings.import_materials = !no_import_materials_;
@@ -188,22 +234,7 @@ auto GltfCommand::Run() -> std::expected<void, std::error_code>
   settings.import_scene = !no_import_scene_;
   settings.bake_transforms = !no_bake_transforms_;
 
-  std::optional<ImportRequest> request;
-  {
-    std::ostringstream err;
-    request = internal::BuildSceneRequest(settings, ImportFormat::kGltf, err);
-    if (!request.has_value()) {
-      const auto msg = err.str();
-      if (!msg.empty()) {
-        writer->Error(msg);
-      }
-      return std::unexpected(std::make_error_code(std::errc::invalid_argument));
-    }
-  }
-
-  return RunImportJob(*request, writer, settings.report_path,
-    global_options_->command_line, !global_options_->no_tui,
-    global_options_->import_service);
+  return RunSceneImportJob(settings, ImportFormat::kGltf, *global_options_);
 }
 
 } // namespace oxygen::content::import::tool

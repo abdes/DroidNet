@@ -141,6 +141,11 @@ IfMacros:
 # matching source header in the Oxygen group rather than ahead of the library.
 IncludeBlocks: Regroup
 IncludeCategories:
+  # Jolt initializes its namespace and allocator macros before its leaf headers.
+  - Regex: '^[<"]Jolt/Jolt\.h[>"]$'
+    Priority: -4
+    SortPriority: -4
+    CaseSensitive: true
   # Windows.h initializes SDK architecture macros before Win32 leaf headers.
   - Regex: '^[<"]windows\.h[>"]$'
     Priority: -3

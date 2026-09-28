@@ -27,7 +27,7 @@ inline auto LoadInputActionAsset(const LoaderContext& context)
   DCHECK_NOTNULL_F(context.desc_reader, "expecting desc_reader not to be null");
   auto& reader = *context.desc_reader;
 
-  auto check_result = [](auto&& result, const char* field) {
+  auto check_result = [](auto&& result, const char* field) -> auto {
     if (!result) {
       LOG_F(
         ERROR, "-failed- on {}: {}", field, result.error().message().c_str());
@@ -56,7 +56,7 @@ inline auto LoadInputActionAsset(const LoaderContext& context)
   }
 
   return std::make_unique<data::InputActionAsset>(
-    context.current_asset_key, desc);
+    context.current_asset_key, desc, context.source_key);
 }
 
 static_assert(oxygen::content::LoadFunction<decltype(LoadInputActionAsset)>);

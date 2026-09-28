@@ -4,8 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
+#include <expected>
 #include <filesystem>
 #include <fstream>
+#include <ios>
 #include <iterator>
 #include <memory>
 #include <optional>
@@ -15,15 +18,14 @@
 #include <system_error>
 #include <vector>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Clap/CommandLineContext.h> // used
+#include <Oxygen/Clap/CommandLineContext.h> // IWYU pragma: keep
 #include <Oxygen/Clap/Fluent/CliBuilder.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Tools/ImportTool/BatchCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/GlobalOptions.h>
 #include <Oxygen/Cooker/Tools/ImportTool/MessageWriter.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 
@@ -168,11 +170,37 @@ protected:
     return writer_->JoinedMessages();
   }
 
+  auto ContinueAfterValidationErrors() -> void { options_.fail_fast = false; }
+
 private:
   GlobalOptions options_ {};
   std::unique_ptr<CapturingWriter> writer_ {};
   std::unique_ptr<AsyncImportService> service_ {};
 };
+
+NOLINT_TEST_F(BatchCommandPhysicsDagTest,
+  RejectedDescriptorFailsBatchEvenWhenValidJobsSucceed)
+{
+  ContinueAfterValidationErrors();
+  const auto root = MakeScenarioDir("rejected_descriptor_with_valid_material");
+  const auto manifest_path = root / "import-manifest.json";
+  WriteTextFile(root / "Valid.material.json", R"({"name":"Valid"})");
+  WriteTextFile(root / "Invalid.geometry.json", R"({"name":"Invalid"})");
+  WriteTextFile(manifest_path, R"({
+    "version": 1,
+    "output": ".cooked",
+    "jobs": [
+      {"type":"material-descriptor","source":"Valid.material.json"},
+      {"type":"geometry-descriptor","source":"Invalid.geometry.json"}
+    ]
+  })");
+
+  const auto result = RunBatch(manifest_path);
+  ASSERT_FALSE(result.has_value()) << Messages();
+  EXPECT_EQ(result.error(), std::make_error_code(std::errc::invalid_argument));
+  EXPECT_TRUE(std::filesystem::exists(root / ".cooked/Materials/Valid.omat"));
+  EXPECT_NE(Messages().find("validation_errors=1"), std::string::npos);
+}
 
 //! Large manifests defer saturated submissions and emit every independent
 //! asset.

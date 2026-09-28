@@ -47,6 +47,7 @@ def _spec() -> dict:
                         "index_buffer": None,
                         "submeshes": [
                             {
+                                "slot_id": "07df2c5b-285a-5c99-b9a0-8f77774c55c7",
                                 "name": "sm0",
                                 "material": "mat0",
                                 "bounding_box_min": [0.0, 0.0, 0.0],

@@ -4,14 +4,38 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <Windows.h> // IWYU pragma: keep
+
+#include <algorithm>
+#include <cerrno>
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
+#include <memory>
+#include <new>
+#include <system_error>
+#include <utility>
+#include <vector>
+
+#include <asio/buffer.hpp>
 #include <asio/read_at.hpp>
 #include <asio/windows/random_access_handle.hpp>
+#include <errhandlingapi.h>
+#include <fileapi.h>
+#include <handleapi.h>
+#include <minwindef.h>
+#include <winbase.h>
+#include <winerror.h>
+#include <winnt.h>
 
-#include <Windows.h>
-
+#include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Result.h>
+#include <Oxygen/Cooker/Import/FileError.h>
+#include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/WindowsFileReader.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/asio.h>
 
 namespace {
@@ -45,6 +69,7 @@ auto MapWindowsError(DWORD error) -> FileError
   case ERROR_INVALID_NAME:
   case ERROR_BAD_PATHNAME:
     return FileError::kInvalidPath;
+  case ERROR_FILENAME_EXCED_RANGE:
   case ERROR_BUFFER_OVERFLOW:
     return FileError::kPathTooLong;
   case ERROR_OPERATION_ABORTED:
@@ -103,7 +128,8 @@ auto WindowsFileReader::ReadFile(const std::filesystem::path& path,
   }
 
   // Open file with FILE_FLAG_OVERLAPPED for async I/O via IOCP
-  HANDLE file_handle = CreateFileW(path.c_str(), GENERIC_READ,
+  const auto native_path = base::ToNativePath(path);
+  HANDLE file_handle = CreateFileW(native_path.c_str(), GENERIC_READ,
     FILE_SHARE_READ, // Allow concurrent reads
     nullptr, OPEN_EXISTING,
     FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED | FILE_FLAG_SEQUENTIAL_SCAN,
@@ -197,17 +223,9 @@ auto WindowsFileReader::GetFileInfo(const std::filesystem::path& path)
 
   // Use std::filesystem for metadata (synchronous but fast)
   std::error_code ec;
-  auto status = std::filesystem::status(path, ec);
+  auto status = std::filesystem::status(base::ToNativePath(path), ec);
   if (ec) {
-    const FileError code = std::filesystem::exists(path, ec)
-      ? FileError::kIOError
-      : FileError::kNotFound;
-    co_return Err(FileErrorInfo {
-      .code = code,
-      .path = path,
-      .system_error = ec,
-      .message = ec.message(),
-    });
+    co_return Err(MakeFileError(path, ec));
   }
 
   FileInfo info {};
@@ -215,7 +233,7 @@ auto WindowsFileReader::GetFileInfo(const std::filesystem::path& path)
   info.is_symlink = std::filesystem::is_symlink(status);
 
   if (!info.is_directory) {
-    info.size = std::filesystem::file_size(path, ec);
+    info.size = std::filesystem::file_size(base::ToNativePath(path), ec);
     if (ec) {
       co_return Err(FileErrorInfo {
         .code = FileError::kIOError,
@@ -226,7 +244,8 @@ auto WindowsFileReader::GetFileInfo(const std::filesystem::path& path)
     }
   }
 
-  info.last_modified = std::filesystem::last_write_time(path, ec);
+  info.last_modified
+    = std::filesystem::last_write_time(base::ToNativePath(path), ec);
   if (ec) {
     // Non-fatal, just log warning
     DLOG_F(WARNING, "Failed to get last_write_time for %s: %s",
@@ -249,7 +268,7 @@ auto WindowsFileReader::Exists(const std::filesystem::path& path)
   }
 
   std::error_code ec;
-  const bool exists = std::filesystem::exists(path, ec);
+  const bool exists = std::filesystem::exists(base::ToNativePath(path), ec);
   if (ec) {
     // Only report true errors, not "doesn't exist"
     if (ec.value() != ENOENT && ec.value() != ERROR_FILE_NOT_FOUND

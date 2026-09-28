@@ -4,15 +4,19 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <cctype>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include <lua.h>
 #include <lualib.h>
 
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Engine/IAsyncEngine.h>
 #include <Oxygen/Physics/Body/BodyDesc.h>
 #include <Oxygen/Physics/Handles.h>
@@ -33,7 +37,6 @@ namespace {
     if (!std::isfinite(value)) {
       luaL_error(state, "physics descriptor field '%s' must be finite",
         field_name == nullptr ? "<unknown>" : field_name);
-      return 0.0F;
     }
     return value;
   }
@@ -61,7 +64,6 @@ namespace {
       lua_pop(state, 1);
       luaL_error(
         state, "world_boundary shape requires 'boundary_mode' (or 'mode')");
-      return physics::WorldBoundaryMode::kInvalid;
     }
 
     physics::WorldBoundaryMode mode = physics::WorldBoundaryMode::kInvalid;
@@ -88,7 +90,6 @@ namespace {
     if (mode == physics::WorldBoundaryMode::kInvalid) {
       luaL_error(state,
         "world_boundary boundary_mode must be 'aabb_clamp' or 'plane_set'");
-      return physics::WorldBoundaryMode::kInvalid;
     }
     return mode;
   }
@@ -105,7 +106,6 @@ namespace {
       lua_pop(state, 1);
       luaL_error(
         state, "shape.cooked_payload requires 'payload_type' (or 'type')");
-      return physics::ShapePayloadType::kInvalid;
     }
 
     physics::ShapePayloadType payload_type
@@ -143,7 +143,6 @@ namespace {
       luaL_error(state,
         "shape.cooked_payload.payload_type must be one of 'convex', 'mesh', "
         "'height_field', or 'compound'");
-      return physics::ShapePayloadType::kInvalid;
     }
     return payload_type;
   }
@@ -161,7 +160,6 @@ namespace {
       return static_cast<uint8_t>(10 + (c - 'A'));
     }
     luaL_error(state, "%s contains non-hex character", field_name);
-    return 0;
   }
 
   auto ParseHexPayloadData(lua_State* state, const std::string_view hex_text,
@@ -170,14 +168,13 @@ namespace {
     if ((hex_text.size() % 2U) != 0U) {
       luaL_error(state, "%s must contain an even number of hex characters",
         field_name == nullptr ? "shape.cooked_payload.data_hex" : field_name);
-      return {};
     }
 
     std::vector<uint8_t> bytes {};
     bytes.reserve(hex_text.size() / 2U);
     for (size_t i = 0; i < hex_text.size(); i += 2U) {
-      const auto hi = ParseHexNybble(state, hex_text[i], field_name);
-      const auto lo = ParseHexNybble(state, hex_text[i + 1U], field_name);
+      const auto hi = ParseHexNybble(state, hex_text.at(i), field_name);
+      const auto lo = ParseHexNybble(state, hex_text.at(i + 1U), field_name);
       bytes.push_back(static_cast<uint8_t>((hi << 4U) | lo));
     }
     return bytes;
@@ -196,7 +193,6 @@ namespace {
       lua_pop(state, 1);
       luaL_error(state,
         "shape.cooked_payload.payload_type does not match this shape type");
-      return {};
     }
 
     std::vector<uint8_t> payload_data {};
@@ -222,7 +218,6 @@ namespace {
 
     if (payload_data.empty()) {
       luaL_error(state, "shape.cooked_payload data must be non-empty");
-      return {};
     }
 
     return physics::CookedShapePayload {
@@ -858,7 +853,6 @@ auto ParseCollisionShape(lua_State* state, const int table_index)
       if (!TryCheckVec3(state, -1, extents)) {
         lua_pop(state, 1);
         luaL_error(state, "shape.extents must be a vector");
-        return physics::SphereShape {};
       }
       lua_pop(state, 1);
     } else {
@@ -868,7 +862,6 @@ auto ParseCollisionShape(lua_State* state, const int table_index)
         if (!TryCheckVec3(state, -1, extents)) {
           lua_pop(state, 1);
           luaL_error(state, "shape.half_extents must be a vector");
-          return physics::SphereShape {};
         }
       }
       lua_pop(state, 1);
@@ -932,7 +925,6 @@ auto ParseCollisionShape(lua_State* state, const int table_index)
       if (!TryCheckVec3(state, -1, normal)) {
         lua_pop(state, 1);
         luaL_error(state, "shape.normal must be a vector");
-        return physics::SphereShape {};
       }
     }
     lua_pop(state, 1);
@@ -949,7 +941,6 @@ auto ParseCollisionShape(lua_State* state, const int table_index)
     if (!TryCheckVec3(state, -1, limits_min)) {
       lua_pop(state, 1);
       luaL_error(state, "shape.limits_min must be a vector");
-      return physics::SphereShape {};
     }
     lua_pop(state, 1);
 
@@ -958,7 +949,6 @@ auto ParseCollisionShape(lua_State* state, const int table_index)
     if (!TryCheckVec3(state, -1, limits_max)) {
       lua_pop(state, 1);
       luaL_error(state, "shape.limits_max must be a vector");
-      return physics::SphereShape {};
     }
     lua_pop(state, 1);
 
@@ -976,7 +966,6 @@ auto ParseCollisionShape(lua_State* state, const int table_index)
   }
 
   luaL_error(state, "unsupported shape.type '%s'", shape_type);
-  return physics::SphereShape {};
 }
 
 auto ParseBodyIdArray(lua_State* state, const int table_index)
@@ -1004,10 +993,8 @@ auto ParseBodyIdOrHandle(lua_State* state, const int index) -> physics::BodyId
   const auto raise_type_error = [&]() -> physics::BodyId {
     if (index > 0) {
       luaL_argerror(state, index, "expected BodyId or BodyHandle userdata");
-      return physics::kInvalidBodyId;
     }
     luaL_error(state, "expected BodyId or BodyHandle userdata");
-    return physics::kInvalidBodyId;
   };
 
   if (lua_isuserdata(state, abs_index) == 0) {

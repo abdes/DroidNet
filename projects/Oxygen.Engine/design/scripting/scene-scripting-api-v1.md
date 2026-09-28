@@ -249,45 +249,52 @@ Notes:
 
 ## 5. Camera Component API
 
-## 5.1 Attach / Detach
+Camera methods are on `SceneNode`. `node:camera()` returns that node when it
+has a camera, or `nil` otherwise.
 
-On `SceneNode`:
+### 5.1 Attach and detach
 
-1. `node:attach_perspective_camera(opts: table?) -> CameraComponent`
-2. `node:attach_orthographic_camera(opts: table?) -> CameraComponent`
-3. `node:detach_camera() -> boolean`
+- `node:attach_perspective_camera(opts: table?) -> boolean`
+- `node:attach_orthographic_camera(opts: table?) -> boolean`
+- `node:detach_camera() -> boolean`
+- `node:has_camera() -> boolean`
+- `node:camera_type() -> "perspective" | "orthographic" | nil`
 
-`CameraComponent`:
+### 5.2 Common settings
 
-1. `camera:type() -> "perspective" | "orthographic"`
+- `node:camera_get_viewport() -> table?`
+- `node:camera_set_viewport(vp: table?) -> boolean`; `nil` clears the override.
+  Viewport fields are `x`, `y`, `width`, `height`, `min_depth` and `max_depth`.
+- `node:camera_get_exposure() -> table` returns
+  `{aperture_f, shutter_rate, iso, ev}`.
+- `node:camera_set_exposure(exposure: table) -> boolean` accepts
+  `{aperture_f, shutter_rate, iso}`.
 
-## 5.2 Common
+### 5.3 Perspective
 
-1. `camera:get_viewport() -> table?`
-   Shape: `{x, y, width, height}`
-2. `camera:set_viewport(vp: table?) -> boolean`
-   `nil` clears override.
-3. `camera:get_exposure() -> table`
-   Shape: `{aperture_f, shutter_rate, iso, ev}`
-4. `camera:set_exposure(exposure: table) -> boolean`
-   Accepts `{aperture_f, shutter_rate, iso}`.
+`node:camera_get_perspective()` returns
+`{fov_y, aspect, aspect_mode, near_plane, far_plane}`.
+`node:camera_set_perspective(fields)` updates supplied fields and returns a boolean.
+The same fields are accepted by `attach_perspective_camera`.
 
-## 5.3 Perspective
+`aspect_mode` is `"auto"` or `"fixed"`; new cameras use Auto. Auto resolves the
+aspect from each target without changing the retained `aspect` or vertical FOV.
+Fixed uses the retained ratio. An invalid mode rejects the patch before changing
+any field. Switching to Auto retains the ratio for a later switch to Fixed.
 
-1. `camera:get_fov_y_radians() -> number`
-2. `camera:set_fov_y_radians(v: number) -> boolean`
-3. `camera:get_aspect_ratio() -> number`
-4. `camera:set_aspect_ratio(v: number) -> boolean`
-5. `camera:get_near_plane() -> number`
-6. `camera:set_near_plane(v: number) -> boolean`
-7. `camera:get_far_plane() -> number`
-8. `camera:set_far_plane(v: number) -> boolean`
+Individual numeric accessors remain available as
+`camera_get_fov_y_radians` / `camera_set_fov_y_radians`,
+`camera_get_aspect_ratio` / `camera_set_aspect_ratio`,
+`camera_get_near_plane` / `camera_set_near_plane`, and
+`camera_get_far_plane` / `camera_set_far_plane`. Setting the ratio does not change
+the aspect mode.
 
-## 5.4 Orthographic
+### 5.4 Orthographic
 
-1. `camera:get_extents() -> table`
-   Shape: `{left, right, bottom, top, near_plane, far_plane}`
-2. `camera:set_extents(extents: table) -> boolean`
+`node:camera_get_orthographic()` returns
+`{left, right, bottom, top, near_plane, far_plane}`;
+`node:camera_set_orthographic(fields)` updates extents.
+`camera_get_extents` and `camera_set_extents` expose the same operations.
 
 ## 6. Light Component API
 

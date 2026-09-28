@@ -58,8 +58,10 @@ public:
   };
 
   OXGN_COOK_API explicit PhysicsMaterialImportPipeline(
-    co::ThreadPool& thread_pool, Config config = {});
-  OXGN_COOK_API ~PhysicsMaterialImportPipeline();
+    co::ThreadPool& thread_pool);
+  OXGN_COOK_API PhysicsMaterialImportPipeline(
+    co::ThreadPool& thread_pool, Config config);
+  OXGN_COOK_API ~PhysicsMaterialImportPipeline() override;
 
   OXYGEN_MAKE_NON_COPYABLE(PhysicsMaterialImportPipeline)
   OXYGEN_MAKE_NON_MOVABLE(PhysicsMaterialImportPipeline)

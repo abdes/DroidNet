@@ -2,7 +2,7 @@
 
 This document complements `overview.md` and is the **deep dive** on how Content
 tracks dependencies and uses caching to enforce safe lifetimes for assets and
-resources.
+resources. See also the [planned simplification](#planned-identity-and-ownership-simplification).
 
 > Canonical status/roadmap: `implementation_plan.md`.
 >
@@ -88,10 +88,19 @@ This is why unloading is deterministic: it happens **only** on eviction.
 - Asset→asset: `asset_dependencies_[dependent] = { dependency, ... }`
 - Asset→resource: `resource_dependencies_[dependent] = { resource_key, ... }`
 
+Asset nodes use the existing source-qualified `uint64_t` cache identity. A stable
+AssetKey may have old and new generation nodes simultaneously. Resource nodes use
+ResourceKey; hashing keeps the original source metadata after lookup retirement.
+`Data::Asset::GetSourceKey()` identifies the decoded origin, and Content-owned
+shared-pointer deleters retain its source through the last loaded owner.
+
 There is no reverse map in production builds.
 
-In debug builds, `ForEachDependent(...)` exists, implemented by scanning the
-forward map (useful for tests/diagnostics, not for runtime behavior).
+Debug `GetDebugAssetDependencyMap()` exposes actual cache identities;
+`GetDebugAssetKey()` labels them. `ForEachDependent(AssetKey, ...)` resolves the
+current winner and scans its direct incoming edges. Runtime contextual lookup
+uses the per-AssetKey identity index and direct-edge membership, without a graph
+traversal.
 
 ### Dependency types
 
@@ -139,8 +148,12 @@ Notes:
 
 ## Release and unload ordering (what happens on ReleaseAsset)
 
-Release is explicit: callers must call `ReleaseAsset(key)` when they’re done
-using an asset.
+Release is explicit: `ReleaseAsset(asset)` checks in that exact decoded origin.
+`ReleaseAsset(AssetKey)` addresses the current winner and is unsuitable for an
+object retained across source replacement. An object from an immutable generation
+retains its source lease after cache eviction and continues reading those bytes.
+Mutable roots require reader quiescence before replacement; the planned source
+instance contract below explicitly revokes their old read capability.
 
 The release algorithm is depth-first and ordered:
 
@@ -153,10 +166,10 @@ invokes the registered unloader.
 
 ```mermaid
 flowchart TD
-   A["Caller: ReleaseAsset(AssetKey)"] --> B["ReleaseAssetTree(AssetKey)"]
+   A["Caller: ReleaseAsset(asset)"] --> B["ReleaseAssetTree(cache identity)"]
    B --> C["CheckIn all resource deps<br/>(resource_dependencies_[key])"]
    C --> D["Recurse ReleaseAssetTree on asset deps<br/>(asset_dependencies_[key])"]
-   D --> E["CheckIn asset itself<br/>(HashAssetKey(key))"]
+   D --> E["CheckIn asset itself<br/>(source-qualified cache identity)"]
    E --> F{"Refcount reaches 0?"}
    F -- No --> G["Entry remains cached"]
    F -- Yes --> H["Cache evicts entry"]
@@ -250,3 +263,58 @@ Deferred / out of scope:
 
 - GPU residency and GPU-side lifetime management. Content eviction triggers
   Content unloaders only; Renderer-owned GPU residency is handled separately.
+
+## Planned identity and ownership simplification
+
+Status: planned for M08.1.5–M08.1.6. This replaces the current cache identity and
+manual checkout protocol; it is not a claim about the implementation above.
+
+| Identity           | Fields                                                             |
+| ------------------ | ------------------------------------------------------------------ |
+| SourceOrigin       | Persistent SourceKey plus runtime SourceInstanceId.                |
+| Asset              | SourceInstanceId and AssetKey.                                     |
+| Cooked resource    | SourceInstanceId, explicit ResourceKind and resource index.        |
+| Synthetic resource | ResourceKind and producer-owned serial/lifetime.                   |
+| ContentId          | Nonzero monotonic uint64, never reused within its loader lifetime. |
+
+Use Base Uuid/NamedType for source instances and handles. Mint a new source
+instance on every open/refresh, including unchanged SourceKey/index bytes. Intern
+full identities using equality; hashes select buckets only. Interning/publication
+belongs to the loader thread; decode workers report identities without modifying
+registries. One owning identity map and nonowning ID index replace the asset and
+resource reverse registries, packed source IDs and hash-as-identity conversions.
+Nexus recycled-slot machinery is unnecessary for nonrecycled IDs.
+
+Source instances retain touched locator records while mounted/readable, even when
+decoded entries are evicted. This preserves lazy reload through a ResourceKey.
+Metadata costs O(distinct locators touched in live sources); measure that cost.
+Retirement removes current-winner eligibility. Immutable sources remain exactly
+readable through retained ownership; mutable roots revoke old read capability
+before path reuse. Distinct identity alone cannot preserve overwritten bytes.
+
+Owning acquisitions return aliasing shared_ptr checkout controls; the cache stores
+bare decoded pointers. Coalesce decoding, then create one control per accepted
+request with its exact internal/external role. Copies share that request's control.
+An in-flight residency hold protects the bare result until surviving requests have
+acquired their controls. Release that hold exactly once after delivery or when all
+waiters cancel; cancellation during delivery must leave neither an eviction gap
+nor an unowned hold.
+Each parent's dependency edge and Data child pointer share one internal control;
+there is no second Touch/pin or control-to-parent reference. Pins remain distinct
+residency requests. Explicit Peek/metadata inspection stays allocation-free and
+cannot be retained across suspension or source mutation.
+
+Last-control destruction queues its already-allocated release record. Enqueue and
+shutdown closure must linearize: accepted releases drain on the owner thread;
+late destruction releases storage without invoking a destroyed loader. No throwing
+lock, allocation or GPU operation belongs in that destructor. Remove manual release
+balancing only after all callers migrate. Keep eviction policy unchanged initially;
+do not force child eviction while a valid extracted child pointer survives.
+
+Required checks: forced hash collisions; same-key mutable refresh; exact old-source
+reads; lazy reload after eviction; mixed-role coalesced requests; all-waiter and
+delivery-time cancellation; shared-parent and
+extracted-child lifetimes; off-thread destruction and shutdown races. Measure cache
+metadata and owning-acquisition costs; preserve IBL hot-path allocations and GPU
+retirement behavior. Reference: UE5.7.4 FStreamableHandle ownership in
+`Engine/Classes/Engine/StreamableManager.h`; Oxygen's CPU/GPU boundary remains its own.

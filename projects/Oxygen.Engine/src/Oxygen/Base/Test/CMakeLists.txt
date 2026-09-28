@@ -55,6 +55,7 @@ m_gtest_program(
 )
 
 m_gtest_program(StaticVector SOURCES "StaticVector_test.cpp")
+m_gtest_program(Span SOURCES "Span_test.cpp")
 m_gtest_program(
   Logging
   SOURCES
@@ -79,6 +80,7 @@ m_gtest_program(
 # Hash utilities tests
 m_gtest_program(Hash SOURCES "Hash_test.cpp")
 m_gtest_program(Sha256 SOURCES "Sha256_test.cpp")
+m_gtest_program(Filesystem SOURCES "Filesystem_test.cpp")
 
 m_gtest_program(NoInline SOURCES "NoInline_test.cpp")
 m_gtest_program(Result SOURCES "Result_test.cpp")

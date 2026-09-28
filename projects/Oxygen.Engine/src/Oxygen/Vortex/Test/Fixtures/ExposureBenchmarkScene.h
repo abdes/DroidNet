@@ -25,7 +25,6 @@
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/GeometryAsset.h>
-#include <Oxygen/Data/HalfFloat.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
@@ -117,11 +116,8 @@ struct MixedExposureBenchmarkScene {
           rgba.z,
         },
         std::begin(desc.emissive_factor),
-        [emissive_scale](const float channel) -> data::HalfFloat {
-          return data::HalfFloat {
-            emissive_scale * channel,
-          };
-        });
+        [emissive_scale](
+          const float channel) -> float { return emissive_scale * channel; });
       std::fill_n(std::begin(desc.base_color), 3, 0.0F);
     }
     return std::make_shared<const data::MaterialAsset>(

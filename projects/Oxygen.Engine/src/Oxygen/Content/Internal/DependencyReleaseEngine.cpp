@@ -5,79 +5,51 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <unordered_map>
 #include <unordered_set>
-#include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ScopeGuard.h>
+#include <Oxygen/Content/Internal/DependencyGraphStore.h>
 #include <Oxygen/Content/Internal/DependencyReleaseEngine.h>
+#include <Oxygen/Data/AssetKey.h>
 
 namespace oxygen::content::internal {
 
-auto DependencyReleaseEngine::ReleaseAssetTree(const data::AssetKey& key,
+auto DependencyReleaseEngine::ReleaseAssetTree(const uint64_t key,
   DependencyGraphStore& graph, CacheT& content_cache,
   const ReleaseCallbacks& callbacks) -> void
 {
-#if !defined(NDEBUG)
-  // Policy: release-recursion visit guard is debug diagnostics only.
-  // Release assumes acyclic graphs validated upstream.
-  static thread_local std::unordered_set<data::AssetKey> release_visit_set;
+#ifndef NDEBUG
+  // Cycles are rejected upstream; the recursion guard is debug diagnostics.
+  static thread_local std::unordered_set<uint64_t> release_visit_set;
   const bool inserted = release_visit_set.emplace(key).second;
   DCHECK_F(inserted, "Cycle encountered during ReleaseAssetTree recursion");
-  class VisitGuard final {
-  public:
-    VisitGuard(
-      std::unordered_set<data::AssetKey>& set, data::AssetKey k) noexcept
-      : set_(set)
-      , key_(std::move(k))
-    {
-    }
-    ~VisitGuard() { set_.erase(key_); }
-    VisitGuard(const VisitGuard&) = delete;
-    VisitGuard& operator=(const VisitGuard&) = delete;
-
-  private:
-    std::unordered_set<data::AssetKey>& set_;
-    data::AssetKey key_;
-  } visit_guard(release_visit_set, key);
+  const auto visit_guard
+    = ScopeGuard([key] noexcept -> void { release_visit_set.erase(key); });
 #endif
 
-  // Release resource dependencies first.
-  if (const auto* resource_deps = graph.FindResourceDependencies(key);
-    resource_deps != nullptr) {
-    for (const auto& res_key : *resource_deps) {
-      content_cache.CheckIn(callbacks.hash_resource(res_key));
+  // Detach before callbacks can re-enter the loader and mutate its graph.
+  auto resource_deps = graph.RemoveResourceDependencies(key);
+  auto asset_deps = graph.RemoveAssetDependencies(key);
+  if (resource_deps) {
+    for (const auto resource : *resource_deps) {
+      content_cache.CheckIn(callbacks.hash_resource(resource));
     }
-    (void)graph.RemoveResourceDependencies(key);
   }
-
-  // Then release asset dependencies.
-  if (const auto* asset_deps = graph.FindAssetDependencies(key);
-    asset_deps != nullptr) {
-    for (const auto& dep_key : *asset_deps) {
-      const auto dep_hash_opt = callbacks.resolve_asset_hash(dep_key);
-      const auto resolved_hash = dep_hash_opt.has_value()
-        ? *dep_hash_opt
-        : callbacks.hash_asset_fallback(dep_key);
-      const auto dep_checkout_count
-        = content_cache.GetCheckoutCount(resolved_hash);
-
-      // Only recurse when retained solely by current dependency edge.
-      if (dep_checkout_count > 1U) {
-        content_cache.CheckIn(resolved_hash);
-        continue;
+  if (asset_deps) {
+    for (const auto dependency : *asset_deps) {
+      if (content_cache.GetCheckoutCount(dependency) > 1U) {
+        content_cache.CheckIn(dependency);
+      } else {
+        ReleaseAssetTree(dependency, graph, content_cache, callbacks);
       }
-
-      ReleaseAssetTree(dep_key, graph, content_cache, callbacks);
     }
-    (void)graph.RemoveAssetDependencies(key);
   }
-
-  // Release the asset itself.
-  const auto key_hash_opt = callbacks.resolve_asset_hash(key);
-  content_cache.CheckIn(key_hash_opt.has_value()
-      ? *key_hash_opt
-      : callbacks.hash_asset_fallback(key));
+  content_cache.CheckIn(key);
   callbacks.assert_refcount_symmetry("ReleaseAssetTree");
 }
 
@@ -87,150 +59,92 @@ auto DependencyReleaseEngine::TrimCache(
   DependencyGraphStore& graph, CacheT& content_cache,
   const ReleaseCallbacks& callbacks) -> TrimResult
 {
-  std::unordered_map<data::AssetKey, uint64_t> hash_by_asset_key;
-  hash_by_asset_key.reserve(asset_keys.size());
-  for (const auto& [hash_key, asset_key] : asset_keys) {
-    if (content_cache.Contains(hash_key)) {
-      hash_by_asset_key.insert_or_assign(asset_key, hash_key);
-    }
-  }
-
-  std::vector<data::AssetKey> trim_roots;
-  trim_roots.reserve(hash_by_asset_key.size());
-  std::vector<data::AssetKey> blocked_roots;
-  blocked_roots.reserve(hash_by_asset_key.size());
-  for (const auto& [asset_key, hash_key] : hash_by_asset_key) {
-    const auto checkout_count = content_cache.GetCheckoutCount(hash_key);
+  std::vector<uint64_t> trim_roots;
+  trim_roots.reserve(asset_keys.size());
+  size_t blocked_roots = 0U;
+  for (const auto& [cache_key, asset_key] : asset_keys) {
+    static_cast<void>(asset_key);
+    const auto checkout_count = content_cache.GetCheckoutCount(cache_key);
     if (checkout_count == 1U) {
-      trim_roots.push_back(asset_key);
+      trim_roots.push_back(cache_key);
     } else if (checkout_count > 1U) {
-      blocked_roots.push_back(asset_key);
+      ++blocked_roots;
     }
   }
   std::ranges::sort(trim_roots);
-  std::ranges::sort(blocked_roots);
 
-  std::unordered_set<data::AssetKey> visited_assets;
-  std::unordered_set<data::AssetKey> visiting_assets;
-  visited_assets.reserve(hash_by_asset_key.size());
-  visiting_assets.reserve(hash_by_asset_key.size());
+  std::unordered_set<uint64_t> visited_assets;
+  std::unordered_set<uint64_t> visiting_assets;
+  visited_assets.reserve(asset_keys.size());
+  visiting_assets.reserve(asset_keys.size());
   size_t pruned_live_branches = 0U;
 
-  auto trim_asset_dfs
-    = [&](auto&& self, const data::AssetKey& asset_key) -> void {
-    if (visited_assets.contains(asset_key)) {
+  auto trim_asset = [&](auto&& self, const uint64_t asset_hash) -> void {
+    if (visited_assets.contains(asset_hash)
+      || !content_cache.Contains(asset_hash)) {
       return;
     }
-    if (!visiting_assets.insert(asset_key).second) {
-      return;
-    }
-
-    struct VisitingGuard final {
-      std::unordered_set<data::AssetKey>& visiting;
-      std::unordered_set<data::AssetKey>& visited;
-      data::AssetKey key;
-      ~VisitingGuard() noexcept
-      {
-        visiting.erase(key);
-        visited.insert(key);
-      }
-    } visiting_guard { visiting_assets, visited_assets, asset_key };
-
-    const auto hash_it = hash_by_asset_key.find(asset_key);
-    if (hash_it == hash_by_asset_key.end()) {
-      return;
-    }
-    const auto asset_hash = hash_it->second;
-    if (!content_cache.Contains(asset_hash)) {
-      return;
-    }
-
     if (content_cache.GetCheckoutCount(asset_hash) > 1U) {
+      // Another parent can release its edge later in this pass. Do not mark
+      // this node visited until its own outgoing edges have been released.
       ++pruned_live_branches;
       return;
     }
-
-    if (const auto* asset_deps = graph.FindAssetDependencies(asset_key);
-      asset_deps != nullptr) {
-      for (const auto& dep_asset_key : *asset_deps) {
-        self(self, dep_asset_key);
-      }
+    if (!visiting_assets.insert(asset_hash).second) {
+      return;
     }
+    const auto visiting_guard
+      = ScopeGuard([&visiting_assets, asset_hash] noexcept -> void {
+          visiting_assets.erase(asset_hash);
+        });
 
-    if (const auto* resource_deps = graph.FindResourceDependencies(asset_key);
-      resource_deps != nullptr) {
-      for (const auto& resource_key : *resource_deps) {
-        const auto resource_hash = callbacks.hash_resource(resource_key);
-        if (!content_cache.Contains(resource_hash)) {
-          continue;
-        }
+    auto resource_deps = graph.RemoveResourceDependencies(asset_hash);
+    auto asset_deps = graph.RemoveAssetDependencies(asset_hash);
+    if (resource_deps) {
+      for (const auto resource : *resource_deps) {
+        const auto resource_hash = callbacks.hash_resource(resource);
         content_cache.CheckIn(resource_hash);
         if (content_cache.Contains(resource_hash)
           && content_cache.GetCheckoutCount(resource_hash) == 1U) {
-          (void)content_cache.Remove(resource_hash);
+          static_cast<void>(content_cache.Remove(resource_hash));
         }
       }
-      (void)graph.RemoveResourceDependencies(asset_key);
     }
-
-    if (const auto* asset_deps = graph.FindAssetDependencies(asset_key);
-      asset_deps != nullptr) {
-      for (const auto& dep_asset_key : *asset_deps) {
-        const auto dep_hash_it = hash_by_asset_key.find(dep_asset_key);
-        if (dep_hash_it == hash_by_asset_key.end()) {
-          continue;
-        }
-        const auto dep_hash = dep_hash_it->second;
-        if (!content_cache.Contains(dep_hash)) {
-          continue;
-        }
-        content_cache.CheckIn(dep_hash);
-        if (content_cache.Contains(dep_hash)
-          && content_cache.GetCheckoutCount(dep_hash) == 1U) {
-          self(self, dep_asset_key);
-          if (content_cache.Contains(dep_hash)
-            && content_cache.GetCheckoutCount(dep_hash) == 1U) {
-            (void)content_cache.Remove(dep_hash);
-          }
-        }
+    if (asset_deps) {
+      for (const auto dependency : *asset_deps) {
+        content_cache.CheckIn(dependency);
+        self(self, dependency);
       }
-      (void)graph.RemoveAssetDependencies(asset_key);
     }
 
     content_cache.CheckIn(asset_hash);
-    if (content_cache.Contains(asset_hash)
-      && content_cache.GetCheckoutCount(asset_hash) == 1U) {
-      (void)content_cache.Remove(asset_hash);
-    }
+    visited_assets.insert(asset_hash);
   };
 
-  for (const auto& root_asset_key : trim_roots) {
-    trim_asset_dfs(trim_asset_dfs, root_asset_key);
+  for (const auto root : trim_roots) {
+    trim_asset(trim_asset, root);
   }
 
-  std::vector<uint64_t> resource_hash_snapshot;
-  resource_hash_snapshot.reserve(resource_keys.size());
-  for (const auto& [hash_key, resource_key] : resource_keys) {
+  std::vector<uint64_t> resource_hashes;
+  resource_hashes.reserve(resource_keys.size());
+  for (const auto& [cache_key, resource_key] : resource_keys) {
     static_cast<void>(resource_key);
-    resource_hash_snapshot.push_back(hash_key);
+    resource_hashes.push_back(cache_key);
   }
-  std::ranges::sort(resource_hash_snapshot);
+  std::ranges::sort(resource_hashes);
 
   size_t orphan_resources = 0U;
-  for (const auto resource_hash : resource_hash_snapshot) {
-    if (!content_cache.Contains(resource_hash)) {
-      continue;
-    }
-    if (content_cache.GetCheckoutCount(resource_hash) == 1U) {
+  for (const auto resource_hash : resource_hashes) {
+    if (content_cache.Contains(resource_hash)
+      && content_cache.GetCheckoutCount(resource_hash) == 1U) {
       ++orphan_resources;
-      (void)content_cache.Remove(resource_hash);
+      static_cast<void>(content_cache.Remove(resource_hash));
     }
   }
-
   return TrimResult {
     .trim_roots = trim_roots.size(),
     .pruned_live_branches = pruned_live_branches,
-    .blocked_priority_roots = blocked_roots.size(),
+    .blocked_priority_roots = blocked_roots,
     .orphan_resources = orphan_resources,
   };
 }

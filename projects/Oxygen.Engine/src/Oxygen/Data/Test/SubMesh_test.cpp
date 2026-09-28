@@ -7,15 +7,25 @@
 // Standard library
 #include <cstdint>
 #include <memory>
+#include <stdexcept>
+#include <utility>
 #include <vector>
 
 // GTest
+#include <Oxygen/Base/Span.h>
+#include <Oxygen/Data/PakFormat_geometry.h>
+#include <Oxygen/Data/PakFormat_render.h>
+#include <Oxygen/Data/ShaderReference.h>
+#include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Testing/GTest.h>
 
 // Project
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/MaterialSlotId.h>
+
+using oxygen::base::CheckedAt;
 
 using oxygen::data::MaterialAsset;
 using oxygen::data::MeshBuilder;
@@ -29,7 +39,7 @@ protected:
   void SetUp() override { }
   void TearDown() override { }
 
-  std::shared_ptr<const MaterialAsset> MakeMaterial() const
+  auto MakeMaterial() const -> std::shared_ptr<const MaterialAsset>
   {
     return std::make_shared<const MaterialAsset>(oxygen::data::AssetKey {},
       oxygen::data::pak::render::MaterialAssetDesc {},
@@ -48,18 +58,22 @@ NOLINT_TEST_F(SubMeshBuilderFixture, ConstructAndAccess)
 {
   // Arrange
   std::vector<Vertex> vertices = {
-    { .position = { 0, 0, 0 },
+    {
+      .position = { 0, 0, 0 },
       .normal = { 0, 1, 0 },
       .texcoord = { 0, 0 },
       .tangent = { 1, 0, 0 },
       .bitangent = {},
-      .color = {} },
-    { .position = { 1, 0, 0 },
+      .color = {},
+    },
+    {
+      .position = { 1, 0, 0 },
       .normal = { 0, 1, 0 },
       .texcoord = { 1, 0 },
       .tangent = { 1, 0, 0 },
       .bitangent = {},
-      .color = {} },
+      .color = {},
+    },
   };
   std::vector<std::uint32_t> indices { 0, 1 };
   auto material = MakeMaterial();
@@ -69,22 +83,24 @@ NOLINT_TEST_F(SubMeshBuilderFixture, ConstructAndAccess)
                 .WithVertices(vertices)
                 .WithIndices(indices)
                 .BeginSubMesh("test_submesh", material)
-                .WithMeshView({ .first_index = 0,
+                .WithMeshView({
+                  .first_index = 0,
                   .index_count = 2,
                   .first_vertex = 0,
-                  .vertex_count = 2 })
+                  .vertex_count = 2,
+                })
                 .EndSubMesh()
                 .Build();
 
   // Assert
   ASSERT_NE(mesh, nullptr);
   ASSERT_THAT(mesh->SubMeshes(), SizeIs(1));
-  const auto& submesh = mesh->SubMeshes()[0];
+  const auto& submesh = CheckedAt(mesh->SubMeshes(), 0);
   EXPECT_EQ(submesh.GetName(), "test_submesh");
   EXPECT_THAT(submesh.MeshViews(), SizeIs(1));
   EXPECT_THAT(submesh.Material(), NotNull());
-  EXPECT_THAT(submesh.MeshViews()[0].Vertices(), SizeIs(2));
-  EXPECT_EQ(submesh.MeshViews()[0].IndexBuffer().Count(), 2u);
+  EXPECT_THAT(CheckedAt(submesh.MeshViews(), 0).Vertices(), SizeIs(2));
+  EXPECT_EQ(CheckedAt(submesh.MeshViews(), 0).IndexBuffer().Count(), 2U);
 }
 
 //! Tests SubMesh handles multiple mesh views correctly via builder.
@@ -107,25 +123,29 @@ NOLINT_TEST_F(SubMeshBuilderFixture, MultipleMeshViews)
                 .WithVertices(vertices)
                 .WithIndices(indices)
                 .BeginSubMesh("multi_view_submesh", material)
-                .WithMeshView({ .first_index = 0,
+                .WithMeshView({
+                  .first_index = 0,
                   .index_count = 3,
                   .first_vertex = 0,
-                  .vertex_count = 3 })
-                .WithMeshView({ .first_index = 3,
+                  .vertex_count = 3,
+                })
+                .WithMeshView({
+                  .first_index = 3,
                   .index_count = 3,
                   .first_vertex = 1,
-                  .vertex_count = 3 })
+                  .vertex_count = 3,
+                })
                 .EndSubMesh()
                 .Build();
 
   // Assert
   ASSERT_NE(mesh, nullptr);
   ASSERT_THAT(mesh->SubMeshes(), SizeIs(1));
-  const auto& submesh = mesh->SubMeshes()[0];
+  const auto& submesh = CheckedAt(mesh->SubMeshes(), 0);
   EXPECT_EQ(submesh.GetName(), "multi_view_submesh");
   EXPECT_THAT(submesh.MeshViews(), SizeIs(2));
-  EXPECT_THAT(submesh.MeshViews()[0].Vertices(), SizeIs(3));
-  EXPECT_THAT(submesh.MeshViews()[1].Vertices(), SizeIs(3));
+  EXPECT_THAT(CheckedAt(submesh.MeshViews(), 0).Vertices(), SizeIs(3));
+  EXPECT_THAT(CheckedAt(submesh.MeshViews(), 1).Vertices(), SizeIs(3));
 }
 
 //! (7) Aggregation correctness: total indices/vertices across views sum as
@@ -175,23 +195,27 @@ NOLINT_TEST_F(SubMeshBuilderFixture, MultipleMeshViews_AggregatedCorrectly)
                 .WithVertices(vertices)
                 .WithIndices(indices)
                 .BeginSubMesh("agg", material)
-                .WithMeshView({ .first_index = 0,
+                .WithMeshView({
+                  .first_index = 0,
                   .index_count = 3,
                   .first_vertex = 0,
-                  .vertex_count = 3 })
-                .WithMeshView({ .first_index = 3,
+                  .vertex_count = 3,
+                })
+                .WithMeshView({
+                  .first_index = 3,
                   .index_count = 3,
                   .first_vertex = 1,
-                  .vertex_count = 3 })
+                  .vertex_count = 3,
+                })
                 .EndSubMesh()
                 .Build();
 
   // Assert
   ASSERT_NE(mesh, nullptr);
-  const auto& sm = mesh->SubMeshes()[0];
-  EXPECT_EQ(sm.MeshViews().size(), 2u);
-  const auto first_count = sm.MeshViews()[0].IndexBuffer().Count();
-  const auto second_count = sm.MeshViews()[1].IndexBuffer().Count();
+  const auto& sm = CheckedAt(mesh->SubMeshes(), 0);
+  EXPECT_EQ(sm.MeshViews().size(), 2U);
+  const auto first_count = CheckedAt(sm.MeshViews(), 0).IndexBuffer().Count();
+  const auto second_count = CheckedAt(sm.MeshViews(), 1).IndexBuffer().Count();
   EXPECT_EQ(first_count + second_count, indices.size());
 }
 
@@ -222,9 +246,11 @@ NOLINT_TEST_F(SubMeshBuilderFixture, DescriptorBoundsUsed)
   oxygen::data::pak::geometry::SubMeshDesc desc {
     .name = {},
     .material_asset_key = {},
+    .slot_id
+    = oxygen::data::MaterialSlotId::FromStableIdentity("SubMeshTest/bounds"),
     .mesh_view_count = 1,
-    .bounding_box_min = { 0.0f, 0.0f, 0.0f },
-    .bounding_box_max = { 1.0f, 2.0f, 3.0f },
+    .bounding_box_min = { 0.0F, 0.0F, 0.0F },
+    .bounding_box_max = { 1.0F, 2.0F, 3.0F },
   };
 
   // Act
@@ -233,17 +259,19 @@ NOLINT_TEST_F(SubMeshBuilderFixture, DescriptorBoundsUsed)
                 .WithIndices(indices)
                 .BeginSubMesh("sm", material)
                 .WithDescriptor(desc)
-                .WithMeshView({ .first_index = 0,
+                .WithMeshView({
+                  .first_index = 0,
                   .index_count = 2,
                   .first_vertex = 0,
-                  .vertex_count = 2 })
+                  .vertex_count = 2,
+                })
                 .EndSubMesh()
                 .Build();
 
   // Assert
-  const auto& sm = mesh->SubMeshes()[0];
-  EXPECT_EQ(sm.BoundingBoxMin(), glm::vec3(0.0f, 0.0f, 0.0f));
-  EXPECT_EQ(sm.BoundingBoxMax(), glm::vec3(1.0f, 2.0f, 3.0f));
+  const auto& sm = CheckedAt(mesh->SubMeshes(), 0);
+  EXPECT_EQ(sm.BoundingBoxMin(), glm::vec3(0.0F, 0.0F, 0.0F));
+  EXPECT_EQ(sm.BoundingBoxMax(), glm::vec3(1.0F, 2.0F, 3.0F));
 }
 
 //! (9) Submesh bounds come from descriptor (precomputed).
@@ -281,9 +309,11 @@ NOLINT_TEST_F(SubMeshBuilderFixture, DescriptorBoundsMatchExpected)
   oxygen::data::pak::geometry::SubMeshDesc desc {
     .name = {},
     .material_asset_key = {},
+    .slot_id
+    = oxygen::data::MaterialSlotId::FromStableIdentity("SubMeshTest/bounds"),
     .mesh_view_count = 1,
-    .bounding_box_min = { -1.0f, -4.0f, -2.0f },
-    .bounding_box_max = { 3.0f, 2.0f, 5.0f },
+    .bounding_box_min = { -1.0F, -4.0F, -2.0F },
+    .bounding_box_max = { 3.0F, 2.0F, 5.0F },
   };
 
   // Act
@@ -292,17 +322,19 @@ NOLINT_TEST_F(SubMeshBuilderFixture, DescriptorBoundsMatchExpected)
                 .WithIndices(indices)
                 .BeginSubMesh("sm", material)
                 .WithDescriptor(desc)
-                .WithMeshView({ .first_index = 0,
+                .WithMeshView({
+                  .first_index = 0,
                   .index_count = 3,
                   .first_vertex = 0,
-                  .vertex_count = 3 })
+                  .vertex_count = 3,
+                })
                 .EndSubMesh()
                 .Build();
 
   // Assert
-  const auto& sm = mesh->SubMeshes()[0];
-  EXPECT_EQ(sm.BoundingBoxMin(), glm::vec3(-1.0f, -4.0f, -2.0f));
-  EXPECT_EQ(sm.BoundingBoxMax(), glm::vec3(3.0f, 2.0f, 5.0f));
+  const auto& sm = CheckedAt(mesh->SubMeshes(), 0);
+  EXPECT_EQ(sm.BoundingBoxMin(), glm::vec3(-1.0F, -4.0F, -2.0F));
+  EXPECT_EQ(sm.BoundingBoxMax(), glm::vec3(3.0F, 2.0F, 5.0F));
 }
 
 //! Submesh bounds fall back to mesh-view vertices when no descriptor is stored.
@@ -310,24 +342,30 @@ NOLINT_TEST_F(
   SubMeshBuilderFixture, ProceduralSubMeshComputesBoundsWithoutDescriptor)
 {
   std::vector<Vertex> vertices = {
-    { .position = { -3, 4, 2 },
+    {
+      .position = { -3, 4, 2 },
       .normal = {},
       .texcoord = {},
       .tangent = {},
       .bitangent = {},
-      .color = {} },
-    { .position = { 6, -2, -5 },
+      .color = {},
+    },
+    {
+      .position = { 6, -2, -5 },
       .normal = {},
       .texcoord = {},
       .tangent = {},
       .bitangent = {},
-      .color = {} },
-    { .position = { 1, 9, 0 },
+      .color = {},
+    },
+    {
+      .position = { 1, 9, 0 },
       .normal = {},
       .texcoord = {},
       .tangent = {},
       .bitangent = {},
-      .color = {} },
+      .color = {},
+    },
   };
   std::vector<std::uint32_t> indices = { 0, 1, 2 };
   auto material = MakeMaterial();
@@ -336,14 +374,16 @@ NOLINT_TEST_F(
                 .WithVertices(vertices)
                 .WithIndices(indices)
                 .BeginSubMesh("sm", material)
-                .WithMeshView({ .first_index = 0,
+                .WithMeshView({
+                  .first_index = 0,
                   .index_count = static_cast<std::uint32_t>(indices.size()),
                   .first_vertex = 0,
-                  .vertex_count = static_cast<std::uint32_t>(vertices.size()) })
+                  .vertex_count = static_cast<std::uint32_t>(vertices.size()),
+                })
                 .EndSubMesh()
                 .Build();
 
-  const auto& sm = mesh->SubMeshes()[0];
+  const auto& sm = CheckedAt(mesh->SubMeshes(), 0);
   EXPECT_EQ(sm.BoundingBoxMin(), glm::vec3(-3, -2, -5));
   EXPECT_EQ(sm.BoundingBoxMax(), glm::vec3(6, 9, 2));
 }
@@ -398,10 +438,12 @@ NOLINT_TEST_F(SubMeshBuilderFixture, Move)
                 .WithVertices(vertices)
                 .WithIndices(indices)
                 .BeginSubMesh("movable_submesh", material)
-                .WithMeshView({ .first_index = 0,
+                .WithMeshView({
+                  .first_index = 0,
                   .index_count = 3,
                   .first_vertex = 0,
-                  .vertex_count = 3 })
+                  .vertex_count = 3,
+                })
                 .EndSubMesh()
                 .Build();
   auto moved = std::move(mesh);
@@ -409,7 +451,7 @@ NOLINT_TEST_F(SubMeshBuilderFixture, Move)
   // Assert
   ASSERT_NE(moved, nullptr);
   ASSERT_THAT(moved->SubMeshes(), SizeIs(1));
-  EXPECT_EQ(moved->SubMeshes()[0].GetName(), "movable_submesh");
+  EXPECT_EQ(CheckedAt(moved->SubMeshes(), 0).GetName(), "movable_submesh");
 }
 
 //! Tests SubMesh accepts empty name string via builder.
@@ -425,17 +467,19 @@ NOLINT_TEST_F(SubMeshBuilderFixture, EmptyName)
                 .WithVertices(vertices)
                 .WithIndices(indices)
                 .BeginSubMesh("", material)
-                .WithMeshView({ .first_index = 0,
+                .WithMeshView({
+                  .first_index = 0,
                   .index_count = 1,
                   .first_vertex = 0,
-                  .vertex_count = 1 })
+                  .vertex_count = 1,
+                })
                 .EndSubMesh()
                 .Build();
 
   // Assert
   ASSERT_NE(mesh, nullptr);
   ASSERT_THAT(mesh->SubMeshes(), SizeIs(1));
-  EXPECT_EQ(mesh->SubMeshes()[0].GetName(), "");
+  EXPECT_EQ(CheckedAt(mesh->SubMeshes(), 0).GetName(), "");
 }
 
 //! Tests SubMesh handles very long name strings via builder.
@@ -452,17 +496,19 @@ NOLINT_TEST_F(SubMeshBuilderFixture, LongName)
                 .WithVertices(vertices)
                 .WithIndices(indices)
                 .BeginSubMesh(long_name, material)
-                .WithMeshView({ .first_index = 0,
+                .WithMeshView({
+                  .first_index = 0,
                   .index_count = 1,
                   .first_vertex = 0,
-                  .vertex_count = 1 })
+                  .vertex_count = 1,
+                })
                 .EndSubMesh()
                 .Build();
 
   // Assert
   ASSERT_NE(mesh, nullptr);
   ASSERT_THAT(mesh->SubMeshes(), SizeIs(1));
-  EXPECT_EQ(mesh->SubMeshes()[0].GetName(), long_name);
-  EXPECT_EQ(mesh->SubMeshes()[0].GetName().size(), 1000);
+  EXPECT_EQ(CheckedAt(mesh->SubMeshes(), 0).GetName(), long_name);
+  EXPECT_EQ(CheckedAt(mesh->SubMeshes(), 0).GetName().size(), 1000);
 }
 } // namespace

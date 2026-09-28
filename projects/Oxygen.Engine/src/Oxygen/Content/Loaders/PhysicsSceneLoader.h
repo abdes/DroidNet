@@ -117,7 +117,7 @@ inline auto LoadPhysicsSceneAsset(const LoaderContext& context)
 
   // Construct the in-memory asset (validates all ranges internally).
   return std::make_unique<data::PhysicsSceneAsset>(
-    context.current_asset_key, std::move(bytes));
+    context.current_asset_key, std::move(bytes), context.source_key);
 }
 
 } // namespace oxygen::content::loaders

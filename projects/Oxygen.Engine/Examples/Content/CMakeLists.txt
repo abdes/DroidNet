@@ -71,6 +71,8 @@ add_custom_command(
   DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/prepare_showcase.py"
     ${OXYGEN_SHOWCASE_INPUTS}
+    oxygen-cooker
+    oxygen-data
     oxygen-cooker-importtool
     oxygen-cooker-paktool
     oxygen-cooker-inspector

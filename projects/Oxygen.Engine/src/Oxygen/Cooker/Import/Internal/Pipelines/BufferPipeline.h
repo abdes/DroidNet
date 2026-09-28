@@ -89,10 +89,10 @@ public:
     CookedBufferPayload cooked;
 
     //! Callback fired when a worker starts processing this item.
-    std::function<void()> on_started;
+    std::function<void()> on_started {};
 
     //! Callback fired when a worker finishes processing this item.
-    std::function<void()> on_finished;
+    std::function<void()> on_finished {};
 
     //! Cancellation token.
     std::stop_token stop_token;

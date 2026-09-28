@@ -10,15 +10,16 @@
 #include <chrono>
 #include <filesystem>
 #include <latch>
+#include <memory>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
 
-#include <Oxygen/Testing/GTest.h>
-
+#include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/MaterialSlotProvenance.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/ComponentType.h>
@@ -26,6 +27,7 @@
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Serio/FileStream.h>
 #include <Oxygen/Serio/Reader.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::import::test {
 
@@ -138,21 +140,33 @@ protected:
     return config;
   }
 
-  [[nodiscard]] static auto RunImport(ImportRequest request) -> ImportRunResult
+  // Each fixture owns one logical source across repeat imports and copied
+  // paths.
+  std::shared_ptr<const MaterialSlotProvenance> source_provenance_
+    = std::make_shared<const MaterialSlotProvenance>(Uuid::Generate());
+
+  [[nodiscard]] auto RunImport(ImportRequest request) -> ImportRunResult
   {
+    if (!request.material_slot_provenance) {
+      request.material_slot_provenance = source_provenance_;
+    }
     AsyncImportService service(MakeMaxConcurrencyConfig());
     std::latch done(1);
     ImportRunResult result {};
 
     const auto import_start = steady_clock::now();
-    auto job_id_opt = service.SubmitImport(
-      std::move(request), [&](ImportJobId id, const ImportReport& completed) {
+    auto job_id_opt = service.SubmitImport(std::move(request),
+      [&](ImportJobId id, const ImportReport& completed) -> void {
         result.finished_id = id;
         result.report = completed;
         done.count_down();
       });
 
-    EXPECT_TRUE(job_id_opt.has_value());
+    if (!job_id_opt) {
+      ADD_FAILURE() << "Import submission was rejected";
+      service.Stop();
+      return result;
+    }
     result.job_id = *job_id_opt;
     EXPECT_NE(result.job_id, kInvalidJobId);
     done.wait();
@@ -163,6 +177,12 @@ protected:
 
     service.Stop();
 
+    if (result.report.success
+      && !result.report.material_slot_provenance_json.empty()) {
+      source_provenance_ = MaterialSlotProvenance::Parse(
+        result.report.material_slot_provenance_json);
+    }
+
     return result;
   }
 
@@ -170,10 +190,10 @@ protected:
     -> Inspection;
 
   [[nodiscard]] static auto FindAssetOfType(const Inspection& inspection,
-    const AssetType type) -> std::optional<Inspection::AssetEntry>;
+    AssetType type) -> std::optional<Inspection::AssetEntry>;
 
   [[nodiscard]] static auto CountAssetsOfType(
-    const Inspection& inspection, const AssetType type) -> size_t;
+    const Inspection& inspection, AssetType type) -> size_t;
 
   [[nodiscard]] static auto LoadSceneReadback(const ImportReport& report)
     -> SceneReadback;

@@ -201,6 +201,14 @@ mutate the camera object or saved data to render multiple targets. Pixel roundin
 and content/scissor mapping are deterministic and shared by both capture paths.
 Fixed 4:3 into 1920x1080 yields 1440x1080 content at x=240, with side bars.
 
+`PerspectiveCamera` owns the authored mode and retained Fixed ratio. Its per-target
+projection calculation consumes a viewport without changing authored state.
+M08.1 delivers this data-preserving seam; M08.2 owns fitted content rectangles,
+bar composition and their rendering qualification. This follows UE5.7.4
+`CameraComponent.h` (`AspectRatio`, `bConstrainAspectRatio`) and
+`CameraStackTypes.cpp::CalculateProjectionMatrixGivenViewRectangle`; Oxygen
+retains its existing vertical-FOV convention without adding UE's axis policy.
+
 Bars are composed after post-processing and remain outside metering/foreground
 grading. Preserve camera identity, local/world pose, vertical FOV and clipping;
 `kVisible` does not disable camera function. Existing native physical exposure

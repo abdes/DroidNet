@@ -136,7 +136,7 @@ inline auto LoadInputMappingContextAsset(const LoaderContext& context)
   std::vector<data::pak::input::InputActionMappingRecord> mappings(
     desc.mappings.count);
   for (uint32_t i = 0; i < desc.mappings.count; ++i) {
-    std::memcpy(&mappings[i],
+    std::memcpy(&mappings.at(i),
       payload
         .subspan(desc.mappings.offset
             + (static_cast<size_t>(i)
@@ -149,7 +149,7 @@ inline auto LoadInputMappingContextAsset(const LoaderContext& context)
   std::vector<data::pak::input::InputTriggerRecord> triggers(
     desc.triggers.count);
   for (uint32_t i = 0; i < desc.triggers.count; ++i) {
-    std::memcpy(&triggers[i],
+    std::memcpy(&triggers.at(i),
       payload
         .subspan(desc.triggers.offset
             + (static_cast<size_t>(i)
@@ -157,13 +157,13 @@ inline auto LoadInputMappingContextAsset(const LoaderContext& context)
           sizeof(data::pak::input::InputTriggerRecord))
         .data(),
       sizeof(data::pak::input::InputTriggerRecord));
-    detail::ValidateTriggerType(triggers[i].type);
+    detail::ValidateTriggerType(triggers.at(i).type);
   }
 
   std::vector<data::pak::input::InputTriggerAuxRecord> trigger_aux(
     desc.trigger_aux.count);
   for (uint32_t i = 0; i < desc.trigger_aux.count; ++i) {
-    std::memcpy(&trigger_aux[i],
+    std::memcpy(&trigger_aux.at(i),
       payload
         .subspan(desc.trigger_aux.offset
             + (static_cast<size_t>(i)
@@ -229,7 +229,7 @@ inline auto LoadInputMappingContextAsset(const LoaderContext& context)
 
   return std::make_unique<data::InputMappingContextAsset>(
     context.current_asset_key, desc, std::move(mappings), std::move(triggers),
-    std::move(trigger_aux), std::move(strings));
+    std::move(trigger_aux), std::move(strings), context.source_key);
 }
 
 static_assert(

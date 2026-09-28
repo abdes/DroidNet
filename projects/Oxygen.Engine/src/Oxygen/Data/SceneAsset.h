@@ -39,6 +39,10 @@ template <> struct ComponentTraits<pak::world::RenderableRecord> {
   static constexpr ComponentType kType = ComponentType::kRenderable;
 };
 
+template <> struct ComponentTraits<pak::world::MaterialOverrideRecord> {
+  static constexpr ComponentType kType = ComponentType::kMaterialOverride;
+};
+
 template <> struct ComponentTraits<pak::world::LocalFogVolumeRecord> {
   static constexpr ComponentType kType = ComponentType::kLocalFogVolume;
 };
@@ -118,7 +122,8 @@ public:
     SceneAssetDesc).
     @throws std::runtime_error if the data is invalid or too small.
   */
-  OXGN_DATA_API SceneAsset(AssetKey key, std::span<const std::byte> data);
+  OXGN_DATA_API SceneAsset(
+    AssetKey key, std::span<const std::byte> data, SourceKey source_key = {});
 
   //! Constructs a SceneAsset that owns its raw data.
   /*!
@@ -129,7 +134,8 @@ public:
       SceneAssetDesc).
     @throws std::runtime_error if the data is invalid or too small.
   */
-  OXGN_DATA_API SceneAsset(AssetKey key, std::vector<std::byte> data);
+  OXGN_DATA_API SceneAsset(
+    AssetKey key, std::vector<std::byte> data, SourceKey source_key = {});
 
   ~SceneAsset() override = default;
 
@@ -174,7 +180,7 @@ public:
   OXGN_DATA_NDAPI auto GetNodeName(
     const pak::world::NodeRecord& node) const noexcept -> std::string_view;
 
-  //! Returns the root node (always index 0).
+  //! Returns the first root (index 0). Requires a nonempty GetNodes() span.
   OXGN_DATA_NDAPI auto GetRootNode() const noexcept
     -> const pak::world::NodeRecord&;
 
@@ -272,7 +278,7 @@ public:
       std::vector<T> decoded;
       decoded.resize(entry->count);
       for (size_t i = 0; i < entry->count; ++i) {
-        const auto res = reader.ReadInto(decoded[i]);
+        const auto res = reader.ReadInto(decoded.at(i));
         if (!res) {
           DCHECK_F(false,
             "SceneAsset failed to deserialize component table (validated by "
@@ -306,7 +312,7 @@ public:
 
     // Binary search for the node_index
     auto it = std::lower_bound(components.begin(), components.end(), node_index,
-      [](const T& record, pak::world::SceneNodeIndexT index) {
+      [](const T& record, pak::world::SceneNodeIndexT index) -> auto {
         return record.node_index < index;
       });
 
@@ -334,7 +340,7 @@ private:
   // Validates offsets and sizes against the data buffer
   auto ParseAndValidate() -> void;
 
-  std::shared_ptr<std::vector<std::byte>> owned_data_ {};
+  std::shared_ptr<std::vector<std::byte>> owned_data_;
   std::span<const std::byte> data_;
   pak::world::SceneAssetDesc desc_ {};
 
@@ -343,7 +349,7 @@ private:
 
   // Nodes are stored packed (alignment 1). Decode lazily into an aligned
   // cache to avoid unaligned typed pointers.
-  mutable std::vector<pak::world::NodeRecord> nodes_cache_ {};
+  mutable std::vector<pak::world::NodeRecord> nodes_cache_;
   mutable bool nodes_cache_valid_ { false };
 
   const char* string_table_ptr_ { nullptr };
@@ -367,7 +373,7 @@ private:
   std::vector<pak::world::ExposureCompensationKeyRecord> post_process_curve_;
 
   // Decoded component tables, keyed by ComponentType.
-  mutable std::unordered_map<ComponentType, std::any> component_cache_ {};
+  mutable std::unordered_map<ComponentType, std::any> component_cache_;
 
   template <typename RecordT>
   auto TryGetEnvironmentRecordAs(

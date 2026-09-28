@@ -28,7 +28,7 @@ public:
     std::vector<pak::input::InputActionMappingRecord> mappings = {},
     std::vector<pak::input::InputTriggerRecord> triggers = {},
     std::vector<pak::input::InputTriggerAuxRecord> trigger_aux = {},
-    std::vector<char> strings = {});
+    std::vector<char> strings = {}, SourceKey source_key = {});
 
   ~InputMappingContextAsset() override = default;
 

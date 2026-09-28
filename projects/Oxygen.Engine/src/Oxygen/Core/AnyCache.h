@@ -122,9 +122,9 @@ class AnyCache {
 public:
   using KeyType = Key;
   using EvictionPolicyType = Evict;
-  using EntryType = typename EvictionPolicyType::EntryType;
-  using IteratorType = typename EvictionPolicyType::IteratorType;
-  using CostType = typename EvictionPolicyType::CostType;
+  using EntryType = EvictionPolicyType::EntryType;
+  using IteratorType = EvictionPolicyType::IteratorType;
+  using CostType = EvictionPolicyType::CostType;
 
   struct Stats final {
     std::size_t size { 0 };
@@ -140,7 +140,7 @@ public:
   };
 
   //! Construct a cache with a given budget.
-  explicit AnyCache(CostType budget = (std::numeric_limits<CostType>::max)())
+  explicit AnyCache(CostType budget = std::numeric_limits<CostType>::max())
     : eviction_(budget)
   {
     if (budget == 0) {
@@ -188,7 +188,7 @@ public:
     if (eviction_.IsEnd(ev_it)) {
       const auto incoming_cost_as_size = eviction_.Cost(erased, type_id);
       if (incoming_cost_as_size
-          > static_cast<std::size_t>((std::numeric_limits<CostType>::max)())
+          > static_cast<std::size_t>(std::numeric_limits<CostType>::max())
         || static_cast<CostType>(incoming_cost_as_size) > eviction_.Budget()) {
         stored = false;
         lock.unlock();
@@ -203,7 +203,7 @@ public:
       // Force an eviction pass that creates room for the incoming item.
       eviction_.SetBudget(target_budget);
       static_cast<void>(
-        eviction_.EnforceBudget([this, &evicted](const KeyType& k) {
+        eviction_.EnforceBudget([this, &evicted](const KeyType& k) -> auto {
           const auto doomed = map_.find(k);
           if (doomed != map_.end()) {
             evicted.push_back(eviction_.MakeEntry(doomed->first,
@@ -274,17 +274,17 @@ public:
     std::unique_lock lock(mutex_);
     auto it = map_.find(key);
     if (it != map_.end()) {
-      eviction_.CheckOut(it->second);
-      auto& owner_counts = owner_counts_[key];
-      if (owner == CheckoutOwner::kInternal) {
-        ++owner_counts.checkout_internal;
-      } else {
-        ++owner_counts.checkout_external;
-      }
-      LOG_F(1, "AnyCache::CheckOut owner={} hit=true", to_string(owner));
       TypeId stored_type = eviction_.TypeOf(it->second);
       if constexpr (requires { V::ClassTypeId(); }) {
         if (stored_type == V::ClassTypeId()) {
+          auto& owner_counts = owner_counts_[key];
+          eviction_.CheckOut(it->second);
+          if (owner == CheckoutOwner::kInternal) {
+            ++owner_counts.checkout_internal;
+          } else {
+            ++owner_counts.checkout_external;
+          }
+          LOG_F(1, "AnyCache::CheckOut owner={} hit=true", to_string(owner));
           return std::static_pointer_cast<V>(eviction_.ValueOf(it->second));
         }
       }
@@ -686,15 +686,16 @@ public:
     std::vector<EntryType> evicted;
     std::unique_lock lock(mutex_);
     eviction_.SetBudget(budget);
-    auto status = eviction_.EnforceBudget([this, &evicted](const KeyType& k) {
-      const auto it = map_.find(k);
-      if (it != map_.end()) {
-        evicted.push_back(eviction_.MakeEntry(it->first,
-          eviction_.TypeOf(it->second), eviction_.ValueOf(it->second)));
-        owner_counts_.erase(it->first);
-        map_.erase(it);
-      }
-    });
+    auto status
+      = eviction_.EnforceBudget([this, &evicted](const KeyType& k) -> auto {
+          const auto it = map_.find(k);
+          if (it != map_.end()) {
+            evicted.push_back(eviction_.MakeEntry(it->first,
+              eviction_.TypeOf(it->second), eviction_.ValueOf(it->second)));
+            owner_counts_.erase(it->first);
+            map_.erase(it);
+          }
+        });
     lock.unlock();
 
     if (on_eviction_) {
@@ -721,7 +722,7 @@ public:
   public:
     EvictionNotificationScope(AnyCache& cache, EvictionCallbackFunction cb)
       : cache_(&cache)
-      , prev_([&] {
+      , prev_([&] -> auto {
         std::swap(cache.on_eviction_, cb);
         return std::move(cb);
       }())
@@ -762,12 +763,12 @@ public:
     {
     }
     class iterator {
-      using base_iter = typename MapType::const_iterator;
+      using base_iter = MapType::const_iterator;
       base_iter it_;
 
     public:
       using iterator_concept = std::forward_iterator_tag;
-      using value_type = typename MapType::key_type;
+      using value_type = MapType::key_type;
       using difference_type = std::ptrdiff_t;
       iterator() = default;
       explicit iterator(base_iter it)

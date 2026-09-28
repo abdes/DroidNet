@@ -45,12 +45,12 @@ struct PakBuildRequest {
   std::vector<data::CookedSource> sources;
 
   std::filesystem::path output_pak_path;
-  std::filesystem::path output_manifest_path;
+  std::filesystem::path output_manifest_path {};
 
   uint16_t content_version = 0;
   data::SourceKey source_key {};
 
-  std::vector<data::PakCatalog> base_catalogs;
+  std::vector<data::PakCatalog> base_catalogs {};
   PatchCompatibilityPolicy patch_compat {};
   PakBuildOptions options {};
 };

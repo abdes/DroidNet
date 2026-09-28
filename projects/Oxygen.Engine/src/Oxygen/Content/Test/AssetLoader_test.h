@@ -6,15 +6,29 @@
 
 #pragma once
 
+#include <array>
+#include <filesystem>
+#include <functional>
 #include <memory>
 #include <string>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Core/EngineTag.h>
+#include <Oxygen/Testing/GTest.h>
+
+namespace oxygen::co::testing {
+class TestEventLoop;
+}
 
 namespace oxygen::content::testing {
+
+using LoadedMaterialGraph = std::array<std::shared_ptr<data::MaterialAsset>, 4>;
+using MaterialGraphCheck
+  = std::function<void(AssetLoader&, const LoadedMaterialGraph&)>;
+
+//! Exercise dependency behavior on four real decoded materials in one source.
+auto CheckLoadedMaterialGraph(co::testing::TestEventLoop* loop,
+  std::filesystem::path root, MaterialGraphCheck check) -> co::Co<>;
 
 //! Base test fixture for AssetLoader tests using real PAK files
 class AssetLoaderBasicTest : public ::testing::Test {

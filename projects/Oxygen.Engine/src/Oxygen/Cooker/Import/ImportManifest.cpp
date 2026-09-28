@@ -5,26 +5,52 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <exception>
+#include <filesystem>
 #include <fstream>
-#include <nlohmann/json-schema.hpp>
-#include <nlohmann/json.hpp>
+#include <optional>
+#include <ostream>
 #include <sstream>
+#include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
+#include <nlohmann/json-schema.hpp>
+#include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
+
+#include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Cooker/Import/BufferContainerImportRequestBuilder.h>
+#include <Oxygen/Cooker/Import/BufferContainerImportSettings.h>
 #include <Oxygen/Cooker/Import/CollisionShapeDescriptorImportRequestBuilder.h>
+#include <Oxygen/Cooker/Import/CollisionShapeDescriptorImportSettings.h>
 #include <Oxygen/Cooker/Import/GeometryDescriptorImportRequestBuilder.h>
+#include <Oxygen/Cooker/Import/ImportConcurrency.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/InputImportRequestBuilder.h>
+#include <Oxygen/Cooker/Import/InputImportSettings.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/SceneImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/Internal/TextureImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/MaterialDescriptorImportRequestBuilder.h>
+#include <Oxygen/Cooker/Import/MaterialDescriptorImportSettings.h>
 #include <Oxygen/Cooker/Import/PhysicsImportRequestBuilder.h>
+#include <Oxygen/Cooker/Import/PhysicsImportSettings.h>
 #include <Oxygen/Cooker/Import/PhysicsMaterialDescriptorImportRequestBuilder.h>
+#include <Oxygen/Cooker/Import/PhysicsMaterialDescriptorImportSettings.h>
 #include <Oxygen/Cooker/Import/SceneDescriptorImportRequestBuilder.h>
+#include <Oxygen/Cooker/Import/SceneImportSettings.h>
 #include <Oxygen/Cooker/Import/ScriptImportRequestBuilder.h>
+#include <Oxygen/Cooker/Import/ScriptImportSettings.h>
 #include <Oxygen/Cooker/Import/TextureDescriptorImportRequestBuilder.h>
+#include <Oxygen/Cooker/Import/TextureDescriptorImportSettings.h>
+#include <Oxygen/Cooker/Import/TextureImportSettings.h>
+#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
+#include <Oxygen/Core/Meta/Physics/Backend.h>
 
 namespace oxygen::content::import {
 
@@ -112,7 +138,7 @@ namespace {
   auto ReadJsonFile(const std::filesystem::path& path,
     std::ostream& error_stream) -> std::optional<json>
   {
-    std::ifstream input(path);
+    std::ifstream input(base::ToNativePath(path));
     if (!input) {
       error_stream << "ERROR: failed to open manifest: " << path.string()
                    << "\n";
@@ -223,11 +249,11 @@ namespace {
     if (!obj.contains(name)) {
       return true;
     }
-    if (!obj[name].is_string()) {
+    if (!obj.at(name).is_string()) {
       errors << "ERROR: '" << name << "' must be a string\n";
       return false;
     }
-    target = obj[name].get<std::string>();
+    target = obj.at(name).get<std::string>();
     return true;
   }
 
@@ -237,35 +263,39 @@ namespace {
     if (!obj.contains(name)) {
       return true;
     }
-    if (!obj[name].is_array()) {
+    if (!obj.at(name).is_array()) {
       errors << "ERROR: '" << name << "' must be an array\n";
       return false;
     }
     target.clear();
-    target.reserve(obj[name].size());
-    for (size_t i = 0; i < obj[name].size(); ++i) {
-      if (!obj[name][i].is_string()) {
+    target.reserve(obj.at(name).size());
+    for (size_t i = 0; i < obj.at(name).size(); ++i) {
+      if (!obj.at(name).at(i).is_string()) {
         errors << "ERROR: '" << name << "[" << i << "]' must be a string\n";
         return false;
       }
-      target.push_back(obj[name][i].get<std::string>());
+      target.push_back(obj.at(name).at(i).get<std::string>());
     }
     return true;
   }
 
   auto TrimInPlace(std::string& value) -> void
   {
-    const auto is_ws = [](const unsigned char ch) {
+    const auto is_ws = [](const unsigned char ch) -> bool {
       return ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n';
     };
-    const auto first = std::find_if(value.begin(), value.end(),
-      [&](const char ch) { return !is_ws(static_cast<unsigned char>(ch)); });
+    const auto first
+      = std::find_if(value.begin(), value.end(), [&](const char ch) -> bool {
+          return !is_ws(static_cast<unsigned char>(ch));
+        });
     if (first == value.end()) {
       value.clear();
       return;
     }
-    const auto last = std::find_if(value.rbegin(), value.rend(),
-      [&](const char ch) { return !is_ws(static_cast<unsigned char>(ch)); });
+    const auto last
+      = std::find_if(value.rbegin(), value.rend(), [&](const char ch) -> bool {
+          return !is_ws(static_cast<unsigned char>(ch));
+        });
     value = std::string(first, last.base());
   }
 
@@ -292,7 +322,7 @@ namespace {
       return false;
     }
     for (size_t dep_index = 0; dep_index < depends_on.size(); ++dep_index) {
-      auto& dep = depends_on[dep_index];
+      auto& dep = depends_on.at(dep_index);
       TrimInPlace(dep);
       if (dep.empty()) {
         errors << "ERROR: " << job_type << " job.depends_on[" << dep_index
@@ -321,19 +351,19 @@ namespace {
   auto ReportEarlyJobKeyWhitelistViolations(
     const json& manifest, std::ostream& errors) -> bool
   {
-    if (!manifest.contains("jobs") || !manifest["jobs"].is_array()) {
+    if (!manifest.contains("jobs") || !manifest.at("jobs").is_array()) {
       return false;
     }
 
-    for (const auto& job : manifest["jobs"]) {
+    for (const auto& job : manifest.at("jobs")) {
       if (!job.is_object()) {
         continue;
       }
-      if (!job.contains("type") || !job["type"].is_string()) {
+      if (!job.contains("type") || !job.at("type").is_string()) {
         continue;
       }
 
-      const auto job_type = job["type"].get<std::string>();
+      const auto job_type = job.at("type").get<std::string>();
       if (job_type == "input") {
         for (auto it = job.begin(); it != job.end(); ++it) {
           if (!IsAllowedInputJobKey(it.key())) {
@@ -344,12 +374,12 @@ namespace {
             return true;
           }
         }
-        if (!job.contains("id") || !job["id"].is_string()) {
+        if (!job.contains("id") || !job.at("id").is_string()) {
           errors << "ERROR [input.manifest.job_id_missing]: input job.id "
                     "is required and must be a string\n";
           return true;
         }
-        auto job_id = job["id"].get<std::string>();
+        auto job_id = job.at("id").get<std::string>();
         TrimInPlace(job_id);
         if (job_id.empty()) {
           errors << "ERROR [input.manifest.job_id_missing]: input job.id "
@@ -386,11 +416,11 @@ namespace {
     if (!obj.contains(name)) {
       return true;
     }
-    if (!obj[name].is_boolean()) {
+    if (!obj.at(name).is_boolean()) {
       errors << "ERROR: '" << name << "' must be a boolean\n";
       return false;
     }
-    target = obj[name].get<bool>();
+    target = obj.at(name).get<bool>();
     return true;
   }
 
@@ -400,11 +430,12 @@ namespace {
     if (!obj.contains(name)) {
       return true;
     }
-    if (!obj[name].is_number_unsigned() && !obj[name].is_number_integer()) {
+    if (!obj.at(name).is_number_unsigned()
+      && !obj.at(name).is_number_integer()) {
       errors << "ERROR: '" << name << "' must be an integer\n";
       return false;
     }
-    const auto value = obj[name].get<int64_t>();
+    const auto value = obj.at(name).get<int64_t>();
     if (value < 0) {
       errors << "ERROR: '" << name << "' must be >= 0\n";
       return false;
@@ -447,11 +478,11 @@ namespace {
     if (!obj.contains(name)) {
       return true;
     }
-    if (!obj[name].is_number()) {
+    if (!obj.at(name).is_number()) {
       errors << "ERROR: '" << name << "' must be a number\n";
       return false;
     }
-    target = obj[name].get<float>();
+    target = obj.at(name).get<float>();
     was_set = true;
     return true;
   }
@@ -460,11 +491,11 @@ namespace {
     std::ostream& errors) -> bool
   {
     if (obj.contains("sources")) {
-      if (!obj["sources"].is_array()) {
+      if (!obj.at("sources").is_array()) {
         errors << "ERROR: 'sources' must be an array\n";
         return false;
       }
-      for (const auto& mapping_json : obj["sources"]) {
+      for (const auto& mapping_json : obj.at("sources")) {
         TextureSourceMapping mapping;
         if (!ReadStringField(mapping_json, "file", mapping.file, errors)) {
           return false;
@@ -552,10 +583,22 @@ namespace {
   auto ApplySceneOverrides(const json& obj, SceneImportSettings& settings,
     std::ostream& errors) -> bool
   {
+    if (!ReadStringField(obj, "material_slot_source_identity",
+          settings.material_slot_source_identity, errors)) {
+      return false;
+    }
+    if (obj.contains("material_slot_provenance")) {
+      const auto& provenance = obj.at("material_slot_provenance");
+      if (!provenance.is_object()) {
+        errors << "ERROR: material_slot_provenance must be an object\n";
+        return false;
+      }
+      settings.material_slot_provenance_json = provenance.dump();
+    }
     ReadBoolField(
       obj, "content_hashing", settings.with_content_hashing, errors);
     if (obj.contains("content_flags")) {
-      const auto& flags = obj["content_flags"];
+      const auto& flags = obj.at("content_flags");
       if (!flags.is_object()) {
         errors << "ERROR: content_flags must be an object\n";
         return false;
@@ -582,12 +625,12 @@ namespace {
           settings.gltf_omitted_light_range_m, omitted_range_set, errors)) {
       return false;
     }
-    if (obj.contains("bake_transforms")) {
-      if (!ReadBoolField(
-            obj, "bake_transforms", settings.bake_transforms, errors)) {
-        return false;
-      }
+    if ((obj.contains("bake_transforms"))
+      && (!ReadBoolField(
+        obj, "bake_transforms", settings.bake_transforms, errors))) {
+      return false;
     }
+
     if (!ReadStringField(
           obj, "normals_policy", settings.normals_policy, errors)) {
       return false;
@@ -610,7 +653,7 @@ namespace {
     }
 
     if (obj.contains("texture_overrides")) {
-      const auto& overrides = obj["texture_overrides"];
+      const auto& overrides = obj.at("texture_overrides");
       if (!overrides.is_object()) {
         errors << "ERROR: 'texture_overrides' must be an object\n";
         return false;
@@ -761,58 +804,61 @@ namespace {
     const json& obj, ImportConcurrency& target, std::ostream& errors) -> bool
   {
     if (obj.contains("texture")) {
-      if (!obj["texture"].is_object()) {
+      if (!obj.at("texture").is_object()) {
         errors << "ERROR: concurrency.texture must be an object\n";
         return false;
       }
-      if (!ApplyPipelineConcurrency(obj["texture"], target.texture, errors)) {
+      if (!ApplyPipelineConcurrency(
+            obj.at("texture"), target.texture, errors)) {
         return false;
       }
     }
     if (obj.contains("buffer")) {
-      if (!obj["buffer"].is_object()) {
+      if (!obj.at("buffer").is_object()) {
         errors << "ERROR: concurrency.buffer must be an object\n";
         return false;
       }
-      if (!ApplyPipelineConcurrency(obj["buffer"], target.buffer, errors)) {
+      if (!ApplyPipelineConcurrency(obj.at("buffer"), target.buffer, errors)) {
         return false;
       }
     }
     if (obj.contains("material")) {
-      if (!obj["material"].is_object()) {
+      if (!obj.at("material").is_object()) {
         errors << "ERROR: concurrency.material must be an object\n";
         return false;
       }
-      if (!ApplyPipelineConcurrency(obj["material"], target.material, errors)) {
+      if (!ApplyPipelineConcurrency(
+            obj.at("material"), target.material, errors)) {
         return false;
       }
     }
     const bool has_mesh_build = obj.contains("mesh_build");
     if (has_mesh_build) {
-      if (!obj["mesh_build"].is_object()) {
+      if (!obj.at("mesh_build").is_object()) {
         errors << "ERROR: concurrency.mesh_build must be an object\n";
         return false;
       }
       if (!ApplyPipelineConcurrency(
-            obj["mesh_build"], target.mesh_build, errors)) {
+            obj.at("mesh_build"), target.mesh_build, errors)) {
         return false;
       }
     }
     if (obj.contains("geometry")) {
-      if (!obj["geometry"].is_object()) {
+      if (!obj.at("geometry").is_object()) {
         errors << "ERROR: concurrency.geometry must be an object\n";
         return false;
       }
-      if (!ApplyPipelineConcurrency(obj["geometry"], target.geometry, errors)) {
+      if (!ApplyPipelineConcurrency(
+            obj.at("geometry"), target.geometry, errors)) {
         return false;
       }
     }
     if (obj.contains("scene")) {
-      if (!obj["scene"].is_object()) {
+      if (!obj.at("scene").is_object()) {
         errors << "ERROR: concurrency.scene must be an object\n";
         return false;
       }
-      if (!ApplyPipelineConcurrency(obj["scene"], target.scene, errors)) {
+      if (!ApplyPipelineConcurrency(obj.at("scene"), target.scene, errors)) {
         return false;
       }
     }
@@ -1018,6 +1064,23 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
     return std::nullopt;
   }
 
+  return Parse(json_data->dump(), manifest_path.parent_path(), root_override,
+    error_stream);
+}
+
+auto ImportManifest::Parse(const std::string_view text,
+  const std::filesystem::path& manifest_directory,
+  const std::optional<std::filesystem::path>& root_override,
+  std::ostream& error_stream) -> std::optional<ImportManifest>
+{
+  std::optional<json> json_data;
+  try {
+    json_data = json::parse(text);
+  } catch (const std::exception& error) {
+    error_stream << "ERROR: invalid manifest JSON: " << error.what() << '\n';
+    return std::nullopt;
+  }
+
   if (ReportEarlyJobKeyWhitelistViolations(*json_data, error_stream)) {
     return std::nullopt;
   }
@@ -1043,13 +1106,13 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
     return std::nullopt;
   }
   if (json_data->contains("concurrency")) {
-    if (!(*json_data)["concurrency"].is_object()) {
+    if (!(*json_data).at("concurrency").is_object()) {
       error_stream << "ERROR: concurrency must be an object\n";
       return std::nullopt;
     }
     ImportConcurrency concurrency {};
     if (!ApplyConcurrencyOverrides(
-          (*json_data)["concurrency"], concurrency, error_stream)) {
+          (*json_data).at("concurrency"), concurrency, error_stream)) {
       return std::nullopt;
     }
     manifest.concurrency = concurrency;
@@ -1062,7 +1125,7 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
   }
 
   if (json_data->contains("layout")) {
-    const auto& layout = (*json_data)["layout"];
+    const auto& layout = (*json_data).at("layout");
     if (!layout.is_object()) {
       error_stream << "ERROR: layout must be an object\n";
       return std::nullopt;
@@ -1073,11 +1136,10 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
     }
   }
 
-  const auto manifest_dir
-    = std::filesystem::absolute(manifest_path).parent_path();
+  const auto manifest_dir = std::filesystem::absolute(manifest_directory);
 
   const auto root
-    = root_override.has_value() ? *root_override : manifest_path.parent_path();
+    = root_override.has_value() ? *root_override : manifest_directory;
 
   auto manifest_output_root = std::string {};
   if (!ReadStringField(
@@ -1103,14 +1165,14 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
   }
 
   if (json_data->contains("defaults")) {
-    const auto& defaults = (*json_data)["defaults"];
+    const auto& defaults = (*json_data).at("defaults");
     if (!defaults.is_object()) {
       error_stream << "ERROR: defaults must be an object\n";
       return std::nullopt;
     }
 
     if (defaults.contains("texture")) {
-      const auto& texture_defaults = defaults["texture"];
+      const auto& texture_defaults = defaults.at("texture");
       if (!texture_defaults.is_object()) {
         error_stream << "ERROR: defaults.texture must be an object\n";
         return std::nullopt;
@@ -1130,7 +1192,7 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
     }
 
     if (defaults.contains("scene")) {
-      const auto& scene_defaults = defaults["scene"];
+      const auto& scene_defaults = defaults.at("scene");
       if (!scene_defaults.is_object()) {
         error_stream << "ERROR: defaults.scene must be an object\n";
         return std::nullopt;
@@ -1154,7 +1216,7 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
     }
 
     if (defaults.contains("script")) {
-      const auto& script_defaults = defaults["script"];
+      const auto& script_defaults = defaults.at("script");
       if (!script_defaults.is_object()) {
         error_stream << "ERROR: defaults.script must be an object\n";
         return std::nullopt;
@@ -1174,7 +1236,7 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
     }
 
     if (defaults.contains("scripting_sidecar")) {
-      const auto& sidecar_defaults = defaults["scripting_sidecar"];
+      const auto& sidecar_defaults = defaults.at("scripting_sidecar");
       if (!sidecar_defaults.is_object()) {
         error_stream << "ERROR: defaults.scripting_sidecar must be an object\n";
         return std::nullopt;
@@ -1195,7 +1257,7 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
     }
 
     if (defaults.contains("physics_sidecar")) {
-      const auto& sidecar_defaults = defaults["physics_sidecar"];
+      const auto& sidecar_defaults = defaults.at("physics_sidecar");
       if (!sidecar_defaults.is_object()) {
         error_stream << "ERROR: defaults.physics_sidecar must be an object\n";
         return std::nullopt;
@@ -1216,7 +1278,7 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
     }
 
     if (defaults.contains("input")) {
-      const auto& input_defaults = defaults["input"];
+      const auto& input_defaults = defaults.at("input");
       if (!input_defaults.is_object()) {
         error_stream << "ERROR: defaults.input must be an object\n";
         return std::nullopt;
@@ -1228,7 +1290,7 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
     }
 
     if (defaults.contains("layout")) {
-      const auto& layout_defaults = defaults["layout"];
+      const auto& layout_defaults = defaults.at("layout");
       if (!layout_defaults.is_object()) {
         error_stream << "ERROR: defaults.layout must be an object\n";
         return std::nullopt;
@@ -1240,7 +1302,7 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
     }
 
     if (defaults.contains("material_descriptor")) {
-      const auto& material_defaults = defaults["material_descriptor"];
+      const auto& material_defaults = defaults.at("material_descriptor");
       if (!material_defaults.is_object()) {
         error_stream
           << "ERROR: defaults.material_descriptor must be an object\n";
@@ -1257,7 +1319,8 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
     }
 
     if (defaults.contains("physics_material_descriptor")) {
-      const auto& material_defaults = defaults["physics_material_descriptor"];
+      const auto& material_defaults
+        = defaults.at("physics_material_descriptor");
       if (!material_defaults.is_object()) {
         error_stream
           << "ERROR: defaults.physics_material_descriptor must be an object\n";
@@ -1274,7 +1337,7 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
     }
 
     if (defaults.contains("collision_shape_descriptor")) {
-      const auto& shape_defaults = defaults["collision_shape_descriptor"];
+      const auto& shape_defaults = defaults.at("collision_shape_descriptor");
       if (!shape_defaults.is_object()) {
         error_stream
           << "ERROR: defaults.collision_shape_descriptor must be an object\n";
@@ -1291,7 +1354,7 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
     }
 
     if (defaults.contains("geometry_descriptor")) {
-      const auto& geometry_defaults = defaults["geometry_descriptor"];
+      const auto& geometry_defaults = defaults.at("geometry_descriptor");
       if (!geometry_defaults.is_object()) {
         error_stream
           << "ERROR: defaults.geometry_descriptor must be an object\n";
@@ -1308,7 +1371,7 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
     }
 
     if (defaults.contains("scene_descriptor")) {
-      const auto& scene_descriptor_defaults = defaults["scene_descriptor"];
+      const auto& scene_descriptor_defaults = defaults.at("scene_descriptor");
       if (!scene_descriptor_defaults.is_object()) {
         error_stream << "ERROR: defaults.scene_descriptor must be an object\n";
         return std::nullopt;
@@ -1324,7 +1387,7 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
     }
 
     if (defaults.contains("buffer_container")) {
-      const auto& buffer_container_defaults = defaults["buffer_container"];
+      const auto& buffer_container_defaults = defaults.at("buffer_container");
       if (!buffer_container_defaults.is_object()) {
         error_stream << "ERROR: defaults.buffer_container must be an object\n";
         return std::nullopt;
@@ -1342,12 +1405,12 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
 
   ResolveCookedRootsRelativeToManifest(manifest_dir, manifest.defaults);
 
-  if (!json_data->contains("jobs") || !(*json_data)["jobs"].is_array()) {
+  if (!json_data->contains("jobs") || !(*json_data).at("jobs").is_array()) {
     error_stream << "ERROR: manifest.jobs must be an array\n";
     return std::nullopt;
   }
 
-  for (const auto& job : (*json_data)["jobs"]) {
+  for (const auto& job : (*json_data).at("jobs")) {
     if (!job.is_object()) {
       error_stream << "ERROR: job entries must be objects\n";
       return std::nullopt;
@@ -1356,7 +1419,7 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
     ImportManifestJob manifest_job {};
     manifest_job.loose_cooked_layout = manifest.defaults.loose_cooked_layout;
     if (job.contains("layout")) {
-      const auto& layout = job["layout"];
+      const auto& layout = job.at("layout");
       if (!layout.is_object()) {
         error_stream << "ERROR: job.layout must be an object\n";
         return std::nullopt;
@@ -1384,11 +1447,11 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
     manifest_job.fbx.texture_defaults = manifest.defaults.texture;
     manifest_job.gltf.texture_defaults = manifest.defaults.texture;
 
-    if (!job.contains("type") || !job["type"].is_string()) {
+    if (!job.contains("type") || !job.at("type").is_string()) {
       error_stream << "ERROR: job.type is required and must be a string\n";
       return std::nullopt;
     }
-    manifest_job.job_type = job["type"].get<std::string>();
+    manifest_job.job_type = job.at("type").get<std::string>();
     if (manifest_job.job_type.empty()) {
       error_stream << "ERROR: job.type must not be empty\n";
       return std::nullopt;
@@ -1412,19 +1475,19 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
         }
       }
 
-      if (!job.contains("source") || !job["source"].is_string()) {
+      if (!job.contains("source") || !job.at("source").is_string()) {
         error_stream << "ERROR: input job.source is required and must be a "
                         "string\n";
         return std::nullopt;
       }
-      if (!job.contains("id") || !job["id"].is_string()) {
+      if (!job.contains("id") || !job.at("id").is_string()) {
         error_stream << "ERROR [input.manifest.job_id_missing]: input job.id "
                         "is required and must be a string\n";
         return std::nullopt;
       }
 
       manifest_job.input.source_path
-        = ResolveSourcePath(root, job["source"].get<std::string>());
+        = ResolveSourcePath(root, job.at("source").get<std::string>());
       if (!ApplyCommonInputOverrides(job, manifest_job.input, error_stream)) {
         return std::nullopt;
       }
@@ -1477,7 +1540,7 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
       return std::nullopt;
     }
 
-    if (has_source && !job["source"].is_string()) {
+    if (has_source && !job.at("source").is_string()) {
       error_stream << "ERROR: job.source must be a string\n";
       return std::nullopt;
     }
@@ -1491,11 +1554,11 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
     }
 
     if (has_bindings) {
-      if (is_script_sidecar_job && !job["bindings"].is_array()) {
+      if (is_script_sidecar_job && !job.at("bindings").is_array()) {
         error_stream << "ERROR: script-sidecar job.bindings must be an array\n";
         return std::nullopt;
       }
-      if (is_physics_sidecar_job && !job["bindings"].is_object()) {
+      if (is_physics_sidecar_job && !job.at("bindings").is_object()) {
         error_stream
           << "ERROR: physics-sidecar job.bindings must be an object\n";
         return std::nullopt;
@@ -1503,7 +1566,7 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
     }
 
     if (has_source) {
-      const auto source = job["source"].get<std::string>();
+      const auto source = job.at("source").get<std::string>();
       manifest_job.texture.source_path = ResolveSourcePath(root, source);
       manifest_job.fbx.source_path = manifest_job.texture.source_path;
       manifest_job.gltf.source_path = manifest_job.texture.source_path;
@@ -1541,12 +1604,12 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
 
     if (has_bindings && is_script_sidecar_job) {
       auto sidecar_doc = json::object();
-      sidecar_doc["bindings"] = job["bindings"];
+      sidecar_doc.update({ { "bindings", job.at("bindings") } });
       manifest_job.scripting_sidecar.inline_bindings_json = sidecar_doc.dump();
       manifest_job.physics_sidecar.inline_bindings_json.clear();
     } else if (has_bindings && is_physics_sidecar_job) {
       auto sidecar_doc = json::object();
-      sidecar_doc["bindings"] = job["bindings"];
+      sidecar_doc.update({ { "bindings", job.at("bindings") } });
       manifest_job.physics_sidecar.inline_bindings_json = sidecar_doc.dump();
       manifest_job.scripting_sidecar.inline_bindings_json.clear();
     } else {

@@ -8,22 +8,27 @@
 #include <array>
 #include <bit>
 #include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <limits>
 #include <span>
-#include <stop_token>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
-#include <Oxygen/Testing/GTest.h>
-
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MaterialPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/ThreadPool.h>
-#include <Oxygen/OxCo/asio.h>
+#include <Oxygen/Testing/GTest.h>
 
 using namespace oxygen::content::import;
 using namespace oxygen;
@@ -35,9 +40,9 @@ namespace {
 //===---------------------------------------------------------//
 
 struct MaterialUvTransformDesc {
-  float uv_scale[2] = { 1.0f, 1.0f };
-  float uv_offset[2] = { 0.0f, 0.0f };
-  float uv_rotation_radians = 0.0f;
+  float uv_scale[2] = { 1.0F, 1.0F };
+  float uv_offset[2] = { 0.0F, 0.0F };
+  float uv_rotation_radians = 0.0F;
   uint8_t uv_set = 0;
 };
 
@@ -119,7 +124,7 @@ auto HasDiagnosticCode(const std::vector<ImportDiagnostic>& diagnostics,
   std::string_view code) -> bool
 {
   return std::any_of(diagnostics.begin(), diagnostics.end(),
-    [&](const ImportDiagnostic& diag) { return diag.code == code; });
+    [&](const ImportDiagnostic& diag) -> bool { return diag.code == code; });
 }
 
 auto CountDiagnosticsWithCode(const std::vector<ImportDiagnostic>& diagnostics,
@@ -127,7 +132,7 @@ auto CountDiagnosticsWithCode(const std::vector<ImportDiagnostic>& diagnostics,
 {
   return static_cast<size_t>(
     std::count_if(diagnostics.begin(), diagnostics.end(),
-      [&](const ImportDiagnostic& diag) { return diag.code == code; }));
+      [&](const ImportDiagnostic& diag) -> bool { return diag.code == code; }));
 }
 
 auto ExpectedShaderStages(const std::vector<ShaderRequest>& requests)
@@ -135,7 +140,7 @@ auto ExpectedShaderStages(const std::vector<ShaderRequest>& requests)
 {
   uint32_t stages = 0;
   for (const auto& request : requests) {
-    const uint32_t bit = 1u << request.shader_type;
+    const uint32_t bit = 1U << request.shader_type;
     stages |= bit;
   }
   return stages;
@@ -189,7 +194,7 @@ NOLINT_TEST_F(
   co::ThreadPool pool(loop_, 2);
 
   // Act
-  co::Run(loop_, [&]() -> co::Co<> {
+  co::Run(loop_, [&] -> co::Co<> {
     MaterialPipeline pipeline(pool,
       MaterialPipeline::Config {
         .queue_capacity = 4,
@@ -209,7 +214,9 @@ NOLINT_TEST_F(
 
   // Assert
   ASSERT_TRUE(result.success);
-  ASSERT_TRUE(result.cooked.has_value());
+  if (!result.cooked.has_value()) {
+    FAIL() << "Expected result.cooked to contain a value";
+  }
 
   const auto desc = ReadMaterialDesc(result.cooked->descriptor_bytes);
   auto zeroed = ZeroContentHash(result.cooked->descriptor_bytes);
@@ -217,6 +224,40 @@ NOLINT_TEST_F(
     std::span<const std::byte>(zeroed.data(), zeroed.size()));
 
   EXPECT_EQ(desc.header.content_hash, expected_hash);
+}
+
+NOLINT_TEST_F(MaterialPipelineBasicTest, RejectsInvalidCompiledEmission)
+{
+  co::ThreadPool pool(loop_, 2);
+  co::Run(loop_, [&] -> co::Co<> {
+    MaterialPipeline pipeline(pool,
+      MaterialPipeline::Config {
+        .queue_capacity = 4,
+        .worker_count = 1,
+        .use_thread_pool = true,
+      });
+    OXCO_WITH_NURSERY(n)
+    {
+      pipeline.Start(n);
+      for (const auto value : std::array {
+             -1.0F,
+             65505.0F,
+             std::numeric_limits<float>::infinity(),
+             std::numeric_limits<float>::quiet_NaN(),
+           }) {
+        auto item = MakeBaseItem();
+        item.inputs.emissive_factor[0] = value;
+        co_await pipeline.Submit(std::move(item));
+        const auto result = co_await pipeline.Collect();
+        EXPECT_FALSE(result.success);
+        EXPECT_FALSE(result.cooked.has_value());
+        EXPECT_TRUE(HasDiagnosticCode(
+          result.diagnostics, "material.emissive_factor_range"));
+      }
+      pipeline.Close();
+      co_return co::kJoin;
+    };
+  });
 }
 
 //=== ORM Policy Tests
@@ -242,7 +283,7 @@ NOLINT_TEST_F(MaterialPipelineOrmTest, CollectAutoOrmPackedSetsFlags)
   co::ThreadPool pool(loop_, 2);
 
   // Act
-  co::Run(loop_, [&]() -> co::Co<> {
+  co::Run(loop_, [&] -> co::Co<> {
     MaterialPipeline pipeline(pool,
       MaterialPipeline::Config {
         .queue_capacity = 4,
@@ -262,15 +303,17 @@ NOLINT_TEST_F(MaterialPipelineOrmTest, CollectAutoOrmPackedSetsFlags)
 
   // Assert
   ASSERT_TRUE(result.success);
-  ASSERT_TRUE(result.cooked.has_value());
+  if (!result.cooked.has_value()) {
+    FAIL() << "Expected result.cooked to contain a value";
+  }
   const auto desc = ReadMaterialDesc(result.cooked->descriptor_bytes);
 
-  EXPECT_NE(desc.flags & data::pak::render::kMaterialFlag_GltfOrmPacked, 0u);
+  EXPECT_NE(desc.flags & data::pak::render::kMaterialFlag_GltfOrmPacked, 0U);
   EXPECT_EQ(
-    desc.flags & data::pak::render::kMaterialFlag_NoTextureSampling, 0u);
-  EXPECT_EQ(desc.metallic_texture, 7u);
-  EXPECT_EQ(desc.roughness_texture, 7u);
-  EXPECT_EQ(desc.ambient_occlusion_texture, 7u);
+    desc.flags & data::pak::render::kMaterialFlag_NoTextureSampling, 0U);
+  EXPECT_EQ(desc.metallic_texture, 7U);
+  EXPECT_EQ(desc.roughness_texture, 7U);
+  EXPECT_EQ(desc.ambient_occlusion_texture, 7U);
 }
 
 //! Verify force-packed ORM emits an error when inputs are incompatible.
@@ -299,7 +342,7 @@ NOLINT_TEST_F(MaterialPipelineOrmTest, CollectForcePackedInvalidEmitsError)
   co::ThreadPool pool(loop_, 2);
 
   // Act
-  co::Run(loop_, [&]() -> co::Co<> {
+  co::Run(loop_, [&] -> co::Co<> {
     MaterialPipeline pipeline(pool,
       MaterialPipeline::Config {
         .queue_capacity = 4,
@@ -335,14 +378,14 @@ NOLINT_TEST_F(MaterialPipelineUvTest, CollectSharedTransformWritesExtension)
     .assigned = true,
     .source_id = "base",
     .uv_set = 2,
-    .uv_transform = { { 2.0f, 2.0f }, { 0.25f, 0.5f }, 0.1f },
+    .uv_transform = { { 2.0F, 2.0F }, { 0.25F, 0.5F }, 0.1F },
   };
 
   MaterialPipeline::WorkResult result;
   co::ThreadPool pool(loop_, 2);
 
   // Act
-  co::Run(loop_, [&]() -> co::Co<> {
+  co::Run(loop_, [&] -> co::Co<> {
     MaterialPipeline pipeline(pool,
       MaterialPipeline::Config {
         .queue_capacity = 4,
@@ -362,16 +405,18 @@ NOLINT_TEST_F(MaterialPipelineUvTest, CollectSharedTransformWritesExtension)
 
   // Assert
   ASSERT_TRUE(result.success);
-  ASSERT_TRUE(result.cooked.has_value());
+  if (!result.cooked.has_value()) {
+    FAIL() << "Expected result.cooked to contain a value";
+  }
   const auto desc = ReadMaterialDesc(result.cooked->descriptor_bytes);
   const auto uv = ReadUvTransform(desc);
 
-  EXPECT_EQ(uv.uv_set, 2u);
-  EXPECT_FLOAT_EQ(uv.uv_scale[0], 2.0f);
-  EXPECT_FLOAT_EQ(uv.uv_scale[1], 2.0f);
-  EXPECT_FLOAT_EQ(uv.uv_offset[0], 0.25f);
-  EXPECT_FLOAT_EQ(uv.uv_offset[1], 0.5f);
-  EXPECT_FLOAT_EQ(uv.uv_rotation_radians, 0.1f);
+  EXPECT_EQ(uv.uv_set, 2U);
+  EXPECT_FLOAT_EQ(uv.uv_scale[0], 2.0F);
+  EXPECT_FLOAT_EQ(uv.uv_scale[1], 2.0F);
+  EXPECT_FLOAT_EQ(uv.uv_offset[0], 0.25F);
+  EXPECT_FLOAT_EQ(uv.uv_offset[1], 0.5F);
+  EXPECT_FLOAT_EQ(uv.uv_rotation_radians, 0.1F);
 }
 
 //! Verify mismatched UV transforms use the first assigned transform.
@@ -384,7 +429,7 @@ NOLINT_TEST_F(MaterialPipelineUvTest, CollectMismatchedTransformsUsesFirst)
     .assigned = true,
     .source_id = "base",
     .uv_set = 0,
-    .uv_transform = { { 2.0f, 2.0f }, { 0.0f, 0.0f }, 0.0f },
+    .uv_transform = { { 2.0F, 2.0F }, { 0.0F, 0.0F }, 0.0F },
   };
   item.textures.normal = MaterialTextureBinding {
     .index = 3,
@@ -398,7 +443,7 @@ NOLINT_TEST_F(MaterialPipelineUvTest, CollectMismatchedTransformsUsesFirst)
   co::ThreadPool pool(loop_, 2);
 
   // Act
-  co::Run(loop_, [&]() -> co::Co<> {
+  co::Run(loop_, [&] -> co::Co<> {
     MaterialPipeline pipeline(pool,
       MaterialPipeline::Config {
         .queue_capacity = 4,
@@ -418,16 +463,18 @@ NOLINT_TEST_F(MaterialPipelineUvTest, CollectMismatchedTransformsUsesFirst)
 
   // Assert
   ASSERT_TRUE(result.success);
-  ASSERT_TRUE(result.cooked.has_value());
+  if (!result.cooked.has_value()) {
+    FAIL() << "Expected result.cooked to contain a value";
+  }
   const auto desc = ReadMaterialDesc(result.cooked->descriptor_bytes);
   const auto uv = ReadUvTransform(desc);
 
-  EXPECT_EQ(uv.uv_set, 0u);
-  EXPECT_FLOAT_EQ(uv.uv_scale[0], 2.0f);
-  EXPECT_FLOAT_EQ(uv.uv_scale[1], 2.0f);
-  EXPECT_FLOAT_EQ(uv.uv_offset[0], 0.0f);
-  EXPECT_FLOAT_EQ(uv.uv_offset[1], 0.0f);
-  EXPECT_FLOAT_EQ(uv.uv_rotation_radians, 0.0f);
+  EXPECT_EQ(uv.uv_set, 0U);
+  EXPECT_FLOAT_EQ(uv.uv_scale[0], 2.0F);
+  EXPECT_FLOAT_EQ(uv.uv_scale[1], 2.0F);
+  EXPECT_FLOAT_EQ(uv.uv_offset[0], 0.0F);
+  EXPECT_FLOAT_EQ(uv.uv_offset[1], 0.0F);
+  EXPECT_FLOAT_EQ(uv.uv_rotation_radians, 0.0F);
 }
 
 //=== Shader Reference Tests
@@ -450,7 +497,7 @@ NOLINT_TEST_F(MaterialPipelineShaderTest, CollectShaderStagesOrderedByBitIndex)
   co::ThreadPool pool(loop_, 2);
 
   // Act
-  co::Run(loop_, [&]() -> co::Co<> {
+  co::Run(loop_, [&] -> co::Co<> {
     MaterialPipeline pipeline(pool,
       MaterialPipeline::Config {
         .queue_capacity = 4,
@@ -470,7 +517,9 @@ NOLINT_TEST_F(MaterialPipelineShaderTest, CollectShaderStagesOrderedByBitIndex)
 
   // Assert
   ASSERT_TRUE(result.success);
-  ASSERT_TRUE(result.cooked.has_value());
+  if (!result.cooked.has_value()) {
+    FAIL() << "Expected result.cooked to contain a value";
+  }
 
   const auto desc = ReadMaterialDesc(result.cooked->descriptor_bytes);
   EXPECT_EQ(desc.shader_stages, expected_stages);
@@ -478,8 +527,8 @@ NOLINT_TEST_F(MaterialPipelineShaderTest, CollectShaderStagesOrderedByBitIndex)
   const auto ref_count = std::popcount(desc.shader_stages);
   const auto refs = ReadShaderRefs(result.cooked->descriptor_bytes, ref_count);
   ASSERT_EQ(refs.size(), ref_count);
-  EXPECT_EQ(refs[0].shader_type, static_cast<uint8_t>(ShaderType::kVertex));
-  EXPECT_EQ(refs[1].shader_type, static_cast<uint8_t>(ShaderType::kPixel));
+  EXPECT_EQ(refs.at(0).shader_type, static_cast<uint8_t>(ShaderType::kVertex));
+  EXPECT_EQ(refs.at(1).shader_type, static_cast<uint8_t>(ShaderType::kPixel));
 }
 
 //! Verify overlong shader strings emit truncation warnings.
@@ -497,7 +546,7 @@ NOLINT_TEST_F(
   co::ThreadPool pool(loop_, 2);
 
   // Act
-  co::Run(loop_, [&]() -> co::Co<> {
+  co::Run(loop_, [&] -> co::Co<> {
     MaterialPipeline pipeline(pool,
       MaterialPipeline::Config {
         .queue_capacity = 4,
@@ -519,7 +568,7 @@ NOLINT_TEST_F(
   ASSERT_TRUE(result.success);
   EXPECT_EQ(CountDiagnosticsWithCode(
               result.diagnostics, "material.shader_ref_truncated"),
-    3u);
+    3U);
 }
 
 } // namespace

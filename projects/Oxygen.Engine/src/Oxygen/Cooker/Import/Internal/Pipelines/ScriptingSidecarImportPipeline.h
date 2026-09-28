@@ -58,9 +58,10 @@ public:
     bool success = false;
   };
 
-  OXGN_COOK_API explicit ScriptingSidecarImportPipeline(Config config = {});
+  OXGN_COOK_API ScriptingSidecarImportPipeline();
+  OXGN_COOK_API explicit ScriptingSidecarImportPipeline(Config config);
 
-  OXGN_COOK_API ~ScriptingSidecarImportPipeline();
+  OXGN_COOK_API ~ScriptingSidecarImportPipeline() override;
 
   OXYGEN_MAKE_NON_COPYABLE(ScriptingSidecarImportPipeline)
   OXYGEN_MAKE_NON_MOVABLE(ScriptingSidecarImportPipeline)

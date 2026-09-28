@@ -9,28 +9,40 @@
 #include <cstdint>
 #include <memory>
 #include <span>
-#include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
-
-#include <Oxygen/Testing/GTest.h>
-
-#include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Content/Internal/InFlightOperationTable.h>
-#include <Oxygen/Content/Loaders/BufferLoader.h>
-#include <Oxygen/Content/Loaders/GeometryLoader.h>
-#include <Oxygen/Content/Loaders/InputActionLoader.h>
-#include <Oxygen/Content/Loaders/InputMappingContextLoader.h>
-#include <Oxygen/Content/Loaders/MaterialLoader.h>
-#include <Oxygen/Content/Loaders/SceneLoader.h>
-#include <Oxygen/Content/Loaders/TextureLoader.h>
-#include <Oxygen/OxCo/Co.h>
-#include <Oxygen/OxCo/Run.h>
-#include <Oxygen/OxCo/Shared.h>
-#include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
 
 #include "./AssetLoader_test.h"
 #include "Utils/PakUtils.h"
+
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/ScopeGuard.h>
+#include <Oxygen/Base/Span.h>
+#include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/Content/IAssetLoader.h>
+#include <Oxygen/Content/Internal/InFlightOperationTable.h>
+#include <Oxygen/Content/LoaderContext.h>
+#include <Oxygen/Content/Loaders/BufferLoader.h>
+#include <Oxygen/Content/Loaders/GeometryLoader.h>
+#include <Oxygen/Content/Loaders/MaterialLoader.h>
+#include <Oxygen/Content/Loaders/TextureLoader.h>
+#include <Oxygen/Content/OperationCancelledException.h>
+#include <Oxygen/Content/ResidencyPolicy.h>
+#include <Oxygen/Content/ResourceKey.h>
+#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/BufferResource.h>
+#include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/InputMappingContextAsset.h>
+#include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/TextureResource.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
+#include <Oxygen/OxCo/Run.h>
+#include <Oxygen/OxCo/Shared.h>
+#include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
+#include <Oxygen/OxCo/ThreadPool.h>
+#include <Oxygen/Testing/GTest.h>
 
 using ::testing::NotNull;
 
@@ -51,6 +63,8 @@ using oxygen::data::MaterialAsset;
 using oxygen::data::TextureResource;
 
 // NOLINTBEGIN(*-magic-numbers)
+
+using oxygen::base::CheckedAt;
 
 namespace {
 
@@ -76,7 +90,7 @@ auto MakeBytesFromHexdump(const std::string& hexdump, const std::size_t size,
   std::vector<uint8_t> bytes(size, fill);
   const auto copy_count = std::min(bytes.size(), header.size());
   for (std::size_t i = 0; i < copy_count; ++i) {
-    bytes[i] = static_cast<uint8_t>(header[i]);
+    bytes.at(i) = static_cast<uint8_t>(header.at(i));
   }
 
   return bytes;
@@ -108,7 +122,7 @@ NOLINT_TEST_F(
   TestEventLoop el;
 
   // Act + Assert
-  (oxygen::co::Run)(el, [&]() -> Co<> {
+  oxygen::co::Run(el, [&] -> Co<> {
     AssetLoaderConfig config {};
 
     oxygen::co::ThreadPool pool(el, 2);
@@ -173,7 +187,7 @@ NOLINT_TEST_F(
   std::span<const uint8_t> span(bytes.data(), bytes.size());
 
   TestEventLoop el;
-  (oxygen::co::Run)(el, [&]() -> Co<> {
+  oxygen::co::Run(el, [&] -> Co<> {
     AssetLoaderConfig config {};
     oxygen::co::ThreadPool pool(el, 2);
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
@@ -247,7 +261,7 @@ NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest, ResourceUnloadRefcountedCheckouts)
   TestEventLoop el;
 
   // Act + Assert
-  (oxygen::co::Run)(el, [&]() -> Co<> {
+  oxygen::co::Run(el, [&] -> Co<> {
     AssetLoaderConfig config {};
 
     oxygen::co::ThreadPool pool(el, 2);
@@ -302,7 +316,7 @@ NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest, ResourcePinUnpinSymmetryExpected)
   auto bytes = MakeBytesFromHexdump(hexdump, kDataOffset + kSizeBytes, kFill);
 
   TestEventLoop el;
-  (oxygen::co::Run)(el, [&]() -> Co<> {
+  oxygen::co::Run(el, [&] -> Co<> {
     AssetLoaderConfig config {};
     oxygen::co::ThreadPool pool(el, 2);
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
@@ -339,6 +353,70 @@ NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest, ResourcePinUnpinSymmetryExpected)
   });
 }
 
+NOLINT_TEST(InFlightOperationTableLifetimeTest, CleanupCanReenterRetirement)
+{
+  using Table = oxygen::content::internal::InFlightOperationTable;
+  enum class Retirement : uint8_t { kErase, kClear, kDestruction };
+  const auto hold = [](auto cleanup) -> Co<std::shared_ptr<void>> {
+    static_cast<void>(cleanup);
+    co_return nullptr;
+  };
+  for (const auto mode :
+    { Retirement::kErase, Retirement::kClear, Retirement::kDestruction }) {
+    size_t retired = 0U;
+    {
+      Table table;
+      const auto type = oxygen::data::BufferResource::ClassTypeId();
+      constexpr uint64_t kHash = 1U;
+      const auto id = table.NewOperationId();
+      const auto cleanup = [&table, type, id, &retired]() noexcept -> void {
+        ++retired;
+        table.Erase(type, kHash, id);
+      };
+      auto guard
+        = std::make_unique<oxygen::ScopeGuard<decltype(cleanup)>>(cleanup);
+      table.Insert(
+        type, kHash, id, oxygen::co::Shared(hold(std::move(guard))), {});
+      if (mode == Retirement::kErase) {
+        table.Erase(type, kHash, id);
+      } else if (mode == Retirement::kClear) {
+        table.Clear();
+      }
+    }
+    EXPECT_EQ(retired, 1U);
+  }
+}
+
+NOLINT_TEST(
+  InFlightOperationTableLifetimeTest, LateCleanupCannotEraseReplacement)
+{
+  using Table = oxygen::content::internal::InFlightOperationTable;
+  Table table;
+  const auto type = oxygen::data::BufferResource::ClassTypeId();
+  constexpr uint64_t kHash = 1U;
+  const auto old_id = table.NewOperationId();
+  const auto cleanup = [&table, type, old_id]() noexcept -> void {
+    table.Erase(type, kHash, old_id);
+  };
+  const auto hold = [](auto guard) -> Co<std::shared_ptr<void>> {
+    static_cast<void>(guard);
+    co_return nullptr;
+  };
+  auto old = oxygen::co::Shared(
+    hold(std::make_unique<oxygen::ScopeGuard<decltype(cleanup)>>(cleanup)));
+  table.Insert(type, kHash, old_id, old, {});
+  table.Clear();
+  const auto replacement_id = table.NewOperationId();
+  auto replacement = oxygen::co::Shared(
+    []() -> Co<std::shared_ptr<void>> { co_return nullptr; }());
+  table.Insert(type, kHash, replacement_id, replacement, {});
+  old = {};
+  EXPECT_TRUE(table.GetRequestMeta(type, kHash).has_value());
+  table.Close();
+  EXPECT_THROW(static_cast<void>(table.NewOperationId()),
+    oxygen::content::OperationCancelledException);
+}
+
 NOLINT_TEST(
   InFlightOperationTablePriorityContractTest, HigherPriorityPromotesMetadata)
 {
@@ -346,21 +424,27 @@ NOLINT_TEST(
   const auto kTypeId = oxygen::data::BufferResource::ClassTypeId();
   constexpr uint64_t kHash = 0xABU;
   auto op = oxygen::co::Shared(
-    []() -> Co<std::shared_ptr<void>> { co_return nullptr; }());
+    [] -> Co<std::shared_ptr<void>> { co_return nullptr; }());
 
-  table.InsertOrAssign(kTypeId, kHash, op,
-    { .priority = oxygen::content::LoadPriority::kDefault,
+  table.Insert(kTypeId, kHash, table.NewOperationId(), op,
+    {
+      .priority = oxygen::content::LoadPriority::kDefault,
       .intent = oxygen::content::LoadIntent::kRuntime,
-      .sequence = 10U });
+      .sequence = 10U,
+    });
 
   auto joined = table.Find(kTypeId, kHash,
-    { .priority = oxygen::content::LoadPriority::kCritical,
+    {
+      .priority = oxygen::content::LoadPriority::kCritical,
       .intent = oxygen::content::LoadIntent::kStreaming,
-      .sequence = 20U });
+      .sequence = 20U,
+    });
   EXPECT_TRUE(joined.has_value());
 
   const auto meta = table.GetRequestMeta(kTypeId, kHash);
-  ASSERT_TRUE(meta.has_value());
+  if (!meta.has_value()) {
+    FAIL() << "Expected meta to contain a value";
+  }
   EXPECT_EQ(meta->priority, oxygen::content::LoadPriority::kCritical);
   EXPECT_EQ(meta->intent, oxygen::content::LoadIntent::kStreaming);
   EXPECT_EQ(meta->sequence, 10U);
@@ -372,28 +456,38 @@ NOLINT_TEST(InFlightOperationTablePriorityContractTest, TieUsesEarliestSequence)
   const auto kTypeId = oxygen::data::BufferResource::ClassTypeId();
   constexpr uint64_t kHash = 0xCDU;
   auto op = oxygen::co::Shared(
-    []() -> Co<std::shared_ptr<void>> { co_return nullptr; }());
+    [] -> Co<std::shared_ptr<void>> { co_return nullptr; }());
 
-  table.InsertOrAssign(kTypeId, kHash, op,
-    { .priority = oxygen::content::LoadPriority::kDefault,
+  table.Insert(kTypeId, kHash, table.NewOperationId(), op,
+    {
+      .priority = oxygen::content::LoadPriority::kDefault,
       .intent = oxygen::content::LoadIntent::kRuntime,
-      .sequence = 5U });
+      .sequence = 5U,
+    });
 
   (void)table.Find(kTypeId, kHash,
-    { .priority = oxygen::content::LoadPriority::kDefault,
+    {
+      .priority = oxygen::content::LoadPriority::kDefault,
       .intent = oxygen::content::LoadIntent::kStreaming,
-      .sequence = 9U });
+      .sequence = 9U,
+    });
   auto meta = table.GetRequestMeta(kTypeId, kHash);
-  ASSERT_TRUE(meta.has_value());
+  if (!meta.has_value()) {
+    FAIL() << "Expected meta to contain a value";
+  }
   EXPECT_EQ(meta->sequence, 5U);
   EXPECT_EQ(meta->intent, oxygen::content::LoadIntent::kRuntime);
 
   (void)table.Find(kTypeId, kHash,
-    { .priority = oxygen::content::LoadPriority::kDefault,
+    {
+      .priority = oxygen::content::LoadPriority::kDefault,
       .intent = oxygen::content::LoadIntent::kPrewarm,
-      .sequence = 3U });
+      .sequence = 3U,
+    });
   meta = table.GetRequestMeta(kTypeId, kHash);
-  ASSERT_TRUE(meta.has_value());
+  if (!meta.has_value()) {
+    FAIL() << "Expected meta to contain a value";
+  }
   EXPECT_EQ(meta->sequence, 3U);
   EXPECT_EQ(meta->intent, oxygen::content::LoadIntent::kPrewarm);
 }
@@ -413,7 +507,7 @@ NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest,
   std::span<const uint8_t> span(bytes.data(), bytes.size());
 
   TestEventLoop el;
-  (oxygen::co::Run)(el, [&]() -> Co<> {
+  oxygen::co::Run(el, [&] -> Co<> {
     AssetLoaderConfig config {};
     oxygen::co::ThreadPool pool(el, 2);
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
@@ -470,7 +564,7 @@ NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest, AssetUnloadRequiresExplicitRelease)
   TestEventLoop el;
 
   // Act + Assert
-  (oxygen::co::Run)(el, [&]() -> Co<> {
+  oxygen::co::Run(el, [&] -> Co<> {
     oxygen::co::ThreadPool pool(el, 2);
     AssetLoaderConfig config {};
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
@@ -518,7 +612,7 @@ NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest,
   const auto material_key = CreateTestAssetKey("textured_material");
 
   TestEventLoop el;
-  (oxygen::co::Run)(el, [&]() -> Co<> {
+  oxygen::co::Run(el, [&] -> Co<> {
     oxygen::co::ThreadPool pool(el, 2);
     AssetLoaderConfig config {};
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
@@ -561,65 +655,50 @@ NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest,
   });
 }
 
-//! Test: Release order unloads dependency before dependent.
-/*!
- Scenario: A depends on B. Releasing A cascades and causes B to be checked in
- before A.
-*/
 NOLINT_TEST_F(AssetLoaderLifetimeTest, ReleaseOrderDependencyBeforeDependent)
 {
-  // Arrange
-  const auto key_a = CreateTestAssetKey("release_a");
-  const auto key_b = CreateTestAssetKey("release_b");
-  asset_loader_->AddAssetDependency(key_a, key_b);
-
-  // Act
-  asset_loader_->ReleaseAsset(key_a);
-  asset_loader_->ReleaseAsset(key_b);
-
-  // Assert (idempotence)
-  EXPECT_TRUE(asset_loader_->ReleaseAsset(key_a));
-  EXPECT_TRUE(asset_loader_->ReleaseAsset(key_b));
+  TestEventLoop loop;
+  oxygen::co::Run(loop,
+    oxygen::content::testing::CheckLoadedMaterialGraph(&loop,
+      temp_dir_ / "release", [](auto& loader, const auto& assets) -> auto {
+        loader.AddAssetDependency(
+          assets.at(0)->GetAssetKey(), assets.at(1)->GetAssetKey());
+        static_cast<void>(loader.ReleaseAsset(*assets.at(0)));
+        static_cast<void>(loader.ReleaseAsset(*assets.at(1)));
+        loader.TrimCache();
+        EXPECT_FALSE(loader.HasMaterialAsset(assets.at(0)->GetAssetKey()));
+        EXPECT_FALSE(loader.HasMaterialAsset(assets.at(1)->GetAssetKey()));
+        EXPECT_TRUE(loader.ReleaseAsset(*assets.at(0)));
+        EXPECT_TRUE(loader.ReleaseAsset(*assets.at(1)));
+      }));
 }
 
-#if !defined(NDEBUG)
-//! Test: Releasing one of multiple dependents does not evict shared dependency.
-/*!
- Scenario: A -> C, B -> C. Release A; C must remain for B. Then release B; C
- may be released.
-*/
+#ifndef NDEBUG
 NOLINT_TEST_F(
   AssetLoaderLifetimeTest, CascadeReleaseSiblingSharedDependencyNotEvicted)
 {
-  const auto key_a = CreateTestAssetKey("cascade_a");
-  const auto key_b = CreateTestAssetKey("cascade_b");
-  const auto key_c = CreateTestAssetKey("cascade_shared");
-  asset_loader_->AddAssetDependency(key_a, key_c);
-  asset_loader_->AddAssetDependency(key_b, key_c);
-
-  size_t dependents_of_c = 0;
-  asset_loader_->ForEachDependent(
-    key_c, [&](const oxygen::data::AssetKey&) { ++dependents_of_c; });
-  EXPECT_EQ(dependents_of_c, 2);
-
-  asset_loader_->ReleaseAsset(key_a);
-
-  dependents_of_c = 0;
-  asset_loader_->ForEachDependent(
-    key_c, [&](const oxygen::data::AssetKey&) { ++dependents_of_c; });
-  EXPECT_EQ(dependents_of_c, 1);
-
-  asset_loader_->ReleaseAsset(key_b);
-
-  dependents_of_c = 0;
-  asset_loader_->ForEachDependent(
-    key_c, [&](const oxygen::data::AssetKey&) { ++dependents_of_c; });
-  EXPECT_EQ(dependents_of_c, 0);
-
-  asset_loader_->ReleaseAsset(key_a);
-  asset_loader_->ReleaseAsset(key_b);
+  TestEventLoop loop;
+  oxygen::co::Run(loop,
+    oxygen::content::testing::CheckLoadedMaterialGraph(&loop,
+      temp_dir_ / "siblings", [](auto& loader, const auto& assets) -> auto {
+        const auto shared = assets.at(2)->GetAssetKey();
+        loader.AddAssetDependency(assets.at(0)->GetAssetKey(), shared);
+        loader.AddAssetDependency(assets.at(1)->GetAssetKey(), shared);
+        static_cast<void>(loader.ReleaseAsset(*assets.at(0)));
+        std::vector<oxygen::data::AssetKey> remaining;
+        loader.ForEachDependent(
+          shared, [&](const auto& key) -> auto { remaining.push_back(key); });
+        EXPECT_THAT(
+          remaining, ::testing::ElementsAre(assets.at(1)->GetAssetKey()));
+        EXPECT_TRUE(loader.HasMaterialAsset(shared));
+        static_cast<void>(loader.ReleaseAsset(*assets.at(1)));
+        remaining.clear();
+        loader.ForEachDependent(
+          shared, [&](const auto& key) -> auto { remaining.push_back(key); });
+        EXPECT_TRUE(remaining.empty());
+      }));
 }
-#endif // !NDEBUG
+#endif
 
 //! Test: async geometry load binds dependencies and unloads after trim.
 /*!
@@ -639,7 +718,7 @@ NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest,
   TestEventLoop el;
 
   // Act + Assert
-  (oxygen::co::Run)(el, [&]() -> Co<> {
+  oxygen::co::Run(el, [&] -> Co<> {
     oxygen::co::ThreadPool pool(el, 2);
     AssetLoaderConfig config {};
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
@@ -665,14 +744,14 @@ NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest,
         const auto meshes = geometry->Meshes();
         EXPECT_FALSE(meshes.empty());
 
-        if (!meshes.empty() && meshes[0]) {
-          EXPECT_EQ(meshes[0]->VertexCount(), 6U);
-          EXPECT_EQ(meshes[0]->IndexCount(), 3U);
+        if (!meshes.empty() && CheckedAt(meshes, 0)) {
+          EXPECT_EQ(CheckedAt(meshes, 0)->VertexCount(), 6U);
+          EXPECT_EQ(CheckedAt(meshes, 0)->IndexCount(), 3U);
 
-          const auto submeshes = meshes[0]->SubMeshes();
+          const auto submeshes = CheckedAt(meshes, 0)->SubMeshes();
           EXPECT_FALSE(submeshes.empty());
           if (!submeshes.empty()) {
-            EXPECT_THAT(submeshes[0].Material(), NotNull());
+            EXPECT_THAT(CheckedAt(submeshes, 0).Material(), NotNull());
           }
         }
       }

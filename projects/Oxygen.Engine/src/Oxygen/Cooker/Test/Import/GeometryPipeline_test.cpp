@@ -8,25 +8,40 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
-#include <glm/glm.hpp>
-
-#include <Oxygen/Testing/GTest.h>
+#include <glm/ext/matrix_float4x4.hpp>
+#include <glm/ext/vector_float2.hpp>
+#include <glm/ext/vector_float3.hpp>
+#include <glm/ext/vector_float4.hpp>
+#include <glm/ext/vector_uint4.hpp>
 
 #include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Base/Uuid.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/GeometryPipeline.h>
+#include <Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h>
+#include <Oxygen/Cooker/Import/MaterialSlotProvenance.h>
+#include <Oxygen/Cooker/Test/Import/SourceLayoutTestSupport.h>
+#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/Vertex.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/ThreadPool.h>
-#include <Oxygen/OxCo/asio.h>
+#include <Oxygen/Testing/GTest.h>
 
 using namespace oxygen::content::import;
 using namespace oxygen;
@@ -38,13 +53,13 @@ namespace {
 //=== Test Helpers
 //===---------------------------------------------------------//
 
-constexpr uint32_t kGeomAttr_Normal = 1u << 0u;
-constexpr uint32_t kGeomAttr_Tangent = 1u << 1u;
-constexpr uint32_t kGeomAttr_Bitangent = 1u << 2u;
-constexpr uint32_t kGeomAttr_Texcoord0 = 1u << 3u;
-constexpr uint32_t kGeomAttr_Color0 = 1u << 4u;
-constexpr uint32_t kGeomAttr_JointWeights = 1u << 5u;
-constexpr uint32_t kGeomAttr_JointIndices = 1u << 6u;
+constexpr uint32_t kGeomAttr_Normal = 1U << 0U;
+constexpr uint32_t kGeomAttr_Tangent = 1U << 1U;
+constexpr uint32_t kGeomAttr_Bitangent = 1U << 2U;
+constexpr uint32_t kGeomAttr_Texcoord0 = 1U << 3U;
+constexpr uint32_t kGeomAttr_Color0 = 1U << 4U;
+constexpr uint32_t kGeomAttr_JointWeights = 1U << 5U;
+constexpr uint32_t kGeomAttr_JointIndices = 1U << 6U;
 
 struct MeshBuffers {
   std::vector<glm::vec3> positions;
@@ -64,9 +79,24 @@ struct MeshBuffers {
 [[nodiscard]] auto MakeDefaultMaterialKey() -> data::AssetKey
 {
   return data::AssetKey::FromBytes(
-    std::array<std::uint8_t, data::AssetKey::kSizeBytes> { 0x10, 0x11, 0x12,
-      0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E,
-      0x1F });
+    std::array<std::uint8_t, data::AssetKey::kSizeBytes> {
+      0x10,
+      0x11,
+      0x12,
+      0x13,
+      0x14,
+      0x15,
+      0x16,
+      0x17,
+      0x18,
+      0x19,
+      0x1A,
+      0x1B,
+      0x1C,
+      0x1D,
+      0x1E,
+      0x1F,
+    });
 }
 
 [[nodiscard]] auto MakeTriangleMeshBuffers() -> std::shared_ptr<MeshBuffers>
@@ -175,6 +205,9 @@ struct MeshBuffers {
 [[nodiscard]] auto MakeRequest() -> ImportRequest
 {
   ImportRequest request;
+  static const auto provenance
+    = std::make_shared<const MaterialSlotProvenance>(Uuid::Generate());
+  request.material_slot_provenance = provenance;
   request.source_path = "Geometry.fbx";
   return request;
 }
@@ -200,6 +233,7 @@ struct MeshBuffers {
       .source_owner = std::move(buffers),
     },
   };
+  item.source_layout_witness = test::FixtureSourceLayoutWitness(item.lods);
   return item;
 }
 
@@ -224,6 +258,7 @@ struct MeshBuffers {
       .source_owner = std::move(buffers),
     },
   };
+  item.source_layout_witness = test::FixtureSourceLayoutWitness(item.lods);
   return item;
 }
 
@@ -248,6 +283,7 @@ struct MeshBuffers {
       .source_owner = std::move(buffers),
     },
   };
+  item.source_layout_witness = test::FixtureSourceLayoutWitness(item.lods);
   return item;
 }
 
@@ -267,6 +303,7 @@ struct MeshBuffers {
     });
   }
 
+  item.source_layout_witness = test::FixtureSourceLayoutWitness(item.lods);
   return item;
 }
 
@@ -275,8 +312,9 @@ struct MeshBuffers {
   -> bool
 {
   return std::any_of(diagnostics.begin(), diagnostics.end(),
-    [code](
-      const ImportDiagnostic& diagnostic) { return diagnostic.code == code; });
+    [code](const ImportDiagnostic& diagnostic) -> bool {
+      return diagnostic.code == code;
+    });
 }
 
 template <typename T>
@@ -309,7 +347,7 @@ NOLINT_TEST_F(
   co::ThreadPool pool(loop_, 2);
 
   // Act
-  co::Run(loop_, [&]() -> co::Co<> {
+  co::Run(loop_, [&] -> co::Co<> {
     MeshBuildPipeline pipeline(pool,
       MeshBuildPipeline::Config {
         .queue_capacity = 4,
@@ -329,16 +367,18 @@ NOLINT_TEST_F(
 
   // Assert
   ASSERT_TRUE(result.success);
-  ASSERT_TRUE(result.cooked.has_value());
+  if (!result.cooked.has_value()) {
+    FAIL() << "Expected result.cooked to contain a value";
+  }
   EXPECT_TRUE(result.diagnostics.empty());
 
   const auto& cooked = *result.cooked;
-  ASSERT_EQ(cooked.lods.size(), 1u);
+  ASSERT_EQ(cooked.lods.size(), 1U);
 
   const auto& lod0 = cooked.lods.front();
   EXPECT_TRUE(lod0.auxiliary_buffers.empty());
-  EXPECT_EQ(lod0.vertex_buffer.data.size(), sizeof(data::Vertex) * 3u);
-  EXPECT_EQ(lod0.index_buffer.data.size(), sizeof(uint32_t) * 3u);
+  EXPECT_EQ(lod0.vertex_buffer.data.size(), sizeof(data::Vertex) * 3U);
+  EXPECT_EQ(lod0.index_buffer.data.size(), sizeof(uint32_t) * 3U);
 
   const auto& bytes = cooked.descriptor_bytes;
   ASSERT_GE(bytes.size(), sizeof(data::pak::geometry::GeometryAssetDesc));
@@ -349,35 +389,35 @@ NOLINT_TEST_F(
     static_cast<uint8_t>(data::AssetType::kGeometry));
   EXPECT_EQ(
     asset_desc.header.version, data::pak::geometry::kGeometryAssetVersion);
-  EXPECT_EQ(asset_desc.lod_count, 1u);
-  EXPECT_NE((asset_desc.header.variant_flags & kGeomAttr_Normal), 0u);
-  EXPECT_NE((asset_desc.header.variant_flags & kGeomAttr_Tangent), 0u);
-  EXPECT_NE((asset_desc.header.variant_flags & kGeomAttr_Bitangent), 0u);
-  EXPECT_NE((asset_desc.header.variant_flags & kGeomAttr_Texcoord0), 0u);
-  EXPECT_EQ((asset_desc.header.variant_flags & kGeomAttr_Color0), 0u);
-  EXPECT_EQ((asset_desc.header.variant_flags & kGeomAttr_JointIndices), 0u);
-  EXPECT_EQ((asset_desc.header.variant_flags & kGeomAttr_JointWeights), 0u);
+  EXPECT_EQ(asset_desc.lod_count, 1U);
+  EXPECT_NE((asset_desc.header.variant_flags & kGeomAttr_Normal), 0U);
+  EXPECT_NE((asset_desc.header.variant_flags & kGeomAttr_Tangent), 0U);
+  EXPECT_NE((asset_desc.header.variant_flags & kGeomAttr_Bitangent), 0U);
+  EXPECT_NE((asset_desc.header.variant_flags & kGeomAttr_Texcoord0), 0U);
+  EXPECT_EQ((asset_desc.header.variant_flags & kGeomAttr_Color0), 0U);
+  EXPECT_EQ((asset_desc.header.variant_flags & kGeomAttr_JointIndices), 0U);
+  EXPECT_EQ((asset_desc.header.variant_flags & kGeomAttr_JointWeights), 0U);
 
   size_t offset = sizeof(data::pak::geometry::GeometryAssetDesc);
   const auto mesh_desc
     = ReadStructAt<data::pak::geometry::MeshDesc>(bytes, offset);
-  EXPECT_EQ(mesh_desc.submesh_count, 1u);
-  EXPECT_EQ(mesh_desc.mesh_view_count, 1u);
+  EXPECT_EQ(mesh_desc.submesh_count, 1U);
+  EXPECT_EQ(mesh_desc.mesh_view_count, 1U);
   EXPECT_EQ(
     mesh_desc.mesh_type, static_cast<uint8_t>(data::MeshType::kStandard));
 
   offset += sizeof(data::pak::geometry::MeshDesc);
   const auto submesh_desc
     = ReadStructAt<data::pak::geometry::SubMeshDesc>(bytes, offset);
-  EXPECT_EQ(submesh_desc.mesh_view_count, 1u);
+  EXPECT_EQ(submesh_desc.mesh_view_count, 1U);
   EXPECT_EQ(submesh_desc.material_asset_key, MakeDefaultMaterialKey());
 
   offset += sizeof(data::pak::geometry::SubMeshDesc);
   const auto view_desc
     = ReadStructAt<data::pak::geometry::MeshViewDesc>(bytes, offset);
-  EXPECT_EQ(view_desc.first_index, 0u);
-  EXPECT_EQ(view_desc.index_count, 3u);
-  EXPECT_EQ(view_desc.vertex_count, 3u);
+  EXPECT_EQ(view_desc.first_index, 0U);
+  EXPECT_EQ(view_desc.index_count, 3U);
+  EXPECT_EQ(view_desc.vertex_count, 3U);
 }
 
 //! Verify long mesh/LOD names emit truncation warnings.
@@ -396,7 +436,7 @@ NOLINT_TEST_F(
     = std::string(data::pak::core::kMaxNameSize + 8, 'L');
 
   // Act
-  co::Run(loop_, [&]() -> co::Co<> {
+  co::Run(loop_, [&] -> co::Co<> {
     MeshBuildPipeline pipeline(pool,
       MeshBuildPipeline::Config {
         .queue_capacity = 4,
@@ -431,7 +471,7 @@ NOLINT_TEST_F(
   co::ThreadPool pool(loop_, 2);
 
   // Act
-  co::Run(loop_, [&]() -> co::Co<> {
+  co::Run(loop_, [&] -> co::Co<> {
     MeshBuildPipeline pipeline(pool,
       MeshBuildPipeline::Config {
         .queue_capacity = 4,
@@ -451,11 +491,13 @@ NOLINT_TEST_F(
 
   // Assert
   ASSERT_TRUE(result.success);
-  ASSERT_TRUE(result.cooked.has_value());
+  if (!result.cooked.has_value()) {
+    FAIL() << "Expected result.cooked to contain a value";
+  }
   EXPECT_TRUE(result.diagnostics.empty());
 
   const auto& cooked = *result.cooked;
-  ASSERT_EQ(cooked.lods.size(), 1u);
+  ASSERT_EQ(cooked.lods.size(), 1U);
 
   const auto& bytes = cooked.descriptor_bytes;
   ASSERT_GE(bytes.size(), sizeof(data::pak::geometry::GeometryAssetDesc));
@@ -465,23 +507,23 @@ NOLINT_TEST_F(
     = ReadStructAt<data::pak::geometry::MeshDesc>(bytes, offset);
   EXPECT_EQ(
     mesh_desc.mesh_type, static_cast<uint8_t>(data::MeshType::kSkinned));
-  EXPECT_EQ(mesh_desc.submesh_count, 1u);
-  EXPECT_EQ(mesh_desc.mesh_view_count, 1u);
-  EXPECT_EQ(mesh_desc.info.skinned.joint_count, 3u);
-  EXPECT_EQ(mesh_desc.info.skinned.influences_per_vertex, 4u);
+  EXPECT_EQ(mesh_desc.submesh_count, 1U);
+  EXPECT_EQ(mesh_desc.mesh_view_count, 1U);
+  EXPECT_EQ(mesh_desc.info.skinned.joint_count, 3U);
+  EXPECT_EQ(mesh_desc.info.skinned.influences_per_vertex, 4U);
 
   offset += sizeof(data::pak::geometry::MeshDesc);
   const auto submesh_desc
     = ReadStructAt<data::pak::geometry::SubMeshDesc>(bytes, offset);
-  EXPECT_EQ(submesh_desc.mesh_view_count, 1u);
+  EXPECT_EQ(submesh_desc.mesh_view_count, 1U);
   EXPECT_EQ(submesh_desc.material_asset_key, MakeDefaultMaterialKey());
 
   offset += sizeof(data::pak::geometry::SubMeshDesc);
   const auto view_desc
     = ReadStructAt<data::pak::geometry::MeshViewDesc>(bytes, offset);
-  EXPECT_EQ(view_desc.first_index, 0u);
-  EXPECT_EQ(view_desc.index_count, 3u);
-  EXPECT_EQ(view_desc.vertex_count, 3u);
+  EXPECT_EQ(view_desc.first_index, 0U);
+  EXPECT_EQ(view_desc.index_count, 3U);
+  EXPECT_EQ(view_desc.vertex_count, 3U);
 }
 
 //! Verify skinned meshes without inverse bind matrices fail.
@@ -496,7 +538,7 @@ NOLINT_TEST_F(
   co::ThreadPool pool(loop_, 2);
 
   // Act
-  co::Run(loop_, [&]() -> co::Co<> {
+  co::Run(loop_, [&] -> co::Co<> {
     MeshBuildPipeline pipeline(pool,
       MeshBuildPipeline::Config {
         .queue_capacity = 4,
@@ -531,7 +573,7 @@ NOLINT_TEST_F(
   co::ThreadPool pool(loop_, 2);
 
   // Act
-  co::Run(loop_, [&]() -> co::Co<> {
+  co::Run(loop_, [&] -> co::Co<> {
     MeshBuildPipeline pipeline(pool,
       MeshBuildPipeline::Config {
         .queue_capacity = 4,
@@ -568,7 +610,7 @@ NOLINT_TEST_F(
   co::ThreadPool pool(loop_, 2);
 
   // Act
-  co::Run(loop_, [&]() -> co::Co<> {
+  co::Run(loop_, [&] -> co::Co<> {
     MeshBuildPipeline pipeline(pool,
       MeshBuildPipeline::Config {
         .queue_capacity = 4,
@@ -590,8 +632,8 @@ NOLINT_TEST_F(
       }
 
       const MeshBufferBindings bindings {
-        .vertex_buffer = data::pak::core::ResourceIndexT { 11u },
-        .index_buffer = data::pak::core::ResourceIndexT { 22u },
+        .vertex_buffer = data::pak::core::ResourceIndexT { 11U },
+        .index_buffer = data::pak::core::ResourceIndexT { 22U },
       };
 
       finalized = co_await finalizer.FinalizeDescriptorBytes(
@@ -603,7 +645,9 @@ NOLINT_TEST_F(
   });
 
   // Assert
-  ASSERT_TRUE(finalized.has_value());
+  if (!finalized.has_value()) {
+    FAIL() << "Expected finalized to contain a value";
+  }
   ASSERT_TRUE(diagnostics.empty());
 
   const auto& bytes = *finalized;
@@ -614,8 +658,8 @@ NOLINT_TEST_F(
   size_t offset = sizeof(data::pak::geometry::GeometryAssetDesc);
   const auto mesh_desc
     = ReadStructAt<data::pak::geometry::MeshDesc>(bytes, offset);
-  EXPECT_EQ(mesh_desc.info.standard.vertex_buffer, 11u);
-  EXPECT_EQ(mesh_desc.info.standard.index_buffer, 22u);
+  EXPECT_EQ(mesh_desc.info.standard.vertex_buffer, 11U);
+  EXPECT_EQ(mesh_desc.info.standard.index_buffer, 22U);
 }
 
 //! Verify missing positions produce a diagnostic and failure.
@@ -637,7 +681,7 @@ NOLINT_TEST_F(
   co::ThreadPool pool(loop_, 2);
 
   // Act
-  co::Run(loop_, [&]() -> co::Co<> {
+  co::Run(loop_, [&] -> co::Co<> {
     MeshBuildPipeline pipeline(pool,
       MeshBuildPipeline::Config {
         .queue_capacity = 4,
@@ -671,13 +715,13 @@ NOLINT_TEST_F(
   co::ThreadPool pool(loop_, 2);
 
   // Act
-  co::Run(loop_, [&]() -> co::Co<> {
+  co::Run(loop_, [&] -> co::Co<> {
     MeshBuildPipeline pipeline(pool,
       MeshBuildPipeline::Config {
         .queue_capacity = 4,
         .worker_count = 1,
         .with_content_hashing = true,
-        .max_data_blob_bytes = sizeof(data::Vertex) * 2u,
+        .max_data_blob_bytes = sizeof(data::Vertex) * 2U,
       });
 
     OXCO_WITH_NURSERY(n)
@@ -706,13 +750,13 @@ NOLINT_TEST_F(
   co::ThreadPool pool(loop_, 2);
 
   // Act
-  co::Run(loop_, [&]() -> co::Co<> {
+  co::Run(loop_, [&] -> co::Co<> {
     MeshBuildPipeline pipeline(pool,
       MeshBuildPipeline::Config {
         .queue_capacity = 4,
         .worker_count = 1,
         .with_content_hashing = true,
-        .max_data_blob_bytes = sizeof(glm::uvec4) * 2u,
+        .max_data_blob_bytes = sizeof(glm::uvec4) * 2U,
       });
 
     OXCO_WITH_NURSERY(n)
@@ -740,7 +784,7 @@ NOLINT_TEST_F(GeometryPipelineBasicTest, CollectWithTooManyLodsReturnsFailure)
   co::ThreadPool pool(loop_, 2);
 
   // Act
-  co::Run(loop_, [&]() -> co::Co<> {
+  co::Run(loop_, [&] -> co::Co<> {
     MeshBuildPipeline pipeline(pool,
       MeshBuildPipeline::Config {
         .queue_capacity = 4,

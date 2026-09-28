@@ -1,5 +1,5 @@
 {
-  "version": 8,
+  "version": 9,
   "name": "CityEnvironmentValidation",
   "nodes": [
     {
@@ -4740,1861 +4740,3721 @@
       "node": 1,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityAsphalt.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityAsphalt.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 7,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 8,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCeramicWhite.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCeramicWhite.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 9,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityBrickRed.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityBrickRed.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 10,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 11,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 12,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySlateDark.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySlateDark.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 13,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 14,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySlateDark.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySlateDark.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 15,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 16,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 17,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 18,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 19,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityBrickRed.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityBrickRed.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 20,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySlateDark.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySlateDark.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 21,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityBrickRed.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityBrickRed.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 22,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySlateDark.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySlateDark.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 23,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityNightWindows.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityNightWindows.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 24,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 25,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityBrickRed.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityBrickRed.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 26,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 27,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 28,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 29,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCeramicWhite.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCeramicWhite.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 30,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 31,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityBrickRed.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityBrickRed.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 32,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 33,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 34,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 35,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityNightWindows.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityNightWindows.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 36,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 37,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityBrickRed.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityBrickRed.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 38,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 39,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 40,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityNightWindows.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityNightWindows.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 41,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 42,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCeramicWhite.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCeramicWhite.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 43,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 44,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 45,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 46,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 47,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySlateDark.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySlateDark.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 48,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 49,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 50,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 51,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityNightWindows.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityNightWindows.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 52,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 53,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCeramicWhite.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCeramicWhite.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 54,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCeramicWhite.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCeramicWhite.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 55,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 56,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityNightWindows.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityNightWindows.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 57,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityNightWindows.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityNightWindows.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 58,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 59,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 60,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 61,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 62,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 63,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityBrickRed.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityBrickRed.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 64,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySlateDark.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySlateDark.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 65,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 66,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySlateDark.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySlateDark.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 67,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 68,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 69,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 70,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 71,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 72,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 73,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityNightWindows.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityNightWindows.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 74,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 75,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 76,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 77,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 78,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 79,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 80,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 81,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCeramicWhite.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCeramicWhite.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 82,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 83,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 84,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityNightWindows.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityNightWindows.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 85,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 86,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 87,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCeramicWhite.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCeramicWhite.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 88,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 89,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySlateDark.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySlateDark.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 90,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 91,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySlateDark.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySlateDark.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 92,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 93,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 94,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 95,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityBrickRed.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityBrickRed.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 96,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 97,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 98,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 99,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityBrickRed.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityBrickRed.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 100,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 101,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySlateDark.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySlateDark.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 102,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityNightWindows.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityNightWindows.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 103,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCeramicWhite.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCeramicWhite.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 104,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 105,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 106,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 107,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 108,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 109,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 110,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 111,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 112,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 113,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 114,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 115,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityBrickRed.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityBrickRed.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 116,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 117,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 118,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 119,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 120,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityBrickRed.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityBrickRed.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 121,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 122,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySlateDark.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySlateDark.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 123,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySlateDark.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySlateDark.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 124,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 125,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityBrickRed.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityBrickRed.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 126,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityBrickRed.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityBrickRed.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 127,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySlateDark.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySlateDark.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 128,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityNightWindows.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityNightWindows.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 129,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 130,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 131,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityBrickRed.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityBrickRed.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 132,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityBrickRed.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityBrickRed.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 133,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityNightWindows.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityNightWindows.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 134,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 135,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityNightWindows.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityNightWindows.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 136,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 137,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 138,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCeramicWhite.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCeramicWhite.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 139,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 140,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 141,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 142,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 143,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 144,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 145,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 146,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySlateDark.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySlateDark.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 147,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 148,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 149,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityBrickRed.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityBrickRed.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 150,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 151,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 152,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySlateDark.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySlateDark.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 153,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityBrickRed.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityBrickRed.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 154,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 155,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 156,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 157,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 158,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 159,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 160,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 161,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCeramicWhite.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCeramicWhite.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 162,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 163,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityBrickRed.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityBrickRed.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 164,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 165,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 166,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCeramicWhite.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCeramicWhite.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 167,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 168,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 169,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 170,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 171,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 172,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySlateDark.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySlateDark.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 173,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 174,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySlateDark.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySlateDark.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 175,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 176,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 177,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 178,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 179,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 180,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 181,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 182,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 183,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCeramicWhite.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCeramicWhite.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 184,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 185,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCeramicWhite.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCeramicWhite.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 186,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 187,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 188,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCeramicWhite.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCeramicWhite.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 189,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 190,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 191,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 192,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityBrickRed.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityBrickRed.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 193,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityNightWindows.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityNightWindows.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 194,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 195,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 196,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 197,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityNightWindows.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityNightWindows.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 198,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 199,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityBrickRed.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityBrickRed.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 200,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 201,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 202,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCeramicWhite.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCeramicWhite.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 203,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 204,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityBrickRed.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityBrickRed.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 205,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCeramicWhite.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCeramicWhite.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 206,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 207,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 208,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 209,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 210,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySlateDark.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySlateDark.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 211,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityNightWindows.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityNightWindows.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 212,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 213,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 214,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 215,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySlateDark.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySlateDark.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 216,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySlateDark.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySlateDark.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 217,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 218,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityNightWindows.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityNightWindows.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 219,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 220,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 221,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySlateDark.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySlateDark.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 222,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySlateDark.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySlateDark.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 223,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityBrickRed.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityBrickRed.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 224,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 225,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 226,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 227,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 228,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityBrickRed.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityBrickRed.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 229,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 230,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 231,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySlateDark.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySlateDark.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 232,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 233,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 234,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCeramicWhite.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCeramicWhite.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 235,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 236,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 237,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCeramicWhite.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCeramicWhite.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 238,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 239,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 240,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySlateDark.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySlateDark.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 241,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 242,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 243,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 244,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 245,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityBrickRed.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityBrickRed.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 246,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 247,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 248,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 249,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 250,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySlateDark.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySlateDark.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 251,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityBrickRed.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityBrickRed.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 252,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySlateDark.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySlateDark.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 253,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 254,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 255,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 256,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 257,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 258,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySlateDark.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySlateDark.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 259,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 260,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 261,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityBrickRed.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityBrickRed.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 262,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 263,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySlateDark.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySlateDark.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 264,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 265,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCeramicWhite.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCeramicWhite.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 266,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityNightWindows.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityNightWindows.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 267,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 268,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 269,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySlateDark.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySlateDark.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 270,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityNightWindows.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityNightWindows.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 271,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 272,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 273,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 274,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 275,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityNightWindows.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityNightWindows.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 276,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 277,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCeramicWhite.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCeramicWhite.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 278,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 279,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 280,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 281,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 282,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityNightWindows.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityNightWindows.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 283,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 284,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 285,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 286,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 287,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityNightWindows.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityNightWindows.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 288,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityNightWindows.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityNightWindows.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 289,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 290,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 291,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySlateDark.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySlateDark.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 292,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 293,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 294,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityBrickRed.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityBrickRed.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 295,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCeramicWhite.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCeramicWhite.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 296,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 297,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityNightWindows.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityNightWindows.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 298,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityNightWindows.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityNightWindows.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 299,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 300,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 301,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteWarm.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 302,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 303,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 304,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 305,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 306,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityBrickRed.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityBrickRed.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 307,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySlateDark.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySlateDark.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 308,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassTeal.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 309,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 310,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityConcreteCool.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 311,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityGlassBlue.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 312,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityNightWindows.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityNightWindows.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 313,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCeramicWhite.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCeramicWhite.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 314,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCityCopperGreen.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     },
     {
       "node": 315,
       "geometry_ref": "/.cooked/Geometry/GeoCityCube.ogeo",
       "visible": true,
-      "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat"
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCitySafetyYellow.omat",
+          "layout_revision": "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+        }
+      ]
     }
   ],
   "cameras": {
@@ -6602,6 +8462,7 @@
       {
         "node": 2,
         "fov_y": 0.785398,
+        "aspect_mode": "fixed",
         "aspect_ratio": 1.777778,
         "near_plane": 0.1,
         "far_plane": 6000.0

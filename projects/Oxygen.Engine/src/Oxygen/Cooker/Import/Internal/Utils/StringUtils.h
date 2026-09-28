@@ -12,7 +12,7 @@
 
 namespace oxygen::content::import::util {
 
-//! Truncates a string and null-terminates it into a fixed-size buffer.
+//! Truncates UTF-8 at a character boundary and null-terminates the buffer.
 inline auto TruncateAndNullTerminate(
   char* dst, const size_t dst_size, std::string_view s) -> void
 {
@@ -21,7 +21,14 @@ inline auto TruncateAndNullTerminate(
   }
 
   std::fill_n(dst, dst_size, '\0');
-  const auto copy_len = (std::min)(dst_size - 1, s.size());
+  auto copy_len = (std::min)(dst_size - 1, s.size());
+  constexpr auto kUtf8PrefixMask = 0xc0U;
+  constexpr auto kUtf8Continuation = 0x80U;
+  while (copy_len > 0 && copy_len < s.size()
+    && (static_cast<unsigned char>(s.at(copy_len)) & kUtf8PrefixMask)
+      == kUtf8Continuation) {
+    --copy_len;
+  }
   std::copy_n(s.data(), copy_len, dst);
 }
 

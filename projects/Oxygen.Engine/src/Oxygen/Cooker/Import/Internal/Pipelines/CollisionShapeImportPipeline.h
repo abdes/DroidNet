@@ -59,8 +59,10 @@ public:
   };
 
   OXGN_COOK_API explicit CollisionShapeImportPipeline(
-    co::ThreadPool& thread_pool, Config config = {});
-  OXGN_COOK_API ~CollisionShapeImportPipeline();
+    co::ThreadPool& thread_pool);
+  OXGN_COOK_API CollisionShapeImportPipeline(
+    co::ThreadPool& thread_pool, Config config);
+  OXGN_COOK_API ~CollisionShapeImportPipeline() override;
 
   OXYGEN_MAKE_NON_COPYABLE(CollisionShapeImportPipeline)
   OXYGEN_MAKE_NON_MOVABLE(CollisionShapeImportPipeline)

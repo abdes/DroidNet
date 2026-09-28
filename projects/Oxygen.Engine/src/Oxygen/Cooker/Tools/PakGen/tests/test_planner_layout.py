@@ -73,6 +73,7 @@ def _build_basic_spec(tmp_path: Path) -> Path:
                         "index_buffer": None,
                         "submeshes": [
                             {
+                                "slot_id": "18c6d72e-69eb-53b8-a0e2-afb41d7d1ad6",
                                 "name": "sm0",
                                 "material": "mat0",
                                 "bounding_box_min": [0.0, 0.0, 0.0],

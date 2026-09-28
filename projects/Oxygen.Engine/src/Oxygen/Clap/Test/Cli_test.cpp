@@ -7,11 +7,10 @@
 #include <array>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <fmt/format.h>
-
-#include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Clap/Cli.h>
 #include <Oxygen/Clap/CliTheme.h>
@@ -19,6 +18,7 @@
 #include <Oxygen/Clap/CommandLineContext.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
+#include <Oxygen/Testing/GTest.h>
 
 using testing::Eq;
 using testing::IsTrue;
@@ -442,10 +442,10 @@ namespace {
     ASSERT_TRUE(context.ovm.HasOption(Option::key_rest_));
     const auto& values = context.ovm.ValuesOf(Option::key_rest_);
     ASSERT_THAT(values.size(), Eq(4U));
-    EXPECT_THAT(values[0].GetAs<std::string>(), Eq("batch"));
-    EXPECT_THAT(values[1].GetAs<std::string>(), Eq("--manifest"));
-    EXPECT_THAT(values[2].GetAs<std::string>(), Eq("m.json"));
-    EXPECT_THAT(values[3].GetAs<std::string>(), Eq("--to-ui"));
+    EXPECT_THAT(values.at(0).GetAs<std::string>(), Eq("batch"));
+    EXPECT_THAT(values.at(1).GetAs<std::string>(), Eq("--manifest"));
+    EXPECT_THAT(values.at(2).GetAs<std::string>(), Eq("m.json"));
+    EXPECT_THAT(values.at(3).GetAs<std::string>(), Eq("--to-ui"));
   }
 
   //! Scenario: Dash-dash with no positional sink reports an argument error.
@@ -564,7 +564,8 @@ namespace {
               .Long("tag")
               .WithValue<int>()
               .Repeatable()
-              .CallOnEachValue([&values](const int& v) { values.push_back(v); })
+              .CallOnEachValue(
+                [&values](const int& v) -> void { values.push_back(v); })
               .Build())
           .Build();
     const auto cli
@@ -578,8 +579,8 @@ namespace {
 
     // Assert
     ASSERT_EQ(values.size(), 2U);
-    EXPECT_EQ(values[0], 1);
-    EXPECT_EQ(values[1], 2);
+    EXPECT_EQ(values.at(0), 1);
+    EXPECT_EQ(values.at(1), 2);
   }
 
   //! Scenario: Per-value notifier is not called for defaulted values.
@@ -593,7 +594,8 @@ namespace {
               .Long("count")
               .WithValue<int>()
               .DefaultValue(42)
-              .CallOnEachValue([&values](const int& v) { values.push_back(v); })
+              .CallOnEachValue(
+                [&values](const int& v) -> void { values.push_back(v); })
               .Build())
           .Build();
     const auto cli
@@ -632,6 +634,60 @@ namespace {
     // Assert
     EXPECT_NE(output.find("FOOTER"), std::string::npos);
     EXPECT_NE(output.find("Footer text goes here."), std::string::npos);
+  }
+
+  NOLINT_TEST(PositionalArguments,
+    OmittedOptionalUsesDefaultAndExplicitValueIsNotDefaulted)
+  {
+    const Command::Ptr command = CommandBuilder("run").WithPositionalArguments(
+      Option::Positional("source")
+        .WithValue<std::string>()
+        .DefaultValue(std::string {})
+        .Build());
+    const auto cli
+      = CliBuilder().ProgramName("tool").WithCommand(command).Build();
+    auto absent_args = std::array { "tool", "run" };
+    const auto absent
+      = cli->Parse(static_cast<int>(absent_args.size()), absent_args.data());
+    ASSERT_TRUE(absent.ovm.HasOption("source"));
+    EXPECT_TRUE(absent.ovm.ValuesOf("source").front().IsDefaulted());
+    auto explicit_args = std::array { "tool", "run", "source.gltf" };
+    const auto explicit_context = cli->Parse(
+      static_cast<int>(explicit_args.size()), explicit_args.data());
+    ASSERT_TRUE(explicit_context.ovm.HasOption("source"));
+    ASSERT_EQ(explicit_context.ovm.ValuesOf("source").size(), 1U);
+    EXPECT_FALSE(explicit_context.ovm.ValuesOf("source").front().IsDefaulted());
+    EXPECT_EQ(
+      explicit_context.ovm.ValuesOf("source").front().GetAs<std::string>(),
+      "source.gltf");
+  }
+
+  NOLINT_TEST(PositionalArguments, MissingRequiredStillFails)
+  {
+    const Command::Ptr command = CommandBuilder("run").WithPositionalArguments(
+      Option::Positional("source").Required().WithValue<std::string>().Build());
+    const auto cli
+      = CliBuilder().ProgramName("tool").WithCommand(command).Build();
+    auto args = std::array { "tool", "run" };
+    NOLINT_EXPECT_THROW(cli->Parse(static_cast<int>(args.size()), args.data()),
+      CmdLineArgumentsError);
+  }
+
+  NOLINT_TEST(PositionalArguments, OmittedDefaultRemainsDistinguishable)
+  {
+    const Command::Ptr command = CommandBuilder("run").WithPositionalArguments(
+      Option::Positional("source")
+        .WithValue<std::string>()
+        .DefaultValue("default.gltf")
+        .Build());
+    const auto cli
+      = CliBuilder().ProgramName("tool").WithCommand(command).Build();
+    auto args = std::array { "tool", "run" };
+    const auto context = cli->Parse(static_cast<int>(args.size()), args.data());
+    ASSERT_TRUE(context.ovm.HasOption("source"));
+    EXPECT_TRUE(context.ovm.ValuesOf("source").front().IsDefaulted());
+    EXPECT_EQ(context.ovm.ValuesOf("source").front().GetAs<std::string>(),
+      "default.gltf");
   }
 
   //! Scenario: Invalid values report expected type names.

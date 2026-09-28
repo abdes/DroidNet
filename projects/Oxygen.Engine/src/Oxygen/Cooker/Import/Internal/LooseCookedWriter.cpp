@@ -8,8 +8,11 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <filesystem>
+#include <ios>
 #include <limits>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <ranges>
@@ -22,15 +25,22 @@
 #include <utility>
 #include <vector>
 
+#include <fmt/format.h>
+
 #include <Oxygen/Base/Endian.h>
+#include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Sha256.h>
-#include <Oxygen/Content/Internal/LooseCookedIndexCodec.h>
+#include <Oxygen/Base/Uuid.h>
+#include <Oxygen/Content/Internal/LooseCookedIndexCodec.h> // IWYU pragma: keep
 #include <Oxygen/Content/Internal/LooseCookedIndexImpl.h>
 #include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
+#include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Serio/FileStream.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Serio/Writer.h>
@@ -56,7 +66,8 @@ namespace {
 
   auto IsAllZeros(std::span<const uint8_t> bytes) noexcept -> bool
   {
-    return std::ranges::all_of(bytes, [](const auto b) { return b == 0; });
+    return std::ranges::all_of(
+      bytes, [](const auto b) -> auto { return b == 0; });
   }
 
   auto ValidateNoDotSegments(
@@ -140,7 +151,7 @@ namespace {
         return it->second;
       }
 
-      if (table_.size() > (std::numeric_limits<uint32_t>::max)()) {
+      if (table_.size() > std::numeric_limits<uint32_t>::max()) {
         throw std::runtime_error("String table too large");
       }
 
@@ -235,7 +246,7 @@ namespace {
   auto WriteBinaryFile(const std::filesystem::path& path,
     const std::span<const std::byte> bytes) -> void
   {
-    std::filesystem::create_directories(path.parent_path());
+    std::filesystem::create_directories(base::ToNativePath(path.parent_path()));
 
     serio::FileStream stream(path, std::ios::out | std::ios::trunc);
     ThrowOnError(stream.Write(bytes), "Failed to write cooked file");
@@ -456,7 +467,7 @@ struct LooseCookedWriter::Impl final {
       .asset_type = asset_type,
       .virtual_path = std::string(virtual_path),
       .descriptor_relpath = std::string(descriptor_relpath),
-      .descriptor_size = (bytes.size()),
+      .descriptor_size = bytes.size(),
       .descriptor_sha256 = CopyDigestOrZero(digest),
     };
 
@@ -510,12 +521,13 @@ struct LooseCookedWriter::Impl final {
     const auto path_on_disk = cooked_root_ / std::filesystem::path(relpath);
 
     std::error_code ec;
-    if (!std::filesystem::exists(path_on_disk, ec)) {
+    if (!std::filesystem::exists(base::ToNativePath(path_on_disk), ec)) {
       throw std::runtime_error(
         "RegisterExternalFile: file does not exist: " + path_on_disk.string());
     }
 
-    const auto size = std::filesystem::file_size(path_on_disk, ec);
+    const auto size
+      = std::filesystem::file_size(base::ToNativePath(path_on_disk), ec);
     if (ec) {
       throw std::runtime_error("RegisterExternalFile: failed to get file size: "
         + path_on_disk.string());
@@ -549,13 +561,14 @@ struct LooseCookedWriter::Impl final {
       = cooked_root_ / std::filesystem::path(descriptor_relpath);
 
     std::error_code ec;
-    if (!std::filesystem::exists(path_on_disk, ec)) {
+    if (!std::filesystem::exists(base::ToNativePath(path_on_disk), ec)) {
       throw std::runtime_error("RegisterExternalAssetDescriptor: file does not "
                                "exist: "
         + path_on_disk.string());
     }
 
-    const auto size_on_disk = std::filesystem::file_size(path_on_disk, ec);
+    const auto size_on_disk
+      = std::filesystem::file_size(base::ToNativePath(path_on_disk), ec);
     if (ec) {
       throw std::runtime_error(
         "RegisterExternalAssetDescriptor: failed to get file size: "
@@ -630,7 +643,8 @@ struct LooseCookedWriter::Impl final {
         continue; // Preserve other writers' published metadata.
       }
       if (file.externally_written) {
-        file.size = std::filesystem::file_size(cooked_root_ / file.relpath);
+        file.size = std::filesystem::file_size(
+          base::ToNativePath(cooked_root_ / file.relpath));
       }
       if (const auto existing = files_.find(kind); existing != files_.end()
         && !HandleFileCollision_(
@@ -650,7 +664,8 @@ struct LooseCookedWriter::Impl final {
 
     const auto index_path
       = cooked_root_ / std::filesystem::path(kIndexFileName);
-    std::filesystem::create_directories(index_path.parent_path());
+    std::filesystem::create_directories(
+      base::ToNativePath(index_path.parent_path()));
 
     WriteIndex_(index_path, source_key, content_version);
 
@@ -701,7 +716,7 @@ private:
   {
     const auto index_path
       = cooked_root_ / std::filesystem::path(kIndexFileName);
-    if (!std::filesystem::exists(index_path)) {
+    if (!std::filesystem::exists(base::ToNativePath(index_path))) {
       return;
     }
 
@@ -896,7 +911,7 @@ private:
       (void)file;
       kinds.push_back(kind);
     }
-    std::ranges::sort(kinds, [](const FileKind a, const FileKind b) {
+    std::ranges::sort(kinds, [](const FileKind a, const FileKind b) -> bool {
       return static_cast<uint16_t>(a) < static_cast<uint16_t>(b);
     });
 
@@ -935,7 +950,7 @@ private:
 
     const auto guid_bytes = data::as_bytes(source_key);
     std::ranges::transform(guid_bytes, std::begin(header.source_identity),
-      [](const auto byte) { return std::to_integer<uint8_t>(byte); });
+      [](const auto byte) -> auto { return std::to_integer<uint8_t>(byte); });
 
     serio::FileStream stream(index_path, std::ios::out | std::ios::trunc);
     serio::Writer writer(stream);

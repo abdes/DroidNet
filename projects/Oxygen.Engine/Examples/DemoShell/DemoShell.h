@@ -47,6 +47,7 @@ class CameraVm;
 class ContentVm;
 class CameraRigController;
 struct SceneEntry;
+struct GenerationPublication;
 } // namespace oxygen::examples::ui
 
 namespace oxygen::examples {
@@ -94,24 +95,26 @@ struct DemoShellConfig {
   bool force_environment_override { true };
   bool restore_environment_profile { false };
   SceneActivationPolicy scene_activation_policy {
-    SceneActivationPolicy::kRestorePreferences
+    SceneActivationPolicy::kRestorePreferences,
   };
-  std::optional<int> initial_environment_profile;
-  std::string startup_skybox_path;
-  std::optional<bool> initial_preview_sun_enabled;
-  std::function<bool()> preview_scene_ready;
+  std::optional<int> initial_environment_profile {};
+  std::string startup_skybox_path {};
+  std::optional<bool> initial_preview_sun_enabled {};
+  std::function<bool()> preview_scene_ready {};
 
   ContentRootConfig content_roots {};
   DemoShellPanelConfig panel_config {};
 
-  std::function<void(const ui::SceneEntry&)> on_scene_load_requested;
-  std::function<void()> on_scene_load_cancel_requested;
-  std::function<void(std::size_t)> on_dump_texture_memory;
-  std::function<std::optional<data::AssetKey>()> get_last_released_scene_key;
-  std::function<void()> on_force_trim;
-  std::function<void()> on_clear_mounts;
-  std::function<void(const std::filesystem::path&)> on_pak_mounted;
-  std::function<void(const std::filesystem::path&)> on_loose_index_loaded;
+  std::function<void(const ui::SceneEntry&)> on_scene_load_requested {};
+  std::function<void()> on_scene_load_cancel_requested {};
+  std::function<void(std::size_t)> on_dump_texture_memory {};
+  std::function<std::optional<data::AssetKey>()> get_last_released_scene_key {};
+  std::function<void()> on_force_trim {};
+  std::function<void()> on_clear_mounts {};
+  std::function<void(const std::filesystem::path&)> on_pak_mounted {};
+  std::function<void(const std::filesystem::path&)> on_loose_index_loaded {};
+  std::function<void(const ui::GenerationPublication&)>
+    on_generation_published {};
 };
 
 //! Orchestrates the demo shell UI, panels, and camera helpers.

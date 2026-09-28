@@ -4,6 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include "DemoShell/DemoShell.h"
+#include "DemoShell/UI/ContentVm.h"
+
+#include <Oxygen/Core/Types/PostProcess.h>
+#include <Oxygen/Vortex/Diagnostics/DiagnosticsTypes.h>
+#include <Oxygen/Vortex/Environment/Types/StaticSkyLightProducts.h>
+#include <Oxygen/Vortex/Types/SkyLightRuntimeState.h>
 #define IMGUI_DEFINE_MATH_OPERATORS
 #include <algorithm>
 #include <cmath>
@@ -12,6 +19,7 @@
 #include <string>
 #include <string_view>
 
+#include "DemoShell/Services/ContentSettingsService.h"
 #include "DemoShell/Services/SettingsService.h"
 #include "DemoShell/Test/UiTestSession.h"
 #include "RenderScene/MainModule.h"
@@ -22,13 +30,14 @@
 
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Console/Console.h>
+#include <Oxygen/Cooker/Import/RetainedModelImport.h>
+#include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Graphics/Common/FrameCaptureController.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
 #include <Oxygen/Scene/Environment/Fog.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
-#include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/SkyLight.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
 #include <Oxygen/Vortex/Renderer.h>
@@ -58,8 +67,9 @@ namespace {
     for (auto* window : ctx->UiContext->Windows) {
       if (window->RootWindow == parent->RootWindow
         && std::string_view(window->Name).find("##EnvironmentProfile_")
-          != std::string_view::npos)
+          != std::string_view::npos) {
         profile = window;
+      }
     }
     IM_CHECK(profile != nullptr);
     // The profile is a child window; bind its real ID rather than hashing its
@@ -76,8 +86,10 @@ namespace {
   {
     for (auto* window : ctx->UiContext->Windows) {
       if (window->RootWindow == root->RootWindow
-        && std::string_view(window->Name).find(name) != std::string_view::npos)
+        && std::string_view(window->Name).find(name)
+          != std::string_view::npos) {
         return window;
+      }
     }
     return nullptr;
   }
@@ -138,8 +150,9 @@ namespace {
     for (unsigned wait = 0U; wait < 600U; ++wait) {
       const auto state = renderer.InspectSkyLight(scene);
       if (state.usable && state.source_age_frames == 0U
-        && state.gpu_validation == vortex::SkyLightGpuValidation::kValid)
+        && state.gpu_validation == vortex::SkyLightGpuValidation::kValid) {
         break;
+      }
       ctx->Yield();
     }
     const auto state = renderer.InspectSkyLight(scene);
@@ -150,20 +163,86 @@ namespace {
     IM_CHECK(state.gpu_validation == vortex::SkyLightGpuValidation::kValid);
     IM_CHECK_EQ(state.validated_revision, state.published_revision);
   }
-}
+} // namespace
 
 // NOLINTBEGIN(readability-magic-numbers) - concrete widget values and wait
 // bounds.
 auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
 {
+  if (testing::UiTestSession::UsesIsolatedSettings()
+    && SettingsService::ForDemoApp()
+      ->GetBool("tests.expect_empty_scene")
+      .value_or(false)) {
+    auto* test = IM_REGISTER_TEST(engine, "renderscene", "empty_scene");
+    test->UserData = this;
+    test->TestFunc = [](ImGuiTestContext* ctx) -> void {
+      auto& app = *static_cast<MainModule*>(ctx->Test->UserData);
+      for (unsigned wait = 0U;
+        wait < 600U && (!app.current_scene_key_ || app.active_scene_load_key_);
+        ++wait) {
+        ctx->Yield();
+      }
+      IM_CHECK(app.current_scene_key_ && !app.active_scene_load_key_);
+      IM_CHECK(app.active_scene_asset_pin_);
+      IM_CHECK(app.active_scene_asset_pin_->GetNodes().empty());
+      IM_CHECK(app.active_scene_asset_pin_->HasEnvironmentBlock());
+      const auto scene = app.GetShell().TryGetScene();
+      IM_CHECK(scene && scene->GetEnvironment());
+      IM_CHECK(app.ResolveVortexRenderer());
+      ctx->Yield(30);
+    };
+  }
+  if (!ContentSettingsService {}.GetMountedImportRecords().empty()) {
+    auto* test = IM_REGISTER_TEST(engine, "renderscene", "retained_library");
+    test->UserData = this;
+    test->TestFunc = [](ImGuiTestContext* ctx) -> void {
+      auto& app = *static_cast<MainModule*>(ctx->Test->UserData);
+      for (unsigned wait = 0U;
+        wait < 600U && (!app.current_scene_key_ || app.active_scene_load_key_);
+        ++wait) {
+        ctx->Yield();
+      }
+      IM_CHECK(app.current_scene_key_ && !app.active_scene_load_key_);
+      const ContentSettingsService settings;
+      const auto records = settings.GetMountedImportRecords();
+      const auto selection = settings.GetActiveSceneSelection();
+      IM_CHECK(!records.empty() && selection);
+      IM_CHECK(std::string(nostd::to_string(*app.current_scene_key_))
+        == selection->scene_key);
+      const auto vm = app.GetShell().GetContentVm();
+      IM_CHECK(vm);
+      for (const auto& record : records) {
+        const auto root
+          = content::import::RetainedModelImport::SelectedGeneration(record);
+        IM_CHECK(root);
+        const auto index = (*root / "container.index.bin").lexically_normal();
+        const auto count = std::ranges::count_if(
+          vm->GetLoadedIndices(), [&](const auto& loaded) -> auto {
+            return loaded.lexically_normal() == index;
+          });
+        IM_CHECK_EQ(count, 1);
+      }
+      const auto scene = app.GetShell().TryGetScene();
+      const auto renderer = app.ResolveVortexRenderer();
+      IM_CHECK(scene && renderer);
+      for (unsigned wait = 0U;
+        wait < 120U && !renderer->InspectSkyLight(*scene).usable; ++wait) {
+        ctx->Yield();
+      }
+      IM_CHECK(renderer->InspectSkyLight(*scene).usable);
+      ctx->Yield(30);
+    };
+  }
+
   auto* test = IM_REGISTER_TEST(engine, "renderscene", "ibl_controls");
   test->UserData = this;
-  test->TestFunc = [](ImGuiTestContext* ctx) {
+  test->TestFunc = [](ImGuiTestContext* ctx) -> void {
     auto& app = *static_cast<MainModule*>(ctx->Test->UserData);
     for (unsigned wait = 0U;
       wait < 600U && (!app.current_scene_key_ || app.active_scene_load_key_);
-      ++wait)
+      ++wait) {
       ctx->Yield();
+    }
     IM_CHECK(app.current_scene_key_.has_value());
     IM_CHECK(!app.active_scene_load_key_.has_value());
     SelectPanel(
@@ -181,8 +260,9 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
       = scene->GetEnvironment()->TryGetSystem<scene::environment::SkyLight>();
     IM_CHECK(sky);
     for (unsigned wait = 0U;
-      wait < 120U && !renderer->InspectSkyLight(*scene).usable; ++wait)
+      wait < 120U && !renderer->InspectSkyLight(*scene).usable; ++wait) {
       ctx->Yield();
+    }
     IM_CHECK(renderer->InspectSkyLight(*scene).usable);
     const auto original_revision
       = renderer->InspectSkyLight(*scene).published_revision;
@@ -218,8 +298,9 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
     for (unsigned wait = 0U; wait < 120U
       && renderer->InspectSkyLight(*scene).gpu_validation
         != vortex::SkyLightGpuValidation::kValid;
-      ++wait)
+      ++wait) {
       ctx->Yield();
+    }
     const auto validated = renderer->InspectSkyLight(*scene);
     IM_CHECK(validated.gpu_validation == vortex::SkyLightGpuValidation::kValid);
     IM_CHECK_EQ(validated.validated_revision, validated.published_revision);
@@ -231,8 +312,9 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
     ctx->ItemCheck("**/GPU Timeline");
     for (unsigned wait = 0U;
       wait < 120U && !renderer->GetDiagnosticsService().GetLatestIblGpuTiming();
-      ++wait)
+      ++wait) {
       ctx->Yield();
+    }
     IM_CHECK(
       renderer->GetDiagnosticsService().GetLatestIblGpuTiming().has_value());
     SelectPanel(
@@ -251,12 +333,13 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
 
   test = IM_REGISTER_TEST(engine, "renderscene", "ibl_source_and_fog");
   test->UserData = this;
-  test->TestFunc = [](ImGuiTestContext* ctx) {
+  test->TestFunc = [](ImGuiTestContext* ctx) -> void {
     auto& app = *static_cast<MainModule*>(ctx->Test->UserData);
     for (unsigned wait = 0U;
       wait < 600U && (!app.current_scene_key_ || app.active_scene_load_key_);
-      ++wait)
+      ++wait) {
       ctx->Yield();
+    }
     IM_CHECK(app.current_scene_key_.has_value());
     IM_CHECK(!app.active_scene_load_key_.has_value());
     SelectPanel(
@@ -334,24 +417,27 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
     ctx->ItemOpen("**/Sky Light (IBL)");
   };
 
-  if (!testing::UiTestSession::UsesIsolatedSettings())
+  if (!testing::UiTestSession::UsesIsolatedSettings()) {
     return;
+  }
 
   test = IM_REGISTER_TEST(engine, "renderscene", "ibl_editor_reference");
   test->UserData = this;
-  test->TestFunc = [](ImGuiTestContext* ctx) {
+  test->TestFunc = [](ImGuiTestContext* ctx) -> void {
     auto& app = *static_cast<MainModule*>(ctx->Test->UserData);
     for (unsigned wait = 0U;
       wait < 600U && (!app.current_scene_key_ || app.active_scene_load_key_);
-      ++wait)
+      ++wait) {
       ctx->Yield();
+    }
     IM_CHECK(app.current_scene_key_ && !app.active_scene_load_key_);
     const auto scene = app.GetShell().TryGetScene();
     const auto renderer = app.ResolveVortexRenderer();
     IM_CHECK(scene && renderer);
     CheckGpuLighting(ctx, *renderer, *scene);
-    if (ctx->IsError())
+    if (ctx->IsError()) {
       return;
+    }
     const auto exposure = renderer->InspectExposureSettings(
       renderer->ResolvePublishedRuntimeViewId(app.main_view_id_));
     IM_CHECK(exposure && exposure->active_settings);
@@ -378,7 +464,7 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
       { "published_revision", state.published_revision },
       { "validated_revision", state.validated_revision },
       { "source_radiance_scale", state.source_radiance_scale },
-      { "average_brightness", state.average_brightness }
+      { "average_brightness", state.average_brightness },
     }.dump(2);
     record.flush();
     IM_CHECK(record.good());
@@ -391,7 +477,7 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
       std::string post_process_scope;
     };
     test->SetVarsDataType<AppearanceState>();
-    test->GuiFunc = [](ImGuiTestContext* ctx) {
+    test->GuiFunc = [](ImGuiTestContext* ctx) -> void {
       auto& app = *static_cast<MainModule*>(ctx->Test->UserData);
       const auto targets
         = app.app_.engine->GetConsole().Execute("pp.targets").output;
@@ -401,12 +487,13 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
           + targets.substr(prefix, targets.find(' ') - prefix);
       }
     };
-    test->TestFunc = [](ImGuiTestContext* ctx) {
+    test->TestFunc = [](ImGuiTestContext* ctx) -> void {
       auto& app = *static_cast<MainModule*>(ctx->Test->UserData);
       for (unsigned wait = 0U;
         wait < 600U && (!app.current_scene_key_ || app.active_scene_load_key_);
-        ++wait)
+        ++wait) {
         ctx->Yield();
+      }
       IM_CHECK(app.current_scene_key_ && !app.active_scene_load_key_);
       const auto scene = app.GetShell().TryGetScene();
       const auto renderer = app.ResolveVortexRenderer();
@@ -419,12 +506,14 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
       ctx->ItemOpen("**/Sky Light (IBL)");
       ctx->ItemCheck("**/Enabled##SkyLight");
       CheckGpuLighting(ctx, *renderer, *scene);
-      if (ctx->IsError())
+      if (ctx->IsError()) {
         return;
+      }
       const bool enabled
         = std::string_view(ctx->Test->Name) == "ibl_appearance_on";
-      if (!enabled)
+      if (!enabled) {
         ctx->ItemUncheck("**/Enabled##SkyLight");
+      }
       SelectPanel(
         ctx, app.GetShell(), "Post Process", imgui::icons::kIconHdrTonemap);
       ctx->ItemCheck("**/Enable exposure");
@@ -436,8 +525,9 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
       ctx->ItemClick("//$FOCUSED/Manual EV100");
       ctx->ItemInputValue("**/EV100/value/##value", "12");
       ctx->ItemInputValue("**/Compensation (EV)/value/##value", "0");
-      if (ctx->IsError())
+      if (ctx->IsError()) {
         return;
+      }
       ctx->Yield(5);
       const auto exposure = renderer->InspectExposureSettings(
         renderer->ResolvePublishedRuntimeViewId(app.main_view_id_));
@@ -451,8 +541,9 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
       IM_CHECK_EQ(state.enabled, enabled);
       if (enabled) {
         CheckGpuLighting(ctx, *renderer, *scene);
-        if (ctx->IsError())
+        if (ctx->IsError()) {
           return;
+        }
       }
       // Close the panel through the sidebar so both images have the same area.
       ctx->SetRef("//DemoPanelSideBar");
@@ -478,7 +569,7 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
         { "scene_lifetime", state.scene_lifetime },
         { "published_revision", state.published_revision },
         { "validated_revision", state.validated_revision },
-        { "source_age_frames", state.source_age_frames }
+        { "source_age_frames", state.source_age_frames },
       }.dump(2);
       record.flush();
       IM_CHECK(record.good());
@@ -487,12 +578,13 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
 
   test = IM_REGISTER_TEST(engine, "renderscene", "ibl_persist_and_replace");
   test->UserData = this;
-  test->TestFunc = [](ImGuiTestContext* ctx) {
+  test->TestFunc = [](ImGuiTestContext* ctx) -> void {
     auto& app = *static_cast<MainModule*>(ctx->Test->UserData);
     for (unsigned wait = 0U;
       wait < 600U && (!app.current_scene_key_ || app.active_scene_load_key_);
-      ++wait)
+      ++wait) {
       ctx->Yield();
+    }
     IM_CHECK(app.current_scene_key_ && !app.active_scene_load_key_);
     const auto renderer = app.ResolveVortexRenderer();
     IM_CHECK(renderer);
@@ -520,19 +612,24 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
     ctx->ItemCheck("**/Include in Sky Lighting");
     ctx->Yield(5);
     CheckPersistedLighting(*app.GetShell().TryGetScene());
-    if (ctx->IsError())
+    if (ctx->IsError()) {
       return;
+    }
     CheckGpuLighting(ctx, *renderer, *app.GetShell().TryGetScene());
-    if (ctx->IsError())
+    if (ctx->IsError()) {
       return;
+    }
     const auto vm = app.GetShell().GetContentVm();
     IM_CHECK(vm);
     const auto& scenes = vm->GetAvailableScenes();
-    const auto original = std::ranges::find_if(scenes,
-      [&](const auto& entry) { return entry.key == *app.current_scene_key_; });
-    const auto other = std::ranges::find_if(scenes, [&](const auto& entry) {
-      return std::filesystem::path(entry.name).stem() == "Lantern";
-    });
+    const auto original
+      = std::ranges::find_if(scenes, [&](const auto& entry) -> auto {
+          return entry.key == *app.current_scene_key_;
+        });
+    const auto other
+      = std::ranges::find_if(scenes, [&](const auto& entry) -> auto {
+          return std::filesystem::path(entry.name).stem() == "Lantern";
+        });
     IM_CHECK(original != scenes.end() && other != scenes.end());
     const auto original_entry = *original;
     const auto other_entry = *other;
@@ -543,13 +640,15 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
       SelectPanel(ctx, app.GetShell(), "Content Loader",
         imgui::icons::kIconContentLoader);
       ClickScene(ctx, target);
-      if (ctx->IsError())
+      if (ctx->IsError()) {
         return;
+      }
       for (unsigned wait = 0U; wait < 600U; ++wait) {
         const auto current = app.GetShell().TryGetScene();
         if (app.current_scene_key_ == target.key && !app.active_scene_load_key_
-          && current && current->GetLifetimeId() != previous_lifetime)
+          && current && current->GetLifetimeId() != previous_lifetime) {
           break;
+        }
         ctx->Yield();
       }
       IM_CHECK(
@@ -557,11 +656,13 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
       const auto current = app.GetShell().TryGetScene();
       IM_CHECK(current && current->GetLifetimeId() != previous_lifetime);
       CheckPersistedLighting(*current);
-      if (ctx->IsError())
+      if (ctx->IsError()) {
         return;
+      }
       CheckGpuLighting(ctx, *renderer, *current);
-      if (ctx->IsError())
+      if (ctx->IsError()) {
         return;
+      }
     }
     const auto state = renderer->InspectSkyLight(*app.GetShell().TryGetScene());
     const auto expected_path
@@ -573,7 +674,7 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
       { "scene_key", std::string(nostd::to_string(*app.current_scene_key_)) },
       { "writer_runtime_source_revision", state.published_source_revision },
       { "radiance_scale", state.source_radiance_scale },
-      { "average_brightness", state.average_brightness }
+      { "average_brightness", state.average_brightness },
     }.dump(2);
     expected.flush();
     IM_CHECK(expected.good());
@@ -584,7 +685,7 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
 
   test = IM_REGISTER_TEST(engine, "renderscene", "ibl_reopen");
   test->UserData = this;
-  test->TestFunc = [](ImGuiTestContext* ctx) {
+  test->TestFunc = [](ImGuiTestContext* ctx) -> void {
     auto& app = *static_cast<MainModule*>(ctx->Test->UserData);
     std::ifstream expected_file(
       SettingsService::ForDemoApp()->GetStoragePath().parent_path()
@@ -593,8 +694,9 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
     const auto expected = nlohmann::json::parse(expected_file);
     for (unsigned wait = 0U;
       wait < 600U && (!app.current_scene_key_ || app.active_scene_load_key_);
-      ++wait)
+      ++wait) {
       ctx->Yield();
+    }
     IM_CHECK(app.current_scene_key_ && !app.active_scene_load_key_);
     IM_CHECK(std::string(nostd::to_string(*app.current_scene_key_))
       == expected.at("scene_key").get<std::string>());
@@ -602,11 +704,13 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
     const auto renderer = app.ResolveVortexRenderer();
     IM_CHECK(scene && renderer);
     CheckPersistedLighting(*scene);
-    if (ctx->IsError())
+    if (ctx->IsError()) {
       return;
+    }
     CheckGpuLighting(ctx, *renderer, *scene);
-    if (ctx->IsError())
+    if (ctx->IsError()) {
       return;
+    }
     const auto state = renderer->InspectSkyLight(*scene);
     IM_CHECK_EQ(
       state.source_radiance_scale, expected.at("radiance_scale").get<float>());

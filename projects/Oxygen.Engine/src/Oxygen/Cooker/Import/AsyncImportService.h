@@ -33,6 +33,7 @@ namespace oxygen::content::import {
 class IAsyncFileReader;
 class IAsyncFileWriter;
 class ResourceTableRegistry;
+class RetainedModelImport;
 
 namespace detail {
   class ImportJob;
@@ -218,6 +219,14 @@ public:
     const ProgressEventCallback& on_progress = nullptr,
     const std::optional<ImportConcurrency>& concurrency_override
     = std::nullopt) const -> std::optional<ImportJobId>;
+
+  //! Cooks and publishes one prepared retained model generation. Completion
+  //! success means its authored record atomically selected that generation.
+  OXGN_COOK_NDAPI auto SubmitRetainedImport(
+    std::shared_ptr<RetainedModelImport> publication,
+    const ImportCompletionCallback& on_complete,
+    const ProgressEventCallback& on_progress = nullptr) const
+    -> std::optional<ImportJobId>;
 
   //! Submit a custom import job for asynchronous processing.
   /*!

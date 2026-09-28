@@ -4,23 +4,34 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
 #include <memory>
+#include <string_view>
 #include <utility>
 
+#include <SDL3/SDL_events.h>
+#include <SDL3/SDL_timer.h>
+#include <SDL3/SDL_video.h>
+
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Composition/Composition.h>
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Composition/Component.h>
+#include <Oxygen/Composition/ComponentMacros.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
+#include <Oxygen/OxCo/ParkingLot.h>
+#include <Oxygen/OxCo/Value.h>
 #include <Oxygen/Platform/Detail/Window_ManagerInterface.h>
-#include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Platform/SDL/Wrapper.h>
+#include <Oxygen/Platform/Types.h>
 #include <Oxygen/Platform/Window.h>
 
 using oxygen::platform::Window;
 
 namespace {
 
-auto CheckNotInFullScreenMode(
-  const Window& window, const std::string& operation) -> bool
+auto CheckNotInFullScreenMode(const Window& window,
+  [[maybe_unused]] const std::string_view operation) -> bool
 {
   if (window.FullScreen()) {
     DLOG_F(WARNING,
@@ -32,8 +43,8 @@ auto CheckNotInFullScreenMode(
   return true;
 }
 
-auto CheckNotMinimized(const Window& window, const std::string& operation)
-  -> bool
+auto CheckNotMinimized(const Window& window,
+  [[maybe_unused]] const std::string_view operation) -> bool
 {
   if (window.Minimized()) {
     DLOG_F(WARNING,
@@ -49,24 +60,25 @@ auto CheckNotMinimized(const Window& window, const std::string& operation)
 class Window::Data final : public Component {
   OXYGEN_COMPONENT(Data)
 public:
-  explicit Data(SDL_Window* window)
-    : sdl_window_(window)
+  using NativeWindow
+    = std::unique_ptr<SDL_Window, decltype(&sdl::DestroyWindow)>;
+
+  explicit Data(NativeWindow window)
+    : sdl_window_(std::move(window))
+    , id_(sdl::GetWindowId(sdl_window_.get()))
   {
-    DCHECK_NOTNULL_F(window);
-    id_ = sdl::GetWindowId(sdl_window_);
   }
   ~Data() override
   {
     if (sdl_window_ != nullptr) {
       LOG_F(2, "SDL3 Window[{}] destroyed", id_);
-      sdl::DestroyWindow(sdl_window_);
     }
   }
 
   OXYGEN_MAKE_NON_COPYABLE(Data)
   OXYGEN_MAKE_NON_MOVABLE(Data)
 
-  SDL_Window* sdl_window_ { nullptr };
+  NativeWindow sdl_window_;
   WindowIdType id_ { kInvalidWindowId };
   mutable bool should_close_ { false };
   mutable bool forced_close_ { false };
@@ -78,6 +90,11 @@ class Window::ManagerInterfaceImpl final : public Component,
   OXYGEN_COMPONENT(ManagerInterfaceImpl)
   OXYGEN_COMPONENT_REQUIRES(Window::Data)
 public:
+  explicit ManagerInterfaceImpl(Data& data)
+    : data_(&data)
+  {
+  }
+
   [[nodiscard]] auto Events() const -> co::Value<window::Event>&
   {
     return events_;
@@ -105,15 +122,9 @@ public:
     close_vote_count_.Set(close_vote_count_.Get() - 1);
   }
 
-protected:
-  auto UpdateDependencies(
-    const std::function<Component&(TypeId)>& get_component) noexcept
-    -> void override
-  {
-    data_ = &static_cast<Data&>(get_component(Data::ClassTypeId()));
-  }
-
 private:
+  auto CollectCloseVotes() -> co::Co<>;
+
   Data* data_ { nullptr };
   bool vote_in_progress_ { false };
   mutable co::Value<size_t> close_vote_count_ { 0 };
@@ -124,24 +135,24 @@ private:
 
 auto Window::ManagerInterfaceImpl::DoRestore() const -> void
 {
-  sdl::RestoreWindow(data_->sdl_window_);
+  sdl::RestoreWindow(data_->sdl_window_.get());
 }
 
 auto Window::ManagerInterfaceImpl::DoMaximize() const -> void
 {
-  sdl::MaximizeWindow(data_->sdl_window_);
+  sdl::MaximizeWindow(data_->sdl_window_.get());
 }
 
 auto Window::ManagerInterfaceImpl::DoResize(const window::ExtentT& extent) const
   -> void
 {
-  sdl::SetWindowSize(data_->sdl_window_, extent.width, extent.height);
+  sdl::SetWindowSize(data_->sdl_window_.get(), extent.width, extent.height);
 }
 
 auto Window::ManagerInterfaceImpl::DoPosition(
   const window::PositionT& position) const -> void
 {
-  sdl::SetWindowPosition(data_->sdl_window_, position.x, position.y);
+  sdl::SetWindowPosition(data_->sdl_window_.get(), position.x, position.y);
 }
 
 auto Window::ManagerInterfaceImpl::InitiateClose(co::Nursery& n) -> void
@@ -158,22 +169,23 @@ auto Window::ManagerInterfaceImpl::InitiateClose(co::Nursery& n) -> void
   }
 
   data_->should_close_ = true;
-  n.Start([this]() -> co::Co<> {
-    // Start the async vote to close the window
-    if (const auto voters_count = close_vote_aw_.ParkedCount();
-      voters_count != 0) {
-      close_vote_count_.Set(voters_count);
-      close_vote_aw_.UnParkAll();
-      co_await close_vote_count_.UntilEquals(0);
-      vote_in_progress_ = false;
-      DLOG_F(INFO, "Window [id = {}] vote complete -> {}", data_->id_,
-        data_->should_close_);
-    }
-    // If the vote is successful, close the window
-    if (data_->should_close_) {
-      DoClose();
-    }
-  });
+  n.Start(&ManagerInterfaceImpl::CollectCloseVotes, this);
+}
+
+auto Window::ManagerInterfaceImpl::CollectCloseVotes() -> co::Co<>
+{
+  if (const auto voters_count = close_vote_aw_.ParkedCount();
+    voters_count != 0) {
+    close_vote_count_.Set(voters_count);
+    close_vote_aw_.UnParkAll();
+    co_await close_vote_count_.UntilEquals(0);
+    vote_in_progress_ = false;
+    DLOG_F(INFO, "Window [id = {}] vote complete -> {}", data_->id_,
+      data_->should_close_);
+  }
+  if (data_->should_close_) {
+    DoClose();
+  }
 }
 
 auto Window::ManagerInterfaceImpl::DoClose() const -> void
@@ -192,8 +204,7 @@ auto Window::ManagerInterfaceImpl::DestroyNativeWindow() -> void
 {
   if (data_->sdl_window_ != nullptr) {
     LOG_F(INFO, "SDL3 Window[{}] native window being destroyed", data_->id_);
-    sdl::DestroyWindow(data_->sdl_window_);
-    data_->sdl_window_ = nullptr;
+    data_->sdl_window_.reset();
   }
 }
 
@@ -206,12 +217,13 @@ Window::Window(const window::Properties& props)
     initial_flags.full_screen = false;
   }
   // This will throw if the window creation failed
-  auto native = std::unique_ptr<SDL_Window, decltype(&sdl::DestroyWindow)>(
+  auto native = Data::NativeWindow(
     sdl::MakeWindow(props.title.c_str(),
-    props.position ? props.position->x : SDL_WINDOWPOS_CENTERED,
-    props.position ? props.position->y : SDL_WINDOWPOS_CENTERED,
-    props.extent ? props.extent->width : SDL_WINDOWPOS_CENTERED,
-    props.extent ? props.extent->height : SDL_WINDOWPOS_CENTERED, initial_flags),
+      props.position ? props.position->x : SDL_WINDOWPOS_CENTERED,
+      props.position ? props.position->y : SDL_WINDOWPOS_CENTERED,
+      props.extent ? props.extent->width : SDL_WINDOWPOS_CENTERED,
+      props.extent ? props.extent->height : SDL_WINDOWPOS_CENTERED,
+      initial_flags),
     sdl::DestroyWindow);
 
   if (props.framebuffer_extent) {
@@ -220,9 +232,8 @@ Window::Window(const window::Properties& props)
   }
 
   // Compose the window
-  AddComponent<Data>(native.get());
-  static_cast<void>(native.release());
-  AddComponent<ManagerInterfaceImpl>();
+  auto& data = AddComponent<Data>(std::move(native));
+  AddComponent<ManagerInterfaceImpl>(data);
 
   LOG_F(INFO, "SDL3 Window[{}] created", Id());
 }
@@ -233,7 +244,7 @@ auto Window::Id() const -> WindowIdType { return GetComponent<Data>().id_; }
 
 auto Window::Native() const -> window::NativeHandles
 {
-  return sdl::GetNativeWindow(GetComponent<Data>().sdl_window_);
+  return sdl::GetNativeWindow(GetComponent<Data>().sdl_window_.get());
 }
 auto Window::Valid() const -> bool { return Id() != kInvalidWindowId; }
 
@@ -241,7 +252,7 @@ auto Window::Size() const -> window::ExtentT
 {
   window::ExtentT extent {};
   sdl::GetWindowSize(
-    GetComponent<Data>().sdl_window_, &extent.width, &extent.height);
+    GetComponent<Data>().sdl_window_.get(), &extent.width, &extent.height);
   return extent;
 }
 
@@ -249,37 +260,37 @@ auto Window::FrameBufferSize() const -> window::ExtentT
 {
   window::ExtentT extent {};
   sdl::GetWindowSizeInPixels(
-    GetComponent<Data>().sdl_window_, &extent.width, &extent.height);
+    GetComponent<Data>().sdl_window_.get(), &extent.width, &extent.height);
   return extent;
 }
 
 auto Window::FullScreen() const -> bool
 {
-  const auto flag = sdl::GetWindowFlags(GetComponent<Data>().sdl_window_);
+  const auto flag = sdl::GetWindowFlags(GetComponent<Data>().sdl_window_.get());
   return (flag & SDL_WINDOW_FULLSCREEN) != 0U;
 }
 
 auto Window::Maximized() const -> bool
 {
-  const auto flag = sdl::GetWindowFlags(GetComponent<Data>().sdl_window_);
+  const auto flag = sdl::GetWindowFlags(GetComponent<Data>().sdl_window_.get());
   return (flag & SDL_WINDOW_MAXIMIZED) != 0U;
 }
 
 auto Window::Minimized() const -> bool
 {
-  const auto flag = sdl::GetWindowFlags(GetComponent<Data>().sdl_window_);
+  const auto flag = sdl::GetWindowFlags(GetComponent<Data>().sdl_window_.get());
   return (flag & SDL_WINDOW_MINIMIZED) != 0U;
 }
 
 auto Window::Resizable() const -> bool
 {
-  const auto flag = sdl::GetWindowFlags(GetComponent<Data>().sdl_window_);
+  const auto flag = sdl::GetWindowFlags(GetComponent<Data>().sdl_window_.get());
   return (flag & SDL_WINDOW_RESIZABLE) != 0U;
 }
 
 auto Window::BorderLess() const -> bool
 {
-  const auto flag = sdl::GetWindowFlags(GetComponent<Data>().sdl_window_);
+  const auto flag = sdl::GetWindowFlags(GetComponent<Data>().sdl_window_.get());
   return (flag & SDL_WINDOW_BORDERLESS) != 0U;
 }
 
@@ -287,38 +298,38 @@ auto Window::Position() const -> window::PositionT
 {
   window::PositionT position {};
   sdl::GetWindowPosition(
-    GetComponent<Data>().sdl_window_, &position.x, &position.y);
+    GetComponent<Data>().sdl_window_.get(), &position.x, &position.y);
   return position;
 }
 
 auto Window::Title() const -> std::string
 {
-  return sdl::GetWindowTitle(GetComponent<Data>().sdl_window_);
+  return sdl::GetWindowTitle(GetComponent<Data>().sdl_window_.get());
 }
 
 auto Window::Show() const -> void
 {
-  sdl::ShowWindow(GetComponent<Data>().sdl_window_);
+  sdl::ShowWindow(GetComponent<Data>().sdl_window_.get());
 }
 
 auto Window::Hide() const -> void
 {
-  sdl::HideWindow(GetComponent<Data>().sdl_window_);
+  sdl::HideWindow(GetComponent<Data>().sdl_window_.get());
 }
 
 auto Window::EnterFullScreen() const -> void
 {
-  sdl::SetWindowFullScreen(GetComponent<Data>().sdl_window_, true);
+  sdl::SetWindowFullScreen(GetComponent<Data>().sdl_window_.get(), true);
 }
 
 auto Window::ExitFullScreen() const -> void
 {
-  sdl::SetWindowFullScreen(GetComponent<Data>().sdl_window_, false);
+  sdl::SetWindowFullScreen(GetComponent<Data>().sdl_window_.get(), false);
 }
 
 auto Window::Minimize() const -> void
 {
-  sdl::MinimizeWindow(GetComponent<Data>().sdl_window_);
+  sdl::MinimizeWindow(GetComponent<Data>().sdl_window_.get());
 }
 
 auto Window::Maximize() const -> void
@@ -338,13 +349,13 @@ auto Window::Restore() const -> void
 auto Window::SetMinimumSize(const window::ExtentT& extent) const -> void
 {
   sdl::SetWindowMinimumSize(
-    GetComponent<Data>().sdl_window_, extent.width, extent.height);
+    GetComponent<Data>().sdl_window_.get(), extent.width, extent.height);
 }
 
 auto Window::SetMaximumSize(const window::ExtentT& extent) const -> void
 {
   sdl::SetWindowMaximumSize(
-    GetComponent<Data>().sdl_window_, extent.width, extent.height);
+    GetComponent<Data>().sdl_window_.get(), extent.width, extent.height);
 }
 
 auto Window::EnableResizing() const -> void
@@ -358,12 +369,12 @@ auto Window::EnableResizing() const -> void
       Id());
     return;
   }
-  sdl::SetWindowResizable(GetComponent<Data>().sdl_window_, true);
+  sdl::SetWindowResizable(GetComponent<Data>().sdl_window_.get(), true);
 }
 
 auto Window::DisableResizing() const -> void
 {
-  sdl::SetWindowResizable(GetComponent<Data>().sdl_window_, false);
+  sdl::SetWindowResizable(GetComponent<Data>().sdl_window_.get(), false);
 }
 
 auto Window::Resize(const window::ExtentT& extent) const -> void
@@ -387,17 +398,18 @@ auto Window::MoveTo(const window::PositionT& position) const -> void
 
 auto Window::SetTitle(const std::string& title) const -> void
 {
-  sdl::SetWindowTitle(GetComponent<Data>().sdl_window_, title);
+  sdl::SetWindowTitle(GetComponent<Data>().sdl_window_.get(), title);
 }
 
 auto Window::Activate() const -> void
 {
-  sdl::RaiseWindow(GetComponent<Data>().sdl_window_);
+  sdl::RaiseWindow(GetComponent<Data>().sdl_window_.get());
 }
 
 auto Window::KeepAlwaysOnTop(const bool always_on_top) const -> void
 {
-  sdl::SetWindowAlwaysOnTop(GetComponent<Data>().sdl_window_, always_on_top);
+  sdl::SetWindowAlwaysOnTop(
+    GetComponent<Data>().sdl_window_.get(), always_on_top);
 }
 
 auto Window::RequestClose(const bool force) const -> void
@@ -434,7 +446,7 @@ auto Window::VoteToClose() const -> void
 auto Window::VoteNotToClose() const -> void
 {
   GetComponent<ManagerInterfaceImpl>().RecordVote();
-  auto& data = GetComponent<Data>();
+  const auto& data = GetComponent<Data>();
   DCHECK_F(!data.forced_close_,
     "window is being force closed, but RequestNotToClose() was called");
   if (data.forced_close_ || !data.should_close_) {
@@ -461,6 +473,5 @@ auto Window::GetManagerInterface() const -> const window::ManagerInterface&
 
 auto Window::GetManagerInterface() -> window::ManagerInterface&
 {
-  return const_cast<window::ManagerInterface&>(
-    std::as_const(*this).GetManagerInterface());
+  return GetComponent<ManagerInterfaceImpl>();
 }

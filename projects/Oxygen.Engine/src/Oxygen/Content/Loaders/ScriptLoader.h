@@ -67,7 +67,7 @@ inline auto LoadScriptAsset(const LoaderContext& context)
       if (resource_index == data::pak::core::kNoResourceIndex) {
         continue;
       }
-      if (i == 1 && resource_index == script_indices[0]) {
+      if (i == 1 && resource_index == script_indices.at(0)) {
         continue;
       }
       internal::ResourceRef ref {
@@ -82,7 +82,8 @@ inline auto LoadScriptAsset(const LoaderContext& context)
   // ScriptAsset defaults are currently carried by ScriptSlotRecord parameter
   // arrays in scene data. Asset-level defaults remain empty in this phase.
   return std::make_unique<data::ScriptAsset>(context.current_asset_key, desc,
-    std::vector<data::pak::scripting::ScriptParamRecord> {});
+    std::vector<data::pak::scripting::ScriptParamRecord> {},
+    context.source_key);
 }
 
 //! Loader for script resources (bytecode or source blobs).

@@ -6,13 +6,16 @@
 
 #pragma once
 
-#include <filesystem>
+#include <cstdint>
 
-namespace oxygen::content::inspection {
+namespace oxygen {
 
-//! Validates loose index/files and parses scene descriptors with native
-//! loaders. Throws on invalid content, including retired scene versions and
-//! flag modes.
-auto ValidateRootOrThrow(const std::filesystem::path& cooked_root) -> void;
+//! Authored perspective-camera framing policy.
+enum class CameraAspectMode : std::uint8_t {
+  kAuto = 0,
+  kFixed = 1,
+};
 
-} // namespace oxygen::content::inspection
+inline constexpr float kDefaultCameraAspectRatio = 16.0F / 9.0F;
+
+} // namespace oxygen

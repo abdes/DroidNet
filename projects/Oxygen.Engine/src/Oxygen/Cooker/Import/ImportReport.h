@@ -24,53 +24,53 @@ namespace oxygen::content::import {
 //! Timing telemetry captured for a single work item.
 struct ImportWorkItemTelemetry final {
   //! Time spent reading bytes from storage for this item.
-  std::optional<std::chrono::microseconds> io_duration;
+  std::optional<std::chrono::microseconds> io_duration {};
 
   //! Time spent decoding or transforming bytes in-memory for this item.
-  std::optional<std::chrono::microseconds> decode_duration;
+  std::optional<std::chrono::microseconds> decode_duration {};
 
   //! Time spent loading or preparing data for this item.
-  std::optional<std::chrono::microseconds> load_duration;
+  std::optional<std::chrono::microseconds> load_duration {};
 
   //! Time spent executing pipeline work for this item.
-  std::optional<std::chrono::microseconds> cook_duration;
+  std::optional<std::chrono::microseconds> cook_duration {};
 
   //! Time spent emitting outputs for this item.
-  std::optional<std::chrono::microseconds> emit_duration;
+  std::optional<std::chrono::microseconds> emit_duration {};
 };
 
 //! Timing telemetry captured during an import job.
 struct ImportTelemetry final {
   //! Time spent reading source bytes from storage.
   //! Includes source files and external dependencies.
-  std::optional<std::chrono::microseconds> io_duration;
+  std::optional<std::chrono::microseconds> io_duration {};
 
   //! Time spent loading the primary source file (IO + parse).
-  std::optional<std::chrono::microseconds> source_load_duration;
+  std::optional<std::chrono::microseconds> source_load_duration {};
 
   //! Total time spent decoding or transforming bytes in-memory.
   //! Aggregates all assets/resources (embedded or external) and excludes
   //! I/O, emission, and LOD building.
-  std::optional<std::chrono::microseconds> decode_duration;
+  std::optional<std::chrono::microseconds> decode_duration {};
 
   //! Total time spent loading or preparing data.
   //! Includes source load and all asset/resource load steps.
-  std::optional<std::chrono::microseconds> load_duration;
+  std::optional<std::chrono::microseconds> load_duration {};
 
   //! Time spent executing pipeline work that cooks content.
   //! Excludes I/O, decode, and emission. Includes LOD building.
-  std::optional<std::chrono::microseconds> cook_duration;
+  std::optional<std::chrono::microseconds> cook_duration {};
 
   //! Total time spent emitting cooked outputs.
   //! Aggregates all assets/resources emitted during the job.
-  std::optional<std::chrono::microseconds> emit_duration;
+  std::optional<std::chrono::microseconds> emit_duration {};
 
   //! Time spent in the finalization stage (index/report updates,
   //! session teardown). Not a per-asset/resource aggregate.
-  std::optional<std::chrono::microseconds> finalize_duration;
+  std::optional<std::chrono::microseconds> finalize_duration {};
 
   //! Total wall-clock duration for the job.
-  std::optional<std::chrono::microseconds> total_duration;
+  std::optional<std::chrono::microseconds> total_duration {};
 };
 
 //! Summary of a cooked output produced by an import job.
@@ -114,6 +114,14 @@ struct ImportPackagingSummary final {
 struct ImportReport final {
   std::filesystem::path cooked_root;
   data::SourceKey source_key {};
+
+  //! Candidate native provenance. Publish with successful geometry output;
+  //! never overwrite retained source settings before the enclosing transaction.
+  std::string material_slot_provenance_json;
+  //! Set only after retained-record publication; staging reports leave these
+  //! unset.
+  std::optional<std::filesystem::path> retained_record_path {};
+  std::optional<std::filesystem::path> previous_cooked_root {};
 
   //! Diagnostics (warnings/errors) emitted during import.
   std::vector<ImportDiagnostic> diagnostics;

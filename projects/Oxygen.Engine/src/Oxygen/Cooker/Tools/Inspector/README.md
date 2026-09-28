@@ -81,9 +81,14 @@ Oxygen.Cooker.Inspector.exe index F:/path/to/loose_cooked_root --assets true --d
 
 ### Scene metadata and current-format validation
 
-`validate` checks scene descriptors through the native parse-only loader in
-addition to index, type and file-size checks. Retired scene versions, malformed
-node records and invalid flag sources fail validation; content must be recooked.
+`validate` checks scene, material and geometry descriptors through their native
+parse-only loaders in addition to index, type and file-size checks. Retired
+versions, malformed records, invalid material emission or slot identities fail
+validation; content must be recooked.
+Scene material overrides are also checked against geometry inventories present
+in the same root: unknown slots or stale layout revisions require repair.
+References to geometry in other mounted roots require validation with those
+roots available; this command does not invent missing inventories.
 
 ```powershell
 Oxygen.Cooker.Inspector.exe scenes <cooked_root> --output <scenes.json>
@@ -104,6 +109,26 @@ native parsing fails before a valid scene is available. Missing/invalid roots or
 output failures also return 2. An empty scene list is valid for a scene-free root.
 The output schema is `Schemas/oxygen.cooked-scenes.schema.json`, installed with
 Inspector tooling. This command contains no qualification hooks or payloads.
+
+### Geometry material-slot inventories
+
+```powershell
+Oxygen.Cooker.Inspector.exe geometries <cooked_root> --output <geometries.json>
+```
+
+Writes schema version 1 geometry inventories using `GeometryAsset::MaterialSlots()`.
+Each geometry reports its asset key, SHA-256 layout revision and ordered slots.
+Each slot retains its opaque ID, display label and exact LOD/submesh/default
+material bindings. Equal labels or material keys never merge slots. Nil default
+material keys remain the omitted-reference sentinel.
+
+The native loader supplies these records without loading vertex/index buffers or
+starting the renderer. An invalid geometry returns exit code 2 before writing a
+report; successful reports contain every geometry in the root. Consumers must
+check the exit code before using output. The installed schema is
+`Schemas/oxygen.cooked-geometries.schema.json`.
+Use `--virtual-path /Content/Geometry/example.ogeo` to inspect one selected
+geometry without parsing other descriptors. A missing path yields an empty report.
 
 ### Dependency metadata
 

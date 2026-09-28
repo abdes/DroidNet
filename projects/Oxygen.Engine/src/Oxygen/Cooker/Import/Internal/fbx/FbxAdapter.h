@@ -18,7 +18,7 @@
 
 namespace oxygen::content::import::adapters {
 
-//! Format adapter that parses FBX once and emits pipeline work items.
+//! Loads FBX source metadata and emits pipeline work items.
 class FbxAdapter final : public std::enable_shared_from_this<FbxAdapter> {
 public:
   //! Result of parsing an FBX source.

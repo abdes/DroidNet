@@ -8,10 +8,12 @@
 
 #include <string_view>
 
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/Object.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/SourceKey.h>
 
 namespace oxygen::data {
 
@@ -28,18 +30,28 @@ namespace oxygen::data {
 class Asset : public Object {
 public:
   //! Constructs an asset with a stable asset key.
-  explicit Asset(AssetKey asset_key) noexcept
+  explicit Asset(AssetKey asset_key, SourceKey source_key = {}) noexcept
     : asset_key_(asset_key)
+    , source_key_(source_key)
   {
   }
 
   //! Virtual destructor for interface.
-  virtual ~Asset() = default;
+  ~Asset() override = default;
+  OXYGEN_DEFAULT_COPYABLE(Asset)
+  OXYGEN_DEFAULT_MOVABLE(Asset)
 
   //! Returns the stable identity key for this asset.
   [[nodiscard]] auto GetAssetKey() const noexcept -> AssetKey
   {
     return asset_key_;
+  }
+
+  //! Identity of the immutable cooked source; nil for generated or detached
+  //! data.
+  [[nodiscard]] auto GetSourceKey() const noexcept -> SourceKey
+  {
+    return source_key_;
   }
 
   //! Returns the asset type field from the header (for debugging).
@@ -62,7 +74,7 @@ public:
     while (len < pak::core::kMaxNameSize && name[len] != '\0') {
       ++len;
     }
-    return std::string_view(name, len);
+    return { name, len };
   }
 
   //! Returns the asset format version.
@@ -91,7 +103,8 @@ protected:
   virtual auto GetHeader() const noexcept -> const pak::core::AssetHeader& = 0;
 
 private:
-  AssetKey asset_key_ {};
+  AssetKey asset_key_;
+  SourceKey source_key_ {};
 };
 
 } // namespace oxygen::data

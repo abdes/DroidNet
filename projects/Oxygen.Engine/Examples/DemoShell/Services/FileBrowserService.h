@@ -13,9 +13,9 @@
 #include <string>
 #include <vector>
 
-#include <Oxygen/Base/ObserverPtr.h>
-
 #include "DemoShell/Services/SettingsService.h"
+
+#include <Oxygen/Base/ObserverPtr.h>
 
 namespace ImGui {
 class FileBrowser;
@@ -33,7 +33,7 @@ struct FileBrowserFilter {
 struct FileBrowserConfig {
   std::string title;
   std::filesystem::path initial_directory;
-  std::vector<FileBrowserFilter> filters;
+  std::vector<FileBrowserFilter> filters {};
   bool select_directory { false };
   bool allow_create_directory { true };
   bool allow_multi_select { false };
@@ -143,8 +143,8 @@ auto MakeModelFileBrowserConfig(const ContentRootPaths& roots)
 auto MakeModelDirectoryBrowserConfig(const ContentRootPaths& roots)
   -> FileBrowserConfig;
 
-//! Creates a file browser configuration for loose cooked index files.
-auto MakeLooseCookedIndexBrowserConfig(const ContentRootPaths& roots)
+//! Creates a browser for retained import records and loose cooked indexes.
+auto MakeLibraryBrowserConfig(const ContentRootPaths& roots)
   -> FileBrowserConfig;
 
 //! Creates a file browser configuration for skybox images.

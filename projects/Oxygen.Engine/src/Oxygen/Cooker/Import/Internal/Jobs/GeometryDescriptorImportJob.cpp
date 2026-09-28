@@ -12,20 +12,26 @@
 #include <exception>
 #include <filesystem>
 #include <limits>
-#include <nlohmann/json-schema.hpp>
-#include <nlohmann/json.hpp>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <unordered_map>
 #include <utility>
 #include <vector>
+
+#include <nlohmann/json-schema.hpp>
+#include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/ImportProgress.h>
+#include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/AssetEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
@@ -33,6 +39,7 @@
 #include <Oxygen/Cooker/Import/Internal/Jobs/GeometryDescriptorImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/BufferPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/GeometryPipeline.h>
+#include <Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/StringUtils.h>
@@ -41,10 +48,12 @@
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/BufferResource.h>
+#include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ProceduralMeshDefaults.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Writer.h>
 
@@ -77,7 +86,7 @@ namespace {
   struct GeometryExecutionContext final {
     ImportSession& session;
     const ImportRequest& request;
-    observer_ptr<IAsyncFileReader> reader {};
+    observer_ptr<IAsyncFileReader> reader;
     std::vector<MountedInspection> mounts;
     std::unordered_map<std::string, ResolvedBufferSidecar> buffer_cache;
     std::unordered_map<std::string, data::AssetKey> material_cache;
@@ -106,7 +115,7 @@ namespace {
 
   auto GetGeometryDescriptorValidator() -> json_validator&
   {
-    static auto validator = []() {
+    static auto validator = [] -> json_validator {
       auto out = json_validator {};
       out.set_root_schema(json::parse(kGeometryDescriptorSchema));
       return out;
@@ -130,7 +139,7 @@ namespace {
     return internal::ValidateJsonSchemaWithDiagnostics(
       GetGeometryDescriptorValidator(), descriptor_doc, config,
       [&](const std::string_view code, const std::string& message,
-        const std::string& object_path) {
+        const std::string& object_path) -> void {
         AddDiagnostic(session, request, ImportSeverity::kError,
           std::string(code), message, object_path);
       });
@@ -173,15 +182,16 @@ namespace {
       return false;
     }
 
-    const auto parse_vec3 = [](const json& value, std::array<float, 3>& out) {
+    const auto parse_vec3
+      = [](const json& value, std::array<float, 3>& out) -> bool {
       if (!value.is_array() || value.size() != 3U) {
         return false;
       }
       for (size_t i = 0; i < 3U; ++i) {
-        if (!value[i].is_number()) {
+        if (!value.at(i).is_number()) {
           return false;
         }
-        out[i] = value[i].get<float>();
+        out.at(i) = value.at(i).get<float>();
       }
       return true;
     };
@@ -466,7 +476,7 @@ namespace {
     std::string_view message, std::string object_path)
     -> std::optional<uint32_t>
   {
-    if (value > (std::numeric_limits<uint32_t>::max)()) {
+    if (value > std::numeric_limits<uint32_t>::max()) {
       AddDiagnostic(session, request, ImportSeverity::kError, std::string(code),
         std::string(message), std::move(object_path));
       return std::nullopt;
@@ -498,13 +508,13 @@ namespace {
     const auto& params = has_params ? proc.at("params") : json::object();
 
     const auto write_u32 = [&writer](const std::string& key, const json& obj,
-                             const uint32_t default_value) {
+                             const uint32_t default_value) -> bool {
       const auto value
         = obj.contains(key) ? obj.at(key).get<uint32_t>() : default_value;
       return WritePod(writer, value);
     };
     const auto write_f32 = [&writer](const std::string& key, const json& obj,
-                             const float default_value) {
+                             const float default_value) -> bool {
       const auto value
         = obj.contains(key) ? obj.at(key).get<float>() : default_value;
       return WritePod(writer, value);
@@ -571,7 +581,7 @@ namespace {
     auto chunks = json::array();
     for (const auto& authored : descriptor_doc.at("buffers")) {
       auto chunk = authored;
-      chunk["source"] = authored.at("uri");
+      chunk.update({ { "source", authored.at("uri") } });
       chunk.erase("uri");
       chunks.push_back(std::move(chunk));
     }
@@ -923,16 +933,14 @@ namespace {
         co_return std::nullopt;
       }
 
-      if (mesh_desc.IsProcedural()) {
-        if (!procedural_blob.empty()) {
-          if (!writer.WriteBlob(std::as_bytes(std::span<const std::byte>(
-                procedural_blob.data(), procedural_blob.size())))) {
-            AddDiagnostic(context.session, context.request,
-              ImportSeverity::kError, "geometry.descriptor.serialize_failed",
-              "Failed writing procedural parameter blob",
-              lod_path + ".procedural.params");
-            co_return std::nullopt;
-          }
+      if ((mesh_desc.IsProcedural()) && (!procedural_blob.empty())) {
+        if (!writer.WriteBlob(std::as_bytes(std::span<const std::byte>(
+              procedural_blob.data(), procedural_blob.size())))) {
+          AddDiagnostic(context.session, context.request,
+            ImportSeverity::kError, "geometry.descriptor.serialize_failed",
+            "Failed writing procedural parameter blob",
+            lod_path + ".procedural.params");
+          co_return std::nullopt;
         }
       }
 
@@ -942,6 +950,16 @@ namespace {
         const auto submesh_path
           = lod_path + ".submeshes[" + std::to_string(submesh_i) + "]";
         auto submesh_desc = data::pak::geometry::SubMeshDesc {};
+        const auto slot = data::MaterialSlotId::FromString(
+          submesh_doc.at("slot_id").get<std::string>());
+        if (!slot || slot.value().IsNil()) {
+          AddDiagnostic(context.session, context.request,
+            ImportSeverity::kError, "geometry.descriptor.slot_id_invalid",
+            "Submesh requires a non-nil canonical material slot identity",
+            submesh_path + ".slot_id");
+          co_return std::nullopt;
+        }
+        submesh_desc.slot_id = slot.value();
 
         const auto submesh_name = submesh_doc.contains("name")
           ? submesh_doc.at("name").get<std::string>()
@@ -964,14 +982,13 @@ namespace {
           = static_cast<uint32_t>(submesh_doc.at("views").size());
 
         auto submesh_bounds = lod_bounds;
-        if (submesh_doc.contains("bounds")) {
-          if (!ParseBounds(submesh_doc.at("bounds"), submesh_bounds)) {
-            AddDiagnostic(context.session, context.request,
-              ImportSeverity::kError, "geometry.descriptor.bounds_invalid",
-              "Submesh bounds must be an object with numeric min/max vec3",
-              submesh_path + ".bounds");
-            co_return std::nullopt;
-          }
+        if ((submesh_doc.contains("bounds"))
+          && (!ParseBounds(submesh_doc.at("bounds"), submesh_bounds))) {
+          AddDiagnostic(context.session, context.request,
+            ImportSeverity::kError, "geometry.descriptor.bounds_invalid",
+            "Submesh bounds must be an object with numeric min/max vec3",
+            submesh_path + ".bounds");
+          co_return std::nullopt;
         }
 
         std::copy_n(
@@ -1066,7 +1083,8 @@ auto GeometryDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   auto session = ImportSession(Request(), FileReader(), FileWriter(),
     ThreadPool(), TableRegistry(), IndexRegistry());
 
-  if (!Request().geometry_descriptor.has_value()) {
+  const auto& descriptor = Request().geometry_descriptor;
+  if (!descriptor.has_value()) {
     AddDiagnostic(session, Request(), ImportSeverity::kError,
       "geometry.descriptor.request_invalid",
       "GeometryDescriptorImportJob requires request geometry_descriptor "
@@ -1079,8 +1097,8 @@ auto GeometryDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   auto descriptor_doc = nlohmann::json {};
   auto parse_exception = std::optional<std::string> {};
   try {
-    descriptor_doc = nlohmann::json::parse(
-      Request().geometry_descriptor->normalized_descriptor_json);
+    descriptor_doc
+      = nlohmann::json::parse(descriptor->normalized_descriptor_json);
   } catch (const std::exception& ex) {
     parse_exception = ex.what();
   }

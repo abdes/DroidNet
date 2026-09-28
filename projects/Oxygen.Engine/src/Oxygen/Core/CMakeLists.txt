@@ -79,6 +79,7 @@ set(
   "Types/Atmosphere.h"
   "Types/Bool32.h"
   "Types/ByteUnits.h"
+  "Types/CameraAspectMode.h"
   "Types/ColorSpace.h"
   "Types/Epoch.h"
   "Types/Format.h"

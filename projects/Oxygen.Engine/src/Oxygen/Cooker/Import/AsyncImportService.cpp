@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <filesystem>
@@ -22,18 +23,18 @@
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
-
-#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
 #include <Oxygen/Cooker/Import/ImportConcurrency.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportJobId.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
+#include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportProgress.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
@@ -57,6 +58,7 @@
 #include <Oxygen/Cooker/Import/Internal/Jobs/TextureImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedIndexRegistry.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
+#include <Oxygen/Cooker/Import/RetainedModelImport.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Event.h>
 #include <Oxygen/OxCo/Nursery.h>
@@ -241,7 +243,7 @@ struct AsyncImportService::Impl {
   //! Start the import thread and wait for it to be ready.
   auto StartThread() -> void
   {
-    import_thread_ = std::thread([this]() -> void { ThreadMain(); });
+    import_thread_ = std::thread([this] -> void { ThreadMain(); });
 
     // Wait for the import thread to finish initialization
     startup_latch_.wait();
@@ -284,7 +286,7 @@ struct AsyncImportService::Impl {
 
     // Run the coroutine runtime with the AsyncImporter
     // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) - blocking call
-    co::Run(*event_loop_, [this]() -> co::Co<> {
+    co::Run(*event_loop_, [this] -> co::Co<> {
       // Use OXCO_WITH_NURSERY to properly activate the LiveObject
       OXCO_WITH_NURSERY(n)
       {
@@ -306,7 +308,7 @@ struct AsyncImportService::Impl {
     // all resource tables. This guarantees that all import jobs have completed
     // and no further writes will be made to the tables.
     // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) - blocking call
-    co::Run(*event_loop_, [this]() -> co::Co<> {
+    co::Run(*event_loop_, [this] -> co::Co<> {
       const auto ok = co_await table_registry_->FinalizeAll();
       if (!ok) {
         LOG_F(WARNING, "Resource table finalization failed");
@@ -371,7 +373,7 @@ struct AsyncImportService::Impl {
         // IMPORTANT: Trigger cancellations on the import thread to keep
         // coroutine resumption on the correct executor.
         event_loop_->Post(
-          [events = std::move(events_to_trigger)]() mutable -> void {
+          [events = std::move(events_to_trigger)] mutable -> void {
             for (auto& event : events) {
               event->Trigger();
             }
@@ -387,7 +389,7 @@ struct AsyncImportService::Impl {
     // correct thread. The nursery will be canceled and co::Run() will
     // exit naturally, causing the event loop to stop.
     if (event_loop_ && async_importer_) {
-      event_loop_->Post([this]() -> void { async_importer_->Stop(); });
+      event_loop_->Post([this] -> void { async_importer_->Stop(); });
     }
   }
 
@@ -431,6 +433,27 @@ AsyncImportService::~AsyncImportService()
   CHECK_F(IsStopped(),
     "Destroyed without Stop(). "
     "Call Stop() and wait for IsStopped() before destruction.");
+}
+
+auto AsyncImportService::SubmitRetainedImport(
+  std::shared_ptr<RetainedModelImport> publication,
+  const ImportCompletionCallback& on_complete,
+  const ProgressEventCallback& on_progress) const -> std::optional<ImportJobId>
+{
+  if (!publication) {
+    return std::nullopt;
+  }
+  auto request = publication->Request();
+  const auto format = request.GetFormat();
+  return SubmitImport(std::move(request), on_complete, on_progress,
+    [publication = std::move(publication), format,
+      loop = observer_ptr(impl_->event_loop_.get())](
+      detail::ImportJobParams params) -> std::shared_ptr<detail::ImportJob> {
+      publication->ClaimSubmission();
+      params.retained_import = publication;
+      params.generation_writer = CreateAsyncFileWriter(*loop);
+      return CreateJobForFormat(format, std::move(params));
+    });
 }
 
 auto AsyncImportService::SubmitImport(ImportRequest request,
@@ -537,7 +560,7 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
   } while (!impl_->admitted_jobs_.compare_exchange_weak(admitted, admitted + 1,
     std::memory_order_acq_rel, std::memory_order_relaxed));
   auto posted = false;
-  const auto admission = ScopeGuard([&]() noexcept {
+  const auto admission = ScopeGuard([&] noexcept -> void {
     if (!posted) {
       impl_->admitted_jobs_.fetch_sub(1, std::memory_order_acq_rel);
     }
@@ -679,25 +702,25 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
 
   // Submit directly to AsyncImporter via event loop post
   // The event loop ensures this runs on the import thread
-  impl_->event_loop_->Post(
-    [importer = impl_->async_importer_.get(), entry = std::move(entry),
-      wrapped_complete, source_path = source_path_string]() mutable -> void {
-      // Now on import thread - submit to AsyncImporter
-      // Use TrySubmitJob since we're not in a coroutine context
-      if (!importer->TrySubmitJob(std::move(entry))) {
-        LOG_F(WARNING, "Failed to submit job (channel full or closed)");
-        auto report = ImportReport {};
-        report.diagnostics.push_back({
-          .severity = ImportSeverity::kError,
-          .code = "import.queue_full",
-          .message = "Import queue is full",
-          .source_path = source_path,
-          .object_path = {},
-        });
-        report.success = false;
-        wrapped_complete(entry.job_id, report);
-      }
-    });
+  impl_->event_loop_->Post([importer = impl_->async_importer_.get(),
+                             entry = std::move(entry), wrapped_complete, job_id,
+                             source_path = source_path_string] mutable -> void {
+    // Now on import thread - submit to AsyncImporter
+    // Use TrySubmitJob since we're not in a coroutine context
+    if (!importer->TrySubmitJob(std::move(entry))) {
+      LOG_F(WARNING, "Failed to submit job (channel full or closed)");
+      auto report = ImportReport {};
+      report.diagnostics.push_back({
+        .severity = ImportSeverity::kError,
+        .code = "import.queue_full",
+        .message = "Import queue is full",
+        .source_path = source_path,
+        .object_path = {},
+      });
+      report.success = false;
+      wrapped_complete(job_id, report);
+    }
+  });
   posted = true;
 
   return job_id;
@@ -741,7 +764,7 @@ auto AsyncImportService::CancelJob(const ImportJobId job_id) const -> bool
   if (cancel_event) {
     if (impl_->event_loop_) {
       impl_->event_loop_->Post(
-        [event = cancel_event]() -> void { event->Trigger(); });
+        [event = cancel_event] -> void { event->Trigger(); });
     } else {
       cancel_event->Trigger();
     }
@@ -772,7 +795,7 @@ auto AsyncImportService::CancelAll() const -> void
   // Trigger all cancel events (outside the lock)
   if (impl_->event_loop_) {
     impl_->event_loop_->Post(
-      [events = std::move(events_to_trigger)]() mutable -> void {
+      [events = std::move(events_to_trigger)] mutable -> void {
         for (auto& event : events) {
           event->Trigger();
         }

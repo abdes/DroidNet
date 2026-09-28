@@ -96,7 +96,8 @@ Imports one FBX scene.
 
 Required:
 
-- positional `source`
+- positional `source`, or `--record <path>` to replay a retained recipe
+- raw staging imports require `--material-slot-source-identity <uuid-v7>`
 
 Common options:
 
@@ -107,6 +108,7 @@ Common options:
 
 Scene controls:
 
+- `--material-slot-provenance <json-file>` (retained candidate from a prior import)
 - `--no-import-textures`
 - `--no-import-materials`
 - `--no-import-geometry`
@@ -126,7 +128,54 @@ Required:
 
 - positional `source`
 
-Options are the same shape as `fbx`.
+Options are the same shape as `fbx`. A retained record can be replayed without
+supplying `source`.
+
+### Retained model imports
+
+Use the shared retained workflow for independently imported models:
+
+```powershell
+Oxygen.Cooker.ImportTool gltf model.glb --content-root H:/Game/Content
+Oxygen.Cooker.ImportTool fbx model.fbx --content-root H:/Game/Content --record H:/Game/Content/imports/model.import.json
+Oxygen.Cooker.ImportTool fbx --record H:/Game/Content/imports/model.import.json
+Oxygen.Cooker.ImportTool fbx --recipe model.recipe.json --record H:/Game/Content/imports/model.import.json --content-root H:/Game/Content
+```
+
+The record owns recipe and slot identity; do not combine retained options with
+`--output`, `--material-slot-source-identity` or `--material-slot-provenance`.
+The native publisher selects a validated immutable generation and its provenance
+in one atomic record replacement. Failed or interrupted attempts keep the prior
+selection. External raw sources are read only. Records follow
+`oxygen.retained-model-import.schema.json`; generated directories belong under
+`Content/.cooked/imports`. The [pipeline owner](../../Docs/Import/async_import_pipeline_v2.md#retained-model-publication)
+defines publication and lifetime.
+
+`--recipe` applies a single-job native import manifest, including texture defaults
+and mesh settings. Relative sources resolve beside that manifest. The command
+validates format and conflicting options before changing the retained record.
+Recipe application and record replay accept reporting and execution options;
+content overrides require a direct source or an updated recipe. Worker budgets
+belong to `--thread-pool-size`/`--concurrency`, outside retained recipes.
+
+### Staged model imports
+
+Project transactions and SDK batches may use explicit output roots. Their host
+owns publication of cooked output together with the returned provenance.
+
+Keep the source identity with the source asset and reuse it on every reimport.
+Successful single and batch job reports include `material_slot_provenance` when
+the importer allocates slots. Preserve that object in the host-owned source metadata;
+pass it through the CLI file option or a manifest's `material_slot_provenance`
+property. The file contains the object itself, not the surrounding job report.
+Failed or canceled jobs do not publish a candidate. Clearing cooked output does
+not erase this retained authoring data. The object follows the installed
+`oxygen.material-slot-provenance.schema.json` schema.
+
+Manifest scene defaults and individual FBX/glTF jobs accept
+`material_slot_source_identity` and `material_slot_provenance`. Job values
+override defaults. Give independent source assets independent identities;
+do not derive identities from machine-local paths.
 
 ### `script`
 
@@ -391,6 +440,10 @@ scene descriptor.
 ### `batch`
 
 Runs manifest jobs.
+
+Validation errors always fail the batch, even when valid jobs continue without
+`--fail-fast`. Human and JSON summaries include `validation_errors` separately
+from the execution results of prepared jobs.
 
 Required:
 

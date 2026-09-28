@@ -51,6 +51,7 @@ def _basic_spec_dict() -> dict:
                         "index_buffer": None,
                         "submeshes": [
                             {
+                                "slot_id": "a5412d85-5e54-5924-951f-819c84668775",
                                 "name": "sm0",
                                 "material": "mat0",
                                 "mesh_views": [

@@ -81,11 +81,11 @@
           "x-editor-order": 0,
           "x-editor-renderer": "asset-picker"
         },
-        "material_ref": {
-          "x-editor-label": "Material",
+        "material_overrides": {
+          "x-editor-label": "Material Slots",
           "x-editor-group": "Geometry",
           "x-editor-order": 10,
-          "x-editor-renderer": "asset-picker"
+          "x-editor-renderer": "material-slots"
         }
       }
     },
@@ -100,11 +100,17 @@
           "x-editor-unit": "deg"
         },
         "aspect_ratio": {
-          "x-editor-label": "Aspect Ratio",
+          "x-editor-label": "Fixed Aspect Ratio",
           "x-editor-group": "Projection",
           "x-editor-order": 10,
           "x-editor-renderer": "numberbox",
           "x-editor-step": 0.01
+        },
+        "aspect_mode": {
+          "x-editor-label": "Aspect Mode",
+          "x-editor-group": "Projection",
+          "x-editor-order": 5,
+          "x-editor-renderer": "combobox"
         },
         "near_plane": {
           "x-editor-label": "Near Plane",

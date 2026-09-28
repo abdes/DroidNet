@@ -14,6 +14,70 @@ Engine. The design uses OxCo structured concurrency with a **dedicated import
 thread** running its own event loop and ThreadPool, completely decoupled from
 the main application thread.
 
+Retained model imports use [immutable publication](#retained-model-publication);
+the editor continues to own its broader project publication transaction.
+
+## Retained model publication
+
+Self-contained glTF/FBX imports have a Cooker-owned authored record in the
+existing Content import-record area. It retains the native model recipe, source
+namespace/provenance and selected cooked generation. Original external files are
+read inputs; importing never writes metadata beside them.
+
+Each attempt cooks into a new private directory under
+`Content/.cooked/imports/<source-id>/<generation-id>`. It neither modifies a
+published generation nor copies an earlier aggregate root. After successful
+native validation, one atomic authored-record replacement selects both the
+candidate provenance and generation. Record/settings changes or a competing
+publication fail the expected-revision check and leave the previous generation
+selected. Failed or interrupted attempts remain unselected and cannot affect
+subsequent source identity allocation.
+
+`AsyncImportService::SubmitImport` is the staging primitive used by project
+transactions. The retained model entry point owns record preparation, isolated
+cooking and publication for native hosts; DemoShell and CLI consume that same
+API and schema. The editor keeps its existing project coordinator and uses the
+shared native provenance value.
+
+`RetainedModelImport::SaveRecipe` creates or updates
+`Content/imports/<name>.import.json`; `Prepare` reserves one unique attempt,
+and `AsyncImportService::SubmitRetainedImport` executes it. The native
+`oxygen.retained-model-import.schema.json` record contains the recipe, native
+material-slot provenance, and selected generation ID/index digest. Generation
+paths are derived, never copied into the authored recipe. A prepared attempt is
+submitted once. Staging imports reject writes into marked generation roots.
+Source bytes consumed during import are checked again before publication.
+
+Physical I/O uses [Base filesystem paths](../../../Base/Docs/Filesystem.md),
+including parser callbacks and generated output. Authored paths and identities
+keep their logical spelling. Emitter failures retain the original file error
+through session finalization, even when another emitter has flushed the shared
+writer.
+
+DemoShell persists retained record paths (`content.library.import_records`)
+and the active scene's record (`content.active_scene.import_record`). It resolves
+the current generation when restoring the library, so external CLI reimports
+do not strand the UI on a historical directory. The source-browser folder is
+independent from the app-owned Content destination.
+
+Content mounts immutable generation paths. Replaced generations remain available
+to referenced assets and in-flight reads. Publication does not delete them;
+reclamation requires the owning Content lifetime to release them.
+`ReclaimUnusedGenerations` checks selection under the record lock, then removes
+only UUID-named private generations for that source whose exclusive marker lock
+can be acquired. Import workers run this cleanup before new work; selected,
+mounted and in-flight generations remain. Retained jobs own existing native
+file writers and registries per generation. Cancellation drains that writer
+before destroying its session/emitters, without cancelling or draining another
+job. One source namespace belongs to one authored record. Hosts expose
+the selected generation without adding workspace-selection UI.
+
+Acceptance: interrupted/failed cooks preserve the selected record and all prior
+bytes; concurrent publishers cannot overwrite each other's accepted generation;
+source/settings edits invalidate an in-flight candidate; deleting derived
+generations preserves SlotIds after recook from retained provenance; old readers
+remain valid through generation replacement.
+
 ### Core Principles
 
 1. **Dedicated Import Thread**: The importer runs on its own thread with an

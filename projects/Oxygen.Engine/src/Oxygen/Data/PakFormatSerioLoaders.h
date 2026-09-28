@@ -308,9 +308,22 @@ inline auto Load(AnyReader& reader, data::pak::world::RenderableRecord& record)
 
   CHECK_RESULT(reader.ReadInto(record.node_index));
   CHECK_RESULT(reader.ReadInto(record.geometry_key));
-  CHECK_RESULT(reader.ReadInto(record.material_key));
   CHECK_RESULT(reader.ReadInto(record.visible));
 
+  return {};
+}
+
+inline auto Load(AnyReader& reader,
+  data::pak::world::MaterialOverrideRecord& record) -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+  CHECK_RESULT(reader.ReadInto(record.node_index));
+  data::MaterialSlotId::ByteArray bytes {};
+  CHECK_RESULT(reader.ReadBlobInto(std::as_writable_bytes(std::span(bytes))));
+  record.slot_id = data::MaterialSlotId::FromBytes(bytes);
+  CHECK_RESULT(reader.ReadInto(record.material_key));
+  CHECK_RESULT(reader.ReadBlobInto(
+    std::as_writable_bytes(std::span(record.layout_revision))));
   return {};
 }
 
@@ -351,9 +364,8 @@ inline auto Load(AnyReader& reader,
   CHECK_RESULT(reader.ReadInto(record.aperture_f));
   CHECK_RESULT(reader.ReadInto(record.shutter_rate));
   CHECK_RESULT(reader.ReadInto(record.iso));
-  if (!std::isfinite(record.aperture_f) || record.aperture_f <= 0.0F
-    || !std::isfinite(record.shutter_rate) || record.shutter_rate <= 0.0F
-    || !std::isfinite(record.iso) || record.iso <= 0.0F) {
+  CHECK_RESULT(reader.ReadInto(record.aspect_mode));
+  if (!data::pak::world::HasValidPerspectiveCameraValues(record)) {
     return ::oxygen::Err(std::errc::invalid_argument);
   }
 

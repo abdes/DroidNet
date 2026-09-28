@@ -25,6 +25,7 @@
       "submeshes": [
         {
           "name": "character_surface",
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
           "material_ref": "/.cooked/Materials/character_teal.omat",
           "views": [
             {

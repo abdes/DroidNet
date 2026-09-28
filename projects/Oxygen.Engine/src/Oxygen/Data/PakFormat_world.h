@@ -11,10 +11,14 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <numbers>
 
 #include <Oxygen/Base/Compilers.h>
 #include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Core/Types/CameraAspectMode.h>
 #include <Oxygen/Core/Types/PostProcess.h>
+#include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/PakFormat_core.h>
 
 // packed structs intentionally embed unaligned NamedType ResourceIndexT fields
@@ -49,7 +53,7 @@ inline constexpr uint32_t kSceneNodeFlags_Known = kSceneNodeFlags_Inheritable
 //!
 //! @note Scene descriptors include a trailing SceneEnvironment block (empty
 //! allowed).
-inline constexpr uint8_t kSceneAssetVersion = 8;
+inline constexpr uint8_t kSceneAssetVersion = 9;
 //! Index type for scene node tables.
 using SceneNodeIndexT = uint32_t;
 
@@ -211,8 +215,7 @@ static_assert(sizeof(NodeRecord) == 72);
   ### Relationships
   - Links to a `NodeRecord` via `node_index`.
   - References a `GeometryAsset` via `geometry_key`.
-  - Optionally references a scene-authored material override via
-    `material_key`.
+  - Material overrides are separate `MaterialOverrideRecord` entries.
 
   @note Component tables are typically sorted by `node_index` for efficient
   loading.
@@ -220,11 +223,21 @@ static_assert(sizeof(NodeRecord) == 72);
 struct RenderableRecord {
   SceneNodeIndexT node_index = 0; // Index of the owner node
   AssetKey geometry_key; // Geometry asset to render
-  AssetKey material_key; // Optional material override; nil means no override
   uint32_t visible = 1; // Visibility flag (boolean)
 };
 #pragma pack(pop)
-static_assert(sizeof(RenderableRecord) == 40);
+static_assert(sizeof(RenderableRecord) == 24);
+
+#pragma pack(push, 1)
+//! One instance assignment. Absence restores the geometry's binding defaults.
+struct MaterialOverrideRecord {
+  SceneNodeIndexT node_index = 0;
+  MaterialSlotId slot_id;
+  AssetKey material_key;
+  base::Sha256Digest layout_revision {};
+};
+#pragma pack(pop)
+static_assert(sizeof(MaterialOverrideRecord) == 68);
 
 #pragma pack(push, 1)
 
@@ -258,18 +271,38 @@ static_assert(sizeof(LocalFogVolumeRecord) == 56);
 struct PerspectiveCameraRecord {
   SceneNodeIndexT node_index = 0; // Index of the owner node
   float fov_y = 0.785398F; // Vertical FOV in radians (~45 deg)
-  float aspect_ratio = 1.777778F; // Width / Height (default 16:9)
+  float aspect_ratio
+    = kDefaultCameraAspectRatio; // Retained Fixed width / height
   float near_plane = 0.1F; // Distance to near clipping plane
   float far_plane = 1000.0F; // Distance to far clipping plane
   float aperture_f = engine::kDefaultCameraApertureF;
   float shutter_rate = engine::kDefaultCameraShutterRate;
   float iso = engine::kDefaultCameraIso;
+  CameraAspectMode aspect_mode = CameraAspectMode::kAuto;
 };
 #pragma pack(pop)
-static_assert(sizeof(PerspectiveCameraRecord) == 32);
+static_assert(sizeof(PerspectiveCameraRecord) == 33);
 static_assert(offsetof(PerspectiveCameraRecord, aperture_f) == 20);
 static_assert(offsetof(PerspectiveCameraRecord, shutter_rate) == 24);
 static_assert(offsetof(PerspectiveCameraRecord, iso) == 28);
+static_assert(offsetof(PerspectiveCameraRecord, aspect_mode) == 32);
+
+//! The canonical finite perspective lens contract shared by cooking and
+//! loading.
+inline auto HasValidPerspectiveCameraValues(
+  const PerspectiveCameraRecord& record) -> bool
+{
+  return (record.aspect_mode == CameraAspectMode::kAuto
+           || record.aspect_mode == CameraAspectMode::kFixed)
+    && std::isfinite(record.fov_y) && record.fov_y > 0.0F
+    && record.fov_y < std::numbers::pi_v<float>
+    && std::isfinite(record.aspect_ratio) && record.aspect_ratio > 0.0F
+    && std::isfinite(record.near_plane) && record.near_plane > 0.0F
+    && std::isfinite(record.far_plane) && record.far_plane > record.near_plane
+    && std::isfinite(record.aperture_f) && record.aperture_f > 0.0F
+    && std::isfinite(record.shutter_rate) && record.shutter_rate > 0.0F
+    && std::isfinite(record.iso) && record.iso > 0.0F;
+}
 
 #pragma pack(push, 1)
 

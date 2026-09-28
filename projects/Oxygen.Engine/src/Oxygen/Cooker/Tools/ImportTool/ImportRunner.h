@@ -7,6 +7,7 @@
 #pragma once
 
 #include <expected>
+#include <memory>
 #include <string_view>
 #include <system_error>
 
@@ -15,16 +16,24 @@
 
 namespace oxygen::content::import {
 class AsyncImportService; // forward-declared
+class RetainedModelImport;
+struct SceneImportSettings;
 } // namespace oxygen::content::import
 
 namespace oxygen::content::import::tool {
 
 class IMessageWriter;
+struct GlobalOptions;
 
 [[nodiscard]] auto RunImportJob(const ImportRequest& request,
   oxygen::observer_ptr<IMessageWriter> writer, std::string_view report_path,
   std::string_view command_line, bool enable_tui,
-  oxygen::observer_ptr<oxygen::content::import::AsyncImportService> service)
+  oxygen::observer_ptr<oxygen::content::import::AsyncImportService> service,
+  std::shared_ptr<RetainedModelImport> publication = {})
+  -> std::expected<void, std::error_code>;
+
+[[nodiscard]] auto RunSceneImportJob(const SceneImportSettings& settings,
+  ImportFormat format, const GlobalOptions& globals)
   -> std::expected<void, std::error_code>;
 
 } // namespace oxygen::content::import::tool

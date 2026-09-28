@@ -6,19 +6,26 @@
 
 #include <array>
 #include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <exception>
 #include <filesystem>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include <nlohmann/json-schema.hpp>
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/ImportProgress.h>
+#include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/AssetEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
@@ -30,6 +37,7 @@
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/OxCo/Co.h>
 
 namespace oxygen::content::import::detail {
 
@@ -44,30 +52,46 @@ namespace {
 
   constexpr std::array kTextureSlotBindings {
     TextureSlotBindingEntry {
-      "base_color", &MaterialTextureBindings::base_color },
+      "base_color",
+      &MaterialTextureBindings::base_color,
+    },
     TextureSlotBindingEntry { "normal", &MaterialTextureBindings::normal },
     TextureSlotBindingEntry { "metallic", &MaterialTextureBindings::metallic },
     TextureSlotBindingEntry {
-      "roughness", &MaterialTextureBindings::roughness },
+      "roughness",
+      &MaterialTextureBindings::roughness,
+    },
     TextureSlotBindingEntry {
-      "ambient_occlusion", &MaterialTextureBindings::ambient_occlusion },
+      "ambient_occlusion",
+      &MaterialTextureBindings::ambient_occlusion,
+    },
     TextureSlotBindingEntry { "emissive", &MaterialTextureBindings::emissive },
     TextureSlotBindingEntry { "specular", &MaterialTextureBindings::specular },
     TextureSlotBindingEntry {
-      "sheen_color", &MaterialTextureBindings::sheen_color },
+      "sheen_color",
+      &MaterialTextureBindings::sheen_color,
+    },
     TextureSlotBindingEntry {
-      "clearcoat", &MaterialTextureBindings::clearcoat },
+      "clearcoat",
+      &MaterialTextureBindings::clearcoat,
+    },
     TextureSlotBindingEntry {
-      "clearcoat_normal", &MaterialTextureBindings::clearcoat_normal },
+      "clearcoat_normal",
+      &MaterialTextureBindings::clearcoat_normal,
+    },
     TextureSlotBindingEntry {
-      "transmission", &MaterialTextureBindings::transmission },
+      "transmission",
+      &MaterialTextureBindings::transmission,
+    },
     TextureSlotBindingEntry {
-      "thickness", &MaterialTextureBindings::thickness },
+      "thickness",
+      &MaterialTextureBindings::thickness,
+    },
   };
 
   auto GetMaterialDescriptorValidator() -> json_validator&
   {
-    static auto validator = []() {
+    static auto validator = [] -> json_validator {
       auto out = json_validator {};
       out.set_root_schema(nlohmann::json::parse(kMaterialDescriptorSchema));
       return out;
@@ -112,7 +136,7 @@ namespace {
     return internal::ValidateJsonSchemaWithDiagnostics(
       GetMaterialDescriptorValidator(), descriptor_doc, config,
       [&](const std::string_view code, const std::string& message,
-        const std::string& object_path) {
+        const std::string& object_path) -> void {
         AddDiagnostic(session, request, ImportSeverity::kError,
           std::string(code), message, object_path);
       });
@@ -228,10 +252,10 @@ namespace {
       return false;
     }
     for (size_t i = 0; i < N; ++i) {
-      if (!value[i].is_number()) {
+      if (!value.at(i).is_number()) {
         return false;
       }
-      out[i] = value[i].get<float>();
+      out[i] = value.at(i).get<float>();
     }
     return true;
   }
@@ -259,9 +283,15 @@ namespace {
     if (doc.contains("ambient_occlusion")) {
       inputs.ambient_occlusion = doc.at("ambient_occlusion").get<float>();
     }
-    if (doc.contains("emissive_factor")
-      && !ParseFloatArray(doc.at("emissive_factor"), inputs.emissive_factor)) {
+    float emissive_color[3] { 1.0F, 1.0F, 1.0F };
+    if (doc.contains("emissive_color")
+      && !ParseFloatArray(doc.at("emissive_color"), emissive_color)) {
       return false;
+    }
+    const auto emissive_intensity = doc.value("emissive_intensity", 0.0F);
+    for (size_t channel = 0; channel < std::size(emissive_color); ++channel) {
+      inputs.emissive_factor[channel]
+        = emissive_color[channel] * emissive_intensity;
     }
     if (doc.contains("alpha_cutoff")) {
       inputs.alpha_cutoff = doc.at("alpha_cutoff").get<float>();
@@ -349,7 +379,8 @@ auto MaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   auto session = ImportSession(Request(), FileReader(), FileWriter(),
     ThreadPool(), TableRegistry(), IndexRegistry());
 
-  if (!Request().material_descriptor.has_value()) {
+  const auto& descriptor = Request().material_descriptor;
+  if (!descriptor.has_value()) {
     AddDiagnostic(session, Request(), ImportSeverity::kError,
       "material.descriptor.request_invalid",
       "MaterialDescriptorImportJob requires request material_descriptor "
@@ -362,8 +393,8 @@ auto MaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   auto descriptor_doc = nlohmann::json {};
   auto parse_exception = std::optional<std::string> {};
   try {
-    descriptor_doc = nlohmann::json::parse(
-      Request().material_descriptor->normalized_descriptor_json);
+    descriptor_doc
+      = nlohmann::json::parse(descriptor->normalized_descriptor_json);
   } catch (const std::exception& ex) {
     parse_exception = ex.what();
   }
@@ -398,8 +429,9 @@ auto MaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   item.naming_service = observer_ptr { &GetNamingService() };
   item.stop_token = StopToken();
 
-  if (Request().job_name.has_value() && !Request().job_name->empty()) {
-    item.material_name = *Request().job_name;
+  const auto& job_name = Request().job_name;
+  if (job_name && !job_name->empty()) {
+    item.material_name = *job_name;
   } else if (descriptor_doc.contains("name")) {
     item.material_name = descriptor_doc.at("name").get<std::string>();
   } else {
@@ -446,13 +478,12 @@ auto MaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
     }
   }
 
-  if (descriptor_doc.contains("parameters")) {
-    if (!ApplyMaterialInputsFromJson(
-          descriptor_doc.at("parameters"), item.inputs)) {
-      AddDiagnostic(session, Request(), ImportSeverity::kError,
-        "material.descriptor.parameters_invalid",
-        "Material parameters payload has invalid shape");
-    }
+  if ((descriptor_doc.contains("parameters"))
+    && (!ApplyMaterialInputsFromJson(
+      descriptor_doc.at("parameters"), item.inputs))) {
+    AddDiagnostic(session, Request(), ImportSeverity::kError,
+      "material.descriptor.parameters_invalid",
+      "Material parameters payload has invalid shape");
   }
 
   auto parse_failed = session.HasErrors();
@@ -482,9 +513,11 @@ auto MaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
     const auto resolved_index
       = co_await internal::ResolveTextureReference(observer_ptr { &session },
         observer_ptr { &Request() }, observer_ptr { reader },
-        { .virtual_path = virtual_path,
+        {
+          .virtual_path = virtual_path,
           .object_path = object_path,
-          .diagnostic_prefix = "material.descriptor." });
+          .diagnostic_prefix = "material.descriptor.",
+        });
     if (!resolved_index.has_value()) {
       parse_failed = true;
       co_return;
@@ -526,14 +559,14 @@ auto MaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
     const auto& textures_doc = descriptor_doc.at("textures");
     for (const auto& entry : kTextureSlotBindings) {
       co_await resolve_texture_binding(
-        textures_doc, entry.slot_name, item.textures.*(entry.binding_member));
+        textures_doc, entry.slot_name, item.textures.*entry.binding_member);
     }
   }
 
   if (descriptor_doc.contains("shaders")) {
     const auto& shaders_doc = descriptor_doc.at("shaders");
     for (size_t i = 0; i < shaders_doc.size(); ++i) {
-      const auto& stage_doc = shaders_doc[i];
+      const auto& stage_doc = shaders_doc.at(i);
       const auto object_path = "shaders[" + std::to_string(i) + "]";
 
       const auto shader_type

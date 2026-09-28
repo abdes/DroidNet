@@ -39,9 +39,8 @@ def check(report):
                 if label == "masked":
                     if not np.all(coverage[mask, 0] == 255) or not np.all(np.abs(coverage[mask, 1].astype(int) - 204) <= 1):
                         raise AssertionError("Masked material did not execute the alpha-test path")
-            # Source authoring stores the emissive factors as IEEE binary16.
-            expected = np.array([.7, .65, .5]) * 4096
-            expected = expected.astype(np.float16).astype(np.float32)
+            # Cooked material factors preserve the float32 source product.
+            expected = np.array([.7, .65, .5], dtype=np.float32) * np.float32(4096)
             emitted = np.all(np.abs(base - expected) <= .005 * expected + 2e-5, axis=2)
             row["emissive_pixels"] = int(np.count_nonzero(emitted))
             if row["emissive_pixels"] < 32:

@@ -72,7 +72,7 @@ namespace oxygen::examples {
 struct PendingSceneSwap {
   std::shared_ptr<data::SceneAsset> asset;
   std::shared_ptr<data::PhysicsSceneAsset> physics_asset;
-  data::AssetKey scene_key {};
+  data::AssetKey scene_key;
 };
 
 //! Async scene loading and instantiation service.
@@ -131,7 +131,7 @@ private:
     data::AssetKey sidecar_key,
     std::shared_ptr<data::PhysicsSceneAsset> physics_asset);
   //! Resolve the mandatory physics sidecar key for the scene.
-  auto ResolvePhysicsSidecarKey(const data::AssetKey& scene_key) const
+  auto ResolvePhysicsSidecarKey(const data::SceneAsset& scene_asset) const
     -> std::optional<data::AssetKey>;
   //! Validate strict scene/physics identity invariants.
   void ValidatePhysicsSidecarIdentity(const data::SceneAsset& scene_asset,
@@ -256,19 +256,19 @@ private:
   std::unordered_set<data::AssetKey> pending_geometry_keys_;
   std::vector<data::AssetKey> pinned_geometry_keys_;
 
-  std::optional<data::AssetKey> current_physics_context_asset_key_ {};
-  observer_ptr<scene::Scene> runtime_scene_ {};
+  observer_ptr<const data::PhysicsSceneAsset> current_physics_context_;
+  observer_ptr<scene::Scene> runtime_scene_;
   bool hydration_window_active_ { false };
   bool hydration_transforms_resolved_ { false };
   observer_ptr<AsyncEngine> engine_;
-  engine::ModuleManager::Subscription physics_module_subscription_ {};
+  engine::ModuleManager::Subscription physics_module_subscription_;
   observer_ptr<physics::PhysicsModule> physics_module_;
   observer_ptr<engine::InputSystem> input_system_;
   observer_ptr<scripting::IScriptCompilationService> compilation_service_;
   std::unique_ptr<scripting::IScriptSourceResolver> source_resolver_;
 
   auto ReadScriptResource(
-    uint32_t index, const data::AssetKey& context_asset_key) const
+    uint32_t index, const data::ScriptAsset& context_asset) const
     -> std::shared_ptr<const data::ScriptResource>;
 };
 

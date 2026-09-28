@@ -402,7 +402,7 @@ def expand_scene_nodes(
     This modifies the scene dict directly, replacing template nodes
     with their expanded concrete nodes.
 
-    Also generates renderable entries for nodes with geometry/material.
+    Also generates renderable entries and explicit per-slot assignments.
     """
     nodes = scene.get("nodes")
     if not isinstance(nodes, list):
@@ -412,6 +412,9 @@ def expand_scene_nodes(
     renderables: List[Dict[str, Any]] = scene.get("renderables") or []
     if not isinstance(renderables, list):
         renderables = []
+    assignments = scene.get("material_overrides") or []
+    if not isinstance(assignments, list):
+        raise GeneratorError("E_TYPE", "material_overrides must be a list", path)
 
     for ni, node in enumerate(nodes):
         if not isinstance(node, dict):
@@ -423,7 +426,13 @@ def expand_scene_nodes(
 
         # Check if template has geometry/material for renderable generation
         geometry = node.get("geometry")
-        material = node.get("material")
+        if "material" in node:
+            raise GeneratorError(
+                "E_VERSION", "Generated materials require explicit material_overrides slot records", node_path
+            )
+        slot_assignments = node.get("material_overrides", [])
+        if not isinstance(slot_assignments, list) or any(not isinstance(row, dict) for row in slot_assignments):
+            raise GeneratorError("E_TYPE", "material_overrides must be a list of objects", node_path)
         generate_renderables = (
             geometry is not None and node.get("generate") is not None
         )
@@ -438,13 +447,14 @@ def expand_scene_nodes(
                     "node_index": node_index,
                     "geometry": geometry,
                 }
-                if material is not None:
-                    renderable["material_override"] = material
                 renderables.append(renderable)
+                assignments.extend({**row, "node_index": node_index} for row in slot_assignments)
 
     scene["nodes"] = expanded_nodes
     if renderables:
         scene["renderables"] = renderables
+    if assignments:
+        scene["material_overrides"] = assignments
 
 
 __all__ = [

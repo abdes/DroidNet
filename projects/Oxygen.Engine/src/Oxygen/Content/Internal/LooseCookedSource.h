@@ -8,8 +8,11 @@
 
 #include <utility>
 
+#include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/Span.h>
 #include <Oxygen/Content/Internal/IContentSource.h>
+#include <Oxygen/Serio/FileLock.h>
 
 namespace oxygen::content::internal {
 
@@ -18,10 +21,11 @@ public:
   OXYGEN_TYPED(LooseCookedSource)
 
 public:
-  explicit LooseCookedSource(
-    std::filesystem::path cooked_root, const bool verify_content_hashes)
+  explicit LooseCookedSource(std::filesystem::path cooked_root,
+    const bool verify_content_hashes, serio::FileLock generation_lock = {})
     : cooked_root_(std::move(cooked_root))
     , debug_name_(cooked_root_.string())
+    , generation_lock_(std::move(generation_lock))
     , index_(LooseCookedIndexImpl::LoadFromFile(
         cooked_root_ / "container.index.bin"))
     , verify_content_hashes_(verify_content_hashes)
@@ -103,14 +107,14 @@ public:
   ~LooseCookedSource() override = default;
 
   OXYGEN_MAKE_NON_COPYABLE(LooseCookedSource)
-  OXYGEN_DEFAULT_MOVABLE(LooseCookedSource)
+  OXYGEN_MAKE_NON_MOVABLE(LooseCookedSource)
 
   [[nodiscard]] auto DebugName() const noexcept -> std::string_view override
   {
     return debug_name_;
   }
   [[nodiscard]] auto SourcePath() const noexcept
-    -> std::filesystem::path override
+    -> const std::filesystem::path& override
   {
     return cooked_root_;
   }
@@ -149,7 +153,7 @@ public:
     if (index >= keys.size()) {
       return std::nullopt;
     }
-    return keys[index];
+    return oxygen::base::CheckedAt(keys, index);
   }
 
   [[nodiscard]] auto CreateAssetDescriptorReader(
@@ -300,8 +304,8 @@ public:
       const size_t offset = static_cast<size_t>(i) * kRecordSize;
       const auto src
         = std::span<const std::byte>(*blob).subspan(offset, kRecordSize);
-      std::memcpy(std::addressof(records[static_cast<size_t>(i)]), src.data(),
-        kRecordSize);
+      std::memcpy(std::addressof(records.at(static_cast<size_t>(i))),
+        src.data(), kRecordSize);
     }
     return records;
   }
@@ -344,8 +348,8 @@ public:
       const size_t offset = static_cast<size_t>(i) * kRecordSize;
       const auto src
         = std::span<const std::byte>(*blob).subspan(offset, kRecordSize);
-      std::memcpy(std::addressof(records[static_cast<size_t>(i)]), src.data(),
-        kRecordSize);
+      std::memcpy(std::addressof(records.at(static_cast<size_t>(i))),
+        src.data(), kRecordSize);
     }
     return records;
   }
@@ -407,7 +411,7 @@ private:
     const auto t0 = std::chrono::steady_clock::now();
 
     std::error_code ec;
-    if (!std::filesystem::exists(absolute_path, ec) || ec) {
+    if (!std::filesystem::exists(base::ToNativePath(absolute_path), ec) || ec) {
       throw std::runtime_error(
         "Loose cooked root missing file: " + absolute_path.string());
     }
@@ -417,7 +421,8 @@ private:
       return;
     }
 
-    const auto actual_size = std::filesystem::file_size(absolute_path, ec);
+    const auto actual_size
+      = std::filesystem::file_size(base::ToNativePath(absolute_path), ec);
     if (ec) {
       throw std::runtime_error(
         "Failed to stat file: " + absolute_path.string());
@@ -466,12 +471,13 @@ private:
       }
 
       const auto abs = cooked_root_ / std::filesystem::path(*rel_opt);
-      if (!std::filesystem::exists(abs, ec) || ec) {
+      if (!std::filesystem::exists(base::ToNativePath(abs), ec) || ec) {
         throw std::runtime_error(
           "Loose cooked root missing descriptor: " + abs.string());
       }
 
-      const auto actual_size = std::filesystem::file_size(abs, ec);
+      const auto actual_size
+        = std::filesystem::file_size(base::ToNativePath(abs), ec);
       if (ec) {
         throw std::runtime_error("Failed to stat descriptor: " + abs.string());
       }
@@ -530,7 +536,8 @@ private:
       return;
     }
     std::error_code ec;
-    const auto size = std::filesystem::file_size(*buffers_table_path_, ec);
+    const auto size = std::filesystem::file_size(
+      base::ToNativePath(*buffers_table_path_), ec);
     if (ec) {
       throw std::runtime_error(
         "Failed to stat buffers.table: " + buffers_table_path_->string());
@@ -543,7 +550,7 @@ private:
     }
 
     const auto count = size / kEntrySize;
-    if (count > (std::numeric_limits<uint32_t>::max)()) {
+    if (count > std::numeric_limits<uint32_t>::max()) {
       throw std::runtime_error(
         "buffers.table too large: " + buffers_table_path_->string());
     }
@@ -562,7 +569,8 @@ private:
       return;
     }
     std::error_code ec;
-    const auto size = std::filesystem::file_size(*textures_table_path_, ec);
+    const auto size = std::filesystem::file_size(
+      base::ToNativePath(*textures_table_path_), ec);
     if (ec) {
       throw std::runtime_error(
         "Failed to stat textures.table: " + textures_table_path_->string());
@@ -576,7 +584,7 @@ private:
     }
 
     const auto count = size / kEntrySize;
-    if (count > (std::numeric_limits<uint32_t>::max)()) {
+    if (count > std::numeric_limits<uint32_t>::max()) {
       throw std::runtime_error(
         "textures.table too large: " + textures_table_path_->string());
     }
@@ -595,7 +603,8 @@ private:
       return;
     }
     std::error_code ec;
-    const auto size = std::filesystem::file_size(*physics_table_path_, ec);
+    const auto size = std::filesystem::file_size(
+      base::ToNativePath(*physics_table_path_), ec);
     if (ec) {
       throw std::runtime_error(
         "Failed to stat physics.table: " + physics_table_path_->string());
@@ -609,7 +618,7 @@ private:
     }
 
     const auto count = size / kEntrySize;
-    if (count > (std::numeric_limits<uint32_t>::max)()) {
+    if (count > std::numeric_limits<uint32_t>::max()) {
       throw std::runtime_error(
         "physics.table too large: " + physics_table_path_->string());
     }
@@ -633,8 +642,8 @@ private:
       return 0;
     }
     std::error_code ec;
-    const auto size
-      = std::filesystem::file_size(*script_bindings_table_path_, ec);
+    const auto size = std::filesystem::file_size(
+      base::ToNativePath(*script_bindings_table_path_), ec);
     if (ec) {
       return 0;
     }
@@ -647,7 +656,8 @@ private:
       return;
     }
     std::error_code ec;
-    const auto size = std::filesystem::file_size(*scripts_table_path_, ec);
+    const auto size = std::filesystem::file_size(
+      base::ToNativePath(*scripts_table_path_), ec);
     if (ec) {
       throw std::runtime_error(
         "Failed to stat scripts.table: " + scripts_table_path_->string());
@@ -661,7 +671,7 @@ private:
     }
 
     const auto count = size / kEntrySize;
-    if (count > (std::numeric_limits<uint32_t>::max)()) {
+    if (count > std::numeric_limits<uint32_t>::max()) {
       throw std::runtime_error(
         "scripts.table too large: " + scripts_table_path_->string());
     }
@@ -735,6 +745,7 @@ private:
 
   std::filesystem::path cooked_root_;
   std::string debug_name_;
+  serio::FileLock generation_lock_;
   LooseCookedIndexImpl index_;
 
   bool verify_content_hashes_ { false };

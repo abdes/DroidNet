@@ -34,9 +34,22 @@ add_test(NAME ${link_test_target} COMMAND ${link_test_target})
 include(GTestHelpers)
 
 m_gtest_program(
+  DependencyReleaseEngine
+  SOURCES
+    "DependencyReleaseEngine_test.cpp"
+)
+target_sources(
+  "${META_MODULE_NAME}.DependencyReleaseEngine.Tests"
+  PRIVATE
+    "../Internal/DependencyGraphStore.cpp"
+    "../Internal/DependencyReleaseEngine.cpp"
+)
+
+m_gtest_program(
   AssetLoader
   SOURCES
     "AssetLoader_async_test.cpp"
+    "AssetLoader_generation_test.cpp"
     "AssetLoader_basic_test.cpp"
     "AssetLoader_buffer_test.cpp"
     "AssetLoader_cancellation_test.cpp"
@@ -110,3 +123,19 @@ m_gtest_program(
 m_gtest_program(LoadersScripting SOURCES "SceneScriptingLoader_test.cpp")
 
 # PakGen is provisioned during setup and checked during configuration.
+
+m_gtest_program(
+  SourceRegistry
+  SOURCES
+    "ContentSourceRegistry_test.cpp"
+    "AssetLoader_test_fixture.cpp"
+    "AssetLoader_test.h"
+    "Fixtures/LooseCookedTestWriter.h"
+    "Fixtures/LooseCookedTestLayout.h"
+)
+target_sources(
+  "Oxygen.Content.SourceRegistry.Tests"
+  PRIVATE
+    "../Internal/ContentSourceRegistry.cpp"
+    "../Internal/ContentSourceRegistry.h"
+)

@@ -4,8 +4,16 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
+#include <cstdint>
+#include <functional>
+#include <optional>
+#include <string_view>
+#include <unordered_map>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/Internal/AssetIdentityIndex.h>
+#include <Oxygen/Data/AssetKey.h>
 
 namespace oxygen::content::internal {
 
@@ -131,14 +139,13 @@ auto AssetIdentityIndex::AssetHashByKeyAndSource() const -> const
 }
 
 auto AssetIdentityIndex::AssertConsistency(std::string_view context,
-  const std::unordered_map<uint16_t, size_t>& source_id_to_index,
+  const std::function<bool(uint16_t)>& is_known_source,
   const std::function<uint64_t(const data::AssetKey&, uint16_t)>&
     hash_asset_key_with_source) const -> void
 {
-#if !defined(NDEBUG)
+#ifndef NDEBUG
   for (const auto& [asset_hash, source_id] : asset_source_id_by_hash_) {
-    const auto source_it = source_id_to_index.find(source_id);
-    if (source_it == source_id_to_index.end()) {
+    if (!is_known_source(source_id)) {
       LOG_F(ERROR,
         "[invariant:{}] asset hash maps to unknown source_id: hash=0x{:016x} "
         "source_id={}",
@@ -190,7 +197,7 @@ auto AssetIdentityIndex::AssertConsistency(std::string_view context,
   }
 #else
   static_cast<void>(context);
-  static_cast<void>(source_id_to_index);
+  static_cast<void>(is_known_source);
   static_cast<void>(hash_asset_key_with_source);
 #endif
 }

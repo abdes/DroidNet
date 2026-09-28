@@ -7,48 +7,63 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <cstring>
 #include <memory>
 #include <numbers>
+#include <optional>
 #include <source_location>
 #include <string>
 #include <utility>
+#include <vector>
 
-#include <glm/gtc/quaternion.hpp>
-#include <imgui.h>
+#include "DemoShell/DemoShell.h"
+#include "DemoShell/Runtime/DemoAppContext.h"
+#include "DemoShell/Services/DefaultSceneLighting.h"
+#include "Physics/MainModule.h"
+#include "Physics/PhysicsDemoPanel.h"
+#include <glm/ext/quaternion_float.hpp>
+#include <glm/ext/quaternion_trigonometric.hpp>
+#include <glm/ext/vector_float4.hpp>
+#include <glm/geometric.hpp>
+#include <glm/trigonometric.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Data/ShaderReference.h>
+#include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/ActionTriggers.h>
+#include <Oxygen/Input/ActionValue.h>
 #include <Oxygen/Input/InputActionMapping.h>
 #include <Oxygen/Input/InputMappingContext.h>
 #include <Oxygen/Input/InputSystem.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Physics/Body/BodyDesc.h>
+#include <Oxygen/Physics/Handles.h>
 #include <Oxygen/Physics/Shape.h>
 #include <Oxygen/PhysicsModule/PhysicsModule.h>
+#include <Oxygen/PhysicsModule/ScenePhysics.h>
 #include <Oxygen/Platform/Input.h>
 #include <Oxygen/Platform/Window.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneFlags.h>
+#include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/Types/Flags.h>
 #include <Oxygen/Vortex/CompositionView.h>
-
-#include "DemoShell/Runtime/DemoAppContext.h"
-#include "DemoShell/Services/DefaultSceneLighting.h"
-#include "Physics/MainModule.h"
 
 namespace {
 
@@ -58,7 +73,7 @@ constexpr float kRampPitchRad = -0.44F;
 constexpr oxygen::Vec3 kFloorCollisionSize { 32.0F, 32.0F, 1.0F };
 constexpr oxygen::Vec3 kFloorCollisionCenterWs { 0.0F, 0.0F, -0.5F };
 constexpr float kFloorCollisionTopZ
-  = kFloorCollisionCenterWs.z + 0.5F * kFloorCollisionSize.z;
+  = kFloorCollisionCenterWs.z + (0.5F * kFloorCollisionSize.z);
 // Oxygen is +Z up. Keep the visible floor just above the UE-style atmosphere
 // planet-top boundary at Z=0 so per-pixel sun transmittance is not occluded.
 constexpr float kFloorVisualClearanceAboveAtmosphereM = 0.02F;
@@ -189,13 +204,15 @@ auto MainModule::BuildDefaultWindowProperties() const
 {
   platform::window::Properties p("Oxygen Physics");
   p.extent = { .width = kWindowWidth, .height = kWindowHeight };
-  p.flags = { .hidden = false,
+  p.flags = {
+    .hidden = false,
     .always_on_top = false,
     .full_screen = app_.fullscreen,
     .maximized = false,
     .minimized = false,
     .resizable = true,
-    .borderless = false };
+    .borderless = false,
+  };
   return p;
 }
 
@@ -216,7 +233,7 @@ auto MainModule::OnAttachedImpl(
     = std::filesystem::path(std::source_location::current().file_name())
         .parent_path();
   DemoShellConfig shell_config {
-    .engine = observer_ptr { app_.engine.get() },
+    .engine = engine,
     .enable_camera_rig = true,
     .force_environment_override = false,
     .content_roots = {
@@ -313,11 +330,6 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
   }
 }
 
-auto MainModule::OnFrameEnd(observer_ptr<engine::FrameContext> /*context*/)
-  -> void
-{
-}
-
 auto MainModule::OnPreRender(observer_ptr<engine::FrameContext> context)
   -> co::Co<>
 {
@@ -340,10 +352,9 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
     co_return;
   }
 
-  if (!active_scene_.IsValid() && !shell.HasStagedScene()) {
-    if (!StageScenarioScene()) {
-      ReportError(context, "failed to stage initial scenario");
-    }
+  if ((!active_scene_.IsValid() && !shell.HasStagedScene())
+    && (!StageScenarioScene())) {
+    ReportError(context, "failed to stage initial scenario");
   }
 
   if (!scene_ready_ && !BuildProceduralScene()) {
@@ -394,11 +405,11 @@ auto MainModule::OnGameplay(observer_ptr<engine::FrameContext> context)
       LaunchSphere();
     }
 
-    if (player_body_) {
+    if (const auto player_body = player_body_) {
       auto* module = ResolvePhysicsModule().get();
       if (module != nullptr) {
         const auto world_id = module->GetWorldId();
-        const auto body_id = *player_body_;
+        const auto body_id = *player_body;
         if (nudge_left_action_ && nudge_left_action_->WasTriggeredThisFrame()) {
           constexpr float kNudgeVelocityDelta = 6.0F;
           const auto current_velocity
@@ -437,12 +448,12 @@ auto MainModule::OnGameplay(observer_ptr<engine::FrameContext> context)
 
     UpdateFlippers(dt);
 
-    if (player_body_) {
+    if (const auto player_body = player_body_) {
       auto* module = ResolvePhysicsModule().get();
       if (module != nullptr) {
         const auto world_id = module->GetWorldId();
         const auto player_pos
-          = module->Bodies().GetBodyPosition(world_id, *player_body_);
+          = module->Bodies().GetBodyPosition(world_id, *player_body);
         if (player_pos.has_value()) {
           const auto& pos = player_pos.value();
           if (previous_player_world_position_ && dt > 0.0F) {
@@ -685,7 +696,7 @@ auto MainModule::BuildProceduralScene() -> bool
       + ramp_up * flipper_surface_offset;
   };
 
-  const float spawn_along_ramp = ramp_half.y - 2.0F * kPlayerSphereRadius;
+  const float spawn_along_ramp = ramp_half.y - (2.0F * kPlayerSphereRadius);
   const float spawn_above_ramp
     = ramp_half.z + kPlayerSphereRadius + kSpawnSurfaceClearance;
   player_spawn_position_ = kRampPosition + ramp_forward * spawn_along_ramp
@@ -696,8 +707,8 @@ auto MainModule::BuildProceduralScene() -> bool
 
   for (int row = 0; row < 8; ++row) {
     const float row_t = static_cast<float>(row) / 7.0F;
-    const float y = -14.0F + row_t * 14.0F;
-    const float z = 8.0F - row_t * 5.2F;
+    const float y = -14.0F + (row_t * 14.0F);
+    const float z = 8.0F - (row_t * 5.2F);
     const bool left_first = (row % 2) == 0;
 
     for (int c = 0; c < 2; ++c) {
@@ -750,8 +761,8 @@ auto MainModule::BuildProceduralScene() -> bool
     const float t = static_cast<float>(i) / static_cast<float>(ring_count);
     const float angle = t * (2.0F * std::numbers::pi_v<float>);
     const Vec3 p {
-      bowl_center_.x + std::cos(angle) * 2.25F,
-      bowl_center_.y + std::sin(angle) * 2.25F,
+      bowl_center_.x + (std::cos(angle) * 2.25F),
+      bowl_center_.y + (std::sin(angle) * 2.25F),
       bowl_ring_center_z,
     };
 
@@ -953,7 +964,8 @@ void MainModule::ResetScenario()
 
 auto MainModule::ResetGameplayState() -> bool
 {
-  if (!scene_ready_ || !physics_ready_ || !player_body_) {
+  const auto player_body = player_body_;
+  if (!scene_ready_ || !physics_ready_ || !player_body) {
     return false;
   }
 
@@ -967,8 +979,9 @@ auto MainModule::ResetGameplayState() -> bool
   }
 
   bool reset_ok = true;
-  auto reset_body_state = [&](const physics::BodyId body_id,
-                            const Vec3& position, const Quat& rotation) {
+  auto reset_body_state
+    = [&](const physics::BodyId body_id, const Vec3& position,
+        const Quat& rotation) -> void {
     reset_ok &= module->Bodies()
                   .SetBodyPose(world_id, body_id, position, rotation)
                   .has_value();
@@ -987,7 +1000,7 @@ auto MainModule::ResetGameplayState() -> bool
     tf.SetLocalPosition(player_spawn_position_);
     tf.SetLocalRotation(player_spawn_rotation_);
     reset_body_state(
-      *player_body_, player_spawn_position_, player_spawn_rotation_);
+      *player_body, player_spawn_position_, player_spawn_rotation_);
   }
 
   for (auto& obstacle : dynamic_obstacles_) {
@@ -1029,7 +1042,8 @@ auto MainModule::ResetGameplayState() -> bool
 
 void MainModule::LaunchSphere()
 {
-  if (!player_body_) {
+  const auto player_body = player_body_;
+  if (!player_body) {
     return;
   }
   auto* module = ResolvePhysicsModule().get();
@@ -1040,7 +1054,7 @@ void MainModule::LaunchSphere()
   const Vec3 launch_direction
     = glm::normalize(MakeXRotationQuat(kRampPitchRad) * space::move::Back);
   const auto set_velocity_result = module->Bodies().SetLinearVelocity(
-    world_id, *player_body_, launch_direction * launch_impulse_);
+    world_id, *player_body, launch_direction * launch_impulse_);
   if (!set_velocity_result.has_value()) {
     LOG_F(ERROR, "Physics: launch failed to set player velocity");
     return;
@@ -1056,12 +1070,12 @@ void MainModule::UpdateFlippers(const float dt_seconds)
   }
 
   std::optional<Vec3> player_pos {};
-  if (player_body_) {
+  if (const auto player_body = player_body_) {
     auto* module = ResolvePhysicsModule().get();
     if (module != nullptr) {
       const auto world_id = module->GetWorldId();
       const auto player_pos_result
-        = module->Bodies().GetBodyPosition(world_id, *player_body_);
+        = module->Bodies().GetBodyPosition(world_id, *player_body);
       if (player_pos_result.has_value()) {
         player_pos = player_pos_result.value();
       }
@@ -1122,7 +1136,7 @@ auto MainModule::UpdateComposition(engine::FrameContext& context,
 
   const auto imgui_view_id = GetOrCreateViewId("ImGuiView");
   views.push_back(vortex::CompositionView::ForImGui(
-    imgui_view_id, view, [](graphics::CommandRecorder&) { }));
+    imgui_view_id, view, [](graphics::CommandRecorder&) -> void { }));
 }
 
 auto MainModule::UpdatePhysicsDemoPanelConfig(

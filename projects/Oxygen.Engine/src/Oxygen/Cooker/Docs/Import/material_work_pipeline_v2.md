@@ -1,8 +1,26 @@
 # Material Pipeline (v2)
 
-**Status:** Complete Design (Phase 5)
-**Date:** 2026-01-15
 **Parent:** [async_import_pipeline_v2.md](async_import_pipeline_v2.md)
+
+Read: [emission contract](#emission-contract), [data model](#data-model),
+[architecture](#alignment-with-current-architecture).
+
+## Emission contract
+
+Canonical descriptors author `parameters.emissive_color` (finite linear RGB in
+[0,1], default white) and `parameters.emissive_intensity` (finite float32 in
+[0,65504], default zero). Schema validation rejects the retired
+`emissive_factor` property. The descriptor job compiles color times intensity
+once into `MaterialInputs::emissive_factor`; imported model adapters provide the
+same compiled RGB input. The pipeline rejects non-finite, negative or
+out-of-range factors and writes float32 channels without clamping or binary16
+conversion.
+
+`MaterialAssetDesc` version 3 is 363 packed bytes. Native readers accept only the
+current version. Recook maintained content and update fixture writers together;
+do not add old-format branches or managed binary writers. This storage change
+adds six bytes per material and leaves Vortex's float32 GPU constants, shaders
+and captured-sky IBL contract unchanged.
 
 ---
 
@@ -311,17 +329,16 @@ The pipeline is defined as two stages with explicit parallelization boundaries:
 
 ## Cooked Output Contract (PAK v7)
 
-This pipeline targets `oxygen::data::pak::v7`. No new material asset versions
-are introduced; the existing `kMaterialAssetVersion` remains authoritative. Any
-future descriptor layout changes that exceed reserved bytes must introduce a new
-PAK namespace.
+The enclosing PAK container and the material descriptor have independent
+versions. `kMaterialAssetVersion` is the sole native descriptor-version authority;
+increment it when changing the material layout. The current value is 3.
 
 ### Material Descriptor (`.omat`)
 
 Packed binary blob:
 
 ```text
-MaterialAssetDesc (256 bytes)
+MaterialAssetDesc (363 bytes)
 ShaderReferenceDesc[ popcount(shader_stages) ]
 ```
 
@@ -337,9 +354,9 @@ Key requirements:
   ready **only when hashing is enabled** and is non-zero when payload bytes
   are non-empty
 
-### UV Transform Extension (v4 Fields)
+### UV Transform Fields
 
-The v4 `MaterialAssetDesc` stores the default per-material UV transform
+`MaterialAssetDesc` stores the default per-material UV transform
 (global, applied to all slots) in explicit fields. The pipeline must
 **always** write these values; identity means “no transform.”
 

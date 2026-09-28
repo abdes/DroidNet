@@ -6,28 +6,41 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdint>
 #include <cstring>
 #include <memory>
 #include <source_location>
 #include <string>
 #include <utility>
+#include <vector>
 
-#include <glm/gtc/quaternion.hpp>
-#include <imgui.h>
+#include "DemoShell/DemoShell.h"
+#include "DemoShell/Runtime/DemoAppContext.h"
+#include "DemoShell/Services/DefaultSceneLighting.h"
+#include "InputSystem/InputDebugPanel.h"
+#include "InputSystem/MainModule.h"
+#include <glm/ext/quaternion_float.hpp>
+#include <glm/ext/vector_float4.hpp>
+#include <glm/trigonometric.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Data/ShaderReference.h>
-#include <Oxygen/Engine/AsyncEngine.h>
+#include <Oxygen/Engine/AsyncEngine.h> // IWYU pragma: keep
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/ActionTriggers.h>
+#include <Oxygen/Input/ActionValue.h>
 #include <Oxygen/Input/InputActionMapping.h>
 #include <Oxygen/Input/InputMappingContext.h>
 #include <Oxygen/Input/InputSystem.h>
@@ -37,10 +50,6 @@
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Vortex/CompositionView.h>
-
-#include "DemoShell/Runtime/DemoAppContext.h"
-#include "DemoShell/Services/DefaultSceneLighting.h"
-#include "InputSystem/MainModule.h"
 
 namespace {
 
@@ -99,13 +108,15 @@ auto MainModule::BuildDefaultWindowProperties() const
 {
   platform::window::Properties p("Oxygen Input System");
   p.extent = { .width = kWindowWidth, .height = kWindowHeight };
-  p.flags = { .hidden = false,
+  p.flags = {
+    .hidden = false,
     .always_on_top = false,
     .full_screen = app_.fullscreen,
     .maximized = false,
     .minimized = false,
     .resizable = true,
-    .borderless = false };
+    .borderless = false,
+  };
   return p;
 }
 
@@ -148,7 +159,7 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
     = std::filesystem::path(std::source_location::current().file_name())
         .parent_path();
   DemoShellConfig shell_config {
-    .engine = observer_ptr { app_.engine.get() },
+    .engine = engine,
     .enable_camera_rig = true,
     .enable_renderer_bound_panels = false,
     .force_environment_override = false,
@@ -220,12 +231,6 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
   if (rig != last_camera_rig_) {
     last_camera_rig_ = rig;
   }
-}
-
-auto MainModule::OnFrameEnd(observer_ptr<engine::FrameContext> /*context*/)
-  -> void
-{
-  LOG_SCOPE_F(3, "MainModule::OnFrameEnd");
 }
 
 auto MainModule::OnGameplay(observer_ptr<engine::FrameContext> context)
@@ -326,7 +331,7 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
   using oxygen::data::pak::geometry::MeshViewDesc;
 
   if (!std::ranges::any_of(scene->GetRootNodes(),
-        [](auto& n) { return n.GetName() == "Sphere"; })) {
+        [](auto& n) -> auto { return n.GetName() == "Sphere"; })) {
     auto sphere_data = oxygen::data::MakeSphereMeshAsset(24, 48);
     if (sphere_data) {
       const auto sphere_mat
@@ -527,7 +532,7 @@ auto MainModule::UpdateComposition(engine::FrameContext& context,
 
   const auto imgui_view_id = GetOrCreateViewId("ImGuiView");
   views.push_back(vortex::CompositionView::ForImGui(
-    imgui_view_id, view, [](graphics::CommandRecorder&) { }));
+    imgui_view_id, view, [](graphics::CommandRecorder&) -> void { }));
 }
 
 } // namespace oxygen::examples::input_system

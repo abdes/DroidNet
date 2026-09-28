@@ -8,6 +8,7 @@
 
 #include <cstddef>
 #include <filesystem>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -20,6 +21,8 @@
 #include <Oxygen/Data/SourceKey.h>
 
 namespace oxygen::content::import {
+
+class MaterialSlotProvenance;
 
 //! Supported authoring source formats.
 enum class ImportFormat : uint8_t {
@@ -116,7 +119,7 @@ struct ImportRequest final {
    * patch a scene that may not yet be present in the cooked-root index.
   */
   struct InflightSceneContext final {
-    data::AssetKey scene_key {};
+    data::AssetKey scene_key;
     std::string virtual_path;
     std::string descriptor_relpath;
     std::vector<std::byte> descriptor_bytes;
@@ -126,7 +129,7 @@ struct ImportRequest final {
   std::filesystem::path source_path;
 
   //! Optional additional source files for multi-source imports.
-  std::vector<ImportSource> additional_sources;
+  std::vector<ImportSource> additional_sources {};
 
   //! Optional destination directory (the loose cooked root).
   /*!
@@ -136,7 +139,7 @@ struct ImportRequest final {
     `loose_cooked_layout.virtual_mount_root`, ensuring the cooked root ends with
     the virtual mount root leaf directory (by default: `.cooked`).
   */
-  std::optional<std::filesystem::path> cooked_root;
+  std::optional<std::filesystem::path> cooked_root {};
 
   //! Loose cooked container layout conventions.
   /*!
@@ -153,10 +156,13 @@ struct ImportRequest final {
   LooseCookedLayout loose_cooked_layout = {};
 
   //! Optional explicit source GUID for the cooked container.
-  std::optional<data::SourceKey> source_key;
+  std::optional<data::SourceKey> source_key {};
+
+  //! Validated retained source identity, shared across mesh work items.
+  std::shared_ptr<const MaterialSlotProvenance> material_slot_provenance {};
 
   //! Optional human-readable job name for logging and UI.
-  std::optional<std::string> job_name;
+  std::optional<std::string> job_name {};
 
   //! Optional orchestration metadata for batch scheduling.
   /*!
@@ -171,7 +177,7 @@ struct ImportRequest final {
     std::vector<std::string> depends_on;
   };
 
-  std::optional<OrchestrationMetadata> orchestration;
+  std::optional<OrchestrationMetadata> orchestration {};
 
   //! Import options.
   ImportOptions options = {};
@@ -183,7 +189,7 @@ struct ImportRequest final {
 
    * domain rather than format-based import routing.
   */
-  std::optional<PhysicsImportSettings> physics;
+  std::optional<PhysicsImportSettings> physics {};
 
   //! Optional buffer-container request payload.
   /*!
@@ -191,14 +197,14 @@ struct ImportRequest final {
    * buffer-container
    domain rather than format-based import routing.
   */
-  std::optional<BufferContainerPayload> buffer_container;
+  std::optional<BufferContainerPayload> buffer_container {};
 
   //! Optional input-import request payload.
   /*!
    Presence indicates this request must be handled by the input-import domain
    rather than format-based import routing.
   */
-  std::optional<InputPayload> input;
+  std::optional<InputPayload> input {};
 
   //! Optional material-descriptor request payload.
   /*!
@@ -206,7 +212,7 @@ struct ImportRequest final {
    * material-descriptor
    domain rather than format-based import routing.
   */
-  std::optional<MaterialDescriptorPayload> material_descriptor;
+  std::optional<MaterialDescriptorPayload> material_descriptor {};
 
   //! Optional physics material-descriptor request payload.
   /*!
@@ -216,7 +222,8 @@ struct ImportRequest final {
 
    * routing.
   */
-  std::optional<PhysicsMaterialDescriptorPayload> physics_material_descriptor;
+  std::optional<PhysicsMaterialDescriptorPayload>
+    physics_material_descriptor {};
 
   //! Optional collision-shape-descriptor request payload.
   /*!
@@ -225,7 +232,7 @@ struct ImportRequest final {
    * collision-shape-descriptor domain rather than format-based import routing.
 
    */
-  std::optional<CollisionShapeDescriptorPayload> collision_shape_descriptor;
+  std::optional<CollisionShapeDescriptorPayload> collision_shape_descriptor {};
 
   //! Optional geometry-descriptor request payload.
   /*!
@@ -234,7 +241,7 @@ struct ImportRequest final {
    * geometry-descriptor
    domain rather than format-based import routing.
   */
-  std::optional<GeometryDescriptorPayload> geometry_descriptor;
+  std::optional<GeometryDescriptorPayload> geometry_descriptor {};
 
   //! Optional scene-descriptor request payload.
   /*!
@@ -243,7 +250,7 @@ struct ImportRequest final {
    * scene-descriptor
    domain rather than format-based import routing.
   */
-  std::optional<SceneDescriptorPayload> scene_descriptor;
+  std::optional<SceneDescriptorPayload> scene_descriptor {};
 
   //! Optional cooked roots mounted for resolver-only scene lookup context.
   /*!
@@ -256,7 +263,7 @@ struct ImportRequest final {
    * allowing callers to explicitly place the destination root in this order.
 
  */
-  std::vector<std::filesystem::path> cooked_context_roots;
+  std::vector<std::filesystem::path> cooked_context_roots {};
 
   //! Optional inflight scene contexts for sidecar target resolution.
   /*!
@@ -266,7 +273,7 @@ struct ImportRequest final {
 
    * fails with an ambiguity diagnostic.
   */
-  std::vector<InflightSceneContext> inflight_scene_contexts;
+  std::vector<InflightSceneContext> inflight_scene_contexts {};
 
   //! Derives a stable scene name from the source file stem.
   /*!

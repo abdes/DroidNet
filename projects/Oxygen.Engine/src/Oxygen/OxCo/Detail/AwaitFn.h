@@ -6,6 +6,11 @@
 
 #pragma once
 
+#include <coroutine>
+#include <type_traits>
+#include <utility>
+
+#include <Oxygen/Base/Compilers.h>
 #include <Oxygen/OxCo/Coroutine.h>
 
 namespace oxygen::co::detail {
@@ -14,6 +19,9 @@ namespace oxygen::co::detail {
 //! Wrappers around await_*() awaiter functions
 
 //! A sanitized version of `await_suspend()` which always returns a Handle.
+// The fallback handle is intentionally unreachable for [[noreturn]] awaiters.
+OXYGEN_DIAGNOSTIC_PUSH
+OXYGEN_DIAGNOSTIC_DISABLE_MSVC(4702)
 template <class Awaiter, class Promise>
 auto AwaitSuspend(Awaiter&& awaiter, CoroutineHandle<Promise> h) -> Handle
 {
@@ -33,6 +41,7 @@ auto AwaitSuspend(Awaiter&& awaiter, CoroutineHandle<Promise> h) -> Handle
     return h;
   }
 }
+OXYGEN_DIAGNOSTIC_POP
 
 //! A sanitized version of `await_early_cancel()` which defaults to `true`.
 template <class Awaiter> auto AwaitEarlyCancel(Awaiter& awaiter) noexcept

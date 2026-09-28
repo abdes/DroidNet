@@ -455,9 +455,7 @@ NOLINT_TEST_F(
             };
             material_desc.uv_scale[0] = material_desc.uv_scale[1] = 1;
             for (auto& v : material_desc.emissive_factor) {
-              v = data::HalfFloat {
-                base_color_source ? 0.0F : 1.0F,
-              };
+              v = base_color_source ? 0.0F : 1.0F;
             }
             std::vector<content::ResourceKey> keys(6);
             keys.at(base_color_source ? 0 : 5) = key;

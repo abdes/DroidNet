@@ -6,16 +6,23 @@
 
 #include <algorithm>
 #include <array>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <string>
-
-#include <Oxygen/Cooker/Import/ImportManifest.h>
-#include <Oxygen/Cooker/Import/Internal/StaticScalarSourceValidation.h>
-#include <Oxygen/Cooker/Import/Internal/gltf/cgltf.h>
-#include <Oxygen/Testing/GTest.h>
+#include <utility>
+#include <vector>
 
 #include "AsyncImporterFullTestBase.h"
+
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportManifest.h>
+#include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/Internal/StaticScalarSourceValidation.h>
+#include <Oxygen/Cooker/Import/Internal/gltf/cgltf.h>
+#include <Oxygen/Data/ComponentType.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 
@@ -219,7 +226,10 @@ NOLINT_TEST_F(
       std::ofstream output(path);
       output
         << "{\"version\":1,\"output\":\"cooked\",\"jobs\":[{\"id\":\"model\","
-           "\"type\":\"gltf\",\"source\":\"model.gltf\",\"content_policy\":\""
+           "\"type\":\"gltf\",\"source\":\"model.gltf\","
+           "\"material_slot_source_identity\":\"01990000-0000-7000-8000-"
+           "000000000001\","
+           "\"content_policy\":\""
         << policy << "\"}]}";
     }
     std::ostringstream errors;

@@ -10,6 +10,7 @@
 #include <type_traits>
 #include <utility>
 
+#include <Oxygen/Base/Compilers.h>
 #include <Oxygen/OxCo/Coroutine.h>
 #include <Oxygen/OxCo/Detail/AwaitFn.h>
 #include <Oxygen/OxCo/Detail/AwaiterStateChecker.h>
@@ -60,6 +61,10 @@ public:
 #endif
   }
 
+  // A void awaiter needs the sentinel return, except when its await_resume is
+  // [[noreturn]]. MSVC diagnoses that intentional template specialization.
+  OXYGEN_DIAGNOSTIC_PUSH
+  OXYGEN_DIAGNOSTIC_DISABLE_MSVC(4702)
   auto await_resume() -> decltype(auto)
   {
     checker_.AboutToResume();
@@ -70,6 +75,7 @@ public:
       return std::forward<Awaiter>(awaiter_).await_resume();
     }
   }
+  OXYGEN_DIAGNOSTIC_POP
 
   auto await_early_cancel() noexcept
   {
@@ -117,7 +123,7 @@ public:
   void Abandon() { checker_.ForceReset(); }
 
 private:
-  [[no_unique_address]] AwaiterStateChecker checker_;
+  OXYGEN_NO_UNIQUE_ADDRESS AwaiterStateChecker checker_;
   Awaiter awaiter_; // NOLINT(cppcoreguidelines-avoid-const-or-ref-data-members)
 };
 

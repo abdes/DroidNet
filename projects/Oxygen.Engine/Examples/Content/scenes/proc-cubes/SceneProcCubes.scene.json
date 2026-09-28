@@ -1,5 +1,5 @@
 {
-  "version": 8,
+  "version": 9,
   "name": "SceneProcCubes",
   "nodes": [
     {
@@ -45,6 +45,7 @@
         "node": 2,
         "fov_y": 0.785398,
         "aspect_ratio": 1.777778,
+        "aspect_mode": "fixed",
         "near_plane": 0.1,
         "far_plane": 250.0
       }

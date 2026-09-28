@@ -1,0 +1,102 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://oxygen-engine.org/schemas/oxygen.material-slot-provenance.schema.json",
+  "title": "Oxygen Retained Material Slot Provenance",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "source_identity", "geometries"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "source_identity": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "geometries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "geometry_asset_key",
+          "source_geometry_anchor",
+          "source_layout_witness",
+          "layout_revision",
+          "slots",
+          "allocations"
+        ],
+        "properties": {
+          "geometry_asset_key": { "$ref": "#/definitions/key" },
+          "source_geometry_anchor": { "type": "string", "minLength": 1 },
+          "source_layout_witness": { "$ref": "#/definitions/digest" },
+          "layout_revision": { "$ref": "#/definitions/digest" },
+          "slots": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["slot_id", "display_name", "bindings"],
+              "properties": {
+                "slot_id": { "$ref": "#/definitions/key" },
+                "display_name": { "type": "string" },
+                "bindings": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "lod_index",
+                      "submesh_index",
+                      "default_material_key"
+                    ],
+                    "properties": {
+                      "lod_index": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 4294967295
+                      },
+                      "submesh_index": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 4294967295
+                      },
+                      "default_material_key": { "$ref": "#/definitions/uuid" }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "allocations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["declaration_key", "slot_id"],
+              "properties": {
+                "declaration_key": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 4294967295
+                },
+                "slot_id": { "$ref": "#/definitions/key" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "key": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "not": { "const": "00000000-0000-0000-0000-000000000000" }
+    },
+    "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+  }
+}

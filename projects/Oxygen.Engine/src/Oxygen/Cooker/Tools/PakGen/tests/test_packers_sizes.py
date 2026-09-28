@@ -70,7 +70,7 @@ def test_submesh_descriptor_size():
     # Provide simple material asset with 16-byte key
     simple_assets = [{"name": "mat0", "key": b"\x00" * 16}]
     desc = pack_submesh_descriptor(
-        {"name": "sm0", "material": "mat0", "mesh_views": []},
+        {"slot_id": "8661e4f5-965e-5f74-9047-5436587313ae", "name": "sm0", "material": "mat0", "mesh_views": []},
         simple_assets,
         lambda n, sz: (n.encode() + b"\x00" * sz)[:sz],
     )

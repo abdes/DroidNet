@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <limits>
 #include <memory>
 #include <stdexcept>
@@ -198,7 +199,6 @@ namespace {
     auto* runtime = EnsureRuntime(state);
     if (runtime == nullptr) {
       (void)luaL_error(state, "oxygen.events runtime is unavailable");
-      return nullptr;
     }
     return runtime;
   }
@@ -292,14 +292,12 @@ namespace {
   {
     if (!lua_istable(state, kLuaArg1)) {
       luaL_typeerror(state, kLuaArg1, "events.connection");
-      return 0;
     }
 
     lua_getfield(state, kLuaArg1, kEventConnectionIdFieldName);
     if (lua_isnumber(state, -1) == 0) {
       lua_pop(state, 1);
       luaL_argerror(state, kLuaArg1, "invalid events connection object");
-      return 0;
     }
     const auto listener_id
       = static_cast<std::uint64_t>(lua_tointeger(state, -1));
@@ -318,14 +316,12 @@ namespace {
   {
     if (!lua_istable(state, kLuaArg1)) {
       luaL_typeerror(state, kLuaArg1, "events.connection");
-      return 0;
     }
 
     lua_getfield(state, kLuaArg1, kEventConnectionIdFieldName);
     if (lua_isnumber(state, -1) == 0) {
       lua_pop(state, 1);
       luaL_argerror(state, kLuaArg1, "invalid events connection object");
-      return 0;
     }
     const auto listener_id
       = static_cast<std::uint64_t>(lua_tointeger(state, -1));
@@ -391,12 +387,10 @@ namespace {
     if (event_name_sv.empty()) {
       (void)luaL_error(
         state, "oxygen.events.on expects a non-empty event name");
-      return 0;
     }
     if (lua_isfunction(state, kLuaArg2) == 0) {
       (void)luaL_error(
         state, "oxygen.events.on expects callback function as arg #2");
-      return 0;
     }
 
     auto* runtime = RequireRuntime(state);
@@ -406,13 +400,11 @@ namespace {
     if (!lua_isnoneornil(state, kLuaArg3) && !lua_istable(state, kLuaArg3)) {
       (void)luaL_error(state,
         "oxygen.events.on expects options table as arg #3 when provided");
-      return 0;
     }
     if (!IsEventOwnerLive(state, *runtime, runtime->active_owner)) {
       luaL_error(state,
         "oxygen.events.on cannot register a listener for a retired script "
         "instance");
-      return 0;
     }
     const std::string phase_name
       = ParsePhaseName(state, kLuaArg3, runtime->current_phase);
@@ -463,13 +455,11 @@ namespace {
     if (event_name_sv.empty()) {
       (void)luaL_error(
         state, "oxygen.events.emit expects a non-empty event name");
-      return 0;
     }
     if (IsReservedEventName(event_name_sv)) {
       (void)luaL_error(state,
         "oxygen.events.emit cannot publish reserved engine event '%s'",
         event_name);
-      return 0;
     }
 
     auto* runtime = RequireRuntime(state);
@@ -509,7 +499,6 @@ namespace {
     if (event_name_sv.empty()) {
       (void)luaL_error(
         state, "oxygen.events.listener_count expects a non-empty event name");
-      return 0;
     }
 
     auto* runtime = RequireRuntime(state);
@@ -540,7 +529,6 @@ namespace {
     if (event_name_sv.empty()) {
       (void)luaL_error(
         state, "oxygen.events.stats expects a non-empty event name");
-      return 0;
     }
 
     auto* runtime = RequireRuntime(state);

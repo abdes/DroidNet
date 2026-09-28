@@ -5,9 +5,14 @@
 //===----------------------------------------------------------------------===//
 
 #include <format>
+#include <string>
+#include <system_error>
+#include <utility>
 
 #ifdef _WIN32
-#  include <Windows.h>
+#  include <Windows.h> // IWYU pragma: keep
+
+#  include <winerror.h>
 #endif
 
 #include <Oxygen/Cooker/Import/FileError.h>
@@ -152,6 +157,7 @@ auto MapSystemError(std::error_code ec) -> FileError
     case ERROR_INVALID_NAME:
     case ERROR_BAD_PATHNAME:
       return FileError::kInvalidPath;
+    case ERROR_FILENAME_EXCED_RANGE:
     case ERROR_BUFFER_OVERFLOW:
       return FileError::kPathTooLong;
     case ERROR_OPERATION_ABORTED:

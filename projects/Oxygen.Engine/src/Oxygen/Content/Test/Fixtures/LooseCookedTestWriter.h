@@ -17,11 +17,12 @@
 #include <utility>
 #include <vector>
 
+#include "./LooseCookedTestLayout.h"
+
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
-
-#include "./LooseCookedTestLayout.h"
+#include <Oxygen/Data/SourceKey.h>
 
 namespace oxygen::content::testing {
 
@@ -39,6 +40,8 @@ public:
   {
     std::filesystem::create_directories(cooked_root_);
   }
+
+  auto SetSourceKey(const data::SourceKey key) -> void { source_key_ = key; }
 
   auto SetComputeSha256(const bool enabled) -> void
   {
@@ -137,7 +140,11 @@ public:
     }
 
     IndexHeader header {};
-    FillGuid(header);
+    if (source_key_.IsNil()) {
+      FillGuid(header);
+    } else {
+      std::ranges::copy(source_key_.get(), std::begin(header.source_identity));
+    }
     header.version = 1;
     header.content_version = 0;
     header.flags = data::loose_cooked::kHasVirtualPaths
@@ -149,7 +156,7 @@ public:
     header.asset_count = static_cast<uint32_t>(asset_entries.size());
     header.asset_entry_size = sizeof(AssetEntry);
     header.file_records_offset = header.asset_entries_offset
-      + static_cast<uint64_t>(asset_entries.size()) * sizeof(AssetEntry);
+      + (static_cast<uint64_t>(asset_entries.size()) * sizeof(AssetEntry));
     header.file_record_count = static_cast<uint32_t>(file_records.size());
     header.file_record_size = sizeof(FileRecord);
 
@@ -177,7 +184,7 @@ public:
 
 private:
   struct PendingAssetRecord {
-    data::AssetKey asset_key {};
+    data::AssetKey asset_key;
     uint8_t asset_type = 0;
     std::string descriptor_relpath;
     std::string virtual_path;
@@ -203,16 +210,17 @@ private:
   static auto FillGuid(data::loose_cooked::IndexHeader& header) -> void
   {
     for (uint8_t i = 0; i < 16; ++i) {
-      header.source_identity[i] = static_cast<uint8_t>(i + 1);
+      header.source_identity.at(i) = static_cast<uint8_t>(i + 1);
     }
-    header.source_identity[6]
-      = static_cast<uint8_t>((header.source_identity[6] & 0x0FU) | 0x70U);
-    header.source_identity[8]
-      = static_cast<uint8_t>((header.source_identity[8] & 0x3FU) | 0x80U);
+    header.source_identity.at(6)
+      = static_cast<uint8_t>((header.source_identity.at(6) & 0x0FU) | 0x70U);
+    header.source_identity.at(8)
+      = static_cast<uint8_t>((header.source_identity.at(8) & 0x3FU) | 0x80U);
   }
 
   std::filesystem::path cooked_root_;
   LooseCookedLayout layout_ {};
+  data::SourceKey source_key_ {};
   bool compute_sha256_ = true;
   std::vector<PendingAssetRecord> assets_;
   std::vector<PendingFileRecord> files_;

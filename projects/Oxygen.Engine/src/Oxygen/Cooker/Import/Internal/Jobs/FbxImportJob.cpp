@@ -4,34 +4,41 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
 #include <chrono>
+#include <cstddef>
 #include <filesystem>
 #include <memory>
 #include <optional>
 #include <span>
 #include <string>
-#include <system_error>
+#include <string_view>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportProgress.h>
+#include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/Internal/AdapterTypes.h>
+#include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/ImportPlanner.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/FbxImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/BufferPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/GeometryPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MaterialPipeline.h>
+#include <Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScenePipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/TexturePipeline.h>
 #include <Oxygen/Cooker/Import/Internal/WorkDispatcher.h>
 #include <Oxygen/Cooker/Import/Internal/WorkPayloadStore.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/FbxAdapter.h>
+#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
 
 namespace oxygen::content::import::detail {
@@ -108,6 +115,15 @@ namespace {
 */
 auto FbxImportJob::ExecuteAsync() -> co::Co<ImportReport>
 {
+  EnsureCookedRoot();
+  ImportSession session(Request(), FileReader(), FileWriter(), ThreadPool(),
+    TableRegistry(), IndexRegistry());
+  co_return co_await RunWithWriteDrain(ExecuteSessionAsync(session));
+}
+
+auto FbxImportJob::ExecuteSessionAsync(ImportSession& session)
+  -> co::Co<ImportReport>
+{
   DLOG_F(INFO, "Starting job: job_id={} path={}", JobId(),
     Request().source_path.string());
 
@@ -146,23 +162,18 @@ auto FbxImportJob::ExecuteAsync() -> co::Co<ImportReport>
     co_return report;
   };
 
-  EnsureCookedRoot();
-
-  ImportSession session(Request(), FileReader(), FileWriter(), ThreadPool(),
-    TableRegistry(), IndexRegistry());
-
-  ReportPhaseProgress(ImportPhase::kLoading, 0.0f, "Parsing FBX...");
+  ReportPhaseProgress(ImportPhase::kLoading, 0.0F, "Parsing FBX...");
   const auto load_start = std::chrono::steady_clock::now();
   auto scene = co_await ParseScene(session);
   const auto load_end = std::chrono::steady_clock::now();
   session.AddSourceLoadDuration(MakeDuration(load_start, load_end));
   AddDiagnostics(session, std::move(scene.diagnostics));
   if (scene.canceled || !scene.success) {
-    ReportPhaseProgress(ImportPhase::kFailed, 1.0f, "FBX parse failed");
+    ReportPhaseProgress(ImportPhase::kFailed, 1.0F, "FBX parse failed");
     co_return co_await FinalizeWithTelemetry(session);
   }
 
-  ReportPhaseProgress(ImportPhase::kPlanning, 0.1f, "Building import plan...");
+  ReportPhaseProgress(ImportPhase::kPlanning, 0.1F, "Building import plan...");
   const auto request_copy = Request();
   const auto stop_token = StopToken();
   const auto plan_start = std::chrono::steady_clock::now();
@@ -179,22 +190,23 @@ auto FbxImportJob::ExecuteAsync() -> co::Co<ImportReport>
     });
   AddDiagnostics(session, std::move(plan_outcome.diagnostics));
   if (plan_outcome.canceled || !plan_outcome.plan) {
-    ReportPhaseProgress(ImportPhase::kFailed, 1.0f, "Plan build failed");
+    ReportPhaseProgress(ImportPhase::kFailed, 1.0F, "Plan build failed");
     co_return co_await FinalizeWithTelemetry(session);
   }
 
-  ReportPhaseProgress(ImportPhase::kWorking, 0.2f, "Executing plan...");
+  ReportPhaseProgress(ImportPhase::kWorking, 0.2F, "Executing plan...");
   const bool executed = co_await ExecutePlan(*plan_outcome.plan, session);
   if (!executed) {
-    ReportPhaseProgress(ImportPhase::kFailed, 1.0f, "Plan execution failed");
+    ReportPhaseProgress(ImportPhase::kFailed, 1.0F, "Plan execution failed");
     co_return co_await FinalizeWithTelemetry(session);
   }
 
-  ReportPhaseProgress(ImportPhase::kFinalizing, 0.9f, "Finalizing import...");
+  ReportPhaseProgress(ImportPhase::kFinalizing, 0.9F, "Finalizing import...");
+  session.MarkMaterialSlotSourceProcessed();
   auto report = co_await FinalizeWithTelemetry(session);
 
   ReportPhaseProgress(
-    report.success ? ImportPhase::kComplete : ImportPhase::kFailed, 1.0f,
+    report.success ? ImportPhase::kComplete : ImportPhase::kFailed, 1.0F,
     report.success ? "Import complete" : "Import failed");
 
   co_return report;
@@ -208,17 +220,8 @@ auto FbxImportJob::ParseScene(ImportSession& session) -> co::Co<ParsedFbxScene>
   const auto naming_service = observer_ptr { &GetNamingService() };
   auto reader = FileReader();
   std::shared_ptr<std::vector<std::byte>> source_bytes;
-  bool should_read_source_bytes = false;
 
   if (reader != nullptr) {
-    std::error_code status_error;
-    const auto status
-      = std::filesystem::status(request_copy.source_path, status_error);
-    should_read_source_bytes
-      = status_error || !std::filesystem::is_regular_file(status);
-  }
-
-  if (should_read_source_bytes) {
     const auto read_start = std::chrono::steady_clock::now();
     auto read_result
       = co_await reader.get()->ReadFile(request_copy.source_path);
@@ -231,12 +234,15 @@ auto FbxImportJob::ParseScene(ImportSession& session) -> co::Co<ParsedFbxScene>
       session.AddDiagnostic(MakeErrorDiagnostic("fbx.read_failed",
         "Failed to read FBX source bytes", request_copy.source_path.string(),
         ""));
+      ParsedFbxScene failed;
+      failed.success = false;
+      co_return failed;
     }
   }
 
   auto parsed = co_await ThreadPool()->Run(
     [request_copy, stop_token, naming_service, source_bytes](
-      co::ThreadPool::CancelToken canceled) {
+      co::ThreadPool::CancelToken canceled) -> ParsedFbxScene {
       DLOG_F(1, "Parse scene task begin");
       ParsedFbxScene out;
       if (canceled || stop_token.stop_requested()) {
@@ -342,7 +348,7 @@ auto FbxImportJob::BuildPlan(ParsedFbxScene& scene,
       plan_.material_items.push_back(id);
       plan_.material_slots.push_back(id);
 
-      auto add_dep = [&](const MaterialTextureBinding& binding) {
+      auto add_dep = [&](const MaterialTextureBinding& binding) -> void {
         if (!binding.assigned || binding.source_id.empty()) {
           return;
         }
@@ -398,7 +404,8 @@ auto FbxImportJob::BuildPlan(ParsedFbxScene& scene,
       plan_.planner.AddDependency(geometry_id, mesh_build_id);
       for (const auto slot : payload.item.material_slots_used) {
         if (slot < plan_.material_slots.size()) {
-          plan_.planner.AddDependency(geometry_id, plan_.material_slots[slot]);
+          plan_.planner.AddDependency(
+            geometry_id, plan_.material_slots.at(slot));
         }
       }
       plan_.geometry_items.push_back(geometry_id);
@@ -488,8 +495,8 @@ auto FbxImportJob::ExecutePlan(PlannedFbxImport& plan, ImportSession& session)
     progress = WorkDispatcher::ProgressReporter {
       .job_id = JobId(),
       .on_progress = ProgressCallback(),
-      .overall_start = 0.2f,
-      .overall_end = 0.9f,
+      .overall_start = 0.2F,
+      .overall_end = 0.9F,
     };
   }
   // Keep dispatcher alive for the whole nursery lifetime. Locals declared

@@ -65,6 +65,7 @@ assets:
         submeshes:
           - name: "submesh0"
             material: "simple_material"
+            slot_id: "00000000-0000-0000-0000-000000000001"
             bounding_box_min: [-1.0, -1.0, -1.0]
             bounding_box_max: [1.0, 1.0, 1.0]
             mesh_views:

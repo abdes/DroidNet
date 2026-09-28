@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <string_view>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Data/AssetKey.h>
@@ -40,6 +41,10 @@ using SizeT = uint64_t;
 using CountT = uint32_t;
 
 //=== Constants ===-----------------------------------------------------------//
+
+//! Cooperative reader/publisher lease marker for an immutable cooked
+//! generation.
+inline constexpr std::string_view kGenerationLeaseFileName = ".generation.lock";
 
 //! 8-byte header magic: {'O','X','L','C','I','D','X',0}
 constexpr std::array<char, 8> kHeaderMagic

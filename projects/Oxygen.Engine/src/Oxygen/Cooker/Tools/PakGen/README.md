@@ -188,7 +188,7 @@ A spec groups resources (buffers, textures, audio, script, physics) and higherâ€
 
 The current schema version is **7**. Use `version: 7` in your spec files for
 full v7 output, including physics-region/footer fields and physics asset types.
-Legacy specs are still accepted, but output is normalized to current v7 layout.
+Retired specification and asset descriptor versions are rejected.
 
 Every spec must supply `source_identity` as a non-nil canonical lowercase RFC
 9562 UUIDv7 string, for example `0194a6d0-1a20-7b42-8ab3-fc384e6d5179`.
@@ -201,7 +201,7 @@ authored spec and identity.
 
 ### Scene node flags
 
-Scene assets use descriptor version **6** and 72-byte node records. Node
+Scene assets use descriptor version **9** and 72-byte node records. Node
 `flags` stores explicit local values; `inherited_flags` stores source modes.
 Both are unsigned integer masks and default to zero, preserving explicit local
 fixture behavior. This low-level tool does not apply editor creation defaults.
@@ -219,6 +219,21 @@ Unknown bits, inheritance for unsupported flags, and overlapping local/inherited
 bits are rejected. An inherited flag must have its local value bit cleared.
 Generated nodes preserve both masks from their template. Older scene descriptor
 versions must be recooked; PakGen emits only the current scene layout.
+
+### Material-slot fixture records
+
+Material descriptors use version 3 and store float32 emissive RGB in 363 bytes.
+Geometry descriptors use version 2: each 124-byte submesh carries an explicit
+non-nil canonical UUID `slot_id` after its material key. Author these IDs in the
+fixture; equal labels or material references do not allocate or merge slots.
+
+Scene renderables contain only node, geometry and visibility (24 bytes). Put
+instance assignments in `material_overrides`: each entry supplies `node_index`,
+`slot_id`, a `material` name or `material_asset_key`, and a 64-digit lowercase
+`layout_revision`. They produce the 68-byte `MSLT` component table. Omitted
+assignments retain geometry defaults. Single-material renderable aliases are
+rejected. Generated node templates also use explicit `material_overrides` and
+retain each declared slot ID for every generated instance.
 
 ### v7 Physics Authoring Notes
 

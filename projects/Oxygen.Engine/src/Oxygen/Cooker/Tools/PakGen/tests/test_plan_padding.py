@@ -65,6 +65,7 @@ def _spec_with_padding() -> dict:
                         "index_buffer": None,
                         "submeshes": [
                             {
+                                "slot_id": "3845e1a0-c4c3-55f2-a9c1-85087d98e806",
                                 "name": "s0",
                                 "material": "mat_z",
                                 "bounding_box_min": [0.0, 0.0, 0.0],

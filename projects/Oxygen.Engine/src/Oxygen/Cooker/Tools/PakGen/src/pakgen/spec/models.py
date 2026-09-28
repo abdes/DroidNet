@@ -117,6 +117,7 @@ class MeshView:
 class Submesh:
     name: str
     material: str
+    slot_id: str
     mesh_views: List[MeshView] = field(default_factory=list)
     bounding_box_min: List[float] = field(
         default_factory=lambda: [0.0, 0.0, 0.0]

@@ -5,12 +5,26 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
-#include <new>
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <optional>
 #include <string_view>
+#include <utility>
 
 #include <lua.h>
 #include <lualib.h>
 
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Content/ResourceKey.h>
+#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/BufferResource.h>
+#include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/InputActionAsset.h>
+#include <Oxygen/Data/InputMappingContextAsset.h>
+#include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/ScriptAsset.h>
+#include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Engine/IAsyncEngine.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Content/ContentBindingsCommon.h>
@@ -58,7 +72,7 @@ namespace {
     std::optional<uint8_t> high_nibble {};
 
     for (size_t char_index = 0; char_index < text.size(); ++char_index) {
-      const auto ch = text[char_index];
+      const auto ch = text.at(char_index);
       if (IsHyphenPosition(char_index)) {
         if (ch != '-') {
           return std::nullopt;
@@ -77,7 +91,7 @@ namespace {
       if (byte_index >= bytes.size()) {
         return std::nullopt;
       }
-      bytes[byte_index++]
+      bytes.at(byte_index++)
         = static_cast<uint8_t>((*high_nibble << 4U) | *nibble);
       high_nibble.reset();
     }
@@ -186,7 +200,6 @@ auto RequireResourceKey(lua_State* state, const int arg_index)
   const auto raw = luaL_checkinteger(state, arg_index);
   if (raw < 0) {
     luaL_argerror(state, arg_index, "resource_key must be >= 0");
-    return content::ResourceKey {};
   }
   return content::ResourceKey { static_cast<uint64_t>(raw) };
 }
@@ -207,7 +220,6 @@ auto RequireAssetGuid(lua_State* state, const int arg_index) -> data::AssetKey
   const auto parsed = TryParseAssetGuid(std::string_view(guid, len));
   if (!parsed.has_value()) {
     luaL_argerror(state, arg_index, "asset_guid must be canonical UUID string");
-    return data::AssetKey {};
   }
   return *parsed;
 }

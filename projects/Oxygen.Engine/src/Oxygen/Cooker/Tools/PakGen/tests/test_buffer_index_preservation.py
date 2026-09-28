@@ -59,6 +59,7 @@ def test_buffer_indices_preserved_for_geometry(tmp_path: Path):
                         "index_buffer": "aaa_index_buffer",
                         "submeshes": [
                             {
+                                "slot_id": "715057a0-ac9a-5b4d-be35-3c04271a3e77",
                                 "name": "s0",
                                 "material": "mat",
                                 "bounding_box_min": [0.0, 0.0, 0.0],

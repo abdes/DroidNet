@@ -15,6 +15,7 @@
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Content/TextureResourceLocator.h>
 
 namespace oxygen::content {
@@ -44,8 +45,8 @@ namespace {
     constexpr size_t kHashHexLength = 16;
 
     const auto parent = plain_path.parent_path();
-    if (!std::filesystem::exists(parent)
-      || !std::filesystem::is_directory(parent)) {
+    if (!std::filesystem::exists(base::ToNativePath(parent))
+      || !std::filesystem::is_directory(base::ToNativePath(parent))) {
       return false;
     }
 
@@ -62,11 +63,12 @@ namespace {
     std::vector<std::filesystem::path> matches;
     const auto expected_prefix = ToLowerAscii(plain_stem) + "_";
 
-    for (const auto& entry : std::filesystem::directory_iterator(parent)) {
+    for (const auto& entry :
+      std::filesystem::directory_iterator(base::ToNativePath(parent))) {
       if (!entry.is_regular_file()) {
         continue;
       }
-      const auto& candidate = entry.path();
+      const auto candidate = base::ToLogicalPath(entry.path());
       if (ToLowerAscii(candidate.extension().string()) != ".otex") {
         continue;
       }
@@ -101,7 +103,7 @@ auto FindTextureResourceDescriptorPath(
   const std::filesystem::path& descriptor_path)
   -> std::optional<std::filesystem::path>
 {
-  if (std::filesystem::is_regular_file(descriptor_path)) {
+  if (std::filesystem::is_regular_file(base::ToNativePath(descriptor_path))) {
     return descriptor_path;
   }
   auto resolved = std::filesystem::path {};

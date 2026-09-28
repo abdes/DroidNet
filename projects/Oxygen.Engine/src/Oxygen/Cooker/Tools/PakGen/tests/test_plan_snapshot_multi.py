@@ -58,6 +58,7 @@ def _spec_multi() -> dict:
                         "index_buffer": None,
                         "submeshes": [
                             {
+                                "slot_id": "f01ea980-281b-5a7d-90e1-8e09c2400130",
                                 "name": "sm0",
                                 "material": "mat_a",
                                 "bounding_box_min": [0.0, 0.0, 0.0],
@@ -85,6 +86,7 @@ def _spec_multi() -> dict:
                         "index_buffer": None,
                         "submeshes": [
                             {
+                                "slot_id": "a770f630-85a3-5625-b99a-debe738edf47",
                                 "name": "sm0",
                                 "material": "mat_b",
                                 "bounding_box_min": [0.0, 0.0, 0.0],

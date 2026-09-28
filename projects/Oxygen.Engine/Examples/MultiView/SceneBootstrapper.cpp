@@ -6,6 +6,8 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
+#include <cstdint>
 #include <cstring>
 #include <memory>
 #include <string>
@@ -13,16 +15,23 @@
 #include <vector>
 
 #include "MultiView/SceneBootstrapper.h"
-#include <glm/glm.hpp>
-#include <glm/gtc/quaternion.hpp>
+#include <glm/ext/quaternion_trigonometric.hpp>
+#include <glm/ext/vector_float4.hpp>
+#include <glm/geometric.hpp>
+#include <glm/trigonometric.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
+#include <Oxygen/Data/ShaderReference.h>
+#include <Oxygen/Data/Unorm16.h>
 #include <Oxygen/Scene/Environment/Fog.h>
 #include <Oxygen/Scene/Environment/LocalFogVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
@@ -32,7 +41,9 @@
 #include <Oxygen/Scene/Light/LightCommon.h>
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
+#include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneFlags.h>
+#include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/Types/Flags.h>
 
 namespace oxygen::examples::multiview {
@@ -85,11 +96,12 @@ namespace {
       // Keep the lit shader path (including AP). Direct-light isolation is
       // established by backlighting the cards, not by unsupported material
       // knobs.
-      for (unsigned channel = 0; channel < 3U; ++channel) {
-        desc.emissive_factor[channel]
-          = data::HalfFloat { emissive_scale * rgba[channel] };
-        desc.base_color[channel] = 0.0F;
-      }
+      desc.emissive_factor[0] = emissive_scale * rgba.r;
+      desc.emissive_factor[1] = emissive_scale * rgba.g;
+      desc.emissive_factor[2] = emissive_scale * rgba.b;
+      desc.base_color[0] = 0.0F;
+      desc.base_color[1] = 0.0F;
+      desc.base_color[2] = 0.0F;
     }
 
     const AssetKey asset_key = AssetKey::FromVirtualPath(
@@ -141,14 +153,16 @@ auto SceneBootstrapper::EnsureProofAtmosphere(const float sun_lux,
   const float scattering_strength, const bool backlit) -> void
 {
   CHECK_NOTNULL_F(scene_.get());
-  if (!scene_->GetEnvironment())
+  if (!scene_->GetEnvironment()) {
     scene_->SetEnvironment(std::make_unique<scene::SceneEnvironment>());
+  }
   auto* atmosphere = scene_->GetEnvironment()
                        ->TryGetSystem<scene::environment::SkyAtmosphere>()
                        .get();
-  if (!atmosphere)
+  if (!atmosphere) {
     atmosphere = &scene_->GetEnvironment()
                     ->AddSystem<scene::environment::SkyAtmosphere>();
+  }
   atmosphere->SetEnabled(true);
   atmosphere->SetAerialPerspectiveStartDepthMeters(0.0F);
   atmosphere->SetAerialScatteringStrength(scattering_strength);
@@ -184,12 +198,14 @@ auto SceneBootstrapper::ApplyDirectionalArrayProof() -> void
   constexpr auto kSecondaryTint = glm::vec3 { 0.3F, 0.6F, 1.0F };
   constexpr auto kSecondaryRays = glm::vec3 { 0.8F, -0.4F, -1.0F };
   EnsureProofAtmosphere(kPrimaryLux, 1.0F, false);
-  CHECK_F(proof_sun_node_.EditLight<scene::DirectionalLight>([kPrimaryLux](auto& primary) {
-    primary.SetIntensityLux(kPrimaryLux);
-    primary.Common().casts_shadows = true;
-    primary.CascadedShadows().cascade_count = 2U;
-    primary.Common().shadow.resolution_hint = scene::ShadowResolutionHint::kMedium;
-  }));
+  CHECK_F(proof_sun_node_.EditLight<scene::DirectionalLight>(
+    [kPrimaryLux](auto& primary) -> auto {
+      primary.SetIntensityLux(kPrimaryLux);
+      primary.Common().casts_shadows = true;
+      primary.CascadedShadows().cascade_count = 2U;
+      primary.Common().shadow.resolution_hint
+        = scene::ShadowResolutionHint::kMedium;
+    }));
   const auto add
     = [this](const char* name, const scene::AtmosphereLightSlot slot,
         const glm::vec3 color, const float lux, const glm::vec3 rays) -> void {
@@ -236,8 +252,9 @@ auto SceneBootstrapper::ApplyConsumerVisualProof(const VisualFogMode fog_mode)
   auto& environment = *scene_->GetEnvironment();
   auto* sky_light
     = environment.TryGetSystem<scene::environment::SkyLight>().get();
-  if (!sky_light)
+  if (!sky_light) {
     sky_light = &environment.AddSystem<scene::environment::SkyLight>();
+  }
   sky_light->SetEnabled(true);
   sky_light->SetDiffuseIntensity(1.0F);
   sky_light->SetSpecularIntensity(0.0F);
@@ -245,10 +262,12 @@ auto SceneBootstrapper::ApplyConsumerVisualProof(const VisualFogMode fog_mode)
   // The existing atmosphere LUT supplies volumetric ambient independently of
   // captured-scene surface IBL, which this renderer does not yet provide.
   ground_plane_node_.GetTransform().SetLocalScale({ 2000.0F, 2000.0F, 0.1F });
-  proof_sun_node_.EditLight<scene::DirectionalLight>([](auto& sun) { sun.Common().casts_shadows = true; });
+  proof_sun_node_.EditLight<scene::DirectionalLight>(
+    [](auto& sun) -> auto { sun.Common().casts_shadows = true; });
   auto* fog = environment.TryGetSystem<scene::environment::Fog>().get();
-  if (!fog)
+  if (!fog) {
     fog = &environment.AddSystem<scene::environment::Fog>();
+  }
   const bool volumetric = fog_mode == VisualFogMode::kVolumetric;
   fog->SetEnabled(volumetric);
   fog->SetEnableHeightFog(volumetric);
@@ -273,9 +292,9 @@ auto SceneBootstrapper::ApplyConsumerVisualProof(const VisualFogMode fog_mode)
       { -1.75F, -0.25F, 0.3F });
     visual_local_fog_node_.GetTransform().SetLocalScale({ 0.45F, 0.45F, 0.3F });
   }
-  auto& local = visual_local_fog_node_.GetImpl()
-                  ->get()
-                  .GetComponent<scene::environment::LocalFogVolume>();
+  const auto node = visual_local_fog_node_.GetImpl();
+  CHECK_F(node.has_value());
+  auto& local = node->get().GetComponent<scene::environment::LocalFogVolume>();
   local.SetEnabled(fog_mode == VisualFogMode::kLocal);
   local.SetRadialFogExtinction(0.9F);
   local.SetHeightFogExtinction(0.45F);
@@ -294,10 +313,16 @@ auto SceneBootstrapper::ApplyAtmosphereProof(const std::uint64_t frame) -> void
     : frame < 56U                         ? 3U
                                           : 4U;
   EnsureProofAtmosphere(1000.0F, phase >= 3U ? 8.0F : 0.01F);
-  if (phase == atmosphere_proof_phase_)
+  if (phase == atmosphere_proof_phase_) {
     return;
-  const std::array nodes { sphere_node_, cube_node_, cylinder_node_, cone_node_,
-    ground_plane_node_ };
+  }
+  const std::array nodes {
+    sphere_node_,
+    cube_node_,
+    cylinder_node_,
+    cone_node_,
+    ground_plane_node_,
+  };
   if (phase == 0U) {
     auto quad = data::MakeQuadMeshAsset(1.5F, 2.0F);
     CHECK_F(quad.has_value());
@@ -307,10 +332,12 @@ auto SceneBootstrapper::ApplyAtmosphereProof(const std::uint64_t frame) -> void
           .WithIndices(quad->second)
           .BeginSubMesh("card",
             MakeSolidColorMaterial("AtmosphereProofCardBase", { 0, 0, 0, 1 }))
-          .WithMeshView(data::pak::geometry::MeshViewDesc { .first_index = 0,
+          .WithMeshView(data::pak::geometry::MeshViewDesc {
+            .first_index = 0,
             .index_count = static_cast<std::uint32_t>(quad->second.size()),
             .first_vertex = 0,
-            .vertex_count = static_cast<std::uint32_t>(quad->first.size()) })
+            .vertex_count = static_cast<std::uint32_t>(quad->first.size()),
+          })
           .EndSubMesh()
           .Build();
     data::pak::geometry::GeometryAssetDesc desc {};
@@ -324,25 +351,30 @@ auto SceneBootstrapper::ApplyAtmosphereProof(const std::uint64_t frame) -> void
         "/Engine/Examples/MultiView/Geometry/AtmosphereProofCard.ogeo"),
       desc, std::vector<std::shared_ptr<data::Mesh>> { std::move(mesh) });
     for (std::size_t i = 0; i < nodes.size(); ++i) {
-      auto node = nodes[i];
+      auto node = nodes.at(i);
       node.GetRenderable().SetGeometry(geometry);
       node.GetTransform().SetLocalRotation(glm::quat { 1, 0, 0, 0 });
       node.GetTransform().SetLocalPosition(i < 4U
-          ? glm::vec3 { -3.0F + 2.0F * static_cast<float>(i), 0, 0 }
+          ? glm::vec3 { -3.0F + (2.0F * static_cast<float>(i)), 0, 0 }
           : glm::vec3 { 0, 2, 0 });
       node.GetTransform().SetLocalScale(
         i < 4U ? glm::vec3 { 1 } : glm::vec3 { 6, 1, 2 });
     }
   }
-  const std::array colors { glm::vec4 { .2F, .7F, .3F, 1 },
-    glm::vec4 { .7F, .7F, .7F, 1 }, glm::vec4 { .4F, .4F, .9F, 1 },
-    glm::vec4 { .9F, .4F, .4F, 1 }, glm::vec4 { .18F, .18F, .18F, 1 } };
+  const std::array colors {
+    glm::vec4 { .2F, .7F, .3F, 1 },
+    glm::vec4 { .7F, .7F, .7F, 1 },
+    glm::vec4 { .4F, .4F, .9F, 1 },
+    glm::vec4 { .9F, .4F, .4F, 1 },
+    glm::vec4 { .18F, .18F, .18F, 1 },
+  };
   for (std::size_t i = 0; i < nodes.size(); ++i) {
-    auto node = nodes[i];
+    auto node = nodes.at(i);
     const bool forward = (phase == 1U && i < 4U) || (phase == 2U && i == 0U);
-    auto color = colors[i];
-    if (phase == 2U && i == 0U)
+    auto color = colors.at(i);
+    if (phase == 2U && i == 0U) {
       color.a = .5F;
+    }
     const auto name
       = "AtmosphereProof" + std::to_string(phase) + "-" + std::to_string(i);
     auto material = MakeSolidColorMaterial(name.c_str(), color,

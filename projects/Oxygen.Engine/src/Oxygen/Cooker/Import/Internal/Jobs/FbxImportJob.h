@@ -33,9 +33,8 @@ namespace oxygen::content::import::detail {
 
 ### Architecture Notes
 
- - Parsing and CPU-heavy work are intended to run on the shared ThreadPool.
+ - Parsing and CPU-heavy work run on the shared ThreadPool.
  - Cooked resources are emitted through async emitters owned by ImportSession.
- - Actual pipeline integration is introduced in Phase 5.
 */
 class FbxImportJob final : public ImportJob {
   OXYGEN_TYPED(FbxImportJob)
@@ -43,7 +42,7 @@ public:
   using ImportJob::ImportJob;
 
 private:
-  //! Placeholder for parsed FBX scene state.
+  //! Parsed FBX scene and its retained input bytes.
   struct ParsedFbxScene {
     std::shared_ptr<adapters::FbxAdapter> adapter;
     std::shared_ptr<std::vector<std::byte>> source_bytes;
@@ -61,6 +60,8 @@ private:
   };
 
   [[nodiscard]] auto ExecuteAsync() -> co::Co<ImportReport> override;
+  [[nodiscard]] auto ExecuteSessionAsync(ImportSession& session)
+    -> co::Co<ImportReport>;
 
   [[nodiscard]] auto ParseScene(ImportSession& session)
     -> co::Co<ParsedFbxScene>;

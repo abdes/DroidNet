@@ -7,15 +7,19 @@
 #include <atomic>
 #include <chrono>
 #include <memory>
+#include <utility>
 
-#include <Oxygen/Testing/GTest.h>
+#include "./AssetLoader_test.h"
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
-
-#include "./AssetLoader_test.h"
+#include <Oxygen/OxCo/ThreadPool.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 
@@ -50,7 +54,7 @@ NOLINT_TEST_F(AssetLoaderCancellationTest, StopCancelsStartLoadAsset)
   std::shared_ptr<oxygen::data::MaterialAsset> result;
 
   // Act + Assert
-  (oxygen::co::Run)(el, [&]() -> Co<> {
+  oxygen::co::Run(el, [&] -> Co<> {
     oxygen::co::ThreadPool pool(el, 2);
     AssetLoaderConfig config {};
     config.thread_pool = oxygen::observer_ptr<oxygen::co::ThreadPool> { &pool };
@@ -63,13 +67,14 @@ NOLINT_TEST_F(AssetLoaderCancellationTest, StopCancelsStartLoadAsset)
 
       loader.AddPakFile(pak_path);
 
-      loader.StartLoadAsset<oxygen::data::MaterialAsset>(
-        material_key, [&](std::shared_ptr<oxygen::data::MaterialAsset> asset) {
+      loader.StartLoadAsset<oxygen::data::MaterialAsset>(material_key,
+        [&](std::shared_ptr<oxygen::data::MaterialAsset> asset) -> void {
           result = std::move(asset);
           callback_called.store(true);
         });
 
       loader.Stop();
+      co_await loader.WaitForPendingLoadsAsync();
 
       // Give cancellation a chance to propagate through the event loop.
       for (int i = 0; i < 50 && !callback_called.load(); ++i) {

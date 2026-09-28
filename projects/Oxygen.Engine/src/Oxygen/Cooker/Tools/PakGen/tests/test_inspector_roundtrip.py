@@ -68,6 +68,7 @@ SIMPLE_SPEC = {
                     "vertex_buffer": "vb0",
                     "submeshes": [
                         {
+                            "slot_id": "0d04388f-e617-53cc-ba72-39d5be77f810",
                             "name": "SM_A",
                             "material": "matA",
                             "bounding_box_min": [0.0, 0.0, 0.0],

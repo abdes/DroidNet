@@ -62,12 +62,12 @@ struct EnvironmentRuntimeConfig {
   SceneActivationPolicy activation_policy {
     SceneActivationPolicy::kRestorePreferences
   };
-  std::optional<int> initial_environment_profile;
-  std::string startup_skybox_path;
-  std::optional<bool> initial_preview_sun_enabled;
+  std::optional<int> initial_environment_profile {};
+  std::string startup_skybox_path {};
+  std::optional<bool> initial_preview_sun_enabled {};
   bool preview_scene_ready { true };
-  std::function<void()> on_atmosphere_params_changed;
-  std::function<void()> on_exposure_changed;
+  std::function<void()> on_atmosphere_params_changed {};
+  std::function<void()> on_exposure_changed {};
 };
 
 //! Settings persistence and runtime apply logic for the environment panel.

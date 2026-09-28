@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
 #include <filesystem>
 #include <string_view>
 
@@ -160,7 +161,6 @@ namespace {
       luaL_error(state,
         "oxygen.assets.%.*s was removed in v1; use oxygen.assets.%s",
         static_cast<int>(key.size()), key.data(), replacement);
-      return 0;
     }
     lua_pushnil(state);
     return 1;

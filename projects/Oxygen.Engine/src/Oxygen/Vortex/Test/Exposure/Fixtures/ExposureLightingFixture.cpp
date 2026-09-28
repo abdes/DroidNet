@@ -26,7 +26,6 @@
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/GeometryAsset.h>
-#include <Oxygen/Data/HalfFloat.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/PakFormat_core.h>
@@ -326,9 +325,7 @@ auto ExposureLightingGpuTest::MakeEmissiveMaterial(float value)
   };
   authored.uv_scale[0] = authored.uv_scale[1] = 1;
   for (auto& component : authored.emissive_factor) {
-    component = data::HalfFloat {
-      1.0F,
-    };
+    component = 1.0F;
   }
   std::vector<content::ResourceKey> keys(6);
   keys.at(5) = key;
@@ -442,9 +439,7 @@ auto ExposureLightingGpuTest::SetSurface(
       = domain == data::MaterialDomain::kAlphaBlended ? .5F : 1.0F;
   }
   for (auto& value : desc.emissive_factor) {
-    value = data::HalfFloat {
-      emission,
-    };
+    value = emission;
   }
   desc.normal_scale = 1;
   desc.roughness = data::Unorm16 {

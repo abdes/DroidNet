@@ -48,6 +48,7 @@ struct SceneBuild final {
   std::vector<std::byte> strings;
 
   std::vector<data::pak::world::RenderableRecord> renderables;
+  std::vector<data::pak::world::MaterialOverrideRecord> material_overrides;
   std::vector<data::pak::world::LocalFogVolumeRecord> local_fog_volumes;
   std::vector<data::pak::world::PerspectiveCameraRecord> perspective_cameras;
   std::vector<data::pak::world::OrthographicCameraRecord> orthographic_cameras;
@@ -158,7 +159,7 @@ public:
     std::string source_id;
     std::optional<CookedScenePayload> cooked;
     std::vector<ImportDiagnostic> diagnostics;
-    ImportWorkItemTelemetry telemetry;
+    ImportWorkItemTelemetry telemetry {};
     bool success = false;
   };
 

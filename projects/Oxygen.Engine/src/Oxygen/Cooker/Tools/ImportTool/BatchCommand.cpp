@@ -6,47 +6,53 @@
 
 #include <algorithm>
 #include <array>
-#include <cctype>
 #include <chrono>
-#include <clocale>
 #include <condition_variable>
+#include <cstdint>
 #include <cstdlib>
 #include <deque>
 #include <exception>
 #include <expected>
 #include <filesystem>
 #include <fstream>
-#include <iomanip>
 #include <iostream>
+#include <memory>
 #include <mutex>
 #include <optional>
+#include <ratio>
 #include <sstream>
+#include <stop_token>
+#include <string>
 #include <string_view>
 #include <system_error>
 #include <thread>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include <fmt/format.h>
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/ScopeGuard.h>
+#include <Oxygen/Clap/Command.h>
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
+#include <Oxygen/Cooker/Import/ImportConcurrency.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportJobId.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
+#include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/ImportProgress.h>
+#include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
-#include <Oxygen/Cooker/Import/Internal/SceneImportRequestBuilder.h>
-#include <Oxygen/Cooker/Import/Internal/TextureImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/SceneImportSettings.h>
-#include <Oxygen/Cooker/Import/ScriptImportRequestBuilder.h>
-#include <Oxygen/Cooker/Import/TextureImportSettings.h>
 #include <Oxygen/Cooker/Tools/ImportTool/BatchCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/MessageWriter.h>
 #include <Oxygen/Cooker/Tools/ImportTool/ReportJson.h>
@@ -80,7 +86,7 @@ namespace {
     std::string object_path;
   };
 
-  auto DisplayJobNumber(const size_t job_index) -> size_t;
+  auto DisplayJobNumber(size_t job_index) -> size_t;
 
   auto IsPhysicsDomainJobType(const std::string_view job_type) -> bool
   {
@@ -445,11 +451,11 @@ namespace {
       std::optional<std::string> produced_virtual_path;
       auto error = std::string {};
       if (!CollectProducedVirtualPathByJob(
-            jobs[job_index], produced_virtual_path, error)) {
+            jobs.at(job_index), produced_virtual_path, error)) {
         writer->Error(fmt::format(
           "ERROR [physics.manifest.dependency_inference_failed]: job '{}' "
           "output inference failed: {}",
-          JobLabel(jobs[job_index], job_index), error));
+          JobLabel(jobs.at(job_index), job_index), error));
         ++validation_failures;
         continue;
       }
@@ -473,21 +479,21 @@ namespace {
     inferred_producers.assign(jobs.size(), {});
 
     for (size_t job_index = 0; job_index < jobs.size(); ++job_index) {
-      if (!IsPhysicsDomainJobType(jobs[job_index].job_type)) {
+      if (!IsPhysicsDomainJobType(jobs.at(job_index).job_type)) {
         continue;
       }
-      if (jobs[job_index].job_type != "physics-sidecar"
-        && jobs[job_index].job_type != "collision-shape-descriptor") {
+      if (jobs.at(job_index).job_type != "physics-sidecar"
+        && jobs.at(job_index).job_type != "collision-shape-descriptor") {
         continue;
       }
 
       auto refs = std::vector<PhysicsDependencyRef> {};
       auto error = std::string {};
-      if (!CollectPhysicsDependencyRefs(jobs[job_index], refs, error)) {
+      if (!CollectPhysicsDependencyRefs(jobs.at(job_index), refs, error)) {
         writer->Error(fmt::format(
           "ERROR [physics.manifest.dependency_inference_failed]: job '{}' "
           "reference collection failed: {}",
-          JobLabel(jobs[job_index], job_index), error));
+          JobLabel(jobs.at(job_index), job_index), error));
         ++validation_failures;
         continue;
       }
@@ -506,7 +512,7 @@ namespace {
             "ERROR [physics.manifest.dependency_unresolved]: job '{}' "
             "references '{}' at '{}' but no manifest job produces that "
             "virtual path",
-            JobLabel(jobs[job_index], job_index), ref.virtual_path,
+            JobLabel(jobs.at(job_index), job_index), ref.virtual_path,
             ref.object_path));
           ++validation_failures;
           continue;
@@ -522,19 +528,19 @@ namespace {
           producer_list.reserve(it->second.size());
           for (const auto producer_index : it->second) {
             producer_list.push_back(
-              JobLabel(jobs[producer_index], producer_index));
+              JobLabel(jobs.at(producer_index), producer_index));
           }
           auto producer_list_text = std::string {};
           for (size_t i = 0; i < producer_list.size(); ++i) {
             if (i > 0U) {
               producer_list_text.append(", ");
             }
-            producer_list_text.append(producer_list[i]);
+            producer_list_text.append(producer_list.at(i));
           }
           writer->Error(fmt::format(
             "ERROR [physics.manifest.dependency_ambiguous]: job '{}' "
             "reference '{}' at '{}' matches multiple producer jobs: {}",
-            JobLabel(jobs[job_index], job_index), ref.virtual_path,
+            JobLabel(jobs.at(job_index), job_index), ref.virtual_path,
             ref.object_path, producer_list_text));
           ++validation_failures;
           continue;
@@ -542,7 +548,7 @@ namespace {
 
         const auto producer_index = it->second.front();
         if (unique_producers.insert(producer_index).second) {
-          inferred_producers[job_index].push_back(producer_index);
+          inferred_producers.at(job_index).push_back(producer_index);
         }
       }
     }
@@ -554,18 +560,18 @@ namespace {
   {
     for (size_t sidecar_index = 0; sidecar_index < jobs.size();
       ++sidecar_index) {
-      if (jobs[sidecar_index].job_type != "physics-sidecar") {
+      if (jobs.at(sidecar_index).job_type != "physics-sidecar") {
         continue;
       }
 
-      const auto sidecar_root = ResolveCookedRootKey(jobs[sidecar_index]);
+      const auto sidecar_root = ResolveCookedRootKey(jobs.at(sidecar_index));
       if (!sidecar_root.has_value()) {
         continue;
       }
 
       auto unique_producers = std::unordered_set<size_t> {};
-      unique_producers.reserve(inferred_producers[sidecar_index].size());
-      for (const auto producer_index : inferred_producers[sidecar_index]) {
+      unique_producers.reserve(inferred_producers.at(sidecar_index).size());
+      for (const auto producer_index : inferred_producers.at(sidecar_index)) {
         unique_producers.insert(producer_index);
       }
 
@@ -574,20 +580,21 @@ namespace {
         if (producer_index == sidecar_index) {
           continue;
         }
-        if (jobs[producer_index].job_type == "physics-sidecar") {
+        if (jobs.at(producer_index).job_type == "physics-sidecar") {
           continue;
         }
-        if (!IsAssetProducingJobType(jobs[producer_index].job_type)) {
+        if (!IsAssetProducingJobType(jobs.at(producer_index).job_type)) {
           continue;
         }
 
-        const auto producer_root = ResolveCookedRootKey(jobs[producer_index]);
+        const auto producer_root
+          = ResolveCookedRootKey(jobs.at(producer_index));
         if (!producer_root.has_value() || *producer_root != *sidecar_root) {
           continue;
         }
 
         if (unique_producers.insert(producer_index).second) {
-          inferred_producers[sidecar_index].push_back(producer_index);
+          inferred_producers.at(sidecar_index).push_back(producer_index);
         }
       }
     }
@@ -601,18 +608,18 @@ namespace {
 
     for (size_t sidecar_index = 0; sidecar_index < jobs.size();
       ++sidecar_index) {
-      if (jobs[sidecar_index].job_type != "script-sidecar") {
+      if (jobs.at(sidecar_index).job_type != "script-sidecar") {
         continue;
       }
 
-      const auto sidecar_root = ResolveCookedRootKey(jobs[sidecar_index]);
+      const auto sidecar_root = ResolveCookedRootKey(jobs.at(sidecar_index));
       if (!sidecar_root.has_value()) {
         continue;
       }
 
       if (const auto it = last_sidecar_by_root.find(*sidecar_root);
         it != last_sidecar_by_root.end()) {
-        inferred_producers[sidecar_index].push_back(it->second);
+        inferred_producers.at(sidecar_index).push_back(it->second);
       }
 
       last_sidecar_by_root.insert_or_assign(*sidecar_root, sidecar_index);
@@ -691,10 +698,10 @@ namespace {
     result.reserve(kinds.size());
     for (size_t index = 0; index < kinds.size(); ++index) {
       WorkerUtilizationView entry {};
-      entry.kind = std::string(kinds[index]);
-      entry.total = totals[index];
-      entry.input_queue_load = 0.0f;
-      entry.output_queue_load = 0.0f;
+      entry.kind = std::string(kinds.at(index));
+      entry.total = totals.at(index);
+      entry.input_queue_load = 0.0F;
+      entry.output_queue_load = 0.0F;
       result.push_back(entry);
     }
     return result;
@@ -939,7 +946,7 @@ auto BatchCommand::BuildCommand() -> std::shared_ptr<clap::Command>
                          .Long("max-in-flight-jobs")
                          .WithValue<uint32_t>()
                          .StoreTo(&options_.max_in_flight_jobs)
-                         .CallOnFinalValue([this](const uint32_t&) {
+                         .CallOnFinalValue([this](const uint32_t&) -> void {
                            options_.max_in_flight_jobs_set = true;
                          })
                          .Build();
@@ -1121,10 +1128,12 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
 
   std::unordered_map<std::string, size_t> job_id_to_index {};
   job_id_to_index.reserve(jobs.size());
-  const auto has_physics_jobs = std::ranges::any_of(
-    jobs, [](const auto& job) { return IsPhysicsDomainJobType(job.job_type); });
+  const auto has_physics_jobs
+    = std::ranges::any_of(jobs, [](const auto& job) -> auto {
+        return IsPhysicsDomainJobType(job.job_type);
+      });
   for (size_t index = 0; index < jobs.size(); ++index) {
-    const auto& job_id = jobs[index].job_id;
+    const auto& job_id = jobs.at(index).job_id;
     if (job_id.empty()) {
       continue;
     }
@@ -1153,7 +1162,7 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
   for (size_t index = 0; index < jobs.size(); ++index) {
     auto unique_producers = std::unordered_set<size_t> {};
     auto missing_dep_ids = std::unordered_set<std::string> {};
-    for (const auto& dep_id : jobs[index].depends_on) {
+    for (const auto& dep_id : jobs.at(index).depends_on) {
       const auto it = job_id_to_index.find(dep_id);
       if (it == job_id_to_index.end()) {
         if (!missing_dep_ids.insert(dep_id).second) {
@@ -1163,7 +1172,7 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
           fmt::format("ERROR [{}]: job '{}' depends on missing id '{}'",
             has_physics_jobs ? "physics.manifest.dependency_missing_target"
                              : "input.manifest.dep_missing_target",
-            JobLabel(jobs[index], index), dep_id));
+            JobLabel(jobs.at(index), index), dep_id));
         ++validation_failures;
         continue;
       }
@@ -1172,16 +1181,16 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
       if (!unique_producers.insert(producer_index).second) {
         continue;
       }
-      dependents[producer_index].push_back(index);
-      ++dependency_remaining[index];
+      dependents.at(producer_index).push_back(index);
+      ++dependency_remaining.at(index);
     }
 
-    for (const auto producer_index : inferred_producers[index]) {
+    for (const auto producer_index : inferred_producers.at(index)) {
       if (!unique_producers.insert(producer_index).second) {
         continue;
       }
-      dependents[producer_index].push_back(index);
-      ++dependency_remaining[index];
+      dependents.at(producer_index).push_back(index);
+      ++dependency_remaining.at(index);
     }
   }
 
@@ -1189,7 +1198,7 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
     auto remaining = dependency_remaining;
     std::deque<size_t> ready;
     for (size_t index = 0; index < remaining.size(); ++index) {
-      if (remaining[index] == 0U) {
+      if (remaining.at(index) == 0U) {
         ready.push_back(index);
       }
     }
@@ -1198,10 +1207,10 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
       const auto node = ready.front();
       ready.pop_front();
       ++visited;
-      for (const auto child : dependents[node]) {
-        if (remaining[child] > 0U) {
-          --remaining[child];
-          if (remaining[child] == 0U) {
+      for (const auto child : dependents.at(node)) {
+        if (remaining.at(child) > 0U) {
+          --remaining.at(child);
+          if (remaining.at(child) == 0U) {
             ready.push_back(child);
           }
         }
@@ -1247,7 +1256,7 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
   common_context->state.total = jobs.size();
   common_context->state.remaining = jobs.size();
   common_context->state.in_flight = 0;
-  common_context->state.progress = 0.0f;
+  common_context->state.progress = 0.0F;
   common_context->state.completed_run = false;
   common_context->state.worker_utilization
     = BuildWorkerUtilizationViews(worker_totals);
@@ -1257,11 +1266,11 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
   std::vector<std::optional<std::chrono::steady_clock::time_point>>
     submit_times(jobs.size());
 
-  auto worker_thread = std::jthread([this, &jobs, common_context, writer,
+  auto worker_thread = std::jthread([&jobs, common_context, writer,
                                       import_service, &progress_traces,
                                       &submit_times, &dependents,
-                                      &dependency_remaining,
-                                      worker_totals](std::stop_token st) {
+                                      &dependency_remaining, worker_totals](
+                                      std::stop_token st) -> void {
     DCHECK_NOTNULL_F(import_service, "Import service must be set by main");
 
     size_t submitted = 0;
@@ -1277,29 +1286,29 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
     auto remaining_dependencies = dependency_remaining;
     auto ready_queue = std::deque<size_t> {};
     for (size_t index = 0; index < remaining_dependencies.size(); ++index) {
-      if (remaining_dependencies[index] == 0U) {
+      if (remaining_dependencies.at(index) == 0U) {
         ready_queue.push_back(index);
       }
     }
 
     std::array<uint32_t, 7> outstanding_items { 0U, 0U, 0U, 0U, 0U, 0U, 0U };
     std::array<float, 7> input_queue_loads {
-      0.0f,
-      0.0f,
-      0.0f,
-      0.0f,
-      0.0f,
-      0.0f,
-      0.0f,
+      0.0F,
+      0.0F,
+      0.0F,
+      0.0F,
+      0.0F,
+      0.0F,
+      0.0F,
     };
     std::array<float, 7> output_queue_loads {
-      0.0f,
-      0.0f,
-      0.0f,
-      0.0f,
-      0.0f,
-      0.0f,
-      0.0f,
+      0.0F,
+      0.0F,
+      0.0F,
+      0.0F,
+      0.0F,
+      0.0F,
+      0.0F,
     };
     std::vector<std::array<uint32_t, 7>> per_job_outstanding(
       jobs.size(), { 0U, 0U, 0U, 0U, 0U, 0U, 0U });
@@ -1316,30 +1325,30 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
 
     auto start_time = std::chrono::steady_clock::now();
 
-    auto UpdateActiveJobs = [&]() {
+    auto UpdateActiveJobs = [&] -> void {
       common_context->state.active_jobs.clear();
       for (size_t index = 0; index < job_views.size(); ++index) {
-        if (job_active[index]) {
-          common_context->state.active_jobs.push_back(job_views[index]);
+        if (job_active.at(index)) {
+          common_context->state.active_jobs.push_back(job_views.at(index));
         }
       }
     };
 
-    auto UpdateWorkerUtilization = [&]() {
+    auto UpdateWorkerUtilization = [&] -> void {
       common_context->state.worker_utilization
         = BuildWorkerUtilizationViews(worker_totals);
       for (auto& entry : common_context->state.worker_utilization) {
         const auto index = WorkerKindIndex(entry.kind);
         if (index.has_value()) {
-          entry.active = std::min(outstanding_items[*index], entry.total);
-          entry.input_queue_load = input_queue_loads[*index];
-          entry.output_queue_load = output_queue_loads[*index];
+          entry.active = std::min(outstanding_items.at(*index), entry.total);
+          entry.input_queue_load = input_queue_loads.at(*index);
+          entry.output_queue_load = output_queue_loads.at(*index);
         }
       }
     };
 
     bool shutdown_requested = false;
-    auto RequestShutdown = [&]() {
+    auto RequestShutdown = [&] -> void {
       if (shutdown_requested) {
         return;
       }
@@ -1374,7 +1383,7 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
           while (!ready_queue.empty()) {
             const auto candidate = ready_queue.front();
             ready_queue.pop_front();
-            if (!job_submitted[candidate] && !job_finished[candidate]) {
+            if (!job_submitted.at(candidate) && !job_finished.at(candidate)) {
               maybe_job_index = candidate;
               break;
             }
@@ -1384,45 +1393,47 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
           break;
         }
         const auto job_index = *maybe_job_index;
-        auto& job = jobs[job_index];
+        auto& job = jobs.at(job_index);
 
-        auto on_complete = [&, job_index](
-                             ImportJobId id, const ImportReport& report) {
+        auto on_complete
+          = [&, job_index](ImportJobId id, const ImportReport& report) -> void {
           std::scoped_lock lock(common_context->mutex);
 
-          if (job_ids[job_index].has_value() && id != *job_ids[job_index]) {
-            const auto u_expected = job_ids[job_index]->get();
+          if (job_ids.at(job_index).has_value()
+            && id != *job_ids.at(job_index)) {
+            const auto u_expected = job_ids.at(job_index)->get();
             const auto u_actual = id.get();
             common_context->state.recent_logs.push_back(
               fmt::format("Job {} id mismatch (expected {}, got {})",
                 DisplayJobNumber(job_index), u_expected, u_actual));
           }
 
-          job_finished[job_index] = true;
+          job_finished.at(job_index) = true;
 
-          job_views[job_index].progress = 1.0f;
-          job_views[job_index].status = report.success ? "Completed" : "Failed";
-          job_views[job_index].item_event = "";
-          items_started[job_index].clear();
-          items_finished[job_index].clear();
-          job_views[job_index].items_completed = 0U;
-          job_views[job_index].items_total = 0U;
-          job_active[job_index] = false;
-          auto& job_outstanding = per_job_outstanding[job_index];
+          job_views.at(job_index).progress = 1.0F;
+          job_views.at(job_index).status
+            = report.success ? "Completed" : "Failed";
+          job_views.at(job_index).item_event = "";
+          items_started.at(job_index).clear();
+          items_finished.at(job_index).clear();
+          job_views.at(job_index).items_completed = 0U;
+          job_views.at(job_index).items_total = 0U;
+          job_active.at(job_index) = false;
+          auto& job_outstanding = per_job_outstanding.at(job_index);
           for (size_t index = 0; index < job_outstanding.size(); ++index) {
-            const auto pending = job_outstanding[index];
+            const auto pending = job_outstanding.at(index);
             if (pending == 0U) {
               continue;
             }
-            if (outstanding_items[index] >= pending) {
-              outstanding_items[index] -= pending;
+            if (outstanding_items.at(index) >= pending) {
+              outstanding_items.at(index) -= pending;
             } else {
-              outstanding_items[index] = 0U;
+              outstanding_items.at(index) = 0U;
             }
-            job_outstanding[index] = 0U;
+            job_outstanding.at(index) = 0U;
           }
 
-          common_context->reports[job_index] = report;
+          common_context->reports.at(job_index) = report;
           if (!report.success) {
             failures++;
             common_context->state.failures = failures;
@@ -1453,60 +1464,60 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
           auto skip_queue = std::deque<std::pair<size_t, std::string>> {};
           const auto mark_dependency
             = [&](const size_t parent_index, const bool parent_success,
-                const std::string& failed_job_id) {
-                for (const auto child_index : dependents[parent_index]) {
-                  if (job_finished[child_index]) {
-                    continue;
-                  }
-                  if (!parent_success) {
-                    predecessor_failed[child_index] = true;
-                  }
-                  if (remaining_dependencies[child_index] > 0U) {
-                    --remaining_dependencies[child_index];
-                  }
-                  if (remaining_dependencies[child_index] == 0U) {
-                    if (predecessor_failed[child_index]) {
-                      skip_queue.emplace_back(child_index, failed_job_id);
-                    } else {
-                      ready_queue.push_back(child_index);
-                    }
-                  }
+                const std::string& failed_job_id) -> void {
+            for (const auto child_index : dependents.at(parent_index)) {
+              if (job_finished.at(child_index)) {
+                continue;
+              }
+              if (!parent_success) {
+                predecessor_failed.at(child_index) = true;
+              }
+              if (remaining_dependencies.at(child_index) > 0U) {
+                --remaining_dependencies.at(child_index);
+              }
+              if (remaining_dependencies.at(child_index) == 0U) {
+                if (predecessor_failed.at(child_index)) {
+                  skip_queue.emplace_back(child_index, failed_job_id);
+                } else {
+                  ready_queue.push_back(child_index);
                 }
-              };
+              }
+            }
+          };
 
-          const auto failed_id = jobs[job_index].job_id.empty()
+          const auto failed_id = jobs.at(job_index).job_id.empty()
             ? fmt::format("#{}", DisplayJobNumber(job_index))
-            : jobs[job_index].job_id;
+            : jobs.at(job_index).job_id;
           mark_dependency(job_index, report.success, failed_id);
 
           while (!skip_queue.empty()) {
             auto [skip_index, failed_dep] = std::move(skip_queue.front());
             skip_queue.pop_front();
-            if (job_finished[skip_index] || job_submitted[skip_index]) {
+            if (job_finished.at(skip_index) || job_submitted.at(skip_index)) {
               continue;
             }
 
-            job_finished[skip_index] = true;
+            job_finished.at(skip_index) = true;
             auto skipped = MakeSkippedDependencyReport(
-              jobs[skip_index].request, failed_dep);
-            common_context->reports[skip_index] = skipped;
+              jobs.at(skip_index).request, failed_dep);
+            common_context->reports.at(skip_index) = skipped;
             failures++;
             completed++;
             common_context->state.failures = failures;
             common_context->exit_code = 2;
-            job_views[skip_index].progress = 1.0f;
-            job_views[skip_index].status = "Skipped";
-            job_views[skip_index].item_event = "";
-            job_views[skip_index].items_completed = 0U;
-            job_views[skip_index].items_total = 0U;
-            job_active[skip_index] = false;
+            job_views.at(skip_index).progress = 1.0F;
+            job_views.at(skip_index).status = "Skipped";
+            job_views.at(skip_index).item_event = "";
+            job_views.at(skip_index).items_completed = 0U;
+            job_views.at(skip_index).items_total = 0U;
+            job_active.at(skip_index) = false;
             common_context->state.recent_logs.push_back(
               fmt::format("↷ Job {} Skipped: predecessor failed ({})",
                 DisplayJobNumber(skip_index), failed_dep));
 
-            const auto next_failed = jobs[skip_index].job_id.empty()
+            const auto next_failed = jobs.at(skip_index).job_id.empty()
               ? failed_dep
-              : jobs[skip_index].job_id;
+              : jobs.at(skip_index).job_id;
             mark_dependency(skip_index, false, next_failed);
           }
 
@@ -1530,10 +1541,11 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
           UpdateWorkerUtilization();
         };
 
-        auto on_progress = [&, job_index](const ProgressEvent& progress) {
+        auto on_progress
+          = [&, job_index](const ProgressEvent& progress) -> void {
           const auto now = std::chrono::steady_clock::now();
           std::scoped_lock lock(common_context->mutex);
-          UpdateProgressTrace(progress_traces[job_index], progress, now);
+          UpdateProgressTrace(progress_traces.at(job_index), progress, now);
           if (progress.header.kind == ProgressEventKind::kPhaseUpdate) {
             return;
           }
@@ -1580,12 +1592,12 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
               return '?';
             };
             std::string event_label = EventLabel(progress.header.kind);
-            if (const auto* item = GetItemProgress(progress)) {
-              if (!item->item_kind.empty()) {
-                event_label = fmt::format(
-                  "{} {}", item->item_kind, EventLabel(progress.header.kind));
-              }
+            if (const auto* item = GetItemProgress(progress);
+              item && (!item->item_kind.empty())) {
+              event_label = fmt::format(
+                "{} {}", item->item_kind, EventLabel(progress.header.kind));
             }
+
             std::string line
               = fmt::format("Job {}-{} {}", DisplayJobNumber(job_index),
                 PhaseCode(progress.header.phase), event_label);
@@ -1608,12 +1620,12 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
             }
           }
           if (progress.header.kind == ProgressEventKind::kJobStarted) {
-            submit_times[job_index] = std::chrono::steady_clock::now();
-            job_views[job_index].status = "Running";
+            submit_times.at(job_index) = std::chrono::steady_clock::now();
+            job_views.at(job_index).status = "Running";
           }
 
-          job_views[job_index].progress = progress.header.overall_progress;
-          job_views[job_index].status
+          job_views.at(job_index).progress = progress.header.overall_progress;
+          job_views.at(job_index).status
             = std::string(nostd::to_string(progress.header.phase));
 
           if (const auto* item = GetItemProgress(progress)) {
@@ -1621,30 +1633,30 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
               if (!item->item_kind.empty()) {
                 const auto index = WorkerKindIndex(item->item_kind);
                 if (index.has_value()) {
-                  DCHECK_F(item->input_queue_load >= 0.0f
-                      && item->input_queue_load <= 1.0f,
+                  DCHECK_F(item->input_queue_load >= 0.0F
+                      && item->input_queue_load <= 1.0F,
                     "Item collection input queue load is out of range: {}",
                     item->input_queue_load);
-                  DCHECK_F(item->output_queue_load >= 0.0f
-                      && item->output_queue_load <= 1.0f,
+                  DCHECK_F(item->output_queue_load >= 0.0F
+                      && item->output_queue_load <= 1.0F,
                     "Item collection output queue load is out of range: {}",
                     item->output_queue_load);
-                  input_queue_loads[*index] = item->input_queue_load;
-                  output_queue_loads[*index] = item->output_queue_load;
+                  input_queue_loads.at(*index) = item->input_queue_load;
+                  output_queue_loads.at(*index) = item->output_queue_load;
                 }
               }
             } else {
               if (!item->item_kind.empty()) {
-                job_views[job_index].item_kind = item->item_kind;
+                job_views.at(job_index).item_kind = item->item_kind;
               }
               if (!item->item_name.empty()) {
-                job_views[job_index].item_name = item->item_name;
+                job_views.at(job_index).item_name = item->item_name;
               }
               if (progress.header.kind == ProgressEventKind::kItemStarted) {
-                job_views[job_index].item_event = "started";
+                job_views.at(job_index).item_event = "started";
               } else if (progress.header.kind
                 == ProgressEventKind::kItemFinished) {
-                job_views[job_index].item_event = "finished";
+                job_views.at(job_index).item_event = "finished";
               }
 
               if (!item->item_kind.empty() || !item->item_name.empty()) {
@@ -1660,23 +1672,24 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
                 }
                 if (!key.empty()) {
                   if (progress.header.kind == ProgressEventKind::kItemStarted) {
-                    items_started[job_index].insert(key);
+                    items_started.at(job_index).insert(key);
                   } else if (progress.header.kind
                     == ProgressEventKind::kItemFinished) {
-                    items_finished[job_index].insert(key);
+                    items_finished.at(job_index).insert(key);
                   }
-                  job_views[job_index].items_total
-                    = static_cast<uint32_t>(items_started[job_index].size());
-                  job_views[job_index].items_completed
-                    = static_cast<uint32_t>(items_finished[job_index].size());
+                  job_views.at(job_index).items_total
+                    = static_cast<uint32_t>(items_started.at(job_index).size());
+                  job_views.at(job_index).items_completed
+                    = static_cast<uint32_t>(
+                      items_finished.at(job_index).size());
                 }
               }
 
               if (!item->item_kind.empty()) {
                 const auto index = WorkerKindIndex(item->item_kind);
                 if (index.has_value()) {
-                  auto& active = outstanding_items[*index];
-                  auto& per_job = per_job_outstanding[job_index][*index];
+                  auto& active = outstanding_items.at(*index);
+                  auto& per_job = per_job_outstanding.at(job_index).at(*index);
                   if (progress.header.kind == ProgressEventKind::kItemStarted) {
                     ++active;
                     ++per_job;
@@ -1704,16 +1717,16 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
           std::scoped_lock lock(common_context->mutex);
           if (auto id = import_service->SubmitImport(
                 job.request, on_complete, on_progress)) {
-            job_submitted[job_index] = true;
-            job_ids[job_index] = *id;
-            job_views[job_index].id
+            job_submitted.at(job_index) = true;
+            job_ids.at(job_index) = *id;
+            job_views.at(job_index).id
               = std::to_string(DisplayJobNumber(job_index));
-            job_views[job_index].source = job.source_path;
-            job_views[job_index].status = "Queued";
-            job_views[job_index].progress = 0.0f;
-            job_views[job_index].items_completed = 0U;
-            job_views[job_index].items_total = 0U;
-            job_active[job_index] = true;
+            job_views.at(job_index).source = job.source_path;
+            job_views.at(job_index).status = "Queued";
+            job_views.at(job_index).progress = 0.0F;
+            job_views.at(job_index).items_completed = 0U;
+            job_views.at(job_index).items_total = 0U;
+            job_active.at(job_index) = true;
             submitted++;
             in_flight++;
           } else {
@@ -1764,7 +1777,7 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
       common_context->completed = true;
       common_context->state.remaining = 0;
       common_context->state.in_flight = 0;
-      common_context->state.progress = 1.0f;
+      common_context->state.progress = 1.0F;
       common_context->state.active_jobs.clear();
       common_context->state.completed_run = true;
       common_context->state.worker_utilization.clear();
@@ -1776,7 +1789,7 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
   if (!(global_options_ != nullptr && global_options_->no_tui)) {
     // TUI mode: the writer is muted by main to avoid console output.
     BatchImportScreen screen;
-    screen.SetDataProvider([common_context]() {
+    screen.SetDataProvider([common_context] -> BatchViewModel {
       std::scoped_lock lock(common_context->mutex);
       return common_context->state;
     });
@@ -1784,7 +1797,7 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
   } else {
     std::unique_lock lock(common_context->mutex);
     common_context->completed_cv.wait(
-      lock, [&]() { return common_context->completed; });
+      lock, [&] -> bool { return common_context->completed; });
   }
 
   std::optional<std::error_code> deferred_error;
@@ -1813,56 +1826,69 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
       ordered_json jobs_json = ordered_json::array();
 
       for (size_t index = 0; index < jobs.size(); ++index) {
-        const auto& job = jobs[index];
-        const auto& report = common_context->reports[index];
+        const auto& job = jobs.at(index);
+        const auto& report = common_context->reports.at(index);
 
         const auto job_type = job.job_type.empty()
           ? ResolveReportJobType(job.request)
           : job.job_type;
 
         ordered_json job_json = ordered_json::object();
-        job_json["index"] = DisplayJobNumber(index);
-        job_json["type"] = job_type;
-        job_json["work_items"] = BuildWorkItemsJson(
-          progress_traces[index], job_type, job.request.source_path.string());
+        job_json.update(
+          { { "index", DisplayJobNumber(index) }, { "type", job_type },
+            { "work_items",
+              BuildWorkItemsJson(progress_traces.at(index), job_type,
+                job.request.source_path.string()) } });
         if (report.has_value()) {
           const auto& report_value = *report;
           total_io_ms += ComputeIoMillis(report_value.telemetry);
           total_cpu_ms += ComputeCpuMillis(report_value.telemetry);
-          job_json["status"] = std::string(JobStatusFromReport(report_value));
-          job_json["outputs"] = BuildOutputsJson(report_value.outputs);
-          job_json["stats"] = BuildStatsJson(report_value.telemetry);
-          job_json["diagnostics"]
-            = BuildDiagnosticsJson(report_value.diagnostics);
+          job_json.update(
+            { { "status", std::string(JobStatusFromReport(report_value)) } });
+          job_json.update(
+            { { "outputs", BuildOutputsJson(report_value.outputs) } });
+          if (report_value.success
+            && !report_value.material_slot_provenance_json.empty()) {
+            job_json.update({ { "material_slot_provenance",
+              ordered_json::parse(
+                report_value.material_slot_provenance_json) } });
+          }
+          job_json.update(
+            { { "stats", BuildStatsJson(report_value.telemetry) } });
+          job_json.update({ { "diagnostics",
+            BuildDiagnosticsJson(report_value.diagnostics) } });
         } else {
-          job_json["status"] = "not_submitted";
-          job_json["outputs"] = ordered_json::array();
-          job_json["stats"] = BuildEmptyStatsJson();
-          job_json["diagnostics"] = ordered_json::array();
+          job_json.update({ { "status", "not_submitted" },
+            { "outputs", ordered_json::array() },
+            { "stats", BuildEmptyStatsJson() },
+            { "diagnostics", ordered_json::array() } });
         }
         jobs_json.push_back(std::move(job_json));
       }
 
       ordered_json payload = ordered_json::object();
-      payload["report_version"] = std::string(kReportVersion);
-      payload["session"] = {
-        { "id", MakeSessionId(session_started) },
-        { "started_utc", FormatUtcTimestamp(session_started) },
-        { "ended_utc", FormatUtcTimestamp(session_ended) },
-        { "tool_version", std::string(OXYGEN_IMPORT_TOOL_VERSION) },
-        { "command_line", std::string(global_options_->command_line) },
-        { "cooked_root", cooked_root->string() },
-      };
-      payload["summary"] = {
-        { "jobs_total", jobs.size() },
-        { "jobs_succeeded", counts.succeeded },
-        { "jobs_failed", counts.failed },
-        { "jobs_skipped", counts.skipped },
-        { "time_ms_total", elapsed_ms },
-        { "time_ms_io", total_io_ms },
-        { "time_ms_cpu", total_cpu_ms },
-      };
-      payload["jobs"] = std::move(jobs_json);
+      payload.update({ { "report_version", std::string(kReportVersion) },
+        { "session",
+          {
+            { "id", MakeSessionId(session_started) },
+            { "started_utc", FormatUtcTimestamp(session_started) },
+            { "ended_utc", FormatUtcTimestamp(session_ended) },
+            { "tool_version", std::string(OXYGEN_IMPORT_TOOL_VERSION) },
+            { "command_line", std::string(global_options_->command_line) },
+            { "cooked_root", cooked_root->string() },
+          } },
+        { "summary",
+          {
+            { "jobs_total", jobs.size() },
+            { "jobs_succeeded", counts.succeeded },
+            { "jobs_failed", counts.failed },
+            { "jobs_skipped", counts.skipped },
+            { "validation_errors", validation_failures },
+            { "time_ms_total", elapsed_ms },
+            { "time_ms_io", total_io_ms },
+            { "time_ms_cpu", total_cpu_ms },
+          } },
+        { "jobs", std::move(jobs_json) } });
 
       if (!WriteJsonReport(payload, *resolved_path, std::cerr)) {
         deferred_error = std::make_error_code(std::errc::io_error);
@@ -1873,7 +1899,7 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
 
   if (quiet) {
     for (size_t index = 0; index < jobs.size(); ++index) {
-      const auto& report = common_context->reports[index];
+      const auto& report = common_context->reports.at(index);
       if (!report.has_value()) {
         continue;
       }
@@ -1900,12 +1926,12 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
           .count();
     writer->Info(
       fmt::format("Summary: jobs={} succeeded={} failed={} skipped={} "
-                  "total_time_ms={}",
+                  "validation_errors={} total_time_ms={}",
         jobs.size(), counts.succeeded, counts.failed, counts.skipped,
-        elapsed_ms));
+        validation_failures, elapsed_ms));
 
     for (size_t index = 0; index < jobs.size(); ++index) {
-      const auto& report = common_context->reports[index];
+      const auto& report = common_context->reports.at(index);
       if (!report.has_value()) {
         writer->Info(
           fmt::format("Job {}: not_submitted", DisplayJobNumber(index)));
@@ -1939,6 +1965,12 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
 
   if (deferred_error.has_value()) {
     return std::unexpected(*deferred_error);
+  }
+
+  if (validation_failures > 0) {
+    return std::unexpected(
+      std::make_error_code(unsupported_seen ? std::errc::not_supported
+                                            : std::errc::invalid_argument));
   }
 
   if (common_context->exit_code != 0) {

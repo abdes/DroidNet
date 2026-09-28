@@ -4,24 +4,36 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Data/PhysicsSceneAsset.h>
-
+#include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <memory>
+#include <span>
 #include <stdexcept>
+#include <utility>
+#include <vector>
+
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Data/Asset.h>
+#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/PakFormat_physics.h>
+#include <Oxygen/Data/PhysicsSceneAsset.h>
+#include <Oxygen/Data/SourceKey.h>
 
 namespace oxygen::data {
 
 PhysicsSceneAsset::PhysicsSceneAsset(
-  AssetKey key, std::span<const std::byte> data)
-  : Asset(key)
+  AssetKey key, std::span<const std::byte> data, SourceKey source_key)
+  : Asset(key, source_key)
   , data_(data)
 {
   ParseAndValidate();
 }
 
-PhysicsSceneAsset::PhysicsSceneAsset(AssetKey key, std::vector<std::byte> data)
-  : Asset(key)
+PhysicsSceneAsset::PhysicsSceneAsset(
+  AssetKey key, std::vector<std::byte> data, SourceKey source_key)
+  : Asset(key, source_key)
   , owned_data_(std::make_shared<std::vector<std::byte>>(std::move(data)))
   , data_(owned_data_->data(), owned_data_->size())
 {
@@ -50,9 +62,9 @@ auto PhysicsSceneAsset::ParseAndValidate() -> void
   }
 
   auto range_ok
-    = [](const size_t offset, const size_t size, const size_t total) {
-        return offset <= total && size <= (total - offset);
-      };
+    = [](const size_t offset, const size_t size, const size_t total) -> bool {
+    return offset <= total && size <= (total - offset);
+  };
 
   binding_tables_.clear();
 
@@ -163,10 +175,12 @@ auto PhysicsSceneAsset::ParseAndValidate() -> void
       continue;
     }
 
-    binding_tables_.push_back({ .type = entry.binding_type,
+    binding_tables_.push_back({
+      .type = entry.binding_type,
       .offset = entry.table.offset,
       .count = entry.table.count,
-      .entry_size = entry.table.entry_size });
+      .entry_size = entry.table.entry_size,
+    });
   }
 }
 

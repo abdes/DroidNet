@@ -8,17 +8,36 @@
 #include <array>
 #include <cassert>
 #include <cctype>
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
 #include <fstream>
+#include <ios>
+#include <memory>
 #include <optional>
 #include <ranges>
+#include <span>
+#include <string>
+#include <string_view>
+#include <system_error>
 #include <utility>
+#include <vector>
 
+#include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Result.h>
+#include <Oxygen/Base/Span.h>
 #include <Oxygen/Cooker/Import/Internal/ImageDecode.h>
 #include <Oxygen/Cooker/Import/Internal/TextureCooker.h>
+#include <Oxygen/Cooker/Import/ScratchImage.h>
+#include <Oxygen/Cooker/Import/TextureImportError.h>
+#include <Oxygen/Cooker/Import/TextureImportPresets.h>
+#include <Oxygen/Cooker/Import/TextureImportTypes.h>
 #include <Oxygen/Cooker/Import/TextureImporter.h>
-
 #include <Oxygen/Cooker/Import/TextureSourceAssembly.h>
+#include <Oxygen/Core/Types/ColorSpace.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/TextureType.h>
 
 namespace oxygen::content::import {
 
@@ -47,9 +66,9 @@ namespace {
     const auto start = str.size() - suffix.size();
     for (size_t i = 0; i < suffix.size(); ++i) {
       const auto ch_str = static_cast<char>(
-        std::tolower(static_cast<unsigned char>(str[start + i])));
+        std::tolower(static_cast<unsigned char>(str.at(start + i))));
       const auto ch_suf = static_cast<char>(
-        std::tolower(static_cast<unsigned char>(suffix[i])));
+        std::tolower(static_cast<unsigned char>(suffix.at(i))));
       if (ch_str != ch_suf) {
         return false;
       }
@@ -71,12 +90,13 @@ namespace {
     -> Result<std::vector<std::byte>, TextureImportError>
   {
     std::error_code ec;
-    if (!std::filesystem::exists(path, ec)) {
+    if (!std::filesystem::exists(base::ToNativePath(path), ec)) {
       LOG_F(WARNING, "File not found: {}", path.string());
       return Err(TextureImportError::kFileNotFound);
     }
 
-    std::ifstream file(path, std::ios::binary | std::ios::ate);
+    std::ifstream file(
+      base::ToNativePath(path), std::ios::binary | std::ios::ate);
     if (!file.is_open()) {
       LOG_F(WARNING, "Failed to open file: {}", path.string());
       return Err(TextureImportError::kFileReadFailed);
@@ -349,7 +369,7 @@ auto LoadTextures(std::span<const std::filesystem::path> paths)
   images.reserve(paths.size());
 
   for (size_t i = 0; i < paths.size(); ++i) {
-    const auto& path = paths[i];
+    const auto& path = oxygen::base::CheckedAt(paths, i);
     auto result = LoadTexture(path);
     if (!result) {
       LOG_F(WARNING, "Failed to load image {} of {}: {}", i + 1, paths.size(),
@@ -622,9 +642,9 @@ namespace {
     -> Result<TextureImportResult, TextureImportError>
   {
     // Validate all faces have matching dimensions
-    const auto& first_meta = faces[0].Meta();
+    const auto& first_meta = faces.at(0).Meta();
     for (size_t i = 1; i < kCubeFaceCount; ++i) {
-      const auto& meta = faces[i].Meta();
+      const auto& meta = faces.at(i).Meta();
       if (meta.width != first_meta.width || meta.height != first_meta.height) {
         LOG_F(WARNING,
           "Cube face {} has different dimensions "
@@ -689,20 +709,20 @@ auto ImportCubeMap(
   // Load all face images
   std::array<ScratchImage, kCubeFaceCount> faces;
   for (size_t i = 0; i < kCubeFaceCount; ++i) {
-    auto result = LoadTexture(face_paths[i]);
+    auto result = LoadTexture(oxygen::base::CheckedAt(face_paths, i));
     if (!result) {
-      LOG_F(
-        WARNING, "Failed to load cube face {}: {}", i, face_paths[i].string());
+      LOG_F(WARNING, "Failed to load cube face {}: {}", i,
+        oxygen::base::CheckedAt(face_paths, i).string());
       return Err(result.error());
     }
-    faces[i] = std::move(*result);
+    faces.at(i) = std::move(*result);
   }
 
   // Create descriptor from preset
   TextureImportDesc desc = MakeDescFromPreset(preset);
 
-  auto import_result
-    = ImportCubeMapFromFacesImpl(std::move(faces), desc, face_paths[0], policy);
+  auto import_result = ImportCubeMapFromFacesImpl(
+    std::move(faces), desc, oxygen::base::CheckedAt(face_paths, 0), policy);
   if (import_result) {
     import_result->applied_preset = preset;
   }
@@ -717,17 +737,17 @@ auto ImportCubeMap(
   // Load all face images
   std::array<ScratchImage, kCubeFaceCount> faces;
   for (size_t i = 0; i < kCubeFaceCount; ++i) {
-    auto result = LoadTexture(face_paths[i]);
+    auto result = LoadTexture(oxygen::base::CheckedAt(face_paths, i));
     if (!result) {
-      LOG_F(
-        WARNING, "Failed to load cube face {}: {}", i, face_paths[i].string());
+      LOG_F(WARNING, "Failed to load cube face {}: {}", i,
+        oxygen::base::CheckedAt(face_paths, i).string());
       return Err(result.error());
     }
-    faces[i] = std::move(*result);
+    faces.at(i) = std::move(*result);
   }
 
   return ImportCubeMapFromFacesImpl(
-    std::move(faces), desc, face_paths[0], policy);
+    std::move(faces), desc, oxygen::base::CheckedAt(face_paths, 0), policy);
 }
 
 auto ImportCubeMap(const std::filesystem::path& base_path, TexturePreset preset,
@@ -797,8 +817,8 @@ auto ImportCubeMapFromEquirect(const std::filesystem::path& equirect_path,
     const size_t pixel_count = meta.width * meta.height;
     for (size_t i = 0; i < pixel_count; ++i) {
       for (size_t c = 0; c < 4; ++c) {
-        const uint8_t byte_val = static_cast<uint8_t>(src_ptr[i * 4 + c]);
-        dst_ptr[i * 4 + c] = static_cast<float>(byte_val) / 255.0F;
+        const uint8_t byte_val = static_cast<uint8_t>(src_ptr[(i * 4) + c]);
+        dst_ptr[(i * 4) + c] = static_cast<float>(byte_val) / 255.0F;
       }
     }
 
@@ -1118,9 +1138,9 @@ namespace {
       !layers.empty(), "ImportTextureArrayImpl: layers must not be empty");
 
     // Validate dimensions match
-    const auto& first_meta = layers[0].Meta();
+    const auto& first_meta = layers.at(0).Meta();
     for (size_t i = 1; i < layers.size(); ++i) {
-      const auto& meta = layers[i].Meta();
+      const auto& meta = layers.at(i).Meta();
       if (meta.width != first_meta.width || meta.height != first_meta.height) {
         LOG_F(WARNING,
           "Array layer {} has different dimensions "
@@ -1157,7 +1177,7 @@ namespace {
 
     // Copy each layer into the array
     for (size_t i = 0; i < layers.size(); ++i) {
-      const auto src_view = layers[i].GetImage(0, 0);
+      const auto src_view = layers.at(i).GetImage(0, 0);
       auto dst_pixels
         = array_image.GetMutablePixels(static_cast<uint16_t>(i), 0);
 
@@ -1215,10 +1235,10 @@ auto ImportTextureArray(std::span<const std::filesystem::path> layer_paths,
   layers.reserve(layer_paths.size());
 
   for (size_t i = 0; i < layer_paths.size(); ++i) {
-    auto result = LoadTexture(layer_paths[i]);
+    auto result = LoadTexture(oxygen::base::CheckedAt(layer_paths, i));
     if (!result) {
       LOG_F(WARNING, "Failed to load array layer {}: {}", i,
-        layer_paths[i].string());
+        oxygen::base::CheckedAt(layer_paths, i).string());
       return Err(result.error());
     }
     layers.push_back(std::move(*result));
@@ -1227,8 +1247,8 @@ auto ImportTextureArray(std::span<const std::filesystem::path> layer_paths,
   // Create descriptor from preset
   TextureImportDesc desc = MakeDescFromPreset(preset);
 
-  auto import_result
-    = ImportTextureArrayImpl(std::move(layers), desc, layer_paths[0], policy);
+  auto import_result = ImportTextureArrayImpl(
+    std::move(layers), desc, oxygen::base::CheckedAt(layer_paths, 0), policy);
   if (import_result) {
     import_result->applied_preset = preset;
   }
@@ -1249,17 +1269,17 @@ auto ImportTextureArray(std::span<const std::filesystem::path> layer_paths,
   layers.reserve(layer_paths.size());
 
   for (size_t i = 0; i < layer_paths.size(); ++i) {
-    auto result = LoadTexture(layer_paths[i]);
+    auto result = LoadTexture(oxygen::base::CheckedAt(layer_paths, i));
     if (!result) {
       LOG_F(WARNING, "Failed to load array layer {}: {}", i,
-        layer_paths[i].string());
+        oxygen::base::CheckedAt(layer_paths, i).string());
       return Err(result.error());
     }
     layers.push_back(std::move(*result));
   }
 
   return ImportTextureArrayImpl(
-    std::move(layers), desc, layer_paths[0], policy);
+    std::move(layers), desc, oxygen::base::CheckedAt(layer_paths, 0), policy);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1278,9 +1298,9 @@ namespace {
     DCHECK_F(!slices.empty(), "ImportTexture3DImpl: slices must not be empty");
 
     // Validate dimensions match
-    const auto& first_meta = slices[0].Meta();
+    const auto& first_meta = slices.at(0).Meta();
     for (size_t i = 1; i < slices.size(); ++i) {
-      const auto& meta = slices[i].Meta();
+      const auto& meta = slices.at(i).Meta();
       if (meta.width != first_meta.width || meta.height != first_meta.height) {
         LOG_F(WARNING,
           "3D slice {} has different dimensions "
@@ -1322,13 +1342,13 @@ namespace {
       * (first_meta.format == Format::kRGBA32Float ? 16 : 4);
 
     for (size_t i = 0; i < slices.size(); ++i) {
-      const auto src_view = slices[i].GetImage(0, 0);
+      const auto src_view = slices.at(i).GetImage(0, 0);
       if (src_view.pixels.size() != slice_size) {
         LOG_F(WARNING, "Pixel size mismatch for 3D slice {}", i);
         return Err(TextureImportError::kDimensionMismatch);
       }
 
-      std::ranges::copy(src_view.pixels, dst_pixels.data() + i * slice_size);
+      std::ranges::copy(src_view.pixels, dst_pixels.data() + (i * slice_size));
     }
 
     // Create resolved descriptor
@@ -1377,10 +1397,10 @@ auto ImportTexture3D(std::span<const std::filesystem::path> slice_paths,
   slices.reserve(slice_paths.size());
 
   for (size_t i = 0; i < slice_paths.size(); ++i) {
-    auto result = LoadTexture(slice_paths[i]);
+    auto result = LoadTexture(oxygen::base::CheckedAt(slice_paths, i));
     if (!result) {
-      LOG_F(
-        WARNING, "Failed to load 3D slice {}: {}", i, slice_paths[i].string());
+      LOG_F(WARNING, "Failed to load 3D slice {}: {}", i,
+        oxygen::base::CheckedAt(slice_paths, i).string());
       return Err(result.error());
     }
     slices.push_back(std::move(*result));
@@ -1389,8 +1409,8 @@ auto ImportTexture3D(std::span<const std::filesystem::path> slice_paths,
   // Create descriptor from preset
   TextureImportDesc desc = MakeDescFromPreset(preset);
 
-  auto import_result
-    = ImportTexture3DImpl(std::move(slices), desc, slice_paths[0], policy);
+  auto import_result = ImportTexture3DImpl(
+    std::move(slices), desc, oxygen::base::CheckedAt(slice_paths, 0), policy);
   if (import_result) {
     import_result->applied_preset = preset;
   }
@@ -1411,16 +1431,17 @@ auto ImportTexture3D(std::span<const std::filesystem::path> slice_paths,
   slices.reserve(slice_paths.size());
 
   for (size_t i = 0; i < slice_paths.size(); ++i) {
-    auto result = LoadTexture(slice_paths[i]);
+    auto result = LoadTexture(oxygen::base::CheckedAt(slice_paths, i));
     if (!result) {
-      LOG_F(
-        WARNING, "Failed to load 3D slice {}: {}", i, slice_paths[i].string());
+      LOG_F(WARNING, "Failed to load 3D slice {}: {}", i,
+        oxygen::base::CheckedAt(slice_paths, i).string());
       return Err(result.error());
     }
     slices.push_back(std::move(*result));
   }
 
-  return ImportTexture3DImpl(std::move(slices), desc, slice_paths[0], policy);
+  return ImportTexture3DImpl(
+    std::move(slices), desc, oxygen::base::CheckedAt(slice_paths, 0), policy);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1611,7 +1632,7 @@ auto TextureImportBuilder::FromMemory(
 auto TextureImportBuilder::AddCubeFace(
   CubeFace face, std::filesystem::path path) -> TextureImportBuilder&
 {
-  impl_->cube_faces[static_cast<size_t>(face)] = std::move(path);
+  impl_->cube_faces.at(static_cast<size_t>(face)) = std::move(path);
   return *this;
 }
 
@@ -1772,7 +1793,7 @@ auto TextureImportBuilder::Build(const ITexturePackingPolicy& policy)
     bool all_faces_present = true;
     size_t missing_face = 0;
     for (size_t i = 0; i < kCubeFaceCount; ++i) {
-      if (!impl_->cube_faces[i]) {
+      if (!impl_->cube_faces.at(i)) {
         all_faces_present = false;
         missing_face = i;
         break;
@@ -1787,14 +1808,21 @@ auto TextureImportBuilder::Build(const ITexturePackingPolicy& policy)
 
     // Load all faces
     std::array<ScratchImage, kCubeFaceCount> faces;
+    std::string first_face_source;
     for (size_t i = 0; i < kCubeFaceCount; ++i) {
-      auto result = LoadTexture(*impl_->cube_faces[i]);
+      const auto& face = impl_->cube_faces.at(i);
+      if (!face) {
+        return Err(TextureImportError::kArrayLayerCountInvalid);
+      }
+      if (i == 0) {
+        first_face_source = face->string();
+      }
+      auto result = LoadTexture(*face);
       if (!result) {
-        LOG_F(WARNING, "Failed to load cube face {}: {}", i,
-          impl_->cube_faces[i]->string());
+        LOG_F(WARNING, "Failed to load cube face {}: {}", i, face->string());
         return Err(result.error());
       }
-      faces[i] = std::move(*result);
+      faces.at(i) = std::move(*result);
     }
 
     // Assemble
@@ -1808,7 +1836,7 @@ auto TextureImportBuilder::Build(const ITexturePackingPolicy& policy)
     desc.width = cube->Meta().width;
     desc.height = cube->Meta().height;
     desc.array_layers = kCubeFaceCount;
-    desc.source_id = impl_->cube_faces[0]->string();
+    desc.source_id = std::move(first_face_source);
 
     auto cooked = CookTexture(std::move(*cube), desc, policy);
     if (!cooked) {
@@ -1827,13 +1855,13 @@ auto TextureImportBuilder::Build(const ITexturePackingPolicy& policy)
     && !impl_->array_layers.empty()) {
     // Sort layers by index
     std::ranges::sort(impl_->array_layers,
-      [](const auto& a, const auto& b) { return a.first < b.first; });
+      [](const auto& a, const auto& b) -> auto { return a.first < b.first; });
 
     // Check for gaps in layer indices
     for (size_t i = 0; i < impl_->array_layers.size(); ++i) {
-      if (impl_->array_layers[i].first != static_cast<uint16_t>(i)) {
+      if (impl_->array_layers.at(i).first != static_cast<uint16_t>(i)) {
         LOG_F(WARNING, "Array layer indices have gaps (expected {}, got {})", i,
-          impl_->array_layers[i].first);
+          impl_->array_layers.at(i).first);
       }
     }
 
@@ -1855,13 +1883,13 @@ auto TextureImportBuilder::Build(const ITexturePackingPolicy& policy)
     && !impl_->depth_slices.empty()) {
     // Sort slices by index
     std::ranges::sort(impl_->depth_slices,
-      [](const auto& a, const auto& b) { return a.first < b.first; });
+      [](const auto& a, const auto& b) -> auto { return a.first < b.first; });
 
     // Check for gaps in slice indices
     for (size_t i = 0; i < impl_->depth_slices.size(); ++i) {
-      if (impl_->depth_slices[i].first != static_cast<uint16_t>(i)) {
+      if (impl_->depth_slices.at(i).first != static_cast<uint16_t>(i)) {
         LOG_F(WARNING, "Depth slice indices have gaps (expected {}, got {})", i,
-          impl_->depth_slices[i].first);
+          impl_->depth_slices.at(i).first);
       }
     }
 

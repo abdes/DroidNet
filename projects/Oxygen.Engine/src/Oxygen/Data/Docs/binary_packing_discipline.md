@@ -1,10 +1,28 @@
 # Binary Packing Discipline for PakFormat Structures
 
+Read [current rules](#mandatory-rules) and the separately planned
+[M08.F1 reference format](#planned-descriptor-local-references-m08f1).
+
 ## Mandatory Rules
 
 All `PakFormat_*.h` structures MUST follow these rules.
 
 Scope: this document defines binary format layout rules only.
+
+### Material-slot records
+
+Geometry version 2 stores a non-nil 16-byte `MaterialSlotId` in each
+`SubMeshDesc`. Repeated IDs explicitly bind one semantic slot across LODs;
+equal labels or default materials never establish identity. The loader builds
+and validates the geometry-owned inventory once, including its canonical layout
+revision. Slot provenance and source-layout witnesses are import data, not
+runtime payloads.
+
+Scene version 9 stores material assignments in a separate component table:
+node index, SlotId, material asset key and the last resolved layout revision.
+Renderable records contain geometry and visibility only. An absent assignment
+uses each binding's geometry default. Readers reject retired format versions;
+maintained source content is migrated and recooked.
 
 ### Rule 1: Use `#pragma pack(1)`
 
@@ -98,3 +116,27 @@ When adding/modifying PakFormat structures:
 - [ ] Reserve fields zero-initialized `= {}`
 - [ ] Union arms padded to equal size
 - [ ] Fields ordered by descending size
+
+## Planned descriptor-local references (M08.F1)
+
+Status: planned, after M08.1.9. The separate
+[format milestone](../../../../../../design/editor/plan/ED-M08.F1-descriptor-local-references.md)
+owns delivery and cutover. This is not the current wire layout.
+
+Resource-bearing descriptor fields use a uint32 local reference index. UINT32_MAX
+means absent; an explicit fallback binding remains distinct. Each asset directory
+entry locates its binding table. A binding identifies an explicit uint8 ResourceKind
+and uint32 container resource index; native validation checks kind, count, extent
+and placement before decode. Native producers also emit complete direct asset
+reference metadata. Stable AssetKey values remain stable across packaging.
+
+Data owns immutable decoded binding metadata. Content resolves bindings into runtime
+identities once; shaders and rendering hot paths do not perform a new table lookup.
+Do not use process-dependent TypeId values in the wire contract or introduce a
+reflection framework. F1.1 enumerates every supported reference-bearing field and
+separates hard runtime dependencies from non-owning logical references.
+
+Scene script-slot/parameter arrays move into the scene descriptor with relative
+offsets. Packaging can then preserve descriptor bytes and digests while moving
+resource bindings. All affected format versions change together; update native
+producers/readers, Inspector and PakGen, recook content and reject prior versions.

@@ -7,11 +7,16 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <optional>
+#include <stdexcept>
 #include <unordered_map>
 #include <utility>
 
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/NamedType.h>
 #include <Oxygen/Composition/TypeSystem.h>
+#include <Oxygen/Content/OperationCancelledException.h>
 #include <Oxygen/Content/ResidencyPolicy.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/ParkingLot.h>
@@ -21,6 +26,13 @@ namespace oxygen::content::internal {
 
 class InFlightOperationTable final {
 public:
+  InFlightOperationTable() = default;
+  ~InFlightOperationTable() { Close(); }
+  OXYGEN_MAKE_NON_COPYABLE(InFlightOperationTable)
+  OXYGEN_MAKE_NON_MOVABLE(InFlightOperationTable)
+
+  using OperationId
+    = NamedType<uint64_t, struct InFlightOperationIdTag, Comparable>;
   using SharedVoidOp = co::Shared<co::Co<std::shared_ptr<void>>>;
   struct Stats final {
     uint64_t find_calls { 0 };
@@ -37,10 +49,30 @@ public:
     uint64_t sequence { 0 };
   };
 
+  auto Open() noexcept -> void { accepting_ = true; }
+  auto Close() -> void
+  {
+    accepting_ = false;
+    Clear();
+  }
+  [[nodiscard]] auto NewOperationId() -> OperationId
+  {
+    if (!accepting_) {
+      throw OperationCancelledException("Asset loader is stopped");
+    }
+    if (next_operation_id_ == 0U) {
+      throw std::overflow_error("In-flight operation identities exhausted");
+    }
+    return OperationId { next_operation_id_++ };
+  }
+
   auto Clear() -> void
   {
     ++stats_.clear_calls;
-    table_.clear();
+    // Coroutine destruction can re-enter Erase through its cleanup guard.
+    while (!table_.empty()) {
+      [[maybe_unused]] auto retired = table_.extract(table_.begin());
+    }
     idle_.UnParkAll();
   }
   auto Find(TypeId type_id, uint64_t hash_key, const RequestMeta& request)
@@ -72,26 +104,46 @@ public:
     }
     return it->second.request;
   }
-  auto InsertOrAssign(TypeId type_id, uint64_t hash_key, SharedVoidOp op,
-    const RequestMeta& request) -> void
+  auto Insert(TypeId type_id, uint64_t hash_key, OperationId id,
+    SharedVoidOp op, const RequestMeta& request) -> void
   {
+    if (!accepting_) {
+      throw OperationCancelledException("Asset loader is stopped");
+    }
+    const auto [bucket, created] = table_.try_emplace(type_id);
+    try {
+      const auto inserted
+        = bucket->second
+            .try_emplace(hash_key,
+              Entry { .op = std::move(op), .request = request, .id = id })
+            .second;
+      if (!inserted) {
+        throw std::logic_error("An in-flight operation already owns this key");
+      }
+    } catch (...) {
+      if (created && bucket->second.empty()) {
+        table_.erase(bucket);
+      }
+      throw;
+    }
     ++stats_.insert_calls;
-    table_[type_id].insert_or_assign(hash_key,
-      Entry {
-        .op = std::move(op),
-        .request = request,
-      });
   }
-  auto Erase(TypeId type_id, uint64_t hash_key) -> void
+  auto Erase(TypeId type_id, uint64_t hash_key, OperationId id) -> void
   {
     ++stats_.erase_calls;
     const auto type_it = table_.find(type_id);
     if (type_it == table_.end()) {
       return;
     }
-    type_it->second.erase(hash_key);
-    if (type_it->second.empty()) {
-      table_.erase(type_it);
+    const auto entry = type_it->second.find(hash_key);
+    if (entry == type_it->second.end() || entry->second.id != id) {
+      return;
+    }
+    {
+      [[maybe_unused]] auto retired = type_it->second.extract(entry);
+      if (type_it->second.empty()) {
+        table_.erase(type_it);
+      }
     }
     if (table_.empty()) {
       idle_.UnParkAll();
@@ -123,6 +175,7 @@ private:
   struct Entry final {
     SharedVoidOp op {};
     RequestMeta request {};
+    OperationId id { 0U };
   };
 
   static auto MergeRequestMeta(
@@ -144,6 +197,8 @@ private:
     return existing.sequence <= incoming.sequence ? existing : incoming;
   }
   std::unordered_map<TypeId, std::unordered_map<uint64_t, Entry>> table_;
+  uint64_t next_operation_id_ { 1U };
+  bool accepting_ { true };
   Stats stats_ {};
   co::ParkingLot idle_;
 };

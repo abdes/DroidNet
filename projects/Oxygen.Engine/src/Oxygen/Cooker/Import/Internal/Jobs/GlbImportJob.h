@@ -60,6 +60,8 @@ private:
   };
 
   [[nodiscard]] auto ExecuteAsync() -> co::Co<ImportReport> override;
+  [[nodiscard]] auto ExecuteSessionAsync(ImportSession& session)
+    -> co::Co<ImportReport>;
 
   [[nodiscard]] auto ParseAsset(ImportSession& session)
     -> co::Co<ParsedGlbAsset>;

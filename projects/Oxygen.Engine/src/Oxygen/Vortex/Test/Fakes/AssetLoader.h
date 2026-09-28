@@ -87,8 +87,20 @@ public:
     on_complete(nullptr);
   }
 
+  void StartLoadMaterialAsset(const data::AssetKey&, data::SourceKey,
+    content::LoadRequest, MaterialCallback on_complete) override
+  {
+    on_complete(nullptr);
+  }
+
   void StartLoadMaterialAsset(
     const data::AssetKey& /*key*/, MaterialCallback on_complete) override
+  {
+    on_complete(nullptr);
+  }
+
+  void StartLoadGeometryAsset(const data::AssetKey&, data::SourceKey,
+    content::LoadRequest, GeometryCallback on_complete) override
   {
     on_complete(nullptr);
   }
@@ -99,14 +111,32 @@ public:
     on_complete(nullptr);
   }
 
+  void StartLoadScene(const data::AssetKey&, data::SourceKey,
+    content::LoadRequest, SceneCallback on_complete) override
+  {
+    on_complete(nullptr);
+  }
+
   void StartLoadScene(
     const data::AssetKey& /*key*/, SceneCallback on_complete) override
   {
     on_complete(nullptr);
   }
 
+  void StartLoadScriptAsset(const data::AssetKey&, data::SourceKey,
+    content::LoadRequest, ScriptCallback on_complete) override
+  {
+    on_complete(nullptr);
+  }
+
   void StartLoadScriptAsset(
     const data::AssetKey& /*key*/, ScriptCallback on_complete) override
+  {
+    on_complete(nullptr);
+  }
+
+  void StartLoadPhysicsSceneAsset(const data::AssetKey&, data::SourceKey,
+    content::LoadRequest, PhysicsSceneCallback on_complete) override
   {
     on_complete(nullptr);
   }
@@ -128,6 +158,16 @@ public:
   auto AddLooseCookedRoot(const std::filesystem::path& /*path*/)
     -> void override
   {
+  }
+
+  auto MountLooseCookedGeneration(const std::filesystem::path&,
+    std::optional<data::SourceKey>) -> data::SourceKey override
+  {
+    throw std::logic_error("GPU test loader does not mount disk generations");
+  }
+  auto RetireLooseCookedGeneration(data::SourceKey) -> bool override
+  {
+    return false;
   }
 
   auto ClearMounts() -> void override { }
@@ -205,6 +245,13 @@ public:
   }
 
   [[nodiscard]] auto GetMaterialAsset(
+    const data::AssetKey&, const data::Asset&) const noexcept
+    -> std::shared_ptr<data::MaterialAsset> override
+  {
+    return nullptr;
+  }
+
+  [[nodiscard]] auto GetMaterialAsset(
     const data::AssetKey& /*key*/) const noexcept
     -> std::shared_ptr<data::MaterialAsset> override
   {
@@ -212,8 +259,22 @@ public:
   }
 
   [[nodiscard]] auto GetGeometryAsset(
+    const data::AssetKey&, const data::Asset&) const noexcept
+    -> std::shared_ptr<data::GeometryAsset> override
+  {
+    return nullptr;
+  }
+
+  [[nodiscard]] auto GetGeometryAsset(
     const data::AssetKey& /*key*/) const noexcept
     -> std::shared_ptr<data::GeometryAsset> override
+  {
+    return nullptr;
+  }
+
+  [[nodiscard]] auto GetScriptAsset(
+    const data::AssetKey&, const data::Asset&) const noexcept
+    -> std::shared_ptr<data::ScriptAsset> override
   {
     return nullptr;
   }
@@ -253,7 +314,7 @@ public:
   }
 
   [[nodiscard]] auto MakeTextureResourceKeyForAsset(
-    const data::AssetKey& /*context_asset_key*/,
+    const data::Asset& /*context_asset*/,
     data::pak::core::ResourceIndexT /*resource_index*/) const noexcept
     -> std::optional<content::ResourceKey> override
   {
@@ -261,7 +322,7 @@ public:
   }
 
   [[nodiscard]] auto MakeScriptResourceKeyForAsset(
-    const data::AssetKey& /*context_asset_key*/,
+    const data::Asset& /*context_asset*/,
     data::pak::core::ResourceIndexT /*resource_index*/) const noexcept
     -> std::optional<content::ResourceKey> override
   {
@@ -269,7 +330,7 @@ public:
   }
 
   [[nodiscard]] auto ReadScriptResourceForAsset(
-    const data::AssetKey& /*context_asset_key*/,
+    const data::Asset& /*context_asset*/,
     data::pak::core::ResourceIndexT /*resource_index*/) const
     -> std::shared_ptr<const data::ScriptResource> override
   {
@@ -304,7 +365,7 @@ public:
   }
 
   [[nodiscard]] auto MakePhysicsResourceKeyForAsset(
-    const data::AssetKey& /*context_asset_key*/,
+    const data::Asset& /*context_asset*/,
     data::pak::core::ResourceIndexT /*resource_index*/) const noexcept
     -> std::optional<content::ResourceKey> override
   {
@@ -312,7 +373,7 @@ public:
   }
 
   [[nodiscard]] auto MakePhysicsResourceKeyForAsset(
-    const data::AssetKey& /*context_asset_key*/,
+    const data::Asset& /*context_asset*/,
     const data::AssetKey& /*resource_asset_key*/) const noexcept
     -> std::optional<content::ResourceKey> override
   {
@@ -320,7 +381,7 @@ public:
   }
 
   [[nodiscard]] auto ReadCollisionShapeAssetDescForAsset(
-    const data::AssetKey& /*context_asset_key*/,
+    const data::Asset& /*context_asset*/,
     const data::AssetKey& /*shape_asset_key*/) const
     -> std::optional<data::pak::physics::CollisionShapeAssetDesc> override
   {
@@ -328,11 +389,18 @@ public:
   }
 
   [[nodiscard]] auto ReadPhysicsMaterialAssetDescForAsset(
-    const data::AssetKey& /*context_asset_key*/,
+    const data::Asset& /*context_asset*/,
     const data::AssetKey& /*material_asset_key*/) const
     -> std::optional<data::pak::physics::PhysicsMaterialAssetDesc> override
   {
     return std::nullopt;
+  }
+
+  [[nodiscard]] auto GetInputActionAsset(
+    const data::AssetKey&, const data::Asset&) const noexcept
+    -> std::shared_ptr<data::InputActionAsset> override
+  {
+    return nullptr;
   }
 
   [[nodiscard]] auto GetInputActionAsset(
@@ -358,7 +426,7 @@ public:
   }
 
   [[nodiscard]] auto FindPhysicsSidecarAssetKeyForScene(
-    const data::AssetKey& /*scene_key*/) const
+    const data::Asset& /*scene_asset*/) const
     -> std::optional<data::AssetKey> override
   {
     return std::nullopt;
@@ -426,6 +494,8 @@ public:
   {
     return false;
   }
+
+  auto ReleaseAsset(const data::Asset&) -> bool override { return false; }
 
   auto ReleaseAsset(const data::AssetKey& /*key*/) -> bool override
   {

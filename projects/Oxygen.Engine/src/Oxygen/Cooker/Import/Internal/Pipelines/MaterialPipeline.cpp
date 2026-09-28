@@ -6,19 +6,37 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <chrono>
-#include <limits>
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <optional>
 #include <span>
+#include <stop_token>
+#include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MaterialPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/StringUtils.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/MaterialDomain.h>
+#include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/PakFormat_render.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
+#include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Writer.h>
 
@@ -36,9 +54,9 @@ namespace {
   constexpr uint32_t kMaxShaderStages = 32;
 
   struct MaterialUvTransformDesc {
-    float uv_scale[2] = { 1.0f, 1.0f };
-    float uv_offset[2] = { 0.0f, 0.0f };
-    float uv_rotation_radians = 0.0f;
+    float uv_scale[2] = { 1.0F, 1.0F };
+    float uv_offset[2] = { 0.0F, 0.0F };
+    float uv_rotation_radians = 0.0F;
     uint8_t uv_set = 0;
   };
 
@@ -49,8 +67,8 @@ namespace {
   };
 
   struct BuildOutcome {
-    std::vector<std::byte> bytes;
-    std::vector<ImportDiagnostic> diagnostics;
+    std::vector<std::byte> bytes {};
+    std::vector<ImportDiagnostic> diagnostics {};
     bool canceled = false;
     bool has_error = false;
   };
@@ -72,9 +90,10 @@ namespace {
   [[nodiscard]] auto HasErrorDiagnostic(
     const std::vector<ImportDiagnostic>& diagnostics) -> bool
   {
-    return std::ranges::any_of(diagnostics, [](const ImportDiagnostic& diag) {
-      return diag.severity == ImportSeverity::kError;
-    });
+    return std::ranges::any_of(
+      diagnostics, [](const ImportDiagnostic& diag) -> bool {
+        return diag.severity == ImportSeverity::kError;
+      });
   }
 
   [[nodiscard]] auto MakeWarningDiagnostic(std::string code,
@@ -117,7 +136,7 @@ namespace {
     -> std::vector<ShaderRequest>
   {
     const bool alpha_test_enabled
-      = (flags & data::pak::render::kMaterialFlag_AlphaTest) != 0u;
+      = (flags & data::pak::render::kMaterialFlag_AlphaTest) != 0U;
     const auto defines = BuildDefinesString(alpha_test_enabled);
 
     std::vector<ShaderRequest> shaders;
@@ -189,7 +208,7 @@ namespace {
       }
 
       const auto stage_bit = ShaderStageBit(request.shader_type);
-      const auto stage_index = static_cast<size_t>(request.shader_type - 1u);
+      const auto stage_index = static_cast<size_t>(request.shader_type - 1U);
       if (stage_index >= seen.size()) {
         diagnostics.push_back(
           MakeErrorDiagnostic("material.shader_stage_invalid",
@@ -198,7 +217,7 @@ namespace {
         continue;
       }
 
-      if (seen[stage_index]) {
+      if (seen.at(stage_index)) {
         diagnostics.push_back(MakeErrorDiagnostic(
           "material.shader_stage_duplicate",
           "Shader type is duplicated in request list", source_id, object_path));
@@ -214,7 +233,7 @@ namespace {
         continue;
       }
 
-      seen[stage_index] = true;
+      seen.at(stage_index) = true;
       result.shader_stages |= stage_bit;
     }
 
@@ -282,7 +301,7 @@ namespace {
 
   [[nodiscard]] auto Normalize01(const float value) -> float
   {
-    return std::clamp(value, 0.0f, 1.0f);
+    return std::clamp(value, 0.0F, 1.0F);
   }
 
   [[nodiscard]] auto ResolveMaterialKey(const ImportRequest& request,
@@ -304,12 +323,11 @@ namespace {
         && domain != data::MaterialDomain::kPostProcess) {
         resolved = data::MaterialDomain::kMasked;
       }
-    } else if (alpha_mode == MaterialAlphaMode::kBlended) {
-      if (domain != data::MaterialDomain::kDecal
+    } else if ((alpha_mode == MaterialAlphaMode::kBlended)
+      && (domain != data::MaterialDomain::kDecal
         && domain != data::MaterialDomain::kUserInterface
-        && domain != data::MaterialDomain::kPostProcess) {
-        resolved = data::MaterialDomain::kAlphaBlended;
-      }
+        && domain != data::MaterialDomain::kPostProcess)) {
+      resolved = data::MaterialDomain::kAlphaBlended;
     }
 
     return resolved;
@@ -325,11 +343,11 @@ namespace {
     desc.base_color[2] = Normalize01(inputs.base_color[2]);
     desc.base_color[3] = Normalize01(inputs.base_color[3]);
 
-    desc.normal_scale = (std::max)(0.0f, inputs.normal_scale);
+    desc.normal_scale = (std::max)(0.0F, inputs.normal_scale);
 
     float roughness = inputs.roughness;
     if (inputs.roughness_as_glossiness) {
-      roughness = 1.0f - roughness;
+      roughness = 1.0F - roughness;
     }
 
     desc.metalness = data::Unorm16 { Normalize01(inputs.metalness) };
@@ -337,13 +355,24 @@ namespace {
     desc.ambient_occlusion
       = data::Unorm16 { Normalize01(inputs.ambient_occlusion) };
 
-    desc.emissive_factor[0] = data::HalfFloat { inputs.emissive_factor[0] };
-    desc.emissive_factor[1] = data::HalfFloat { inputs.emissive_factor[1] };
-    desc.emissive_factor[2] = data::HalfFloat { inputs.emissive_factor[2] };
+    if (std::ranges::any_of(
+          inputs.emissive_factor, [](const float value) -> bool {
+            return !std::isfinite(value) || value < 0.0F
+              || value > data::pak::render::kMaxMaterialEmissiveFactor;
+          })) {
+      diagnostics.push_back(
+        MakeErrorDiagnostic("material.emissive_factor_range",
+          "Emission must contain finite channels in [0,65504]", source_id,
+          object_path));
+      return;
+    }
+    desc.emissive_factor[0] = inputs.emissive_factor[0];
+    desc.emissive_factor[1] = inputs.emissive_factor[1];
+    desc.emissive_factor[2] = inputs.emissive_factor[2];
 
     float alpha_cutoff = inputs.alpha_cutoff;
     if (alpha_mode == MaterialAlphaMode::kMasked
-      && (alpha_cutoff < 0.0f || alpha_cutoff > 1.0f)) {
+      && (alpha_cutoff < 0.0F || alpha_cutoff > 1.0F)) {
       diagnostics.push_back(MakeWarningDiagnostic("material.alpha_cutoff_range",
         "Alpha cutoff outside [0,1] was clamped", source_id, object_path));
     }
@@ -354,7 +383,7 @@ namespace {
     // instructions.
     desc.alpha_cutoff = data::Unorm16 { alpha_cutoff };
 
-    desc.ior = (std::max)(1.0f, inputs.ior);
+    desc.ior = (std::max)(1.0F, inputs.ior);
     desc.specular_factor
       = data::Unorm16 { Normalize01(inputs.specular_factor) };
 
@@ -380,7 +409,7 @@ namespace {
       = data::HalfFloat { Normalize01(inputs.attenuation_color[1]) };
     desc.attenuation_color[2]
       = data::HalfFloat { Normalize01(inputs.attenuation_color[2]) };
-    desc.attenuation_distance = (std::max)(0.0f, inputs.attenuation_distance);
+    desc.attenuation_distance = (std::max)(0.0F, inputs.attenuation_distance);
   }
 
   [[nodiscard]] auto HasAnyAssignedTextures(
@@ -523,7 +552,7 @@ namespace {
     }
 
     const auto data = stream.Data();
-    return std::vector(data.begin(), data.end());
+    return { data.begin(), data.end() };
   }
 
   auto PatchContentHash(std::vector<std::byte>& bytes,
@@ -543,7 +572,8 @@ namespace {
     -> co::Co<std::optional<data::pak::core::ContentHashDigest>>
   {
     const auto hash = co_await thread_pool.Run(
-      [bytes, stop_token](co::ThreadPool::CancelToken canceled) noexcept {
+      [bytes, stop_token](
+        co::ThreadPool::CancelToken canceled) noexcept -> base::Sha256Digest {
         DLOG_F(1, "Compute content hash");
         if (stop_token.stop_requested() || canceled) {
           return data::pak::core::ContentHashDigest {};
@@ -692,7 +722,7 @@ auto MaterialPipeline::Start(co::Nursery& nursery) -> void
 
   const auto worker_count = std::max(1U, config_.worker_count);
   for (uint32_t i = 0; i < worker_count; ++i) {
-    nursery.Start([this]() -> co::Co<> { co_await Worker(); });
+    nursery.Start([this] -> co::Co<> { co_await Worker(); });
   }
 }
 
@@ -792,7 +822,7 @@ auto MaterialPipeline::Worker() -> co::Co<>
     if (item.on_started) {
       item.on_started();
     }
-    auto NotifyFinished = [&item]() {
+    auto NotifyFinished = [&item] -> void {
       if (item.on_finished) {
         item.on_finished();
       }
@@ -812,7 +842,7 @@ auto MaterialPipeline::Worker() -> co::Co<>
       auto item_copy = item;
       build_outcome = co_await thread_pool_.Run(
         [item = std::move(item_copy)](
-          co::ThreadPool::CancelToken canceled) noexcept {
+          co::ThreadPool::CancelToken canceled) noexcept -> BuildOutcome {
           DLOG_F(1, "Build material task begin");
           if (item.stop_token.stop_requested() || canceled) {
             return BuildOutcome { .canceled = true };

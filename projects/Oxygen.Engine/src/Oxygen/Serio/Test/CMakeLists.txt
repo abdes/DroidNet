@@ -38,9 +38,34 @@ m_gtest_program(
   Serio
   SOURCES
     "FileStream_test.cpp"
+    "AtomicFile_test.cpp"
+    "FileLock_test.cpp"
     "MemoryStream_test.cpp"
     "Reader_test.cpp"
     "Writer_test.cpp"
 )
 
 m_gtest_program(SerioFullCycle SOURCES "Integration_test.cpp")
+
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+add_executable(Oxygen.Serio.FileLockProbe "FileLockProbe.cpp")
+target_link_libraries(Oxygen.Serio.FileLockProbe PRIVATE oxygen::serio)
+set_target_properties(
+  Oxygen.Serio.FileLockProbe
+  PROPERTIES
+    FOLDER
+      "Testing"
+)
+add_test(
+  NAME "Oxygen.Serio.FileLock.CrossProcess"
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/file_lock_process_test.py"
+    "$<TARGET_FILE:Oxygen.Serio.FileLockProbe>"
+)
+set_tests_properties(
+  "Oxygen.Serio.FileLock.CrossProcess"
+  PROPERTIES
+    TIMEOUT
+      30
+)

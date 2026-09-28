@@ -23,7 +23,8 @@ public:
   struct Callbacks final {
     std::function<std::optional<uint16_t>(const data::AssetKey&)>
       resolve_source_id_for_asset;
-    std::function<const IContentSource*(uint16_t)> resolve_source_for_id;
+    std::function<std::shared_ptr<const IContentSource>(uint16_t)>
+      resolve_source_for_id;
     std::function<ResourceKey(uint16_t, data::pak::core::ResourceIndexT)>
       make_script_resource_key;
   };

@@ -7,28 +7,50 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
+#include <exception>
 #include <filesystem>
 #include <fstream>
+#include <ios>
 #include <latch>
 #include <limits>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
+#include <system_error>
+#include <utility>
 #include <vector>
 
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/Finally.h>
+#include <Oxygen/Base/Span.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportJobId.h>
+#include <Oxygen/Cooker/Import/ImportReport.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
+#include <Oxygen/Core/Types/CameraAspectMode.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/MaterialSlotId.h>
+#include <Oxygen/Data/MeshType.h>
+#include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/PakFormat_geometry.h>
+#include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Serio/FileStream.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Writer.h>
 #include <Oxygen/Testing/GTest.h>
+
+using oxygen::base::CheckedAt;
 
 namespace oxygen::content::import::test {
 
@@ -55,6 +77,43 @@ namespace {
     out << text;
   }
 
+  auto WriteSlotGeometry(const std::filesystem::path& path) -> void
+  {
+    namespace geometry = data::pak::geometry;
+    std::filesystem::create_directories(path.parent_path());
+    serio::FileStream<> stream(path, std::ios::out | std::ios::trunc);
+    serio::Writer writer(stream);
+    const auto packed = writer.ScopedAlignment(1);
+    auto descriptor = geometry::GeometryAssetDesc {};
+    descriptor.header.asset_type
+      = static_cast<uint8_t>(data::AssetType::kGeometry);
+    descriptor.header.version = geometry::kGeometryAssetVersion;
+    descriptor.lod_count = 1;
+    auto mesh = geometry::MeshDesc {};
+    mesh.mesh_type = static_cast<uint8_t>(data::MeshType::kStandard);
+    mesh.submesh_count = 1;
+    mesh.mesh_view_count = 1;
+    auto submesh = geometry::SubMeshDesc {};
+    submesh.slot_id
+      = data::MaterialSlotId::FromString("00000000-0000-0000-0000-000000000001")
+          .value();
+    submesh.mesh_view_count = 1;
+    const auto view = geometry::MeshViewDesc {
+      .first_index = 0,
+      .index_count = 3,
+      .first_vertex = 0,
+      .vertex_count = 3,
+    };
+    const auto write = [&writer](const auto& record) -> auto {
+      ASSERT_TRUE(writer.WriteBlob(std::as_bytes(std::span(&record, 1))));
+    };
+    write(descriptor);
+    write(mesh);
+    write(submesh);
+    write(view);
+    ASSERT_TRUE(writer.Flush());
+  }
+
   auto ReadBinaryFile(const std::filesystem::path& path)
     -> std::vector<std::byte>
   {
@@ -79,7 +138,7 @@ namespace {
     const std::string_view code) -> bool
   {
     return std::ranges::any_of(diagnostics,
-      [code](const ImportDiagnostic& d) { return d.code == code; });
+      [code](const ImportDiagnostic& d) -> bool { return d.code == code; });
   }
 
   auto SubmitAndWait(AsyncImportService& service, ImportRequest request)
@@ -90,7 +149,7 @@ namespace {
     const auto submitted = service.SubmitImport(
       std::move(request),
       [&report, &done](
-        const ImportJobId /*job_id*/, const ImportReport& completed) {
+        const ImportJobId /*job_id*/, const ImportReport& completed) -> void {
         report = completed;
         done.count_down();
       },
@@ -127,6 +186,57 @@ namespace {
       return request;
     }
   };
+
+  NOLINT_TEST_F(SceneDescriptorImportJobTest, EmptyScenePreservesEnvironment)
+  {
+    const auto root = MakeTempCookedRoot("empty_scene_environment");
+    auto service = AsyncImportService {};
+    const auto stop = oxygen::Finally([&service] -> void { service.Stop(); });
+    const auto report = SubmitAndWait(service, MakeRequest(root, R"({
+      "version":9, "name":"EmptyScene", "nodes":[],
+      "environment": {
+        "background": {"color_rgb":[0.1,0.2,0.3]},
+        "post_process_volume": {"manual_exposure_ev":9.5}
+      }
+    })"));
+    ASSERT_TRUE(report.success);
+    ASSERT_EQ(report.scenes_written, 1U);
+    const auto bytes = ReadBinaryFile(root / "Scenes/EmptyScene.oscene");
+    const auto scene = data::SceneAsset(data::AssetKey {}, bytes);
+    EXPECT_TRUE(scene.GetNodes().empty());
+    EXPECT_TRUE(
+      scene.GetComponents<data::pak::world::RenderableRecord>().empty());
+    EXPECT_TRUE(
+      scene.GetComponents<data::pak::world::PerspectiveCameraRecord>().empty());
+    ASSERT_TRUE(scene.HasEnvironmentBlock());
+    const auto background = scene.TryGetBackgroundEnvironment();
+    if (!background) {
+      FAIL() << "Expected background";
+    }
+    EXPECT_FLOAT_EQ(background->color_rgb[0], 0.1F);
+    EXPECT_FLOAT_EQ(background->color_rgb[1], 0.2F);
+    EXPECT_FLOAT_EQ(background->color_rgb[2], 0.3F);
+    const auto exposure = scene.TryGetPostProcessVolumeEnvironment();
+    if (!exposure) {
+      FAIL() << "Expected exposure";
+    }
+    EXPECT_FLOAT_EQ(exposure->manual_exposure_ev, 9.5F);
+  }
+
+  NOLINT_TEST_F(SceneDescriptorImportJobTest, EmptySceneRejectsDanglingCamera)
+  {
+    const auto root = MakeTempCookedRoot("empty_scene_invalid_camera");
+    auto service = AsyncImportService {};
+    const auto stop = oxygen::Finally([&service] -> void { service.Stop(); });
+    const auto report = SubmitAndWait(service, MakeRequest(root, R"({
+      "version":9, "name":"EmptyScene", "nodes":[],
+      "cameras":{"perspective":[{"node":0,"aspect_mode":"auto"}]}
+    })"));
+    EXPECT_FALSE(report.success);
+    EXPECT_EQ(report.scenes_written, 0U);
+    EXPECT_TRUE(HasDiagnosticCode(
+      report.diagnostics, "scene.descriptor.camera_node_index_out_of_range"));
+  }
 
   auto WriteMeteringMaskSidecar(const std::filesystem::path& root,
     const Format format, const uint32_t index) -> void
@@ -165,12 +275,13 @@ namespace {
     MeteringMaskUsesCurrentSourceLocalTextureReference)
   {
     auto service = AsyncImportService {};
-    const auto stop_service = oxygen::Finally([&service] { service.Stop(); });
+    const auto stop_service
+      = oxygen::Finally([&service] -> void { service.Stop(); });
     [[maybe_unused]] const auto stop
-      = oxygen::Finally([&service] { service.Stop(); });
+      = oxygen::Finally([&service] -> void { service.Stop(); });
     const auto root = MakeTempCookedRoot("mask_reference");
     constexpr auto kDescriptor
-      = R"({"version":8,"name":"MaskScene","nodes":[{}],
+      = R"({"version":9,"name":"MaskScene","nodes":[{}],
       "environment":{"post_process_volume":{"auto_exposure_metering_mask":"/.cooked/Textures/Meter.otex"}}})";
     WriteMeteringMaskSidecar(root, Format::kRGBA8UNorm, 4U);
     const auto success = SubmitAndWait(service, MakeRequest(root, kDescriptor));
@@ -178,7 +289,9 @@ namespace {
     const auto bytes = ReadBinaryFile(root / "Scenes/MaskScene.oscene");
     const auto scene = data::SceneAsset(data::AssetKey {}, bytes);
     const auto exposure = scene.TryGetPostProcessVolumeEnvironment();
-    ASSERT_TRUE(exposure.has_value());
+    if (!exposure.has_value()) {
+      FAIL() << "Expected exposure to contain a value";
+    }
     EXPECT_EQ(exposure->auto_exposure_metering_mask.get(), 4U);
 
     WriteMeteringMaskSidecar(root, Format::kRGBA8UNormSRGB, 4U);
@@ -208,15 +321,16 @@ namespace {
     namespace world = data::pak::world;
     const auto root = MakeTempCookedRoot("physical_cameras");
     auto service = AsyncImportService {};
-    const auto stop_service = oxygen::Finally([&service] { service.Stop(); });
+    const auto stop_service
+      = oxygen::Finally([&service] -> void { service.Stop(); });
     [[maybe_unused]] const auto stop
-      = oxygen::Finally([&service] { service.Stop(); });
+      = oxygen::Finally([&service] -> void { service.Stop(); });
     const auto report = SubmitAndWait(service, MakeRequest(root, R"({
-      "version": 8, "name": "Physical", "nodes": [{}, {}, {}, {}],
+      "version": 9, "name": "Physical", "nodes": [{}, {}, {}, {}],
       "cameras": {
         "perspective": [
-          {"node":0,"aperture_f":2.8,"shutter_rate":250,"iso":400},
-          {"node":1}],
+          {"node":0,"aspect_mode":"fixed","aspect_ratio":1.5,"aperture_f":2.8,"shutter_rate":250,"iso":400},
+          {"node":1,"aspect_mode":"auto"}],
         "orthographic": [
           {"node":2,"aperture_f":8,"shutter_rate":60,"iso":200},
           {"node":3}]
@@ -231,41 +345,57 @@ namespace {
       = scene.GetComponents<world::OrthographicCameraRecord>();
     ASSERT_EQ(perspective.size(), 2U);
     ASSERT_EQ(orthographic.size(), 2U);
-    EXPECT_FLOAT_EQ(perspective[0].aperture_f, 2.8F);
-    EXPECT_FLOAT_EQ(perspective[0].shutter_rate, 250.0F);
-    EXPECT_FLOAT_EQ(perspective[0].iso, 400.0F);
-    EXPECT_FLOAT_EQ(orthographic[0].aperture_f, 8.0F);
-    EXPECT_FLOAT_EQ(orthographic[0].shutter_rate, 60.0F);
-    EXPECT_FLOAT_EQ(orthographic[0].iso, 200.0F);
-    EXPECT_FLOAT_EQ(perspective[1].aperture_f, 11.0F);
-    EXPECT_FLOAT_EQ(perspective[1].shutter_rate, 125.0F);
-    EXPECT_FLOAT_EQ(perspective[1].iso, 100.0F);
-    EXPECT_FLOAT_EQ(orthographic[1].aperture_f, 11.0F);
-    EXPECT_FLOAT_EQ(orthographic[1].shutter_rate, 125.0F);
-    EXPECT_FLOAT_EQ(orthographic[1].iso, 100.0F);
+    EXPECT_FLOAT_EQ(CheckedAt(perspective, 0).aperture_f, 2.8F);
+    EXPECT_FLOAT_EQ(CheckedAt(perspective, 0).shutter_rate, 250.0F);
+    EXPECT_FLOAT_EQ(CheckedAt(perspective, 0).iso, 400.0F);
+    EXPECT_EQ(CheckedAt(perspective, 0).aspect_mode, CameraAspectMode::kFixed);
+    EXPECT_FLOAT_EQ(CheckedAt(perspective, 0).aspect_ratio, 1.5F);
+    EXPECT_EQ(CheckedAt(perspective, 1).aspect_mode, CameraAspectMode::kAuto);
+    EXPECT_FLOAT_EQ(CheckedAt(orthographic, 0).aperture_f, 8.0F);
+    EXPECT_FLOAT_EQ(CheckedAt(orthographic, 0).shutter_rate, 60.0F);
+    EXPECT_FLOAT_EQ(CheckedAt(orthographic, 0).iso, 200.0F);
+    EXPECT_FLOAT_EQ(CheckedAt(perspective, 1).aperture_f, 11.0F);
+    EXPECT_FLOAT_EQ(CheckedAt(perspective, 1).shutter_rate, 125.0F);
+    EXPECT_FLOAT_EQ(CheckedAt(perspective, 1).iso, 100.0F);
+    EXPECT_FLOAT_EQ(CheckedAt(orthographic, 1).aperture_f, 11.0F);
+    EXPECT_FLOAT_EQ(CheckedAt(orthographic, 1).shutter_rate, 125.0F);
+    EXPECT_FLOAT_EQ(CheckedAt(orthographic, 1).iso, 100.0F);
   }
 
   NOLINT_TEST_F(
     SceneDescriptorImportJobTest, RejectsCoupledExposureAndCurveErrors)
   {
     auto service = AsyncImportService {};
-    const auto stop_service = oxygen::Finally([&service] { service.Stop(); });
+    const auto stop_service
+      = oxygen::Finally([&service] -> void { service.Stop(); });
     [[maybe_unused]] const auto stop
-      = oxygen::Finally([&service] { service.Stop(); });
+      = oxygen::Finally([&service] -> void { service.Stop(); });
     const auto root = MakeTempCookedRoot("invalid_exposure");
     for (const auto& invalid : std::vector<nlohmann::json> {
            { { "auto_exposure_min_ev", 10 }, { "auto_exposure_max_ev", 5 } },
-           { { "auto_exposure_low_percentile", 0.9 },
-             { "auto_exposure_high_percentile", 0.1 } },
-           { { "auto_exposure_min_log_luminance", 31 },
-             { "auto_exposure_log_luminance_range", 2 } },
-           { { "auto_exposure_compensation_curve",
-             { { { "metered_ev", 0 }, { "compensation_ev", 1 } },
-               { { "metered_ev", 0 }, { "compensation_ev", 2 } } } } },
-           { { "exposure_compensation_ev", 10000 } } }) {
+           {
+             { "auto_exposure_low_percentile", 0.9 },
+             { "auto_exposure_high_percentile", 0.1 },
+           },
+           {
+             { "auto_exposure_min_log_luminance", 31 },
+             { "auto_exposure_log_luminance_range", 2 },
+           },
+           {
+             {
+               "auto_exposure_compensation_curve",
+               {
+                 { { "metered_ev", 0 }, { "compensation_ev", 1 } },
+                 { { "metered_ev", 0 }, { "compensation_ev", 2 } },
+               },
+             },
+           },
+           { { "exposure_compensation_ev", 10000 } },
+         }) {
       auto document = nlohmann::json::parse(
-        R"({"version":8,"name":"Invalid","nodes":[{}]})");
-      document["environment"]["post_process_volume"] = invalid;
+        R"({"version":9,"name":"Invalid","nodes":[{}]})");
+      document.update(
+        { { "environment", { { "post_process_volume", invalid } } } });
       SCOPED_TRACE(document.dump());
       const auto report
         = SubmitAndWait(service, MakeRequest(root, document.dump()));
@@ -282,11 +412,12 @@ namespace {
     namespace world = data::pak::world;
     const auto root = MakeTempCookedRoot("node_flag_source_modes");
     auto service = AsyncImportService {};
-    const auto stop_service = oxygen::Finally([&service] { service.Stop(); });
+    const auto stop_service
+      = oxygen::Finally([&service] -> void { service.Stop(); });
     [[maybe_unused]] const auto stop
-      = oxygen::Finally([&service] { service.Stop(); });
+      = oxygen::Finally([&service] -> void { service.Stop(); });
     const auto report = SubmitAndWait(service, MakeRequest(root, R"({
-      "version": 8,
+      "version": 9,
       "name": "Flags",
       "nodes": [
         {"name":"HiddenRoot", "flags":{
@@ -305,18 +436,22 @@ namespace {
     const auto scene = data::SceneAsset(data::AssetKey {}, bytes);
     const auto nodes = scene.GetNodes();
     ASSERT_EQ(nodes.size(), 5U);
-    EXPECT_EQ(nodes[0].node_flags, world::kSceneNodeFlag_ReceivesShadows);
-    EXPECT_EQ(nodes[0].inherited_flags, 0U);
-    EXPECT_EQ(nodes[1].node_flags, 0U);
-    EXPECT_EQ(nodes[1].inherited_flags, world::kSceneNodeFlags_Inheritable);
-    EXPECT_EQ(nodes[2].node_flags,
+    EXPECT_EQ(
+      CheckedAt(nodes, 0).node_flags, world::kSceneNodeFlag_ReceivesShadows);
+    EXPECT_EQ(CheckedAt(nodes, 0).inherited_flags, 0U);
+    EXPECT_EQ(CheckedAt(nodes, 1).node_flags, 0U);
+    EXPECT_EQ(
+      CheckedAt(nodes, 1).inherited_flags, world::kSceneNodeFlags_Inheritable);
+    EXPECT_EQ(CheckedAt(nodes, 2).node_flags,
       world::kSceneNodeFlag_Visible | world::kSceneNodeFlag_CastsShadows
         | world::kSceneNodeFlag_Static);
-    EXPECT_EQ(nodes[2].inherited_flags, 0U);
-    EXPECT_EQ(nodes[3].node_flags, world::kSceneNodeFlags_Inheritable);
-    EXPECT_EQ(nodes[3].inherited_flags, 0U);
-    EXPECT_EQ(nodes[4].node_flags, 0U);
-    EXPECT_EQ(nodes[4].inherited_flags, world::kSceneNodeFlags_Inheritable);
+    EXPECT_EQ(CheckedAt(nodes, 2).inherited_flags, 0U);
+    EXPECT_EQ(
+      CheckedAt(nodes, 3).node_flags, world::kSceneNodeFlags_Inheritable);
+    EXPECT_EQ(CheckedAt(nodes, 3).inherited_flags, 0U);
+    EXPECT_EQ(CheckedAt(nodes, 4).node_flags, 0U);
+    EXPECT_EQ(
+      CheckedAt(nodes, 4).inherited_flags, world::kSceneNodeFlags_Inheritable);
   }
 
   auto WriteIndexedReference(const std::filesystem::path& root,
@@ -342,9 +477,10 @@ namespace {
     WriteIndexedReference(output, own_key, data::AssetType::kGeometry);
     WriteIndexedReference(library, library_key, data::AssetType::kGeometry);
     auto service = AsyncImportService {};
-    const auto stop_service = oxygen::Finally([&service] { service.Stop(); });
+    const auto stop_service
+      = oxygen::Finally([&service] -> void { service.Stop(); });
     const auto descriptor
-      = R"({"version":8,"name":"Scene","nodes":[{"name":"Mesh"}],
+      = R"({"version":9,"name":"Scene","nodes":[{"name":"Mesh"}],
       "renderables":[{"node":0,"geometry_ref":"/Art/Geometry/Mesh.ogeo"}]})";
     for (const auto own_wins : { false, true }) {
       auto request = MakeRequest(output, descriptor);
@@ -360,7 +496,8 @@ namespace {
       const auto renderables
         = scene.GetComponents<data::pak::world::RenderableRecord>();
       ASSERT_EQ(renderables.size(), 1U);
-      EXPECT_EQ(renderables[0].geometry_key, own_wins ? own_key : library_key);
+      EXPECT_EQ(CheckedAt(renderables, 0).geometry_key,
+        own_wins ? own_key : library_key);
     }
     service.Stop();
   }
@@ -377,9 +514,10 @@ namespace {
     WriteTextFile(output / "Geometry/Mesh.ogeo", "new descriptor");
     WriteIndexedReference(library, library_key, data::AssetType::kGeometry);
     auto service = AsyncImportService {};
-    const auto stop_service = oxygen::Finally([&service] { service.Stop(); });
+    const auto stop_service
+      = oxygen::Finally([&service] -> void { service.Stop(); });
     const auto descriptor
-      = R"({"version":8,"name":"Scene","nodes":[{"name":"Mesh"}],
+      = R"({"version":9,"name":"Scene","nodes":[{"name":"Mesh"}],
       "renderables":[{"node":0,"geometry_ref":"/Art/Geometry/Mesh.ogeo"}]})";
     for (const auto own_wins : { true, false }) {
       auto request = MakeRequest(output, descriptor);
@@ -396,7 +534,8 @@ namespace {
       const auto renderables
         = scene.GetComponents<data::pak::world::RenderableRecord>();
       ASSERT_EQ(renderables.size(), 1U);
-      EXPECT_EQ(renderables[0].geometry_key, own_wins ? own_key : library_key);
+      EXPECT_EQ(CheckedAt(renderables, 0).geometry_key,
+        own_wins ? own_key : library_key);
     }
     service.Stop();
   }
@@ -413,9 +552,10 @@ namespace {
       data::AssetKey::FromVirtualPath("/Library/Wrong.omat"),
       data::AssetType::kMaterial);
     auto service = AsyncImportService {};
-    const auto stop_service = oxygen::Finally([&service] { service.Stop(); });
+    const auto stop_service
+      = oxygen::Finally([&service] -> void { service.Stop(); });
     auto request = MakeRequest(
-      output, R"({"version":8,"name":"Scene","nodes":[{"name":"Mesh"}],
+      output, R"({"version":9,"name":"Scene","nodes":[{"name":"Mesh"}],
       "renderables":[{"node":0,"geometry_ref":"/Art/Geometry/Mesh.ogeo"}]})");
     request.cooked_context_roots = { library };
     const auto report = SubmitAndWait(service, std::move(request));
@@ -429,7 +569,8 @@ namespace {
     SceneDescriptorImportJobTest, ResolvesReferencesAndEmitsSceneDescriptor)
   {
     const auto cooked_root = MakeTempCookedRoot("resolves_and_emits");
-    WriteTextFile(cooked_root / "Geometry" / "cube.ogeo", "ogeo");
+    ASSERT_NO_FATAL_FAILURE(
+      WriteSlotGeometry(cooked_root / "Geometry" / "cube.ogeo"));
     WriteTextFile(cooked_root / "Materials" / "cube.omat", "omat");
     WriteTextFile(cooked_root / "Scripts" / "spin.oscript", "oscript");
     WriteTextFile(cooked_root / "Input" / "jump.oiact", "oiact");
@@ -441,7 +582,7 @@ namespace {
     });
 
     const auto report = SubmitAndWait(service, MakeRequest(cooked_root, R"({
-      "version": 8,
+      "version": 9,
       "name": "DemoScene",
       "nodes": [
         { "name": "Root" },
@@ -451,7 +592,11 @@ namespace {
         {
           "node": 1,
           "geometry_ref": "/.cooked/Geometry/cube.ogeo",
-          "material_ref": "/.cooked/Materials/cube.omat",
+          "material_overrides": [{
+            "slot_id": "00000000-0000-0000-0000-000000000001",
+            "material_ref": "/.cooked/Materials/cube.omat",
+            "layout_revision": "0000000000000000000000000000000000000000000000000000000000000001"
+          }],
           "visible": true
         }
       ],
@@ -482,7 +627,10 @@ namespace {
     const auto renderables
       = scene.GetComponents<oxygen::data::pak::world::RenderableRecord>();
     ASSERT_EQ(renderables.size(), 1U);
-    EXPECT_EQ(renderables[0].material_key,
+    const auto assignments
+      = scene.GetComponents<oxygen::data::pak::world::MaterialOverrideRecord>();
+    ASSERT_EQ(assignments.size(), 1U);
+    EXPECT_EQ(assignments.front().material_key,
       oxygen::data::AssetKey::FromVirtualPath("/.cooked/Materials/cube.omat"));
 
     service.Stop();
@@ -497,7 +645,7 @@ namespace {
     });
 
     const auto report = SubmitAndWait(service, MakeRequest(cooked_root, R"({
-      "version": 8,
+      "version": 9,
       "name": "DemoScene",
       "nodes": [
         { "name": "Root" },
@@ -527,7 +675,7 @@ namespace {
     });
 
     const auto report = SubmitAndWait(service, MakeRequest(cooked_root, R"({
-      "version": 8,
+      "version": 9,
       "name": "DirectionalTuning",
       "nodes": [
         { "name": "Root" },
@@ -573,34 +721,36 @@ namespace {
     const auto directional
       = scene.GetComponents<oxygen::data::pak::world::DirectionalLightRecord>();
     ASSERT_EQ(directional.size(), 1U);
-    EXPECT_EQ(directional[0].common.affects_world, 0U);
-    EXPECT_FLOAT_EQ(directional[0].common.color_rgb[0], 0.25F);
-    EXPECT_FLOAT_EQ(directional[0].common.color_rgb[1], 0.5F);
-    EXPECT_FLOAT_EQ(directional[0].common.color_rgb[2], 0.75F);
-    EXPECT_EQ(directional[0].common.casts_shadows, 1U);
-    EXPECT_FLOAT_EQ(directional[0].common.exposure_compensation_ev, -2.0F);
-    EXPECT_FLOAT_EQ(directional[0].common.shadow.bias, 0.125F);
-    EXPECT_FLOAT_EQ(directional[0].common.shadow.normal_bias, 0.25F);
-    EXPECT_EQ(directional[0].common.shadow.contact_shadows, 1U);
-    EXPECT_EQ(directional[0].common.shadow.resolution_hint, 3U);
-    EXPECT_EQ(directional[0].atmosphere_light_slot, 2U);
-    EXPECT_EQ(directional[0].use_per_pixel_atmosphere_transmittance, 1U);
+    EXPECT_EQ(CheckedAt(directional, 0).common.affects_world, 0U);
+    EXPECT_FLOAT_EQ(CheckedAt(directional, 0).common.color_rgb[0], 0.25F);
+    EXPECT_FLOAT_EQ(CheckedAt(directional, 0).common.color_rgb[1], 0.5F);
+    EXPECT_FLOAT_EQ(CheckedAt(directional, 0).common.color_rgb[2], 0.75F);
+    EXPECT_EQ(CheckedAt(directional, 0).common.casts_shadows, 1U);
     EXPECT_FLOAT_EQ(
-      directional[0].atmosphere_disk_luminance_scale_rgb[0], 0.5F);
+      CheckedAt(directional, 0).common.exposure_compensation_ev, -2.0F);
+    EXPECT_FLOAT_EQ(CheckedAt(directional, 0).common.shadow.bias, 0.125F);
+    EXPECT_FLOAT_EQ(CheckedAt(directional, 0).common.shadow.normal_bias, 0.25F);
+    EXPECT_EQ(CheckedAt(directional, 0).common.shadow.contact_shadows, 1U);
+    EXPECT_EQ(CheckedAt(directional, 0).common.shadow.resolution_hint, 3U);
+    EXPECT_EQ(CheckedAt(directional, 0).atmosphere_light_slot, 2U);
+    EXPECT_EQ(
+      CheckedAt(directional, 0).use_per_pixel_atmosphere_transmittance, 1U);
     EXPECT_FLOAT_EQ(
-      directional[0].atmosphere_disk_luminance_scale_rgb[1], 1.0F);
+      CheckedAt(directional, 0).atmosphere_disk_luminance_scale_rgb[0], 0.5F);
     EXPECT_FLOAT_EQ(
-      directional[0].atmosphere_disk_luminance_scale_rgb[2], 2.0F);
-    EXPECT_FLOAT_EQ(directional[0].angular_size_radians, 0.02F);
-    EXPECT_FLOAT_EQ(directional[0].intensity_lux, 10000.0F);
-    EXPECT_EQ(directional[0].split_mode, 1U);
-    EXPECT_FLOAT_EQ(directional[0].max_shadow_distance, 200.0F);
-    EXPECT_FLOAT_EQ(directional[0].cascade_distances[0], 10.0F);
-    EXPECT_FLOAT_EQ(directional[0].cascade_distances[1], 30.0F);
-    EXPECT_FLOAT_EQ(directional[0].cascade_distances[2], 80.0F);
-    EXPECT_FLOAT_EQ(directional[0].cascade_distances[3], 200.0F);
-    EXPECT_FLOAT_EQ(directional[0].transition_fraction, 0.1F);
-    EXPECT_FLOAT_EQ(directional[0].distance_fadeout_fraction, 0.1F);
+      CheckedAt(directional, 0).atmosphere_disk_luminance_scale_rgb[1], 1.0F);
+    EXPECT_FLOAT_EQ(
+      CheckedAt(directional, 0).atmosphere_disk_luminance_scale_rgb[2], 2.0F);
+    EXPECT_FLOAT_EQ(CheckedAt(directional, 0).angular_size_radians, 0.02F);
+    EXPECT_FLOAT_EQ(CheckedAt(directional, 0).intensity_lux, 10000.0F);
+    EXPECT_EQ(CheckedAt(directional, 0).split_mode, 1U);
+    EXPECT_FLOAT_EQ(CheckedAt(directional, 0).max_shadow_distance, 200.0F);
+    EXPECT_FLOAT_EQ(CheckedAt(directional, 0).cascade_distances[0], 10.0F);
+    EXPECT_FLOAT_EQ(CheckedAt(directional, 0).cascade_distances[1], 30.0F);
+    EXPECT_FLOAT_EQ(CheckedAt(directional, 0).cascade_distances[2], 80.0F);
+    EXPECT_FLOAT_EQ(CheckedAt(directional, 0).cascade_distances[3], 200.0F);
+    EXPECT_FLOAT_EQ(CheckedAt(directional, 0).transition_fraction, 0.1F);
+    EXPECT_FLOAT_EQ(CheckedAt(directional, 0).distance_fadeout_fraction, 0.1F);
 
     // Exercise strict binary ingress with otherwise valid cooked content.
     using namespace oxygen::data::pak::world;
@@ -613,7 +763,7 @@ namespace {
       sizeof(table));
     for (unsigned malformed = 0U; malformed < 8U; ++malformed) {
       SCOPED_TRACE(malformed);
-      auto record = directional[0];
+      auto record = CheckedAt(directional, 0);
       switch (malformed) {
       case 0:
         record.common.affects_world = 2U;
@@ -685,7 +835,7 @@ namespace {
     });
 
     const auto report = SubmitAndWait(service, MakeRequest(cooked_root, R"({
-      "version": 8,
+      "version": 9,
       "name": "EnvironmentScene",
       "nodes": [
         { "name": "Root" },
@@ -781,7 +931,9 @@ namespace {
       oxygen::data::AssetKey {}, std::span<const std::byte>(scene_bytes));
 
     const auto fog = scene.TryGetFogEnvironment();
-    ASSERT_TRUE(fog.has_value());
+    if (!fog.has_value()) {
+      FAIL() << "Expected fog to contain a value";
+    }
     EXPECT_EQ(fog->enable_height_fog, 1U);
     EXPECT_EQ(fog->enable_volumetric_fog, 1U);
     EXPECT_FLOAT_EQ(fog->second_fog_density, 0.03F);
@@ -790,7 +942,9 @@ namespace {
     EXPECT_EQ(fog->visible_in_real_time_sky_captures, 0U);
 
     const auto sky_light = scene.TryGetSkyLightEnvironment();
-    ASSERT_TRUE(sky_light.has_value());
+    if (!sky_light.has_value()) {
+      FAIL() << "Expected sky_light to contain a value";
+    }
     EXPECT_FLOAT_EQ(sky_light->source_cubemap_angle_radians, 0.75F);
     EXPECT_EQ(sky_light->lower_hemisphere_is_solid_color, 0U);
     EXPECT_FLOAT_EQ(sky_light->lower_hemisphere_blend_alpha, 0.35F);
@@ -799,10 +953,10 @@ namespace {
     const auto local_fog
       = scene.GetComponents<oxygen::data::pak::world::LocalFogVolumeRecord>();
     ASSERT_EQ(local_fog.size(), 1U);
-    EXPECT_EQ(local_fog[0].node_index, 1U);
-    EXPECT_EQ(local_fog[0].enabled, 1U);
-    EXPECT_FLOAT_EQ(local_fog[0].radial_fog_extinction, 0.3F);
-    EXPECT_EQ(local_fog[0].sort_priority, 2);
+    EXPECT_EQ(CheckedAt(local_fog, 0).node_index, 1U);
+    EXPECT_EQ(CheckedAt(local_fog, 0).enabled, 1U);
+    EXPECT_FLOAT_EQ(CheckedAt(local_fog, 0).radial_fog_extinction, 0.3F);
+    EXPECT_EQ(CheckedAt(local_fog, 0).sort_priority, 2);
 
     service.Stop();
   }
@@ -816,7 +970,7 @@ namespace {
     auto document = nlohmann::json::parse(
       R"JSON(
 {
-  "version": 8,
+  "version": 9,
   "name": "Environment",
   "nodes": [
     {
@@ -870,11 +1024,10 @@ namespace {
     for (uint32_t tone = 0; tone != 4; ++tone) {
       for (uint32_t exposure = 0; exposure != 3; ++exposure) {
         for (uint32_t metering = 0; metering != 3; ++metering) {
-          auto& input = document["environment"]["post_process_volume"];
-          input["tone_mapper"] = tone;
-          input["exposure_mode"] = exposure;
-          input["auto_exposure_metering_mode"] = metering;
-          input["exposure_enabled"] = exposure == 1;
+          auto& input = document.at("environment").at("post_process_volume");
+          input.update({ { "tone_mapper", tone }, { "exposure_mode", exposure },
+            { "auto_exposure_metering_mode", metering },
+            { "exposure_enabled", exposure == 1 } });
           SCOPED_TRACE(document.dump());
           const auto report = SubmitAndWait(
             service, MakeRequest(root, document.dump(), "Environment"));
@@ -912,10 +1065,10 @@ namespace {
           EXPECT_EQ(post->auto_exposure_metering_mask.get(), 0U);
           const auto curve = scene.GetPostProcessCompensationCurve();
           ASSERT_EQ(curve.size(), 2U);
-          EXPECT_FLOAT_EQ(curve[0].metered_ev, -4.0F);
-          EXPECT_FLOAT_EQ(curve[0].compensation_ev, 1.25F);
-          EXPECT_FLOAT_EQ(curve[1].metered_ev, 12.0F);
-          EXPECT_FLOAT_EQ(curve[1].compensation_ev, -0.5F);
+          EXPECT_FLOAT_EQ(CheckedAt(curve, 0).metered_ev, -4.0F);
+          EXPECT_FLOAT_EQ(CheckedAt(curve, 0).compensation_ev, 1.25F);
+          EXPECT_FLOAT_EQ(CheckedAt(curve, 1).metered_ev, 12.0F);
+          EXPECT_FLOAT_EQ(CheckedAt(curve, 1).compensation_ev, -0.5F);
           EXPECT_FLOAT_EQ(post->bloom_intensity, 0.6F);
           EXPECT_FLOAT_EQ(post->bloom_threshold, 2.25F);
           EXPECT_FLOAT_EQ(post->saturation, 0.8F);
@@ -923,7 +1076,9 @@ namespace {
           EXPECT_FLOAT_EQ(post->vignette_intensity, 0.3F);
           EXPECT_FLOAT_EQ(post->display_gamma, 2.4F);
           const auto background = scene.TryGetBackgroundEnvironment();
-          ASSERT_TRUE(background.has_value());
+          if (!background.has_value()) {
+            FAIL() << "Expected background to contain a value";
+          }
           EXPECT_EQ(background->enabled, 1U);
           EXPECT_EQ(background->header.record_size, 24U);
           EXPECT_FLOAT_EQ(background->color_rgb[0], 0.05F);

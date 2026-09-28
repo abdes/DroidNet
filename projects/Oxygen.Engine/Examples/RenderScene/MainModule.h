@@ -107,7 +107,7 @@ public:
     -> co::Co<> override;
 
 private:
-#if defined(OXYGEN_BUILD_UI_TESTS)
+#ifdef OXYGEN_BUILD_UI_TESTS
   auto RegisterUiTests(ImGuiTestEngine* engine) -> void override;
 #endif
   auto ReleaseCurrentSceneAsset(const char* reason) -> void;
@@ -121,7 +121,7 @@ private:
     oxygen::scene::Scene& scene, std::uint64_t frame_index) -> void;
 
   struct SceneLoadRequest {
-    data::AssetKey key {};
+    data::AssetKey key;
     ui::SceneSourceKind source_kind { ui::SceneSourceKind::kPak };
     std::filesystem::path source_path;
     std::string scene_name;
@@ -161,10 +161,12 @@ private:
     kTrimCache,
     kMountPak,
     kMountIndex,
+    kMountGeneration,
   };
   struct PendingSourceRequest final {
     PendingSourceAction action { PendingSourceAction::kNone };
-    std::filesystem::path path;
+    std::filesystem::path path {};
+    std::optional<std::filesystem::path> previous_root {};
   };
   std::deque<PendingSourceRequest> pending_source_requests_;
   std::optional<SceneLoadRequest> pending_scene_load_;

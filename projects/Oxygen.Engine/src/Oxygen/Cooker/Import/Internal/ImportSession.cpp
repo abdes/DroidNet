@@ -5,17 +5,33 @@
 //===----------------------------------------------------------------------===//
 
 #include <bit>
+#include <chrono>
 #include <cstddef>
+#include <cstdint>
+#include <exception>
+#include <filesystem>
 #include <fstream>
+#include <ios>
 #include <limits>
+#include <memory>
+#include <mutex>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
+#include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/ImportReport.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/AssetEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/BufferEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/PhysicsResourceEmitter.h>
@@ -23,10 +39,15 @@
 #include <Oxygen/Cooker/Import/Internal/Emitters/TextureEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedIndexRegistry.h>
+#include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
+#include <Oxygen/Cooker/Import/MaterialSlotProvenance.h>
+#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/OxCo/Co.h>
 
 namespace oxygen::content::import {
 
@@ -35,17 +56,19 @@ namespace {
   auto EnsureExternalFileExists(const std::filesystem::path& path) -> void
   {
     std::error_code ec;
-    if (std::filesystem::exists(path, ec)) {
+    if (std::filesystem::exists(base::ToNativePath(path), ec)) {
       return;
     }
 
-    std::filesystem::create_directories(path.parent_path(), ec);
+    std::filesystem::create_directories(
+      base::ToNativePath(path.parent_path()), ec);
     if (ec) {
       throw std::runtime_error(
         "Failed to create directory for external file: " + path.string());
     }
 
-    std::ofstream out(path, std::ios::binary | std::ios::app);
+    std::ofstream out(
+      base::ToNativePath(path), std::ios::binary | std::ios::app);
     if (!out) {
       throw std::runtime_error(
         "Failed to create external file: " + path.string());
@@ -68,7 +91,8 @@ namespace {
   {
     std::error_code ec;
     const auto full_path = cooked_root / std::filesystem::path(relpath);
-    const auto size = std::filesystem::file_size(full_path, ec);
+    const auto size
+      = std::filesystem::file_size(base::ToNativePath(full_path), ec);
     if (ec) {
       diagnostics.push_back({
         .severity = ImportSeverity::kError,
@@ -150,14 +174,15 @@ namespace {
     static_assert(std::is_trivially_copyable_v<RecordT>);
 
     std::error_code ec;
-    const auto size = std::filesystem::file_size(file_path, ec);
+    const auto size
+      = std::filesystem::file_size(base::ToNativePath(file_path), ec);
     if (ec || size == 0U || (size % sizeof(RecordT)) != 0U) {
       return 0U;
     }
 
     const auto count = size / sizeof(RecordT);
-    if (count > (std::numeric_limits<uint32_t>::max)()) {
-      return (std::numeric_limits<uint32_t>::max)();
+    if (count > std::numeric_limits<uint32_t>::max()) {
+      return std::numeric_limits<uint32_t>::max();
     }
     return static_cast<uint32_t>(count);
   }
@@ -165,7 +190,8 @@ namespace {
   auto ReadBinaryFile(const std::filesystem::path& path)
     -> std::vector<std::byte>
   {
-    auto in = std::ifstream(path, std::ios::binary | std::ios::ate);
+    auto in = std::ifstream(
+      base::ToNativePath(path), std::ios::binary | std::ios::ate);
     if (!in) {
       return {};
     }
@@ -199,8 +225,8 @@ namespace {
       const auto components
         = scene.GetComponents<data::pak::scripting::ScriptingComponentRecord>();
       const auto count = components.size();
-      if (count > (std::numeric_limits<uint32_t>::max)()) {
-        return (std::numeric_limits<uint32_t>::max)();
+      if (count > std::numeric_limits<uint32_t>::max()) {
+        return std::numeric_limits<uint32_t>::max();
       }
       return static_cast<uint32_t>(count);
     } catch (...) {
@@ -326,7 +352,7 @@ auto ImportSession::TextureEmitter() -> import::TextureEmitter&
     config.with_content_hashing
       = EffectiveContentHashingEnabled(request_.options.with_content_hashing);
     config.collision_policy = request_.options.dedup_collision_policy;
-    config.on_dedup_diagnostic = [this](ImportDiagnostic diagnostic) {
+    config.on_dedup_diagnostic = [this](ImportDiagnostic diagnostic) -> void {
       AddDiagnostic(std::move(diagnostic));
     };
     texture_emitter_.emplace(std::make_unique<import::TextureEmitter>(
@@ -350,7 +376,7 @@ auto ImportSession::BufferEmitter() -> import::BufferEmitter&
       cooked_root_, request_.loose_cooked_layout);
     BufferEmitter::Config config {};
     config.collision_policy = request_.options.dedup_collision_policy;
-    config.on_dedup_diagnostic = [this](ImportDiagnostic diagnostic) {
+    config.on_dedup_diagnostic = [this](ImportDiagnostic diagnostic) -> void {
       AddDiagnostic(std::move(diagnostic));
     };
     buffer_emitter_.emplace(
@@ -376,7 +402,7 @@ auto ImportSession::PhysicsResourceEmitter() -> import::PhysicsResourceEmitter&
       cooked_root_, request_.loose_cooked_layout);
     auto config = import::PhysicsResourceEmitter::Config {};
     config.collision_policy = request_.options.dedup_collision_policy;
-    config.on_dedup_diagnostic = [this](ImportDiagnostic diagnostic) {
+    config.on_dedup_diagnostic = [this](ImportDiagnostic diagnostic) -> void {
       AddDiagnostic(std::move(diagnostic));
     };
     physics_resource_emitter_.emplace(
@@ -488,6 +514,13 @@ auto ImportSession::EmitDuration() const noexcept -> std::chrono::microseconds
   return emit_duration_;
 }
 
+auto ImportSession::AddMaterialSlotProvenance(
+  MaterialSlotGeometryProvenance geometry) -> void
+{
+  const std::scoped_lock lock(slot_provenance_mutex_);
+  slot_provenance_.push_back(std::move(geometry));
+}
+
 auto ImportSession::AddDiagnostic(ImportDiagnostic diagnostic) -> void
 {
   auto added = ImportDiagnostic {};
@@ -551,7 +584,7 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
       AddDiagnostic({
         .severity = ImportSeverity::kError,
         .code = "import.texture_emitter_finalize_failed",
-        .message = "Texture emitter finalization failed",
+        .message = ok.error().ToString(),
         .source_path = request_.source_path.string(),
         .object_path = {},
       });
@@ -564,7 +597,7 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
       AddDiagnostic({
         .severity = ImportSeverity::kError,
         .code = "import.buffer_emitter_finalize_failed",
-        .message = "Buffer emitter finalization failed",
+        .message = ok.error().ToString(),
         .source_path = request_.source_path.string(),
         .object_path = {},
       });
@@ -577,7 +610,7 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
       AddDiagnostic({
         .severity = ImportSeverity::kError,
         .code = "import.physics_resource_emitter_finalize_failed",
-        .message = "Physics resource emitter finalization failed",
+        .message = ok.error().ToString(),
         .source_path = request_.source_path.string(),
         .object_path = {},
       });
@@ -590,7 +623,7 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
       AddDiagnostic({
         .severity = ImportSeverity::kError,
         .code = "import.asset_emitter_finalize_failed",
-        .message = "Asset emitter finalization failed",
+        .message = ok.error().ToString(),
         .source_path = request_.source_path.string(),
         .object_path = {},
       });
@@ -603,7 +636,7 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
       AddDiagnostic({
         .severity = ImportSeverity::kError,
         .code = "import.resource_descriptor_emitter_finalize_failed",
-        .message = "Resource descriptor emitter finalization failed",
+        .message = ok.error().ToString(),
         .source_path = request_.source_path.string(),
         .object_path = {},
       });
@@ -703,8 +736,9 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
     const auto physics_data_path
       = cooked_root_ / std::filesystem::path(physics_data_rel);
     const auto physics_table_exists
-      = std::filesystem::exists(physics_table_path);
-    const auto physics_data_exists = std::filesystem::exists(physics_data_path);
+      = std::filesystem::exists(base::ToNativePath(physics_table_path));
+    const auto physics_data_exists
+      = std::filesystem::exists(base::ToNativePath(physics_data_path));
 
     if (physics_table_exists || physics_data_exists) {
       RegisterExternalTable(*index_registry_, FileKind::kPhysicsData,
@@ -798,9 +832,9 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
             rec.key);
         }
       }
-      if (component_count > (std::numeric_limits<uint32_t>::max)()) {
+      if (component_count > std::numeric_limits<uint32_t>::max()) {
         report.scripting_components_written
-          = (std::numeric_limits<uint32_t>::max)();
+          = std::numeric_limits<uint32_t>::max();
       } else {
         report.scripting_components_written
           = static_cast<uint32_t>(component_count);
@@ -831,6 +865,17 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
     }
 
     report.success = !had_errors;
+    if (report.success && request_.material_slot_provenance) {
+      if (material_slot_source_processed_) {
+        const MaterialSlotProvenance provenance(
+          request_.material_slot_provenance->SourceIdentity(),
+          std::move(slot_provenance_));
+        report.material_slot_provenance_json = provenance.Serialize();
+      } else {
+        report.material_slot_provenance_json
+          = request_.material_slot_provenance->Serialize();
+      }
+    }
     report.packaging
       = BuildPackagingSummary(report, write_result, index_write_deferred);
 

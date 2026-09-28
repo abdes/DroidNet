@@ -12,6 +12,7 @@
 #include <Oxygen/Content/ResourceTypeList.h>
 #include <Oxygen/Content/SourceToken.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Serio/Stream.h>
 
@@ -22,13 +23,11 @@ namespace internal {
   class IContentSource;
 } // namespace internal
 
-class PakFile;
-
 //! Context passed to loader functions containing all necessary loading state.
 
 struct LoaderContext {
   //! Key of the current asset being loaded (for dependency registration)
-  data::AssetKey current_asset_key {};
+  data::AssetKey current_asset_key;
 
   //! Opaque token representing the mounted source being decoded.
   /*!
@@ -93,18 +92,10 @@ struct LoaderContext {
   */
   std::shared_ptr<internal::DependencyCollector> dependency_collector {};
 
-  //! Source PAK file from which the asset/resource is being loaded. Guaranteed
-  //! to be valid during a load operation.
-  const PakFile* source_pak { nullptr };
-
-  //! Source abstraction for source-agnostic runtime data access.
-  /*!
-   This pointer is valid for the duration of the load operation and
-   * provides
-   source-neutral access to auxiliary data such as script
-   * slot/param records.
-  */
-  const internal::IContentSource* source_content { nullptr };
+  //! Retains source readers and auxiliary records through decode and asset use.
+  std::shared_ptr<const internal::IContentSource> source_content {};
+  //! Decoders preserve this identity on disk-loaded Data::Asset objects.
+  data::SourceKey source_key {};
 
   //! Parse-only mode: loaders should not attempt to load/register dependencies.
   /*!

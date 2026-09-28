@@ -7,8 +7,8 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <functional>
-#include <optional>
 #include <string_view>
 #include <unordered_map>
 
@@ -25,9 +25,6 @@ public:
   using CacheT = AnyCache<uint64_t, RefCountedEviction<uint64_t>>;
 
   struct ReleaseCallbacks final {
-    std::function<std::optional<uint64_t>(const data::AssetKey&)>
-      resolve_asset_hash;
-    std::function<uint64_t(const data::AssetKey&)> hash_asset_fallback;
     std::function<uint64_t(ResourceKey)> hash_resource;
     std::function<void(std::string_view)> assert_refcount_symmetry;
   };
@@ -39,7 +36,7 @@ public:
     size_t orphan_resources = 0;
   };
 
-  auto ReleaseAssetTree(const data::AssetKey& key, DependencyGraphStore& graph,
+  auto ReleaseAssetTree(uint64_t key, DependencyGraphStore& graph,
     CacheT& content_cache, const ReleaseCallbacks& callbacks) -> void;
 
   auto TrimCache(const std::unordered_map<uint64_t, data::AssetKey>& asset_keys,

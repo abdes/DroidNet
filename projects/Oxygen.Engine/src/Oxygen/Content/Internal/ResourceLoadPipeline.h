@@ -47,8 +47,8 @@ public:
     std::function<void(TypeId)> on_resource_started_inflight;
     std::function<void(TypeId)> on_resource_decode_failure;
     std::function<void(TypeId)> on_resource_type_mismatch;
-    std::function<void(TypeId)> on_resource_store_retry;
-    std::function<void(TypeId)> on_resource_store_retry_failed;
+    std::function<void(TypeId)> on_resource_store_retry {};
+    std::function<void(TypeId)> on_resource_store_retry_failed {};
     std::function<void(std::string_view, bool)> on_store_pressure;
   };
 

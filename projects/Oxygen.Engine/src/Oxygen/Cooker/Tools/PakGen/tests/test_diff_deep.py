@@ -70,6 +70,7 @@ def test_diff_geometry_removed_submesh(tmp_path: Path, mesh_type):
                         "mesh_type": 0,
                         "submeshes": [
                             {
+                                "slot_id": "eb07f9aa-5c3a-564f-ba98-d694f9b1ff0e",
                                 "material": "MatA",
                                 "bounding_box_min": [0.0, 0.0, 0.0],
                                 "bounding_box_max": [1.0, 1.0, 1.0],
@@ -83,6 +84,7 @@ def test_diff_geometry_removed_submesh(tmp_path: Path, mesh_type):
                                 ],
                             },
                             {
+                                "slot_id": "8002ffd2-049a-5204-8bc1-2603a4645d74",
                                 "material": "MatB",
                                 "bounding_box_min": [0.0, 0.0, 0.0],
                                 "bounding_box_max": [1.0, 1.0, 1.0],
@@ -124,6 +126,7 @@ def test_diff_geometry_removed_submesh(tmp_path: Path, mesh_type):
                     "mesh_type": 0,
                     "submeshes": [
                         {
+                            "slot_id": "d83fbab1-2e87-5e19-b550-dfc68c3a3e1c",
                             "material": "MatA",
                             "bounding_box_min": [0.0, 0.0, 0.0],
                             "bounding_box_max": [1.0, 1.0, 1.0],
@@ -166,6 +169,7 @@ def test_diff_geometry_lod_count(tmp_path: Path):
                         "mesh_type": 0,
                         "submeshes": [
                             {
+                                "slot_id": "9f92e37d-95e8-5da1-bc36-09c9066ccc4a",
                                 "material": "MatA",
                                 "bounding_box_min": [0.0, 0.0, 0.0],
                                 "bounding_box_max": [1.0, 1.0, 1.0],

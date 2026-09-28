@@ -95,7 +95,8 @@ public:
     kPlaceholder,
   };
 
-  //! Distinguish decoded-source storage, material-role defaults and user intent.
+  //! Distinguish decoded-source storage, material-role defaults and user
+  //! intent.
   enum class OutputFormatPolicy : uint8_t {
     kPreserveSource,
     kMaterialPreset, //!< Use the role preset for LDR; preserve floating HDR.
@@ -119,7 +120,7 @@ public:
 
     //! External source path used to load bytes on the import thread.
     //! Leave empty when `source` already contains content.
-    std::filesystem::path source_path;
+    std::filesystem::path source_path {};
 
     //! Canonical dedupe key (normalized path or embedded hash).
     std::string texture_id;
@@ -134,7 +135,8 @@ public:
     std::string packing_policy_id;
 
     //! How decoded source format and the import descriptor select storage.
-    OutputFormatPolicy output_format_policy = OutputFormatPolicy::kPreserveSource;
+    OutputFormatPolicy output_format_policy
+      = OutputFormatPolicy::kPreserveSource;
 
     //! Failure policy for this work item.
     FailurePolicy failure_policy = FailurePolicy::kPlaceholder;
@@ -152,10 +154,10 @@ public:
     SourceContent source;
 
     //! Callback fired when a worker starts processing this item.
-    std::function<void()> on_started;
+    std::function<void()> on_started {};
 
     //! Callback fired when a worker finishes processing this item.
-    std::function<void()> on_finished;
+    std::function<void()> on_finished {};
 
     //! Cancellation token.
     std::stop_token stop_token;

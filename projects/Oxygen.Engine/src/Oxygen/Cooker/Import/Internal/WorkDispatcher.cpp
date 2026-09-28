@@ -4,35 +4,60 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Cooker/Import/Internal/WorkDispatcher.h>
-
 #include <algorithm>
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <deque>
 #include <exception>
-#include <filesystem>
 #include <functional>
 #include <limits>
 #include <memory>
+#include <optional>
+#include <span>
 #include <sstream>
+#include <stop_token>
+#include <string>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 #include <variant>
+#include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/ScopeGuard.h>
+#include <Oxygen/Base/Span.h>
+#include <Oxygen/Cooker/Import/BufferImportTypes.h>
+#include <Oxygen/Cooker/Import/ImportConcurrency.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/ImportProgress.h>
+#include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/AssetEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/BufferEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/ResourceDescriptorEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/TextureEmitter.h>
+#include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
+#include <Oxygen/Cooker/Import/Internal/ImportPlanner.h>
+#include <Oxygen/Cooker/Import/Internal/ImportSession.h>
+#include <Oxygen/Cooker/Import/Internal/Pipelines/BufferPipeline.h>
+#include <Oxygen/Cooker/Import/Internal/Pipelines/GeometryPipeline.h>
+#include <Oxygen/Cooker/Import/Internal/Pipelines/MaterialPipeline.h>
+#include <Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h>
+#include <Oxygen/Cooker/Import/Internal/Pipelines/ScenePipeline.h>
+#include <Oxygen/Cooker/Import/Internal/Pipelines/TexturePipeline.h>
+#include <Oxygen/Cooker/Import/Internal/WorkDispatcher.h>
+#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat.h>
-#include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Channel.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Event.h>
+#include <Oxygen/OxCo/Nursery.h>
 
 namespace oxygen::content::import::detail {
 
@@ -98,7 +123,7 @@ namespace {
   public:
     auto AddReady(PlanItemId item_id, PlanItemKind kind) -> void override
     {
-      buckets_[static_cast<size_t>(kind)].push_back(item_id);
+      buckets_.at(static_cast<size_t>(kind)).push_back(item_id);
     }
 
     [[nodiscard]] auto HasReady() const -> bool override
@@ -120,15 +145,15 @@ namespace {
 
       for (size_t attempt = 0U; attempt < buckets_.size(); ++attempt) {
         const auto kind_index = (cursor_ + attempt) % buckets_.size();
-        if (buckets_[kind_index].empty()) {
+        if (buckets_.at(kind_index).empty()) {
           continue;
         }
-        if (!availability[kind_index]) {
+        if (!availability.at(kind_index)) {
           continue;
         }
 
-        auto item_id = buckets_[kind_index].front();
-        buckets_[kind_index].pop_front();
+        auto item_id = buckets_.at(kind_index).front();
+        buckets_.at(kind_index).pop_front();
         cursor_ = (kind_index + 1U) % buckets_.size();
         return item_id;
       }
@@ -292,8 +317,9 @@ auto WorkDispatcher::EmitTexturePayload(TexturePipeline::WorkResult& result)
       return std::nullopt;
     }
     using data::pak::core::ResourceIndexT;
-    constexpr ResourceIndexT kErrorTextureIndex { (
-      std::numeric_limits<uint32_t>::max)() };
+    constexpr ResourceIndexT kErrorTextureIndex {
+      std::numeric_limits<uint32_t>::max()
+    };
     return kErrorTextureIndex;
   }
 
@@ -462,7 +488,7 @@ auto WorkDispatcher::UpdateMaterialBindings(
   -> void
 {
   auto resolve_binding = [&](MaterialTextureBinding& binding,
-                           [[maybe_unused]] std::string_view label) {
+                           [[maybe_unused]] std::string_view label) -> void {
     if (!binding.assigned || binding.source_id.empty()) {
       return;
     }
@@ -475,8 +501,9 @@ auto WorkDispatcher::UpdateMaterialBindings(
       DLOG_F(WARNING, "Material '{}' missing texture '{}' ({})", item.source_id,
         binding.source_id, label);
       using data::pak::core::ResourceIndexT;
-      constexpr ResourceIndexT kErrorTextureIndex { (
-        std::numeric_limits<uint32_t>::max)() };
+      constexpr ResourceIndexT kErrorTextureIndex {
+        std::numeric_limits<uint32_t>::max()
+      };
       binding.index = kErrorTextureIndex;
       binding.assigned = true;
       return;
@@ -692,7 +719,7 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
   co::Channel<ResultEnvelope> result_channel(result_capacity);
   co::Channel<uint8_t> collector_kick(1U);
 
-  auto PendingTotal = [&]() -> size_t {
+  auto PendingTotal = [&] -> size_t {
     return pending_textures.load(std::memory_order_acquire)
       + pending_buffers.load(std::memory_order_acquire)
       + pending_materials.load(std::memory_order_acquire)
@@ -701,12 +728,12 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
       + pending_scenes.load(std::memory_order_acquire);
   };
 
-  auto NotifyCollector = [&]() -> void {
+  auto NotifyCollector = [&] -> void {
     // Best-effort wake; ignore if the channel is full or closed.
     [[maybe_unused]] const bool sent = collector_kick.TrySend(uint8_t { 1 });
   };
 
-  ScopeGuard close_guard([&]() noexcept { ClosePipelines(); });
+  ScopeGuard close_guard([&] noexcept -> void { ClosePipelines(); });
 
   auto resolve_texture_item =
     [&](
@@ -767,6 +794,9 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
   };
 
   auto progress_state = std::make_shared<ProgressState>();
+  const auto deactivate_progress = ScopeGuard([progress_state] noexcept {
+    progress_state->active.store(false, std::memory_order_release);
+  });
   progress_state->item_count = item_count;
   if (progress_.has_value()) {
     progress_state->reporter = std::make_shared<ProgressReporter>(*progress_);
@@ -779,7 +809,7 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
   for (const auto& step : context.steps) {
     for (const auto prerequisite_id : step.prerequisites) {
       const auto u_prereq = prerequisite_id.get();
-      dependents[u_prereq].push_back(step.item_id);
+      dependents.at(u_prereq).push_back(step.item_id);
     }
   }
 
@@ -791,9 +821,9 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     }
   }
 
-  auto enqueue_ready = [&](const PlanItemId item_id) {
+  auto enqueue_ready = [&](const PlanItemId item_id) -> void {
     const auto u_item = item_id.get();
-    if (submitted[u_item] != 0U) {
+    if (submitted.at(u_item) != 0U) {
       return;
     }
     const auto& item = context.planner.Item(item_id);
@@ -801,16 +831,16 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
   };
 
   auto mark_complete = [&](const PlanItemId item_id, const PlanItemKind kind,
-                         std::string_view item_name) {
+                         std::string_view item_name) -> void {
     (void)kind;
     (void)item_name;
     const auto u_item = item_id.get();
-    if (completed[u_item] != 0U) {
+    if (completed.at(u_item) != 0U) {
       return;
     }
-    completed[u_item] = 1U;
+    completed.at(u_item) = 1U;
     progress_state->completed_count.fetch_add(1U, std::memory_order_relaxed);
-    for (const auto dependent : dependents[u_item]) {
+    for (const auto dependent : dependents.at(u_item)) {
       auto& tracker = context.planner.Tracker(dependent);
       if (tracker.MarkReady({ item_id })) {
         enqueue_ready(dependent);
@@ -825,7 +855,8 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
       return {};
     }
     const std::string name(item_name);
-    return [state = progress_state, kind, name, kind_label, phase_for_kind]() {
+    return [state = progress_state, kind, name, kind_label,
+             phase_for_kind] -> void {
       if (!state->active.load(std::memory_order_acquire) || !state->reporter
         || !state->reporter->on_progress) {
         return;
@@ -834,9 +865,9 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
         = state->completed_count.load(std::memory_order_relaxed);
       const float overall_progress = (state->item_count > 0U)
         ? state->reporter->overall_start
-          + (state->reporter->overall_end - state->reporter->overall_start)
+          + ((state->reporter->overall_end - state->reporter->overall_start)
             * (static_cast<float>(completed_count)
-              / static_cast<float>(state->item_count))
+              / static_cast<float>(state->item_count)))
         : state->reporter->overall_start;
       const auto label = kind_label(kind);
       state->reporter->ReportItemProgress(ProgressEventKind::kItemStarted,
@@ -851,24 +882,25 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
       return {};
     }
     const std::string name(item_name);
-    return [state = progress_state, kind, name, kind_label, phase_for_kind]() {
-      if (!state->active.load(std::memory_order_acquire) || !state->reporter
-        || !state->reporter->on_progress) {
-        return;
-      }
-      const auto completed_count
-        = state->completed_count.load(std::memory_order_relaxed);
-      const float overall_progress = (state->item_count > 0U)
-        ? state->reporter->overall_start
-          + (state->reporter->overall_end - state->reporter->overall_start)
-            * (static_cast<float>(completed_count)
-              / static_cast<float>(state->item_count))
-        : state->reporter->overall_start;
-      const auto label = kind_label(kind);
-      state->reporter->ReportItemProgress(ProgressEventKind::kItemFinished,
-        phase_for_kind(kind), overall_progress, name + " finished", label,
-        name);
-    };
+    return
+      [state = progress_state, kind, name, kind_label, phase_for_kind] -> void {
+        if (!state->active.load(std::memory_order_acquire) || !state->reporter
+          || !state->reporter->on_progress) {
+          return;
+        }
+        const auto completed_count
+          = state->completed_count.load(std::memory_order_relaxed);
+        const float overall_progress = (state->item_count > 0U)
+          ? state->reporter->overall_start
+            + ((state->reporter->overall_end - state->reporter->overall_start)
+              * (static_cast<float>(completed_count)
+                / static_cast<float>(state->item_count)))
+          : state->reporter->overall_start;
+        const auto label = kind_label(kind);
+        state->reporter->ReportItemProgress(ProgressEventKind::kItemFinished,
+          phase_for_kind(kind), overall_progress, name + " finished", label,
+          name);
+      };
   };
 
   auto ReportItemFinished
@@ -881,10 +913,10 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
       = progress_state->completed_count.load(std::memory_order_relaxed);
     const float overall_progress = (progress_state->item_count > 0U)
       ? progress_state->reporter->overall_start
-        + (progress_state->reporter->overall_end
-            - progress_state->reporter->overall_start)
+        + ((progress_state->reporter->overall_end
+             - progress_state->reporter->overall_start)
           * (static_cast<float>(completed_count)
-            / static_cast<float>(progress_state->item_count))
+            / static_cast<float>(progress_state->item_count)))
       : progress_state->reporter->overall_start;
     const auto label = kind_label(kind);
     progress_state->reporter->ReportItemProgress(
@@ -904,10 +936,10 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
       = progress_state->completed_count.load(std::memory_order_relaxed);
     const float overall_progress = (progress_state->item_count > 0U)
       ? progress_state->reporter->overall_start
-        + (progress_state->reporter->overall_end
-            - progress_state->reporter->overall_start)
+        + ((progress_state->reporter->overall_end
+             - progress_state->reporter->overall_start)
           * (static_cast<float>(completed_count)
-            / static_cast<float>(progress_state->item_count))
+            / static_cast<float>(progress_state->item_count)))
       : progress_state->reporter->overall_start;
     const auto label = kind_label(kind);
     progress_state->reporter->ReportItemCollected(phase_for_kind(kind),
@@ -1170,7 +1202,7 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
       if (!emitted.has_value()) {
         return false;
       }
-      auto& lod_binding = bindings[lod_index];
+      auto& lod_binding = bindings.at(lod_index);
       switch (kind) {
       case GeometryBufferKind::kVertex:
         lod_binding.vertex_buffer
@@ -1210,9 +1242,9 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     bindings.resize(cooked.lods.size());
 
     for (size_t lod_index = 0; lod_index < cooked.lods.size(); ++lod_index) {
-      auto& lod = cooked.lods[lod_index];
+      auto& lod = cooked.lods.at(lod_index);
       if (!lod.auxiliary_buffers.empty()
-        && lod.auxiliary_buffers.size() != 4u) {
+        && lod.auxiliary_buffers.size() != 4U) {
         session_.AddDiagnostic(MakeErrorDiagnostic("mesh.aux_buffer_count",
           "Unexpected auxiliary buffer count for mesh LOD", result.source_id,
           ""));
@@ -1226,23 +1258,23 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
             GeometryBufferKind::kIndex, lod_index, "ib", bindings)) {
         co_return false;
       }
-      if (lod.auxiliary_buffers.size() == 4u) {
-        if (!EmitGeometryBuffer(std::move(lod.auxiliary_buffers[0]),
+      if (lod.auxiliary_buffers.size() == 4U) {
+        if (!EmitGeometryBuffer(std::move(lod.auxiliary_buffers.at(0)),
               GeometryBufferKind::kJointIndex, lod_index, "joint_indices",
               bindings)) {
           co_return false;
         }
-        if (!EmitGeometryBuffer(std::move(lod.auxiliary_buffers[1]),
+        if (!EmitGeometryBuffer(std::move(lod.auxiliary_buffers.at(1)),
               GeometryBufferKind::kJointWeight, lod_index, "joint_weights",
               bindings)) {
           co_return false;
         }
-        if (!EmitGeometryBuffer(std::move(lod.auxiliary_buffers[2]),
+        if (!EmitGeometryBuffer(std::move(lod.auxiliary_buffers.at(2)),
               GeometryBufferKind::kInverseBind, lod_index, "inverse_bind",
               bindings)) {
           co_return false;
         }
-        if (!EmitGeometryBuffer(std::move(lod.auxiliary_buffers[3]),
+        if (!EmitGeometryBuffer(std::move(lod.auxiliary_buffers.at(3)),
               GeometryBufferKind::kJointRemap, lod_index, "joint_remap",
               bindings)) {
           co_return false;
@@ -1252,7 +1284,9 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
 
     mesh_build_results.emplace(*item_id,
       MeshBuildReady {
-        .result = std::move(result), .bindings = std::move(bindings) });
+        .result = std::move(result),
+        .bindings = std::move(bindings),
+      });
 
     const auto& item = context.planner.Item(*item_id);
     mark_complete(*item_id, item.kind, item.debug_name);
@@ -1288,6 +1322,10 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     }
 
     geometry_keys.emplace(*item_id, result.cooked->geometry_key);
+    if (result.cooked->material_slot_provenance) {
+      session_.AddMaterialSlotProvenance(
+        std::move(*result.cooked->material_slot_provenance));
+    }
     const auto& item = context.planner.Item(*item_id);
     mark_complete(*item_id, item.kind, item.debug_name);
     co_return true;
@@ -1354,7 +1392,7 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
 
   std::atomic<bool> collector_done { false };
   co::Event collector_finished;
-  nursery.Start([&]() -> co::Co<> {
+  auto collect_results = [&] -> co::Co<> {
     size_t collect_cursor = 0U;
     while (true) {
       if (collector_done.load(std::memory_order_acquire)
@@ -1531,7 +1569,7 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     result_channel.Close();
     collector_finished.Trigger();
     co_return;
-  });
+  };
 
   auto Finish = [&](const bool ok) -> co::Co<bool> {
     progress_state->active.store(false, std::memory_order_release);
@@ -1692,6 +1730,11 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
       cooked_payload.material_patch_offsets.size());
     for (const auto& patch_offset : cooked_payload.material_patch_offsets) {
       const auto slot = patch_offset.slot;
+      if (slot == context.material_slots.size()) {
+        // The separate unassigned declaration already carries the native
+        // default-material sentinel and has no material dependency to patch.
+        continue;
+      }
       if (slot >= context.material_slots.size()) {
         session_.AddDiagnostic(
           MakeErrorDiagnostic("import.plan.material_slot_invalid",
@@ -1701,7 +1744,8 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
         continue;
       }
 
-      const auto material_item = context.material_slots[slot];
+      const auto material_item
+        = oxygen::base::CheckedAt(context.material_slots, slot);
       const auto it = material_keys.find(material_item);
       if (it == material_keys.end()) {
         session_.AddDiagnostic(
@@ -1778,10 +1822,10 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
 
   auto submit_item = [&](const PlanItemId item_id) -> co::Co<bool> {
     const auto u_item = item_id.get();
-    if (submitted[u_item] != 0U) {
+    if (submitted.at(u_item) != 0U) {
       co_return true;
     }
-    submitted[u_item] = 1U;
+    submitted.at(u_item) = 1U;
 
     const auto& item = context.planner.Item(item_id);
     auto on_started = MakeItemStartedCallback(item.kind, item.debug_name);
@@ -1833,86 +1877,99 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     return false;
   };
 
-  auto BuildAvailability = [&]() -> KindAvailability {
+  auto BuildAvailability = [&] -> KindAvailability {
     KindAvailability availability {};
     for (size_t index = 0U; index < availability.size(); ++index) {
       const auto kind = static_cast<PlanItemKind>(index);
-      availability[index] = KindHasCapacity(kind);
+      availability.at(index) = KindHasCapacity(kind);
     }
     return availability;
   };
 
-  while (progress_state->completed_count.load(std::memory_order_acquire)
-    < item_count) {
-    bool submitted_any = false;
-    auto availability = BuildAvailability();
-    auto next_item = scheduler->NextReady(availability);
-    while (next_item.has_value()) {
-      submitted_any = true;
-      if (!co_await submit_item(*next_item)) {
-        co_return co_await Finish(false);
-      }
-      availability = BuildAvailability();
-      next_item = scheduler->NextReady(availability);
-    }
-
-    if (stop_token_.stop_requested()) {
-      co_return co_await Finish(false);
-    }
-
-    while (auto envelope = result_channel.TryReceive()) {
-      if (!co_await ProcessEnvelope(std::move(*envelope))) {
-        co_return co_await Finish(false);
-      }
-    }
-
-    if (progress_state->completed_count.load(std::memory_order_acquire)
-      >= item_count) {
-      co_return co_await Finish(true);
-    }
-
-    const auto pending_total = PendingTotal();
-    const auto pending_envelopes_count
-      = pending_envelopes.load(std::memory_order_acquire);
-    if (pending_total == 0U && pending_envelopes_count == 0U) {
-      if (scheduler->HasReady()) {
-        const auto any_capacity = [&]() -> bool {
-          for (size_t index = 0U; index < kPlanKindCount; ++index) {
-            if (KindHasCapacity(static_cast<PlanItemKind>(index))) {
-              return true;
-            }
-          }
-          return false;
-        }();
-
-        if (!any_capacity) {
-          session_.AddDiagnostic(
-            MakeErrorDiagnostic("import.plan.capacity_blocked",
-              "Import plan has ready work but no pipeline capacity available",
-              "", ""));
+  auto run_scheduler = [&] -> co::Co<bool> {
+    while (progress_state->completed_count.load(std::memory_order_acquire)
+      < item_count) {
+      bool submitted_any = false;
+      auto availability = BuildAvailability();
+      auto next_item = scheduler->NextReady(availability);
+      while (next_item.has_value()) {
+        submitted_any = true;
+        if (!co_await submit_item(*next_item)) {
           co_return co_await Finish(false);
         }
-
-        continue;
+        availability = BuildAvailability();
+        next_item = scheduler->NextReady(availability);
       }
 
-      session_.AddDiagnostic(MakeErrorDiagnostic("import.plan.deadlock",
-        "Import plan has no pending work but is not complete", "", ""));
-      co_return co_await Finish(false);
-    }
-
-    if (!submitted_any) {
-      auto envelope = co_await result_channel.Receive();
-      if (!envelope.has_value()) {
+      if (stop_token_.stop_requested()) {
         co_return co_await Finish(false);
       }
-      if (!co_await ProcessEnvelope(std::move(*envelope))) {
+
+      while (auto envelope = result_channel.TryReceive()) {
+        if (!co_await ProcessEnvelope(std::move(*envelope))) {
+          co_return co_await Finish(false);
+        }
+      }
+
+      if (progress_state->completed_count.load(std::memory_order_acquire)
+        >= item_count) {
+        co_return co_await Finish(true);
+      }
+
+      const auto pending_total = PendingTotal();
+      const auto pending_envelopes_count
+        = pending_envelopes.load(std::memory_order_acquire);
+      if (pending_total == 0U && pending_envelopes_count == 0U) {
+        if (scheduler->HasReady()) {
+          const auto any_capacity = [&] -> bool {
+            for (size_t index = 0U; index < kPlanKindCount; ++index) {
+              if (KindHasCapacity(static_cast<PlanItemKind>(index))) {
+                return true;
+              }
+            }
+            return false;
+          }();
+
+          if (!any_capacity) {
+            session_.AddDiagnostic(
+              MakeErrorDiagnostic("import.plan.capacity_blocked",
+                "Import plan has ready work but no pipeline capacity available",
+                "", ""));
+            co_return co_await Finish(false);
+          }
+
+          continue;
+        }
+
+        session_.AddDiagnostic(MakeErrorDiagnostic("import.plan.deadlock",
+          "Import plan has no pending work but is not complete", "", ""));
         co_return co_await Finish(false);
       }
-    }
-  }
 
-  co_return co_await Finish(true);
+      if (!submitted_any) {
+        auto envelope = co_await result_channel.Receive();
+        if (!envelope.has_value()) {
+          co_return co_await Finish(false);
+        }
+        if (!co_await ProcessEnvelope(std::move(*envelope))) {
+          co_return co_await Finish(false);
+        }
+      }
+    }
+
+    co_return co_await Finish(true);
+  };
+
+  bool success = false;
+  // The collector borrows this frame. Drain it before Run releases its state,
+  // including when scheduler work throws or the caller cancels the import.
+  OXCO_WITH_NURSERY(collector_nursery)
+  {
+    collector_nursery.Start(collect_results);
+    success = co_await run_scheduler();
+    co_return co::kJoin;
+  };
+  co_return success;
 }
 
 } // namespace oxygen::content::import::detail

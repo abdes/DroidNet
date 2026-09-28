@@ -12,6 +12,7 @@ Returns list of ValidationErrorRecord; empty list means success.
 from __future__ import annotations
 from typing import Any, List, Dict
 from ..packing.errors import PakError
+from ..packing.material_slots import layout_revision_bytes, slot_id_bytes
 from ..packing.scene_flags import node_flag_masks
 from ..packing.source_identity import source_identity_bytes
 
@@ -823,6 +824,10 @@ def _semantic_phase(spec: Dict[str, Any]) -> List[ValidationErrorRecord]:
                 if not isinstance(sub, dict):
                     continue
                 sub_path = f"geometries[{gi}].lods[{li}].submeshes[{si}]"
+                try:
+                    slot_id_bytes(sub.get("slot_id"))
+                except PakError as error:
+                    _err(errors, error.code, error.message, sub_path + ".slot_id")
                 _validate_bounds_vec3(errors, sub, sub_path)
                 material_ref = sub.get("material")
                 if not material_ref:
@@ -1202,30 +1207,36 @@ def _semantic_phase(spec: Dict[str, Any]) -> List[ValidationErrorRecord]:
                 )
             )
             if material_ref_present:
-                material_key = _clean_key_hex(
-                    r.get("material_asset_key", r.get("material_key"))
-                )
-                if material_key is None:
-                    material_name = r.get(
-                        "material",
-                        r.get("material_override", r.get("material_asset")),
-                    )
-                    if isinstance(material_name, str):
-                        material_key = material_name_to_key.get(material_name)
-                if material_key is None:
-                    _err(
-                        errors,
-                        "E_REF",
-                        "Renderable material override must reference material_asset_key (hex) or material (name)",
-                        rpath,
-                    )
-                elif material_key not in known_material_keys:
-                    _err(
-                        errors,
-                        "E_REF",
-                        "Unknown material override reference",
-                        rpath + ".material_asset_key",
-                    )
+                _err(errors, "E_VERSION", "Use explicit material_overrides slot records", rpath)
+
+        assignments = s.get("material_overrides", []) or []
+        if not isinstance(assignments, list):
+            _err(errors, "E_TYPE", "material_overrides must be a list", f"scenes[{si}].material_overrides")
+            assignments = []
+        seen_assignments = set()
+        renderable_nodes = {r.get("node_index") for r in renderables if isinstance(r, dict)}
+        for index, assignment in enumerate(assignments):
+            path = f"scenes[{si}].material_overrides[{index}]"
+            if not isinstance(assignment, dict):
+                _err(errors, "E_TYPE", "Material override must be an object", path)
+                continue
+            try:
+                slot = slot_id_bytes(assignment.get("slot_id"))
+                layout_revision_bytes(assignment.get("layout_revision"))
+                node = assignment.get("node_index")
+                if type(node) is not int or node not in renderable_nodes:
+                    raise PakError("E_REF", "Material override must reference a renderable node")
+                identity = (node, slot)
+                if identity in seen_assignments:
+                    raise PakError("E_SLOT_ID", "Duplicate node/slot material override")
+                seen_assignments.add(identity)
+                key = _clean_key_hex(assignment.get("material_asset_key"))
+                if key is None:
+                    key = material_name_to_key.get(assignment.get("material"))
+                if key is None or key not in known_material_keys:
+                    raise PakError("E_REF", "Unknown material override reference")
+            except PakError as error:
+                _err(errors, error.code, error.message, path)
 
         perspective_cameras = s.get("perspective_cameras", []) or []
         if not isinstance(perspective_cameras, list):

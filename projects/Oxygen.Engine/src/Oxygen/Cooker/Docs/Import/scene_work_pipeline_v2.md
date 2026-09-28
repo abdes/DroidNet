@@ -1,5 +1,11 @@
 # Scene Pipeline (v2)
 
+## Open items
+
+| ID           | State   | Next action                                                                                                                                                                                                                                                                                                                               |
+| ------------ | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| CK-IMPORT-01 | planned | Honor `ImportOptions.import_content` in model planning; current glTF/FBX plans run all content stages. Qualify geometry without authored materials using engine defaults, texture/material dependency selection, and the scene-without-geometry reference policy. Slot provenance reports actual processed geometry, not requested flags. |
+
 **Status:** Complete Design (Phase 5)
 **Date:** 2026-01-26
 **Parent:** [async_import_pipeline_v2.md](async_import_pipeline_v2.md)
@@ -19,8 +25,11 @@ Core properties:
 - **No I/O**: `AssetEmitter` writes `.oscene` files.
 - **Job-scoped**: created per job and started in the job’s child nursery.
 - **Geometry-aware**: links nodes to geometry assets via `geometry_keys`.
-- **PAK v7 container, v3 scene asset**: uses the v3 scene asset layout as
-  defined in [src/Oxygen/Data/PakFormat.h](../src/Oxygen/Data/PakFormat.h).
+- **Native scene layout**: uses the current
+  [SceneAssetDesc](../../../Data/PakFormat_world.h) and environment records.
+- **Empty scenes**: a zero-node scene is valid and retains its environment.
+  No placeholder node is emitted. Node-indexed components require an existing
+  node; empty scenes cannot contain dangling component references.
 - **Planner‑gated**: the planner submits scene work only after referenced
   geometry assets are ready.
 

@@ -61,6 +61,7 @@ def test_procedural_mesh_params_blob_is_emitted(tmp_path: Path):
                         },
                         "submeshes": [
                             {
+                                "slot_id": "26250d5c-0350-5598-9b92-ec0b0039a66e",
                                 "name": "main",
                                 "material": "MatProc",
                                 "bounding_box_min": [-0.5, -0.5, -0.5],

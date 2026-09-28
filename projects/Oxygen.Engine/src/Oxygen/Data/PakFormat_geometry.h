@@ -7,6 +7,7 @@
 #pragma once
 
 #include <Oxygen/Base/Compilers.h>
+#include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/PakFormat_core.h>
 
 // packed structs intentionally embed unaligned NamedType ResourceIndexT fields
@@ -21,7 +22,7 @@ OXYGEN_DIAGNOSTIC_DISABLE_MSVC(4315)
 namespace oxygen::data::pak::geometry {
 
 //! Geometry asset descriptor version for current PAK schema.
-[[maybe_unused]] constexpr uint8_t kGeometryAssetVersion = 1;
+[[maybe_unused]] constexpr uint8_t kGeometryAssetVersion = 2;
 
 //! Geometry asset descriptor
 /*!
@@ -94,7 +95,7 @@ struct SkinnedMeshInfo {
   //!< Mesh-to-skeleton remap buffer
   core::ResourceIndexT joint_remap_buffer = core::kNoResourceIndex;
   //!< Skeleton asset reference - TODO: future
-  AssetKey skeleton_asset_key = {};
+  AssetKey skeleton_asset_key;
   //!< Number of joints referenced by this mesh
   uint16_t joint_count = 0;
   //!< Influences per vertex (1..8)
@@ -205,13 +206,14 @@ static_assert(sizeof(MeshDesc) == 145);
 struct SubMeshDesc {
   char name[core::kMaxNameSize] = {};
   AssetKey material_asset_key; // AssetKey reference to MaterialAsset
+  MaterialSlotId slot_id; // Semantic declaration, shared only explicitly
   uint32_t mesh_view_count = 0; // Number of MeshViews in this SubMesh
   float bounding_box_min[3] = {}; // AABB min coordinates
   float bounding_box_max[3] = {}; // AABB max coordinates
 };
 // Followed by: MeshViewDesc mesh_views[mesh_view_count]
 #pragma pack(pop)
-static_assert(sizeof(SubMeshDesc) == 108);
+static_assert(sizeof(SubMeshDesc) == 124);
 
 //! Mesh view descriptor
 /*!

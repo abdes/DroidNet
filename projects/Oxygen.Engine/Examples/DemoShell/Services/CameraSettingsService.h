@@ -53,7 +53,7 @@ public:
   auto SetSceneActivationPolicy(SceneActivationPolicy policy) -> void;
 
   CameraSettingsService() = default;
-  virtual ~CameraSettingsService() = default;
+  ~CameraSettingsService() override = default;
 
   OXYGEN_MAKE_NON_COPYABLE(CameraSettingsService)
   OXYGEN_MAKE_NON_MOVABLE(CameraSettingsService)
@@ -184,12 +184,12 @@ public:
   auto OnSceneActivated(scene::Scene& scene) -> void override;
   auto OnMainViewReady(const engine::FrameContext& context,
     const vortex::CompositionView& view) -> void override;
-  auto OnRuntimeMainViewReady(scene::SceneNode camera, const ViewPort& viewport)
-    -> void;
+  auto OnRuntimeMainViewReady(
+    const scene::SceneNode& camera, const ViewPort& viewport) -> void;
 
 private:
   SceneActivationPolicy activation_policy_ {
-    SceneActivationPolicy::kRestorePreferences
+    SceneActivationPolicy::kRestorePreferences,
   };
   // NOLINTBEGIN(*-magic-numbers)
   struct PersistedCameraState {
@@ -265,7 +265,7 @@ private:
   void RequestSyncFromActive();
   void ApplyPendingSync();
   void ApplyPendingReset();
-  void ApplyViewportToActive(float aspect, const ViewPort& viewport);
+  void ApplyViewportToActive(const ViewPort& viewport);
   [[nodiscard]] auto RestoreActiveCameraSettings() -> bool;
   [[nodiscard]] auto CaptureActiveCameraState() -> PersistedCameraState;
 

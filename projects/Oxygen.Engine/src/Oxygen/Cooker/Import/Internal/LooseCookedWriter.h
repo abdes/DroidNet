@@ -35,7 +35,7 @@ struct LooseCookedAssetRecord final {
   std::string descriptor_relpath;
 
   uint64_t descriptor_size = 0;
-  std::optional<base::Sha256Digest> descriptor_sha256;
+  std::optional<base::Sha256Digest> descriptor_sha256 {};
 };
 
 //! Summary of one cooked file record written to disk.
@@ -66,8 +66,8 @@ struct LooseCookedWriteResult final {
   data::SourceKey source_key {};
 
   uint16_t content_version = 0;
-  std::vector<LooseCookedAssetRecord> assets;
-  std::vector<LooseCookedFileRecord> files;
+  std::vector<LooseCookedAssetRecord> assets {};
+  std::vector<LooseCookedFileRecord> files {};
   LooseCookedCollisionSummary collision_summary {};
 };
 

@@ -94,7 +94,7 @@ namespace detail {
     // MeshInfo arms are fixed-width on disk. Consume the reserved tail bytes so
     // subsequent SubMeshDesc reads start at the correct offset.
     constexpr size_t kStandardConsumed
-      = sizeof(ResourceIndexT) * 2 + sizeof(float) * 3 * 2;
+      = (sizeof(ResourceIndexT) * 2) + (sizeof(float) * 3 * 2);
     constexpr size_t kStandardTail
       = sizeof(data::pak::geometry::StandardMeshInfo) - kStandardConsumed;
     static_assert(kStandardTail == 40);
@@ -114,7 +114,7 @@ namespace detail {
         "GeometryLoader requires a DependencyCollector for async decode");
     }
 
-    auto collect_buffer_ref = [&](const ResourceIndexT resource_index) {
+    auto collect_buffer_ref = [&](const ResourceIndexT resource_index) -> void {
       if (resource_index == data::pak::core::kNoResourceIndex) {
         return; // sentinel / absent – nothing to collect
       }
@@ -253,7 +253,7 @@ namespace detail {
         "GeometryLoader requires a DependencyCollector for async decode");
     }
 
-    auto collect_buffer_ref = [&](const ResourceIndexT resource_index) {
+    auto collect_buffer_ref = [&](const ResourceIndexT resource_index) -> void {
       if (resource_index == data::pak::core::kNoResourceIndex) {
         return; // sentinel / absent – nothing to collect
       }
@@ -322,6 +322,15 @@ namespace detail {
       = desc_reader.ReadInto<AssetKey>(desc.material_asset_key);
     CheckResult(mat_key_result, "sm.material_asset_key");
     LOG_F(2, "material asset : {}", desc.material_asset_key);
+
+    data::MaterialSlotId::ByteArray slot_bytes {};
+    CheckResult(
+      desc_reader.ReadBlobInto(std::as_writable_bytes(std::span(slot_bytes))),
+      "sm.slot_id");
+    desc.slot_id = data::MaterialSlotId::FromBytes(slot_bytes);
+    if (desc.slot_id.IsNil()) {
+      throw std::runtime_error("Geometry material slot identity is nil");
+    }
 
     // mesh_view_count
     auto mesh_view_count_result
@@ -422,23 +431,10 @@ inline auto LoadMesh(LoaderContext context) -> std::unique_ptr<data::Mesh>
   MeshBuilder builder(/*lod=*/0, name);
   builder.WithDescriptor(desc);
 
-  const bool should_build_mesh = !(context.parse_only && desc.IsStandard());
-
-  // Configure builder based on mesh type
-  if (desc.IsStandard()) {
-    if (should_build_mesh) {
-      // Reference external buffer resources (zero-copy)
-      builder.WithBufferResources(
-        vertex_buffer_resource, index_buffer_resource);
-    }
-  } else if (desc.IsSkinned()) {
-    if (should_build_mesh) {
-      builder.WithBufferResources(
-        vertex_buffer_resource, index_buffer_resource);
-    }
-  } else if (desc.IsProcedural()) {
-    // Use owned vertex/index data (data is moved into builder)
-    builder.WithVertices(vertices).WithIndices(indices);
+  if (desc.IsProcedural()) {
+    builder.WithVertices(std::move(vertices)).WithIndices(std::move(indices));
+  } else {
+    builder.WithBufferResources(vertex_buffer_resource, index_buffer_resource);
   }
 
   uint32_t total_read_views { 0 };
@@ -480,24 +476,18 @@ inline auto LoadMesh(LoaderContext context) -> std::unique_ptr<data::Mesh>
         "GeometryLoader requires a DependencyCollector for async decode");
     }
 
-    if (should_build_mesh) {
-      auto sm_builder
-        = builder.BeginSubMesh(sm_name, material).WithDescriptor(sm_desc);
-      for (const auto& mv_desc : mesh_views) {
-        sm_builder.WithMeshView(mv_desc);
-      }
-      builder.EndSubMesh(std::move(sm_builder));
+    auto sm_builder
+      = builder.BeginSubMesh(sm_name, material).WithDescriptor(sm_desc);
+    for (const auto& mv_desc : mesh_views) {
+      sm_builder.WithMeshView(mv_desc);
     }
+    builder.EndSubMesh(std::move(sm_builder));
   }
 
   if (total_read_views != desc.mesh_view_count) {
     throw std::runtime_error(
       fmt::format("total read mesh views ({}) != expected ({})",
         total_read_views, desc.mesh_view_count));
-  }
-
-  if (!should_build_mesh) {
-    return nullptr;
   }
 
   return builder.Build();
@@ -522,6 +512,10 @@ inline auto LoadGeometryAsset(LoaderContext context)
   // header (use header loader from Helpers.h)
   LoadAssetHeader(reader, desc.header);
 
+  if (desc.header.version != data::pak::geometry::kGeometryAssetVersion) {
+    throw std::runtime_error("Geometry version requires recooking");
+  }
+
   // lod_count
   auto lod_count_result = reader.ReadInto<uint32_t>(desc.lod_count);
   detail::CheckResult(lod_count_result, "g.lod_count");
@@ -542,8 +536,8 @@ inline auto LoadGeometryAsset(LoaderContext context)
   }
 
   // Construct and return GeometryAsset with LOD meshes
-  return std::make_unique<data::GeometryAsset>(
-    context.current_asset_key, std::move(desc), std::move(lod_meshes));
+  return std::make_unique<data::GeometryAsset>(context.current_asset_key,
+    std::move(desc), std::move(lod_meshes), context.source_key);
 }
 
 static_assert(oxygen::content::LoadFunction<decltype(LoadGeometryAsset)>);

@@ -5,15 +5,56 @@
 //===----------------------------------------------------------------------===//
 
 #include <chrono>
+#include <exception>
 #include <filesystem>
+#include <memory>
+#include <stdexcept>
+#include <string_view>
+#include <system_error>
+#include <utility>
 
+#include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Cooker/Import/AsyncImportService.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportProgress.h>
+#include <Oxygen/Cooker/Import/ImportReport.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/ImportJob.h>
+#include <Oxygen/Cooker/Import/Internal/ImportJobParams.h>
+#include <Oxygen/Cooker/Import/Internal/ImportSourceSnapshot.h>
+#include <Oxygen/Cooker/Import/Internal/LooseCookedIndexRegistry.h>
+#include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
+#include <Oxygen/Cooker/Import/Naming.h>
+#include <Oxygen/Cooker/Import/RetainedModelImport.h>
+#include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/OxCo/Algorithms.h>
+#include <Oxygen/OxCo/Awaitables.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
 
 namespace oxygen::content::import::detail {
 
 namespace {
+
+  [[nodiscard]] auto HasGenerationMarker(std::filesystem::path path) -> bool
+  {
+    path = base::ToLogicalPath(
+      std::filesystem::weakly_canonical(base::ToNativePath(path)));
+    while (!path.empty()) {
+      if (std::filesystem::exists(base::ToNativePath(
+            path / data::loose_cooked::kGenerationLeaseFileName))) {
+        return true;
+      }
+      const auto parent = path.parent_path();
+      if (parent == path) {
+        break;
+      }
+      path = parent;
+    }
+    return false;
+  }
 
   [[nodiscard]] auto MakeZeroTelemetry() -> ImportTelemetry
   {
@@ -42,7 +83,7 @@ namespace {
 
     // Defensive fallback: virtual mount roots are expected to end with a
     // directory name (e.g. "/.cooked").
-    return std::filesystem::path(".cooked");
+    return { ".cooked" };
   }
 
   [[nodiscard]] auto ResolveCookedRootForRequest(const ImportRequest& request)
@@ -92,9 +133,28 @@ ImportJob::ImportJob(ImportJobParams params)
   , concurrency_(params.concurrency)
   , script_compile_callback_(std::move(params.script_compile_callback))
   , stop_token_(std::move(params.stop_token))
+  , retained_import_(std::move(params.retained_import))
 {
   CHECK_NOTNULL_F(thread_pool_, "ImportJob requires a non-null thread pool");
+  if (retained_import_) {
+    CHECK_NOTNULL_F(file_reader_, "Retained imports require a source reader");
+    source_snapshot_
+      = std::make_shared<ImportSourceSnapshot>(*file_reader_, *thread_pool_);
+    file_reader_ = observer_ptr { source_snapshot_.get() };
+    CHECK_NOTNULL_F(
+      file_writer_, "Retained imports require a generation writer");
+    generation_writer_ = std::move(params.generation_writer);
+    CHECK_NOTNULL_F(
+      generation_writer_, "Retained imports require an isolated native writer");
+    file_writer_ = observer_ptr { generation_writer_.get() };
+    generation_tables_ = std::make_unique<ResourceTableRegistry>(*file_writer_);
+    generation_index_ = std::make_unique<LooseCookedIndexRegistry>();
+    table_registry_ = observer_ptr { generation_tables_.get() };
+    index_registry_ = observer_ptr { generation_index_.get() };
+  }
 }
+
+ImportJob::~ImportJob() = default;
 
 auto ImportJob::ActivateAsync(co::TaskStarted<> started) -> co::Co<>
 {
@@ -108,7 +168,7 @@ void ImportJob::Run()
   DCHECK_F(!started_, "ImportJob::Run() called more than once");
   started_ = true;
 
-  nursery_->Start([this]() -> co::Co<> { co_await MainAsync(); });
+  nursery_->Start([this] -> co::Co<> { co_await MainAsync(); });
 }
 
 void ImportJob::Stop()
@@ -143,13 +203,23 @@ auto ImportJob::Request() const -> const ImportRequest& { return request_; }
  cooked root from the source path and loose cooked layout. If the source path
  cannot be resolved, falls back to the process temp directory.
 */
+auto ImportJob::WritableCookedRoot() const -> std::filesystem::path
+{
+  const auto root = ResolveCookedRootForRequest(request_);
+  if (HasGenerationMarker(root)
+    && (!retained_import_ || !retained_import_->AllowsWriting(root))) {
+    throw std::invalid_argument(
+      "Immutable import generations require their prepared write authority");
+  }
+  return root;
+}
+
 auto ImportJob::EnsureCookedRoot() -> void
 {
-  auto cooked_root = ResolveCookedRootForRequest(request_);
+  const auto cooked_root = WritableCookedRoot();
   request_.cooked_root = cooked_root;
-
   std::error_code ec;
-  std::filesystem::create_directories(cooked_root, ec);
+  std::filesystem::create_directories(base::ToNativePath(cooked_root), ec);
   if (ec) {
     LOG_F(WARNING, "Failed to create cooked root '{}': {}",
       cooked_root.string(), ec.message());
@@ -231,12 +301,76 @@ auto ImportJob::ProgressCallback() const noexcept
   return on_progress_;
 }
 
+auto ImportJob::DrainGenerationWrites() -> co::Co<>
+{
+  static_cast<void>(co_await co::NonCancellable(generation_writer_->Flush()));
+}
+
+auto ImportJob::RunWithWriteDrain(co::Co<ImportReport> work)
+  -> co::Co<ImportReport>
+{
+  if (!generation_writer_) {
+    co_return co_await std::move(work);
+  }
+  const auto drain = [this] -> co::Co<> { return DrainGenerationWrites(); };
+  auto [report, drained]
+    = co_await co::AnyOf(std::move(work), co::UntilCancelledAnd(drain));
+  if (!report) {
+    co_return MakeCancelledReport(request_);
+  }
+  co_return std::move(*report);
+}
+
+auto ImportJob::ExecuteAndPublishAsync() -> co::Co<ImportReport>
+{
+  static_cast<void>(WritableCookedRoot());
+  if (retained_import_) {
+    co_await thread_pool_->Run(
+      [publication = retained_import_](
+        co::ThreadPool::CancelToken cancelled) -> void {
+        if (!cancelled) {
+          try {
+            static_cast<void>(publication->ReclaimUnusedGenerations());
+          } catch (const std::exception& error) {
+            LOG_F(WARNING, "Retained generation cleanup deferred: {}",
+              error.what());
+          }
+        }
+      });
+  }
+  auto report = co_await ExecuteAsync();
+  if (!retained_import_ || !report.success) {
+    co_return report;
+  }
+  auto candidate = std::make_shared<ImportReport>(std::move(report));
+  const bool validated = co_await thread_pool_->Run(
+    [publication = retained_import_, candidate](
+      co::ThreadPool::CancelToken cancelled) -> bool {
+      if (cancelled) {
+        return false;
+      }
+      publication->ValidateCandidate(*candidate);
+      return true;
+    });
+  if (!validated) {
+    co_return MakeCancelledReport(request_);
+  }
+  co_await source_snapshot_->Verify();
+  if (IsStopped() || (cancel_event_ && cancel_event_->Triggered())) {
+    co_return MakeCancelledReport(request_);
+  }
+  // The short CAS/atomic-replace section does not suspend. Once it commits,
+  // completion wins over a cancellation delivered afterward.
+  retained_import_->Publish(*candidate, StopToken());
+  co_return std::move(*candidate);
+}
+
 auto ImportJob::MainAsync() -> co::Co<>
 {
   bool finalized = false;
 
   ReportJobEvent(
-    ProgressEventKind::kJobStarted, ImportPhase::kPending, 0.0f, "Job started");
+    ProgressEventKind::kJobStarted, ImportPhase::kPending, 0.0F, "Job started");
 
   auto make_exception_report = [&](std::string_view message) -> ImportReport {
     auto report = ImportReport {};
@@ -254,7 +388,7 @@ auto ImportJob::MainAsync() -> co::Co<>
     return report;
   };
 
-  auto finalize = [&](ImportReport report) {
+  auto finalize = [&](ImportReport report) -> void {
     if (finalized) {
       return;
     }
@@ -262,7 +396,7 @@ auto ImportJob::MainAsync() -> co::Co<>
 
     const auto phase
       = report.success ? ImportPhase::kComplete : ImportPhase::kFailed;
-    ReportJobEvent(ProgressEventKind::kJobFinished, phase, 1.0f,
+    ReportJobEvent(ProgressEventKind::kJobFinished, phase, 1.0F,
       report.success ? "Job finished" : "Job failed");
 
     DLOG_F(2, "Finalize: job_id={} success={}", job_id_, report.success);
@@ -283,8 +417,8 @@ auto ImportJob::MainAsync() -> co::Co<>
   // await is not guaranteed to run, so finalization must be done inside the
   // branches.
   co_await co::AnyOf(
-    [&]() -> co::Co<> {
-      auto run_work = [&]() -> co::Co<ImportReport> {
+    [&] -> co::Co<> {
+      auto run_work = [&] -> co::Co<ImportReport> {
         if (cancel_event_ && cancel_event_->Triggered()) {
           stop_source_.request_stop();
           co_return MakeCancelledReport(request_);
@@ -292,7 +426,7 @@ auto ImportJob::MainAsync() -> co::Co<>
 
         if (cancel_event_) {
           auto [canceled, maybe_report]
-            = co_await co::AnyOf(*cancel_event_, ExecuteAsync());
+            = co_await co::AnyOf(*cancel_event_, ExecuteAndPublishAsync());
           if (canceled.has_value()) {
             stop_source_.request_stop();
             co_return MakeCancelledReport(request_);
@@ -302,7 +436,7 @@ auto ImportJob::MainAsync() -> co::Co<>
           co_return std::move(*maybe_report);
         }
 
-        co_return co_await ExecuteAsync();
+        co_return co_await ExecuteAndPublishAsync();
       };
 
       try {
@@ -328,7 +462,7 @@ auto ImportJob::MainAsync() -> co::Co<>
       }
       co_return;
     }(),
-    co::UntilCancelledAnd([&]() -> co::Co<> {
+    co::UntilCancelledAnd([&] -> co::Co<> {
       if (finalized) {
         co_return;
       }

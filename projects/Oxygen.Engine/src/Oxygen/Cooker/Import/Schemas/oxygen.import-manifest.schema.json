@@ -596,6 +596,14 @@
           },
           "additionalProperties": false
         },
+        "material_slot_source_identity": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        "material_slot_provenance": {
+          "type": "object",
+          "description": "Retained native provenance, validated against oxygen.material-slot-provenance.schema.json by the importer."
+        },
         "content_policy": {
           "enum": ["default", "static-scalar"]
         },
@@ -962,6 +970,14 @@
             }
           },
           "additionalProperties": false
+        },
+        "material_slot_source_identity": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        "material_slot_provenance": {
+          "type": "object",
+          "description": "Retained native provenance, validated against oxygen.material-slot-provenance.schema.json by the importer."
         },
         "content_policy": {
           "enum": ["default", "static-scalar"]

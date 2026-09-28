@@ -19,6 +19,7 @@
 #include "AssetDumper.h"
 
 #include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Base/Span.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -85,37 +86,37 @@ public:
     std::vector<NodeRecord> nodes;
     nodes.resize(node_count);
     for (uint32_t i = 0; i < node_count; ++i) {
-      std::memcpy(&nodes[i], nodes_span.data() + i, sizeof(NodeRecord));
+      std::memcpy(&nodes.at(i), nodes_span.data() + i, sizeof(NodeRecord));
     }
 
     const uint32_t node_limit
-      = ctx.verbose ? node_count : (std::min)(node_count, 16u);
+      = ctx.verbose ? node_count : (std::min)(node_count, 16U);
 
     if (node_count > 0) {
       std::cout << "    Nodes (" << node_count << "):\n";
       for (uint32_t i = 0; i < node_limit; ++i) {
-        const auto name = scene->GetNodeName(nodes[i]);
+        const auto name = scene->GetNodeName(nodes.at(i));
         std::cout << "      [" << i << "] "
                   << (name.empty() ? "(unnamed)" : std::string(name))
-                  << " (parent=" << nodes[i].parent_index << ")\n";
+                  << " (parent=" << nodes.at(i).parent_index << ")\n";
 
         if (ctx.verbose) {
           oxygen::data::AssetKey node_id {};
           std::memcpy(&node_id,
-            reinterpret_cast<const std::byte*>(&nodes[i])
+            reinterpret_cast<const std::byte*>(&nodes.at(i))
               + offsetof(NodeRecord, node_id),
             sizeof(node_id));
           PrintUtils::Field("Node ID", oxygen::data::to_string(node_id), 10);
-          PrintUtils::Field(
-            "Flags", asset_dump_helpers::ToHexString(nodes[i].node_flags), 10);
+          PrintUtils::Field("Flags",
+            asset_dump_helpers::ToHexString(nodes.at(i).node_flags), 10);
           PrintUtils::Field("Inherited Flags",
-            asset_dump_helpers::ToHexString(nodes[i].inherited_flags), 10);
+            asset_dump_helpers::ToHexString(nodes.at(i).inherited_flags), 10);
           PrintUtils::Field(
-            "T", asset_dump_helpers::FormatVec3(nodes[i].translation), 10);
+            "T", asset_dump_helpers::FormatVec3(nodes.at(i).translation), 10);
           PrintUtils::Field(
-            "R", asset_dump_helpers::FormatQuat(nodes[i].rotation), 10);
+            "R", asset_dump_helpers::FormatQuat(nodes.at(i).rotation), 10);
           PrintUtils::Field(
-            "S", asset_dump_helpers::FormatVec3(nodes[i].scale), 10);
+            "S", asset_dump_helpers::FormatVec3(nodes.at(i).scale), 10);
         }
       }
 
@@ -134,12 +135,12 @@ public:
       roots.reserve(node_count);
 
       for (uint32_t i = 0; i < node_count; ++i) {
-        const auto parent = nodes[i].parent_index;
+        const auto parent = nodes.at(i).parent_index;
         if (i == 0 || parent == i || parent >= node_count) {
           roots.push_back(i);
           continue;
         }
-        children[parent].push_back(i);
+        children.at(parent).push_back(i);
       }
 
       for (auto& c : children) {
@@ -156,19 +157,19 @@ public:
           return;
         }
 
-        const auto name = scene->GetNodeName(nodes[node_index]);
-        const auto indent = static_cast<int>(10 + depth * 2);
+        const auto name = scene->GetNodeName(nodes.at(node_index));
+        const auto indent = static_cast<int>(10 + (depth * 2));
         const auto pretty_name = name.empty() ? "(unnamed)" : std::string(name);
 
-        if (visited[node_index]) {
+        if (visited.at(node_index)) {
           fmt::print(
             "{:>{}}[{}] {} (cycle)\n", "", indent, node_index, pretty_name);
           return;
         }
-        visited[node_index] = true;
+        visited.at(node_index) = true;
 
         fmt::print("{:>{}}[{}] {}\n", "", indent, node_index, pretty_name);
-        for (const auto child_index : children[node_index]) {
+        for (const auto child_index : children.at(node_index)) {
           self(self, child_index, depth + 1);
         }
       };
@@ -205,7 +206,7 @@ public:
       scene->GetComponents<ScriptingComponentRecord>().size());
     std::cout << "\n";
 
-    const auto DumpRenderables = [&]() -> void {
+    const auto DumpRenderables = [&] -> void {
       const auto renderables = scene->GetComponents<RenderableRecord>();
       if (renderables.empty()) {
         return;
@@ -213,18 +214,16 @@ public:
 
       std::cout << "    Renderables (" << renderables.size() << "):\n";
       for (size_t i = 0; i < renderables.size(); ++i) {
-        const auto& rec = renderables[i];
+        const auto& rec = oxygen::base::CheckedAt(renderables, i);
         std::cout << "      [" << i << "] node=" << rec.node_index << "\n";
         PrintUtils::Field(
           "Geometry Key", oxygen::data::to_string(rec.geometry_key), 10);
-        PrintUtils::Field(
-          "Material Key", oxygen::data::to_string(rec.material_key), 10);
         PrintUtils::Field("Visible", rec.visible != 0U, 10);
       }
       std::cout << "\n";
     };
 
-    const auto DumpDirectionalLights = [&]() -> void {
+    const auto DumpDirectionalLights = [&] -> void {
       const auto lights = scene->GetComponents<DirectionalLightRecord>();
       if (lights.empty()) {
         return;
@@ -234,7 +233,7 @@ public:
       std::cout << "\n";
 
       for (size_t i = 0; i < lights.size(); ++i) {
-        const auto& rec = lights[i];
+        const auto& rec = oxygen::base::CheckedAt(lights, i);
 
         std::cout << "      [" << i << "] node=" << rec.node_index << "\n";
         PrintUtils::Field(
@@ -263,7 +262,7 @@ public:
       std::cout << "\n";
     };
 
-    const auto DumpPointLights = [&]() -> void {
+    const auto DumpPointLights = [&] -> void {
       const auto lights = scene->GetComponents<PointLightRecord>();
       if (lights.empty()) {
         return;
@@ -284,7 +283,7 @@ public:
       std::cout << "\n";
     };
 
-    const auto DumpSpotLights = [&]() -> void {
+    const auto DumpSpotLights = [&] -> void {
       const auto lights = scene->GetComponents<SpotLightRecord>();
       if (lights.empty()) {
         return;
@@ -307,7 +306,7 @@ public:
       std::cout << "\n";
     };
 
-    const auto DumpLocalFogVolumes = [&]() -> void {
+    const auto DumpLocalFogVolumes = [&] -> void {
       const auto volumes = scene->GetComponents<LocalFogVolumeRecord>();
       if (volumes.empty()) {
         return;
@@ -315,7 +314,7 @@ public:
 
       std::cout << "    Local Fog Volumes (" << volumes.size() << "):\n";
       for (size_t i = 0; i < volumes.size(); ++i) {
-        const auto& rec = volumes[i];
+        const auto& rec = oxygen::base::CheckedAt(volumes, i);
         std::cout << "      [" << i << "] node=" << rec.node_index << "\n";
         PrintUtils::Field("Enabled", rec.enabled != 0U, 10);
         PrintUtils::Field("Radial Extinction", rec.radial_fog_extinction, 10);
@@ -377,7 +376,7 @@ public:
 
     const auto records = scene->GetEnvironmentSystemRecords();
     for (size_t i = 0; i < records.size(); ++i) {
-      const auto& record = records[i];
+      const auto& record = oxygen::base::CheckedAt(records, i);
       const auto type
         = static_cast<EnvironmentComponentType>(record.header.system_type);
 

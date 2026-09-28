@@ -6,8 +6,11 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cctype>
 #include <cstddef>
+#include <cstdint>
+#include <filesystem>
 #include <memory>
 #include <optional>
 #include <span>
@@ -16,10 +19,17 @@
 #include <string_view>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Result.h>
+#include <Oxygen/Cooker/Import/FileError.h>
 #include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/ResourceDescriptorEmitter.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h>
+#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
+#include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/OxCo/Co.h>
 
 namespace oxygen::content::import {
 
@@ -88,7 +98,7 @@ namespace {
     auto out = std::string(16, '0');
     for (size_t i = 0; i < out.size(); ++i) {
       const auto shift = static_cast<unsigned>((out.size() - 1U - i) * 4U);
-      out[i] = kDigits[(value >> shift) & 0xFU];
+      out.at(i) = kDigits.at((value >> shift) & 0xFU);
     }
     return out;
   }
@@ -234,8 +244,8 @@ auto ResourceDescriptorEmitter::QueueWrite(
       .overwrite = true,
       .share_write = true,
     },
-    [this, relpath = std::move(relpath), bytes](
-      const FileErrorInfo& error, [[maybe_unused]] uint64_t bytes_written) {
+    [this, relpath = std::move(relpath), bytes](const FileErrorInfo& error,
+      [[maybe_unused]] uint64_t bytes_written) -> void {
       OnWriteComplete(relpath, error);
     });
 }
@@ -249,6 +259,9 @@ auto ResourceDescriptorEmitter::OnWriteComplete(
   }
 
   error_count_.fetch_add(1, std::memory_order_acq_rel);
+  if (!first_error_) {
+    first_error_ = error;
+  }
   LOG_F(ERROR, "resource descriptor write failed '{}': {}", relpath,
     error.ToString());
 }
@@ -263,25 +276,23 @@ auto ResourceDescriptorEmitter::Records() const -> std::vector<Record>
       .size_bytes = size,
     });
   }
-  std::ranges::sort(records, [](const Record& lhs, const Record& rhs) {
+  std::ranges::sort(records, [](const Record& lhs, const Record& rhs) -> bool {
     return lhs.relpath < rhs.relpath;
   });
   return records;
 }
 
-auto ResourceDescriptorEmitter::Finalize() -> co::Co<bool>
+auto ResourceDescriptorEmitter::Finalize()
+  -> co::Co<Result<void, FileErrorInfo>>
 {
-  auto flush_result = co_await file_writer_.Flush();
-  if (!flush_result.has_value()) {
-    LOG_F(ERROR, "resource descriptor emitter flush failed: {}",
-      flush_result.error().ToString());
-    co_return false;
+  const auto flush_result = co_await file_writer_.Flush();
+  if (first_error_) {
+    co_return Result<void, FileErrorInfo>::Err(*first_error_);
   }
-
-  if (error_count_.load(std::memory_order_acquire) > 0U) {
-    co_return false;
+  if (!flush_result) {
+    co_return Result<void, FileErrorInfo>::Err(flush_result.error());
   }
-  co_return true;
+  co_return Result<void, FileErrorInfo>::Ok();
 }
 
 } // namespace oxygen::content::import

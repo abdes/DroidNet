@@ -6,33 +6,41 @@
 
 #include <chrono>
 #include <cstdlib>
+#include <exception>
+#include <functional>
 #include <memory>
 #include <span>
 #include <string>
-#include <type_traits>
 #include <vector>
 
 #include <SDL3/SDL_events.h>
+#include <SDL3/SDL_keycode.h>
 
 #ifdef _WIN32
-#  include <windows.h>
+#  include <windows.h> // IWYU pragma: keep
+
+#  include <minwindef.h>
+#  include <windef.h>
 #  include <wingdi.h>
+#  include <winuser.h>
 #endif
+
+#include "Common/DemoCli.h"
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Clap/Cli.h>
 #include <Oxygen/Clap/Command.h>
-#include <Oxygen/Clap/CommandLineContext.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Fluent/OptionValueBuilder.h>
 #include <Oxygen/Clap/Option.h>
 #include <Oxygen/Config/PlatformConfig.h>
 #include <Oxygen/OxCo/Algorithms.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/EventLoop.h>
+#include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Platform/Window.h>
-
-#include "Common/DemoCli.h"
 
 using oxygen::Platform;
 using oxygen::PlatformConfig;
@@ -147,19 +155,20 @@ private:
     const int line_height = 35;
 
     for (size_t i = 0; i < help_lines_.size(); ++i) {
-      if (help_lines_[i].empty())
+      const auto& line = help_lines_.at(i);
+      if (line.empty()) {
         continue;
+      }
 
       // Use bright colors on black background
       if (i == 0) {
         SetTextColor(hdc, RGB(255, 255, 255)); // White header
-      } else if (help_lines_[i].find(":") != std::string::npos) {
+      } else if (line.find(":") != std::string::npos) {
         SetTextColor(hdc, RGB(255, 255, 0)); // Yellow for key controls
       } else {
         SetTextColor(hdc, RGB(200, 200, 200)); // Light gray for descriptions
       }
 
-      const std::string& line = help_lines_[i];
       TextOut(hdc, margin, margin + static_cast<int>(i) * line_height,
         line.c_str(), static_cast<int>(line.length()));
     }
@@ -244,9 +253,9 @@ auto AsyncMain(std::shared_ptr<oxygen::Platform> platform,
         try {
           platform->OnFrameStart();
         } catch (const std::exception& e) {
-          DLOG_F(WARNING, "Platform::OnFrameStart() threw: {}", e.what());
+          LOG_F(WARNING, "Platform::OnFrameStart() threw: {}", e.what());
         } catch (...) {
-          DLOG_F(WARNING, "Platform::OnFrameStart() threw unknown exception");
+          LOG_F(WARNING, "Platform::OnFrameStart() threw unknown exception");
         }
 
         // Scan for new close requests that should be processed on the next
@@ -254,9 +263,9 @@ auto AsyncMain(std::shared_ptr<oxygen::Platform> platform,
         try {
           platform->OnFrameEnd();
         } catch (const std::exception& e) {
-          DLOG_F(WARNING, "Platform::OnFrameEnd() threw: {}", e.what());
+          LOG_F(WARNING, "Platform::OnFrameEnd() threw: {}", e.what());
         } catch (...) {
-          DLOG_F(WARNING, "Platform::OnFrameEnd() threw unknown exception");
+          LOG_F(WARNING, "Platform::OnFrameEnd() threw unknown exception");
         }
 
         co_await platform->Async().SleepFor(frame_period);

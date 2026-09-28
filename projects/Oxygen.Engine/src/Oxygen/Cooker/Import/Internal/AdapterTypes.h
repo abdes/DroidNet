@@ -23,6 +23,10 @@
 #include <Oxygen/Cooker/Import/Naming.h>
 #include <Oxygen/Data/AssetKey.h>
 
+namespace oxygen::content::import::detail {
+class ImportSourceSnapshot;
+}
+
 namespace oxygen::content::import::adapters {
 
 //! Inputs shared by format adapters.
@@ -42,6 +46,7 @@ struct AdapterInput final {
   observer_ptr<NamingService> naming_service;
   std::stop_token stop_token;
   std::span<const ExternalTextureBytes> external_texture_bytes;
+  std::shared_ptr<detail::ImportSourceSnapshot> source_snapshot {};
 };
 
 //! Tag selecting geometry work item production.

@@ -6,18 +6,20 @@
 
 #include <filesystem>
 #include <fstream>
+#include <ios>
 #include <optional>
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <system_error>
 
 #include <nlohmann/json.hpp>
-
-#include <Oxygen/Testing/GTest.h>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Cooker/Import/GeometryDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/GeometryDescriptorImportSettings.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 
@@ -75,6 +77,7 @@ NOLINT_TEST(GeometryDescriptorImportRequestBuilderTest,
           "procedural": { "generator": "Cube", "mesh_name": "CubeMesh" },
           "submeshes": [
             {
+              "slot_id": "018f8f8f-1111-7111-8111-111111111111",
               "material_ref": "/.cooked/Materials/default.omat",
               "views": [ { "view_ref": "__all__" } ]
             }
@@ -88,16 +91,22 @@ NOLINT_TEST(GeometryDescriptorImportRequestBuilderTest,
 
   const auto request = BuildGeometryDescriptorRequest(settings, errors);
 
-  ASSERT_TRUE(request.has_value()) << errors.str();
+  if (!request.has_value()) {
+    FAIL() << "Expected request to contain a value" << errors.str();
+  }
   EXPECT_TRUE(errors.str().empty());
-  ASSERT_TRUE(request->cooked_root.has_value());
+  if (!request->cooked_root.has_value()) {
+    FAIL() << "Expected request->cooked_root to contain a value";
+  }
   EXPECT_TRUE(request->cooked_root->is_absolute());
   EXPECT_EQ(request->source_path, descriptor_path.lexically_normal());
   EXPECT_EQ(
     request->job_name, std::optional<std::string> { "manifest-geometry" });
   EXPECT_EQ(request->options.with_content_hashing,
     EffectiveContentHashingEnabled(false));
-  ASSERT_TRUE(request->geometry_descriptor.has_value());
+  if (!request->geometry_descriptor.has_value()) {
+    FAIL() << "Expected request->geometry_descriptor to contain a value";
+  }
 
   const auto normalized
     = json::parse(request->geometry_descriptor->normalized_descriptor_json);
@@ -121,6 +130,7 @@ NOLINT_TEST(GeometryDescriptorImportRequestBuilderTest,
           "procedural": { "generator": "Cube", "mesh_name": "Cube" },
           "submeshes": [
             {
+              "slot_id": "018f8f8f-1111-7111-8111-111111111111",
               "material_ref": "/.cooked/Materials/default.omat",
               "views": [ { "view_ref": "__all__", "unexpected": true } ]
             }
@@ -170,6 +180,7 @@ NOLINT_TEST(
           "procedural": { "generator": "Cube", "mesh_name": "CubeMesh" },
           "submeshes": [
             {
+              "slot_id": "018f8f8f-1111-7111-8111-111111111111",
               "material_ref": "/.cooked/Materials/default.omat",
               "views": [ { "view_ref": "__all__" } ]
             }

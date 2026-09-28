@@ -67,10 +67,10 @@ public:
     std::vector<MaterialKeyPatch> material_patches;
 
     //! Callback fired when a worker starts processing this item.
-    std::function<void()> on_started;
+    std::function<void()> on_started {};
 
     //! Callback fired when a worker finishes processing this item.
-    std::function<void()> on_finished;
+    std::function<void()> on_finished {};
 
     //! Cancellation token.
     std::stop_token stop_token;
@@ -91,7 +91,7 @@ public:
     std::vector<ImportDiagnostic> diagnostics;
 
     //! Per-item telemetry captured during pipeline execution.
-    ImportWorkItemTelemetry telemetry;
+    ImportWorkItemTelemetry telemetry {};
 
     //! True if successful; false if canceled or failed.
     bool success = false;

@@ -54,6 +54,7 @@
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/PakFormat_world.h>
+#include <Oxygen/Data/PhysicsSceneAsset.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Serio/FileStream.h>
@@ -1333,6 +1334,11 @@ auto BuildOutputCatalog(const pak::PakBuildRequest& request,
   };
 }
 
+struct PhysicsScenePair final {
+  data::AssetKey scene_key {};
+  data::AssetKey sidecar_key {};
+};
+
 struct PlanningState final {
   explicit PlanningState(const pak::PakBuildRequest& request_in)
     : request(oxygen::observer_ptr<const pak::PakBuildRequest> {
@@ -1348,6 +1354,7 @@ struct PlanningState final {
   pak::PakPlanBuilder::BuildResult output {};
 
   std::vector<AggregatedAsset> assets;
+  std::vector<PhysicsScenePair> physics_scene_pairs;
   std::unordered_map<data::AssetKey, size_t> asset_positions;
   std::vector<PendingResource> pending_resources;
   std::unordered_map<size_t, SourceContribution> source_contributions;
@@ -2567,6 +2574,141 @@ auto CollectSourceData(PlanningState& state) -> void
   }
 }
 
+// Check the original pair before relocation; never repair stale authored input.
+auto ValidatePhysicsScenePairs(PlanningState& state) -> void
+{
+  std::unordered_map<data::AssetKey, const AggregatedAsset*> scenes;
+  std::unordered_set<data::AssetKey> paired_scene_keys;
+  for (const auto& asset : state.assets) {
+    if (asset.asset_type == data::AssetType::kScene) {
+      scenes.emplace(asset.key, &asset);
+    }
+  }
+  for (const auto& asset : state.assets) {
+    if (asset.asset_type != data::AssetType::kPhysicsScene) {
+      continue;
+    }
+    try {
+      const auto sidecar_bytes
+        = ReadSourceDescriptorBytes(asset, state.output.diagnostics);
+      if (!sidecar_bytes) {
+        continue;
+      }
+      const auto sidecar = data::PhysicsSceneAsset(
+        asset.key, std::span<const std::byte>(*sidecar_bytes));
+      if (!paired_scene_keys.insert(sidecar.GetTargetSceneKey()).second) {
+        throw std::runtime_error(
+          "Multiple physics sidecars target the same scene");
+      }
+      const auto found = scenes.find(sidecar.GetTargetSceneKey());
+      if (found == scenes.end()) {
+        throw std::runtime_error("Physics sidecar target scene is missing");
+      }
+      const auto scene_bytes
+        = ReadSourceDescriptorBytes(*found->second, state.output.diagnostics);
+      if (!scene_bytes) {
+        continue;
+      }
+      const auto scene = data::SceneAsset(
+        found->first, std::span<const std::byte>(*scene_bytes));
+      if (scene.GetNodes().size() != sidecar.GetTargetNodeCount()
+        || !std::ranges::equal(sidecar.GetTargetSceneContentHash(),
+          oxygen::base::ComputeSha256(*scene_bytes))) {
+        throw std::runtime_error(
+          "Physics sidecar does not match its target scene");
+      }
+      state.physics_scene_pairs.push_back(PhysicsScenePair {
+        .scene_key = found->first,
+        .sidecar_key = asset.key,
+      });
+    } catch (const std::exception& error) {
+      AddDiagnostic(state.output.diagnostics,
+        pak::PakDiagnosticSeverity::kError, pak::PakBuildPhase::kPlanning,
+        "pak.plan.physics_scene_pair_invalid", error.what(),
+        asset.descriptor_path);
+    }
+  }
+}
+
+// The current format loads a scene and its sidecars from the same mount.
+auto IncludePhysicsScenePatchPartners(
+  PlanningState& state, std::unordered_set<data::AssetKey>& emitted) -> void
+{
+  std::unordered_set<data::AssetKey> changed_scenes;
+  for (const auto& pair : state.physics_scene_pairs) {
+    if (emitted.contains(pair.scene_key)
+      || emitted.contains(pair.sidecar_key)) {
+      changed_scenes.insert(pair.scene_key);
+    }
+  }
+  for (const auto& pair : state.physics_scene_pairs) {
+    if (changed_scenes.contains(pair.scene_key)) {
+      emitted.insert(pair.scene_key);
+      emitted.insert(pair.sidecar_key);
+    }
+  }
+  for (auto& record : state.data_plan.patch_actions) {
+    if (record.action == pak::PakPatchAction::kUnchanged
+      && emitted.contains(record.asset_key)) {
+      record.action = pak::PakPatchAction::kReplace;
+    }
+  }
+}
+
+// Embedded hashes cover a descriptor with its own hash field zeroed.
+auto PublishRewrittenDescriptor(PlanningState& state, AggregatedAsset& asset,
+  std::vector<std::byte> bytes) -> void
+{
+  if (bytes.size() < sizeof(core::AssetHeader)) {
+    throw std::runtime_error(
+      "Rewritten descriptor has no complete asset header");
+  }
+  auto header = core::AssetHeader {};
+  std::memcpy(&header, bytes.data(), sizeof(header));
+  if (!oxygen::base::IsAllZero(header.content_hash)) {
+    auto hash_field = std::span(bytes).subspan(
+      offsetof(core::AssetHeader, content_hash), sizeof(header.content_hash));
+    std::ranges::fill(hash_field, std::byte { 0 });
+    const auto digest = oxygen::base::ComputeSha256(bytes);
+    std::memcpy(hash_field.data(), digest.data(), digest.size());
+  }
+  asset.descriptor_digest = oxygen::base::ComputeSha256(bytes);
+  asset.descriptor_source_offset = 0U;
+  state.rewritten_asset_payloads.insert_or_assign(asset.key, std::move(bytes));
+}
+
+auto RewritePhysicsSceneHashes(PlanningState& state) -> void
+{
+  std::unordered_map<data::AssetKey, AggregatedAsset*> assets;
+  for (auto& asset : state.assets) {
+    assets.emplace(asset.key, &asset);
+  }
+  for (const auto& pair : state.physics_scene_pairs) {
+    const auto sidecar = assets.find(pair.sidecar_key);
+    if (sidecar == assets.end()) {
+      continue;
+    }
+    const auto rewritten = state.rewritten_asset_payloads.find(pair.scene_key);
+    if (rewritten == state.rewritten_asset_payloads.end()) {
+      continue;
+    }
+    auto bytes
+      = ReadSourceDescriptorBytes(*sidecar->second, state.output.diagnostics);
+    if (!bytes) {
+      continue;
+    }
+    const auto digest = oxygen::base::ComputeSha256(rewritten->second);
+    auto target_hash = std::span(*bytes).subspan(
+      offsetof(physics::PhysicsSceneAssetDesc, target_scene_content_hash),
+      digest.size());
+    std::memcpy(target_hash.data(), digest.data(), digest.size());
+    PublishRewrittenDescriptor(state, *sidecar->second, std::move(*bytes));
+    // Physics sidecars reference assets, with no direct resource payloads.
+    sidecar->second->transitive_resource_digest
+      = sidecar->second->descriptor_digest;
+  }
+}
+
 auto ClassifyPatchActionsAndFinalizeBrowse(PlanningState& state) -> void
 {
   using pak::PakBuildPhase;
@@ -2658,6 +2800,8 @@ auto ClassifyPatchActionsAndFinalizeBrowse(PlanningState& state) -> void
         emitted_patch_keys.insert(asset_key);
       }
     }
+
+    IncludePhysicsScenePatchPartners(state, emitted_patch_keys);
 
     std::erase_if(
       assets, [&emitted_patch_keys](const AggregatedAsset& asset) -> bool {
@@ -3154,11 +3298,7 @@ auto RewriteSceneScriptBindings(PlanningState& state) -> void
             *bytes, remaps, state.output.diagnostics, asset.descriptor_path)) {
         continue;
       }
-      asset.descriptor_digest
-        = oxygen::base::ComputeSha256(std::span<const std::byte>(*bytes));
-      asset.descriptor_source_offset = 0U;
-      state.rewritten_asset_payloads.insert_or_assign(
-        asset.key, std::move(*bytes));
+      PublishRewrittenDescriptor(state, asset, std::move(*bytes));
     }
     return;
   }
@@ -3231,12 +3371,7 @@ auto RewriteSceneScriptBindings(PlanningState& state) -> void
       continue;
     }
 
-    asset.descriptor_digest
-      = oxygen::base::ComputeSha256(std::span<const std::byte>(
-        descriptor_bytes->data(), descriptor_bytes->size()));
-    asset.descriptor_source_offset = 0U;
-    asset.descriptor_size = descriptor_bytes->size();
-    state.rewritten_asset_payloads[asset.key] = std::move(*descriptor_bytes);
+    PublishRewrittenDescriptor(state, asset, std::move(*descriptor_bytes));
   }
 }
 
@@ -3434,11 +3569,7 @@ using ResourceIndexRemaps = std::unordered_map<std::string, SourceIndexRemaps>;
       }
     }
     if (changed) {
-      asset.descriptor_digest
-        = oxygen::base::ComputeSha256(std::span<const std::byte>(*bytes));
-      asset.descriptor_source_offset = 0U;
-      state.rewritten_asset_payloads.insert_or_assign(
-        asset.key, std::move(*bytes));
+      PublishRewrittenDescriptor(state, asset, std::move(*bytes));
     }
     return true;
   } catch (const std::exception& error) {
@@ -3605,9 +3736,10 @@ auto PlanFileLayout(PlanningState& state) -> void
   state.data_plan.asset_payload_sources.clear();
   state.data_plan.directory.entries.clear();
   for (auto& asset : state.assets) {
-    if (!RewriteResourceReferences(state, asset, resource_remaps)) {
-      continue;
-    }
+    static_cast<void>(RewriteResourceReferences(state, asset, resource_remaps));
+  }
+  RewritePhysicsSceneHashes(state);
+  for (const auto& asset : state.assets) {
     cursor = AlignUp(cursor, AlignmentBytes { kAssetAlignment });
 
     if (asset.descriptor_size > std::numeric_limits<uint32_t>::max()) {
@@ -3986,6 +4118,9 @@ auto PakPlanBuilder::Build(const PakBuildRequest& request) const -> BuildResult
   RunStage(state, "ValidateCollectSourceDataInvariants",
     "pak.plan.stage.collect_invariants_exception",
     [&state] -> void { ValidateCollectSourceDataInvariants(state); });
+  RunStage(state, "ValidatePhysicsScenePairs",
+    "pak.plan.stage.physics_scene_pairs_exception",
+    [&state] -> void { ValidatePhysicsScenePairs(state); });
   RunStage(state, "ClassifyPatchActionsAndFinalizeBrowse",
     "pak.plan.stage.patch_classify_exception",
     [&state] -> void { ClassifyPatchActionsAndFinalizeBrowse(state); });

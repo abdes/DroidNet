@@ -1,5 +1,5 @@
 {
-  "version": 8,
+  "version": 9,
   "name": "bottle-on-box",
   "nodes": [
     {
@@ -128,6 +128,7 @@
         "node": 6,
         "fov_y": 0.7854,
         "aspect_ratio": 1.7778,
+        "aspect_mode": "fixed",
         "near_plane": 0.1,
         "far_plane": 100.0
       }

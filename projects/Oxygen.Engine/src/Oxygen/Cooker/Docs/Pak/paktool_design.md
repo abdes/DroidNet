@@ -1,5 +1,8 @@
 # PakTool Technical Design
 
+Start with [purpose](#1-purpose); the approved future format work is in
+[M08.F1 reference-table packaging](#planned-reference-table-packaging-m08f1).
+
 This document defines the release-target design for
 `src/Oxygen/Cooker/Tools/PakTool`, the native Oxygen CLI for building
 `.pak` archives from cooked content and for emitting the metadata required to
@@ -723,3 +726,22 @@ separately approved:
 - extra machine-readable outputs beyond the build report
 - batch orchestration across multiple pak jobs
 - future pak format evolution
+
+## Planned reference-table packaging (M08.F1)
+
+Status: planned after M08.1.9. Data owns the
+[descriptor-local reference contract](../../../Data/Docs/binary_packing_discipline.md#planned-descriptor-local-references-m08f1).
+The [format milestone](../../../../../../../design/editor/plan/ED-M08.F1-descriptor-local-references.md)
+owns migration and qualification.
+
+PakPlanBuilder remaps generic per-asset resource bindings into destination resource
+tables. It preserves opaque descriptor bytes and stable AssetKeys. Remove
+`RewriteResourceReferences`' asset/field dispatch and the scene scripting range/
+binding rewrites once scripts are descriptor-local. Resource aggregation, placement,
+deduplication and bounds validation remain native Cooker responsibilities.
+
+Qualify multi-root repacking, fallback/absent references, every supported reference
+kind, script payloads, metering masks and physics-sidecar scene hashes. Adding a
+resource-bearing field must require no packaging byte-offset walker. Reject malformed
+bindings before publication; include the complete reference inventory in native
+inspection. Version bumps and full recooking replace legacy readers.

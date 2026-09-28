@@ -26,7 +26,6 @@
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/GeometryAsset.h>
-#include <Oxygen/Data/HalfFloat.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/PakFormat_core.h>
@@ -282,9 +281,9 @@ namespace {
           desc.roughness = data::Unorm16 { 0.8F };
           desc.ambient_occlusion = data::Unorm16 { 0.5F };
           desc.normal_scale = normal_scale;
-          desc.emissive_factor[0] = data::HalfFloat { 2.0F };
-          desc.emissive_factor[1] = data::HalfFloat { 4.0F };
-          desc.emissive_factor[2] = data::HalfFloat { 8.0F };
+          desc.emissive_factor[0] = 2.0F;
+          desc.emissive_factor[1] = 4.0F;
+          desc.emissive_factor[2] = 8.0F;
           auto keys = std::vector<content::ResourceKey>(
             static_cast<std::size_t>(MaterialSlot::kCount));
           keys.at(static_cast<std::size_t>(MaterialSlot::kBaseColor))
@@ -559,7 +558,7 @@ namespace {
               channel = 1.0F;
             }
             for (auto& channel : desc.emissive_factor) {
-              channel = data::HalfFloat { 2.0F };
+              channel = 2.0F;
             }
             desc.roughness = data::Unorm16 { 1.0F };
             desc.ambient_occlusion = data::Unorm16 { 1.0F };
@@ -760,7 +759,7 @@ namespace {
             channel = 1.0F;
           }
           for (auto& channel : material.emissive_factor) {
-            channel = data::HalfFloat { 1.0F };
+            channel = 1.0F;
           }
           material.roughness = data::Unorm16 { 1.0F };
           material.ambient_occlusion = data::Unorm16 { 1.0F };

@@ -4,26 +4,36 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <windows.h> // IWYU pragma: keep
+
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <limits>
+#if !defined(NDEBUG)
+#  include <limits>
+#endif
 #include <map>
 #include <memory>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
-#include <d3dcommon.h>
+#include <basetsd.h>
+#include <combaseapi.h>
 #include <dxcapi.h>
 #include <fmt/format.h>
-#include <unknwn.h>
-#include <windows.h>
+#include <winerror.h>
+#include <winnls.h>
+#include <winnt.h>
 #include <wrl/client.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/StringUtils.h>
 #include <Oxygen/Base/Windows/ComError.h>
+#include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Graphics/Common/ShaderByteCode.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/CompileProfile.h>
@@ -118,8 +128,8 @@ auto MakeDxcArguments(IDxcUtils& utils, const std::wstring& source_name_w,
   std::span<const std::filesystem::path> include_dirs,
   const std::map<std::wstring, std::wstring>& global_defines,
   std::span<const oxygen::graphics::ShaderDefine> request_defines,
-  std::string_view object_output_name, std::string_view debug_output_name)
-  -> DxcCompileArgs
+  std::string_view object_output_name,
+  [[maybe_unused]] std::string_view debug_output_name) -> DxcCompileArgs
 {
   using oxygen::windows::ThrowOnFailed;
 
@@ -251,6 +261,9 @@ auto CompileDxc(IDxcCompiler3& compiler, IDxcIncludeHandler& include_handler,
   if (FAILED(hr)) {
     LOG_F(ERROR, "DXC Compile call failed: {:x}", hr);
     return DxcShaderCompiler::CompileResult {
+      .bytecode = nullptr,
+      .pdb = {},
+      .dependencies = {},
       .diagnostics = LogDxcFailureReport(ctx, "Compile call failed", nullptr),
     };
   }
@@ -262,6 +275,9 @@ auto CompileDxc(IDxcCompiler3& compiler, IDxcIncludeHandler& include_handler,
     ComPtr<IDxcBlobEncoding> error_blob;
     hr = result->GetErrorBuffer(&error_blob);
     return DxcShaderCompiler::CompileResult {
+      .bytecode = nullptr,
+      .pdb = {},
+      .dependencies = {},
       .diagnostics
       = LogDxcFailureReport(ctx, "Compilation failed", error_blob.Get()),
     };
@@ -283,6 +299,9 @@ auto CompileDxc(IDxcCompiler3& compiler, IDxcIncludeHandler& include_handler,
   if (output == nullptr) {
     LOG_F(ERROR, "GetResult returned null blob");
     return DxcShaderCompiler::CompileResult {
+      .bytecode = nullptr,
+      .pdb = {},
+      .dependencies = {},
       .diagnostics
       = LogDxcFailureReport(ctx, "GetResult returned null blob", nullptr),
     };
@@ -297,6 +316,9 @@ auto CompileDxc(IDxcCompiler3& compiler, IDxcIncludeHandler& include_handler,
 
     auto* diagnostics_blob = (SUCCEEDED(hr) ? warning_blob.Get() : nullptr);
     return DxcShaderCompiler::CompileResult {
+      .bytecode = nullptr,
+      .pdb = {},
+      .dependencies = {},
       .diagnostics
       = LogDxcFailureReport(ctx, "Empty bytecode", diagnostics_blob),
     };
@@ -313,6 +335,9 @@ auto CompileDxc(IDxcCompiler3& compiler, IDxcIncludeHandler& include_handler,
       || pdb_blob->GetBufferPointer() == nullptr
       || pdb_blob->GetBufferSize() == 0U) {
       return DxcShaderCompiler::CompileResult {
+        .bytecode = nullptr,
+        .pdb = {},
+        .dependencies = {},
         .diagnostics = LogDxcFailureReport(ctx, "Missing PDB output", nullptr),
       };
     }
@@ -332,6 +357,7 @@ auto CompileDxc(IDxcCompiler3& compiler, IDxcIncludeHandler& include_handler,
       std::move(output)),
     .pdb = std::move(pdb),
     .dependencies = tracking_include_handler.Dependencies(),
+    .diagnostics = {},
   };
 }
 
@@ -455,6 +481,9 @@ auto DxcShaderCompiler::CompileFromSource(const std::u8string& shader_source,
   if (shader_source.empty()) {
     LOG_F(WARNING, "Attempt to compile a shader from empty source");
     return CompileResult {
+      .bytecode = nullptr,
+      .pdb = {},
+      .dependencies = {},
       .diagnostics = "Attempt to compile a shader from empty source\n",
     };
   }

@@ -5,25 +5,29 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <array>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
-#include <iterator>
+#include <ios>
 #include <latch>
 #include <optional>
-#include <ranges>
 #include <span>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportJobId.h>
+#include <Oxygen/Cooker/Import/ImportReport.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::import::test {
 
@@ -110,7 +114,7 @@ namespace {
     const std::string_view code) -> bool
   {
     return std::ranges::any_of(diagnostics,
-      [code](const ImportDiagnostic& d) { return d.code == code; });
+      [code](const ImportDiagnostic& d) -> bool { return d.code == code; });
   }
 
   auto SubmitAndWait(AsyncImportService& service, ImportRequest request)
@@ -121,7 +125,7 @@ namespace {
     const auto submitted = service.SubmitImport(
       std::move(request),
       [&report, &done](
-        const ImportJobId /*job_id*/, const ImportReport& completed) {
+        const ImportJobId /*job_id*/, const ImportReport& completed) -> void {
         report = completed;
         done.count_down();
       },
@@ -148,6 +152,34 @@ namespace {
       return request;
     }
   };
+
+  NOLINT_TEST_F(MaterialDescriptorImportJobTest,
+    CompilesEmissionColorAndIntensityWithoutBinary16Rounding)
+  {
+    const auto cooked_root = MakeTempCookedRoot("float32_emission");
+    auto service = AsyncImportService(AsyncImportService::Config {
+      .thread_pool_size = 2U,
+    });
+    const auto report = SubmitAndWait(service,
+      MakeRequest(cooked_root, R"({
+      "name": "HdrEmission",
+      "parameters": {
+        "emissive_color": [1.0, 0.25, 0.0],
+        "emissive_intensity": 9.7
+      }
+    })",
+        "HdrEmission"));
+    ASSERT_TRUE(report.success);
+    const auto bytes
+      = ReadBinaryFile(cooked_root / "Materials" / "HdrEmission.omat");
+    ASSERT_GE(bytes.size(), sizeof(data::pak::render::MaterialAssetDesc));
+    const auto desc = ReadMaterialDesc(bytes);
+    EXPECT_EQ(desc.header.version, data::pak::render::kMaterialAssetVersion);
+    EXPECT_EQ(desc.emissive_factor[0], 9.7F);
+    EXPECT_EQ(desc.emissive_factor[1], 9.7F * 0.25F);
+    EXPECT_EQ(desc.emissive_factor[2], 0.0F);
+    service.Stop();
+  }
 
   NOLINT_TEST_F(MaterialDescriptorImportJobTest,
     ResolvesHashedTextureDescriptorVirtualPathAndEmitsMaterial)

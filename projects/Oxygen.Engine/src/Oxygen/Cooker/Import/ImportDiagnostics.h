@@ -44,10 +44,10 @@ struct ImportDiagnostic final {
   std::string message;
 
   //! Optional path to the source file.
-  std::string source_path;
+  std::string source_path {};
 
   //! Optional hierarchical object path (node/material/mesh).
-  std::string object_path;
+  std::string object_path {};
 };
 
 } // namespace oxygen::content::import

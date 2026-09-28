@@ -4,27 +4,36 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
-#include <array>
 #include <cctype>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
 #include <nlohmann/json-schema.hpp>
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Content/LoaderContext.h>
+#include <Oxygen/Content/Loaders/GeometryLoader.h>
+#include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/ImportProgress.h>
+#include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/AssetEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
@@ -36,16 +45,22 @@
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Core/Detail/FormatUtils.h>
+#include <Oxygen/Core/Types/CameraAspectMode.h>
 #include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/PakFormatSerioWriters.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_world.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Scene/ExposureSettings.h>
 #include <Oxygen/Serio/MemoryStream.h>
+#include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Serio/Writer.h>
 
 namespace oxygen::content::import::detail {
@@ -67,6 +82,8 @@ namespace {
     std::vector<MountedInspection> mounts;
     std::unordered_map<std::string, std::pair<data::AssetKey, data::AssetType>>
       index_cache;
+    std::unordered_map<std::string, std::unique_ptr<data::GeometryAsset>>
+      geometries;
   };
 
   struct PreparedSceneDescriptor final {
@@ -181,7 +198,7 @@ namespace {
 
   auto GetSceneDescriptorValidator() -> json_validator&
   {
-    static auto validator = []() {
+    static auto validator = [] -> json_validator {
       auto out = json_validator {};
       out.set_root_schema(nlohmann::json::parse(kSceneDescriptorSchema));
       return out;
@@ -204,7 +221,7 @@ namespace {
     return internal::ValidateJsonSchemaWithDiagnostics(
       GetSceneDescriptorValidator(), descriptor_doc, config,
       [&](const std::string_view code, const std::string& message,
-        const std::string& object_path) {
+        const std::string& object_path) -> void {
         AddDiagnostic(session, request, ImportSeverity::kError,
           std::string(code), message, object_path);
       });
@@ -695,7 +712,8 @@ namespace {
     for (const auto& key : settings.compensation_curve) {
       if (!writer.Write(data::pak::world::ExposureCompensationKeyRecord {
             .metered_ev = key.metered_ev,
-            .compensation_ev = key.compensation_ev })) {
+            .compensation_ev = key.compensation_ev,
+          })) {
         AddDiagnostic(context.session, context.request, ImportSeverity::kError,
           "scene.descriptor.exposure_curve_write_failed",
           "Could not serialize exposure compensation curve",
@@ -897,7 +915,7 @@ namespace {
     }
 
     const auto& flags_doc = node_doc.at("flags");
-    const auto apply_flag = [&](const char* key, const uint32_t mask) {
+    const auto apply_flag = [&](const char* key, const uint32_t mask) -> void {
       if (!flags_doc.contains(key)) {
         return;
       }
@@ -909,7 +927,8 @@ namespace {
       }
     };
 
-    const auto apply_source = [&](const char* key, const uint32_t mask) {
+    const auto apply_source
+      = [&](const char* key, const uint32_t mask) -> void {
       if (!flags_doc.contains(key)) {
         return;
       }
@@ -933,6 +952,82 @@ namespace {
       data::pak::world::kSceneNodeFlag_RayCastingSelectable);
     apply_flag("ignore_parent_transform",
       data::pak::world::kSceneNodeFlag_IgnoreParentTransform);
+  }
+
+  auto LoadSlotInventories(SceneDescriptorExecutionContext& context,
+    const json& descriptor, IAsyncFileReader& file_reader) -> co::Co<bool>
+  {
+    if (!descriptor.contains("renderables")) {
+      co_return true;
+    }
+    for (const auto& renderable : descriptor.at("renderables")) {
+      if (!renderable.contains("material_overrides")) {
+        continue;
+      }
+      const auto path = renderable.at("geometry_ref").get<std::string>();
+      if (context.geometries.contains(path)) {
+        continue;
+      }
+      const auto resolved = ResolveAssetReference(context, path,
+        data::AssetType::kGeometry, true, "renderables.geometry_ref");
+      if (!resolved) {
+        co_return false;
+      }
+      std::filesystem::path descriptor_path;
+      for (auto mount = context.mounts.rbegin(); mount != context.mounts.rend();
+        ++mount) {
+        if (mount->inspection) {
+          for (const auto& asset : mount->inspection->Assets()) {
+            if (asset.key == resolved->first && asset.virtual_path == path) {
+              descriptor_path = mount->root / asset.descriptor_relpath;
+              break;
+            }
+          }
+        }
+        if (!descriptor_path.empty()) {
+          break;
+        }
+      }
+      if (descriptor_path.empty()) {
+        std::string relative;
+        if (internal::TryVirtualPathToRelPath(
+              context.request, path, relative)) {
+          for (auto mount = context.mounts.rbegin();
+            mount != context.mounts.rend(); ++mount) {
+            const auto candidate = mount->root / relative;
+            const auto exists = co_await file_reader.Exists(candidate);
+            if (exists && exists.value()) {
+              descriptor_path = candidate;
+              break;
+            }
+          }
+        }
+      }
+      const auto bytes = co_await file_reader.ReadFile(descriptor_path);
+      if (!bytes) {
+        AddDiagnostic(context.session, context.request, ImportSeverity::kError,
+          "scene.descriptor.geometry_inventory_unavailable",
+          "Cannot read geometry for slot validation", path);
+        co_return false;
+      }
+      try {
+        serio::ReadOnlyMemoryStream stream(bytes.value());
+        serio::Reader reader(stream);
+        const LoaderContext loader_context {
+          .current_asset_key = resolved->first,
+          .desc_reader = &reader,
+          .work_offline = true,
+          .parse_only = true,
+        };
+        context.geometries.emplace(
+          path, loaders::LoadGeometryAsset(loader_context));
+      } catch (const std::exception& error) {
+        AddDiagnostic(context.session, context.request, ImportSeverity::kError,
+          "scene.descriptor.geometry_inventory_invalid", error.what(), path);
+        co_return false;
+      }
+    }
+    co_return true;
   }
 
   auto PrepareSceneDescriptor(SceneDescriptorExecutionContext& context,
@@ -1033,23 +1128,42 @@ namespace {
           return std::nullopt;
         }
 
-        auto material_key = data::AssetKey {};
-        if (renderable_doc.contains("material_ref")) {
-          const auto material_ref
-            = renderable_doc.at("material_ref").get<std::string>();
-          const auto resolved_material
-            = ResolveAssetReference(context, material_ref,
-              data::AssetType::kMaterial, false, object_path + ".material_ref");
-          if (!resolved_material.has_value()) {
-            return std::nullopt;
+        if (renderable_doc.contains("material_overrides")) {
+          const auto& geometry = *context.geometries.at(geometry_ref);
+          std::unordered_set<data::MaterialSlotId> assigned;
+          for (const auto& assignment :
+            renderable_doc.at("material_overrides")) {
+            const auto slot = data::MaterialSlotId::FromString(
+              assignment.at("slot_id").get<std::string>());
+            if (!slot || geometry.FindMaterialSlot(slot.value()) == nullptr
+              || !assigned.insert(slot.value()).second) {
+              AddDiagnostic(context.session, context.request,
+                ImportSeverity::kError,
+                "scene.descriptor.material_slot_invalid",
+                "Material assignment targets a missing or duplicate slot",
+                object_path + ".material_overrides");
+              return std::nullopt;
+            }
+            const auto material = ResolveAssetReference(context,
+              assignment.at("material_ref").get<std::string>(),
+              data::AssetType::kMaterial, true,
+              object_path + ".material_overrides");
+            if (!material) {
+              return std::nullopt;
+            }
+            prepared.build.material_overrides.push_back(
+              data::pak::world::MaterialOverrideRecord {
+                .node_index = node_index,
+                .slot_id = slot.value(),
+                .material_key = material->first,
+                .layout_revision = geometry.MaterialSlots().layout_revision,
+              });
           }
-          material_key = resolved_material->first;
         }
 
         auto renderable = data::pak::world::RenderableRecord {};
         renderable.node_index = node_index;
         renderable.geometry_key = resolved_geometry->first;
-        renderable.material_key = material_key;
         renderable.visible = renderable_doc.value("visible", true) ? 1U : 0U;
         prepared.build.renderables.push_back(renderable);
         prepared.geometry_keys.push_back(renderable.geometry_key);
@@ -1075,6 +1189,9 @@ namespace {
 
           auto camera = data::pak::world::PerspectiveCameraRecord {};
           camera.node_index = node_index;
+          camera.aspect_mode = camera_doc.at("aspect_mode") == "fixed"
+            ? CameraAspectMode::kFixed
+            : CameraAspectMode::kAuto;
           if (camera_doc.contains("fov_y")) {
             camera.fov_y = camera_doc.at("fov_y").get<float>();
           }
@@ -1442,7 +1559,8 @@ auto SceneDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   auto session = ImportSession(Request(), FileReader(), FileWriter(),
     ThreadPool(), TableRegistry(), IndexRegistry());
 
-  if (!Request().scene_descriptor.has_value()) {
+  const auto& descriptor = Request().scene_descriptor;
+  if (!descriptor.has_value()) {
     AddDiagnostic(session, Request(), ImportSeverity::kError,
       "scene.descriptor.request_invalid",
       "SceneDescriptorImportJob requires request.scene_descriptor payload");
@@ -1454,8 +1572,8 @@ auto SceneDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   auto descriptor_doc = nlohmann::json {};
   auto parse_exception = std::optional<std::string> {};
   try {
-    descriptor_doc = nlohmann::json::parse(
-      Request().scene_descriptor->normalized_descriptor_json);
+    descriptor_doc
+      = nlohmann::json::parse(descriptor->normalized_descriptor_json);
   } catch (const std::exception& ex) {
     parse_exception = ex.what();
   }
@@ -1495,8 +1613,14 @@ auto SceneDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
     .request = Request(),
     .mounts = {},
     .index_cache = {},
+    .geometries = {},
   };
   LoadMountedInspections(context);
+
+  if (!FileReader()
+    || !co_await LoadSlotInventories(context, descriptor_doc, *FileReader())) {
+    co_return co_await FinalizeWithTelemetry(session);
+  }
 
   auto mask_index = data::pak::core::kNoResourceIndex;
   const auto mask_pointer = json::json_pointer(
@@ -1513,10 +1637,12 @@ auto SceneDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
     }
     const auto reference = co_await internal::ResolveTextureReference(
       observer_ptr { &session }, observer_ptr { &Request() }, reader,
-      { .virtual_path = path,
+      {
+        .virtual_path = path,
         .object_path
         = "environment.post_process_volume.auto_exposure_metering_mask",
-        .diagnostic_prefix = "scene.descriptor." });
+        .diagnostic_prefix = "scene.descriptor.",
+      });
     if (!reference) {
       co_return co_await FinalizeWithTelemetry(session);
     }

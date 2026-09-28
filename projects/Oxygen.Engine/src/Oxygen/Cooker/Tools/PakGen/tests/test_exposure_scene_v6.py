@@ -18,7 +18,7 @@ from pakgen.packing.packers import (
 
 @pytest.mark.parametrize(
     "pack,expected_size,physical_offset",
-    [(_pack_perspective_camera_record, 32, 20),
+    [(_pack_perspective_camera_record, 33, 20),
      (_pack_orthographic_camera_record, 40, 28)],
 )
 def test_camera_physical_fields_follow_projection(pack, expected_size, physical_offset):
@@ -112,7 +112,7 @@ def test_inspector_rejects_obsolete_scene_descriptor(tmp_path):
     data[scene["desc_offset"] + 65] = 7
     obsolete = tmp_path / "obsolete-scene.pak"
     obsolete.write_bytes(data)
-    with pytest.raises(ValueError, match="requires descriptor version 8"):
+    with pytest.raises(ValueError, match="requires descriptor version 9"):
         inspect_pak(obsolete)
 
 
@@ -131,7 +131,7 @@ def test_file_build_rejects_retired_spec_version(tmp_path):
     assert not (tmp_path / "old.pak").exists()
 
 
-@pytest.mark.parametrize("asset_type, version", [("material", 2), ("geometry", 1), ("scene", 8)])
+@pytest.mark.parametrize("asset_type, version", [("material", 3), ("geometry", 2), ("scene", 9)])
 def test_asset_headers_emit_only_current_descriptor_versions(asset_type, version):
     from pakgen.packing.packers import pack_asset_header
 

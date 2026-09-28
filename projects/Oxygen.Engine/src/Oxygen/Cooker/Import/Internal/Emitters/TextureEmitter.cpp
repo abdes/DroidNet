@@ -4,21 +4,38 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <array>
+#include <atomic>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <limits>
+#include <memory>
+#include <optional>
 #include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Result.h>
+#include <Oxygen/Cooker/Import/FileError.h>
 #include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/TextureEmitter.h>
+#include <Oxygen/Cooker/Import/Internal/ResourceTableAggregator.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
+#include <Oxygen/Cooker/Import/TextureImportTypes.h>
 #include <Oxygen/Cooker/Import/TexturePackingPolicy.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/PakFormat_render.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Writer.h>
 
@@ -46,7 +63,7 @@ namespace {
 
   [[nodiscard]] auto DefaultPackingPolicyId() -> std::string
   {
-#if defined(_WIN32)
+#ifdef _WIN32
     return "d3d12";
 #else
     return "tight";
@@ -170,8 +187,12 @@ namespace {
     };
 
     auto row_data = std::vector<std::byte>(aligned_pitch, std::byte { 0 });
-    constexpr std::array white_pixel { std::byte { 0xFF }, std::byte { 0xFF },
-      std::byte { 0xFF }, std::byte { 0xFF } };
+    constexpr std::array white_pixel {
+      std::byte { 0xFF },
+      std::byte { 0xFF },
+      std::byte { 0xFF },
+      std::byte { 0xFF },
+    };
     std::ranges::copy(white_pixel, row_data.begin());
 
     serio::MemoryStream stream;
@@ -207,7 +228,7 @@ namespace {
       CheckResult(writer.Write(header), "payload_header_hash");
     }
 
-    return std::vector(payload_bytes.begin(), payload_bytes.end());
+    return { payload_bytes.begin(), payload_bytes.end() };
   }
 
 } // namespace
@@ -295,12 +316,13 @@ auto TextureEmitter::Emit(CookedTexturePayload cooked,
   const auto tmp_desc = ToPakDescriptor(cooked, 0);
   const auto signature = MakeTextureSignature(cooked, tmp_desc, signature_salt);
   DCHECK_F(!signature.empty(), "texture signature must not be empty");
-  const auto acquire = table_aggregator_.AcquireOrInsert(signature, [&]() {
-    const auto reserved = table_aggregator_.ReserveDataRange(
-      config_.data_alignment, cooked.payload.size());
-    auto desc = ToPakDescriptor(cooked, reserved.aligned_offset);
-    return std::make_pair(desc, reserved);
-  });
+  const auto acquire = table_aggregator_.AcquireOrInsert(signature,
+    [&] -> std::pair<data::pak::core::TextureResourceDesc, WriteReservation> {
+      const auto reserved = table_aggregator_.ReserveDataRange(
+        config_.data_alignment, cooked.payload.size());
+      auto desc = ToPakDescriptor(cooked, reserved.aligned_offset);
+      return std::make_pair(desc, reserved);
+    });
 
   RecordEmissionSignature(signature);
 
@@ -355,8 +377,8 @@ auto TextureEmitter::QueueDataWrite(const WriteKind kind,
   file_writer_.WriteAtAsync(data_path_, offset,
     std::span<const std::byte>(*data),
     WriteOptions { .create_directories = true, .share_write = true },
-    [this, kind, texture_kind, index, data](
-      const FileErrorInfo& error, [[maybe_unused]] uint64_t bytes_written) {
+    [this, kind, texture_kind, index, data](const FileErrorInfo& error,
+      [[maybe_unused]] uint64_t bytes_written) -> void {
       OnWriteComplete(kind, texture_kind, index, error);
     });
 }
@@ -372,6 +394,9 @@ auto TextureEmitter::OnWriteComplete(const WriteKind kind,
   }
 
   error_count_.fetch_add(1, std::memory_order_acq_rel);
+  if (!first_error_) {
+    first_error_ = error;
+  }
 
   if (kind == WriteKind::kPadding) {
     if (texture_kind == TextureKind::kFallback) {
@@ -428,7 +453,7 @@ auto TextureEmitter::RecordEmissionSignature(const std::string& signature)
   }
 }
 
-auto TextureEmitter::Finalize() -> co::Co<bool>
+auto TextureEmitter::Finalize() -> co::Co<Result<void, FileErrorInfo>>
 {
   finalize_started_.store(true, std::memory_order_release);
   EnsureFallbackTexture();
@@ -436,21 +461,14 @@ auto TextureEmitter::Finalize() -> co::Co<bool>
     pending_count_.load(std::memory_order_acquire));
 
   // Wait for all pending writes via flush
-  auto flush_result = co_await file_writer_.Flush();
-
-  if (!flush_result.has_value()) {
-    LOG_F(ERROR, "flush failed: {}", flush_result.error().ToString());
-    co_return false;
+  const auto flush_result = co_await file_writer_.Flush();
+  if (first_error_) {
+    co_return Result<void, FileErrorInfo>::Err(*first_error_);
   }
-
-  // Check for accumulated errors
-  const auto errors = error_count_.load(std::memory_order_acquire);
-  if (errors > 0) {
-    LOG_F(ERROR, "I/O errors occurred: {}", errors);
-    co_return false;
+  if (!flush_result) {
+    co_return Result<void, FileErrorInfo>::Err(flush_result.error());
   }
-
-  co_return true;
+  co_return Result<void, FileErrorInfo>::Ok();
 }
 
 auto TextureEmitter::CreateFallbackPayload() const -> CookedTexturePayload
@@ -532,12 +550,13 @@ auto TextureEmitter::EnsureFallbackTexture() -> void
   const auto signature = MakeTextureSignature(fallback, tmp_desc, "fallback");
   DCHECK_F(!signature.empty(), "fallback texture signature must not be empty");
 
-  const auto acquire = table_aggregator_.AcquireOrInsert(signature, [&]() {
-    const auto reserved = table_aggregator_.ReserveDataRange(
-      config_.data_alignment, fallback.payload.size());
-    auto desc = ToPakDescriptor(fallback, reserved.aligned_offset);
-    return std::make_pair(desc, reserved);
-  });
+  const auto acquire = table_aggregator_.AcquireOrInsert(signature,
+    [&] -> std::pair<data::pak::core::TextureResourceDesc, WriteReservation> {
+      const auto reserved = table_aggregator_.ReserveDataRange(
+        config_.data_alignment, fallback.payload.size());
+      auto desc = ToPakDescriptor(fallback, reserved.aligned_offset);
+      return std::make_pair(desc, reserved);
+    });
 
   RecordEmissionSignature(signature);
 

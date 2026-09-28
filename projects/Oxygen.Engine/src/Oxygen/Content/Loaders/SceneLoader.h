@@ -358,7 +358,7 @@ inline auto LoadSceneAsset(const LoaderContext& context)
   for (uint32_t index = 0; index < desc.nodes.count; ++index) {
     const auto node = detail::ReadPackedRecord<data::pak::world::NodeRecord>(
       bytes_span.subspan(desc.nodes.offset
-          + static_cast<size_t>(index) * sizeof(data::pak::world::NodeRecord),
+          + (static_cast<size_t>(index) * sizeof(data::pak::world::NodeRecord)),
         sizeof(data::pak::world::NodeRecord)),
       "scene node record");
     if (!data::pak::world::HasCanonicalNodeFlags(node)) {
@@ -406,6 +406,16 @@ inline auto LoadSceneAsset(const LoaderContext& context)
             sizeof(oxygen::data::pak::world::RenderableRecord)),
           "scene renderable record");
         geometry_deps.insert(record.geometry_key);
+      }
+    } else if (type == oxygen::data::ComponentType::kMaterialOverride) {
+      using Record = oxygen::data::pak::world::MaterialOverrideRecord;
+      detail::ValidateComponentTable<Record>(
+        table_bytes, entry.table.count, entry.table.entry_size, node_count);
+      for (uint32_t i = 0; i < entry.table.count; ++i) {
+        const auto record = detail::ReadPackedRecord<Record>(
+          table_bytes.subspan(
+            static_cast<size_t>(i) * sizeof(Record), sizeof(Record)),
+          "scene material override");
         if (record.material_key != oxygen::data::AssetKey {}) {
           material_deps.insert(record.material_key);
         }
@@ -490,7 +500,7 @@ inline auto LoadSceneAsset(const LoaderContext& context)
   }
 
   auto asset = std::make_unique<data::SceneAsset>(
-    context.current_asset_key, std::move(bytes));
+    context.current_asset_key, std::move(bytes), context.source_key);
   if (const auto post = asset->TryGetPostProcessVolumeEnvironment(); post
     && post->auto_exposure_metering_mask != data::pak::core::kNoResourceIndex
     && !context.parse_only) {

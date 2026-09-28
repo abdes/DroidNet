@@ -21,6 +21,7 @@
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
+#include <Oxygen/Cooker/Import/MaterialSlotProvenance.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/OxCo/Co.h>
 
@@ -208,6 +209,18 @@ public:
   */
   OXGN_COOK_API auto AddDiagnostic(ImportDiagnostic diagnostic) -> void;
 
+  //! Adds candidate identity metadata for an emitted geometry. Returned only
+  //! with a successful final report; source publication remains caller-owned.
+  OXGN_COOK_API auto AddMaterialSlotProvenance(
+    MaterialSlotGeometryProvenance geometry) -> void;
+
+  //! The complete source geometry set was processed successfully, even if
+  //! empty.
+  auto MarkMaterialSlotSourceProcessed() noexcept -> void
+  {
+    material_slot_source_processed_ = true;
+  }
+
   //! Get all diagnostics collected so far.
   /*!
    @note This takes a lock and copies the diagnostics vector.
@@ -255,6 +268,9 @@ private:
     resource_descriptor_emitter_;
 
   mutable std::mutex diagnostics_mutex_;
+  std::mutex slot_provenance_mutex_;
+  std::vector<MaterialSlotGeometryProvenance> slot_provenance_;
+  bool material_slot_source_processed_ = false;
   std::vector<ImportDiagnostic> diagnostics_;
   std::unordered_set<std::string> diagnostic_keys_;
   bool has_errors_ = false;

@@ -7,6 +7,7 @@
 #pragma once
 
 #include <bit>
+#include <cmath>
 #include <memory>
 
 #include <Oxygen/Base/Logging.h>
@@ -41,7 +42,7 @@ inline auto LoadMaterialAsset(LoaderContext context)
   using data::pak::render::ShaderReferenceDesc;
   using oxygen::ShaderType;
 
-  auto check_result = [](auto&& result, const char* field) {
+  auto check_result = [](auto&& result, const char* field) -> auto {
     if (!result) {
       LOG_F(
         INFO, "-failed- on {}: {}", field, result.error().message().c_str());
@@ -60,6 +61,10 @@ inline auto LoadMaterialAsset(LoaderContext context)
   {
     LOG_SCOPE_F(1, "Header");
     LoadAssetHeader(reader, desc.header);
+    if (desc.header.version != data::pak::render::kMaterialAssetVersion) {
+      throw std::runtime_error(
+        "unsupported MaterialAssetDesc descriptor version");
+    }
   }
 
   // -- Read MaterialAssetDesc specific fields
@@ -147,8 +152,12 @@ inline auto LoadMaterialAsset(LoaderContext context)
   check_result(thickness_texture_result, "MaterialAssetDesc.thickness_texture");
 
   for (auto& i : desc.emissive_factor) {
-    auto emissive_factor_result = ReadHalfFloat(reader, i);
+    auto emissive_factor_result = reader.ReadInto<float>(i);
     check_result(emissive_factor_result, "MaterialAssetDesc.emissive_factor");
+    if (!std::isfinite(i) || i < 0.0F
+      || i > data::pak::render::kMaxMaterialEmissiveFactor) {
+      throw std::runtime_error("invalid MaterialAssetDesc emissive factor");
+    }
   }
 
   auto alpha_cutoff_result = ReadUnorm16(reader, desc.alpha_cutoff);
@@ -320,7 +329,7 @@ inline auto LoadMaterialAsset(LoaderContext context)
   // For each set bit, read a ShaderReferenceDesc and construct a
   // ShaderReference
   for (uint32_t i = 0; i < 32; ++i) {
-    if ((shader_stage_bits & (1u << i)) != 0) {
+    if ((shader_stage_bits & (1U << i)) != 0) {
       auto shader_result = reader.Read<ShaderReferenceDesc>();
       check_result(shader_result, "ShaderReferenceDesc");
       shader_refs.emplace_back(shader_result.value());
@@ -347,7 +356,7 @@ inline auto LoadMaterialAsset(LoaderContext context)
     using data::pak::core::kNoResourceIndex;
     using data::pak::core::ResourceIndexT;
 
-    auto collect_texture_ref = [&](const ResourceIndexT texture_index) {
+    auto collect_texture_ref = [&](const ResourceIndexT texture_index) -> void {
       if (texture_index == kNoResourceIndex) {
         return;
       }
@@ -376,8 +385,9 @@ inline auto LoadMaterialAsset(LoaderContext context)
 
   // Create the material asset with the loaded shader references and runtime
   // per-slot texture resource keys produced during loading.
-  auto material_asset = std::make_unique<data::MaterialAsset>(
-    context.current_asset_key, desc, std::move(shader_refs));
+  auto material_asset
+    = std::make_unique<data::MaterialAsset>(context.current_asset_key, desc,
+      std::move(shader_refs), std::vector<ResourceKey> {}, context.source_key);
 
   return material_asset;
 }

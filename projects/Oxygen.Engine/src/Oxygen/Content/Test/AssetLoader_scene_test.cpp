@@ -5,36 +5,43 @@
 //===----------------------------------------------------------------------===//
 
 #include <cstddef>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <ios>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "./AssetLoader_test.h"
 #include "Fixtures/LooseCookedTestLayout.h"
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Span.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/Loaders/BufferLoader.h>
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
-#include <Oxygen/Content/Loaders/InputActionLoader.h>
-#include <Oxygen/Content/Loaders/InputMappingContextLoader.h>
 #include <Oxygen/Content/Loaders/MaterialLoader.h>
 #include <Oxygen/Content/Loaders/PhysicsSceneLoader.h>
 #include <Oxygen/Content/Loaders/SceneLoader.h>
 #include <Oxygen/Content/Loaders/TextureLoader.h>
+#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/InputMappingContextAsset.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/PhysicsSceneAsset.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
+#include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/Testing/GTest.h>
 
 using ::testing::NotNull;
@@ -53,17 +60,19 @@ using oxygen::data::InputMappingContextAsset;
 using oxygen::data::PhysicsSceneAsset;
 using oxygen::data::SceneAsset;
 
+using oxygen::base::CheckedAt;
+
 namespace {
 
 auto FillTestGuid(oxygen::data::loose_cooked::IndexHeader& header) -> void
 {
   for (uint8_t i = 0; i < 16; ++i) {
-    header.source_identity[i] = static_cast<uint8_t>(i + 1);
+    header.source_identity.at(i) = static_cast<uint8_t>(i + 1);
   }
-  header.source_identity[6]
-    = static_cast<uint8_t>((header.source_identity[6] & 0x0FU) | 0x70U);
-  header.source_identity[8]
-    = static_cast<uint8_t>((header.source_identity[8] & 0x3FU) | 0x80U);
+  header.source_identity.at(6)
+    = static_cast<uint8_t>((header.source_identity.at(6) & 0x0FU) | 0x70U);
+  header.source_identity.at(8)
+    = static_cast<uint8_t>((header.source_identity.at(8) & 0x3FU) | 0x80U);
 }
 
 auto WriteLooseCookedSceneWithSingleRootNode(
@@ -147,7 +156,7 @@ auto WriteLooseCookedSceneWithSingleRootNode(
   header.asset_count = 1;
   header.asset_entry_size = sizeof(AssetEntry);
   header.file_records_offset
-    = header.asset_entries_offset + sizeof(AssetEntry) * header.asset_count;
+    = header.asset_entries_offset + (sizeof(AssetEntry) * header.asset_count);
   header.file_record_count = 0;
   header.file_record_size = sizeof(oxygen::data::loose_cooked::FileRecord);
 
@@ -193,7 +202,7 @@ NOLINT_TEST_F(AssetLoaderSceneTest,
   TestEventLoop el;
 
   // Act + Assert
-  (oxygen::co::Run)(el, [&]() -> Co<> {
+  oxygen::co::Run(el, [&] -> Co<> {
     oxygen::co::ThreadPool pool(el, 2);
     AssetLoaderConfig config {};
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
@@ -232,10 +241,10 @@ NOLINT_TEST_F(AssetLoaderSceneTest,
         = scene->GetComponents<oxygen::data::pak::world::RenderableRecord>();
       EXPECT_TRUE(renderables.empty());
 
-#if !defined(NDEBUG)
+#ifndef NDEBUG
       size_t dependents = 0;
-      loader.ForEachDependent(
-        geometry_key, [&](const oxygen::data::AssetKey&) { ++dependents; });
+      loader.ForEachDependent(geometry_key,
+        [&](const oxygen::data::AssetKey&) -> void { ++dependents; });
       EXPECT_EQ(dependents, 0U);
 #endif
 
@@ -270,7 +279,7 @@ NOLINT_TEST_F(AssetLoaderSceneTest,
   TestEventLoop el;
 
   // Act + Assert
-  (oxygen::co::Run)(el, [&]() -> Co<> {
+  oxygen::co::Run(el, [&] -> Co<> {
     oxygen::co::ThreadPool pool(el, 2);
     AssetLoaderConfig config {};
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
@@ -315,15 +324,25 @@ NOLINT_TEST_F(AssetLoaderSceneTest,
         loader.Stop();
         co_return oxygen::co::kJoin;
       }
-      EXPECT_EQ(renderables[0].node_index, 1U);
-      EXPECT_EQ(renderables[0].geometry_key, referenced_geometry_key);
-      EXPECT_EQ(renderables[0].material_key, material_key);
+      EXPECT_EQ(CheckedAt(renderables, 0).node_index, 1U);
+      EXPECT_EQ(
+        CheckedAt(renderables, 0).geometry_key, referenced_geometry_key);
+      const auto overrides
+        = scene
+            ->GetComponents<oxygen::data::pak::world::MaterialOverrideRecord>();
+      EXPECT_EQ(overrides.size(), 1U);
+      if (overrides.size() != 1U) {
+        loader.Stop();
+        co_return oxygen::co::kJoin;
+      }
+      EXPECT_EQ(overrides.front().node_index, 1U);
+      EXPECT_EQ(overrides.front().material_key, material_key);
 
-#if !defined(NDEBUG)
+#ifndef NDEBUG
       // Assert: referenced renderable assets become dependent edges.
       bool has_scene_as_dependent = false;
-      loader.ForEachDependent(
-        referenced_geometry_key, [&](const oxygen::data::AssetKey& dependent) {
+      loader.ForEachDependent(referenced_geometry_key,
+        [&](const oxygen::data::AssetKey& dependent) -> void {
           if (dependent == scene_key) {
             has_scene_as_dependent = true;
           }
@@ -332,7 +351,7 @@ NOLINT_TEST_F(AssetLoaderSceneTest,
 
       bool has_scene_as_material_dependent = false;
       loader.ForEachDependent(
-        material_key, [&](const oxygen::data::AssetKey& dependent) {
+        material_key, [&](const oxygen::data::AssetKey& dependent) -> void {
           if (dependent == scene_key) {
             has_scene_as_material_dependent = true;
           }
@@ -341,7 +360,7 @@ NOLINT_TEST_F(AssetLoaderSceneTest,
 
       size_t unused_dependents = 0;
       loader.ForEachDependent(unused_geometry_key,
-        [&](const oxygen::data::AssetKey&) { ++unused_dependents; });
+        [&](const oxygen::data::AssetKey&) -> void { ++unused_dependents; });
       EXPECT_EQ(unused_dependents, 0U);
 #endif
 
@@ -377,7 +396,7 @@ NOLINT_TEST_F(AssetLoaderSceneTest,
   TestEventLoop el;
 
   // Act + Assert
-  (oxygen::co::Run)(el, [&]() -> Co<> {
+  oxygen::co::Run(el, [&] -> Co<> {
     oxygen::co::ThreadPool pool(el, 2);
     AssetLoaderConfig config {};
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
@@ -411,13 +430,13 @@ NOLINT_TEST_F(AssetLoaderSceneTest,
         loader.Stop();
         co_return oxygen::co::kJoin;
       }
-      EXPECT_EQ(renderables[0].geometry_key, geometry_key);
-      EXPECT_EQ(renderables[1].geometry_key, geometry_key);
+      EXPECT_EQ(CheckedAt(renderables, 0).geometry_key, geometry_key);
+      EXPECT_EQ(CheckedAt(renderables, 1).geometry_key, geometry_key);
 
-#if !defined(NDEBUG)
+#ifndef NDEBUG
       bool has_scene_as_dependent = false;
       loader.ForEachDependent(
-        geometry_key, [&](const oxygen::data::AssetKey& dependent) {
+        geometry_key, [&](const oxygen::data::AssetKey& dependent) -> void {
           if (dependent == scene_key) {
             has_scene_as_dependent = true;
           }
@@ -450,7 +469,7 @@ NOLINT_TEST_F(AssetLoaderSceneTest,
   TestEventLoop el;
 
   // Act + Assert
-  (oxygen::co::Run)(el, [&]() -> Co<> {
+  oxygen::co::Run(el, [&] -> Co<> {
     oxygen::co::ThreadPool pool(el, 2);
     AssetLoaderConfig config {};
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
@@ -484,13 +503,13 @@ NOLINT_TEST_F(AssetLoaderSceneTest,
         loader.Stop();
         co_return oxygen::co::kJoin;
       }
-      EXPECT_EQ(renderables[0].geometry_key, geometry_a);
-      EXPECT_EQ(renderables[1].geometry_key, geometry_b);
+      EXPECT_EQ(CheckedAt(renderables, 0).geometry_key, geometry_a);
+      EXPECT_EQ(CheckedAt(renderables, 1).geometry_key, geometry_b);
 
-#if !defined(NDEBUG)
+#ifndef NDEBUG
       bool has_a = false;
       loader.ForEachDependent(
-        geometry_a, [&](const oxygen::data::AssetKey& dependent) {
+        geometry_a, [&](const oxygen::data::AssetKey& dependent) -> void {
           if (dependent == scene_key) {
             has_a = true;
           }
@@ -499,7 +518,7 @@ NOLINT_TEST_F(AssetLoaderSceneTest,
 
       bool has_b = false;
       loader.ForEachDependent(
-        geometry_b, [&](const oxygen::data::AssetKey& dependent) {
+        geometry_b, [&](const oxygen::data::AssetKey& dependent) -> void {
           if (dependent == scene_key) {
             has_b = true;
           }
@@ -531,7 +550,7 @@ NOLINT_TEST_F(AssetLoaderSceneTest,
 
   TestEventLoop el;
 
-  (oxygen::co::Run)(el, [&]() -> Co<> {
+  oxygen::co::Run(el, [&] -> Co<> {
     oxygen::co::ThreadPool pool(el, 2);
     AssetLoaderConfig config {};
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
@@ -559,19 +578,20 @@ NOLINT_TEST_F(AssetLoaderSceneTest,
             ->GetComponents<oxygen::data::pak::world::DirectionalLightRecord>();
       EXPECT_EQ(directional.size(), 1U);
       if (directional.size() == 1U) {
-        EXPECT_EQ(directional[0].node_index, 1U);
-        EXPECT_EQ(directional[0].atmosphere_light_slot, 1U);
-        EXPECT_EQ(directional[0].split_mode, 1U);
-        EXPECT_FLOAT_EQ(directional[0].max_shadow_distance, 200.0F);
-        EXPECT_FLOAT_EQ(directional[0].transition_fraction, 0.1F);
-        EXPECT_FLOAT_EQ(directional[0].distance_fadeout_fraction, 0.1F);
+        EXPECT_EQ(CheckedAt(directional, 0).node_index, 1U);
+        EXPECT_EQ(CheckedAt(directional, 0).atmosphere_light_slot, 1U);
+        EXPECT_EQ(CheckedAt(directional, 0).split_mode, 1U);
+        EXPECT_FLOAT_EQ(CheckedAt(directional, 0).max_shadow_distance, 200.0F);
+        EXPECT_FLOAT_EQ(CheckedAt(directional, 0).transition_fraction, 0.1F);
+        EXPECT_FLOAT_EQ(
+          CheckedAt(directional, 0).distance_fadeout_fraction, 0.1F);
       }
 
       const auto points
         = scene->GetComponents<oxygen::data::pak::world::PointLightRecord>();
       EXPECT_EQ(points.size(), 1U);
       if (points.size() == 1U) {
-        EXPECT_EQ(points[0].node_index, 2U);
+        EXPECT_EQ(CheckedAt(points, 0).node_index, 2U);
       }
 
       const auto spots
@@ -637,7 +657,7 @@ NOLINT_TEST_F(AssetLoaderSceneTest,
         EXPECT_FLOAT_EQ(ppv->auto_exposure_transition_distance_ev, 2.5F);
         EXPECT_EQ(scene->GetPostProcessCompensationCurve().size(), 2U);
         const auto mask = loader.MakeTextureResourceKeyForAsset(
-          scene_key, ppv->auto_exposure_metering_mask);
+          *scene, ppv->auto_exposure_metering_mask);
         EXPECT_TRUE(mask.has_value());
         if (mask) {
           const auto texture
@@ -647,15 +667,16 @@ NOLINT_TEST_F(AssetLoaderSceneTest,
         }
         EXPECT_FALSE(loader
             .MakeTextureResourceKeyForAsset(
-              scene_key, oxygen::data::pak::core::kNoResourceIndex)
+              *scene, oxygen::data::pak::core::kNoResourceIndex)
             .has_value());
         EXPECT_FALSE(loader
             .MakeTextureResourceKeyForAsset(
-              scene_key, oxygen::data::pak::core::ResourceIndexT { 999U })
+              *scene, oxygen::data::pak::core::ResourceIndexT { 999U })
             .has_value());
         EXPECT_FALSE(loader
             .MakeTextureResourceKeyForAsset(
-              oxygen::data::AssetKey {}, ppv->auto_exposure_metering_mask)
+              *oxygen::data::MaterialAsset::CreateDefault(),
+              ppv->auto_exposure_metering_mask)
             .has_value());
       }
 
@@ -683,7 +704,7 @@ NOLINT_TEST_F(AssetLoaderSceneTest, LoadAssetSceneWithPhysicsSidecarLoadsV7)
     = CreateTestAssetKey("test_scene_with_physics_sidecar");
 
   TestEventLoop el;
-  (oxygen::co::Run)(el, [&]() -> Co<> {
+  oxygen::co::Run(el, [&] -> Co<> {
     oxygen::co::ThreadPool pool(el, 2);
     AssetLoaderConfig config {};
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
@@ -748,19 +769,20 @@ NOLINT_TEST_F(AssetLoaderSceneTest, LoadAssetSceneWithPhysicsSidecarLoadsV7)
       EXPECT_EQ(aggregates.size(), 1U);
 
       if (!rigid.empty()) {
-        EXPECT_EQ(rigid[0].node_index, 1U);
-        EXPECT_FALSE(rigid[0].shape_asset_key.IsNil());
-        EXPECT_FALSE(rigid[0].material_asset_key.IsNil());
+        EXPECT_EQ(CheckedAt(rigid, 0).node_index, 1U);
+        EXPECT_FALSE(CheckedAt(rigid, 0).shape_asset_key.IsNil());
+        EXPECT_FALSE(CheckedAt(rigid, 0).material_asset_key.IsNil());
       }
       if (!joints.empty()) {
-        EXPECT_FALSE(joints[0].constraint_asset_key.IsNil());
+        EXPECT_FALSE(CheckedAt(joints, 0).constraint_asset_key.IsNil());
       }
       if (!soft_bodies.empty()) {
-        EXPECT_GT(soft_bodies[0].solver_iteration_count, 0U);
-        EXPECT_NE(static_cast<uint32_t>(soft_bodies[0].topology_format), 0U);
+        EXPECT_GT(CheckedAt(soft_bodies, 0).solver_iteration_count, 0U);
+        EXPECT_NE(
+          static_cast<uint32_t>(CheckedAt(soft_bodies, 0).topology_format), 0U);
       }
       if (!vehicles.empty()) {
-        EXPECT_FALSE(vehicles[0].constraint_asset_key.IsNil());
+        EXPECT_FALSE(CheckedAt(vehicles, 0).constraint_asset_key.IsNil());
       }
 
       loader.Stop();
@@ -785,7 +807,7 @@ NOLINT_TEST_F(AssetLoaderSceneTest, LoadAssetLooseCookedSceneLoads)
   TestEventLoop el;
 
   // Act + Assert
-  (oxygen::co::Run)(el, [&]() -> Co<> {
+  oxygen::co::Run(el, [&] -> Co<> {
     using oxygen::content::AssetLoader;
     using oxygen::content::AssetLoaderConfig;
     using oxygen::data::SceneAsset;

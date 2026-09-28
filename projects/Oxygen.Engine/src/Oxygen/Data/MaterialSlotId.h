@@ -56,6 +56,15 @@ public:
   OXGN_DATA_NDAPI static auto FromString(std::string_view text)
     -> Result<MaterialSlotId>;
 
+  //! Allocates a fresh identity for a runtime-created declaration.
+  OXGN_DATA_NDAPI static auto Generate() -> MaterialSlotId;
+
+  //! Allocates deterministically from a producer-owned canonical identity.
+  //! The identity includes the producer version and retained source namespace;
+  //! display labels and unproven binding ordinals are not canonical identities.
+  OXGN_DATA_NDAPI static auto FromStableIdentity(std::string_view identity)
+    -> MaterialSlotId;
+
   [[nodiscard]] constexpr auto data() const noexcept -> const value_type*
   {
     return bytes_.data();
@@ -69,10 +78,10 @@ public:
   [[nodiscard]] constexpr auto begin() const noexcept { return bytes_.begin(); }
   [[nodiscard]] constexpr auto end() const noexcept { return bytes_.end(); }
 
-  [[nodiscard]] friend constexpr std::strong_ordering operator<=>(
-    const MaterialSlotId&, const MaterialSlotId&) noexcept = default;
-  [[nodiscard]] friend constexpr bool operator==(
-    const MaterialSlotId&, const MaterialSlotId&) noexcept = default;
+  [[nodiscard]] friend constexpr auto operator<=>(const MaterialSlotId&,
+    const MaterialSlotId&) noexcept -> std::strong_ordering = default;
+  [[nodiscard]] friend constexpr auto operator==(
+    const MaterialSlotId&, const MaterialSlotId&) noexcept -> bool = default;
 
 private:
   constexpr explicit MaterialSlotId(const ByteArray& bytes) noexcept

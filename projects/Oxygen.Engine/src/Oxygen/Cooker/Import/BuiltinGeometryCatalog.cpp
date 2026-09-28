@@ -5,14 +5,21 @@
 //===----------------------------------------------------------------------===//
 
 #include <stdexcept>
+#include <string>
+#include <string_view>
 #include <utility>
 
+#include <fmt/format.h>
+#include <fmt/ranges.h>
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Cooker/Import/BuiltinGeometryCatalog.h>
+#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/BuiltinGeometry.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/MaterialSlotId.h>
 
 namespace {
 
@@ -38,23 +45,30 @@ auto AuthoringCategoryName(
 auto DefaultMaterialDescriptor() -> json
 {
   const auto material = oxygen::data::MaterialAsset::CreateDefault();
-  const auto color = material->GetBaseColor();
+  auto color = json::array();
+  for (const auto channel : material->GetBaseColor()) {
+    color.push_back(channel);
+  }
   return {
     { "$schema", "oxygen.material-descriptor.v1" },
     { "name", kDefaultMaterialName },
     { "domain", "opaque" },
     { "alpha_mode", "opaque" },
-    { "parameters",
+    {
+      "parameters",
       {
-        { "base_color",
-          json::array({ color[0], color[1], color[2], color[3] }) },
+        {
+          "base_color",
+          std::move(color),
+        },
         { "metalness", material->GetMetalness() },
         { "roughness", material->GetRoughness() },
         { "normal_scale", material->GetNormalScale() },
         { "ambient_occlusion", material->GetAmbientOcclusion() },
         { "alpha_cutoff", material->GetAlphaCutoff() },
         { "double_sided", material->IsDoubleSided() },
-      } },
+      },
+    },
   };
 }
 
@@ -72,24 +86,70 @@ auto GeometryDescriptor(const oxygen::data::BuiltinGeometryIdentity& identity,
     { "$schema", "oxygen.geometry-descriptor.v1" },
     { "name", identity.descriptor_name },
     { "bounds", bounds },
-    { "lods",
-      json::array({ {
-        { "name", "LOD0" },
-        { "mesh_type", "procedural" },
-        { "bounds", bounds },
-        { "procedural",
+    {
+      "lods",
+      json::array({
+        {
+          { "name", "LOD0" },
+          { "mesh_type", "procedural" },
+          { "bounds", bounds },
           {
-            { "generator", identity.generator },
-            { "mesh_name", identity.name },
-            { "params", json::object() },
-          } },
-        { "submeshes",
-          json::array({ {
-            { "name", "Main" },
-            { "material_ref", material_path },
-            { "views", json::array({ json { { "view_ref", "__all__" } } }) },
-          } }) },
-      } }) },
+            "procedural",
+            {
+              { "generator", identity.generator },
+              { "mesh_name", identity.name },
+              { "params", json::object() },
+            },
+          },
+          {
+            "submeshes",
+            json::array({
+              {
+                { "name", "Main" },
+                {
+                  "slot_id",
+                  to_string(geometry.MaterialSlots().slots.front().slot_id),
+                },
+                { "material_ref", material_path },
+                {
+                  "views",
+                  json::array({ json { { "view_ref", "__all__" } } }),
+                },
+              },
+            }),
+          },
+        },
+      }),
+    },
+  };
+}
+
+auto MaterialInventory(const oxygen::data::GeometryAsset& geometry) -> json
+{
+  const auto& inventory = geometry.MaterialSlots();
+  auto slots = json::array();
+  for (const auto& slot : inventory.slots) {
+    auto bindings = json::array();
+    for (const auto& binding : slot.bindings) {
+      bindings.push_back({
+        { "lod_index", binding.lod_index },
+        { "submesh_index", binding.submesh_index },
+        { "default_material_key", to_string(binding.default_material_key) },
+      });
+    }
+    slots.push_back({
+      { "slot_id", to_string(slot.slot_id) },
+      { "display_name", slot.display_name },
+      { "bindings", std::move(bindings) },
+    });
+  }
+  return {
+    { "geometry_asset_key", to_string(inventory.geometry_asset_key) },
+    {
+      "layout_revision",
+      fmt::format("{:02x}", fmt::join(inventory.layout_revision, "")),
+    },
+    { "slots", std::move(slots) },
   };
 }
 
@@ -120,23 +180,30 @@ auto ExportBuiltinGeometryCatalog(const std::string_view mount_name)
     entries.push_back({
       { "name", identity->name },
       { "canonical_name", identity->generator },
-      { "authoring_category",
-        AuthoringCategoryName(identity->authoring_category) },
+      {
+        "authoring_category",
+        AuthoringCategoryName(identity->authoring_category),
+      },
       { "asset_uri", identity->asset_uri },
-      { "virtual_path",
-        mount + "/Geometry/" + identity->descriptor_name + ".ogeo" },
+      {
+        "virtual_path",
+        mount + "/Geometry/" + identity->descriptor_name + ".ogeo",
+      },
       { "descriptor", GeometryDescriptor(*identity, *geometry, material_path) },
+      { "material_slot_inventory", MaterialInventory(*geometry) },
     });
   }
 
   return json {
-    { "schema", "oxygen.builtin-geometry-catalog.v2" },
+    { "schema", "oxygen.builtin-geometry-catalog.v3" },
     { "mount", mount_name },
-    { "default_material",
+    {
+      "default_material",
       {
         { "virtual_path", material_path },
         { "descriptor", DefaultMaterialDescriptor() },
-      } },
+      },
+    },
     { "geometries", std::move(entries) },
   }
     .dump(2);

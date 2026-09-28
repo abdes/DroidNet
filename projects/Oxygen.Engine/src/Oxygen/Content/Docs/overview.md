@@ -38,7 +38,6 @@ In practice, it owns:
 Content does **not**:
 
 - Submit GPU uploads, track GPU residency, or manage GPU memory budgets
-- Resolve cross-source references (it is forbidden by design)
 - Interpret editor virtual paths (resolution happens above Content)
 
 GPU staging/submission is handled by the Vortex upload/resource layer on top of
@@ -48,28 +47,18 @@ Graphics command recording.
 
 ## Core invariants (do not violate)
 
-### 1) Intra-source dependencies only
+### 1) Preserve resolved source identity
 
-**Core rule:** all asset and resource dependencies must be contained within the
-same mounted cooked source (a `.pak` file or a loose cooked root).
+Resource table indices belong to their cooked source. Asset dependencies resolve
+in the owning source first; absent external AssetKeys may resolve through active
+source precedence. Once published, the direct dependency edge retains the actual
+resolved source. Contextual reads and repeated publication reuse that binding.
 
-What this means:
-
-- Assets (Geometry, Material, …) may reference other assets/resources **only
-  inside the same mounted source**
-- Resource indices (`ResourceIndexT`) are source-scoped; index values are only
-  meaningful within their originating source
-- No cross-source references: an asset in `level_forest.pak` cannot reference an
-  asset/resource in `base_game.pak`, and content from a loose cooked root cannot
-  reference content in a different root or PAK
-
-Why we enforce it:
-
-- Packaging: each PAK is a self-contained unit (levels, DLC, mods)
-- Runtime: improves locality, reduces seeking, and enables clean PAK-level
-  unload
-- Simplifies lifecycle: dependency tracking and cache accounting do not need to
-  span multiple sources
+Loaded assets expose `SourceKey`. Use the retained asset for dependency queries
+and release; an AssetKey-only query deliberately selects the current winner.
+Immutable loose generations can coexist without replacing bytes used by old
+assets. [Generation ownership](loose_cooked_content.md#published-generations)
+defines the mount and cross-process storage lease contract.
 
 ### 2) Clear CPU vs GPU boundary
 

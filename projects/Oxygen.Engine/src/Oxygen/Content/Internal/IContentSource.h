@@ -57,7 +57,7 @@ public:
 
   [[nodiscard]] virtual auto DebugName() const noexcept -> std::string_view = 0;
   [[nodiscard]] virtual auto SourcePath() const noexcept
-    -> std::filesystem::path = 0;
+    -> const std::filesystem::path& = 0;
 
   [[nodiscard]] virtual auto GetSourceKey() const noexcept -> data::SourceKey
     = 0;

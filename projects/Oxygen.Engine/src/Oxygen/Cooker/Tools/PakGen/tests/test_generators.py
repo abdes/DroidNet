@@ -306,7 +306,11 @@ class TestExpandSceneNodes:
                     "name": "Cube",
                     "parent": 0,
                     "geometry": "CubeGeo",
-                    "material": "Red",
+                    "material_overrides": [{
+                        "slot_id": "00000000-0000-0000-0000-000000000001",
+                        "material": "Red",
+                        "layout_revision": "01" * 32,
+                    }],
                     "generate": {
                         "layout": "grid",
                         "grid": {"count": [2, 2, 1]},
@@ -333,7 +337,11 @@ class TestExpandSceneNodes:
                     "name": "Cube",
                     "parent": 0,
                     "geometry": "CubeGeo",
-                    "material": "Blue",
+                    "material_overrides": [{
+                        "slot_id": "00000000-0000-0000-0000-000000000001",
+                        "material": "Blue",
+                        "layout_revision": "01" * 32,
+                    }],
                     "generate": {"layout": "linear", "linear": {"count": 3}},
                 },
             ],
@@ -347,6 +355,8 @@ class TestExpandSceneNodes:
         # Node indices should be 1, 2, 3 (Root is 0)
         indices = [r["node_index"] for r in scene["renderables"]]
         assert indices == [1, 2, 3]
+        assert [row["node_index"] for row in scene["material_overrides"]] == indices
+        assert all(row["material"] == "Blue" for row in scene["material_overrides"])
 
     def test_mixed_manual_and_generated(self) -> None:
         """Test scene with both manual and generated nodes."""

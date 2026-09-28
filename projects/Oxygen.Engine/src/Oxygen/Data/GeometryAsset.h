@@ -25,6 +25,7 @@
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Data/Asset.h>
 #include <Oxygen/Data/BufferResource.h>
+#include <Oxygen/Data/MaterialSlotInventory.h>
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Data/api_export.h>
 
@@ -147,6 +148,11 @@ private:
 */
 class SubMesh {
 public:
+  //! Semantic declaration identity; independent of its label or material.
+  [[nodiscard]] auto SlotId() const noexcept -> MaterialSlotId
+  {
+    return slot_id_;
+  }
   ~SubMesh() = default;
 
   OXYGEN_MAKE_NON_COPYABLE(SubMesh)
@@ -214,6 +220,7 @@ protected:
   // Only for SubMeshBuilder: set PAK descriptor for bounding optimization
   void SetDescriptor(pak::geometry::SubMeshDesc desc)
   {
+    slot_id_ = desc.slot_id;
     desc_ = std::move(desc);
   }
 
@@ -231,14 +238,15 @@ private:
 
   std::reference_wrapper<const Mesh> mesh_;
 
-  std::string name_ {};
+  std::string name_;
   glm::vec3 bbox_min_ {};
   glm::vec3 bbox_max_ {};
-  glm::vec4 bounding_sphere_ { 0.0f, 0.0f, 0.0f, 0.0f };
+  glm::vec4 bounding_sphere_ { 0.0F, 0.0F, 0.0F, 0.0F };
   std::vector<MeshView> mesh_views_;
   std::shared_ptr<const MaterialAsset> material_;
 
-  std::optional<pak::geometry::SubMeshDesc> desc_ {};
+  std::optional<pak::geometry::SubMeshDesc> desc_;
+  MaterialSlotId slot_id_;
 };
 
 //! Immutable, shareable mesh asset containing geometry data and submeshes.
@@ -329,15 +337,17 @@ namespace detail {
 
     [[nodiscard]] auto AsU16() const noexcept -> std::span<const std::uint16_t>
     {
-      if (type != IndexType::kUInt16)
+      if (type != IndexType::kUInt16) {
         return {};
+      }
       return { reinterpret_cast<const std::uint16_t*>(bytes.data()), Count() };
     }
 
     [[nodiscard]] auto AsU32() const noexcept -> std::span<const std::uint32_t>
     {
-      if (type != IndexType::kUInt32)
+      if (type != IndexType::kUInt32) {
         return {};
+      }
       return { reinterpret_cast<const std::uint32_t*>(bytes.data()), Count() };
     }
 
@@ -413,8 +423,9 @@ namespace detail {
 
     [[nodiscard]] auto BuildIndexBufferView() const noexcept -> IndexBufferView
     {
-      if (indices.empty())
+      if (indices.empty()) {
         return {};
+      }
       auto raw = std::span<const std::uint32_t>(indices.data(), indices.size());
       auto bytes = std::as_bytes(raw);
       return IndexBufferView { bytes, IndexType::kUInt32 };
@@ -431,8 +442,9 @@ namespace detail {
 
     [[nodiscard]] auto GetVertices() const noexcept -> std::span<const Vertex>
     {
-      if (!vertex_buffer_resource)
+      if (!vertex_buffer_resource) {
         return {};
+      }
       auto data = vertex_buffer_resource->GetData();
       return { reinterpret_cast<const Vertex*>(data.data()),
         data.size() / sizeof(Vertex) };
@@ -443,8 +455,9 @@ namespace detail {
     [[nodiscard]] auto BuildIndexBufferView() const noexcept -> IndexBufferView
     {
       InitializeIndexInfo();
-      if (cached_index_type == IndexType::kNone || !index_buffer_resource)
+      if (cached_index_type == IndexType::kNone || !index_buffer_resource) {
         return {};
+      }
       auto data_u8 = index_buffer_resource->GetData();
       auto bytes_span = std::span<const std::byte>(
         reinterpret_cast<const std::byte*>(data_u8.data()), data_u8.size());
@@ -477,7 +490,8 @@ public:
   [[nodiscard]] virtual auto Vertices() const noexcept
     -> std::span<const Vertex>
   {
-    return std::visit([](const auto& storage) { return storage.GetVertices(); },
+    return std::visit(
+      [](const auto& storage) -> auto { return storage.GetVertices(); },
       buffer_storage_);
   }
 
@@ -485,7 +499,8 @@ public:
   [[nodiscard]] auto IndexBuffer() const noexcept -> detail::IndexBufferView
   {
     return std::visit(
-      [](const auto& storage) { return storage.BuildIndexBufferView(); },
+      [](
+        const auto& storage) -> auto { return storage.BuildIndexBufferView(); },
       buffer_storage_);
   }
 
@@ -610,7 +625,7 @@ public:
     if (submesh_index >= submeshes_.size()) {
       throw std::out_of_range("submesh_index");
     }
-    submeshes_[submesh_index].SetMaterial(std::move(material));
+    submeshes_.at(submesh_index).SetMaterial(std::move(material));
   }
 
   //! Returns the optional PAK descriptor used to construct this mesh.
@@ -686,10 +701,10 @@ private:
   */
   auto ComputeBounds() -> void;
 
-  std::string name_ {};
+  std::string name_;
   glm::vec3 bbox_min_ {};
   glm::vec3 bbox_max_ {};
-  glm::vec4 bounding_sphere_ { 0.0f, 0.0f, 0.0f, 0.0f };
+  glm::vec4 bounding_sphere_ { 0.0F, 0.0F, 0.0F, 0.0F };
   std::vector<SubMesh> submeshes_;
 
   detail::BufferStorage buffer_storage_;
@@ -699,7 +714,7 @@ private:
   std::shared_ptr<BufferResource> inverse_bind_buffer_;
   std::shared_ptr<BufferResource> joint_remap_buffer_;
 
-  std::optional<pak::geometry::MeshDesc> desc_ {};
+  std::optional<pak::geometry::MeshDesc> desc_;
 };
 
 //! Geometry asset as stored in the PAK file resource table.
@@ -717,13 +732,19 @@ class GeometryAsset : public Asset {
   OXYGEN_TYPED(GeometryAsset)
 
 public:
-  GeometryAsset(AssetKey asset_key, pak::geometry::GeometryAssetDesc desc,
-    std::vector<std::shared_ptr<Mesh>> lod_meshes)
-    : Asset(asset_key)
-    , desc_(std::move(desc))
-    , lod_meshes_(std::move(lod_meshes))
+  OXGN_DATA_API GeometryAsset(AssetKey asset_key,
+    pak::geometry::GeometryAssetDesc desc,
+    std::vector<std::shared_ptr<Mesh>> lod_meshes, SourceKey source_key = {});
+
+  //! Immutable declaration inventory, resolved once when geometry is created.
+  [[nodiscard]] auto MaterialSlots() const noexcept
+    -> const MaterialSlotInventory&
   {
+    return material_slots_;
   }
+
+  OXGN_DATA_NDAPI auto FindMaterialSlot(MaterialSlotId id) const noexcept
+    -> const MaterialSlot*;
 
   ~GeometryAsset() override = default;
 
@@ -731,7 +752,8 @@ public:
   OXYGEN_DEFAULT_MOVABLE(GeometryAsset)
 
   //! Returns the asset header metadata.
-  [[nodiscard]] auto GetHeader() const noexcept -> const pak::core::AssetHeader&
+  [[nodiscard]] auto GetHeader() const noexcept
+    -> const pak::core::AssetHeader& override
   {
     return desc_.header;
   }
@@ -740,16 +762,16 @@ public:
   //! (AABB).
   [[nodiscard]] auto BoundingBoxMin() const noexcept -> glm::vec3
   {
-    return glm::vec3(desc_.bounding_box_min[0], desc_.bounding_box_min[1],
-      desc_.bounding_box_min[2]);
+    return { desc_.bounding_box_min[0], desc_.bounding_box_min[1],
+      desc_.bounding_box_min[2] };
   }
 
   //! Returns the maximum corner of the asset's axis-aligned bounding box
   //! (AABB).
   [[nodiscard]] auto BoundingBoxMax() const noexcept -> glm::vec3
   {
-    return glm::vec3(desc_.bounding_box_max[0], desc_.bounding_box_max[1],
-      desc_.bounding_box_max[2]);
+    return { desc_.bounding_box_max[0], desc_.bounding_box_max[1],
+      desc_.bounding_box_max[2] };
   }
 
   //! Returns a span of all LOD meshes.
@@ -764,8 +786,9 @@ public:
     -> const std::shared_ptr<Mesh>&
   {
     static const std::shared_ptr<Mesh> null_mesh;
-    if (lod < lod_meshes_.size())
-      return lod_meshes_[lod];
+    if (lod < lod_meshes_.size()) {
+      return lod_meshes_.at(lod);
+    }
     return null_mesh;
   }
 
@@ -778,6 +801,7 @@ public:
 private:
   pak::geometry::GeometryAssetDesc desc_ {};
   std::vector<std::shared_ptr<Mesh>> lod_meshes_;
+  MaterialSlotInventory material_slots_ {};
 };
 
 //! Builder for a single submesh within a MeshBuilder type-state API.
@@ -809,6 +833,17 @@ public:
   auto WithDescriptor(pak::geometry::SubMeshDesc desc) -> SubMeshBuilder&
   {
     desc_ = std::move(desc);
+    return *this;
+  }
+
+  //! Supplies persistent producer-owned identity. Omission creates a fresh
+  //! runtime declaration; its identity survives only while that mesh exists.
+  auto WithMaterialSlotId(MaterialSlotId id) -> SubMeshBuilder&
+  {
+    if (id.IsNil()) {
+      throw std::invalid_argument("Material slot identity must not be nil");
+    }
+    slot_id_ = id;
     return *this;
   }
 
@@ -846,6 +881,7 @@ private:
   std::shared_ptr<const MaterialAsset> material_;
   std::vector<pak::geometry::MeshViewDesc> mesh_views_;
   std::optional<pak::geometry::SubMeshDesc> desc_;
+  MaterialSlotId slot_id_;
 
   friend class MeshBuilder;
 };
@@ -1024,7 +1060,7 @@ public:
       throw std::logic_error("SubMesh material must not be null");
     }
     submesh_in_progress_ = true;
-    return SubMeshBuilder(*this, std::move(name), std::move(material));
+    return { *this, std::move(name), std::move(material) };
   }
 
   //! Finalizes a submesh and adds it to the mesh. Only callable with a finished
@@ -1043,6 +1079,7 @@ public:
       .material = submesh_builder.Material(),
       .mesh_views = submesh_builder.MeshViews(),
       .desc = submesh_builder.desc_,
+      .slot_id = submesh_builder.slot_id_,
     });
     submesh_in_progress_ = false;
     return *this;
@@ -1056,7 +1093,7 @@ private:
   enum class StorageType {
     kUninitialized, //!< No storage type set yet
     kOwned, //!< Uses owned storage (vertices/indices vectors)
-    kReferenced //!< Uses referenced storage (BufferResource pointers)
+    kReferenced, //!< Uses referenced storage (BufferResource pointers)
   };
 
   //! Validates that the requested storage type is compatible with current
@@ -1115,6 +1152,7 @@ private:
     std::shared_ptr<const MaterialAsset> material;
     std::vector<pak::geometry::MeshViewDesc> mesh_views;
     std::optional<pak::geometry::SubMeshDesc> desc;
+    MaterialSlotId slot_id;
   };
   std::vector<SubMeshSpec> submeshes_;
   std::optional<pak::geometry::MeshDesc> desc_;
@@ -1129,6 +1167,7 @@ private:
       .material = builder.Material(),
       .mesh_views = builder.MeshViews(),
       .desc = builder.desc_,
+      .slot_id = builder.slot_id_,
     });
   }
 };

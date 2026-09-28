@@ -1,30 +1,10 @@
 from pathlib import Path
-import hashlib
-import json
 from pakgen.api import BuildOptions, build_pak, inspect_pak
 from pakgen.packing.constants import PAK_FORMAT_VERSION_CURRENT
 
 
-def _read_bytes(path: Path) -> bytes:
-    return path.read_bytes()
-
-
-def _hexdigest(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
-
-
 def test_binary_diff_regression(tmp_path: Path):  # noqa: N802
-    """Build minimal spec and validate structural compatibility.
-
-    The PAK format now includes an optional embedded browse index blob (OXPAKBIX)
-    inserted between the directory and footer. That intentionally changes the
-    byte layout vs historical golden files.
-
-    This test keeps a strong regression signal by asserting:
-    - Byte stability for all content *before* the directory end.
-    - Directory entries remain identical.
-    - New output contains a valid browse index referenced by the footer.
-    """
+    """Reproduce canonical golden bytes and validate browse-index placement."""
     repo_root = Path(__file__).parent
     golden_spec = repo_root / "_golden" / "minimal_spec.json"
     if not golden_spec.exists():
@@ -33,7 +13,7 @@ def test_binary_diff_regression(tmp_path: Path):  # noqa: N802
     assert golden_spec.exists(), "Golden spec missing"
     assert (
         golden_pak.exists()
-    ), "Golden pak missing (run build_minimal_ref.py to regenerate intentionally)"
+    ), "Golden pak missing (run _golden/build_ref_paks.py to regenerate)"
 
     # Rebuild using current code
     spec_copy = tmp_path / f"spec{golden_spec.suffix}"
@@ -61,15 +41,12 @@ def test_binary_diff_regression(tmp_path: Path):  # noqa: N802
         "directory_entries", []
     )
 
-    golden_bytes = _read_bytes(golden_pak)
-    new_bytes = _read_bytes(out_pak)
+    golden_bytes = golden_pak.read_bytes()
+    new_bytes = out_pak.read_bytes()
 
     directory = new_info["footer"]["directory"]
     directory_end = directory["offset"] + directory["size"]
-    # NOTE: We intentionally do not assert byte-for-byte equality against the
-    # historical golden file here. Descriptor layouts can evolve (while still
-    # remaining binary-compatible with the engine readers), and this test's core
-    # purpose is to validate structural invariants and the browse-index placement.
+    assert golden_bytes == new_bytes
 
     browse = new_info["footer"].get("browse_index") or {"offset": 0, "size": 0}
     assert browse["size"] > 0

@@ -50,8 +50,9 @@ public:
     bool success = false;
   };
 
-  OXGN_COOK_API explicit PhysicsSidecarImportPipeline(Config config = {});
-  OXGN_COOK_API ~PhysicsSidecarImportPipeline();
+  OXGN_COOK_API PhysicsSidecarImportPipeline();
+  OXGN_COOK_API explicit PhysicsSidecarImportPipeline(Config config);
+  OXGN_COOK_API ~PhysicsSidecarImportPipeline() override;
 
   OXYGEN_MAKE_NON_COPYABLE(PhysicsSidecarImportPipeline)
   OXYGEN_MAKE_NON_MOVABLE(PhysicsSidecarImportPipeline)

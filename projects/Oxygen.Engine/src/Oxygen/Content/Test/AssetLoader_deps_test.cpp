@@ -4,20 +4,29 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
+#include <cstddef>
+#include <stdexcept>
+#include <vector>
+
+#include "AssetLoader_test.h"
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Span.h>
+#include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/Loaders/BufferLoader.h>
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
 #include <Oxygen/Content/Loaders/MaterialLoader.h>
 #include <Oxygen/Content/Loaders/TextureLoader.h>
+#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
-
-#include "AssetLoader_test.h"
+#include <Oxygen/OxCo/ThreadPool.h>
+#include <Oxygen/Testing/GTest.h>
 
 using testing::NotNull;
 
@@ -28,9 +37,11 @@ using oxygen::data::MaterialAsset;
 using oxygen::data::TextureResource;
 
 using oxygen::observer_ptr;
+using oxygen::base::CheckedAt;
 using oxygen::co::Co;
 using oxygen::co::testing::TestEventLoop;
 using oxygen::content::testing::AssetLoaderLoadingTest;
+
 namespace oxco = oxygen::co;
 
 //=== AssetLoader Dependency Mgmt Tests ===-----------------------------------//
@@ -55,7 +66,7 @@ NOLINT_TEST_F(
   TestEventLoop el;
 
   // Act + Assert
-  oxco::Run(el, [&]() -> Co<> { // NOLINT(*-lambda-coroutines)
+  oxco::Run(el, [&] -> Co<> { // NOLINT(*-lambda-coroutines)
     using oxygen::content::AssetLoader;
     using oxygen::content::AssetLoaderConfig;
 
@@ -114,7 +125,7 @@ NOLINT_TEST_F(
   TestEventLoop el;
 
   // Act + Assert
-  oxco::Run(el, [&]() -> Co<> { // NOLINT(*-lambda-coroutines)
+  oxco::Run(el, [&] -> Co<> { // NOLINT(*-lambda-coroutines)
     using oxygen::content::AssetLoader;
     using oxygen::content::AssetLoaderConfig;
 
@@ -147,7 +158,7 @@ NOLINT_TEST_F(
         EXPECT_FALSE(meshes.empty());
 
         if (!meshes.empty()) {
-          const auto& first_mesh = meshes[0];
+          const auto& first_mesh = CheckedAt(meshes, 0);
           EXPECT_THAT(first_mesh, NotNull());
 
           // Verify mesh has buffer data available.
@@ -170,80 +181,58 @@ NOLINT_TEST_F(
   });
 }
 
-//! Test: Cycle detection prevents insertion of an edge creating a cycle
-/*!
- Scenario: Create two fake dependencies A->B then attempt to add B->A and
- ensure second insertion rejected (no reverse edge recorded).
-*/
 NOLINT_TEST_F(AssetLoaderDependencyTest, CycleDetectionPreventsInsertion)
 {
-  // Arrange
-  auto key_a = CreateTestAssetKey("cycle_a");
-  auto key_b = CreateTestAssetKey("cycle_b");
-
-  // Simulate dependency A -> B (A depends on B). Therefore, B has A as a
-  // dependent.
-  asset_loader_->AddAssetDependency(key_a, key_b);
-
-#if !defined(NDEBUG)
-  // In debug builds, adding the reverse edge should trigger death.
-  EXPECT_DEATH(
-    { asset_loader_->AddAssetDependency(key_b, key_a); }, "Cycle detected");
-
-  // After death test, only the original edge A->B exists in this process.
-  size_t dependents_of_a = 0; // Assets that depend on A (should be none)
-  asset_loader_->ForEachDependent(
-    key_a, [&](const AssetKey&) { ++dependents_of_a; });
-  size_t dependents_of_b = 0; // Assets that depend on B (should be A)
-  asset_loader_->ForEachDependent(
-    key_b, [&](const AssetKey&) { ++dependents_of_b; });
-  EXPECT_EQ(dependents_of_a, 0U);
-  EXPECT_EQ(dependents_of_b, 1U);
+  TestEventLoop loop;
+  oxco::Run(loop,
+    oxygen::content::testing::CheckLoadedMaterialGraph(
+      &loop, temp_dir_ / "cycle", [](auto& loader, const auto& assets) -> auto {
+        const auto first = assets.at(0)->GetAssetKey();
+        const auto second = assets.at(1)->GetAssetKey();
+        loader.AddAssetDependency(first, second);
+#ifndef NDEBUG
+        EXPECT_THROW(
+          loader.AddAssetDependency(second, first), std::logic_error);
+        std::size_t dependents = 0;
+        loader.ForEachDependent(second, [&](const AssetKey& key) -> void {
+          EXPECT_EQ(key, first);
+          ++dependents;
+        });
+        EXPECT_EQ(dependents, 1U);
 #else
-  // Release build: cycle detection is debug-only. Adding the reverse edge is
-  // accepted and may create a cycle in the dependency graph.
-  EXPECT_NO_THROW(asset_loader_->AddAssetDependency(key_b, key_a));
-  SUCCEED();
+      EXPECT_NO_THROW(loader.AddAssetDependency(first, second));
 #endif
+      }));
 }
 
-#if !defined(NDEBUG)
-//! Test: Debug dependent enumeration enumerates only direct dependents (partial
-//! release)
-/*!
- Scenario: Build a small graph A->B, C->B, C->D. In release, we just ensure
- operations succeed. In debug, we enumerate dependents to validate counts.
-*/
+#ifndef NDEBUG
 NOLINT_TEST_F(AssetLoaderDependencyTest, DebugDependentEnumerationWorks)
 {
-  const auto key_a = CreateTestAssetKey("enum_a");
-  const auto key_b = CreateTestAssetKey("enum_b");
-  const auto key_c = CreateTestAssetKey("enum_c");
-  const auto key_d = CreateTestAssetKey("enum_d");
-  asset_loader_->AddAssetDependency(key_a, key_b);
-  asset_loader_->AddAssetDependency(key_c, key_b);
-  asset_loader_->AddAssetDependency(key_c, key_d);
-
-  std::vector<AssetKey> dependents_of_b;
-  asset_loader_->ForEachDependent(
-    key_b, [&](const AssetKey& dk) { dependents_of_b.push_back(dk); });
-  EXPECT_EQ(dependents_of_b.size(), 2);
-  size_t hits = 0;
-  for (const auto& k : dependents_of_b) {
-    if (k == key_a || k == key_c) {
-      ++hits;
-    }
-  }
-  EXPECT_EQ(hits, 2);
-  size_t dependents_of_d = 0;
-  asset_loader_->ForEachDependent(
-    key_d, [&](const AssetKey&) { ++dependents_of_d; });
-  EXPECT_EQ(dependents_of_d, 1);
-  size_t dependents_of_a = 0;
-  asset_loader_->ForEachDependent(
-    key_a, [&](const AssetKey&) { ++dependents_of_a; });
-  EXPECT_EQ(dependents_of_a, 0);
+  TestEventLoop loop;
+  oxco::Run(loop,
+    oxygen::content::testing::CheckLoadedMaterialGraph(&loop,
+      temp_dir_ / "enumeration", [](auto& loader, const auto& assets) -> auto {
+        const auto first = assets.at(0)->GetAssetKey();
+        const auto shared = assets.at(1)->GetAssetKey();
+        const auto second = assets.at(2)->GetAssetKey();
+        const auto leaf = assets.at(3)->GetAssetKey();
+        loader.AddAssetDependency(first, shared);
+        loader.AddAssetDependency(second, shared);
+        loader.AddAssetDependency(second, leaf);
+        std::vector<AssetKey> dependents;
+        loader.ForEachDependent(shared,
+          [&](const AssetKey& key) -> void { dependents.push_back(key); });
+        EXPECT_THAT(dependents, ::testing::UnorderedElementsAre(first, second));
+        dependents.clear();
+        loader.ForEachDependent(leaf,
+          [&](const AssetKey& key) -> void { dependents.push_back(key); });
+        EXPECT_THAT(dependents, ::testing::ElementsAre(second));
+        dependents.clear();
+        loader.ForEachDependent(first,
+          [&](const AssetKey& key) -> void { dependents.push_back(key); });
+        EXPECT_TRUE(dependents.empty());
+      }));
 }
-#endif // !NDEBUG
+#endif
 
 } // namespace

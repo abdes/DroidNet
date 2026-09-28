@@ -8,13 +8,17 @@
 #include <cmath>
 #include <limits>
 #include <memory>
+#include <optional>
+#include <string_view>
 #include <utility>
 
 #include <lua.h>
 #include <lualib.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Types/CameraAspectMode.h>
 #include <Oxygen/Core/Types/ViewPort.h>
+#include <Oxygen/Scene/Camera/CameraExposure.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneNodeBindings.h>
@@ -23,6 +27,26 @@
 namespace oxygen::scripting::bindings {
 
 namespace {
+  auto ReadAspectMode(lua_State* state, const int table_index,
+    const CameraAspectMode current) -> std::optional<CameraAspectMode>
+  {
+    lua_getfield(state, table_index, "aspect_mode");
+    const auto type = lua_type(state, -1);
+    auto result = std::optional<CameraAspectMode> {};
+    if (type == LUA_TNIL) {
+      result = current;
+    } else if (type == LUA_TSTRING) {
+      const auto name = std::string_view(lua_tostring(state, -1));
+      if (name == "auto") {
+        result = CameraAspectMode::kAuto;
+      } else if (name == "fixed") {
+        result = CameraAspectMode::kFixed;
+      }
+    }
+    lua_pop(state, 1);
+    return result;
+  }
+
   auto TryGetNumberField(lua_State* state, const int table_index,
     const char* key, float& out) -> bool
   {
@@ -148,6 +172,12 @@ namespace {
     }
     auto camera = std::make_unique<scene::PerspectiveCamera>();
     if (lua_istable(state, 2) != 0) {
+      const auto mode = ReadAspectMode(state, 2, camera->GetAspectMode());
+      if (!mode) {
+        lua_pushboolean(state, 0);
+        return 1;
+      }
+      camera->SetAspectMode(*mode);
       float value = 0.0F;
       if (TryGetNumberField(state, 2, "fov_y", value)) {
         camera->SetFieldOfView(value);
@@ -248,11 +278,15 @@ namespace {
       lua_pushnil(state);
       return 1;
     }
-    lua_createtable(state, 0, 4);
+    constexpr auto kPerspectiveFieldCount = 5;
+    lua_createtable(state, 0, kPerspectiveFieldCount);
     lua_pushnumber(state, cam->get().GetFieldOfView());
     lua_setfield(state, -2, "fov_y");
     lua_pushnumber(state, cam->get().GetAspectRatio());
     lua_setfield(state, -2, "aspect");
+    lua_pushstring(state,
+      cam->get().GetAspectMode() == CameraAspectMode::kAuto ? "auto" : "fixed");
+    lua_setfield(state, -2, "aspect_mode");
     lua_pushnumber(state, cam->get().GetNearPlane());
     lua_setfield(state, -2, "near_plane");
     lua_pushnumber(state, cam->get().GetFarPlane());
@@ -282,6 +316,12 @@ namespace {
       CHECK_F(lua_gettop(state) == entry_top + 1, "stack imbalance");
       return 1;
     }
+    const auto mode = ReadAspectMode(state, 2, cam->get().GetAspectMode());
+    if (!mode) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
+    cam->get().SetAspectMode(*mode);
     float value = 0.0F;
     if (TryGetNumberField(state, 2, "fov_y", value)) {
       cam->get().SetFieldOfView(value);
@@ -314,17 +354,17 @@ namespace {
     }
     const auto e = cam->get().GetExtents();
     lua_createtable(state, 0, 6); // NOLINT(*-magic-numbers)
-    lua_pushnumber(state, e[0]);
+    lua_pushnumber(state, e.at(0));
     lua_setfield(state, -2, "left");
-    lua_pushnumber(state, e[1]);
+    lua_pushnumber(state, e.at(1));
     lua_setfield(state, -2, "right");
-    lua_pushnumber(state, e[2]);
+    lua_pushnumber(state, e.at(2));
     lua_setfield(state, -2, "bottom");
-    lua_pushnumber(state, e[3]);
+    lua_pushnumber(state, e.at(3));
     lua_setfield(state, -2, "top");
-    lua_pushnumber(state, e[4]);
+    lua_pushnumber(state, e.at(4));
     lua_setfield(state, -2, "near_plane");
-    lua_pushnumber(state, e[5]); // NOLINT(*-magic-numbers)
+    lua_pushnumber(state, e.at(5)); // NOLINT(*-magic-numbers)
     lua_setfield(state, -2, "far_plane");
     return 1;
   }
@@ -553,39 +593,63 @@ auto RegisterSceneNodeCameraMethods(lua_State* state, const int metatable_index)
   using spc = scene::PerspectiveCamera;
   constexpr auto methods = std::to_array<luaL_Reg>({
     { .name = "camera", .func = SceneNodeCamera },
-    { .name = "attach_perspective_camera",
-      .func = SceneNodeAttachPerspectiveCamera },
-    { .name = "attach_orthographic_camera",
-      .func = SceneNodeAttachOrthographicCamera },
+    {
+      .name = "attach_perspective_camera",
+      .func = SceneNodeAttachPerspectiveCamera,
+    },
+    {
+      .name = "attach_orthographic_camera",
+      .func = SceneNodeAttachOrthographicCamera,
+    },
     { .name = "detach_camera", .func = SceneNodeDetachCamera },
     { .name = "has_camera", .func = SceneNodeHasCamera },
     { .name = "camera_type", .func = SceneNodeCameraType },
     { .name = "camera_get_perspective", .func = SceneNodeCameraGetPerspective },
     { .name = "camera_set_perspective", .func = SceneNodeCameraSetPerspective },
-    { .name = "camera_get_orthographic",
-      .func = SceneNodeCameraGetOrthographic },
-    { .name = "camera_set_orthographic",
-      .func = SceneNodeCameraSetOrthographic },
+    {
+      .name = "camera_get_orthographic",
+      .func = SceneNodeCameraGetOrthographic,
+    },
+    {
+      .name = "camera_set_orthographic",
+      .func = SceneNodeCameraSetOrthographic,
+    },
     { .name = "camera_get_viewport", .func = SceneNodeCameraGetViewport },
     { .name = "camera_set_viewport", .func = SceneNodeCameraSetViewport },
     { .name = "camera_get_exposure", .func = SceneNodeCameraGetExposure },
     { .name = "camera_set_exposure", .func = SceneNodeCameraSetExposure },
-    { .name = "camera_get_fov_y_radians",
-      .func = CameraGetPerspectiveFloat<&spc::GetFieldOfView> },
-    { .name = "camera_set_fov_y_radians",
-      .func = CameraSetPerspectiveFloat<&spc::SetFieldOfView> },
-    { .name = "camera_get_aspect_ratio",
-      .func = CameraGetPerspectiveFloat<&spc::GetAspectRatio> },
-    { .name = "camera_set_aspect_ratio",
-      .func = CameraSetPerspectiveFloat<&spc::SetAspectRatio> },
-    { .name = "camera_get_near_plane",
-      .func = CameraGetPerspectiveFloat<&spc::GetNearPlane> },
-    { .name = "camera_set_near_plane",
-      .func = CameraSetPerspectiveFloat<&spc::SetNearPlane> },
-    { .name = "camera_get_far_plane",
-      .func = CameraGetPerspectiveFloat<&spc::GetFarPlane> },
-    { .name = "camera_set_far_plane",
-      .func = CameraSetPerspectiveFloat<&spc::SetFarPlane> },
+    {
+      .name = "camera_get_fov_y_radians",
+      .func = CameraGetPerspectiveFloat<&spc::GetFieldOfView>,
+    },
+    {
+      .name = "camera_set_fov_y_radians",
+      .func = CameraSetPerspectiveFloat<&spc::SetFieldOfView>,
+    },
+    {
+      .name = "camera_get_aspect_ratio",
+      .func = CameraGetPerspectiveFloat<&spc::GetAspectRatio>,
+    },
+    {
+      .name = "camera_set_aspect_ratio",
+      .func = CameraSetPerspectiveFloat<&spc::SetAspectRatio>,
+    },
+    {
+      .name = "camera_get_near_plane",
+      .func = CameraGetPerspectiveFloat<&spc::GetNearPlane>,
+    },
+    {
+      .name = "camera_set_near_plane",
+      .func = CameraSetPerspectiveFloat<&spc::SetNearPlane>,
+    },
+    {
+      .name = "camera_get_far_plane",
+      .func = CameraGetPerspectiveFloat<&spc::GetFarPlane>,
+    },
+    {
+      .name = "camera_set_far_plane",
+      .func = CameraSetPerspectiveFloat<&spc::SetFarPlane>,
+    },
     { .name = "camera_get_extents", .func = SceneNodeCameraGetExtents },
     { .name = "camera_set_extents", .func = SceneNodeCameraSetExtents },
   });

@@ -1,5 +1,7 @@
 # Loose cooked content (filesystem-backed cooked source)
 
+Planned next: [complete integrity inventory](#planned-complete-integrity-inventory) (M08.1.7).
+
 This document specifies how Oxygen Content loads **cooked Oxygen runtime formats** from a **directory of loose cooked files** (“loose cooked”), in addition to `.pak` containers.
 
 The goal is a single content model with two container forms:
@@ -11,6 +13,42 @@ Related:
 
 - Conceptual architecture and async pipeline: `truly-async-asset-loader.md` and `overview.md`
 - Dependency tracking and cache semantics: `deps_and_cache.md`
+- [Published generations](#published-generations)
+
+## Published generations
+
+`AssetLoader::MountLooseCookedGeneration(root, replaces)` mounts an immutable
+generation, optionally replacing one active generation at the same source
+priority. It acquires the existing `.generation.lock` shared before reading the
+index. A new generation has a fresh cooked SourceKey and runtime source ID;
+reusing another generation's identity is rejected before changing the mount.
+`RetireLooseCookedGeneration(source_key)` removes it from ordinary winning lookup.
+Neither operation clears unrelated assets, resources or IBL caches.
+`AddLooseCookedRoot` dispatches roots carrying this marker to the same lease-aware
+mount operation.
+
+Active sources have registry ownership. Retired sources have weak registry
+entries; decode operations and loaded asset/resource owners retain their actual
+source and shared marker lock. Old asset objects expose their original SourceKey.
+Source-qualified operations select that source exactly; they do not silently
+release or load the newer winning generation. Contextual reads and repeated dependency publication preserve a recorded direct
+dependency binding. An unbound dependency resolves within its retained origin
+first; an absent external asset may use normal source precedence. A declared local
+dependency never falls through to newer bytes, and replacing an external root
+does not silently rebind an already loaded asset.
+
+Dependency graph nodes are the existing source-qualified asset cache identities,
+not bare AssetKeys. Old and new generations can therefore coexist, release and
+trim independently. Runtime source IDs are not recycled while naked ResourceKey
+values could survive; exhaustion of the existing 16-bit namespace is an explicit
+capacity error, never wraparound.
+
+Content does not delete generation directories. A publisher can reclaim only an
+unselected generation after acquiring its existing marker exclusively. Loaded
+objects, cached objects and in-flight operations are all holders. The operating
+system lock also protects against reclamation by another process. Publisher CAS
+and selection rules are separate from this byte-lifetime contract; the shared
+lock primitive is owned by [Serio](../../Serio/README.md#file-locks).
 
 ---
 
@@ -54,18 +92,19 @@ Related:
 
 ## Core invariants
 
-1. **Intra-source references only**
+1. **Resource indices are source-local; asset dependencies retain their origin**
 
-   Cooked assets in a source may reference only assets/resources in the _same_ source.
-
-   This is a runtime correctness requirement: the loader does not support cross-source dependency edges.
+   Table indices always address their owning cooked source. AssetKey dependencies
+   resolve in that source first; an absent external asset may resolve through
+   active source precedence. The dependency graph records the actual resolved
+   source, so release and trim never substitute a newer generation.
 
 2. **Source id segregation is explicit**
 
    `ResourceKey` encodes a 16-bit **source id**. Source ids are assigned by the runtime as follows:
 
-   - PAK sources use dense ids starting at `0` in PAK registration order.
-   - Loose cooked sources use ids starting at `0x8000` in loose-cooked registration order.
+   - PAK source IDs start at `0`, increasing without reuse during loader lifetime.
+   - Loose cooked source IDs start at `0x8000`, also increasing without reuse.
    - `0xFFFF` is reserved for synthetic/buffer-backed sources.
 
    These ranges are part of the contract and are centralized in `Oxygen/Content/Constants.h`.
@@ -209,7 +248,7 @@ This section merges the editor capabilities required to use loose cooked roots a
 ### 2) Canonical virtual path rules
 
 - Normalize and validate virtual paths according to the single source of truth:
-  - [virtual-paths.md](../../../../../Oxygen.Assets/docs/virtual-paths.md)
+  - [virtual-paths.md](../../../../../Oxygen.Managed.Assets/docs/virtual-paths.md)
 - Establish and enforce a case policy (recommended: case-sensitive for identity; handle platform case quirks in UI).
 - Use one canonicalization implementation consistently for browser, scenes, cook inputs, and lookup.
 
@@ -324,3 +363,26 @@ This section merges the editor capabilities required to use loose cooked roots a
 - Registration order: sources register deterministically.
 - Resolution: virtual-path lookup uses cooked index; collisions are diagnosed deterministically.
 - Diagnostics: mount failures and asset misses report searched sources (and virtual path when available).
+
+## Planned complete integrity inventory
+
+Status: planned for M08.1.7. Extend the existing native loose index; do not add a
+second output manifest. Published descriptors and resource table/data files have
+canonical relative paths, exact sizes and mandatory SHA-256 digests. Inventory
+membership is complete. The index's own digest lives in the selecting publication
+record; `.generation.lock` is the explicit non-content exception.
+
+LooseCookedWriter finalization owns inventory production after all writes and
+resource tables finish. Reuse emitter hashes only for the exact finalized bytes;
+otherwise hash after the final write barrier. Native validation checks bytes,
+membership and bounds. Neither timestamps nor zero digests establish integrity.
+
+Inspector exports the native inventory. Protected readers may reuse verification
+only within the same valid read lease. Managed publication/provenance references
+that inventory instead of duplicating descriptor/file proofs or rehashing merely
+to translate proof models. Keep consumed-input and reuse fingerprints distinct.
+
+Bump the loose-index format and recook; retain no old reader. Qualification covers
+tampered/truncated data, absent/extra files, changed index, stale leases and measured
+removal of redundant file reads. This does not remove incremental staging copies;
+that is a different writer-granularity problem.

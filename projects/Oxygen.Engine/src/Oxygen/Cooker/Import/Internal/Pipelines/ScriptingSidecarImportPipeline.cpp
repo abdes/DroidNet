@@ -6,10 +6,12 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <exception>
 #include <filesystem>
 #include <limits>
 #include <map>
@@ -24,25 +26,32 @@
 #include <vector>
 
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Span.h>
 #include <Oxygen/Content/VirtualPathResolver.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/AssetEmitter.h>
+#include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedIndexRegistry.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScriptingSidecarImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
 #include <Oxygen/Cooker/Import/Internal/SidecarSceneResolver.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/ImportSettingsUtils.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
+#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
 
 namespace oxygen::content::import {
 namespace {
@@ -170,8 +179,8 @@ namespace {
       return false;
     }
     const auto parsed = value.get<int64_t>();
-    if (parsed < (std::numeric_limits<int32_t>::min)()
-      || parsed > (std::numeric_limits<int32_t>::max)()) {
+    if (parsed < std::numeric_limits<int32_t>::min()
+      || parsed > std::numeric_limits<int32_t>::max()) {
       error = "int32 param value is out of range";
       return false;
     }
@@ -227,12 +236,12 @@ namespace {
       return false;
     }
     for (size_t i = 0; i < N; ++i) {
-      if (!value[i].is_number()) {
+      if (!value.at(i).is_number()) {
         error = std::string(type_name)
           + " param array must contain numeric elements";
         return false;
       }
-      out.value.as_vec[i] = value[i].get<float>();
+      out.value.as_vec[i] = value.at(i).get<float>();
     }
     out.type = param_type;
     return true;
@@ -280,8 +289,8 @@ namespace {
   auto FindScriptParamParser(const std::string_view type_name)
     -> const ScriptParamParserEntry*
   {
-    const auto it = std::ranges::find_if(
-      kScriptParamParsers, [type_name](const ScriptParamParserEntry& entry) {
+    const auto it = std::ranges::find_if(kScriptParamParsers,
+      [type_name](const ScriptParamParserEntry& entry) -> bool {
         return entry.type_name == type_name;
       });
     return it == kScriptParamParsers.end() ? nullptr : &(*it);
@@ -294,11 +303,11 @@ namespace {
       error = "Param record must be an object";
       return false;
     }
-    if (!param.contains("key") || !param["key"].is_string()) {
+    if (!param.contains("key") || !param.at("key").is_string()) {
       error = "Param record requires string field 'key'";
       return false;
     }
-    if (!param.contains("type") || !param["type"].is_string()) {
+    if (!param.contains("type") || !param.at("type").is_string()) {
       error = "Param record requires string field 'type'";
       return false;
     }
@@ -307,14 +316,14 @@ namespace {
       return false;
     }
 
-    const auto key = param["key"].get<std::string>();
+    const auto key = param.at("key").get<std::string>();
     if (!CopyNullTerminated(key, std::span { out.key })) {
       error = "Param key exceeds ScriptParamRecord::key capacity";
       return false;
     }
 
-    const auto type = param["type"].get<std::string>();
-    const auto& value = param["value"];
+    const auto type = param.at("type").get<std::string>();
+    const auto& value = param.at("value");
     const auto* parser = FindScriptParamParser(type);
     if (parser == nullptr || parser->parse_fn == nullptr) {
       error = "Unsupported param type '" + type + "'";
@@ -327,7 +336,7 @@ namespace {
     ImportSession& session, const ImportRequest& request)
     -> std::optional<SidecarDocument>
   {
-    using json = nlohmann::json;
+    using nlohmann::json;
 
     std::string source_text;
     source_text.resize(bytes.size());
@@ -351,7 +360,7 @@ namespace {
         "Sidecar document root must be a JSON object");
       return std::nullopt;
     }
-    if (!doc.contains("bindings") || !doc["bindings"].is_array()) {
+    if (!doc.contains("bindings") || !doc.at("bindings").is_array()) {
       AddDiagnostic(session, request, ImportSeverity::kError,
         "script.sidecar.payload_invalid",
         "Sidecar document requires array field 'bindings'");
@@ -359,9 +368,9 @@ namespace {
     }
 
     SidecarDocument out {};
-    for (size_t i = 0; i < doc["bindings"].size(); ++i) {
+    for (size_t i = 0; i < doc.at("bindings").size(); ++i) {
       const auto object_path = "bindings[" + std::to_string(i) + "]";
-      const auto& binding = doc["bindings"][i];
+      const auto& binding = doc.at("bindings").at(i);
       if (!binding.is_object()) {
         AddDiagnosticAtPath(session, request, ImportSeverity::kError,
           "script.sidecar.payload_invalid", "Binding row must be an object",
@@ -369,20 +378,20 @@ namespace {
         continue;
       }
       if (!binding.contains("node_index")
-        || !binding["node_index"].is_number_unsigned()) {
+        || !binding.at("node_index").is_number_unsigned()) {
         AddDiagnosticAtPath(session, request, ImportSeverity::kError,
           "script.sidecar.payload_invalid",
           "Binding row requires unsigned field 'node_index'", object_path);
         continue;
       }
-      if (!binding.contains("slot_id") || !binding["slot_id"].is_string()) {
+      if (!binding.contains("slot_id") || !binding.at("slot_id").is_string()) {
         AddDiagnosticAtPath(session, request, ImportSeverity::kError,
           "script.sidecar.payload_invalid",
           "Binding row requires string field 'slot_id'", object_path);
         continue;
       }
       if (!binding.contains("script_virtual_path")
-        || !binding["script_virtual_path"].is_string()) {
+        || !binding.at("script_virtual_path").is_string()) {
         AddDiagnosticAtPath(session, request, ImportSeverity::kError,
           "script.sidecar.payload_invalid",
           "Binding row requires string field 'script_virtual_path'",
@@ -391,20 +400,20 @@ namespace {
       }
 
       SidecarBindingRow row {};
-      row.node_index = binding["node_index"].get<uint32_t>();
-      row.slot_id = binding["slot_id"].get<std::string>();
+      row.node_index = binding.at("node_index").get<uint32_t>();
+      row.slot_id = binding.at("slot_id").get<std::string>();
       row.script_virtual_path
-        = binding["script_virtual_path"].get<std::string>();
+        = binding.at("script_virtual_path").get<std::string>();
       if (binding.contains("execution_order")) {
-        if (!binding["execution_order"].is_number_integer()) {
+        if (!binding.at("execution_order").is_number_integer()) {
           AddDiagnosticAtPath(session, request, ImportSeverity::kError,
             "script.sidecar.payload_invalid",
             "Binding row field 'execution_order' must be integer", object_path);
           continue;
         }
-        const auto order = binding["execution_order"].get<int64_t>();
-        if (order < (std::numeric_limits<int32_t>::min)()
-          || order > (std::numeric_limits<int32_t>::max)()) {
+        const auto order = binding.at("execution_order").get<int64_t>();
+        if (order < std::numeric_limits<int32_t>::min()
+          || order > std::numeric_limits<int32_t>::max()) {
           AddDiagnosticAtPath(session, request, ImportSeverity::kError,
             "script.sidecar.payload_invalid",
             "Binding row field 'execution_order' is out of int32 range",
@@ -415,19 +424,19 @@ namespace {
       }
 
       if (binding.contains("params")) {
-        if (!binding["params"].is_array()) {
+        if (!binding.at("params").is_array()) {
           AddDiagnosticAtPath(session, request, ImportSeverity::kError,
             "script.sidecar.payload_invalid",
             "Binding row field 'params' must be an array", object_path);
           continue;
         }
-        for (size_t j = 0; j < binding["params"].size(); ++j) {
+        for (size_t j = 0; j < binding.at("params").size(); ++j) {
           auto parsed_param = data::pak::scripting::ScriptParamRecord {};
           auto error = std::string {};
           const auto param_path
             = object_path + ".params[" + std::to_string(j) + "]";
           if (!ParseScriptParamRecord(
-                binding["params"][j], parsed_param, error)) {
+                binding.at("params").at(j), parsed_param, error)) {
             AddDiagnosticAtPath(session, request, ImportSeverity::kError,
               "script.sidecar.param_invalid", std::move(error), param_path);
             continue;
@@ -443,8 +452,8 @@ namespace {
       return std::nullopt;
     }
 
-    std::ranges::sort(
-      out.rows, [](const SidecarBindingRow& lhs, const SidecarBindingRow& rhs) {
+    std::ranges::sort(out.rows,
+      [](const SidecarBindingRow& lhs, const SidecarBindingRow& rhs) -> bool {
         if (lhs.node_index != rhs.node_index) {
           return lhs.node_index < rhs.node_index;
         }
@@ -453,8 +462,8 @@ namespace {
 
     auto seen = std::unordered_map<std::string, size_t> {};
     for (size_t i = 0; i < out.rows.size(); ++i) {
-      const auto identity
-        = MakeBindingIdentity(out.rows[i].node_index, out.rows[i].slot_id);
+      const auto identity = MakeBindingIdentity(
+        out.rows.at(i).node_index, out.rows.at(i).slot_id);
       if (seen.contains(identity)) {
         AddDiagnosticAtPath(session, request, ImportSeverity::kError,
           "script.sidecar.duplicate_slot_conflict",
@@ -520,7 +529,7 @@ namespace {
       }
       AppendScriptingComponentPayload();
       std::ranges::sort(component_payloads_,
-        [](const ComponentPayload& lhs, const ComponentPayload& rhs) {
+        [](const ComponentPayload& lhs, const ComponentPayload& rhs) -> bool {
           return lhs.component_type < rhs.component_type;
         });
       CaptureTrailingBytes();
@@ -599,7 +608,7 @@ namespace {
       for (uint32_t i = 0; i < source_desc_.component_table_count; ++i) {
         const auto dir_offset
           = static_cast<size_t>(source_desc_.component_table_directory_offset)
-          + static_cast<size_t>(i) * sizeof(SceneComponentTableDesc);
+          + (static_cast<size_t>(i) * sizeof(SceneComponentTableDesc));
         auto entry = SceneComponentTableDesc {};
         std::memcpy(
           &entry, source_descriptor_.data() + dir_offset, sizeof(entry));
@@ -687,7 +696,7 @@ namespace {
         = uint64_t { desc.nodes.offset } + node_table_size_;
       using SceneStringOffsetT = decltype(desc.scene_strings.offset);
       if (scene_strings_offset
-        > (std::numeric_limits<SceneStringOffsetT>::max)()) {
+        > std::numeric_limits<SceneStringOffsetT>::max()) {
         error = "Scene string table offset overflow";
         return false;
       }
@@ -696,7 +705,7 @@ namespace {
       desc.component_table_directory_offset = 0;
       desc.component_table_count = 0;
 
-      const auto append_bytes = [&](std::span<const std::byte> bytes) {
+      const auto append_bytes = [&](std::span<const std::byte> bytes) -> void {
         out.insert(out.end(), bytes.begin(), bytes.end());
       };
 
@@ -720,16 +729,16 @@ namespace {
         auto directory = std::vector<SceneComponentTableDesc> {};
         directory.resize(component_payloads_.size());
         for (size_t i = 0; i < component_payloads_.size(); ++i) {
-          auto& entry = directory[i];
-          entry.component_type = component_payloads_[i].component_type;
-          entry.table.entry_size = component_payloads_[i].entry_size;
+          auto& entry = directory.at(i);
+          entry.component_type = component_payloads_.at(i).component_type;
+          entry.table.entry_size = component_payloads_.at(i).entry_size;
           entry.table.count
-            = static_cast<uint32_t>(component_payloads_[i].entry_size == 0U
+            = static_cast<uint32_t>(component_payloads_.at(i).entry_size == 0U
                 ? 0U
-                : component_payloads_[i].bytes.size()
-                  / component_payloads_[i].entry_size);
+                : component_payloads_.at(i).bytes.size()
+                  / component_payloads_.at(i).entry_size);
           entry.table.offset = out.size();
-          append_bytes(component_payloads_[i].bytes);
+          append_bytes(component_payloads_.at(i).bytes);
         }
 
         std::memcpy(
@@ -899,7 +908,7 @@ namespace {
     const data::AssetKey& key) -> std::optional<data::AssetType>
   {
     for (size_t i = cooked_contexts.size(); i > 0; --i) {
-      const auto& context = cooked_contexts[i - 1U];
+      const auto& context = oxygen::base::CheckedAt(cooked_contexts, i - 1U);
       for (const auto& asset : context.inspection.Assets()) {
         if (asset.key == key) {
           return static_cast<data::AssetType>(asset.asset_type);
@@ -930,7 +939,7 @@ namespace {
       auto slots = std::vector<SlotWithParams> {};
       slots.reserve(slot_count);
       for (uint32_t i = 0; i < slot_count; ++i) {
-        const auto& slot = tables.slots[slot_start + i];
+        const auto& slot = tables.slots.at(slot_start + i);
         const auto param_record_size
           = uint64_t { sizeof(script::ScriptParamRecord) };
         if ((slot.params_array_offset % param_record_size) != 0U) {
@@ -979,13 +988,13 @@ namespace {
       if (slots.empty()) {
         continue;
       }
-      if (serialized.slots.size() > (std::numeric_limits<uint32_t>::max)()) {
+      if (serialized.slots.size() > std::numeric_limits<uint32_t>::max()) {
         AddDiagnostic(session, request, ImportSeverity::kError,
           "script.sidecar.slot_count_overflow",
           "Scripting slot count exceeded uint32 limits");
         return std::nullopt;
       }
-      if (slots.size() > (std::numeric_limits<uint32_t>::max)()) {
+      if (slots.size() > std::numeric_limits<uint32_t>::max()) {
         AddDiagnostic(session, request, ImportSeverity::kError,
           "script.sidecar.slot_count_overflow",
           "One scene node has too many script slots");
@@ -1009,14 +1018,13 @@ namespace {
         auto slot = slot_payload.slot;
         const auto param_offset = uint64_t { serialized.params.size() }
           * sizeof(script::ScriptParamRecord);
-        if (param_offset > (std::numeric_limits<OffsetT>::max)()) {
+        if (param_offset > std::numeric_limits<OffsetT>::max()) {
           AddDiagnostic(session, request, ImportSeverity::kError,
             "script.sidecar.param_offset_overflow",
             "Script param offset exceeded OffsetT limits");
           return std::nullopt;
         }
-        if (slot_payload.params.size()
-          > (std::numeric_limits<uint32_t>::max)()) {
+        if (slot_payload.params.size() > std::numeric_limits<uint32_t>::max()) {
           AddDiagnostic(session, request, ImportSeverity::kError,
             "script.sidecar.param_count_overflow",
             "Script param count exceeded uint32 limits");
@@ -1034,7 +1042,7 @@ namespace {
       DCHECK_F(patch_ref.component_index < serialized.components.size(),
         "Sidecar patch-ref invariant failure: component index is out of "
         "bounds");
-      auto& component = serialized.components[patch_ref.component_index];
+      auto& component = serialized.components.at(patch_ref.component_index);
       component.slot_start_index = patch_ref.slot_start_index;
       component.slot_count = patch_ref.slot_count;
     }
@@ -1084,8 +1092,8 @@ namespace {
     }
 
     for (size_t i = 0; i < existing_serialized.components.size(); ++i) {
-      const auto& existing_component = existing_serialized.components[i];
-      const auto& merged_component = merged_serialized.components[i];
+      const auto& existing_component = existing_serialized.components.at(i);
+      const auto& merged_component = merged_serialized.components.at(i);
       if (existing_component.node_index != merged_component.node_index
         || existing_component.slot_count != merged_component.slot_count) {
         return std::nullopt;
@@ -1127,8 +1135,8 @@ namespace {
         }
 
         const auto& merged_slot
-          = merged_serialized.slots[merged_slot_global_index];
-        auto& existing_slot = result.slots[existing_slot_global_index];
+          = merged_serialized.slots.at(merged_slot_global_index);
+        auto& existing_slot = result.slots.at(existing_slot_global_index);
         if (existing_slot.params_count != merged_slot.params_count) {
           return std::nullopt;
         }
@@ -1159,7 +1167,7 @@ namespace {
 
         auto updated_slot = merged_slot;
         updated_slot.params_array_offset = existing_slot.params_array_offset;
-        result.slots[existing_slot_global_index] = updated_slot;
+        result.slots.at(existing_slot_global_index) = updated_slot;
 
         std::copy_n(merged_serialized.params.begin()
             + static_cast<ptrdiff_t>(merged_param_start),
@@ -1209,7 +1217,7 @@ namespace {
       auto incoming_bindings
         = std::map<uint32_t, std::vector<SlotWithParams>> {};
       for (size_t row_index = 0; row_index < parsed_.rows.size(); ++row_index) {
-        const auto& row = parsed_.rows[row_index];
+        const auto& row = parsed_.rows.at(row_index);
         const auto object_path = "bindings[" + std::to_string(row_index) + "]";
         if (row.node_index >= node_count_) {
           AddDiagnosticAtPath(session_, request_, ImportSeverity::kError,
@@ -1271,8 +1279,8 @@ namespace {
 
       auto merged_bindings = *existing_bindings;
       for (auto& [node_index, slots] : incoming_bindings) {
-        std::ranges::sort(
-          slots, [](const SlotWithParams& lhs, const SlotWithParams& rhs) {
+        std::ranges::sort(slots,
+          [](const SlotWithParams& lhs, const SlotWithParams& rhs) -> bool {
             return lhs.slot_id < rhs.slot_id;
           });
         merged_bindings.insert_or_assign(node_index, std::move(slots));
@@ -1311,14 +1319,14 @@ namespace {
       // stable descriptor slot ranges across sidecar updates.
 
       const auto slot_base = result.slots.size();
-      if (slot_base > (std::numeric_limits<uint32_t>::max)()) {
+      if (slot_base > std::numeric_limits<uint32_t>::max()) {
         AddDiagnostic(session_, request_, ImportSeverity::kError,
           "script.sidecar.slot_count_overflow",
           "Global scripting slot count exceeded uint32 limits");
         return std::nullopt;
       }
       for (auto& component : result.components) {
-        if (component.slot_start_index > (std::numeric_limits<uint32_t>::max)()
+        if (component.slot_start_index > std::numeric_limits<uint32_t>::max()
             - static_cast<uint32_t>(slot_base)) {
           AddDiagnostic(session_, request_, ImportSeverity::kError,
             "script.sidecar.slot_count_overflow",
@@ -1352,7 +1360,7 @@ namespace {
 
         const auto global_param_offset = uint64_t { result.params.size() }
           * sizeof(script::ScriptParamRecord);
-        if (global_param_offset > (std::numeric_limits<OffsetT>::max)()) {
+        if (global_param_offset > std::numeric_limits<OffsetT>::max()) {
           AddDiagnostic(session_, request_, ImportSeverity::kError,
             "script.sidecar.param_offset_overflow",
             "Script param offset exceeded OffsetT limits");
@@ -1651,6 +1659,11 @@ namespace {
   }
 
 } // namespace
+ScriptingSidecarImportPipeline::ScriptingSidecarImportPipeline()
+  : ScriptingSidecarImportPipeline(Config {})
+{
+}
+
 ScriptingSidecarImportPipeline::ScriptingSidecarImportPipeline(Config config)
   : config_(config)
   , input_channel_(config.queue_capacity)
@@ -1677,7 +1690,7 @@ auto ScriptingSidecarImportPipeline::Start(co::Nursery& nursery) -> void
 
   const auto worker_count = std::max(1U, config_.worker_count);
   for (uint32_t i = 0; i < worker_count; ++i) {
-    nursery.Start([this]() -> co::Co<> { co_await Worker(); });
+    nursery.Start([this] -> co::Co<> { co_await Worker(); });
   }
 }
 

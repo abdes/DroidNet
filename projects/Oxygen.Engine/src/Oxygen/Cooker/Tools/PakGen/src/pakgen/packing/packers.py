@@ -52,6 +52,7 @@ from .constants import (
     SCRIPT_SLOT_RECORD_SIZE,
 )
 from .errors import PakError
+from .material_slots import layout_revision_bytes, slot_id_bytes
 from .scene_flags import node_flag_masks
 from .source_identity import validate_source_identity_bytes
 from ..utils.io import DataError, read_data_from_spec
@@ -90,6 +91,7 @@ __all__ = [
 
 
 _COMPONENT_TYPE_RENDERABLE = 0x4853454D  # 'MESH'
+_COMPONENT_TYPE_MATERIAL_OVERRIDE = 0x544C534D  # 'MSLT'
 _COMPONENT_TYPE_PERSPECTIVE_CAMERA = 0x4D414350  # 'PCAM'
 _COMPONENT_TYPE_ORTHOGRAPHIC_CAMERA = 0x4D41434F  # 'OCAM'
 _COMPONENT_TYPE_DIRECTIONAL_LIGHT = 0x54494C44  # 'DLIT'
@@ -1202,7 +1204,6 @@ def _pack_node_record(
 def _pack_renderable_record(
     renderable: Dict[str, Any],
     geometry_name_to_key: Dict[str, bytes],
-    material_name_to_key: Dict[str, bytes],
     *,
     node_count: int,
 ) -> bytes:
@@ -1225,28 +1226,43 @@ def _pack_renderable_record(
     if geometry_key == b"\x00" * ASSET_KEY_SIZE:
         raise PakError("E_REF", "Renderable missing geometry reference")
 
-    material_key = _asset_key_bytes(
-        renderable.get("material_asset_key", renderable.get("material_key"))
-    )
-    if material_key == b"\x00" * ASSET_KEY_SIZE:
-        material_name = renderable.get(
-            "material",
-            renderable.get("material_override", renderable.get("material_asset")),
-        )
-        if isinstance(material_name, str) and material_name in material_name_to_key:
-            material_key = material_name_to_key[material_name]
+    if any(key in renderable for key in (
+        "material_asset_key", "material_key", "material", "material_override", "material_asset"
+    )):
+        raise PakError("E_VERSION", "Renderable material overrides require explicit material_overrides slot records")
 
     visible = renderable.get("visible", 1)
     visible_u32 = 1 if bool(visible) else 0
     out = (
         struct.pack("<I", int(node_index))
         + geometry_key
-        + material_key
         + struct.pack("<I", int(visible_u32))
     )
-    if len(out) != 40:
+    if len(out) != 24:
         raise PakError("E_SIZE", f"RenderableRecord size mismatch: {len(out)}")
     return out
+
+
+def _pack_material_override_record(
+    assignment: Dict[str, Any],
+    material_name_to_key: Dict[str, bytes],
+    *,
+    node_count: int,
+) -> bytes:
+    node_index = assignment.get("node_index")
+    if type(node_index) is not int or not 0 <= node_index < node_count:
+        raise PakError("E_REF", "Material override node_index is out of range")
+    material_key = _asset_key_bytes(assignment.get("material_asset_key"))
+    if material_key == b"\x00" * ASSET_KEY_SIZE:
+        material_key = material_name_to_key.get(assignment.get("material"), material_key)
+    if material_key == b"\x00" * ASSET_KEY_SIZE:
+        raise PakError("E_REF", "Material override requires an explicit material reference")
+    return (
+        struct.pack("<I", node_index)
+        + slot_id_bytes(assignment.get("slot_id"))
+        + material_key
+        + layout_revision_bytes(assignment.get("layout_revision"))
+    )
 
 
 def _pack_perspective_camera_record(
@@ -1266,10 +1282,18 @@ def _pack_perspective_camera_record(
     aspect_ratio = float(camera.get("aspect_ratio", 1.777778))
     near_plane = float(camera.get("near_plane", 0.1))
     far_plane = float(camera.get("far_plane", 1000.0))
+    aspect_mode = camera.get("aspect_mode", "auto")
+    if aspect_mode not in ("auto", "fixed"):
+        raise PakError("E_VALUE", f"Invalid camera aspect_mode: {aspect_mode}")
+    if not (0.0 < fov_y < math.pi and aspect_ratio > 0.0
+            and 0.0 < near_plane < far_plane
+            and all(math.isfinite(v) for v in (fov_y, aspect_ratio, near_plane, far_plane))):
+        raise PakError("E_VALUE", "Invalid perspective camera projection")
     out = (
         struct.pack("<I", int(node_index))
         + struct.pack("<4f", fov_y, aspect_ratio, near_plane, far_plane)
         + struct.pack("<3f", *_camera_exposure_values(camera))
+        + struct.pack("<B", int(aspect_mode == "fixed"))
     )
     if len(out) != SCENE_PERSPECTIVE_CAMERA_RECORD_SIZE:
         raise PakError(
@@ -1377,10 +1401,24 @@ def pack_scene_asset_descriptor_and_payload(
         _pack_renderable_record(
             r,
             geometry_name_to_key,
-            material_name_to_key,
             node_count=node_count,
         )
         for r in renderables
+    )
+
+    assignments = scene.get("material_overrides", []) or []
+    if not isinstance(assignments, list) or any(not isinstance(row, dict) for row in assignments):
+        raise PakError("E_TYPE", "scene.material_overrides must be a list of objects")
+    assignments = sorted(assignments, key=lambda row: (row.get("node_index", -1), row.get("slot_id", "")))
+    seen_assignments = set()
+    for assignment in assignments:
+        identity = (assignment.get("node_index"), assignment.get("slot_id"))
+        if identity in seen_assignments:
+            raise PakError("E_SLOT_ID", "Duplicate material override for the same node and slot")
+        seen_assignments.add(identity)
+    material_override_records = b"".join(
+        _pack_material_override_record(row, material_name_to_key, node_count=node_count)
+        for row in assignments
     )
 
     local_fog_volumes = scene.get("local_fog_volumes", []) or []
@@ -1459,9 +1497,13 @@ def pack_scene_asset_descriptor_and_payload(
             (
                 _COMPONENT_TYPE_RENDERABLE,
                 len(renderables),
-                40,
+                24,
                 renderable_records,
             )
+        )
+    if material_override_records:
+        component_tables.append(
+            (_COMPONENT_TYPE_MATERIAL_OVERRIDE, len(assignments), 68, material_override_records)
         )
     if local_fog_volume_records:
         component_tables.append(
@@ -1897,7 +1939,7 @@ def pack_material_asset_descriptor(
             transmission_texture,
             thickness_texture,
         )
-        + pack_f16x3(emissive_factor)
+        + struct.pack("<3f", *emissive_factor)
         + struct.pack("<H", to_unorm16(alpha_cutoff))
         + struct.pack("<f", ior)
         + struct.pack("<H", to_unorm16(specular_factor))
@@ -3741,8 +3783,6 @@ def pack_submesh_descriptor(
     simple_assets: List[Dict[str, Any]],
     pack_name_fn: Callable[[str, int], bytes],
 ) -> bytes:
-    # legacy layout: name(64) + material asset key(16) + mesh_view_count(u32) + bbox min/max (6*4) = 64+16+4+24+24 = 132? but spec size 108.
-    # Spec actually: name(64) + AssetKey(16) + mesh_view_count(4) + bb_min(12) + bb_max(12) = 64+16+4+12+12 = 108.
     sm_name = pack_name_fn(submesh.get("name", ""), 64)
     mat_name = submesh.get("material")
     mat_key = None
@@ -3765,6 +3805,7 @@ def pack_submesh_descriptor(
     desc = (
         sm_name
         + mat_key  # type: ignore[operator]
+        + slot_id_bytes(submesh.get("slot_id"))
         + struct.pack("<I", len(mesh_views))
         + struct.pack("<3f", *sm_bb_min)
         + struct.pack("<3f", *sm_bb_max)

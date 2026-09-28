@@ -51,7 +51,8 @@ public:
   //! metadata.
   OXGN_DATA_API ScriptAsset(AssetKey asset_key,
     pak::scripting::ScriptAssetDesc desc,
-    const std::vector<pak::scripting::ScriptParamRecord>& default_params = {});
+    const std::vector<pak::scripting::ScriptParamRecord>& default_params = {},
+    SourceKey source_key = {});
 
   ~ScriptAsset() override = default;
 
@@ -90,7 +91,7 @@ public:
     return (static_cast<uint32_t>(desc_.flags)
              & static_cast<uint32_t>(
                pak::scripting::ScriptAssetFlags::kAllowExternalSource))
-      != 0u;
+      != 0U;
   }
 
   //! Returns external source path when present and valid.
@@ -134,8 +135,10 @@ public:
   [[nodiscard]] auto Parameters() const
   {
     return params_ | std::views::transform([](const auto& kv) -> auto {
-      return DefaultParameterEntry { .key = kv.first,
-        .value = std::cref(kv.second) };
+      return DefaultParameterEntry {
+        .key = kv.first,
+        .value = std::cref(kv.second),
+      };
     });
   }
 

@@ -10,6 +10,7 @@
 #include <optional>
 #include <ostream>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <Oxygen/Cooker/Import/BufferContainerImportSettings.h>
@@ -96,6 +97,12 @@ struct ImportManifest {
   OXGN_COOK_NDAPI static auto Load(const std::filesystem::path& manifest_path,
     const std::optional<std::filesystem::path>& root_override = std::nullopt,
     std::ostream& error_stream = std::cerr) -> std::optional<ImportManifest>;
+
+  //! Parses the same native manifest schema with an explicit path base.
+  OXGN_COOK_NDAPI static auto Parse(std::string_view text,
+    const std::filesystem::path& manifest_directory,
+    const std::optional<std::filesystem::path>& root_override,
+    std::ostream& error_stream) -> std::optional<ImportManifest>;
 };
 
 } // namespace oxygen::content::import

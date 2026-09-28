@@ -5,11 +5,14 @@
 //===----------------------------------------------------------------------===//
 
 #include <cmath>
+#include <cstdint>
 
 #include <lua.h>
 #include <lualib.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Physics/Character/CharacterController.h>
 #include <Oxygen/Physics/Handles.h>
 #include <Oxygen/PhysicsModule/PhysicsModule.h>
@@ -242,7 +245,6 @@ namespace {
     Vec3 velocity {};
     if (!TryCheckVec3(state, 2, velocity)) {
       luaL_error(state, "character:move expects velocity vector");
-      return 0;
     }
 
     // Signature: handle:move(velocity, jump_pressed?, dt)
@@ -261,7 +263,6 @@ namespace {
     const auto dt = static_cast<float>(luaL_checknumber(state, dt_arg_index));
     if (!std::isfinite(dt) || dt <= 0.0F) {
       luaL_error(state, "character:move dt must be a positive finite number");
-      return 0;
     }
 
     auto* physics_module = GetPhysicsModule(state);

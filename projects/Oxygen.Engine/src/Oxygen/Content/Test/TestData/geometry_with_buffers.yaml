@@ -97,6 +97,7 @@ assets:
         submeshes:
           - name: "main_submesh"
             material: "buffer_material"
+            slot_id: "00000000-0000-0000-0000-000000000001"
             bounding_box_min: [-2.0, -2.0, -2.0]
             bounding_box_max: [2.0, 2.0, 2.0]
             mesh_views:

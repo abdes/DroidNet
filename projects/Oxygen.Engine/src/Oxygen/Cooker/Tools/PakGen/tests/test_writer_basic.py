@@ -28,6 +28,7 @@ def test_build_minimal_pak(tmp_path: Path):
                         "mesh_type": 0,
                         "submeshes": [
                             {
+                                "slot_id": "2f0c54a4-3fe5-5b3e-88d7-cf39bf107e77",
                                 "material": "MatA",
                                 "bounding_box_min": [0.0, 0.0, 0.0],
                                 "bounding_box_max": [1.0, 1.0, 1.0],

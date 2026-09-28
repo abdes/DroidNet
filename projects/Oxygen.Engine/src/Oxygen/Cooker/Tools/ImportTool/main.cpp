@@ -13,17 +13,29 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <exception>
+#include <expected>
 #include <iostream>
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <stdio.h>
+#include <stop_token>
+#include <string_view>
 #include <system_error>
 #include <thread>
+#include <utility>
 #include <vector>
 
-#if defined(_WIN32)
-#  include <io.h>
+#include <corecrt_io.h>
+#include <fmt/base.h>
+
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Cooker/Import/ImportConcurrency.h>
+#include <Oxygen/Core/Meta/Scripting/ScriptCompileMode.h>
+
+#ifdef _WIN32
 #else
 #  include <unistd.h>
 #endif
@@ -343,7 +355,7 @@ auto ResetStopState() -> void
 auto StartStopWatcher(AsyncImportService* service,
   oxygen::observer_ptr<IMessageWriter> writer) -> std::jthread
 {
-  return std::jthread([service, writer](std::stop_token st) {
+  return std::jthread([service, writer](std::stop_token st) -> void {
     while (!st.stop_requested()) {
       if (g_stop_requested.load(std::memory_order_relaxed)) {
         if (g_stop_handled.exchange(true, std::memory_order_acq_rel)) {
@@ -388,7 +400,7 @@ auto RunSelectedCommand(ImportCommand& active_command, int& exit_code) -> void
 
 auto IsInteractiveStdout() noexcept -> bool
 {
-#if defined(_WIN32)
+#ifdef _WIN32
   return _isatty(_fileno(stdout)) != 0;
 #else
   return isatty(fileno(stdout)) != 0;
@@ -567,7 +579,7 @@ private:
       "⠸",
     };
     const auto index = spinner_index_++ % kFrames.size();
-    return kFrames[index];
+    return kFrames.at(index);
   }
 
   static constexpr std::string_view kErrorGlyph = "×";
@@ -760,6 +772,7 @@ auto main(int argc, char** argv) -> int
 
     const auto cli = BuildCli(commands, global_options);
     const auto context = cli->Parse(argc, const_cast<const char**>(argv));
+    global_options.parsed_options = oxygen::observer_ptr { &context.ovm };
 
     FinalizeGlobalOptions(context);
 

@@ -3,7 +3,7 @@
     {
       "alignment": 16,
       "descriptor_offset": 2816,
-      "descriptor_size": 357,
+      "descriptor_size": 363,
       "key": "00000000000000000000000000000000",
       "name": "mat0",
       "type": "material",
@@ -12,18 +12,18 @@
     },
     {
       "alignment": 1,
-      "descriptor_offset": 3173,
+      "descriptor_offset": 3179,
       "descriptor_size": 131,
       "key": "00000000000000000000000000000000",
       "name": "geo0",
       "type": "geometry",
-      "variable_extra_size": 269,
+      "variable_extra_size": 285,
       "warnings": []
     }
   ],
   "browse_index": {
     "entry_count": 2,
-    "offset": 3712,
+    "offset": 3728,
     "padding_before": 0,
     "size": 78,
     "string_table_size": 10
@@ -32,23 +32,23 @@
   "deterministic": true,
   "directory": {
     "asset_count": 2,
-    "offset": 3584,
-    "padding_before": 11,
+    "offset": 3600,
+    "padding_before": 5,
     "size": 128
   },
-  "file_size": 4046,
+  "file_size": 4062,
   "footer": {
-    "offset": 3790,
+    "offset": 3806,
     "size": 256
   },
   "padding": {
     "by_section": {
       "assets_region": 102,
-      "directory": 11,
+      "directory": 5,
       "table_buffer": 2,
       "table_texture": 12
     },
-    "total": 127
+    "total": 121
   },
   "regions": [
     {
@@ -99,7 +99,7 @@
       "scripts": 0,
       "total": 2
     },
-    "variable_extra_total": 269
+    "variable_extra_total": 285
   },
   "tables": [
     {

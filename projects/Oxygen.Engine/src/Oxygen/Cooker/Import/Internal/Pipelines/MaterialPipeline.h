@@ -183,10 +183,10 @@ public:
     std::vector<ShaderRequest> shader_requests;
 
     //! Callback fired when a worker starts processing this item.
-    std::function<void()> on_started;
+    std::function<void()> on_started {};
 
     //! Callback fired when a worker finishes processing this item.
-    std::function<void()> on_finished;
+    std::function<void()> on_finished {};
 
     ImportRequest request;
     observer_ptr<NamingService> naming_service;
@@ -198,7 +198,7 @@ public:
     std::string source_id;
     std::optional<CookedMaterialPayload> cooked;
     std::vector<ImportDiagnostic> diagnostics;
-    ImportWorkItemTelemetry telemetry;
+    ImportWorkItemTelemetry telemetry {};
     bool success = false;
   };
 

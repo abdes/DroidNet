@@ -4,18 +4,36 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <exception>
+#include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Base/Span.h>
+#include <Oxygen/Content/LoaderContext.h>
+#include <Oxygen/Content/Loaders/GeometryLoader.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportReport.h>
+#include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/GeometryPipeline.h>
+#include <Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
+#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
+#include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Serio/Writer.h>
@@ -66,7 +84,7 @@ auto GeometryPipeline::Start(co::Nursery& nursery) -> void
 
   const auto worker_count = std::max(1U, config_.worker_count);
   for (uint32_t i = 0; i < worker_count; ++i) {
-    nursery.Start([this]() -> co::Co<> { co_await Worker(); });
+    nursery.Start([this] -> co::Co<> { co_await Worker(); });
   }
 }
 
@@ -198,7 +216,7 @@ auto GeometryPipeline::FinalizeDescriptorBytes(
       co_return std::nullopt;
     }
 
-    const auto& binding = bindings[lod_i];
+    const auto& binding = oxygen::base::CheckedAt(bindings, lod_i);
 
     if (static_cast<data::MeshType>(mesh_desc.mesh_type)
       == data::MeshType::kSkinned) {
@@ -325,8 +343,9 @@ auto GeometryPipeline::FinalizeDescriptorBytes(
 
   if (config_.with_content_hashing) {
     const auto hash = co_await thread_pool_.Run(
-      [bytes = std::span<const std::byte>(output_bytes.data(),
-         output_bytes.size())](co::ThreadPool::CancelToken canceled) noexcept {
+      [bytes
+        = std::span<const std::byte>(output_bytes.data(), output_bytes.size())](
+        co::ThreadPool::CancelToken canceled) noexcept -> base::Sha256Digest {
         DLOG_F(1, "Compute content hash");
         if (canceled) {
           return data::pak::core::ContentHashDigest {};
@@ -388,6 +407,24 @@ auto GeometryPipeline::Worker() -> co::Co<>
       continue;
     }
 
+    if (finalized && item.cooked.material_slot_provenance) {
+      try {
+        serio::ReadOnlyMemoryStream stream(*finalized);
+        serio::Reader reader(stream);
+        const LoaderContext context {
+          .current_asset_key = item.cooked.geometry_key,
+          .desc_reader = &reader,
+          .work_offline = true,
+          .parse_only = true,
+        };
+        const auto geometry = loaders::LoadGeometryAsset(context);
+        item.cooked.material_slot_provenance->inventory
+          = geometry->MaterialSlots();
+      } catch (const std::exception& error) {
+        diagnostics.push_back(MakeErrorDiagnostic(
+          "mesh.slot_inventory_invalid", error.what(), item.source_id, ""));
+      }
+    }
     const bool success = finalized.has_value() && diagnostics.empty();
     WorkResult result {
       .source_id = std::move(item.source_id),

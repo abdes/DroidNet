@@ -61,7 +61,10 @@ namespace oxygen::data::pak::render {
 [[maybe_unused]] constexpr uint32_t kMaterialFlag_ProceduralGrid = (1U << 5);
 
 //! Material asset descriptor version for current PAK schema.
-[[maybe_unused]] constexpr uint8_t kMaterialAssetVersion = 2;
+[[maybe_unused]] constexpr uint8_t kMaterialAssetVersion = 3;
+
+//! Maximum finite channel value accepted for material emission.
+inline constexpr float kMaxMaterialEmissiveFactor = 65504.0F;
 
 //! Shader descriptor
 /*!
@@ -132,8 +135,7 @@ struct MaterialAssetDesc {
 
   // --- Additional scalar parameters (Tier 1/2) ---
   // Emissive
-  HalfFloat emissive_factor[3]
-    = { HalfFloat { 0.0F }, HalfFloat { 0.0F }, HalfFloat { 0.0F } };
+  float emissive_factor[3] = { 0.0F, 0.0F, 0.0F };
   // Alpha
   Unorm16 alpha_cutoff = Unorm16 { 0.5F };
   // Dielectric response
@@ -178,7 +180,7 @@ struct MaterialAssetDesc {
 //   `shader_stages` (least-significant set bit first). Count is population
 //   count of `shader_stages`.
 #pragma pack(pop)
-static_assert(sizeof(MaterialAssetDesc) == 357);
+static_assert(sizeof(MaterialAssetDesc) == 363);
 
 //=== Texture Payload Structures ===-----------------------------------------//
 

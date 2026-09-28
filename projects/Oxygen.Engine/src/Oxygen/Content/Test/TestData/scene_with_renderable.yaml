@@ -67,6 +67,7 @@ assets:
         submeshes:
           - name: "submesh0"
             material: "simple_material"
+            slot_id: "00000000-0000-0000-0000-000000000001"
             bounding_box_min: [-1.0, -1.0, -1.0]
             bounding_box_max: [1.0, 1.0, 1.0]
             mesh_views:
@@ -91,6 +92,7 @@ assets:
         submeshes:
           - name: "submesh0"
             material: "simple_material"
+            slot_id: "00000000-0000-0000-0000-000000000002"
             bounding_box_min: [-2.0, -2.0, -2.0]
             bounding_box_max: [2.0, 2.0, 2.0]
             mesh_views:
@@ -110,4 +112,8 @@ assets:
     renderables:
       - node_index: 1
         geometry: "test_geometry"
+    material_overrides:
+      - node_index: 1
+        slot_id: "00000000-0000-0000-0000-000000000001"
         material_asset_key: "11111111-2222-3333-4444-555555555555"
+        layout_revision: "c95b1cbd09ecca2138fed57451738b692de6450e397a53e4d2aa6c95886c07bc"

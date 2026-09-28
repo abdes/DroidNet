@@ -7,6 +7,7 @@
 #pragma once
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/Span.h>
 #include <Oxygen/Content/Internal/IContentSource.h>
 
 namespace oxygen::content::internal {
@@ -37,7 +38,7 @@ public:
     return debug_name_;
   }
   [[nodiscard]] auto SourcePath() const noexcept
-    -> std::filesystem::path override
+    -> const std::filesystem::path& override
   {
     return pak_.FilePath();
   }
@@ -65,7 +66,7 @@ public:
     if (index >= directory.size()) {
       return std::nullopt;
     }
-    return directory[index].asset_key;
+    return oxygen::base::CheckedAt(directory, index).asset_key;
   }
 
   [[nodiscard]] auto CreateAssetDescriptorReader(
@@ -198,7 +199,9 @@ public:
     -> std::vector<data::pak::scripting::ScriptParamRecord> override
   {
     return pak_.ReadScriptParamRecords(PakFile::ScriptParamReadRequest {
-      .absolute_offset = absolute_offset, .count = count });
+      .absolute_offset = absolute_offset,
+      .count = count,
+    });
   }
 
   [[nodiscard]] auto ResolveVirtualPath(

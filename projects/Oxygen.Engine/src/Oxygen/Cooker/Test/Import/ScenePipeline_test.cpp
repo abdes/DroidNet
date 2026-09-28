@@ -8,6 +8,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <memory>
 #include <span>
 #include <string>
@@ -15,16 +16,20 @@
 #include <utility>
 #include <vector>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScenePipeline.h>
 #include <Oxygen/Cooker/Import/Naming.h>
+#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/ThreadPool.h>
+#include <Oxygen/Testing/GTest.h>
 
 using namespace oxygen::content::import;
 using namespace oxygen::co;
@@ -36,7 +41,7 @@ namespace {
 auto MakeAssetKey(const std::uint8_t seed) -> data::AssetKey
 {
   auto bytes = std::array<std::uint8_t, data::AssetKey::kSizeBytes> {};
-  bytes[0] = seed;
+  bytes.at(0) = seed;
   return data::AssetKey::FromBytes(bytes);
 }
 
@@ -106,7 +111,7 @@ auto ReadNodeRecord(const std::vector<std::byte>& bytes,
   -> data::pak::world::NodeRecord
 {
   data::pak::world::NodeRecord record {};
-  const auto offset = desc.nodes.offset + index * sizeof(record);
+  const auto offset = desc.nodes.offset + (index * sizeof(record));
   if (bytes.size() < offset + sizeof(record)) {
     return record;
   }
@@ -151,7 +156,7 @@ auto ReadRenderableRecord(const std::vector<std::byte>& bytes,
   -> data::pak::world::RenderableRecord
 {
   data::pak::world::RenderableRecord record {};
-  const auto offset = entry.table.offset + index * sizeof(record);
+  const auto offset = entry.table.offset + (index * sizeof(record));
   if (bytes.size() < offset + sizeof(record)) {
     return record;
   }
@@ -173,7 +178,7 @@ NOLINT_TEST_F(ScenePipelineTest, RejectsUnsupportedNodeFlagSourceModes)
     = data::pak::world::kSceneNodeFlag_Static;
   ScenePipeline::WorkResult result;
   ThreadPool pool(loop_, 1);
-  co::Run(loop_, [&]() -> Co<> {
+  co::Run(loop_, [&] -> Co<> {
     ScenePipeline pipeline(pool);
     NamingService naming_service(NamingService::Config {
       .strategy = std::make_shared<NoOpNamingStrategy>(),
@@ -195,7 +200,7 @@ NOLINT_TEST_F(ScenePipelineTest, RejectsUnsupportedNodeFlagSourceModes)
   EXPECT_FALSE(result.success);
   EXPECT_FALSE(result.cooked.has_value());
   EXPECT_TRUE(std::ranges::any_of(
-    result.diagnostics, [](const ImportDiagnostic& diagnostic) {
+    result.diagnostics, [](const ImportDiagnostic& diagnostic) -> bool {
       return diagnostic.code == "scene.node.flags_invalid";
     }));
 }
@@ -210,7 +215,7 @@ NOLINT_TEST_F(ScenePipelineTest, CollectMinimalSceneBuildsDescriptor)
   ThreadPool pool(loop_, 1);
 
   // Act
-  co::Run(loop_, [&]() -> Co<> {
+  co::Run(loop_, [&] -> Co<> {
     ScenePipeline pipeline(pool);
 
     NamingService naming_service(NamingService::Config {
@@ -238,20 +243,22 @@ NOLINT_TEST_F(ScenePipelineTest, CollectMinimalSceneBuildsDescriptor)
 
   // Assert
   ASSERT_TRUE(result.success);
-  ASSERT_TRUE(result.cooked.has_value());
+  if (!result.cooked.has_value()) {
+    FAIL() << "Expected result.cooked to contain a value";
+  }
   const auto& bytes = result.cooked->descriptor_bytes;
   const auto desc = ReadSceneDesc(bytes);
-  EXPECT_EQ(desc.nodes.count, 1u);
-  EXPECT_EQ(desc.component_table_count, 0u);
+  EXPECT_EQ(desc.nodes.count, 1U);
+  EXPECT_EQ(desc.component_table_count, 0U);
 
   const auto node = ReadNodeRecord(bytes, desc, 0);
-  EXPECT_EQ(node.parent_index, 0u);
-  EXPECT_NE(node.scene_name_offset, 0u);
+  EXPECT_EQ(node.parent_index, 0U);
+  EXPECT_NE(node.scene_name_offset, 0U);
 
   const auto env_header_offset
     = bytes.size() - sizeof(data::pak::world::SceneEnvironmentBlockHeader);
   const auto env_header = ReadEnvironmentHeader(bytes, env_header_offset);
-  EXPECT_EQ(env_header.systems_count, 0u);
+  EXPECT_EQ(env_header.systems_count, 0U);
   EXPECT_EQ(env_header.byte_size,
     sizeof(data::pak::world::SceneEnvironmentBlockHeader));
 }
@@ -288,13 +295,11 @@ NOLINT_TEST_F(ScenePipelineTest, CollectSortsRenderablesByNodeIndex)
     data::pak::world::RenderableRecord {
       .node_index = 1,
       .geometry_key = MakeAssetKey(42U),
-      .material_key = MakeAssetKey(52U),
       .visible = 1,
     },
     data::pak::world::RenderableRecord {
       .node_index = 0,
       .geometry_key = MakeAssetKey(43U),
-      .material_key = MakeAssetKey(53U),
       .visible = 1,
     },
   };
@@ -306,7 +311,7 @@ NOLINT_TEST_F(ScenePipelineTest, CollectSortsRenderablesByNodeIndex)
   ThreadPool pool(loop_, 1);
 
   // Act
-  co::Run(loop_, [&]() -> Co<> {
+  co::Run(loop_, [&] -> Co<> {
     ScenePipeline pipeline(pool);
 
     NamingService naming_service(NamingService::Config {
@@ -334,26 +339,28 @@ NOLINT_TEST_F(ScenePipelineTest, CollectSortsRenderablesByNodeIndex)
 
   // Assert
   ASSERT_TRUE(result.success);
-  ASSERT_TRUE(result.cooked.has_value());
+  if (!result.cooked.has_value()) {
+    FAIL() << "Expected result.cooked to contain a value";
+  }
   const auto& bytes = result.cooked->descriptor_bytes;
   const auto desc = ReadSceneDesc(bytes);
-  EXPECT_EQ(desc.component_table_count, 1u);
+  EXPECT_EQ(desc.component_table_count, 1U);
   EXPECT_EQ(desc.component_table_directory_offset,
     desc.scene_strings.offset + desc.scene_strings.size);
 
   const auto entries = ReadComponentDirectory(bytes, desc);
-  ASSERT_EQ(entries.size(), 1u);
-  EXPECT_EQ(entries[0].component_type,
+  ASSERT_EQ(entries.size(), 1U);
+  EXPECT_EQ(entries.at(0).component_type,
     static_cast<uint32_t>(data::ComponentType::kRenderable));
   EXPECT_EQ(
-    entries[0].table.entry_size, sizeof(data::pak::world::RenderableRecord));
-  EXPECT_EQ(entries[0].table.count, 2u);
+    entries.at(0).table.entry_size, sizeof(data::pak::world::RenderableRecord));
+  EXPECT_EQ(entries.at(0).table.count, 2U);
 
-  const auto renderable0 = ReadRenderableRecord(bytes, entries[0], 0);
-  const auto renderable1 = ReadRenderableRecord(bytes, entries[0], 1);
+  const auto renderable0 = ReadRenderableRecord(bytes, entries.at(0), 0);
+  const auto renderable1 = ReadRenderableRecord(bytes, entries.at(0), 1);
   EXPECT_LT(renderable0.node_index, renderable1.node_index);
-  EXPECT_EQ(renderable0.material_key, MakeAssetKey(53U));
-  EXPECT_EQ(renderable1.material_key, MakeAssetKey(52U));
+  EXPECT_EQ(renderable0.geometry_key, MakeAssetKey(43U));
+  EXPECT_EQ(renderable1.geometry_key, MakeAssetKey(42U));
 }
 
 //! Verify environment block records are appended to the descriptor.
@@ -372,7 +379,7 @@ NOLINT_TEST_F(ScenePipelineTest, CollectWithEnvironmentBlockAppendsBlock)
   ThreadPool pool(loop_, 1);
 
   // Act
-  co::Run(loop_, [&]() -> Co<> {
+  co::Run(loop_, [&] -> Co<> {
     ScenePipeline pipeline(pool);
 
     NamingService naming_service(NamingService::Config {
@@ -408,7 +415,9 @@ NOLINT_TEST_F(ScenePipelineTest, CollectWithEnvironmentBlockAppendsBlock)
 
   // Assert
   ASSERT_TRUE(result.success);
-  ASSERT_TRUE(result.cooked.has_value());
+  if (!result.cooked.has_value()) {
+    FAIL() << "Expected result.cooked to contain a value";
+  }
 
   const auto& bytes = result.cooked->descriptor_bytes;
   const auto header_size
@@ -416,7 +425,7 @@ NOLINT_TEST_F(ScenePipelineTest, CollectWithEnvironmentBlockAppendsBlock)
   const auto record_size = sizeof(data::pak::world::FogEnvironmentRecord);
   const auto env_header_offset = bytes.size() - header_size - record_size;
   const auto env_header = ReadEnvironmentHeader(bytes, env_header_offset);
-  EXPECT_EQ(env_header.systems_count, 1u);
+  EXPECT_EQ(env_header.systems_count, 1U);
   EXPECT_EQ(env_header.byte_size, header_size + record_size);
 }
 
