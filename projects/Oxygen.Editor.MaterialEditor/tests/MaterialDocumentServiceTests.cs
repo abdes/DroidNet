@@ -93,7 +93,7 @@ public sealed partial class MaterialDocumentServiceTests
         var reopened = await service.OpenAsync(materialUri, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = reopened.MaterialGuid.Should().Be(created.MaterialGuid);
-        _ = reopened.Source.Schema.Should().Be("oxygen.material.v1");
+        _ = MaterialSourceWriter.ToJson(reopened.Source).ContainsKey("Schema").Should().BeFalse();
         _ = reopened.Source.PbrMetallicRoughness.MetallicFactor.Should().Be(0.75f);
         _ = reopened.Source.PbrMetallicRoughness.RoughnessFactor.Should().Be(0.5f);
     }
@@ -140,11 +140,11 @@ public sealed partial class MaterialDocumentServiceTests
     }
 
     /// <summary>
-    /// Verifies legacy scalar editing clamps fields to supported ranges.
+    /// Verifies scalar edits reject out-of-range values without changing authored state.
     /// </summary>
     /// <returns>The asynchronous test task.</returns>
     [TestMethod]
-    public async Task EditScalarAsyncClampsOutOfRangeScalarFields()
+    public async Task EditScalarAsyncRejectsOutOfRangeScalarFields()
     {
         using var workspace = new TempWorkspace();
         var materialUri = new Uri("asset:///Content/Materials/Test.omat.json");
@@ -155,13 +155,13 @@ public sealed partial class MaterialDocumentServiceTests
             created.DocumentId,
             new MaterialFieldEdit(MaterialFieldKeys.BaseColorR, 2.0f),
             cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = edit.Succeeded.Should().BeTrue();
+        _ = edit.Succeeded.Should().BeFalse();
 
         edit = await service.EditScalarAsync(
             created.DocumentId,
             new MaterialFieldEdit(MaterialFieldKeys.RoughnessFactor, -1.0f),
             cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = edit.Succeeded.Should().BeTrue();
+        _ = edit.Succeeded.Should().BeFalse();
 
         _ = await service.SaveAsync(created.DocumentId, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
         await service.CloseAsync(created.DocumentId, discard: false, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -169,7 +169,7 @@ public sealed partial class MaterialDocumentServiceTests
         var reopened = await service.OpenAsync(materialUri, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = reopened.Source.PbrMetallicRoughness.BaseColorR.Should().Be(1.0f);
-        _ = reopened.Source.PbrMetallicRoughness.RoughnessFactor.Should().Be(0.0f);
+        _ = reopened.Source.PbrMetallicRoughness.RoughnessFactor.Should().Be(0.5f);
     }
 
     /// <summary>
@@ -425,8 +425,6 @@ public sealed partial class MaterialDocumentServiceTests
         var catalog = EditorSchemaCatalog.LoadFromDirectory(schemaRoot);
         var validator = new MaterialSchemaValidator(catalog);
         var source = new MaterialSource(
-            schema: "oxygen.material.v1",
-            type: "PBR",
             name: "Gold",
             pbrMetallicRoughness: new MaterialPbrMetallicRoughness(
                 baseColorR: 1.0f,
@@ -442,8 +440,8 @@ public sealed partial class MaterialDocumentServiceTests
             alphaMode: MaterialAlphaMode.Opaque,
             alphaCutoff: 0.5f,
             doubleSided: false);
-        var valid = MaterialSourceProjection.ToEngineJson(source);
-        var invalid = MaterialSourceProjection.ToEngineJson(source);
+        var valid = MaterialSourceWriter.ToJson(source);
+        var invalid = MaterialSourceWriter.ToJson(source);
         invalid["parameters"]!.AsObject()["metalness"] = 2.0;
 
         _ = validator.ValidatorParityHolds(valid).Should().BeTrue();
@@ -637,8 +635,6 @@ public sealed partial class MaterialDocumentServiceTests
     private static async Task WriteMaterialAsync(TempWorkspace workspace, string relativePath, string name)
     {
         var source = new MaterialSource(
-            schema: "oxygen.material.v1",
-            type: "PBR",
             name: name,
             pbrMetallicRoughness: new MaterialPbrMetallicRoughness(
                 baseColorR: 1.0f,

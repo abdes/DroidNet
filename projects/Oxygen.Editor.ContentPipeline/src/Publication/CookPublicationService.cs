@@ -51,7 +51,7 @@ public sealed partial class CookPublicationService(IContentCookCoordinator coord
         {
             var snapshot = result.InputSnapshot ?? throw new InvalidOperationException("Publication requires captured saved inputs.");
             var receipt = new CookPublicationReceipt(
-                1,
+                2,
                 operation.Project.ProjectId,
                 operation.OperationId,
                 DateTimeOffset.UtcNow,
@@ -63,13 +63,15 @@ public sealed partial class CookPublicationService(IContentCookCoordinator coord
                 preview?.IsRuntimeAvailable == true)
             {
                 CookedDependencies = snapshot.CookedDependencies,
+                ProducedSourceFiles = [.. result.ProducedSourceFiles.Select(static file => new CookPublicationReceipt.ProducedSourceFile(file.RelativePath, file.BeforeHash, file.AfterHash))],
             };
             var metadata = new Dictionary<string, byte[]>(StringComparer.Ordinal)
             {
                 [CookPublicationTransaction.PublicationMetadata] = JsonSerializer.SerializeToUtf8Bytes(receipt),
                 [CookPublicationTransaction.ProvenanceMetadata] = CookProvenanceStore.Serialize(operation.Project, provenance),
             };
-            var transaction = await CookPublicationTransaction.PrepareAsync(operation, staging, metadata, files, cancellationToken, sourceReplacement: snapshot.SourceReplacement).ConfigureAwait(false);
+            var transaction = await CookPublicationTransaction.PrepareAsync(operation, staging, metadata, files, cancellationToken,
+                sourceReplacement: snapshot.SourceReplacement, producedSourceFiles: result.ProducedSourceFiles).ConfigureAwait(false);
             CookRunContext.Report(new(Message: "Publishing cooked content.", State: CookRunState.Publishing));
             await transaction.PublishAsync(preview, () => coordinator.VerifyWriter(operation), cancellationToken).ConfigureAwait(false);
             if (transaction.CleanupFailure is { } cleanup)

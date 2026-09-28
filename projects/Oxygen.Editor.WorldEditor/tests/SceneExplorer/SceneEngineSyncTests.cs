@@ -149,7 +149,7 @@ public sealed partial class SceneEngineSyncTests
         var outcome = await sut.UpdateMaterialSlotAsync(
             scene,
             node,
-            slotIndex: 0,
+            target: new MaterialSlotTarget(new Uri("asset:///Engine/Generated/BasicShapes/Cube"), Guid.Parse("10000000-0000-0000-0000-000000000001"), new string('a', 64)),
             materialUri: new Uri("asset:///Materials/Test"),
             cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -171,7 +171,7 @@ public sealed partial class SceneEngineSyncTests
         var outcome = await sut.UpdateMaterialSlotAsync(
             scene,
             node,
-            slotIndex: 0,
+            target: new MaterialSlotTarget(new Uri("asset:///Engine/Generated/BasicShapes/Cube"), Guid.Parse("10000000-0000-0000-0000-000000000001"), new string('a', 64)),
             materialUri: null,
             cancellationToken: cts.Token).ConfigureAwait(false);
 
@@ -249,18 +249,6 @@ public sealed partial class SceneEngineSyncTests
     }
 
     [TestMethod]
-    public async Task MaterialOverrideLegacyMethods_DoNotThrowWhenEngineApiIsUnsupported()
-    {
-        var engine = new Mock<IEngineService>(MockBehavior.Strict);
-        using var sut = new SceneEngineSync(engine.Object, NullLoggerFactory.Instance);
-
-        await sut.UpdateMaterialOverrideAsync(Guid.NewGuid(), new MaterialsSlot()).ConfigureAwait(false);
-        await sut.UpdateTargetedMaterialOverrideAsync(Guid.NewGuid(), lodIndex: 0, submeshIndex: 0, new MaterialsSlot()).ConfigureAwait(false);
-        await sut.RemoveMaterialOverrideAsync(Guid.NewGuid(), typeof(MaterialsSlot)).ConfigureAwait(false);
-        await sut.RemoveTargetedMaterialOverrideAsync(Guid.NewGuid(), lodIndex: 0, submeshIndex: 0, typeof(MaterialsSlot)).ConfigureAwait(false);
-    }
-
-    [TestMethod]
     public void MaterialOverridePathMapper_MapsDescriptorUriToCookedEnginePath()
     {
         var path = MaterialOverridePathMapper.ToEnginePath(new Uri("asset:///Content/Materials/Red.omat.json"));
@@ -269,10 +257,11 @@ public sealed partial class SceneEngineSyncTests
     }
 
     [TestMethod]
-    public void MaterialOverridePathMapper_MapsNullAndEmptySentinelToClearOverride()
+    public void MaterialOverridePathMapper_ClearsOnlyAnExplicitNull()
     {
         _ = MaterialOverridePathMapper.ToEnginePath(materialUri: null).Should().BeNull();
-        _ = MaterialOverridePathMapper.ToEnginePath(new Uri("asset:///__uninitialized__")).Should().BeNull();
+        Action invalid = () => MaterialOverridePathMapper.ToEnginePath(new Uri("asset:///__uninitialized__"));
+        _ = invalid.Should().Throw<ArgumentException>();
     }
 
     [TestMethod]

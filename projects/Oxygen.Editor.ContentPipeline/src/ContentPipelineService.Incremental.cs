@@ -41,8 +41,11 @@ public sealed partial class ContentPipelineService
             TaskContinuationOptions.ExecuteSynchronously,
             TaskScheduler.Default);
 
-    private static CookProvenance BuildProvenance(CookProvenance previous, CookIncrementalPlan plan, CookDependencyGraph graph, IReadOnlyList<ContentCookResult> results)
+    private static CookProvenance BuildProvenance(CookProvenance previous, CookIncrementalPlan plan, CookDependencyGraph graph, IReadOnlyList<ContentCookResult> results, CookInputSnapshot snapshot, ImmutableArray<CookProducedSourceFile> produced)
     {
+        var expectedInputs = CookProducedSourceFile.ExpectedInputs(snapshot.Inputs, produced);
+        var expectedFiles = expectedInputs.ToDictionary(static file => file.RelativePath, StringComparer.Ordinal);
+        var sourceInputs = graph.Assets.ToDictionary(static input => input.AssetUri);
         var roots = previous.Roots.ToDictionary(static root => root.Mount, StringComparer.Ordinal);
         var products = previous.Products.ToDictionary(static product => product.SourceUri);
         var invalidatedRoots = previous.Roots.Where(root => !plan.ValidSharedRoots.Contains(root.Mount)).Select(static root => root.Mount).ToHashSet(StringComparer.Ordinal);
@@ -83,8 +86,13 @@ public sealed partial class ContentPipelineService
                     : ProceduralGeometryDescriptorService.IsGeneratedBasicShape(source.Key) ? [AssetUris.BuildGeneratedUri("Materials/Default")] : ImmutableArray<Uri>.Empty;
                 products[source.Key] = new(source.Key, fingerprint, dependencies, [.. source.Select(asset => new CookProvenance.Output(asset, root.Mount))])
                 {
+                    ReuseFingerprint = sourceInputs.TryGetValue(source.Key, out var sourceInput)
+                        ? CookIncrementalPlanner.Fingerprint(sourceInput, snapshot.BuildFingerprint, expectedInputs, graph) : fingerprint,
                     CookedDependencies = graph.CookedDependencies.GetValueOrDefault(source.Key, []),
-                    ImportedSource = graph.ImportedSources.GetValueOrDefault(source.Key),
+                    ImportedSource = graph.ImportedSources.TryGetValue(source.Key, out var imported) ? imported with
+                    {
+                        ContentFingerprint = CookDependencyDiscovery.FingerprintImportedContent(graph.FileDependencies[source.Key].Select(path => expectedFiles[path])),
+                    } : null,
                     Diagnostics =
                     [
                         .. result.Diagnostics.Where(diagnostic => diagnostic.Severity == Oxygen.Managed.Core.Diagnostics.DiagnosticSeverity.Warning
@@ -97,7 +105,7 @@ public sealed partial class ContentPipelineService
 
         var retained = products.Values.Where(product => product.Outputs.All(output => roots.TryGetValue(output.RootMount, out var root)
             && root.Assets.Any(asset => string.Equals(asset.Entry.VirtualPath, output.Asset.VirtualPath, StringComparison.Ordinal))));
-        return new(1, previous.ProjectId, [.. roots.Values.OrderBy(static root => root.Mount, StringComparer.Ordinal)], [.. retained.OrderBy(static product => product.SourceUri.AbsoluteUri, StringComparer.Ordinal)]);
+        return new(CookProvenance.CurrentVersion, previous.ProjectId, [.. roots.Values.OrderBy(static root => root.Mount, StringComparer.Ordinal)], [.. retained.OrderBy(static product => product.SourceUri.AbsoluteUri, StringComparer.Ordinal)]);
     }
 
     private async Task<IReadOnlyList<ContentCookInput>> PrepareMissingBuiltinsAsync(
@@ -264,14 +272,15 @@ public sealed partial class ContentPipelineService
         {
             references.Verify();
             libraries.Verify();
-            using var sourceOwners = snapshot.SourceReplacement is null ? null
+            result = result with { ProducedSourceFiles = await PrepareProducedSourceFilesAsync(snapshot, graph, result, cancellationToken).ConfigureAwait(false) };
+            using var sourceOwners = snapshot.SourceReplacement is null && result.ProducedSourceFiles.IsEmpty ? null
                 : await cookDocuments.AcquireAsync(snapshot.Inputs.Select(static input => input.SourcePath), cancellationToken).ConfigureAwait(false);
             if (sourceOwners?.Documents.Any(static document => document.IsDirty) == true)
             {
                 throw new InvalidOperationException("The retained source has unsaved edits. Save or discard them and review the replacement again.");
             }
 
-            result = await this.publication.PublishAsync(operation, staging, result, BuildProvenance(previous, plan, graph, results), cancellationToken).ConfigureAwait(false);
+            result = await this.publication.PublishAsync(operation, staging, result, BuildProvenance(previous, plan, graph, results, snapshot, result.ProducedSourceFiles), cancellationToken).ConfigureAwait(false);
             if (!result.IsPublished && resolveScopes().SingleOrDefault(static scope => scope.ImportReplacement is not null) is { } replacement)
             {
                 RetainRolledBackReplacement(replacement, snapshot);
@@ -282,6 +291,6 @@ public sealed partial class ContentPipelineService
             throw new InvalidDataException("Native validation did not establish output identities for publication.");
         }
 
-        return result with { InputsAreCurrent = await this.InputsAreCurrentAsync(snapshot, graph, resolveScopes, result.IsPublished ? CancellationToken.None : cancellationToken).ConfigureAwait(false) };
+        return result with { InputsAreCurrent = await this.InputsAreCurrentAsync(snapshot, graph, resolveScopes, result.IsPublished ? CancellationToken.None : cancellationToken, result.IsPublished ? result.ProducedSourceFiles : []).ConfigureAwait(false) };
     }
 }

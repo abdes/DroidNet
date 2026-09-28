@@ -15,11 +15,11 @@ opt-in development adapters; they are not production services or dependencies.
 
 ## 2. PRD Traceability
 
-| IDs | Required result |
-| --- | --- |
-| GOAL-003, REQ-008/026 | Embedded preview reflects committed supported authoring. |
-| GOAL-006, REQ-022/024 | Failures retain precise operation/target diagnostics. |
-| SUCCESS-003 | The current scene converges after edits, publication and restart. |
+| IDs                   | Required result                                                   |
+| --------------------- | ----------------------------------------------------------------- |
+| GOAL-003, REQ-008/026 | Embedded preview reflects committed supported authoring.          |
+| GOAL-006, REQ-022/024 | Failures retain precise operation/target diagnostics.             |
+| SUCCESS-003           | The current scene converges after edits, publication and restart. |
 
 ## 3. Architecture Links
 
@@ -70,13 +70,13 @@ Invariants:
 
 ## 6. Ownership
 
-| Owner | Responsibility |
-| --- | --- |
-| Scene document commands | Validate/mutate source, history and immutable revision-stamped delivery. |
-| SceneEngineSync | Current-state projection, ordering, coalescing and classified results. |
-| Runtime world capabilities | Engine-run/scene-target validation and managed DTO transport. |
-| Interop | Narrow native dispatch; no authoring policy or independent asset state. |
-| Native scene/content/Vortex | Asset readiness, mutation-phase application and actual rendering. |
+| Owner                       | Responsibility                                                           |
+| --------------------------- | ------------------------------------------------------------------------ |
+| Scene document commands     | Validate/mutate source, history and immutable revision-stamped delivery. |
+| SceneEngineSync             | Current-state projection, ordering, coalescing and classified results.   |
+| Runtime world capabilities  | Engine-run/scene-target validation and managed DTO transport.            |
+| Interop                     | Narrow native dispatch; no authoring policy or independent asset state.  |
+| Native scene/content/Vortex | Asset readiness, mutation-phase application and actual rendering.        |
 
 Feature code uses Runtime-owned capabilities rather than obtaining an
 `OxygenWorld` facade. Production sync has no import/cook/mount or development
@@ -118,19 +118,19 @@ identity. See section 8.2.
 
 ### 8.1 Canonical payloads
 
-| Operation | Required runtime behavior |
-| --- | --- |
-| Transform / reparent | Apply immutable local TRS and explicit reparent policy; resolve affected descendants and invalidate render/light products. Reject unrepresentable requested transforms before authoring mutation. |
-| Scene Visibility | Preserve Inherit/Shown/Hidden source mode. Geometry and light eligibility use the resolved native flag; a locally Shown child can override a hidden parent. |
-| Geometry Cast / Receive Shadows | Preserve each independent Inherit/On/Off flag. Cast controls opaque/masked occluder submission; Receive controls actual direct-light shadow attenuation, not AO or Unlit shading. |
-| Geometry attach/change/remove | Dispatch canonical geometry identity and retire obsolete request/slot intent; obtain the accepted inventory before applying material overrides. |
-| Material slot assign/clear | Apply the named SlotId's current native bindings; clear restores that slot's mesh default on every declared LOD/submesh binding. |
-| Perspective camera | Carry Auto/Fixed mode, stored Fixed ratio, vertical FOV, valid clipping and parented pose. Auto derives ratio per target; Fixed fits the complete image with bars. Resizing never edits source/history. |
-| Directional light | Carry runtime affects-world, light shadowing and supported values separately from AtmosphereLightSlot None/Primary/Secondary. Both atmospheric roles have full independent consumers; None still permits ordinary directional illumination. |
-| Atmosphere role edit | Validate unique stored slot occupancy across hidden/off sources; reject conflicts. No promotion, brightest/first-light selection or coupled Sun pointer/boolean representation. |
-| Scene environment | Carry exactly the canonical atmosphere, captured-sky lighting, exposure and appearance fields from the owning field tables; invalidate products affected by either atmospheric source. |
-| Background | Preserve its defined display-colour semantics and translucent foreground composition. |
-| Editor Hide | Editing-view representation mask only, retaining lighting and caster eligibility. It never writes source flags or triggers a cook. |
+| Operation                       | Required runtime behavior                                                                                                                                                                                                                   |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Transform / reparent            | Apply immutable local TRS and explicit reparent policy; resolve affected descendants and invalidate render/light products. Reject unrepresentable requested transforms before authoring mutation.                                           |
+| Scene Visibility                | Preserve Inherit/Shown/Hidden source mode. Geometry and light eligibility use the resolved native flag; a locally Shown child can override a hidden parent.                                                                                 |
+| Geometry Cast / Receive Shadows | Preserve each independent Inherit/On/Off flag. Cast controls opaque/masked occluder submission; Receive controls actual direct-light shadow attenuation, not AO or Unlit shading.                                                           |
+| Geometry attach/change/remove   | Dispatch canonical geometry identity and retire obsolete request/slot intent; obtain the accepted inventory before applying material overrides.                                                                                             |
+| Material slot assign/clear      | Apply the named SlotId's current native bindings; clear restores that slot's mesh default on every declared LOD/submesh binding.                                                                                                            |
+| Perspective camera              | Carry Auto/Fixed mode, stored Fixed ratio, vertical FOV, valid clipping and parented pose. Auto derives ratio per target; Fixed fits the complete image with bars. Resizing never edits source/history.                                     |
+| Directional light               | Carry runtime affects-world, light shadowing and supported values separately from AtmosphereLightSlot None/Primary/Secondary. Both atmospheric roles have full independent consumers; None still permits ordinary directional illumination. |
+| Atmosphere role edit            | Validate unique stored slot occupancy across hidden/off sources; reject conflicts. No promotion, brightest/first-light selection or coupled Sun pointer/boolean representation.                                                             |
+| Scene environment               | Carry exactly the canonical atmosphere, captured-sky lighting, exposure and appearance fields from the owning field tables; invalidate products affected by either atmospheric source.                                                      |
+| Background                      | Preserve its defined display-colour semantics and translucent foreground composition.                                                                                                                                                       |
+| Editor Hide                     | Editing-view representation mask only, retaining lighting and caster eligibility. It never writes source flags or triggers a cook.                                                                                                          |
 
 Physical-camera inputs, general simulation activation and authored hidden-shadow
 modes are not introduced by these mappings. An explicitly selected camera remains
@@ -171,9 +171,11 @@ retried endlessly or applied to another surface. Resolution/load errors retain
 node/asset/slot context and recover through existing content-demand/publication
 paths.
 
-Clear records explicit removal intent and immediately removes an applicable
-visible override even while newer geometry loads. Older pending loads cannot
-restore it. Undo/Redo sends the same generation-checked commands. On publication,
+Clear updates authored removal intent and supersedes pending material loads
+immediately. Native applied-success follows geometry identity and revision
+validation; unavailable geometry remains pending. New edits require the observed
+revision, while refreshes of accepted assignments can follow surviving SlotIds
+into a compatible revision. Undo/Redo uses the same commands. On publication,
 only identity-compatible current intents are reapplied; incompatible layouts are
 blocked by the publication contract before they can break saved scene consumers.
 
@@ -231,13 +233,13 @@ current scene through the same projection and generation authority.
 
 ## 12. Operation Results And Diagnostics
 
-| Sync result | Authoring/result consequence |
-| --- | --- |
-| Accepted | No routine success result; queue acceptance only. |
-| SkippedNotRunning | Authoring succeeds; preview unavailable/pending warning. |
-| Unsupported | Capability failure; authoring retained, required-field qualification fails. |
-| Rejected / Failed | Authoring retained; scoped partial preview failure with actual reason. |
-| Cancelled | That delivery stops; current intent remains authoritative where the document is live. |
+| Sync result       | Authoring/result consequence                                                          |
+| ----------------- | ------------------------------------------------------------------------------------- |
+| Accepted          | No routine success result; queue acceptance only.                                     |
+| SkippedNotRunning | Authoring succeeds; preview unavailable/pending warning.                              |
+| Unsupported       | Capability failure; authoring retained, required-field qualification fails.           |
+| Rejected / Failed | Authoring retained; scoped partial preview failure with actual reason.                |
+| Cancelled         | That delivery stops; current intent remains authoritative where the document is live. |
 
 Diagnostics carry scene/document lifetime, node/component identity, asset URI,
 SlotId and expected/actual geometry layout where relevant. Preserve native codes

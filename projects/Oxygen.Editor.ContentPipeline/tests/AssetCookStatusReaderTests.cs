@@ -158,8 +158,6 @@ public sealed partial class AssetCookStatusReaderTests
         {
             using var buffer = new MemoryStream();
             MaterialSourceWriter.Write(buffer, new MaterialSource(
-                "oxygen.material.v1",
-                "PBR",
                 "Material",
                 new MaterialPbrMetallicRoughness(1, 1, 1, 1, 0, roughness, baseColorTexture: null, metallicRoughnessTexture: null),
                 normalTexture: null,
@@ -186,7 +184,7 @@ public sealed partial class AssetCookStatusReaderTests
             var producer = verified.Artifacts!;
             await using var producerLifetime = producer.ConfigureAwait(false);
             _ = verified.Succeeded.Should().BeTrue();
-            var plan = await CookIncrementalPlanner.PlanAsync(this.Project, producer.Fingerprint, graph.Files, graph, new(1, this.Project.ProjectId, [], []), cancellationToken).ConfigureAwait(false);
+            var plan = await CookIncrementalPlanner.PlanAsync(this.Project, producer.Fingerprint, graph.Files, graph, new(CookProvenance.CurrentVersion, this.Project.ProjectId, [], []), cancellationToken).ConfigureAwait(false);
             using var staging = await CookStagingArea.CreateAsync(operation, ["Content"], cancellationToken).ConfigureAwait(false);
             var root = staging.Roots.Single().StagingPath;
             await File.WriteAllTextAsync(Path.Combine(root, "container.index.bin"), "index", cancellationToken).ConfigureAwait(false);
@@ -203,13 +201,13 @@ public sealed partial class AssetCookStatusReaderTests
 
             var evidence = new CookProvenance.Root("Content", [Proof("container.index.bin", "index")], indexed.ToImmutable());
             var provenance = new CookProvenance(
-                1,
+                CookProvenance.CurrentVersion,
                 this.Project.ProjectId,
                 [evidence],
                 [
-                    .. outputs.Select(output => new CookProvenance.Product(output.SourceAssetUri, plan.Fingerprints[output.SourceAssetUri], graph.Dependencies[output.SourceAssetUri], [new(output, "Content")])),
+                    .. outputs.Select(output => new CookProvenance.Product(output.SourceAssetUri, plan.Fingerprints[output.SourceAssetUri], graph.Dependencies[output.SourceAssetUri], [new(output, "Content")]) { ReuseFingerprint = plan.Fingerprints[output.SourceAssetUri] }),
                 ]);
-            var receipt = new CookPublicationReceipt(1, this.Project.ProjectId, operation.OperationId, DateTimeOffset.UtcNow, producer.Fingerprint, new string('A', 64), graph.Files, [], [evidence], WasMounted: false);
+            var receipt = new CookPublicationReceipt(2, this.Project.ProjectId, operation.OperationId, DateTimeOffset.UtcNow, producer.Fingerprint, new string('A', 64), graph.Files, [], [evidence], WasMounted: false);
             var transaction = await CookPublicationTransaction.PrepareAsync(
                 operation,
                 staging,

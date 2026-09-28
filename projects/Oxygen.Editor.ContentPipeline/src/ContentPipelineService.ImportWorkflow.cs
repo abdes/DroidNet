@@ -43,21 +43,6 @@ public sealed partial class ContentPipelineService
             cancellationToken);
     }
 
-    private static Uri? FindAuthoringSourceUri(ProjectContext project, string source)
-    {
-        foreach (var mount in project.AuthoringMounts)
-        {
-            var root = Path.GetFullPath(Path.Combine(project.ProjectRoot, mount.RelativePath)).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
-            if (source.StartsWith(root, StringComparison.OrdinalIgnoreCase))
-            {
-                var relative = Path.GetRelativePath(root, source).Replace('\\', '/');
-                return new Uri(AssetUris.Scheme + ":///" + Uri.EscapeDataString(mount.Name) + "/" + string.Join('/', relative.Split('/').Select(Uri.EscapeDataString)));
-            }
-        }
-
-        return null;
-    }
-
     private async Task<ContentCookResult> ImportSourceCoreAsync(ContentCookOperation operation, SceneImportRequest request, Action<SceneImportRequest> retainRecovery, CancellationToken cancellationToken)
     {
         Uri? retainedUri = null;
@@ -77,7 +62,7 @@ public sealed partial class ContentPipelineService
             var target = SceneImportTarget.Resolve(operation.Project, request.DestinationFolder, request.Name);
             var retained = request.RetainedSource ?? await this.RetainRequestedSourceAsync(operation, request, cancellationToken).ConfigureAwait(false);
             var primary = Path.GetFullPath(Path.Combine(operation.Project.ProjectRoot, retained.DirectoryRelativePath, retained.PrimaryRelativePath));
-            retainedUri = FindAuthoringSourceUri(operation.Project, primary)
+            retainedUri = CookInputResolver.FindAuthoringSourceUri(operation.Project, primary)
                 ?? throw new InvalidDataException("The retained source is outside the project's authoring mounts.");
             var recovery = request with { RetainedSource = retained };
             retainRecovery(recovery);
@@ -112,7 +97,7 @@ public sealed partial class ContentPipelineService
         var source = Path.GetFullPath(request.SourcePath);
         var inspector = this.engineContentPipelineApi as ISceneSourceInspector
             ?? throw new InvalidOperationException("The native pipeline cannot inspect model sources.");
-        if (FindAuthoringSourceUri(operation.Project, source) is { } existingUri)
+        if (CookInputResolver.FindAuthoringSourceUri(operation.Project, source) is { } existingUri)
         {
             var input = CookInputResolver.Resolve(operation.Project, existingUri, ContentCookInputRole.Primary);
             var discovered = await this.DiscoverChangedImportedSourceAsync(operation, input, artifacts: null, cancellationToken).ConfigureAwait(false);

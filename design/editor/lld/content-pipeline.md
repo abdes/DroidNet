@@ -2,6 +2,11 @@
 
 Status: `Canonical V0.1 contract; implementation and qualification tracked by ED-M08`
 
+**Navigation:** [purpose](#1-purpose),
+[slot identity and reimport](#20-canonical-material-slot-identity-and-reimport),
+[emission](#21-material-emission-precision),
+[planned simplification](#22-planned-content-pipeline-simplification).
+
 ## 1. Purpose
 
 Define how editor workflows generate engine descriptors, run import/cook jobs,
@@ -16,23 +21,23 @@ editor-only JSON schemas for runtime content.
 
 ## 2. PRD Traceability
 
-| ID | Coverage |
-| --- | --- |
-| `GOAL-004` | Authored material, geometry, and scene content can produce cooked output. |
-| `GOAL-005` | Descriptor, cook, inspect, validation, catalog, and mount state are visible. |
-| `GOAL-006` | Pipeline failures are structured, actionable operation results. |
-| `REQ-014` | Scalar material values save, reopen, cook, and remain assignable by identity. |
-| `REQ-015` | Editor generates or updates engine descriptor inputs for supported authored content. |
-| `REQ-016` | Scoped import/reimport uses retained sources; accepted Save/import/demand triggers and explicit Cook actions share the incremental coordinator and visible results. |
-| `REQ-017` | Cooked output and catalog state refresh after cook. |
-| `REQ-018` | Cooked output is validated before runtime mount refresh. |
-| `REQ-019` | Project cook scope and authored mount policy are honored. |
-| `REQ-021` | Authored asset identity stays distinct from cooked filesystem paths. |
-| `REQ-022` | Save/cook/refresh/mount failures surface operation results. |
-| `REQ-023` | Pipeline and engine/tool failures produce correlated logs. |
-| `REQ-024` | Diagnostics identify descriptor/import/cook/index/mount cause. |
-| `REQ-036` | Content Browser reflects refreshed descriptor/cooked states. |
-| `REQ-037` | Authored source remains repairable and round-trippable. |
+| ID         | Coverage                                                                                                                                                            |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GOAL-004` | Authored material, geometry, and scene content can produce cooked output.                                                                                           |
+| `GOAL-005` | Descriptor, cook, inspect, validation, catalog, and mount state are visible.                                                                                        |
+| `GOAL-006` | Pipeline failures are structured, actionable operation results.                                                                                                     |
+| `REQ-014`  | Scalar material values save, reopen, cook, and remain assignable by identity.                                                                                       |
+| `REQ-015`  | Editor generates or updates engine descriptor inputs for supported authored content.                                                                                |
+| `REQ-016`  | Scoped import/reimport uses retained sources; accepted Save/import/demand triggers and explicit Cook actions share the incremental coordinator and visible results. |
+| `REQ-017`  | Cooked output and catalog state refresh after cook.                                                                                                                 |
+| `REQ-018`  | Cooked output is validated before runtime mount refresh.                                                                                                            |
+| `REQ-019`  | Project cook scope and authored mount policy are honored.                                                                                                           |
+| `REQ-021`  | Authored asset identity stays distinct from cooked filesystem paths.                                                                                                |
+| `REQ-022`  | Save/cook/refresh/mount failures surface operation results.                                                                                                         |
+| `REQ-023`  | Pipeline and engine/tool failures produce correlated logs.                                                                                                          |
+| `REQ-024`  | Diagnostics identify descriptor/import/cook/index/mount cause.                                                                                                      |
+| `REQ-036`  | Content Browser reflects refreshed descriptor/cooked states.                                                                                                        |
+| `REQ-037`  | Authored source remains repairable and round-trippable.                                                                                                             |
 
 ## 3. Architecture Links
 
@@ -107,16 +112,16 @@ Failed staging remains inspectable without becoming published current content.
 
 ## 6. Ownership
 
-| Owner | Responsibility |
-| --- | --- |
-| `Oxygen.Editor.ContentPipeline` | Editor orchestration service, descriptor adapter coordination, import/cook requests, inspect/validate adapters, catalog refresh, operation results. |
-| `Oxygen.Managed.Assets` | Managed reusable import/cook/index primitives and editor-side readers/writers. |
-| `Oxygen.Cooker` / engine content API | Native schemas, manifest batch import, scene descriptor import, loose cooked inspection/validation, runtime-compatible descriptors. |
-| `Oxygen.Editor.Interop` | Narrow managed wrappers for native cooker inspection/validation/import APIs when ED-M07 needs native behavior that is not exposed in managed code. |
-| `Oxygen.Editor.Projects` | Project root, authoring mount facts, local mount facts, default cooked output root, and validation policy. |
-| `Oxygen.Editor.WorldEditor` | Scene document ownership and user commands that invoke pipeline workflows. |
-| `Oxygen.Editor.ContentBrowser` | Presents refreshed source/descriptor/cooked/stale/broken/mounted state; does not cook. |
-| `Oxygen.Editor.Runtime` | Runtime mount/unmount calls through `IEngineService`; does not decide cook scope. |
+| Owner                                | Responsibility                                                                                                                                      |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Oxygen.Editor.ContentPipeline`      | Editor orchestration service, descriptor adapter coordination, import/cook requests, inspect/validate adapters, catalog refresh, operation results. |
+| `Oxygen.Managed.Assets`              | Managed reusable import/cook/index primitives and editor-side readers/writers.                                                                      |
+| `Oxygen.Cooker` / engine content API | Native schemas, manifest batch import, scene descriptor import, loose cooked inspection/validation, runtime-compatible descriptors.                 |
+| `Oxygen.Editor.Interop`              | Narrow managed wrappers for native cooker inspection/validation/import APIs when ED-M07 needs native behavior that is not exposed in managed code.  |
+| `Oxygen.Editor.Projects`             | Project root, authoring mount facts, local mount facts, default cooked output root, and validation policy.                                          |
+| `Oxygen.Editor.WorldEditor`          | Scene document ownership and user commands that invoke pipeline workflows.                                                                          |
+| `Oxygen.Editor.ContentBrowser`       | Presents refreshed source/descriptor/cooked/stale/broken/mounted state; does not cook.                                                              |
+| `Oxygen.Editor.Runtime`              | Runtime mount/unmount calls through `IEngineService`; does not decide cook scope.                                                                   |
 
 `Oxygen.Editor.Projects` must not regain cook execution ownership.
 
@@ -183,37 +188,40 @@ complete diagnostics. Development identity-map construction consumes its stable
 traversal through a development adapter; no qualification protocol is embedded
 in this production service.
 
-| Authoring fact | Required native descriptor/record content |
-| --- | --- |
-| Node identity/order/hierarchy | Deterministic depth-first records and parent indices; duplicate names are not identities. |
-| Local TRS | Captured position, quaternion and scale without silent repairs. |
-| Scene Visibility / geometry Cast and Receive Shadows | Each stored Local/Inherit mode and local value; never flatten inherited intent into the current effective boolean. |
-| Geometry URI | Canonical geometry key/path and its native slot inventory. |
-| Instance material assignments | Explicit SlotId-keyed overrides and resolved material keys; every supplied slot/LOD binding is supported. No single material_ref or positional-only override path. |
-| Perspective camera | Auto/Fixed mode, stored Fixed ratio, vertical FOV, near/far and parented pose. Auto ratio/content rectangle is derived per view, not saved on resize. |
-| Directional light | Complete selected scalar/common/shadow values and canonical AtmosphereLightSlot None/Primary/Secondary. |
-| Atmosphere roles | Per-light assignment only; uniqueness checked across stored lights including hidden/off ones. No SunNodeId, IsSunLight/Contributes duplicate authority or automatic promotion. |
-| Scene environment | Complete canonical atmosphere, captured-sky diffuse/specular, exposure and appearance data from the owning field tables. |
-| Background | Canonical display-background colour semantics, independent of scene exposure/tone mapping while preserving foreground transparency. |
-| Editor Hide, loaded IsActive, selection/gizmos | Editor/runtime-derived state, excluded from authored runtime content. |
-| Unsupported required values | Actionable failure before publication; no best-effort omission or substituted defaults. |
+| Authoring fact                                       | Required native descriptor/record content                                                                                                                                      |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Node identity/order/hierarchy                        | Deterministic depth-first records and parent indices; duplicate names are not identities.                                                                                      |
+| Local TRS                                            | Captured position, quaternion and scale without silent repairs.                                                                                                                |
+| Scene Visibility / geometry Cast and Receive Shadows | Each stored Local/Inherit mode and local value; never flatten inherited intent into the current effective boolean.                                                             |
+| Geometry URI                                         | Canonical geometry key/path and its native slot inventory.                                                                                                                     |
+| Instance material assignments                        | Explicit SlotId-keyed overrides and resolved material keys; every supplied slot/LOD binding is supported. No single material_ref or positional-only override path.             |
+| Perspective camera                                   | Auto/Fixed mode, stored Fixed ratio, vertical FOV, near/far and parented pose. Auto ratio/content rectangle is derived per view, not saved on resize.                          |
+| Directional light                                    | Complete selected scalar/common/shadow values and canonical AtmosphereLightSlot None/Primary/Secondary.                                                                        |
+| Atmosphere roles                                     | Per-light assignment only; uniqueness checked across stored lights including hidden/off ones. No SunNodeId, IsSunLight/Contributes duplicate authority or automatic promotion. |
+| Scene environment                                    | Complete canonical atmosphere, captured-sky diffuse/specular, exposure and appearance data from the owning field tables.                                                       |
+| Background                                           | Canonical display-background colour semantics, independent of scene exposure/tone mapping while preserving foreground transparency.                                            |
+| Editor Hide, loaded IsActive, selection/gizmos       | Editor/runtime-derived state, excluded from authored runtime content.                                                                                                          |
+| Unsupported required values                          | Actionable failure before publication; no best-effort omission or substituted defaults.                                                                                        |
 
 The engine owns the changed schema and binary versions. Do not continue emitting
 old scene record layouts that cannot represent the selected contracts. Qualified
 imports reject excluded components instead of reporting success after dropping
-them. Reject an empty scene and invalid clipping/enum/role/slot data with the
-scene and field in the diagnostic.
+them. Reject invalid clipping/enum/role/slot data with the scene and field in the
+diagnostic. Empty scenes are valid: emit an empty node array and preserve their
+environment and identity. Project cooking publishes them normally, without
+placeholder nodes. Components still require valid node references; runtime
+hosts own their preview cameras.
 
 Native descriptor names derive from the scene file stem: remove `.oscene.json`,
 replace characters outside `[A-Za-z0-9_.-]` with `_`, prefix `_` if the first
 character is not `[A-Za-z0-9_]`, then limit to 63 characters. An empty result fails.
 Display names and original paths remain intact in authoring and diagnostics.
 
-| Authoring URI | Native reference |
-| --- | --- |
-| `asset:///<Mount>/<Path>.omat.json` or `.omat` | `/<Mount>/<Path>.omat` |
-| `asset:///<Mount>/<Path>.ogeo.json` or `.ogeo` | `/<Mount>/<Path>.ogeo` |
-| `asset:///<Mount>/<Path>.oscene.json` | `/<Mount>/<Path>.oscene` |
+| Authoring URI                                  | Native reference         |
+| ---------------------------------------------- | ------------------------ |
+| `asset:///<Mount>/<Path>.omat.json` or `.omat` | `/<Mount>/<Path>.omat`   |
+| `asset:///<Mount>/<Path>.ogeo.json` or `.ogeo` | `/<Mount>/<Path>.ogeo`   |
+| `asset:///<Mount>/<Path>.oscene.json`          | `/<Mount>/<Path>.oscene` |
 
 Reject an unknown mount, wrong scheme/type, traversal or invalid normalization.
 Native references contain neither `asset:///` nor an authoring `.json` suffix.
@@ -306,14 +314,14 @@ Mount layout rules:
 
 Required job type mapping:
 
-| Input | Manifest job type |
-| --- | --- |
-| scalar material descriptor `*.omat.json` | `material-descriptor` |
-| procedural/imported geometry descriptor `*.ogeo.json` | `geometry-descriptor` |
-| generated native scene descriptor | `scene-descriptor` |
-| glTF/GLB source media import | `gltf` |
-| FBX source media import | `fbx` |
-| texture source or descriptor | `texture` or `texture-descriptor` |
+| Input                                                 | Manifest job type                 |
+| ----------------------------------------------------- | --------------------------------- |
+| scalar material descriptor `*.omat.json`              | `material-descriptor`             |
+| procedural/imported geometry descriptor `*.ogeo.json` | `geometry-descriptor`             |
+| generated native scene descriptor                     | `scene-descriptor`                |
+| glTF/GLB source media import                          | `gltf`                            |
+| FBX source media import                               | `fbx`                             |
+| texture source or descriptor                          | `texture` or `texture-descriptor` |
 
 Scene jobs depend on the material and geometry jobs needed by their
 renderables. Folder/project cook generates a manifest and validates it against
@@ -405,12 +413,12 @@ publish or remount roots independently. Inspect-only operations never mount.
 
 Use the existing UI surfaces:
 
-| Surface | Actions |
-| --- | --- |
+| Surface                              | Actions                                                                             |
+| ------------------------------------ | ----------------------------------------------------------------------------------- |
 | Content Browser toolbar/context menu | `Cook`, `Cook Folder`, `Inspect Cooked Output`, `Validate Cooked Output`, `Refresh` |
-| Scene document/header/menu | `Cook Current Scene` |
-| Material editor | continues to expose `Cook` for one material |
-| Output/log panel | correlated cook phase summaries and diagnostics |
+| Scene document/header/menu           | `Cook Current Scene`                                                                |
+| Material editor                      | continues to expose `Cook` for one material                                         |
+| Output/log panel                     | correlated cook phase summaries and diagnostics                                     |
 
 Illustrative result summary:
 
@@ -467,36 +475,36 @@ material slots, project manifests, or recent documents.
 
 Operation kinds:
 
-| Operation | Producer | Domain |
-| --- | --- | --- |
-| `Content.Descriptor.Generate` | scene/procedural descriptor generators | `ContentPipeline` |
-| `Content.Manifest.Generate` | manifest builder | `ContentPipeline` |
-| `Content.Import` | content pipeline / engine API adapter | `AssetImport` |
-| `Content.Cook.Asset` | content pipeline | `AssetCook` |
-| `Content.Cook.Scene` | content pipeline | `AssetCook` |
-| `Content.Cook.Folder` | content pipeline | `AssetCook` |
-| `Content.Cook.Project` | content pipeline | `AssetCook` |
-| `Content.CookedOutput.Inspect` | inspect adapter | `ContentPipeline` |
-| `Content.CookedOutput.Validate` | validation adapter | `ContentPipeline` |
-| `Content.Catalog.Refresh` | catalog refresh adapter | `AssetIdentity` |
-| `Runtime.CookedRoot.Refresh` | workspace/runtime integration | `AssetMount` |
+| Operation                       | Producer                               | Domain            |
+| ------------------------------- | -------------------------------------- | ----------------- |
+| `Content.Descriptor.Generate`   | scene/procedural descriptor generators | `ContentPipeline` |
+| `Content.Manifest.Generate`     | manifest builder                       | `ContentPipeline` |
+| `Content.Import`                | content pipeline / engine API adapter  | `AssetImport`     |
+| `Content.Cook.Asset`            | content pipeline                       | `AssetCook`       |
+| `Content.Cook.Scene`            | content pipeline                       | `AssetCook`       |
+| `Content.Cook.Folder`           | content pipeline                       | `AssetCook`       |
+| `Content.Cook.Project`          | content pipeline                       | `AssetCook`       |
+| `Content.CookedOutput.Inspect`  | inspect adapter                        | `ContentPipeline` |
+| `Content.CookedOutput.Validate` | validation adapter                     | `ContentPipeline` |
+| `Content.Catalog.Refresh`       | catalog refresh adapter                | `AssetIdentity`   |
+| `Runtime.CookedRoot.Refresh`    | workspace/runtime integration          | `AssetMount`      |
 
 Failure mapping:
 
-| Failure | Domain | Code |
-| --- | --- | --- |
-| scene descriptor generation failed | `ContentPipeline` | `OXE.CONTENTPIPELINE.SCENE.DescriptorGenerationFailed` |
-| required authored scene value cannot be represented; publication blocked | `ContentPipeline` | `OXE.CONTENTPIPELINE.SCENE.UnsupportedField` |
-| procedural geometry descriptor failed | `ContentPipeline` | `OXE.CONTENTPIPELINE.GEOMETRY.DescriptorGenerationFailed` |
-| manifest generation failed | `ContentPipeline` | `OXE.CONTENTPIPELINE.MANIFEST.GenerationFailed` |
-| source path missing | `AssetImport` | `OXE.ASSETIMPORT.SourceMissing` |
-| importer returned diagnostics | `AssetImport` | `OXE.ASSETIMPORT.ImportFailed` |
-| cook failed | `AssetCook` | `OXE.ASSETCOOK.CookFailed` |
-| cooked index missing or invalid | `AssetCook` | `OXE.ASSETCOOK.IndexInvalid` |
-| inspect failed | `ContentPipeline` | `OXE.CONTENTPIPELINE.INSPECT.Failed` |
-| validation failed | `ContentPipeline` | `OXE.CONTENTPIPELINE.VALIDATE.Failed` |
-| catalog refresh failed | `AssetIdentity` | `OXE.ASSETID.RefreshFailed` |
-| mount refresh failed | `AssetMount` | `OXE.ASSETMOUNT.RefreshFailed` |
+| Failure                                                                  | Domain            | Code                                                      |
+| ------------------------------------------------------------------------ | ----------------- | --------------------------------------------------------- |
+| scene descriptor generation failed                                       | `ContentPipeline` | `OXE.CONTENTPIPELINE.SCENE.DescriptorGenerationFailed`    |
+| required authored scene value cannot be represented; publication blocked | `ContentPipeline` | `OXE.CONTENTPIPELINE.SCENE.UnsupportedField`              |
+| procedural geometry descriptor failed                                    | `ContentPipeline` | `OXE.CONTENTPIPELINE.GEOMETRY.DescriptorGenerationFailed` |
+| manifest generation failed                                               | `ContentPipeline` | `OXE.CONTENTPIPELINE.MANIFEST.GenerationFailed`           |
+| source path missing                                                      | `AssetImport`     | `OXE.ASSETIMPORT.SourceMissing`                           |
+| importer returned diagnostics                                            | `AssetImport`     | `OXE.ASSETIMPORT.ImportFailed`                            |
+| cook failed                                                              | `AssetCook`       | `OXE.ASSETCOOK.CookFailed`                                |
+| cooked index missing or invalid                                          | `AssetCook`       | `OXE.ASSETCOOK.IndexInvalid`                              |
+| inspect failed                                                           | `ContentPipeline` | `OXE.CONTENTPIPELINE.INSPECT.Failed`                      |
+| validation failed                                                        | `ContentPipeline` | `OXE.CONTENTPIPELINE.VALIDATE.Failed`                     |
+| catalog refresh failed                                                   | `AssetIdentity`   | `OXE.ASSETID.RefreshFailed`                               |
+| mount refresh failed                                                     | `AssetMount`      | `OXE.ASSETMOUNT.RefreshFailed`                            |
 
 Import/cooker native diagnostic codes must be preserved in technical details
 and adapted to the nearest editor diagnostic code.
@@ -707,18 +715,18 @@ are not authored identities or required manual repair steps.
 ### Publication Validation Gates
 
 - [ ] Dirty dependencies reject capture; later edits do not mutate the captured
-  bytes or get cleared by cook completion. Overlapping requests serialize.
+      bytes or get cleared by cook completion. Overlapping requests serialize.
 - [ ] Asset/folder recook preserves unrelated published entries and stable
-  source/subasset identity; deleted generated subassets are reconciled.
+      source/subasset identity; deleted generated subassets are reconciled.
 - [ ] Inspect and validation run on staging before any published file changes.
 - [ ] Failure/cancellation at every staging and publication boundary preserves
-  or restores the prior complete output; recovery handles interruption between
-  each pair of journaled steps, including first publication with no prior root.
+      or restores the prior complete output; recovery handles interruption between
+      each pair of journaled steps, including first publication with no prior root.
 - [ ] Preview pause/drain/resume, active-scene change, runtime fault, failed new
-  mount, failed rollback mount, and standalone reader leases are exercised.
+      mount, failed rollback mount, and standalone reader leases are exercised.
 - [ ] Input/output hashes and publication state are queryable in results;
-  stale/newer authoring never becomes falsely current. User workflows need no
-  manual generated-file edits.
+      stale/newer authoring never becomes falsely current. User workflows need no
+      manual generated-file edits.
 
 ## 17. Qualified Import And Reproduction Policy
 
@@ -734,7 +742,12 @@ and nonuniform transform fixture prove each conversion.
 
 Perspective cameras and directional lights are included under REQ-009. Map
 explicit source camera ratios to Fixed and omitted ratios to Auto; preserve
-valid FOV/clipping. Per-light atmosphere assignment uses the canonical
+valid FOV/clipping. For FBX, window-size aspect mode maps to Auto and its fixed
+aspect modes map to Fixed using the importer-resolved ratio. Canonical descriptors
+store an explicit `aspect_mode` and retain a positive `aspect_ratio` in both modes.
+Scene records carry the same policy; hydrate every camera before selecting a view.
+Reject invalid projection values rather than normalizing clipping distances.
+Per-light atmosphere assignment uses the canonical
 None/Primary/Secondary contract; ambiguous old sun combinations require explicit
 migration repair, not an automatic selection.
 Orthographic cameras, point/spot lights, animation, skinning, morphs, physics
@@ -1058,19 +1071,29 @@ is insufficient to establish that relation.
 
 The engine-owned inventory schema contains:
 
-| Field | Contract |
-| --- | --- |
-| `schema_version` | Inventory schema version, checked before use. |
-| `geometry_asset_key` | Exact native geometry identity; authored callers retain its URI and winning source. |
-| `layout_revision` | SHA-256 of canonical slot IDs, binding locations and default keys. Excludes display labels, material scalar/texture bytes, producer timestamps and temporary paths. |
-| `slots[].slot_id` | Unique, nonempty MaterialSlotId. |
-| `slots[].display_name` | Presentation only; may be duplicated or renamed. |
-| `slots[].bindings[]` | Explicit `lod_index`, `submesh_index` and `default_material_key` for each existing binding. Each material-bearing surface belongs to exactly one declared slot. |
+| Field                  | Contract                                                                                                                                                            |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `schema_version`       | Inventory schema version, checked before use.                                                                                                                       |
+| `geometry_asset_key`   | Exact native geometry identity; authored callers retain its URI and winning source.                                                                                 |
+| `layout_revision`      | SHA-256 of canonical slot IDs, binding locations and default keys. Excludes display labels, material scalar/texture bytes, producer timestamps and temporary paths. |
+| `slots[].slot_id`      | Unique, nonempty MaterialSlotId.                                                                                                                                    |
+| `slots[].display_name` | Presentation only; may be duplicated or renamed.                                                                                                                    |
+| `slots[].bindings[]`   | Explicit `lod_index`, `submesh_index` and `default_material_key` for each existing binding. Each material-bearing surface belongs to exactly one declared slot.     |
 
 Inventory order is display order only. The native canonical hash writer sorts
 slots by ID and each binding list by LOD/submesh before hashing the fixed-schema
 UTF-8 record. Managed code transports the native revision and validates the
 report/record schema; it does not invent another canonical hash algorithm.
+
+`IGeometryMaterialSlotProvider.ReadAsync(project, geometryUri, cancellationToken)`
+is the editor's authoring entry point. The existing `ContentPipelineService`
+selects the winning project/library source, retains publication and file readers,
+and obtains typed inventory through native Inspector `geometries --virtual-path`.
+Project output must pass the shared freshness checks before and after inspection;
+uncooked, stale or missing output yields no current inventory. Project replacement
+cancels the request. Builtin catalog v3 supplies native inventories before cooking,
+using the authored builtin identity; its separate descriptor maps that identity
+to the cooked contribution. No managed code decodes geometry bytes or hashes slots.
 
 Canonical scene assignments contain GeometryUri, SlotId, MaterialUri and the
 last resolved layout revision. MaterialUri absence means no override; clearing
@@ -1092,6 +1115,20 @@ reproducible output/cache directories must not change slot identities. The
 source/import-settings publication journal commits updated identity provenance
 with the produced geometry, never ahead of it.
 
+Captured inputs and the publication receipt retain the exact consumed bytes.
+Returned native provenance is a produced source-file update with distinct before
+and after hashes. The existing publication journal installs ordinary sidecar
+updates through atomic compare-and-swap writes and restores them with cooked
+roots on failure. Explicit source-bundle replacement uses separate publication
+staging; it never moves or edits the consumed input snapshot.
+
+Product provenance records both the consumed fingerprint and the fingerprint
+accepted for subsequent reuse after those source updates. Freshness compares
+committed source updates against their after hashes and all other inputs against
+their consumed hashes. Later authoring edits make products stale; they do not
+invalidate immutable generation receipts. No provenance field is omitted from
+dependency fingerprints, and no consumed hash is rewritten after cooking.
+
 For each source geometry, the native provenance schema records:
 
 - Retained source identity and source-geometry anchor.
@@ -1106,9 +1143,16 @@ For each source geometry, the native provenance schema records:
 
 The witness excludes material scalar values, texture-reference payloads/image
 contents, render colours, normals/tangents, producer fingerprints, timestamps
-and temporary paths. Material parameter or texture-content edits therefore do
+and temporary paths. Adapter-owned witnesses are captured before producer
+coordinate/unit conversion and optimization. Material parameter or texture-content edits therefore do
 not change it. Material assignment/slot-to-surface relations do participate;
 matching only material names or list positions is never continuity proof.
+
+Transform-bake or instance-material policies may legitimately split or rename
+output geometry. Their changed geometry identity/anchor can change SlotIds even
+when the raw source-layout witness matches; witnesses do not merge different
+geometry assets. Format-specific capture and cost are owned by the native
+[geometry pipeline](../../../projects/Oxygen.Engine/src/Oxygen/Cooker/Docs/Import/geometry_work_pipeline_v2.md#material-slot-provenance).
 
 Resolve a reimport in this order:
 
@@ -1218,3 +1262,38 @@ Earlier evidence remains in [ED-M07B closeout](../validation/ED-M07B-closeout-au
 [workspace publication](../validation/ED-M07B-workspace-publication.md).
 The canonical changes above require their own implementation and evidence in
 ED-M08; this LLD is a contract, not a completion report.
+
+## 22. Planned content pipeline simplification
+
+Status: planned for M08.1.8–M08.1.9, following native identities, ownership and
+integrity inventory. [The milestone plan](../plan/ED-M08-runtime-parity-and-standalone-validation.md#m081-remaining-increments)
+owns execution order and gates.
+
+Immutable project publication stores the ordered root set, native inventory
+identities, captured document/input identities, product provenance and produced
+source transitions in one immutable publication document. One atomic head selects
+its ID and digest; paths derive from those IDs. Keep the project writer, document
+ownership and authored-source CAS/recovery transaction. Validate the complete native
+mount set before changing precedence; old objects retain old generation leases.
+
+Publication seals candidate roots, checks head/source baselines, journals source
+transitions, applies source CAS, selects the new head, accepts preview and commits.
+Failure restores head/source state with preview held. Remove cooked-directory
+swap/recovery phases. Existing incremental staging seed copies remain initially;
+no hardlinks to append-mutated resource files or accumulating overlay chains.
+Consumed snapshots remain immutable; reuse fingerprints account only for committed
+produced-source changes. Later source edits affect freshness, not historical validity.
+
+Native source analysis extends the existing tool/API with a batch request/result:
+producer/schema identity, declared outputs, logical references, actual file/absence
+observations and diagnostics. Use the same native schemas/import interpretation as
+cooking. Managed code keeps project/mount resolution, dirty-document policy, scene
+DTO projection and capture ownership. Analyze, capture the reported closure, compare
+input proofs, then cook captured input; reject unreported reads or use the existing
+conflict/retry path. No daemon or universal graph is introduced.
+
+Remove parallel managed descriptor-dependency parsers and repeated small native
+queries where this batch supplies their facts. Preserve separate source invalidation,
+import scheduling and runtime ownership graphs. Tests cover multi-root crash/preview
+failure, source conflicts, shutdown, old readers, no perpetual stale loop, exact
+analysis/cook closure and bounded process launches.

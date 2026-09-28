@@ -20,16 +20,35 @@ public sealed class MaterialSourceImporterTests
         const string sourcePath = "Content/Materials/Wood.omat.json";
         const string json = """
         {
-          "Schema": "oxygen.material.v1",
-          "Type": "PBR",
-          "Name": "Wood",
-                    "PbrMetallicRoughness": {
-                        "BaseColorFactor": [1, 1, 1, 1],
-                        "BaseColorTexture": { "Source": "asset:///Content/Textures/Wood_BaseColor.png" },
-                        "MetallicRoughnessTexture": { "Source": "asset:///Content/Textures/Wood_MR.png" }
-                    },
-                    "NormalTexture": { "Source": "asset:///Content/Textures/Wood_Normal.png", "Scale": 1.0 },
-                    "OcclusionTexture": { "Source": "asset:///Content/Textures/Wood_AO.png", "Strength": 1.0 }
+          "name": "Wood",
+          "parameters": {
+            "base_color": [
+              1,
+              1,
+              1,
+              1
+            ],
+            "normal_scale": 1.0,
+            "ambient_occlusion": 1.0
+          },
+          "textures": {
+            "base_color": {
+              "virtual_path": "/Content/Textures/Wood_BaseColor.png"
+            },
+            "metallic": {
+              "virtual_path": "/Content/Textures/Wood_Metallic.png"
+            },
+            "roughness": {
+              "virtual_path": "/Content/Textures/Wood_Roughness.png"
+            },
+            "normal": {
+              "virtual_path": "/Content/Textures/Wood_Normal.png"
+            },
+            "ambient_occlusion": {
+              "virtual_path": "/Content/Textures/Wood_AO.png"
+            },
+            "emissive": { "virtual_path": "/Content/Textures/Wood_Emissive.png" }
+          }
         }
         """;
 
@@ -64,8 +83,10 @@ public sealed class MaterialSourceImporterTests
             new ImportedDependency(sourcePath + ".import.json", ImportedDependencyKind.Sidecar),
             new ImportedDependency("Content/Textures/Wood_AO.png", ImportedDependencyKind.ReferencedResource),
             new ImportedDependency("Content/Textures/Wood_BaseColor.png", ImportedDependencyKind.ReferencedResource),
-            new ImportedDependency("Content/Textures/Wood_MR.png", ImportedDependencyKind.ReferencedResource),
-            new ImportedDependency("Content/Textures/Wood_Normal.png", ImportedDependencyKind.ReferencedResource));
+            new ImportedDependency("Content/Textures/Wood_Emissive.png", ImportedDependencyKind.ReferencedResource),
+            new ImportedDependency("Content/Textures/Wood_Metallic.png", ImportedDependencyKind.ReferencedResource),
+            new ImportedDependency("Content/Textures/Wood_Normal.png", ImportedDependencyKind.ReferencedResource),
+            new ImportedDependency("Content/Textures/Wood_Roughness.png", ImportedDependencyKind.ReferencedResource));
 
         _ = diagnostics.ToList().Should().BeEmpty();
     }
@@ -78,9 +99,7 @@ public sealed class MaterialSourceImporterTests
 
         const string json = """
         {
-          "Schema": "oxygen.material.v1",
-          "Type": "PBR",
-          "Name": "Stone"
+          "name": "Stone"
         }
         """;
 

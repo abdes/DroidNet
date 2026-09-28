@@ -6,7 +6,6 @@ using System.Collections.Concurrent;
 using AwesomeAssertions;
 using Oxygen.Managed.Assets.Cook;
 using Oxygen.Managed.Assets.Import;
-using Oxygen.Managed.Assets.Import.Materials;
 using Oxygen.Managed.Assets.Persistence.LooseCooked.V1;
 
 namespace Oxygen.Managed.Assets.Tests;
@@ -18,7 +17,7 @@ public sealed class LooseCookedBuildServiceTests
     public async Task BuildIndexAsync_ShouldRejectSceneBatchBeforeAnyMountIsChanged()
     {
         var files = new InMemoryImportFileAccess();
-        files.AddUtf8("A/Materials/Wood.omat.json", """{"Schema":"oxygen.material.v1","Type":"PBR","Name":"Wood"}""");
+        files.AddUtf8("A/Materials/Wood.omat.json", """{"name":"Wood"}""");
         files.AddUtf8(".cooked/A/Materials/Wood.omat", "previous descriptor");
         files.AddUtf8(".cooked/A/container.index.bin", "previous index");
         var source = new ImportedAssetSource("source", ReadOnlyMemory<byte>.Empty, DateTimeOffset.UnixEpoch);
@@ -41,137 +40,18 @@ public sealed class LooseCookedBuildServiceTests
     }
 
     [TestMethod]
-    public async Task BuildIndexesAsync_ShouldWriteContainerIndexForCookedMaterial()
+    [DataRow("Material", "/Content/Materials/Wood.omat")]
+    [DataRow("Geometry", "/Content/Geometry/Cube.ogeo")]
+    [DataRow("Scene", "/Content/Scenes/Main.oscene")]
+    public async Task BuildIndexAsync_RequiresNativeCookingWithoutWriting(string assetType, string virtualPath)
     {
-        const string sourcePath = "Content/Materials/Wood.omat.json";
-
-        const string json = """
-        {
-          "Schema": "oxygen.material.v1",
-          "Type": "PBR",
-          "Name": "Wood"
-        }
-        """;
-
         var files = new InMemoryImportFileAccess();
-        files.AddUtf8(sourcePath, json);
-
-        var registry = new ImporterRegistry();
-        registry.Register(new MaterialSourceImporter());
-
-        var import = new ImportService(
-            registry,
-            fileAccessFactory: _ => files,
-            identityPolicyFactory: static () => new FixedIdentityPolicy(new AssetKey(1, 2)));
-
-        var request = new ImportRequest(
-            ProjectRoot: "C:/Fake",
-            Inputs: [new ImportInput(SourcePath: sourcePath, MountPoint: "Content")],
-            Options: new ImportOptions(FailFast: true));
-
-        var imported = await import.ImportAsync(request, CancellationToken.None).ConfigureAwait(false);
-        _ = imported.Succeeded.Should().BeTrue();
-        _ = imported.Imported.Should().ContainSingle();
-
+        var source = new ImportedAssetSource("source", ReadOnlyMemory<byte>.Empty, DateTimeOffset.UnixEpoch);
+        ImportedAsset[] assets = [new(new AssetKey(1, 2), virtualPath, assetType, source, [])];
         var build = new LooseCookedBuildService(fileAccessFactory: _ => files);
-        await build.BuildIndexAsync("C:/Fake", imported.Imported, CancellationToken.None).ConfigureAwait(false);
-
-        _ = files.TryGet(".cooked/Content/container.index.bin", out var indexBytes).Should().BeTrue();
-        var doc = await ReadIndexAsync(indexBytes).ConfigureAwait(false);
-
-        _ = doc.Assets.Should().ContainSingle();
-        var entry = doc.Assets[0];
-
-        _ = entry.AssetKey.Should().Be(new AssetKey(1, 2));
-        _ = entry.VirtualPath.Should().Be("/Content/Materials/Wood.omat");
-        _ = entry.DescriptorRelativePath.Should().Be("Materials/Wood.omat");
-        _ = entry.AssetType.Should().Be(1);
-        _ = entry.DescriptorSize.Should().Be(357);
-
-        _ = files.TryGet(".cooked/Content/Materials/Wood.omat", out var cookedBytes).Should().BeTrue();
-        _ = entry.DescriptorSha256.Span.ToArray().Should().Equal(LooseCookedIndex.ComputeSha256(cookedBytes));
-    }
-
-    [TestMethod]
-    public async Task BuildIndexesAsync_ShouldReplaceExistingEntryWithSameVirtualPathOnReimport()
-    {
-        const string sourcePath = "Content/Materials/Wood.omat.json";
-
-        const string json = """
-        {
-          "Schema": "oxygen.material.v1",
-          "Type": "PBR",
-          "Name": "Wood"
-        }
-        """;
-
-        var files = new InMemoryImportFileAccess();
-        files.AddUtf8(sourcePath, json);
-
-        var registry = new ImporterRegistry();
-        registry.Register(new MaterialSourceImporter());
-
-        var request = new ImportRequest(
-            ProjectRoot: "C:/Fake",
-            Inputs: [new ImportInput(SourcePath: sourcePath, MountPoint: "Content")],
-            Options: new ImportOptions(FailFast: true));
-
-        var import1 = new ImportService(
-            registry,
-            fileAccessFactory: _ => files,
-            identityPolicyFactory: static () => new FixedIdentityPolicy(new AssetKey(1, 2)));
-
-        var imported1 = await import1.ImportAsync(request, CancellationToken.None).ConfigureAwait(false);
-        _ = imported1.Succeeded.Should().BeTrue();
-        _ = imported1.Imported.Should().ContainSingle();
-
-        var build = new LooseCookedBuildService(fileAccessFactory: _ => files);
-        await build.BuildIndexAsync("C:/Fake", imported1.Imported, CancellationToken.None).ConfigureAwait(false);
-
-        var import2 = new ImportService(
-            registry,
-            fileAccessFactory: _ => files,
-            identityPolicyFactory: static () => new FixedIdentityPolicy(new AssetKey(3, 4)));
-
-        var imported2 = await import2.ImportAsync(request, CancellationToken.None).ConfigureAwait(false);
-        _ = imported2.Succeeded.Should().BeTrue();
-        _ = imported2.Imported.Should().ContainSingle();
-
-        // The second build should replace the existing entry for the same VirtualPath
-        // rather than producing two entries (which the engine rejects).
-        await build.BuildIndexAsync("C:/Fake", imported2.Imported, CancellationToken.None).ConfigureAwait(false);
-
-        _ = files.TryGet(".cooked/Content/container.index.bin", out var indexBytes).Should().BeTrue();
-        var doc = await ReadIndexAsync(indexBytes).ConfigureAwait(false);
-
-        _ = doc.Assets.Should().ContainSingle();
-        _ = doc.Assets[0].VirtualPath.Should().Be("/Content/Materials/Wood.omat");
-        _ = doc.Assets[0].AssetKey.Should().Be(new AssetKey(3, 4));
-    }
-
-    private static async Task<Document> ReadIndexAsync(byte[] indexBytes)
-    {
-        var ms = new MemoryStream(indexBytes);
-        try
-        {
-            return LooseCookedIndex.Read(ms);
-        }
-        finally
-        {
-            await ms.DisposeAsync().ConfigureAwait(false);
-        }
-    }
-
-    private sealed class FixedIdentityPolicy(AssetKey key) : IAssetIdentityPolicy
-    {
-        public AssetKey Key { get; } = key;
-
-        public AssetKey GetOrCreateAssetKey(string virtualPath, string assetType)
-        {
-            _ = virtualPath;
-            _ = assetType;
-            return this.Key;
-        }
+        Func<Task> action = () => build.BuildIndexAsync("C:/Fake", assets, CancellationToken.None);
+        _ = await action.Should().ThrowAsync<NotSupportedException>().WithMessage("*native content pipeline*").ConfigureAwait(false);
+        _ = files.WriteCount.Should().Be(0);
     }
 
     private sealed class InMemoryImportFileAccess : IImportFileAccess

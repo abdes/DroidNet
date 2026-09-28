@@ -641,16 +641,19 @@ public sealed partial class ContentPipelineServiceTests
         {
             var source = $$"""
                 {
-                  "Schema": "oxygen.material.v1",
-                  "Type": "PBR",
-                  "Name": "{{name}}",
-                  "PbrMetallicRoughness": {
-                    "BaseColorFactor": [1, 0, 0, 1],
-                    "MetallicFactor": 0,
-                    "RoughnessFactor": 0.5
-                  },
-                  "AlphaMode": "OPAQUE",
-                  "DoubleSided": false
+                  "name": "{{name}}",
+                  "alpha_mode": "opaque",
+                  "parameters": {
+                    "base_color": [
+                      1,
+                      0,
+                      0,
+                      1
+                    ],
+                    "metalness": 0,
+                    "roughness": 0.5,
+                    "double_sided": false
+                  }
                 }
                 """;
             this.WriteText(relativePath, source);

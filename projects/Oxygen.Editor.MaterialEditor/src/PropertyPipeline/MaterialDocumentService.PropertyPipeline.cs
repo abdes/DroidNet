@@ -78,7 +78,7 @@ public sealed partial class MaterialDocumentService
             return null;
         }
 
-        var json = MaterialSourceProjection.ToEngineJson(source);
+        var json = MaterialSourceWriter.ToJson(source);
         var engine = validator.ValidateAgainstEngineSchema(json);
         var overlay = validator.ValidateAgainstMergedSchema(json);
         return engine.IsValid && overlay.IsValid

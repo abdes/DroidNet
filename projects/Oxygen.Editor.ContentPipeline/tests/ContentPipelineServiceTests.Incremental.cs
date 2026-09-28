@@ -234,11 +234,28 @@ public sealed partial class ContentPipelineServiceTests
         workspace.WriteMaterial("Content/Materials/Blue.omat.json", "Blue");
         var node = new SceneNode(workspace.Scene) { Name = "Cube" };
         var geometry = new GeometryComponent { Name = "Geometry", Geometry = new AssetReference<GeometryAsset>(AssetUris.BuildGeneratedUri("BasicShapes/Cube")) };
-        geometry.OverrideSlots.Add(new MaterialsSlot { Material = new AssetReference<MaterialAsset>(new Uri("asset:///Content/Materials/Blue.omat.json")) });
+        geometry.OverrideSlots.Add(await CreateBuiltinMaterialSlotAsync(
+            workspace, geometry, new("asset:///Content/Materials/Blue.omat.json")).ConfigureAwait(false));
         _ = node.AddComponent(geometry);
         workspace.Scene.RootNodes.Add(node);
         workspace.Scene.SetEnvironment(new SceneEnvironmentData { PostProcess = new PostProcessEnvironmentData { ExposureMode = ExposureMode.Auto } });
         await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
+    }
+
+    private static async Task<MaterialsSlot> CreateBuiltinMaterialSlotAsync(
+        TempWorkspace workspace, GeometryComponent geometry, Uri materialUri, CancellationToken cancellationToken = default)
+    {
+        var catalog = await new BuiltinCatalogFixture().GetBuiltinGeometryCatalogAsync(
+            workspace.Root, "Content", cancellationToken).ConfigureAwait(false);
+        var geometryUri = geometry.Geometry?.Uri
+            ?? throw new InvalidOperationException("The native fixture requires a geometry reference.");
+        var inventory = (catalog.Find(geometryUri)
+            ?? throw new InvalidOperationException("The native fixture has no matching builtin geometry.")).MaterialSlots;
+        return new MaterialsSlot
+        {
+            Target = new(geometryUri, inventory.Slots.Single().SlotId, inventory.LayoutRevision),
+            Material = new AssetReference<MaterialAsset>(materialUri),
+        };
     }
 
     private sealed class RecordingNativeApi(ImportToolContentPipelineApi native) : IEngineContentPipelineApi, IBuiltinGeometryCatalogProvider

@@ -34,7 +34,7 @@ public sealed partial class ContentPipelineService
         var (provenance, _) = await this.provenanceStore.ReadAsync(project, token).ConfigureAwait(false);
         if (!await this.publication.HasCommittedMetadataUnderLeaseAsync(project, token).ConfigureAwait(false))
         {
-            provenance = new(1, project.ProjectId, [], []);
+            provenance = new(Incremental.CookProvenance.CurrentVersion, project.ProjectId, [], []);
         }
 
         var requestedRoots = ResolveInspectionRoots(project, scopeUri);

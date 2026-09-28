@@ -21,39 +21,30 @@ public sealed class SidecarAssetIdentityPolicyTests
 
         const string jsonV1 = """
         {
-          "Schema": "oxygen.material.v1",
-          "Type": "PBR",
-          "Name": "Wood"
+          "name": "Wood"
         }
         """;
 
         const string jsonV2 = """
         {
-          "Schema": "oxygen.material.v1",
-          "Type": "PBR",
-          "Name": "Wood",
-          "DoubleSided": true
+          "name": "Wood",
+          "parameters": {
+            "double_sided": true
+          }
         }
         """;
 
         var files = new InMemoryImportFileAccess();
         files.AddUtf8(sourcePath, jsonV1);
 
-        var registry = new ImporterRegistry();
-        registry.Register(new MaterialSourceImporter());
+        var importer = new MaterialSourceImporter();
+        var input = new ImportInput(SourcePath: sourcePath, MountPoint: "Content");
+        var options = new ImportOptions(FailFast: true);
+        Task<IReadOnlyList<ImportedAsset>> ImportMetadataAsync()
+            => importer.ImportAsync(new ImportContext(files, input,
+                new SidecarAssetIdentityPolicy(files, input, importer, options), options, new ImportDiagnostics()), CancellationToken.None);
 
-        var service = new ImportService(
-            registry,
-            fileAccessFactory: _ => files,
-            identityPolicyFactory: static (f, input, importer, options) => new SidecarAssetIdentityPolicy(f, input, importer, options));
-
-        var request = new ImportRequest(
-            ProjectRoot: "C:/Fake",
-            Inputs: [new ImportInput(SourcePath: sourcePath, MountPoint: "Content")],
-            Options: new ImportOptions(FailFast: true));
-
-        var first = await service.ImportAsync(request, CancellationToken.None).ConfigureAwait(false);
-        _ = first.Succeeded.Should().BeTrue();
+        var first = await ImportMetadataAsync().ConfigureAwait(false);
         _ = files.TryGet(sidecarPath, out var sidecarBytes).Should().BeTrue();
         _ = sidecarBytes.Length.Should().BePositive();
 
@@ -66,13 +57,12 @@ public sealed class SidecarAssetIdentityPolicyTests
             _ = root.GetProperty("Importer").GetProperty("Settings").TryGetProperty("FailFast", out _).Should().BeTrue();
         }
 
-        var firstKey = first.Imported.Single().AssetKey;
+        var firstKey = first.Single().AssetKey;
 
         files.AddUtf8(sourcePath, jsonV2);
 
-        var second = await service.ImportAsync(request, CancellationToken.None).ConfigureAwait(false);
-        _ = second.Succeeded.Should().BeTrue();
-        _ = second.Imported.Single().AssetKey.Should().Be(firstKey);
+        var second = await ImportMetadataAsync().ConfigureAwait(false);
+        _ = second.Single().AssetKey.Should().Be(firstKey);
     }
 
     private sealed class InMemoryImportFileAccess : IImportFileAccess

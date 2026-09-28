@@ -45,7 +45,7 @@ public sealed class GltfGeometryImporterTests
         var result = await import.ImportAsync(request, CancellationToken.None).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeFalse();
-        _ = result.Diagnostics.Should().ContainSingle(d => d.Code == "OXYIMPORT_NATIVE_SCENE_COOK_REQUIRED");
+        _ = result.Diagnostics.Should().ContainSingle(d => d.Code == "OXYIMPORT_NATIVE_COOK_REQUIRED");
         _ = result.Imported.Should().HaveCount(3);
 
         AssertDependencyKinds(result.Imported, sourcePath);
@@ -92,7 +92,7 @@ public sealed class GltfGeometryImporterTests
 
         var result = await import.ImportAsync(request, CancellationToken.None).ConfigureAwait(false);
         _ = result.Succeeded.Should().BeFalse();
-        _ = result.Diagnostics.Should().ContainSingle(d => d.Code == "OXYIMPORT_NATIVE_SCENE_COOK_REQUIRED");
+        _ = result.Diagnostics.Should().ContainSingle(d => d.Code == "OXYIMPORT_NATIVE_COOK_REQUIRED");
         _ = result.Imported.Should().HaveCount(3);
 
         AssertDependencyKinds(result.Imported, sourcePath);
@@ -135,7 +135,7 @@ public sealed class GltfGeometryImporterTests
         {
             var result = await import.ImportAsync(request, CancellationToken.None).ConfigureAwait(false);
             _ = result.Succeeded.Should().BeFalse();
-            _ = result.Diagnostics.Should().ContainSingle(d => d.Code == "OXYIMPORT_NATIVE_SCENE_COOK_REQUIRED");
+            _ = result.Diagnostics.Should().ContainSingle(d => d.Code == "OXYIMPORT_NATIVE_COOK_REQUIRED");
             _ = result.Imported.Should().HaveCount(3);
 
             AssertDependencyKinds(result.Imported, sourcePath, expectedReferencedResources: [bufferPath]);
@@ -180,7 +180,7 @@ public sealed class GltfGeometryImporterTests
 
         var result = await import.ImportAsync(request, CancellationToken.None).ConfigureAwait(false);
         _ = result.Succeeded.Should().BeFalse();
-        _ = result.Diagnostics.Should().ContainSingle(d => d.Code == "OXYIMPORT_NATIVE_SCENE_COOK_REQUIRED");
+        _ = result.Diagnostics.Should().ContainSingle(d => d.Code == "OXYIMPORT_NATIVE_COOK_REQUIRED");
         _ = files.Keys.Should().NotContain(static path => path.StartsWith(".cooked/", StringComparison.Ordinal));
 
         // Check if .omat.json was written to the custom destination

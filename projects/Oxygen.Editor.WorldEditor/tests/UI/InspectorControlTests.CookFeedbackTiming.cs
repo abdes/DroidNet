@@ -41,7 +41,7 @@ public sealed partial class InspectorControlTests
         var material = new Uri("asset:///" + WorkloadMaterialPath(0));
         var source = Path.Combine(fixture.ProjectRoot, WorkloadMaterialPath(0));
         var changed = JsonNode.Parse(await File.ReadAllTextAsync(source, timeout.Token).ConfigureAwait(true))!;
-        changed["PbrMetallicRoughness"]!["RoughnessFactor"] = 0.8;
+        changed["parameters"]!["roughness"] = 0.8;
         await File.WriteAllTextAsync(source, changed.ToJsonString(), timeout.Token).ConfigureAwait(true);
         var baselineRuns = services.Runs.Runs.Count;
         using var model = fixture.CreateTimingCookingPanel(services);

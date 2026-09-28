@@ -103,16 +103,19 @@ public sealed class FileSystemAssetResolverTests
 
         const string json = """
             {
-              "Schema": "oxygen.material.v1",
-              "Type": "PBR",
-              "Name": "Wood Material",
-              "PbrMetallicRoughness": {
-                "BaseColorFactor": [1.0, 0.0, 0.0, 1.0],
-                "MetallicFactor": 0.5,
-                "RoughnessFactor": 0.1
-              },
-              "AlphaMode": "OPAQUE",
-              "DoubleSided": false
+              "name": "Wood Material",
+              "alpha_mode": "opaque",
+              "parameters": {
+                "base_color": [
+                  1.0,
+                  0.0,
+                  0.0,
+                  1.0
+                ],
+                "metalness": 0.5,
+                "roughness": 0.1,
+                "double_sided": false
+              }
             }
             """;
 

@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Collections.Immutable;
+using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -49,4 +51,11 @@ public sealed record ContentCookResult(
 
     /// <summary>Gets the output evidence captured under the native validation read lease.</summary>
     internal Incremental.CookProvenance.Root? VerifiedRoot { get; init; }
+
+    /// <summary>Gets native source-allocation candidates awaiting journaled publication.</summary>
+    internal ImmutableDictionary<string, NativeMaterialSlotProvenance> MaterialSlotProvenance { get; init; }
+        = ImmutableDictionary<string, NativeMaterialSlotProvenance>.Empty;
+
+    /// <summary>Gets source settings emitted by the native producer and committed with its outputs.</summary>
+    internal ImmutableArray<Publication.CookProducedSourceFile> ProducedSourceFiles { get; init; } = [];
 }

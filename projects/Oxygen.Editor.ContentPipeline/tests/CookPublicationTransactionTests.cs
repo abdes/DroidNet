@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Collections.Immutable;
 using System.Text;
 using AwesomeAssertions;
 using DroidNet.Storage.Native;
@@ -304,7 +305,8 @@ public sealed partial class CookPublicationTransactionTests
             return staging;
         }
 
-        public Task<CookPublicationTransaction> PrepareAsync(CookStagingArea staging, CancellationToken cancellationToken, Func<string, Task>? checkpoint = null, CookSourceReplacement? sourceReplacement = null)
+        public Task<CookPublicationTransaction> PrepareAsync(CookStagingArea staging, CancellationToken cancellationToken, Func<string, Task>? checkpoint = null, CookSourceReplacement? sourceReplacement = null,
+            ImmutableArray<CookProducedSourceFile> producedSourceFiles = default)
             => CookPublicationTransaction.PrepareAsync(
                 this.Operation,
                 staging,
@@ -316,7 +318,8 @@ public sealed partial class CookPublicationTransactionTests
                 this.Files,
                 cancellationToken,
                 checkpoint,
-                sourceReplacement);
+                sourceReplacement,
+                producedSourceFiles);
 
         public void AssertOld()
         {

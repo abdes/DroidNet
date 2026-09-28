@@ -18,6 +18,16 @@ public sealed record ContentImportJob(
     [property: JsonPropertyName("output")] string? Output,
     [property: JsonPropertyName("name")] string? Name)
 {
+    /// <summary>Gets the retained source namespace used by native slot allocation.</summary>
+    [JsonPropertyName("material_slot_source_identity")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? MaterialSlotSourceIdentity { get; init; }
+
+    /// <summary>Gets the native record carried unchanged between successful imports.</summary>
+    [JsonPropertyName("material_slot_provenance")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Import.NativeMaterialSlotProvenance? MaterialSlotProvenance { get; init; }
+
     /// <summary>Gets per-job descriptor folders while retaining the manifest's shared cooked root.</summary>
     [JsonPropertyName("layout")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

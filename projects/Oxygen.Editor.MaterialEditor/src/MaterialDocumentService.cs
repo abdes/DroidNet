@@ -36,8 +36,6 @@ public sealed partial class MaterialDocumentService(
     IOperationResultPublisher? operationResults = null,
     ILoggerFactory? loggerFactory = null) : IMaterialDocumentService, IMaterialPropertyEditService
 {
-    private const string MaterialSchema = "oxygen.material.v1";
-    private const string MaterialType = "PBR";
 
     private readonly IMaterialSourcePathResolver pathResolver = pathResolver ?? throw new ArgumentNullException(nameof(pathResolver));
     private readonly IMaterialCookService cookService = cookService ?? throw new ArgumentNullException(nameof(cookService));
@@ -289,8 +287,6 @@ public sealed partial class MaterialDocumentService(
 
     private static MaterialSource CreateDefaultSource(string displayName)
         => new(
-            schema: MaterialSchema,
-            type: MaterialType,
             name: displayName,
             pbrMetallicRoughness: new MaterialPbrMetallicRoughness(
                 baseColorR: 1.0f,
@@ -358,10 +354,13 @@ public sealed partial class MaterialDocumentService(
     {
         updated = source;
 
-        var clamped01 = Math.Clamp(value, 0.0f, 1.0f);
+        if (value < 0.0f || (value > 1.0f && !string.Equals(fieldKey, MaterialFieldKeys.NormalTextureScale, StringComparison.Ordinal)))
+        {
+            return false;
+        }
 
         var pbr = source.PbrMetallicRoughness;
-        if (TryUpdatePbr(pbr, fieldKey, clamped01, out var updatedPbr))
+        if (TryUpdatePbr(pbr, fieldKey, value, out var updatedPbr))
         {
             updated = WithPbr(source, updatedPbr);
             return true;
@@ -369,19 +368,19 @@ public sealed partial class MaterialDocumentService(
 
         if (string.Equals(fieldKey, MaterialFieldKeys.AlphaCutoff, StringComparison.Ordinal))
         {
-            updated = WithAlphaCutoff(source, clamped01);
+            updated = WithAlphaCutoff(source, value);
             return true;
         }
 
         if (string.Equals(fieldKey, MaterialFieldKeys.NormalTextureScale, StringComparison.Ordinal) && source.NormalTexture is { } normal)
         {
-            updated = WithNormalTexture(source, normal with { Scale = Math.Max(0.0f, value) });
+            updated = WithNormalTexture(source, normal with { Scale = value });
             return true;
         }
 
         if (string.Equals(fieldKey, MaterialFieldKeys.OcclusionTextureStrength, StringComparison.Ordinal) && source.OcclusionTexture is { } occlusion)
         {
-            updated = WithOcclusionTexture(source, occlusion with { Strength = clamped01 });
+            updated = WithOcclusionTexture(source, occlusion with { Strength = value });
             return true;
         }
 
@@ -432,7 +431,7 @@ public sealed partial class MaterialDocumentService(
         {
             case MaterialAlphaMode mode:
                 alphaMode = mode;
-                return true;
+                return Enum.IsDefined(mode);
             case string text:
                 return TryParseAlphaMode(text, out alphaMode);
             default:
@@ -442,24 +441,7 @@ public sealed partial class MaterialDocumentService(
     }
 
     private static bool TryParseAlphaMode(string text, out MaterialAlphaMode alphaMode)
-    {
-        if (Enum.TryParse(text, ignoreCase: true, out alphaMode))
-        {
-            return true;
-        }
-
-        alphaMode = text.Trim().ToUpperInvariant() switch
-        {
-            "OPAQUE" => MaterialAlphaMode.Opaque,
-            "MASK" => MaterialAlphaMode.Mask,
-            "BLEND" => MaterialAlphaMode.Blend,
-            _ => alphaMode,
-        };
-
-        return text.Trim().Equals("OPAQUE", StringComparison.OrdinalIgnoreCase)
-            || text.Trim().Equals("MASK", StringComparison.OrdinalIgnoreCase)
-            || text.Trim().Equals("BLEND", StringComparison.OrdinalIgnoreCase);
-    }
+        => Enum.TryParse(text, ignoreCase: true, out alphaMode) && Enum.IsDefined(alphaMode);
 
     private static bool TryGetFiniteFloat(object? value, out float number)
     {
@@ -485,88 +467,25 @@ public sealed partial class MaterialDocumentService(
     }
 
     private static MaterialSource WithName(MaterialSource source, string? name)
-        => new(
-            source.Schema,
-            source.Type,
-            name,
-            source.PbrMetallicRoughness,
-            source.NormalTexture,
-            source.OcclusionTexture,
-            source.AlphaMode,
-            source.AlphaCutoff,
-            source.DoubleSided);
+        => source with { Name = name };
 
     private static MaterialSource WithPbr(MaterialSource source, MaterialPbrMetallicRoughness pbr)
-        => new(
-            source.Schema,
-            source.Type,
-            source.Name,
-            pbr,
-            source.NormalTexture,
-            source.OcclusionTexture,
-            source.AlphaMode,
-            source.AlphaCutoff,
-            source.DoubleSided);
+        => source with { PbrMetallicRoughness = pbr };
 
     private static MaterialSource WithNormalTexture(MaterialSource source, NormalTextureRef normal)
-        => new(
-            source.Schema,
-            source.Type,
-            source.Name,
-            source.PbrMetallicRoughness,
-            normal,
-            source.OcclusionTexture,
-            source.AlphaMode,
-            source.AlphaCutoff,
-            source.DoubleSided);
+        => source with { NormalTexture = normal };
 
     private static MaterialSource WithOcclusionTexture(MaterialSource source, OcclusionTextureRef occlusion)
-        => new(
-            source.Schema,
-            source.Type,
-            source.Name,
-            source.PbrMetallicRoughness,
-            source.NormalTexture,
-            occlusion,
-            source.AlphaMode,
-            source.AlphaCutoff,
-            source.DoubleSided);
+        => source with { OcclusionTexture = occlusion };
 
     private static MaterialSource WithAlphaMode(MaterialSource source, MaterialAlphaMode alphaMode)
-        => new(
-            source.Schema,
-            source.Type,
-            source.Name,
-            source.PbrMetallicRoughness,
-            source.NormalTexture,
-            source.OcclusionTexture,
-            alphaMode,
-            source.AlphaCutoff,
-            source.DoubleSided);
+        => source with { AlphaMode = alphaMode };
 
     private static MaterialSource WithAlphaCutoff(MaterialSource source, float alphaCutoff)
-        => new(
-            source.Schema,
-            source.Type,
-            source.Name,
-            source.PbrMetallicRoughness,
-            source.NormalTexture,
-            source.OcclusionTexture,
-            source.AlphaMode,
-            alphaCutoff,
-            source.DoubleSided);
+        => source with { AlphaCutoff = alphaCutoff };
 
     private static MaterialSource WithDoubleSided(MaterialSource source, bool doubleSided)
-        => new(
-            source.Schema,
-            source.Type,
-            source.Name,
-            source.PbrMetallicRoughness,
-            source.NormalTexture,
-            source.OcclusionTexture,
-            source.AlphaMode,
-            source.AlphaCutoff,
-            doubleSided);
+        => source with { DoubleSided = doubleSided };
 
     private static string GetMaterialDisplayName(Uri materialUri)
     {
@@ -671,7 +590,7 @@ public sealed partial class MaterialDocumentService(
         var validator = this.GetSchemaValidator();
         if (validator is not null)
         {
-            var engineJson = MaterialSourceProjection.ToEngineJson(source);
+            var engineJson = MaterialSourceWriter.ToJson(source);
             var validation = validator.ValidateAgainstEngineSchema(engineJson);
             if (!validation.IsValid)
             {
@@ -709,9 +628,8 @@ public sealed partial class MaterialDocumentService(
         }
         catch (Exception ex)
         {
-            // Validator unavailable (missing schemas in output, etc.).
-            // Saves proceed without engine-schema enforcement; the
-            // cooker will catch any drift on cook.
+            // The optional UI overlay is unavailable. MaterialSourceWriter still
+            // validates every save against the embedded canonical engine schema.
             this.LogSchemaUnavailable(ex);
             this.cachedValidator = null;
         }

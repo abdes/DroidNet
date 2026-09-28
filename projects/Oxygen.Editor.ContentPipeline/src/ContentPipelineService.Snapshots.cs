@@ -2,7 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Collections.Immutable;
 using System.Security.Cryptography;
+using Oxygen.Editor.ContentPipeline.Publication;
 using System.Text.Json.Nodes;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Snapshots;
@@ -187,7 +189,7 @@ public sealed partial class ContentPipelineService
         var (previous, _) = await this.provenanceStore.ReadAsync(operation.Project, cancellationToken).ConfigureAwait(false);
         if (!await this.publication.HasCommittedMetadataAsync(operation.Project, cancellationToken).ConfigureAwait(false))
         {
-            previous = new(1, operation.Project.ProjectId, [], []);
+            previous = new(Incremental.CookProvenance.CurrentVersion, operation.Project.ProjectId, [], []);
         }
 
         var imports = await Import.ImportedSourceIndex.ReadAsync(operation.Project, cookDocuments, previous, cancellationToken).ConfigureAwait(false);
@@ -242,9 +244,12 @@ public sealed partial class ContentPipelineService
         CookInputSnapshot snapshot,
         CookDependencyGraph graph,
         Func<IReadOnlyList<ContentCookScope>> resolveScopes,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ImmutableArray<CookProducedSourceFile> producedSourceFiles = default)
     {
-        using var reads = await cookDocuments.AcquireAsync(snapshot.Inputs.Select(static input => input.SourcePath), cancellationToken).ConfigureAwait(false);
+        var expectedInputs = producedSourceFiles.IsDefaultOrEmpty ? snapshot.Inputs
+            : CookProducedSourceFile.ExpectedInputs(snapshot.Inputs, producedSourceFiles);
+        using var reads = await cookDocuments.AcquireAsync(expectedInputs.Select(static input => input.SourcePath), cancellationToken).ConfigureAwait(false);
         if (reads.Documents.Any(static document => document.IsDirty))
         {
             return false;
@@ -259,7 +264,7 @@ public sealed partial class ContentPipelineService
                 return false;
             }
 
-            foreach (var input in snapshot.Inputs.Where(static input => !input.IsAbsent))
+            foreach (var input in expectedInputs.Where(static input => !input.IsAbsent))
             {
                 if (!streams.ContainsKey(input.SourcePath))
                 {
@@ -267,7 +272,7 @@ public sealed partial class ContentPipelineService
                 }
             }
 
-            foreach (var input in snapshot.Inputs)
+            foreach (var input in expectedInputs)
             {
                 if (input.IsAbsent)
                 {

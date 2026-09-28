@@ -10,4 +10,5 @@ namespace Oxygen.Editor.Runtime.Engine;
 /// <param name="AspectRatio">The AspectRatio command value.</param>
 /// <param name="NearPlane">The NearPlane command value.</param>
 /// <param name="FarPlane">The FarPlane command value.</param>
-public sealed record RuntimeAttachPerspectiveCamera(Guid NodeId, float FieldOfViewYRadians, float AspectRatio, float NearPlane, float FarPlane) : RuntimeWorldCommand;
+/// <param name="AspectMode">The authored framing policy.</param>
+public sealed record RuntimeAttachPerspectiveCamera(Guid NodeId, float FieldOfViewYRadians, float AspectRatio, float NearPlane, float FarPlane, Oxygen.Managed.Core.CameraAspectMode AspectMode) : RuntimeWorldCommand;

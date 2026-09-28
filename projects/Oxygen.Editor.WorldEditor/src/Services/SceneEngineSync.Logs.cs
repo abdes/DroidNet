@@ -275,30 +275,6 @@ public partial class SceneEngineSync
     private void LogFailedToDetachCameraComponent(Exception ex, Guid nodeId)
         => LogFailedToDetachCameraComponent(this.logger, ex, nodeId);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Live material override sync is unsupported for node {NodeId}")]
-    private static partial void LogMaterialOverrideSyncUnsupported(ILogger logger, Guid nodeId);
-
-    private void LogMaterialOverrideSyncUnsupported(Guid nodeId)
-        => LogMaterialOverrideSyncUnsupported(this.logger, nodeId);
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Live targeted material override sync is unsupported for node {NodeId}, LOD {LodIndex}, submesh {SubmeshIndex}")]
-    private static partial void LogTargetedMaterialOverrideSyncUnsupported(ILogger logger, Guid nodeId, int lodIndex, int submeshIndex);
-
-    private void LogTargetedMaterialOverrideSyncUnsupported(Guid nodeId, int lodIndex, int submeshIndex)
-        => LogTargetedMaterialOverrideSyncUnsupported(this.logger, nodeId, lodIndex, submeshIndex);
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Live material override removal is unsupported for node {NodeId}, slot {SlotType}")]
-    private static partial void LogMaterialOverrideRemovalUnsupported(ILogger logger, Guid nodeId, string slotType);
-
-    private void LogMaterialOverrideRemovalUnsupported(Guid nodeId, string slotType)
-        => LogMaterialOverrideRemovalUnsupported(this.logger, nodeId, slotType);
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Live targeted material override removal is unsupported for node {NodeId}, LOD {LodIndex}, submesh {SubmeshIndex}, slot {SlotType}")]
-    private static partial void LogTargetedMaterialOverrideRemovalUnsupported(ILogger logger, Guid nodeId, int lodIndex, int submeshIndex, string slotType);
-
-    private void LogTargetedMaterialOverrideRemovalUnsupported(Guid nodeId, int lodIndex, int submeshIndex, string slotType)
-        => LogTargetedMaterialOverrideRemovalUnsupported(this.logger, nodeId, lodIndex, submeshIndex, slotType);
-
     [LoggerMessage(Level = LogLevel.Warning, Message = "Live LOD policy sync is unsupported for node {NodeId}")]
     private static partial void LogLodPolicySyncUnsupported(ILogger logger, Guid nodeId);
 

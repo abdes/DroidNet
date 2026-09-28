@@ -38,7 +38,7 @@ public sealed partial class SceneEngineSyncTests
         var node = new SceneNode(scene) { Name = "Cube" };
         scene.RootNodes.Add(node);
         _ = await sut.SyncSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = await sut.UpdateMaterialSlotAsync(scene, node, 0, new Uri("asset:///Content/Materials/Missing.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await sut.UpdateMaterialSlotAsync(scene, node, new Oxygen.Editor.World.Slots.MaterialSlotTarget(new Uri("asset:///Engine/Generated/BasicShapes/Cube"), Guid.Parse("10000000-0000-0000-0000-000000000001"), new string('a', 64)), new Uri("asset:///Content/Materials/Missing.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
         var failure = new RuntimeAssetLoadFailedEventArgs(captured!, 71, "Asset path could not be resolved");
 
         commands.Raise(value => value.AssetLoadFailed += null, failure);

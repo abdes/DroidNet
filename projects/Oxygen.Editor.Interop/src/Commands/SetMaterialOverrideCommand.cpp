@@ -28,7 +28,7 @@ void SetMaterialOverrideCommand::Execute(CommandContext &context) {
         "Material command requires scene asset request state");
   }
   context.AssetRequests->SetMaterial(
-      node_, slot_index_, material_uri_, std::move(failure_callback_),
+      node_, std::move(target_), material_uri_, intent_, std::move(failure_callback_),
       std::move(success_callback_));
 }
 

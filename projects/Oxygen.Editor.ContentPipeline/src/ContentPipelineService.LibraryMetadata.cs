@@ -108,7 +108,7 @@ public sealed partial class ContentPipelineService : ICookedLibraryMetadataServi
         var (previous, _) = await this.provenanceStore.ReadAsync(operation.Project, cancellationToken).ConfigureAwait(false);
         if (!await this.publication.HasCommittedMetadataAsync(operation.Project, cancellationToken).ConfigureAwait(false))
         {
-            previous = new(1, operation.Project.ProjectId, [], []);
+            previous = new(Incremental.CookProvenance.CurrentVersion, operation.Project.ProjectId, [], []);
         }
 
         var imports = await Import.ImportedSourceIndex.ReadAsync(operation.Project, cookDocuments, previous, cancellationToken).ConfigureAwait(false);

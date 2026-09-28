@@ -654,48 +654,80 @@ namespace Oxygen::Interop::World {
   }
 
   void OxygenWorld::SetMaterialOverride(
-    System::Guid nodeId, int slotIndex, String^ materialUri,
+    System::Guid nodeId, String^ geometryUri, System::Guid slotId,
+    String^ layoutRevision, String^ materialUri, System::Byte intent,
     Action<System::UInt64, String^>^ onFailure) {
-    SetMaterialOverride(nodeId, slotIndex, materialUri, onFailure, nullptr);
+    SetMaterialOverride(nodeId, geometryUri, slotId, layoutRevision, materialUri, intent,
+      onFailure, nullptr);
   }
 
   void OxygenWorld::SetMaterialOverride(
-    System::Guid nodeId, int slotIndex, String^ materialUri,
+    System::Guid nodeId, String^ geometryUri, System::Guid slotId,
+    String^ layoutRevision, String^ materialUri, System::Byte intent,
     Action<System::UInt64, String^>^ onFailure,
     Action<System::UInt64>^ onSuccess) {
+    const auto native_intent = static_cast<MaterialSlotAssignmentIntent>(intent);
+    if (native_intent != MaterialSlotAssignmentIntent::kObservedEdit
+      && native_intent != MaterialSlotAssignmentIntent::kRetainedAssignment) {
+      throw gcnew ArgumentOutOfRangeException("intent");
+    }
+    if (String::IsNullOrWhiteSpace(geometryUri)) {
+      throw gcnew ArgumentException("Material assignment requires geometry identity.", "geometryUri");
+    }
+    const auto native_slot = oxygen::data::MaterialSlotId::FromString(
+      msclr::interop::marshal_as<std::string>(slotId.ToString("D")));
+    if (!native_slot || native_slot.value().IsNil()) {
+      throw gcnew ArgumentException("Material slot identity must not be empty.", "slotId");
+    }
+    MaterialSlotTarget target {
+      .geometry_uri = msclr::interop::marshal_as<std::string>(geometryUri),
+      .slot_id = native_slot.value(),
+      .layout_revision = {},
+    };
+    constexpr auto kHexCharactersPerByte = 2U;
+    if (layoutRevision == nullptr
+      || layoutRevision->Length != static_cast<int>(target.layout_revision.size() * kHexCharactersPerByte)
+      || !String::Equals(layoutRevision, layoutRevision->ToLowerInvariant(), StringComparison::Ordinal)) {
+      throw gcnew ArgumentException("Layout revision requires canonical SHA-256 text.", "layoutRevision");
+    }
+    const auto revision_bytes = Convert::FromHexString(layoutRevision);
+    for (std::size_t index = 0; index < target.layout_revision.size(); ++index) {
+      target.layout_revision.at(index) = revision_bytes[static_cast<int>(index)];
+    }
+    if (oxygen::base::IsAllZero(target.layout_revision)) {
+      throw gcnew ArgumentException("Layout revision must not be empty.", "layoutRevision");
+    }
+
     auto native_ctx = context_->NativePtr();
     if (!native_ctx || !native_ctx->engine) {
       throw gcnew InvalidOperationException("Runtime asset command has no engine context.");
     }
-
     auto editor_module = native_ctx->engine->GetModule<EditorModule>();
     if (!editor_module) {
       throw gcnew InvalidOperationException("Runtime asset command has no editor module.");
     }
-
-    auto b = nodeId.ToByteArray();
-    std::array<uint8_t, 16> key{};
-    for (int i = 0; i < 16; ++i)
-      key[i] = b[i];
-
-    auto opt = NodeRegistry::Lookup(key);
-    if (!opt.has_value()) {
+    const auto node_bytes = nodeId.ToByteArray();
+    UuidKey key {};
+    for (std::size_t index = 0; index < key.size(); ++index) {
+      key.at(index) = node_bytes[static_cast<int>(index)];
+    }
+    const auto handle = NodeRegistry::Lookup(key);
+    if (!handle) {
       throw gcnew InvalidOperationException("Runtime asset target is no longer registered.");
     }
-
-    if (slotIndex < 0) {
-      throw gcnew ArgumentOutOfRangeException("slotIndex");
+    std::optional<std::string> native_material_uri;
+    if (materialUri != nullptr) {
+      if (String::IsNullOrWhiteSpace(materialUri)) {
+        throw gcnew ArgumentException("Material URI must be nonempty; use null to clear.", "materialUri");
+      }
+      native_material_uri = msclr::interop::marshal_as<std::string>(materialUri);
     }
-    const auto& handle = opt.value();
-    auto native_material_uri = materialUri == nullptr
-      ? std::string{}
-      : msclr::interop::marshal_as<std::string>(materialUri);
-    auto cmd = std::unique_ptr<SetMaterialOverrideCommand>(
+    auto command = std::unique_ptr<SetMaterialOverrideCommand>(
       commandFactory_->CreateSetMaterialOverride(
-        handle, static_cast<std::size_t>(slotIndex), native_material_uri));
-    cmd->SetFailureCallback(MakeAssetFailureCallback(onFailure));
-    cmd->SetSuccessCallback(MakeAssetSuccessCallback(onSuccess));
-    editor_module->get().Enqueue(std::move(cmd));
+        handle.value(), std::move(target), std::move(native_material_uri), native_intent));
+    command->SetFailureCallback(MakeAssetFailureCallback(onFailure));
+    command->SetSuccessCallback(MakeAssetSuccessCallback(onSuccess));
+    editor_module->get().Enqueue(std::move(command));
   }
 
   void OxygenWorld::SetBackgroundColor(System::Numerics::Vector3 color) {
@@ -890,28 +922,33 @@ namespace Oxygen::Interop::World {
 
   void OxygenWorld::AttachPerspectiveCamera(System::Guid nodeId,
     float fieldOfViewYRadians, float aspectRatio, float nearPlane,
-    float farPlane) {
+    float farPlane, System::Byte aspectMode) {
     auto native_ctx = context_->NativePtr();
-    if (!native_ctx || !native_ctx->engine)
+    if (!native_ctx || !native_ctx->engine) {
       return;
+    }
 
     auto editor_module = native_ctx->engine->GetModule<EditorModule>();
-    if (!editor_module)
+    if (!editor_module) {
       return;
+    }
 
     auto b = nodeId.ToByteArray();
     std::array<uint8_t, 16> key{};
-    for (int i = 0; i < 16; ++i)
+    for (int i = 0; i < 16; ++i) {
       key[i] = b[i];
+    }
 
     auto opt = NodeRegistry::Lookup(key);
-    if (!opt.has_value())
+    if (!opt.has_value()) {
       return;
+    }
 
     const auto& handle = opt.value();
     auto cmd = std::unique_ptr<AttachPerspectiveCameraCommand>(
       commandFactory_->CreateAttachPerspectiveCamera(handle,
-        fieldOfViewYRadians, aspectRatio, nearPlane, farPlane));
+        fieldOfViewYRadians, aspectRatio, nearPlane, farPlane,
+        static_cast<oxygen::CameraAspectMode>(aspectMode)));
     editor_module->get().Enqueue(std::move(cmd));
   }
 

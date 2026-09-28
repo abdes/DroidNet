@@ -17,13 +17,13 @@ This covers REQ-004 through REQ-009, REQ-036/037 and SUCCESS-002. Related owners
 
 ## 2. Ownership
 
-| Owner | Responsibility |
-| --- | --- |
-| `Oxygen.Editor.World` | Scene/node/component values, DTOs, serializer and invariants |
+| Owner                         | Responsibility                                                     |
+| ----------------------------- | ------------------------------------------------------------------ |
+| `Oxygen.Editor.World`         | Scene/node/component values, DTOs, serializer and invariants       |
 | WorldEditor document commands | Atomic validated mutations, history, dirty state and sync requests |
-| Scene explorer/workspace | Selection, layout, editor-only hiding and view preferences |
-| ContentPipeline/native cooker | Canonical source-to-native mapping and asset/slot identity |
-| Runtime/Interop/engine scene | Lifetime-bound projection of authoring state |
+| Scene explorer/workspace      | Selection, layout, editor-only hiding and view preferences         |
+| ContentPipeline/native cooker | Canonical source-to-native mapping and asset/slot identity         |
+| Runtime/Interop/engine scene  | Lifetime-bound projection of authoring state                       |
 
 World has no WorldEditor, WinUI, Runtime or Interop dependency. DTOs contain no
 native pointers, handles, cache/view indices or current loading status.
@@ -64,6 +64,9 @@ PerspectiveCamera stores vertical FOV in degrees, positive near/far distances
 with near < far, and Auto/Fixed aspect policy. Auto is the creation default.
 Fixed retains a positive width/height ratio, initially 16:9. Per-view Auto aspect
 is derived, not saved. Fixed fits its full image without stretching or cropping.
+The mode and retained ratio survive save/load and runtime synchronization together.
+The one-time project upgrade marks existing explicit ratios Fixed; newly created
+cameras use Auto. Resizing never overwrites the retained ratio.
 Select cameras by authored ID; hidden camera nodes remain usable. Physical-camera
 authoring is outside V0.1; existing native physical exposure remains engine-owned.
 
@@ -71,11 +74,11 @@ authoring is outside V0.1; existing native physical exposure remains engine-owne
 
 Each flag preserves its source mode independently of its resolved value.
 
-| Node flag | Source choices | New root | New child | Root Inherit fallback |
-| --- | --- | --- | --- | --- |
-| Scene Visibility | Inherit / Shown / Hidden | Shown | Inherit | Shown |
-| Geometry Cast Shadows | Inherit / On / Off | On | Inherit | On |
-| Geometry Receive Shadows | Inherit / On / Off | On | Inherit | On |
+| Node flag                | Source choices           | New root | New child | Root Inherit fallback |
+| ------------------------ | ------------------------ | -------- | --------- | --------------------- |
+| Scene Visibility         | Inherit / Shown / Hidden | Shown    | Inherit   | Shown                 |
+| Geometry Cast Shadows    | Inherit / On / Off       | On       | Inherit   | On                    |
+| Geometry Receive Shadows | Inherit / On / Off       | On       | Inherit   | On                    |
 
 Local overrides replace inheritance for that flag. Inherit copies the parent's
 resolved value; this is not ancestor-AND activation. Reparenting recomputes an
@@ -195,14 +198,14 @@ Normal execution keeps no obsolete aliases, fallback readers or dual meanings.
 
 ## 10. Alternatives and rationale
 
-| Alternative | Reason not used |
-| --- | --- |
-| Ancestor-AND visibility | Discards intentional local overrides |
-| One scene Sun selector | Cannot express two simultaneous sources without competing state |
-| Slot mapping by name/index | Can silently redirect an override to another surface |
-| Activation through IsActive | Confuses runtime presence with authored processing |
-| Mixed/Baked choices without baking | Advertises nonfunctional lighting modes |
-| Editor hide stored as render visibility | Alters cooked output during a view-only editing action |
+| Alternative                             | Reason not used                                                 |
+| --------------------------------------- | --------------------------------------------------------------- |
+| Ancestor-AND visibility                 | Discards intentional local overrides                            |
+| One scene Sun selector                  | Cannot express two simultaneous sources without competing state |
+| Slot mapping by name/index              | Can silently redirect an override to another surface            |
+| Activation through IsActive             | Confuses runtime presence with authored processing              |
+| Mixed/Baked choices without baking      | Advertises nonfunctional lighting modes                         |
+| Editor hide stored as render visibility | Alters cooked output during a view-only editing action          |
 
 ## 11. Qualification
 

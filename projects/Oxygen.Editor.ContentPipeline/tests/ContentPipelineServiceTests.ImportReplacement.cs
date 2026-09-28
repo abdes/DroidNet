@@ -122,7 +122,7 @@ public sealed partial class ContentPipelineServiceTests
 
             if (string.Equals(conflict, "authored output", StringComparison.Ordinal))
             {
-                workspace.WriteMaterial("Content/Models/Model/Materials/Custom.omat.json", "Custom");
+                workspace.WriteMaterial("Content/Materials/Models/Model/Custom.omat.json", "Custom");
             }
 
             var original = await File.ReadAllBytesAsync(primary, this.TestContext.CancellationToken).ConfigureAwait(false);

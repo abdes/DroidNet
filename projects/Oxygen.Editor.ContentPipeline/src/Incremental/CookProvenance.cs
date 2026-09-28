@@ -13,6 +13,7 @@ namespace Oxygen.Editor.ContentPipeline.Incremental;
 /// <param name="Products">The source fingerprints responsible for produced assets.</param>
 internal sealed record CookProvenance(int Version, Guid ProjectId, ImmutableArray<CookProvenance.Root> Roots, ImmutableArray<CookProvenance.Product> Products)
 {
+    internal const int CurrentVersion = 2;
     /// <summary>A file's complete content identity within a cooked root.</summary>
     /// <param name="RelativePath">The root-relative physical path.</param>
     /// <param name="Size">The byte length.</param>
@@ -42,6 +43,8 @@ internal sealed record CookProvenance(int Version, Guid ProjectId, ImmutableArra
     /// <param name="Outputs">The produced asset identities.</param>
     public sealed record Product(Uri SourceUri, string Fingerprint, ImmutableArray<Uri> Dependencies, ImmutableArray<Output> Outputs)
     {
+        /// <summary>Gets the source state accepted for reuse after producer-owned source metadata is committed.</summary>
+        public required string ReuseFingerprint { get; init; }
         /// <summary>Gets the external native identities used when the source was cooked.</summary>
         public ImmutableArray<Snapshots.CookedDependencySnapshot> CookedDependencies { get; init; } = [];
 

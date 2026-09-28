@@ -79,7 +79,7 @@ public sealed partial class CookedLibraryBrowserTests
             _ = Directory.CreateDirectory(Path.Combine(this.directory.FullName, "Content"));
             File.WriteAllText(
                 Path.Combine(this.directory.FullName, "Content", "Shared.omat.json"),
-                """{"Schema":"oxygen.material.v1","Type":"PBR","Name":"Shared","PbrMetallicRoughness":{"BaseColorFactor":[1,0,0,1],"MetallicFactor":0,"RoughnessFactor":0.5}}""");
+                """{"name":"Shared","parameters":{"base_color":[1,0,0,1],"metalness":0,"roughness":0.5}}""");
             this.ProjectOutput = this.WriteRoot(".cooked/Content", 1);
             this.First = this.WriteRoot("Libraries/First", 2);
             this.Second = this.WriteRoot("Libraries/Second", 3);

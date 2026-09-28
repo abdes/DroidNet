@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Collections.Immutable;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Snapshots;
@@ -131,7 +132,11 @@ public sealed partial class ContentPipelineService(
             NormalizeDiagnostics(operationId, diagnostics),
             cookedAssets,
             inspection,
-            validation);
+            validation)
+        {
+            MaterialSlotProvenance = results.SelectMany(static result => result.MaterialSlotProvenance)
+                .ToImmutableDictionary(static entry => entry.Key, static entry => entry.Value, StringComparer.Ordinal),
+        };
     }
 
     private static OperationStatus ReduceStatus(IEnumerable<OperationStatus> statuses)
@@ -350,39 +355,6 @@ public sealed partial class ContentPipelineService(
         return Path.GetFullPath(Path.Combine(projectRoot, ".pipeline", "Materials", generatedRelative));
     }
 
-    private static NativeMaterialDescriptor ToNativeMaterialDescriptor(ContentCookInput input, MaterialSource material)
-    {
-        var pbr = material.PbrMetallicRoughness;
-        return new NativeMaterialDescriptor(
-            string.IsNullOrWhiteSpace(material.Name)
-                ? Path.GetFileNameWithoutExtension(Path.GetFileNameWithoutExtension(input.SourceRelativePath))
-                : material.Name!,
-            ToNativeDomain(material.AlphaMode),
-            ToNativeAlphaMode(material.AlphaMode),
-            new NativeMaterialParameters(
-                BaseColor: [pbr.BaseColorR, pbr.BaseColorG, pbr.BaseColorB, pbr.BaseColorA],
-                Metalness: pbr.MetallicFactor,
-                Roughness: pbr.RoughnessFactor,
-                DoubleSided: material.DoubleSided,
-                AlphaCutoff: material.AlphaMode == MaterialAlphaMode.Mask ? material.AlphaCutoff : null));
-    }
-
-    private static string ToNativeDomain(MaterialAlphaMode alphaMode)
-        => alphaMode switch
-        {
-            MaterialAlphaMode.Blend => "alpha_blended",
-            MaterialAlphaMode.Mask => "masked",
-            _ => "opaque",
-        };
-
-    private static string ToNativeAlphaMode(MaterialAlphaMode alphaMode)
-        => alphaMode switch
-        {
-            MaterialAlphaMode.Blend => "blended",
-            MaterialAlphaMode.Mask => "masked",
-            _ => "opaque",
-        };
-
     private static async Task<PreparedScope> PrepareScopeInputsAsync(
         Guid operationId,
         ContentCookScope scope,
@@ -458,7 +430,7 @@ public sealed partial class ContentPipelineService(
 
             var materialBytes = await File.ReadAllBytesAsync(input.SourceAbsolutePath, cancellationToken).ConfigureAwait(false);
             var material = MaterialSourceReader.Read(materialBytes);
-            var native = ToNativeMaterialDescriptor(input, material);
+            var native = MaterialSourceWriter.ToJson(material);
             var stream = File.Create(generatedAbsolutePath);
             await using (stream.ConfigureAwait(false))
             {
@@ -711,16 +683,20 @@ public sealed partial class ContentPipelineService(
             };
         });
         var allDiagnostics = diagnostics.Concat(nativeDiagnostics).ToList();
-        return !importResult.Succeeded
-            ? new ContentCookResult(
+        if (!importResult.Succeeded)
+        {
+            return new ContentCookResult(
                 operationId,
                 targetKind,
                 OperationStatus.Failed,
                 NormalizeDiagnostics(operationId, allDiagnostics),
                 CookedAssets: [],
                 Inspection: null,
-                Validation: null)
-            : await this.ValidateImportedOutputAsync(operationId, targetKind, scope, manifest, allDiagnostics, importResult.OutputFiles, cancellationToken).ConfigureAwait(false);
+                Validation: null);
+        }
+
+        var validated = await this.ValidateImportedOutputAsync(operationId, targetKind, scope, manifest, allDiagnostics, importResult.OutputFiles, cancellationToken).ConfigureAwait(false);
+        return validated with { MaterialSlotProvenance = importResult.MaterialSlotProvenance };
     }
 
     private async Task<ContentCookResult> ValidateImportedOutputAsync(Guid operationId, CookTargetKind targetKind, ContentCookScope scope, ContentImportManifest manifest, List<DiagnosticRecord> allDiagnostics, IReadOnlyList<string>? outputFiles, CancellationToken cancellationToken)

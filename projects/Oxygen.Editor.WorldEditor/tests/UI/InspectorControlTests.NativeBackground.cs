@@ -121,7 +121,7 @@ public sealed partial class InspectorControlTests
             default,
             new StrongReferenceMessenger(),
             results,
-            new OperationStatusReducer());
+            new OperationStatusReducer(), Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(), Moq.Mock.Of<Oxygen.Editor.Projects.IProjectContextService>());
         var context = new SceneDocumentCommandContext(scene.Id, metadata, scene, new HistoryKeeper(scene));
         var model = new EnvironmentViewModel(commands, () => context);
         using (model)

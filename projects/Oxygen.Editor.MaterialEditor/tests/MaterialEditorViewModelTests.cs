@@ -158,8 +158,6 @@ public sealed partial class MaterialEditorViewModelTests
     {
         var uri = new Uri("asset:///Content/Materials/Test.omat.json");
         var source = new MaterialSource(
-            schema: "oxygen.material.v1",
-            type: "PBR",
             name: "Test",
             pbrMetallicRoughness: new MaterialPbrMetallicRoughness(
                 baseColorR: 1.0f,

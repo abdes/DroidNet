@@ -203,17 +203,6 @@ public sealed partial class SceneDocumentCommandService
             }
         }
 
-        if (edit.Contains(Geometry.MaterialSlot0Uri.Id))
-        {
-            var materialUri = GetNullableReference(edit, Geometry.MaterialSlot0Uri);
-            result = await this.EditMaterialSlotAsync(
-                context,
-                nodeIds,
-                slotIndex: 0,
-                materialUri,
-                session).ConfigureAwait(true);
-        }
-
         return result;
     }
 

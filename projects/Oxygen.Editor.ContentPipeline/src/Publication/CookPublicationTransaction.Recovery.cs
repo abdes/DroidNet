@@ -148,6 +148,14 @@ internal sealed partial class CookPublicationTransaction
         var loadedJournal = JsonSerializer.Deserialize<CookPublicationJournal>(snapshot.Content.AsSpan(), JsonOptions)
             ?? throw new InvalidDataException("The publication recovery journal is empty.");
         ValidateJournal(loadedJournal, project.ProjectId, operationId);
+        foreach (var sourceFile in loadedJournal.SourceFiles)
+        {
+            _ = ProducedSourcePath(project, sourceFile);
+            if (loadedJournal.SourceReplacement is { } replacement && IsWithinSourceBundle(project, replacement.BundleName, sourceFile.RelativePath))
+            {
+                throw new InvalidDataException("A source file overlaps a journaled source-directory replacement.");
+            }
+        }
         if (loadedJournal.SourceReplacement is { } source)
         {
             try
@@ -172,11 +180,13 @@ internal sealed partial class CookPublicationTransaction
 
     private static void ValidateJournal(CookPublicationJournal journal, Guid projectId, Guid operationId)
     {
-        if (journal.Version != 1 || journal.ProjectId != projectId || journal.OperationId != operationId
+        if (journal.Version != 2 || journal.ProjectId != projectId || journal.OperationId != operationId
             || !Enum.IsDefined(journal.Phase) || journal.Roots.IsDefaultOrEmpty || journal.Metadata.IsDefaultOrEmpty
             || journal.Roots.Any(static root => root is null) || journal.Metadata.Any(static file => file is null || file.After is null)
             || !journal.Metadata.Any(static file => string.Equals(file.RelativePath, PublicationMetadata, StringComparison.Ordinal))
-            || journal.Metadata.Select(static file => file.RelativePath).ToHashSet(StringComparer.Ordinal).Count != journal.Metadata.Length)
+            || journal.Metadata.Select(static file => file.RelativePath).ToHashSet(StringComparer.Ordinal).Count != journal.Metadata.Length
+            || journal.SourceFiles.IsDefault || journal.SourceFiles.Any(static file => file is null)
+            || journal.SourceFiles.Select(static file => file.RelativePath).ToHashSet(StringComparer.OrdinalIgnoreCase).Count != journal.SourceFiles.Length)
         {
             throw new InvalidDataException("The publication journal does not identify a complete operation for this project.");
         }
@@ -220,6 +230,15 @@ internal sealed partial class CookPublicationTransaction
 
     private async Task RestoreFilesAsync()
     {
+        foreach (var update in this.journal.SourceFiles)
+        {
+            var current = await this.files.ReadAsync(ProducedSourcePath(this.project, update), CancellationToken.None).ConfigureAwait(false);
+            if (current.Version != Version(update.Before) && current.Version != Version(update.After))
+            {
+                throw new StorageWriteConflictException("Retained source settings changed outside this transaction; recovery files were retained.");
+            }
+        }
+
         // Verify all recovery material before changing any root.
         foreach (var root in this.Directories())
         {
@@ -235,6 +254,7 @@ internal sealed partial class CookPublicationTransaction
             }
         }
 
+        await this.RestoreSourceFilesAsync().ConfigureAwait(false);
         foreach (var root in this.Directories().Reverse())
         {
             var previous = await CookRootImage.CaptureAsync(root.Previous, copyTo: null, CancellationToken.None).ConfigureAwait(false);

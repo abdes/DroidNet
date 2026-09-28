@@ -16,11 +16,17 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <PackageReference Include="JsonSchema.Net" />
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
         <PackageReference Include="System.Reactive" />
         <PackageReference Include="SixLabors.ImageSharp" />
         <PackageReference Include="SharpGLTF.Core" />
         <PackageReference Include="SharpGLTF.Toolkit" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <EmbeddedResource Include="$(ProjectsRoot)\Oxygen.Engine\src\Oxygen\Cooker\Import\Schemas\oxygen.material-descriptor.schema.json"
+                          LogicalName="oxygen.material-descriptor.schema.json" />
     </ItemGroup>
 
     <ItemGroup>

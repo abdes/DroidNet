@@ -4,7 +4,7 @@
   "type": "object",
   "properties": {
     "SchemaVersion": {
-      "enum": [2, 3]
+      "const": 4
     },
     "Importer": {
       "const": "Oxygen.Cooker.Scene/v1"
@@ -56,6 +56,9 @@
     },
     "TangentsPolicy": {
       "const": "preserve"
+    },
+    "MaterialSlotProvenance": {
+      "type": "object"
     }
   },
   "required": [
@@ -72,7 +75,8 @@
     "UnitPolicy",
     "BakeTransforms",
     "NormalsPolicy",
-    "TangentsPolicy"
+    "TangentsPolicy",
+    "MaterialSlotProvenance"
   ],
   "additionalProperties": false
 }

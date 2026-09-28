@@ -8,6 +8,8 @@ using DroidNet.TimeMachine;
 using Microsoft.UI;
 using Moq;
 using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.ContentPipeline.Inspection;
+using Oxygen.Editor.World.Slots;
 using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World.Components;
@@ -30,8 +32,6 @@ public sealed partial class InspectorControlTests
     {
         var uri = new Uri("asset:///Content/Materials/UI.omat.json");
         var source = new MaterialSource(
-            schema: "oxygen.material.v1",
-            type: "PBR",
             name: "UI",
             pbrMetallicRoughness: new MaterialPbrMetallicRoughness(1, 1, 1, 1, 0, 0.5f, baseColorTexture: null, metallicRoughnessTexture: null),
             normalTexture: null,
@@ -50,7 +50,14 @@ public sealed partial class InspectorControlTests
     {
         public Fixture()
         {
-            this.Scene = new Scene(Mock.Of<IProject>()) { Name = "UI Test Scene" };
+            var info = new ProjectInfo("UI slot fixtures", Category.Games, Path.Combine(Path.GetTempPath(), "Oxygen-UI-Slots"));
+            var project = new Mock<IProject>();
+            _ = project.SetupGet(value => value.ProjectInfo).Returns(info);
+            this.Projects.Activate(ProjectContext.FromProjectInfo(info));
+            _ = this.Slots.Setup(value => value.ReadAsync(It.IsAny<ProjectContext>(), It.IsAny<Uri>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((ProjectContext _, Uri uri, CancellationToken _) => new GeometryMaterialSlotMetadata(uri, Guid.Parse("20000000-0000-0000-0000-000000000001"), new string('a', 64),
+                    [new(this.TargetFor(uri).SlotId, "Surface", [new(0, 0, Guid.Empty)])]));
+            this.Scene = new Scene(project.Object) { Name = "UI Test Scene" };
             this.Node = new SceneNode(this.Scene) { Name = "Camera and sun" };
             this.Camera = new PerspectiveCamera { Name = "Camera", NearPlane = 0.1f, FarPlane = 1000 };
             _ = this.Node.AddComponent(this.Camera);
@@ -59,6 +66,8 @@ public sealed partial class InspectorControlTests
             this.Context = new(this.Scene.Id, new SceneDocumentMetadata(this.Scene.Id), this.Scene, UndoRedo.GetHistory(this.Scene.Id));
             var sync = this.Sync;
             var accepted = new SyncOutcome(SyncStatus.Accepted, "UI control command", AffectedScope.Empty);
+            _ = sync.Setup(value => value.UpdateMaterialSlotAsync(It.IsAny<Scene>(), It.IsAny<SceneNode>(), It.IsAny<MaterialSlotTarget>(), It.IsAny<Uri?>(), It.IsAny<CancellationToken>())).ReturnsAsync(accepted);
+            _ = sync.Setup(value => value.RestoreMaterialSlotAsync(It.IsAny<Scene>(), It.IsAny<SceneNode>(), It.IsAny<MaterialSlotTarget>(), It.IsAny<Uri?>(), It.IsAny<CancellationToken>())).ReturnsAsync(accepted);
             _ = sync.Setup(value => value.UpdatePropertiesAsync(It.IsAny<Scene>(), It.IsAny<SceneNode>(), It.IsAny<IReadOnlyList<EnginePropertyValueEntry>>(), It.IsAny<SceneSyncRevision>(), It.IsAny<CancellationToken>())).ReturnsAsync(accepted);
             _ = sync.Setup(value => value.UpdateEnvironmentAsync(It.IsAny<Scene>(), It.IsAny<SceneEnvironmentData>(), It.IsAny<SceneSyncRevision>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new EnvironmentSyncResult(SyncStatus.Accepted, new Dictionary<string, SyncOutcome>(StringComparer.Ordinal)));
@@ -78,8 +87,14 @@ public sealed partial class InspectorControlTests
                 default,
                 this.Messenger,
                 Mock.Of<IOperationResultPublisher>(),
-                new OperationStatusReducer());
+                new OperationStatusReducer(), this.Slots.Object, this.Projects);
         }
+
+        public ProjectContextService Projects { get; } = new();
+
+        public Mock<IGeometryMaterialSlotProvider> Slots { get; } = new();
+
+        public MaterialSlotTarget TargetFor(Uri geometry) => new(geometry, Guid.Parse("10000000-0000-0000-0000-000000000001"), new string('a', 64));
 
         public Scene Scene { get; }
 

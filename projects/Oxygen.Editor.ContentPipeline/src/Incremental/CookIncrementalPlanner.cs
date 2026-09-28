@@ -56,7 +56,7 @@ internal static class CookIncrementalPlanner
         }
 
         var reused = previous.Products.Where(product => fingerprints.TryGetValue(product.SourceUri, out var fingerprint)
-            && string.Equals(fingerprint, product.Fingerprint, StringComparison.Ordinal)
+            && string.Equals(fingerprint, product.ReuseFingerprint, StringComparison.Ordinal)
             && product.Outputs.Length != 0
             && product.Outputs.All(output => validOutputs.Contains((output.RootMount, output.Asset.VirtualPath))))
             .ToImmutableDictionary(static product => product.SourceUri);
@@ -88,7 +88,7 @@ internal static class CookIncrementalPlanner
             ? path : throw new InvalidDataException("Cook provenance contains a file outside its output root.");
     }
 
-    private static string Fingerprint(ContentCookInput input, string producer, IReadOnlyList<CookSnapshotInput> inputs, CookDependencyGraph graph)
+    internal static string Fingerprint(ContentCookInput input, string producer, IReadOnlyList<CookSnapshotInput> inputs, CookDependencyGraph graph)
     {
         var files = inputs.ToDictionary(static file => file.RelativePath, StringComparer.Ordinal);
         var authored = Hash(new

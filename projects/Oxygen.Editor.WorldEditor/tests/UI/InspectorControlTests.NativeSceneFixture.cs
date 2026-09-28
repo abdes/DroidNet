@@ -16,6 +16,12 @@ using DroidNet.Storage.Native;
 using DroidNet.Tests;
 using DroidNet.TimeMachine;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.ContentPipeline.Inspection;
+using Oxygen.Editor.ContentPipeline.Snapshots;
+using Oxygen.Editor.World.Slots;
+using Oxygen.Editor.World.Utils;
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Moq;
@@ -46,6 +52,10 @@ public sealed partial class InspectorControlTests
         private readonly EngineService engine;
         private readonly Oxygen.Testing.TemporaryNativeArtifacts compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
         private readonly SceneEngineSync sync;
+        private readonly ProjectContextService projectContexts = new();
+        private readonly ContentCookCoordinator materialCookCoordinator;
+        private readonly Oxygen.Testing.NativeContentPipelineFixture materialPipeline;
+        private readonly Dictionary<string, (ContentCookCoordinator Coordinator, Oxygen.Testing.NativeContentPipelineFixture Pipeline)> foreignMaterialPipelines = new(StringComparer.OrdinalIgnoreCase);
         private readonly Mock<IDocumentService> documents = new();
         private readonly StrongReferenceMessenger messenger = new();
         private readonly HostingContext hosting;
@@ -63,7 +73,13 @@ public sealed partial class InspectorControlTests
             _ = settings.SetupGet(value => value.Settings).Returns(engineSettings ?? new EngineSettings());
             this.engine = new EngineService(this.hosting, results, loggerFactory, engineSettings: settings.Object, nativeCompatibility: this.compatibility);
             this.sync = new SceneEngineSync(this.engine, operationResults: results, hostingContext: this.hosting);
-            var project = new Project(new ProjectInfo("Environment fields", Category.Games, this.directory.FullName, "preview.png")) { Name = "Environment fields" };
+            var project = new Project(new ProjectInfo("Environment fields", Category.Games, this.directory.FullName, "preview.png")
+            {
+                AuthoringMounts = [new("Content", "Content")],
+            }) { Name = "Environment fields" };
+            this.projectContexts.Activate(ProjectContext.FromProjectInfo(project.ProjectInfo));
+            this.materialCookCoordinator = new(this.projectContexts, NullLogger<ContentCookCoordinator>.Instance);
+            this.materialPipeline = new(this.projectContexts, this.materialCookCoordinator, new CookDocumentRegistry());
             var mode = automatic ? ExposureMode.Auto : ExposureMode.Manual;
             this.Source = Scene.CreateAndHydrate(project, new SceneData
             {
@@ -91,7 +107,7 @@ public sealed partial class InspectorControlTests
                 default,
                 this.messenger,
                 results,
-                new OperationStatusReducer());
+                new OperationStatusReducer(), this.materialPipeline.Pipeline, this.projectContexts);
             this.Model = new EnvironmentViewModel(this.Commands, () => this.Context);
             this.Model.SetScene(this.Source);
             this.sync.SceneSynchronized += (_, args) =>
@@ -119,6 +135,38 @@ public sealed partial class InspectorControlTests
 
         public string ProjectRoot => this.directory.FullName;
 
+        public async Task<MaterialSlotTarget> ReadSingleMaterialSlotAsync(Guid nodeId, CancellationToken cancellationToken)
+        {
+            var node = this.Source.RootNodes.Select(root => SceneTraversal.FindNodeById(root, nodeId)).OfType<SceneNode>().Single();
+            var uri = node.Components.OfType<GeometryComponent>().Single().Geometry!.Uri;
+            var inventory = await ((IGeometryMaterialSlotProvider)this.materialPipeline.Pipeline).ReadAsync(this.projectContexts.ActiveProject!, uri, cancellationToken).ConfigureAwait(true);
+            _ = inventory.Should().NotBeNull("the native fixture geometry must have a current slot inventory");
+            var slot = inventory!.Slots.Should().ContainSingle().Which;
+            return new(uri, slot.SlotId, inventory.LayoutRevision);
+        }
+
+        private Oxygen.Testing.NativeContentPipelineFixture MaterialPipelineFor(string root)
+        {
+            if (string.Equals(root, this.ProjectRoot, StringComparison.OrdinalIgnoreCase))
+            {
+                return this.materialPipeline;
+            }
+
+            if (!this.foreignMaterialPipelines.TryGetValue(root, out var value))
+            {
+                var contexts = new ProjectContextService();
+                contexts.Activate(ProjectContext.FromProjectInfo(new ProjectInfo("Foreign material fixture", Category.Games, root)
+                {
+                    AuthoringMounts = [new("Content", "Content")],
+                }));
+                var coordinator = new ContentCookCoordinator(contexts, NullLogger<ContentCookCoordinator>.Instance);
+                value = (coordinator, new(contexts, coordinator, new CookDocumentRegistry()));
+                this.foreignMaterialPipelines.Add(root, value);
+            }
+
+            return value.Pipeline;
+        }
+
         public void SetMaterialChoices(IReadOnlyList<MaterialPickerResult> choices) => this.materialChoices.OnNext(choices);
 
         public void MountCookedRoot(string path) => this.engine.MountProjectCookedRoot(path);
@@ -135,7 +183,7 @@ public sealed partial class InspectorControlTests
             ISceneContentDemandService? contentDemand = null)
         {
             this.messenger.Register<SceneNodeSelectionRequestMessage>(this, (_, message) => message.Reply(selection));
-            return new(this.hosting, new ViewModelToView(Mock.Of<IViewLocator>()), this.messenger, this.Commands, this.documents.Object, default, assets ?? this.AssetCatalog.Object, materials ?? this.MaterialPicker.Object, this.sync, builtins ?? new Oxygen.Testing.BuiltinCatalogDiscoveryFixture(), contentDemand ?? Mock.Of<ISceneContentDemandService>());
+            return new(this.hosting, new ViewModelToView(Mock.Of<IViewLocator>()), this.messenger, this.Commands, this.documents.Object, default, assets ?? this.AssetCatalog.Object, materials ?? this.MaterialPicker.Object, this.sync, builtins ?? new Oxygen.Testing.BuiltinCatalogDiscoveryFixture(), contentDemand ?? Mock.Of<ISceneContentDemandService>(), this.materialPipeline.Pipeline, this.projectContexts);
         }
 
         public async Task InitializeAsync(CancellationToken cancellationToken, string? cookedRoot = null)
@@ -203,6 +251,14 @@ public sealed partial class InspectorControlTests
             }
             finally
             {
+                this.materialPipeline.Dispose();
+                this.materialCookCoordinator.Dispose();
+                foreach (var foreign in this.foreignMaterialPipelines.Values)
+                {
+                    foreign.Pipeline.Dispose();
+                    foreign.Coordinator.Dispose();
+                }
+
                 this.compatibility.Dispose();
                 this.directory.Delete(recursive: true);
             }

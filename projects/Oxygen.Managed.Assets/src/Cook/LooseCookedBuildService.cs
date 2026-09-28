@@ -17,7 +17,7 @@ namespace Oxygen.Managed.Assets.Cook;
 /// <remarks>
 /// MVP responsibility: write <c>container.index.bin</c> for each mount point based on descriptor files
 /// that already exist under <c>.cooked/&lt;MountPoint&gt;/</c>.
-/// Scene-containing batches are rejected before any cooked files change. Scene cooking and publication
+/// Scene, geometry and material batches are rejected before any cooked files change. Their production and publication
 /// belong to the native content pipeline.
 /// </remarks>
 public sealed class LooseCookedBuildService
@@ -52,7 +52,7 @@ public sealed class LooseCookedBuildService
     /// <param name="imported">Imported assets that have corresponding cooked descriptors written.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A task that completes when the index has been written.</returns>
-    /// <exception cref="NotSupportedException">The batch contains a scene that requires native cooking.</exception>
+    /// <exception cref="NotSupportedException">The batch contains an asset that requires native cooking.</exception>
     public async Task BuildIndexAsync(
         string projectRoot,
         IReadOnlyList<ImportedAsset> imported,
@@ -75,10 +75,10 @@ public sealed class LooseCookedBuildService
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        if (FindSceneRequiringNativeCooking(imported) is { } scene)
+        if (FindAssetRequiringNativeCooking(imported) is { } asset)
         {
             throw new NotSupportedException(
-                $"Scene '{scene.VirtualPath}' requires the native content pipeline. Managed scene cooking is not supported.");
+                $"{asset.AssetType} '{asset.VirtualPath}' requires the native content pipeline.");
         }
 
         var groups = imported
@@ -94,10 +94,12 @@ public sealed class LooseCookedBuildService
         }
     }
 
-    internal static ImportedAsset? FindSceneRequiringNativeCooking(IEnumerable<ImportedAsset> imported)
+    internal static ImportedAsset? FindAssetRequiringNativeCooking(IEnumerable<ImportedAsset> imported)
     {
         ArgumentNullException.ThrowIfNull(imported);
-        return imported.FirstOrDefault(static asset => string.Equals(asset.AssetType, "Scene", StringComparison.OrdinalIgnoreCase));
+        return imported.FirstOrDefault(static asset => asset.AssetType.Equals("Scene", StringComparison.OrdinalIgnoreCase)
+            || asset.AssetType.Equals("Geometry", StringComparison.OrdinalIgnoreCase)
+            || asset.AssetType.Equals("Material", StringComparison.OrdinalIgnoreCase));
     }
 
     internal static async Task RepairIndexFileRecordsAsync(
@@ -218,20 +220,6 @@ public sealed class LooseCookedBuildService
         var virtualPathToKey = BuildVirtualPathToKeyMap(existingAssets);
 
         var newFileRecords = new List<FileRecord>();
-
-        // Best-effort: never leave the index stale if we already updated any cooked files.
-        // This avoids runtime mount failures due to file record size/SHA mismatches.
-        await RunBestEffortAsync(
-                stage: "CookGeometry",
-                mountPoint,
-                () => CookGeometryAsync(files, loader, mountPoint, group, newFileRecords, cancellationToken))
-            .ConfigureAwait(false);
-
-        await RunBestEffortAsync(
-                stage: "CookMaterial",
-                mountPoint,
-                () => CookMaterialAsync(files, loader, group, cancellationToken))
-            .ConfigureAwait(false);
 
         await RunBestEffortAsync(
                 stage: "CookTexture",
@@ -479,249 +467,6 @@ public sealed class LooseCookedBuildService
         await files
             .WriteAllBytesAsync(indexPath, indexBytes, cancellationToken)
             .ConfigureAwait(false);
-    }
-
-    private static async Task CookMaterialAsync(
-        IImportFileAccess files,
-        IntermediateAssetLoader loader,
-        IGrouping<string, ImportedAsset> group,
-        CancellationToken cancellationToken)
-    {
-        var materials = group
-            .Where(static a => string.Equals(a.AssetType, "Material", StringComparison.Ordinal))
-            .ToList();
-
-        if (materials.Count == 0)
-        {
-            return;
-        }
-
-        foreach (var asset in materials)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var source = await loader.LoadMaterialAsync(asset, cancellationToken).ConfigureAwait(false);
-            if (source == null)
-            {
-                continue;
-            }
-
-            var descriptorRelativePath = asset.VirtualPath.TrimStart('/');
-            var cookedDescriptorPath = AssetPipelineConstants.CookedFolderName + "/" + descriptorRelativePath;
-
-            byte[] cookedBytes;
-            var ms = new MemoryStream();
-            await using (ms.ConfigureAwait(false))
-            {
-                CookedMaterialWriter.Write(ms, source);
-                cookedBytes = ms.ToArray();
-            }
-
-            await files.WriteAllBytesAsync(cookedDescriptorPath, cookedBytes, cancellationToken).ConfigureAwait(false);
-        }
-    }
-
-    private static async Task CookGeometryAsync(
-        IImportFileAccess files,
-        IntermediateAssetLoader loader,
-        string mountPoint,
-        IGrouping<string, ImportedAsset> group,
-        List<FileRecord> fileRecords,
-        CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(files);
-        ArgumentException.ThrowIfNullOrWhiteSpace(mountPoint);
-        ArgumentNullException.ThrowIfNull(group);
-        ArgumentNullException.ThrowIfNull(fileRecords);
-
-        var geometry = await CollectGeometryAssetsAsync().ConfigureAwait(false);
-        if (geometry.Count == 0)
-        {
-            return;
-        }
-
-        // Prepare paths
-        const string buffersTableRel = "resources/buffers.table";
-        const string buffersDataRel = "resources/buffers.data";
-        var tablePath = $"{AssetPipelineConstants.CookedFolderName}/{mountPoint}/{buffersTableRel}";
-        var dataPath = $"{AssetPipelineConstants.CookedFolderName}/{mountPoint}/{buffersDataRel}";
-
-        // Read existing buffers if they exist
-        byte[] existingTable = [];
-        byte[] existingData = [];
-        try
-        {
-            var t = await files.ReadAllBytesAsync(tablePath, cancellationToken).ConfigureAwait(false);
-            existingTable = t.ToArray();
-            var d = await files.ReadAllBytesAsync(dataPath, cancellationToken).ConfigureAwait(false);
-            existingData = d.ToArray();
-        }
-        catch (FileNotFoundException)
-        {
-            // Ignore
-        }
-
-        var cooked = CookBuffers();
-        cooked = MergeCookedBuffers(existingTable, existingData, cooked);
-
-        await WriteBuffersAsync(cooked).ConfigureAwait(false);
-        await WriteGeometryDescriptorsAsync(cooked).ConfigureAwait(false);
-
-        async Task<List<(ImportedAsset asset, GeometryCookInput input)>> CollectGeometryAssetsAsync()
-        {
-            var list = new List<(ImportedAsset, GeometryCookInput)>();
-            foreach (var asset in group.Where(static a => string.Equals(a.AssetType, "Geometry", StringComparison.Ordinal)))
-            {
-                GeometryCookInput? input = null;
-                try
-                {
-                    input = await loader.LoadGeometryAsync(asset, cancellationToken).ConfigureAwait(false);
-                }
-                catch (InvalidDataException ex)
-                {
-                    System.Diagnostics.Debug.WriteLine(
-                        $"[LooseCookedBuildService] Failed to load geometry for '{asset.VirtualPath}': {ex.Message}");
-                }
-                catch (FileNotFoundException ex)
-                {
-                    System.Diagnostics.Debug.WriteLine(
-                        $"[LooseCookedBuildService] Failed to load geometry for '{asset.VirtualPath}': {ex.Message}");
-                }
-                catch (System.Text.Json.JsonException ex)
-                {
-                    System.Diagnostics.Debug.WriteLine(
-                        $"[LooseCookedBuildService] Failed to load geometry for '{asset.VirtualPath}': {ex.Message}");
-                }
-
-                if (input != null)
-                {
-                    list.Add((asset, input));
-                }
-            }
-
-            return list.OrderBy(static x => x.Item1.VirtualPath, StringComparer.Ordinal).ToList();
-        }
-
-        CookedBuffersResult CookBuffers()
-            => CookedBuffersWriter.Write(geometry.ConvertAll(static g => g.input));
-
-        async Task WriteBuffersAsync(CookedBuffersResult cooked)
-        {
-            await files.WriteAllBytesAsync(tablePath, cooked.BuffersTableBytes, cancellationToken).ConfigureAwait(false);
-            await files.WriteAllBytesAsync(dataPath, cooked.BuffersDataBytes, cancellationToken).ConfigureAwait(false);
-
-            fileRecords.Add(CreateFileRecord(FileKind.BuffersTable, buffersTableRel, cooked.BuffersTableBytes));
-            fileRecords.Add(CreateFileRecord(FileKind.BuffersData, buffersDataRel, cooked.BuffersDataBytes));
-        }
-
-        async Task WriteGeometryDescriptorsAsync(CookedBuffersResult cooked)
-        {
-            // Write per-asset .ogeo descriptors.
-            foreach (var (asset, input) in geometry)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                if (!cooked.BufferIndices.TryGetValue(asset.AssetKey, out var buffers))
-                {
-                    continue;
-                }
-
-                var descriptorRelativePath = asset.VirtualPath.TrimStart('/');
-                var cookedDescriptorPath = AssetPipelineConstants.CookedFolderName + "/" + descriptorRelativePath;
-
-                try
-                {
-                    byte[] ogBytes;
-                    var ms = new MemoryStream();
-                    await using (ms.ConfigureAwait(false))
-                    {
-                        CookedGeometryWriter.Write(ms, input.Geometry, buffers.VertexBufferIndex, buffers.IndexBufferIndex);
-                        ogBytes = ms.ToArray();
-                    }
-
-                    await files.WriteAllBytesAsync(cookedDescriptorPath, ogBytes, cancellationToken).ConfigureAwait(false);
-                }
-                catch (InvalidDataException ex)
-                {
-                    System.Diagnostics.Debug.WriteLine(
-                        $"[LooseCookedBuildService] Failed to write cooked geometry '{asset.VirtualPath}': {ex.Message}");
-                }
-                catch (ArgumentException ex)
-                {
-                    System.Diagnostics.Debug.WriteLine(
-                        $"[LooseCookedBuildService] Failed to write cooked geometry '{asset.VirtualPath}': {ex.Message}");
-                }
-                catch (IOException ex)
-                {
-                    System.Diagnostics.Debug.WriteLine(
-                        $"[LooseCookedBuildService] Failed to write cooked geometry '{asset.VirtualPath}': {ex.Message}");
-                }
-                catch (UnauthorizedAccessException ex)
-                {
-                    System.Diagnostics.Debug.WriteLine(
-                        $"[LooseCookedBuildService] Failed to write cooked geometry '{asset.VirtualPath}': {ex.Message}");
-                }
-            }
-        }
-
-        static FileRecord CreateFileRecord(FileKind kind, string relativePath, ReadOnlyMemory<byte> bytes)
-            => new(
-                Kind: kind,
-                RelativePath: relativePath,
-                Size: (ulong)bytes.Length,
-                Sha256: SHA256.HashData(bytes.Span));
-    }
-
-    private static CookedBuffersResult MergeCookedBuffers(byte[] existingTable, byte[] existingData, CookedBuffersResult cooked)
-    {
-        if (existingTable.Length == 0)
-        {
-            return cooked;
-        }
-
-        // Calculate padding for data alignment (72 bytes)
-        const int bufferAlignmentBytes = 72;
-        const int tableEntrySize = 32;
-        var padding = (bufferAlignmentBytes - (existingData.Length % bufferAlignmentBytes)) % bufferAlignmentBytes;
-        var baseDataOffset = (ulong)(existingData.Length + padding);
-        var baseIndex = (uint)(existingTable.Length / tableEntrySize);
-
-        // Strip the first reserved entry (32 bytes) from the new table
-        var newTableSpan = cooked.BuffersTableBytes.Span[tableEntrySize..];
-        var patchedTable = new byte[newTableSpan.Length];
-        newTableSpan.CopyTo(patchedTable);
-
-        // Patch data offsets in the new table
-        for (var i = 0; i < patchedTable.Length; i += tableEntrySize)
-        {
-            var entry = patchedTable.AsSpan(i, tableEntrySize);
-            var offset = BinaryPrimitives.ReadUInt64LittleEndian(entry[..8]);
-            offset += baseDataOffset;
-            BinaryPrimitives.WriteUInt64LittleEndian(entry[..8], offset);
-        }
-
-        // Adjust indices
-        var newIndices = new Dictionary<AssetKey, GeometryBufferPair>();
-        foreach (var (key, pair) in cooked.BufferIndices)
-        {
-            // Global = Base + Local - 1
-            newIndices[key] = new GeometryBufferPair(
-                VertexBufferIndex: baseIndex + pair.VertexBufferIndex - 1,
-                IndexBufferIndex: baseIndex + pair.IndexBufferIndex - 1);
-        }
-
-        // Combine data
-        var combinedTable = new byte[existingTable.Length + patchedTable.Length];
-        existingTable.CopyTo(combinedTable, 0);
-        patchedTable.CopyTo(combinedTable, existingTable.Length);
-
-        var combinedData = new byte[existingData.Length + padding + cooked.BuffersDataBytes.Length];
-        existingData.CopyTo(combinedData, 0);
-
-        // Padding is zero-init
-        cooked.BuffersDataBytes.CopyTo(combinedData.AsMemory(existingData.Length + padding));
-
-        return new CookedBuffersResult(combinedTable, combinedData, newIndices);
     }
 
     private static string GetMountPointFromVirtualPath(string virtualPath)

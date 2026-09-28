@@ -9,6 +9,15 @@ namespace Oxygen.Editor.World.Serialization;
 /// </summary>
 public record MaterialsSlotData : OverrideSlotData
 {
+    /// <summary>Gets the geometry identity retained with this assignment.</summary>
+    public required Uri GeometryUri { get; init; }
+
+    /// <summary>Gets the native slot identity, independent of display order.</summary>
+    public required Guid SlotId { get; init; }
+
+    /// <summary>Gets the last resolved native inventory revision.</summary>
+    public required string LayoutRevision { get; init; }
+
     /// <summary>
     /// Gets or initializes the material URI.
     /// </summary>

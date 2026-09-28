@@ -25,21 +25,21 @@ Content/SourceMedia/...
 
 ## 2. PRD Traceability
 
-| ID | Coverage |
-| --- | --- |
-| `GOAL-004` | Authored content produces runtime cook artifacts. |
+| ID         | Coverage                                                                      |
+| ---------- | ----------------------------------------------------------------------------- |
+| `GOAL-004` | Authored content produces runtime cook artifacts.                             |
 | `GOAL-005` | Descriptor, cook, inspect, validation, catalog, and mount states are visible. |
-| `GOAL-006` | Pipeline failures are structured and actionable. |
-| `REQ-015` | Supported authored content generates engine descriptor inputs. |
-| `REQ-016` | Cook/import workflows are explicit user actions. |
-| `REQ-017` | Cooked output and catalog state can refresh. |
-| `REQ-018` | Cooked output validates before mount. |
-| `REQ-019` | Project cook scope and authored mount policy are honored. |
-| `REQ-022` | Pipeline failures surface operation results. |
-| `REQ-023` | Pipeline/native tool failures produce correlated logs. |
-| `REQ-024` | Failure domain identifies descriptor/import/cook/index/mount cause. |
-| `REQ-036` | Content Browser reflects refreshed cooked state. |
-| `REQ-037` | Authored data remains repairable and round-trippable. |
+| `GOAL-006` | Pipeline failures are structured and actionable.                              |
+| `REQ-015`  | Supported authored content generates engine descriptor inputs.                |
+| `REQ-016`  | Cook/import workflows are explicit user actions.                              |
+| `REQ-017`  | Cooked output and catalog state can refresh.                                  |
+| `REQ-018`  | Cooked output validates before mount.                                         |
+| `REQ-019`  | Project cook scope and authored mount policy are honored.                     |
+| `REQ-022`  | Pipeline failures surface operation results.                                  |
+| `REQ-023`  | Pipeline/native tool failures produce correlated logs.                        |
+| `REQ-024`  | Failure domain identifies descriptor/import/cook/index/mount cause.           |
+| `REQ-036`  | Content Browser reflects refreshed cooked state.                              |
+| `REQ-037`  | Authored data remains repairable and round-trippable.                         |
 
 ## 3. Required LLDs
 
@@ -228,7 +228,7 @@ Out of scope:
   - `asset:///<Mount>/<Path>.ogeo.json` -> `/<Mount>/<Path>.ogeo`
   - `asset:///<Mount>/<Path>.oscene.json` -> `/<Mount>/<Path>.oscene`
   - reject invalid scheme, mount, or extension combinations.
-- Reject empty scenes before native cook and publish a useful diagnostic.
+- Empty-scene rejection was the M07 contract; [M08.1.4](ED-M08-runtime-parity-and-standalone-validation.md#m081--native-canonical-data-producers-and-primitives) supersedes it with genuine zero-node scene support.
 - Unsupported ED-M04 or future scene fields produce warnings that name the
   field; they are not silently dropped.
 - Ensure generated descriptor path is derived/cache state, not authoring
@@ -372,16 +372,16 @@ Docs/ledger:
 
 ## 8. Dependency And Execution Risks
 
-| Risk | Mitigation |
-| --- | --- |
-| Editor duplicates native cooker behavior. | ED-M07.1 audits `Oxygen.Cooker` and records the chosen Interop/ImportTool/managed path before implementation. |
+| Risk                                                                                   | Mitigation                                                                                                                                                                                                                      |
+| -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Editor duplicates native cooker behavior.                                              | ED-M07.1 audits `Oxygen.Cooker` and records the chosen Interop/ImportTool/managed path before implementation.                                                                                                                   |
 | Import tool discovery or cooker schema drift invalidates a previously working adapter. | ED-M07.3 uses the engine install/runtime discovery policy; ED-M07.4-6 validate descriptors/manifests against the accepted native contracts. Prior workflow validation does not prove compatibility with a later engine install. |
-| Managed scene writer omits material/environment data. | Full scene cook uses native `oxygen.scene` descriptor import unless equivalent managed coverage is intentionally added. |
-| Material/geometry dependencies cook after scene. | Manifest builder adds dependency edges before scene jobs. |
-| Validation is skipped because cook succeeded. | Service contract requires inspect/validate before mount refresh. |
-| Cooked paths leak into scene/material/project files. | Tests assert authoring files persist asset URIs only. |
-| Runtime mount refresh happens mid-frame. | Runtime path stays through `IEngineService` and `EditorModule` frame-start root sync. |
-| Multi-viewport gets pulled back in. | Explicit non-scope; only supported single viewport/manual validation may be referenced. |
+| Managed scene writer omits material/environment data.                                  | Full scene cook uses native `oxygen.scene` descriptor import unless equivalent managed coverage is intentionally added.                                                                                                         |
+| Material/geometry dependencies cook after scene.                                       | Manifest builder adds dependency edges before scene jobs.                                                                                                                                                                       |
+| Validation is skipped because cook succeeded.                                          | Service contract requires inspect/validate before mount refresh.                                                                                                                                                                |
+| Cooked paths leak into scene/material/project files.                                   | Tests assert authoring files persist asset URIs only.                                                                                                                                                                           |
+| Runtime mount refresh happens mid-frame.                                               | Runtime path stays through `IEngineService` and `EditorModule` frame-start root sync.                                                                                                                                           |
+| Multi-viewport gets pulled back in.                                                    | Explicit non-scope; only supported single viewport/manual validation may be referenced.                                                                                                                                         |
 
 ## 9. Validation Gates
 
@@ -389,7 +389,7 @@ Source/test validation expected before user manual validation:
 
 1. Descriptor generation test maps transform, geometry URI, material URI,
    perspective camera, directional light, and supported environment fields.
-2. Descriptor generation rejects empty scene with a visible diagnostic.
+2. Historical M07 check: empty-scene rejection. Superseded by the M08.1.4 zero-node cook/load gate.
 3. Procedural geometry resolver prevents invalid geometry keys.
 4. URI normalization maps authored `.omat.json`/`.ogeo.json` asset URIs to
    native `.omat`/`.ogeo` descriptor paths and rejects invalid inputs.
@@ -404,7 +404,7 @@ Source/test validation expected before user manual validation:
    `.cooked/Content` with `virtual_mount_root=/Content`.
 9. Manifest validation uses the native JSON schema before execution.
 10. Cook orchestration does not call `LooseCookedBuildService` directly after a
-   managed `ImportService.ImportAsync` path.
+    managed `ImportService.ImportAsync` path.
 11. Validation failure blocks runtime mount refresh.
 12. Successful cook publishes catalog refresh notification.
 13. Scene save, material save/cook, Content Browser import/cook, and

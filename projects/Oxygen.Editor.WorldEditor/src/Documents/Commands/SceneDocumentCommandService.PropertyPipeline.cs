@@ -410,6 +410,7 @@ public sealed partial class SceneDocumentCommandService
             new(EngineComponentId.PerspectiveCamera, (ushort)PerspectiveCameraField.ApertureF, camera.ApertureF),
             new(EngineComponentId.PerspectiveCamera, (ushort)PerspectiveCameraField.ShutterRate, camera.ShutterRate),
             new(EngineComponentId.PerspectiveCamera, (ushort)PerspectiveCameraField.Iso, camera.Iso),
+            new(EngineComponentId.PerspectiveCamera, (ushort)PerspectiveCameraField.AspectMode, (float)camera.AspectMode),
         ];
     }
 

@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Collections.Immutable;
+using System.Security.Cryptography;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Managed.Core.Compatibility;
@@ -12,6 +14,43 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <summary>Cooks retained models through the same snapshot, staging and publication path as authored descriptors.</summary>
 public sealed partial class ContentPipelineService
 {
+    private static async Task<ImmutableArray<CookProducedSourceFile>> PrepareProducedSourceFilesAsync(
+        Snapshots.CookInputSnapshot snapshot, Snapshots.CookDependencyGraph graph, ContentCookResult result, CancellationToken cancellationToken)
+    {
+        var outputs = ImmutableArray.CreateBuilder<CookProducedSourceFile>();
+        var sources = graph.Assets.Where(static input => input.Kind == ContentCookAssetKind.ForeignSource)
+            .ToDictionary(static input => input.SourceRelativePath, StringComparer.Ordinal);
+        foreach (var (sourcePath, provenance) in result.MaterialSlotProvenance)
+        {
+            if (!sources.TryGetValue(sourcePath, out var source))
+            {
+                throw new InvalidDataException("Native material-slot provenance names a source outside this cook.");
+            }
+
+            var relative = source.SourceRelativePath + NativeSceneImportSettings.SidecarSuffix;
+            var input = snapshot.Inputs.Single(file => string.Equals(file.RelativePath, relative, StringComparison.Ordinal));
+            var before = await File.ReadAllBytesAsync(Path.Combine(snapshot.InputRoot, relative), cancellationToken).ConfigureAwait(false);
+            if (input.IsAbsent || !string.Equals(Convert.ToHexString(SHA256.HashData(before)), input.DiscoveryHash, StringComparison.Ordinal))
+            {
+                throw new InvalidDataException("Captured source settings changed during native cooking.");
+            }
+
+            var settings = NativeSceneImportSettings.Parse(before);
+            if (settings.MaterialSlotProvenance.SourceIdentity != provenance.SourceIdentity)
+            {
+                throw new InvalidDataException("Native material-slot provenance changed the retained source identity.");
+            }
+
+            var after = (settings with { MaterialSlotProvenance = provenance }).ToBytes();
+            if (!before.AsSpan().SequenceEqual(after))
+            {
+                outputs.Add(new(relative, before, after));
+            }
+        }
+
+        return outputs.ToImmutable();
+    }
+
     private static DiagnosticRecord[] ChangedImportedSourceDiagnostics(Guid operationId, Snapshots.CookDependencyGraph graph, Incremental.CookProvenance previous, Incremental.CookIncrementalPlan plan)
     {
         var prior = previous.Products.Where(static product => product.ImportedSource is not null).ToDictionary(static product => product.SourceUri);
@@ -166,6 +205,8 @@ public sealed partial class ContentPipelineService
                         BakeTransforms = settings.BakeTransforms,
                         NormalsPolicy = settings.NormalsPolicy,
                         TangentsPolicy = settings.TangentsPolicy,
+                        MaterialSlotSourceIdentity = settings.MaterialSlotProvenance.SourceIdentity.ToString("D"),
+                        MaterialSlotProvenance = settings.MaterialSlotProvenance,
                     },
                 ]);
             var result = await this.ExecuteManifestAsync(operationId, scope.TargetKind, sourceScope, manifest, [], cancellationToken).ConfigureAwait(false);

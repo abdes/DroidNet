@@ -37,7 +37,7 @@ public sealed partial class InspectorControlTests
     {
         using var fixture = new DemandFixture();
         fixture.Geometry.Geometry = new(fixture.GeometryUri);
-        fixture.Geometry.OverrideSlots.Add(new MaterialsSlot { Material = new(fixture.MaterialUri) });
+        fixture.Geometry.OverrideSlots.Add(new MaterialsSlot { Target = fixture.Authoring.TargetFor(fixture.Geometry.Geometry!.Uri), Material = new(fixture.MaterialUri) });
         fixture.Activate();
         _ = fixture.Requests.Select(static request => request.uri).Should().BeEquivalentTo([fixture.GeometryUri, fixture.MaterialUri]);
         fixture.Activate();
@@ -87,6 +87,8 @@ public sealed partial class InspectorControlTests
         fixture.Activate();
         using var host = fixture.Authoring.CreateInspectorHost("Geometry", contentDemand: fixture.Service, assetProvider: fixture.Assets.Object);
         var model = host.PropertyEditors.OfType<GeometryViewModel>().Single();
+        await model.RefreshMaterialSlotsAsync().ConfigureAwait(true);
+        await model.RefreshMaterialPickerAsync().ConfigureAwait(true);
         await model.ApplyMaterialAsync(new("Material", fixture.MaterialUri, "Material", "/Content/Material.omat.json", AssetPickerGroup.Content, IsEnabled: true, ThumbnailModel: "\uE790")).ConfigureAwait(true);
         _ = fixture.Geometry.OverrideSlots.OfType<MaterialsSlot>().Single().Material.Uri.Should().Be(fixture.MaterialUri);
         _ = fixture.Requests.Should().ContainSingle().Which.uri.Should().Be(fixture.MaterialUri);
@@ -104,6 +106,8 @@ public sealed partial class InspectorControlTests
         fixture.Activate();
         using var host = fixture.Authoring.CreateInspectorHost("Geometry", contentDemand: fixture.Service, assetProvider: fixture.Assets.Object);
         var model = host.PropertyEditors.OfType<GeometryViewModel>().Single();
+        await model.RefreshMaterialSlotsAsync().ConfigureAwait(true);
+        await model.RefreshMaterialPickerAsync().ConfigureAwait(true);
         await model.ApplyMaterialAsync(new("Material", fixture.MaterialUri, "Material", "/Content/Material.omat.json", AssetPickerGroup.Content, IsEnabled: true, ThumbnailModel: "\uE790")).ConfigureAwait(true);
         _ = fixture.Requests.Should().ContainSingle();
         await fixture.Authoring.Context.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
@@ -154,7 +158,7 @@ public sealed partial class InspectorControlTests
         fixture.Geometry.Geometry = new(fixture.GeometryUri);
         _ = fixture.Assets.Setup(value => value.ResolveAsync(fixture.GeometryUri, It.IsAny<CancellationToken>()))
             .ReturnsAsync(fixture.GeometryAsset with { CookStatus = fixture.GeometryAsset.CookStatus! with { Freshness = AssetCookFreshness.Current, HasVerifiedOutput = true } });
-        fixture.Geometry.OverrideSlots.Add(new MaterialsSlot { Material = new(AssetUris.BuildGeneratedUri("Materials/Default")) });
+        fixture.Geometry.OverrideSlots.Add(new MaterialsSlot { Target = fixture.Authoring.TargetFor(fixture.Geometry.Geometry!.Uri), Material = new(AssetUris.BuildGeneratedUri("Materials/Default")) });
         fixture.Activate();
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = fixture.Requests.Should().BeEmpty();
@@ -218,6 +222,7 @@ public sealed partial class InspectorControlTests
         {
             var info = new ProjectInfo("Demand", Category.Games, "C:/Demand", "preview.png");
             _ = Mock.Get(this.Authoring.Scene.Project).SetupGet(value => value.ProjectInfo).Returns(info);
+            this.Authoring.Projects.Activate(ProjectContext.FromProjectInfo(info));
             this.projects.Activate(new ProjectContext
             {
                 ProjectId = info.Id, Name = info.Name, Category = Category.Games, ProjectRoot = "C:/Demand",
@@ -232,7 +237,7 @@ public sealed partial class InspectorControlTests
                 .Callback(this.NotifyEdited).ReturnsAsync(value: true);
             var accepted = new SyncOutcome(SyncStatus.Accepted, "Demand assignment", AffectedScope.Empty);
             _ = this.Authoring.Sync.Setup(value => value.AttachGeometryAsync(It.IsAny<Scene>(), It.IsAny<SceneNode>(), It.IsAny<CancellationToken>())).ReturnsAsync(accepted);
-            _ = this.Authoring.Sync.Setup(value => value.UpdateMaterialSlotAsync(It.IsAny<Scene>(), It.IsAny<SceneNode>(), It.IsAny<int>(), It.IsAny<Uri?>(), It.IsAny<CancellationToken>())).ReturnsAsync(accepted);
+            _ = this.Authoring.Sync.Setup(value => value.UpdateMaterialSlotAsync(It.IsAny<Scene>(), It.IsAny<SceneNode>(), It.IsAny<Oxygen.Editor.World.Slots.MaterialSlotTarget>(), It.IsAny<Uri?>(), It.IsAny<CancellationToken>())).ReturnsAsync(accepted);
             this.GeometryAsset = CreateStatusAsset(0) with
             {
                 IdentityUri = this.GeometryUri, DisplayName = "Custom", Kind = AssetKind.Geometry, DerivedState = null,

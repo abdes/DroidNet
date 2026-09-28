@@ -39,12 +39,22 @@ public sealed partial class AssetCookStatusReader(
         }
 
         using var output = await CookOutputLease.AcquireInspectionAsync(project.ProjectRoot, cancellationToken).ConfigureAwait(false);
+        return await this.ReadUnderInspectionAsync(project, assetUris, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Reads status while the caller retains the project's finite inspection lease.</summary>
+    /// <param name="project">The protected project.</param>
+    /// <param name="assetUris">The requested authored identities.</param>
+    /// <param name="cancellationToken">Cancels status reads.</param>
+    /// <returns>The current source and output facts.</returns>
+    internal async Task<IReadOnlyList<AssetCookStatus>> ReadUnderInspectionAsync(ProjectContext project, IReadOnlyList<Uri> assetUris, CancellationToken cancellationToken)
+    {
         var (prior, version) = await this.provenance.ReadAsync(project, cancellationToken).ConfigureAwait(false);
         var trusted = await publication.HasCommittedMetadataUnderLeaseAsync(project, cancellationToken).ConfigureAwait(false);
         var metadataUnavailable = version.Exists && !trusted;
         if (!trusted)
         {
-            prior = new(1, project.ProjectId, [], []);
+            prior = new(Incremental.CookProvenance.CurrentVersion, project.ProjectId, [], []);
         }
 
         var requested = assetUris.Distinct().ToArray();

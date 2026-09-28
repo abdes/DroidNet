@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 <UserControl
     x:Class="Oxygen.Editor.World.Inspector.Geometry.GeometryView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -147,8 +147,27 @@
                 </Grid>
             </editorcontrols:PropertyCard>
 
+            <editorcontrols:PropertyCard
+                HorizontalContentAlignment="Stretch"
+                PropertyName="Slot"
+                Visibility="{x:Bind ViewModel.ShowMaterialSlotSelector, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                <ComboBox
+                    x:Name="MaterialSlotSelector"
+                    HorizontalAlignment="Stretch"
+                    DisplayMemberPath="DisplayName"
+                    ItemsSource="{x:Bind ViewModel.MaterialSlots, Mode=OneWay}"
+                    SelectedItem="{x:Bind ViewModel.SelectedMaterialSlot, Mode=TwoWay}" />
+            </editorcontrols:PropertyCard>
+
             <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Material">
-                <Grid HorizontalAlignment="Stretch" ColumnSpacing="8">
+                <Grid
+                    HorizontalAlignment="Stretch"
+                    ColumnSpacing="8"
+                    RowSpacing="4">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
@@ -166,6 +185,7 @@
                         Grid.Column="1"
                         HorizontalAlignment="Stretch"
                         Content="{x:Bind ViewModel.MaterialButtonLabel, Mode=OneWay}"
+                        IsEnabled="{x:Bind ViewModel.CanEditMaterialSlot, Mode=OneWay}"
                         ToolTipService.ToolTip="{x:Bind ViewModel.MaterialButtonLabel, Mode=OneWay}">
                         <muxc:SplitButton.Flyout>
                             <Flyout x:Name="MaterialPickerFlyout" Opening="OnMaterialPickerOpening">
@@ -250,6 +270,22 @@
                             </Flyout>
                         </muxc:SplitButton.Flyout>
                     </muxc:SplitButton>
+                    <StackPanel
+                        Grid.Row="1"
+                        Grid.ColumnSpan="2"
+                        Spacing="2"
+                        Visibility="{x:Bind ViewModel.HasMaterialSlotNotice, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                        <TextBlock
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Style="{ThemeResource CaptionTextBlockStyle}"
+                            Text="{x:Bind ViewModel.MaterialSlotNotice, Mode=OneWay}"
+                            TextWrapping="Wrap" />
+                        <HyperlinkButton
+                            Padding="0"
+                            HorizontalAlignment="Left"
+                            Command="{x:Bind ViewModel.RefreshMaterialSlotsCommand}"
+                            Content="Refresh slots" />
+                    </StackPanel>
                 </Grid>
             </editorcontrols:PropertyCard>
         </editorcontrols:PropertiesExpander.Items>

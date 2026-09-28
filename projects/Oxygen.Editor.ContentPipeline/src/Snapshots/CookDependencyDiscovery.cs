@@ -18,7 +18,7 @@ using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline.Snapshots;
 
-/// <summary>Discovers saved scene, scalar material and static geometry dependencies without generating output.</summary>
+/// <summary>Discovers saved scene, material, texture and static geometry dependencies without generating output.</summary>
 /// <param name="documents">Document owners coordinating saved-source reads.</param>
 /// <param name="allowUnsavedDocuments">Allows read-only inspection of saved inputs while their documents contain newer edits.</param>
 /// <param name="importedSources">Previously published native dependency layouts for exact source revisions.</param>
@@ -139,20 +139,17 @@ public sealed class CookDependencyDiscovery(
             };
         }
 
-        private static Uri[] ReadMaterial(ContentCookInput input, byte[] bytes)
+        private static Uri[] ReadMaterial(byte[] bytes)
         {
             var material = MaterialSourceReader.Read(bytes);
-            return material.PbrMetallicRoughness.BaseColorTexture is not null
-                || material.PbrMetallicRoughness.MetallicRoughnessTexture is not null
-                || material.NormalTexture is not null || material.OcclusionTexture is not null
-                ? throw new InvalidDataException($"Material '{input.AssetUri}' contains textures. Material cooking supports scalar properties only.")
-                : [];
+            return [.. material.EnumerateTextureVirtualPaths().Distinct(StringComparer.Ordinal)
+                .Select(static path => new Uri($"{AssetUris.Scheme}://{string.Join('/', path.Split('/').Select(Uri.EscapeDataString))}"))];
         }
 
         private static ContentCookInput WithImportedOutputs(ContentCookInput input, NativeSceneImportSettings settings) => input with
         {
             MountName = settings.MountPoint,
-            OutputVirtualPath = settings.SchemaVersion == 2 ? settings.OutputPrefixes[0] : null,
+            OutputVirtualPath = null,
             OutputNamespaces = settings.OutputPrefixes,
         };
 
@@ -173,7 +170,7 @@ public sealed class CookDependencyDiscovery(
             {
                 ContentCookAssetKind.Scene => await this.ReadSceneAsync(bytes, cancellationToken).ConfigureAwait(false),
                 ContentCookAssetKind.Geometry => await this.ReadGeometryAsync(input, bytes, cancellationToken).ConfigureAwait(false),
-                ContentCookAssetKind.Material => ReadMaterial(input, bytes),
+                ContentCookAssetKind.Material => ReadMaterial(bytes),
                 ContentCookAssetKind.Texture => await this.ReadTextureAsync(input, bytes, cancellationToken).ConfigureAwait(false),
                 _ => throw new InvalidDataException($"Unsupported cook input '{input.AssetUri}'."),
             };

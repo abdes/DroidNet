@@ -295,14 +295,21 @@ public sealed partial class SceneEngineSync(
 
     /// <inheritdoc/>
     public Task<SyncOutcome> UpdateMaterialSlotAsync(
-        Scene scene,
-        SceneNode node,
-        int slotIndex,
-        Uri? materialUri,
-        CancellationToken cancellationToken = default)
+        Scene scene, SceneNode node, MaterialSlotTarget target, Uri? materialUri, CancellationToken cancellationToken = default)
+        => this.SyncMaterialSlotAsync(scene, node, target, materialUri, MaterialSlotAssignmentIntent.ObservedEdit, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<SyncOutcome> RestoreMaterialSlotAsync(
+        Scene scene, SceneNode node, MaterialSlotTarget target, Uri? materialUri, CancellationToken cancellationToken = default)
+        => this.SyncMaterialSlotAsync(scene, node, target, materialUri, MaterialSlotAssignmentIntent.RetainedAssignment, cancellationToken);
+
+    private Task<SyncOutcome> SyncMaterialSlotAsync(
+        Scene scene, SceneNode node, MaterialSlotTarget target, Uri? materialUri,
+        MaterialSlotAssignmentIntent intent, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(node);
+        ArgumentNullException.ThrowIfNull(target);
 
         var scope = Scope(
             scene,
@@ -328,8 +335,10 @@ public sealed partial class SceneEngineSync(
             LiveSyncDiagnosticCodes.MaterialFailed,
             world => world.Execute(new RuntimeSetMaterialOverride(
                 node.Id,
-                slotIndex,
-                MaterialOverridePathMapper.ToEnginePath(materialUri))),
+                GeometryPathMapper.ToEnginePath(target.GeometryUri),
+                target.SlotId,
+                target.LayoutRevision,
+                MaterialOverridePathMapper.ToEnginePath(materialUri), intent)),
             cancellationToken);
     }
 
@@ -624,34 +633,6 @@ public sealed partial class SceneEngineSync(
             this.LogFailedToDetachCameraComponent(ex, nodeId);
         }
 
-        return Task.CompletedTask;
-    }
-
-    /// <inheritdoc/>
-    public Task UpdateMaterialOverrideAsync(Guid nodeId, OverrideSlot slot)
-    {
-        this.LogMaterialOverrideSyncUnsupported(nodeId);
-        return Task.CompletedTask;
-    }
-
-    /// <inheritdoc/>
-    public Task UpdateTargetedMaterialOverrideAsync(Guid nodeId, int lodIndex, int submeshIndex, OverrideSlot slot)
-    {
-        this.LogTargetedMaterialOverrideSyncUnsupported(nodeId, lodIndex, submeshIndex);
-        return Task.CompletedTask;
-    }
-
-    /// <inheritdoc/>
-    public Task RemoveMaterialOverrideAsync(Guid nodeId, Type slotType)
-    {
-        this.LogMaterialOverrideRemovalUnsupported(nodeId, slotType.Name);
-        return Task.CompletedTask;
-    }
-
-    /// <inheritdoc/>
-    public Task RemoveTargetedMaterialOverrideAsync(Guid nodeId, int lodIndex, int submeshIndex, Type slotType)
-    {
-        this.LogTargetedMaterialOverrideRemovalUnsupported(nodeId, lodIndex, submeshIndex, slotType.Name);
         return Task.CompletedTask;
     }
 
@@ -1284,7 +1265,8 @@ public sealed partial class SceneEngineSync(
                     ToEngineFieldOfViewRadians(perspective.FieldOfView),
                     perspective.AspectRatio,
                     perspective.NearPlane,
-                    perspective.FarPlane));
+                    perspective.FarPlane,
+                    perspective.AspectMode));
                 world.Execute(new RuntimeSetProperties(node.Id,
                 [
                     new((ushort)EngineComponentId.PerspectiveCamera, (ushort)PerspectiveCameraField.ApertureF, perspective.ApertureF),

@@ -84,7 +84,7 @@ public sealed partial class InspectorControlTests
         using var updates = new BehaviorSubject<IReadOnlyList<ContentBrowserAssetItem>>([CreateImportedSourceRow(configured: false)]);
         var provider = CreateQueryProvider(updates);
         using var materials = new MaterialPickerService(provider.Object);
-        using var geometry = new GeometryViewModel(CreateStatusHosting(), provider.Object, materials, new Oxygen.Testing.BuiltinCatalogDiscoveryFixture(), Mock.Of<Services.ISceneContentDemandService>());
+        using var geometry = new GeometryViewModel(CreateStatusHosting(), provider.Object, materials, new Oxygen.Testing.BuiltinCatalogDiscoveryFixture(), Mock.Of<Services.ISceneContentDemandService>(), Mock.Of<Oxygen.Editor.ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(), Mock.Of<Oxygen.Editor.Projects.IProjectContextService>());
         var view = new GeometryView { ViewModel = geometry, Width = 440 };
         await LoadTestContentAsync(view).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);

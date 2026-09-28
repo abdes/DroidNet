@@ -10,6 +10,7 @@ using DroidNet.TimeMachine;
 using Microsoft.UI;
 using Moq;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Documents;
@@ -371,7 +372,7 @@ public sealed partial class SceneDocumentCommandServiceTests
     }
 
     [TestMethod]
-    public async Task EditMaterialSlotAsync_WhenCleared_PersistsEmptySentinelSlot()
+    public async Task EditMaterialSlotAsync_WhenAlreadyClear_DoesNotCreateAnOverride()
     {
         var fixture = CreateFixture();
         var scene = CreateScene();
@@ -386,24 +387,24 @@ public sealed partial class SceneDocumentCommandServiceTests
         var context = CreateContext(scene);
         var accepted = new SyncOutcome(SyncStatus.Accepted, SceneOperationKinds.EditMaterialSlot, AffectedScope.Empty);
         _ = fixture.Sync
-            .Setup(sync => sync.UpdateMaterialSlotAsync(scene, node, 0, materialUri: null, It.IsAny<CancellationToken>()))
+            .Setup(sync => sync.UpdateMaterialSlotAsync(scene, node, TestSlotTarget(geometry.Geometry!.Uri), materialUri: null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(accepted);
 
         var result = await fixture.Sut.EditMaterialSlotAsync(
             context,
             [node.Id],
-            slotIndex: 0,
+            target: TestSlotTarget(geometry.Geometry!.Uri),
             newMaterialUri: null,
             EditSessionToken.OneShot).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
-        _ = geometry.OverrideSlots.OfType<MaterialsSlot>().Should().ContainSingle()
-            .Which.Material.Uri.ToString().Should().Be("asset:///__uninitialized__");
-        _ = context.Metadata.IsDirty.Should().BeTrue();
+        _ = geometry.OverrideSlots.OfType<MaterialsSlot>().Should().BeEmpty();
+        _ = context.Metadata.IsDirty.Should().BeFalse();
+        _ = context.History.UndoStack.Should().BeEmpty();
     }
 
     [TestMethod]
-    public async Task EditPropertiesAsync_WhenMaterialSlotIsCleared_SyncsNullMaterialUri()
+    public async Task EditMaterialSlotAsync_WhenCleared_SyncsNullMaterialUri()
     {
         var fixture = CreateFixture();
         var scene = CreateScene();
@@ -415,27 +416,22 @@ public sealed partial class SceneDocumentCommandServiceTests
             Name = "Geometry",
             Geometry = new AssetReference<GeometryAsset>(AssetUris.BuildGeneratedUri("BasicShapes/Cube")),
         };
-        geometry.OverrideSlots.Add(new MaterialsSlot { Material = new AssetReference<MaterialAsset>(materialUri) });
+        geometry.OverrideSlots.Add(new MaterialsSlot { Target = TestSlotTarget(geometry.Geometry!.Uri), Material = new AssetReference<MaterialAsset>(materialUri) });
         _ = node.AddComponent(geometry);
         var context = CreateContext(scene);
         var accepted = new SyncOutcome(SyncStatus.Accepted, SceneOperationKinds.EditMaterialSlot, AffectedScope.Empty);
         _ = fixture.Sync
-            .Setup(sync => sync.UpdateMaterialSlotAsync(scene, node, 0, materialUri: null, It.IsAny<CancellationToken>()))
+            .Setup(sync => sync.UpdateMaterialSlotAsync(scene, node, TestSlotTarget(geometry.Geometry!.Uri), materialUri: null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(accepted);
 
-        var result = await fixture.Sut.EditPropertiesAsync(
-            context,
-            [node.Id],
-            PropertyEdit.Single(SceneDocumentCommandService.Geometry.MaterialSlot0Uri, value: (Uri?)null),
-            "Edit Material Slot",
+        var result = await fixture.Sut.EditMaterialSlotAsync(context, [node.Id], TestSlotTarget(geometry.Geometry!.Uri), null,
             EditSessionToken.OneShot).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
-        _ = geometry.OverrideSlots.OfType<MaterialsSlot>().Should().ContainSingle()
-            .Which.Material.Uri.ToString().Should().Be("asset:///__uninitialized__");
-        fixture.Sync.Verify(sync => sync.UpdateMaterialSlotAsync(scene, node, 0, materialUri: null, It.IsAny<CancellationToken>()), Times.Once);
+        _ = geometry.OverrideSlots.OfType<MaterialsSlot>().Should().BeEmpty();
+        fixture.Sync.Verify(sync => sync.UpdateMaterialSlotAsync(scene, node, TestSlotTarget(geometry.Geometry!.Uri), materialUri: null, It.IsAny<CancellationToken>()), Times.Once);
         fixture.Sync.Verify(
-            sync => sync.UpdateMaterialSlotAsync(scene, node, 0, new Uri("asset:///__uninitialized__"), It.IsAny<CancellationToken>()),
+            sync => sync.UpdateMaterialSlotAsync(scene, node, TestSlotTarget(geometry.Geometry!.Uri), new Uri("asset:///__uninitialized__"), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -452,14 +448,14 @@ public sealed partial class SceneDocumentCommandServiceTests
             Name = "Geometry",
             Geometry = new AssetReference<GeometryAsset>(AssetUris.BuildGeneratedUri("BasicShapes/Cube")),
         };
-        geometry.OverrideSlots.Add(new MaterialsSlot { Material = new AssetReference<MaterialAsset>(materialUri) });
+        geometry.OverrideSlots.Add(new MaterialsSlot { Target = TestSlotTarget(geometry.Geometry!.Uri), Material = new AssetReference<MaterialAsset>(materialUri) });
         _ = node.AddComponent(geometry);
         var context = CreateContext(scene);
 
         var result = await fixture.Sut.EditMaterialSlotAsync(
             context,
             [node.Id],
-            slotIndex: 0,
+            target: TestSlotTarget(geometry.Geometry!.Uri),
             newMaterialUri: materialUri,
             EditSessionToken.OneShot).ConfigureAwait(false);
 
@@ -467,7 +463,7 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = context.Metadata.IsDirty.Should().BeFalse();
         _ = context.History.UndoStack.Should().BeEmpty();
         fixture.Sync.Verify(
-            sync => sync.UpdateMaterialSlotAsync(scene, node, 0, It.IsAny<Uri?>(), It.IsAny<CancellationToken>()),
+            sync => sync.UpdateMaterialSlotAsync(scene, node, TestSlotTarget(geometry.Geometry!.Uri), It.IsAny<Uri?>(), It.IsAny<CancellationToken>()),
             Times.Never);
         fixture.DocumentService.Verify(
             service => service.UpdateMetadataAsync(It.IsAny<WindowId>(), context.DocumentId, context.Metadata),
@@ -487,21 +483,22 @@ public sealed partial class SceneDocumentCommandServiceTests
             Name = "Geometry",
             Geometry = new AssetReference<GeometryAsset>(AssetUris.BuildGeneratedUri("BasicShapes/Cube")),
         };
-        geometry.OverrideSlots.Add(new MaterialsSlot { Material = new AssetReference<MaterialAsset>(materialUri) });
+        geometry.OverrideSlots.Add(new MaterialsSlot { Target = TestSlotTarget(geometry.Geometry!.Uri), Material = new AssetReference<MaterialAsset>(materialUri) });
         _ = node.AddComponent(geometry);
         var context = CreateContext(scene);
         var accepted = new SyncOutcome(SyncStatus.Accepted, SceneOperationKinds.EditMaterialSlot, AffectedScope.Empty);
         _ = fixture.Sync
-            .Setup(sync => sync.UpdateMaterialSlotAsync(scene, node, 0, materialUri: null, It.IsAny<CancellationToken>()))
+            .Setup(sync => sync.UpdateMaterialSlotAsync(scene, node, TestSlotTarget(geometry.Geometry!.Uri), materialUri: null, It.IsAny<CancellationToken>()))
             .ReturnsAsync(accepted);
+        _ = fixture.Sync.Setup(sync => sync.RestoreMaterialSlotAsync(scene, node, TestSlotTarget(geometry.Geometry!.Uri), materialUri: null, It.IsAny<CancellationToken>())).ReturnsAsync(accepted);
         _ = fixture.Sync
-            .Setup(sync => sync.UpdateMaterialSlotAsync(scene, node, 0, materialUri, It.IsAny<CancellationToken>()))
+            .Setup(sync => sync.RestoreMaterialSlotAsync(scene, node, TestSlotTarget(geometry.Geometry!.Uri), materialUri, It.IsAny<CancellationToken>()))
             .ReturnsAsync(accepted);
 
         var result = await fixture.Sut.EditMaterialSlotAsync(
             context,
             [node.Id],
-            slotIndex: 0,
+            target: TestSlotTarget(geometry.Geometry!.Uri),
             newMaterialUri: null,
             EditSessionToken.OneShot).ConfigureAwait(false);
 
@@ -513,12 +510,12 @@ public sealed partial class SceneDocumentCommandServiceTests
             .Which.Material.Uri.Should().Be(materialUri);
 
         await context.History.RedoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = geometry.OverrideSlots.OfType<MaterialsSlot>().Should().ContainSingle()
-            .Which.Material.Uri.ToString().Should().Be("asset:///__uninitialized__");
-        fixture.Sync.Verify(sync => sync.UpdateMaterialSlotAsync(scene, node, 0, materialUri: null, It.IsAny<CancellationToken>()), Times.Exactly(2));
-        fixture.Sync.Verify(sync => sync.UpdateMaterialSlotAsync(scene, node, 0, materialUri, It.IsAny<CancellationToken>()), Times.Once);
+        _ = geometry.OverrideSlots.OfType<MaterialsSlot>().Should().BeEmpty();
+        fixture.Sync.Verify(sync => sync.UpdateMaterialSlotAsync(scene, node, TestSlotTarget(geometry.Geometry!.Uri), materialUri: null, It.IsAny<CancellationToken>()), Times.Once);
+        fixture.Sync.Verify(sync => sync.RestoreMaterialSlotAsync(scene, node, TestSlotTarget(geometry.Geometry!.Uri), materialUri: null, It.IsAny<CancellationToken>()), Times.Once);
+        fixture.Sync.Verify(sync => sync.RestoreMaterialSlotAsync(scene, node, TestSlotTarget(geometry.Geometry!.Uri), materialUri, It.IsAny<CancellationToken>()), Times.Once);
         fixture.Sync.Verify(
-            sync => sync.UpdateMaterialSlotAsync(scene, node, 0, new Uri("asset:///__uninitialized__"), It.IsAny<CancellationToken>()),
+            sync => sync.UpdateMaterialSlotAsync(scene, node, TestSlotTarget(geometry.Geometry!.Uri), new Uri("asset:///__uninitialized__"), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -1278,10 +1275,21 @@ public sealed partial class SceneDocumentCommandServiceTests
                 (_, _, sync, cancellationToken) => sync(cancellationToken));
     }
 
+    private static readonly ProjectInfo SlotTestProjectInfo = new("Material slot tests", Category.Games, Path.Combine(Path.GetTempPath(), "Oxygen-Slot-Tests"));
+    private static readonly Guid PrimarySlotId = Guid.Parse("10000000-0000-0000-0000-000000000001");
+    private static readonly Guid SecondarySlotId = Guid.Parse("10000000-0000-0000-0000-000000000002");
+
+    private static MaterialSlotTarget TestSlotTarget(Uri geometry) => new(geometry, PrimarySlotId, new string('a', 64));
+
+    private static GeometryMaterialSlotMetadata TestSlotInventory(Uri geometry)
+        => new(geometry, Guid.Parse("20000000-0000-0000-0000-000000000001"), new string('a', 64),
+            [new(PrimarySlotId, "Body", [new(0, 0, Guid.Empty)]), new(SecondarySlotId, "Trim", [new(0, 1, Guid.Empty), new(1, 2, Guid.Empty)])]);
+
     private static Scene CreateScene()
     {
-        var project = new Mock<IProject>().Object;
-        return new Scene(project) { Name = "Test Scene" };
+        var project = new Mock<IProject>();
+        _ = project.SetupGet(value => value.ProjectInfo).Returns(SlotTestProjectInfo);
+        return new Scene(project.Object) { Name = "Test Scene" };
     }
 
     private static SceneDocumentCommandContext CreateContext(Scene scene)
@@ -1301,6 +1309,11 @@ public sealed partial class SceneDocumentCommandServiceTests
             .Setup(service => service.UpdateMetadataAsync(It.IsAny<WindowId>(), It.IsAny<Guid>(), It.IsAny<IDocumentMetadata>()))
             .ReturnsAsync(value: true);
         var results = new CapturingOperationResultPublisher();
+        var projects = new ProjectContextService();
+        projects.Activate(ProjectContext.FromProjectInfo(SlotTestProjectInfo));
+        var inventories = new Mock<IGeometryMaterialSlotProvider>();
+        _ = inventories.Setup(value => value.ReadAsync(It.IsAny<ProjectContext>(), It.IsAny<Uri>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ProjectContext _, Uri uri, CancellationToken _) => TestSlotInventory(uri));
         var sut = new SceneDocumentCommandService(
             automaticCooking ?? Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(),
             new Mock<ISceneExplorerService>(MockBehavior.Strict).Object,
@@ -1311,16 +1324,18 @@ public sealed partial class SceneDocumentCommandServiceTests
             default,
             WeakReferenceMessenger.Default,
             results,
-            new OperationStatusReducer());
+            new OperationStatusReducer(), inventories.Object, projects);
 
-        return new(sut, sync, documentService, results);
+        return new(sut, sync, documentService, results, inventories, projects);
     }
 
     private sealed record Fixture(
         SceneDocumentCommandService Sut,
         Mock<ISceneEngineSync> Sync,
         Mock<IDocumentService> DocumentService,
-        CapturingOperationResultPublisher Results);
+        CapturingOperationResultPublisher Results,
+        Mock<IGeometryMaterialSlotProvider> Inventories,
+        ProjectContextService Projects);
 
     private sealed class CapturingOperationResultPublisher : IOperationResultPublisher
     {

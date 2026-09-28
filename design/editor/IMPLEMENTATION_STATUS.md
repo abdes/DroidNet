@@ -963,12 +963,40 @@ readers. Primary/Secondary names remain unchanged.
       is accepted after 97 focused tests, native checks and user visual validation.
       Sponza's non-sun lighting defects and exposure correction remain open;
       this example workflow does not close canonical directional/rendering parity.
-      The [native slot foundation](validation/ED-M08-M08.1-slot-foundation.md)
-      provides tested identity, inventory validation and revision hashing;
-      producer/provenance, wire-format and override integration remain open.
-      Slot identities/provenance/overrides, camera aspect, atmospheric roles,
-      float32 emission and capture-toggle removal remain open. Rendered flag
-      behavior remains M08.2 work; supplemental captures do not close M08.3.
+      Canonical slots/provenance/overrides, Auto/Fixed camera aspect and
+      float32 emission are implemented. Geometry v2, material v3 and scene v9
+      producers/readers share the current contracts; retired formats are rejected.
+      Atmospheric role records/import/conflict checks and capture-toggle removal
+      are implemented; rendered/editor qualification stays in its owning slices.
+
+      Native qualification passes: full Debug/Release engine/examples builds,
+      1,530 native runtime tests, final cleanup regressions (406 Debug/399 Release),
+      27 profiling/shader-baking tests and 345 PakGen tests with current goldens.
+      Scoped clang-tidy checks and reported first-party MSVC warnings are cleared;
+      six existing warnings remain in unchanged ufbx vendor code. SDK showcase cooks,
+      PAK packaging and loose-root validation pass. All maintained examples pass
+      their bounded runtime/UI checks at 1920×1080, including town4new retained
+      loading and IBL validation with the D3D12 debug layer.
+
+      All four registered editor projects have migrated materials, retained
+      settings and scenes; their cooks publish and pass native validation.
+      Zero-node scenes preserve environment and load from loose content and PAKs.
+      The refreshed Debug SDK/Interop and editor build pass. Six native editor UI
+      cases cover material slots, mixed selection, clear/default, Undo/Redo,
+      saved reload and automatic publication. The scene-descriptor suites pass
+      44 native and 29 managed cases. Editor regression suites pass 484 content-pipeline,
+      109 asset and 151 scene-editor tests, including publication rollback for
+      project-owned sources and native slot identity/revision validation.
+
+      Remaining: normal migrated-project editor workflow and editor Release
+      qualification. Approved M08.1.5–M08.1.9 work follows in order:
+      runtime identities → automatic load ownership → native integrity inventory
+      → immutable project publication → batched native source analysis.
+      Rendered flag behavior remains M08.2 work; supplemental captures do not
+      close M08.3.
+
+- [ ] [M08.F1 descriptor-local reference format](plan/ED-M08.F1-descriptor-local-references.md),
+      after M08.1.9 and before M08.2. Separate format cutover, recook and SDK gate.
 - [ ] M08.2 native rendering and view behavior.
 - [ ] M08.3 development harness and native visual gate outside the editor.
 - [ ] M08.4 editor canonical authoring and live delivery.

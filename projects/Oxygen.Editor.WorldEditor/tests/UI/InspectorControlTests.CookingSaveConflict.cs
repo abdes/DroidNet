@@ -48,7 +48,7 @@ public sealed partial class InspectorControlTests
             var id = panel.SelectedRun!.Snapshot.OperationId;
             var published = ReadPublishedHashes(scenario.Fixture.ProjectRoot);
             var source = JsonNode.Parse(await File.ReadAllTextAsync(scenario.Material.SourcePath, cancellationToken).ConfigureAwait(true))!;
-            source["PbrMetallicRoughness"]!["BaseColorFactor"] = new JsonArray(0f, 0f, 1f, 1f);
+            source["parameters"]!["base_color"] = new JsonArray(0f, 0f, 1f, 1f);
             var external = source.ToJsonString();
             await File.WriteAllTextAsync(scenario.Material.SourcePath, external, cancellationToken).ConfigureAwait(true);
             await InvokeCookingSaveAsync(panel, view, cancellationToken).ConfigureAwait(true);

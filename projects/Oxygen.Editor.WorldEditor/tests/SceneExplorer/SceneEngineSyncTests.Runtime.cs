@@ -53,7 +53,9 @@ public sealed partial class SceneEngineSyncTests
     }
 
     [TestMethod]
-    public async Task SceneProjection_PreservesCameraUnitsAndMaterialClearWithoutNativeFacades()
+    [DataRow(Oxygen.Managed.Core.CameraAspectMode.Auto)]
+    [DataRow(Oxygen.Managed.Core.CameraAspectMode.Fixed)]
+    public async Task SceneProjection_PreservesCameraUnitsAndMaterialClearWithoutNativeFacades(Oxygen.Managed.Core.CameraAspectMode aspectMode)
     {
         var commands = CreateManagedWorld();
         var requests = new List<RuntimeWorldRequest>();
@@ -71,7 +73,7 @@ public sealed partial class SceneEngineSyncTests
         _ = sut.RegisterDocument(scene, new SceneDocumentMetadata(scene.Id));
         var node = new SceneNode(scene) { Name = "Camera" };
         scene.RootNodes.Add(node);
-        node.Components.Add(new PerspectiveCamera { Name = "Perspective Camera", FieldOfView = 60, AspectRatio = 1.5f, NearPlane = 0.25f, FarPlane = 500 });
+        node.Components.Add(new PerspectiveCamera { Name = "Perspective Camera", FieldOfView = 60, AspectMode = aspectMode, AspectRatio = 1.5f, NearPlane = 0.25f, FarPlane = 500 });
 
         _ = (await sut.SyncSceneAsync(scene, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeTrue();
 
@@ -79,11 +81,47 @@ public sealed partial class SceneEngineSyncTests
         _ = camera.NodeId.Should().Be(node.Id);
         _ = camera.FieldOfViewYRadians.Should().BeApproximately(MathF.PI / 3, 0.00001f);
         _ = camera.AspectRatio.Should().Be(1.5f);
+        _ = camera.AspectMode.Should().Be(aspectMode);
         _ = camera.NearPlane.Should().Be(0.25f);
         _ = camera.FarPlane.Should().Be(500);
-        var cleared = await sut.UpdateMaterialSlotAsync(scene, node, 0, materialUri: null, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
+        var cleared = await sut.UpdateMaterialSlotAsync(scene, node, new Oxygen.Editor.World.Slots.MaterialSlotTarget(new Uri("asset:///Engine/Generated/BasicShapes/Cube"), Guid.Parse("10000000-0000-0000-0000-000000000001"), new string('a', 64)), materialUri: null, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = cleared.Status.Should().Be(SyncStatus.Accepted);
         _ = requests.Select(value => value.Command).OfType<RuntimeSetMaterialOverride>().Should().ContainSingle().Which.MaterialPath.Should().BeNull();
+    }
+
+    [TestMethod]
+    public async Task SavedMaterialProjectionAndHistoryUseRetainedIdentity()
+    {
+        var commands = CreateManagedWorld();
+        var requests = new List<RuntimeWorldRequest>();
+        _ = commands.Setup(value => value.Execute(It.IsAny<RuntimeWorldRequest>(), It.IsAny<CancellationToken>()))
+            .Returns((RuntimeWorldRequest request, CancellationToken _) =>
+            {
+                requests.Add(request);
+                return new RuntimeCommandResult(request.OperationId, request.Target.RunId, RuntimeCommandStatus.Accepted);
+            });
+        var engine = new Mock<IEngineService>();
+        _ = engine.SetupGet(value => value.State).Returns(EngineServiceState.Running);
+        _ = engine.SetupGet(value => value.WorldCommands).Returns(commands.Object);
+        using var sync = new SceneEngineSync(engine.Object);
+        var scene = CreateScene();
+        _ = sync.RegisterDocument(scene, new SceneDocumentMetadata(scene.Id));
+        var node = new SceneNode(scene) { Name = "Saved geometry" };
+        scene.RootNodes.Add(node);
+        var target = new Oxygen.Editor.World.Slots.MaterialSlotTarget(new Uri("asset:///Engine/Generated/BasicShapes/Cube"),
+            Guid.Parse("10000000-0000-0000-0000-000000000001"), new string('a', 64));
+        var geometry = new GeometryComponent { Name = "Geometry", Geometry = new(target.GeometryUri) };
+        geometry.OverrideSlots.Add(new Oxygen.Editor.World.Slots.MaterialsSlot { Target = target, Material = new(new Uri("asset:///Content/Materials/Saved.omat.json")) });
+        node.Components.Add(geometry);
+        _ = (await sync.SyncSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeTrue();
+        var projected = requests.Select(static request => request.Command).OfType<RuntimeSetMaterialOverride>().Should().ContainSingle().Which;
+        _ = projected.Intent.Should().Be(MaterialSlotAssignmentIntent.RetainedAssignment);
+        _ = projected.SlotId.Should().Be(target.SlotId);
+        _ = projected.LayoutRevision.Should().Be(target.LayoutRevision);
+        _ = (await sync.RestoreMaterialSlotAsync(scene, node, target, null, this.TestContext.CancellationToken).ConfigureAwait(false)).Status.Should().Be(SyncStatus.Accepted);
+        _ = requests.Select(static request => request.Command).OfType<RuntimeSetMaterialOverride>().Last().Intent.Should().Be(MaterialSlotAssignmentIntent.RetainedAssignment);
+        _ = (await sync.UpdateMaterialSlotAsync(scene, node, target, null, this.TestContext.CancellationToken).ConfigureAwait(false)).Status.Should().Be(SyncStatus.Accepted);
+        _ = requests.Select(static request => request.Command).OfType<RuntimeSetMaterialOverride>().Last().Intent.Should().Be(MaterialSlotAssignmentIntent.ObservedEdit);
     }
 
     private static Mock<IRuntimeWorldCommands> CreateManagedWorld()

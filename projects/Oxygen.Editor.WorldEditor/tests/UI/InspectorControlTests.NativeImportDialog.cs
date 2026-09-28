@@ -187,7 +187,7 @@ public sealed partial class InspectorControlTests
     {
         var material = first.Assets.Values.Single(asset => asset.Kind == ContentCookAssetKind.Material).AssetUri;
         var node = fixture.Source.RootNodes[0].Id;
-        _ = (await fixture.Commands.EditMaterialSlotAsync(fixture.Context, [node], 0, material, EditSessionToken.OneShot).ConfigureAwait(true)).Succeeded.Should().BeTrue();
+        _ = (await fixture.Commands.EditMaterialSlotAsync(fixture.Context, [node], await fixture.ReadSingleMaterialSlotAsync(node, cancellationToken).ConfigureAwait(true), material, EditSessionToken.OneShot).ConfigureAwait(true)).Succeeded.Should().BeTrue();
         var before = await WaitForNodeAsync(fixture, node, value => value.MaterialBaseColors.Length == 1 && Vector4.Distance(value.MaterialBaseColors[0], new(0.8f, 0.2f, 0.1f, 1)) < 0.001f, cancellationToken).ConfigureAwait(true);
         var revision = fixture.Context.Metadata.ChangeVersion;
         var history = fixture.Context.History.UndoStack.Count;

@@ -15,9 +15,15 @@ internal static class MaterialOverridePathMapper
             return null;
         }
 
+        if (!materialUri.IsAbsoluteUri || materialUri.Scheme != AssetUriHelper.Scheme
+            || materialUri.Query.Length != 0 || materialUri.Fragment.Length != 0)
+        {
+            throw new ArgumentException("A material requires an absolute asset URI without query or fragment.", nameof(materialUri));
+        }
+
         if (string.Equals(AssetUriHelper.GetMountPoint(materialUri), "__uninitialized__", StringComparison.OrdinalIgnoreCase))
         {
-            return null;
+            throw new ArgumentException("An uninitialized material is not a clear operation; use null.", nameof(materialUri));
         }
 
         var virtualPath = AssetUriHelper.GetVirtualPath(materialUri);

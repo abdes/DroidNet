@@ -732,8 +732,6 @@ public sealed class GltfImporter : IAssetImporter
             metallicRoughnessTexture: mrTexture != null ? new MaterialTextureRef(mrTexture.Uri) : null);
 
         return new MaterialSource(
-            schema: "oxygen.material.v1",
-            type: "PBR",
             name: mat.Name,
             pbrMetallicRoughness: pbrData,
             normalTexture: normalTexture != null ? new NormalTextureRef(normalTexture.Uri, normalTexture.Scale) : null,

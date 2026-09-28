@@ -33,4 +33,13 @@ internal sealed record CookPublicationReceipt(
 {
     /// <summary>Gets the selected foreign cooked inputs consumed by this generation.</summary>
     public ImmutableArray<CookedDependencySnapshot> CookedDependencies { get; init; } = [];
+
+    /// <summary>Gets source metadata produced after the immutable consumed input set.</summary>
+    public ImmutableArray<ProducedSourceFile> ProducedSourceFiles { get; init; } = [];
+
+    /// <summary>Records a source-sidecar transition without rewriting consumed input evidence.</summary>
+    /// <param name="RelativePath">The project-relative source path.</param>
+    /// <param name="BeforeHash">The consumed bytes.</param>
+    /// <param name="AfterHash">The bytes committed with the cooked generation.</param>
+    public sealed record ProducedSourceFile(string RelativePath, string BeforeHash, string AfterHash);
 }

@@ -52,8 +52,13 @@ internal sealed record NativeNodeTransform(
 internal sealed record NativeRenderable(
     [property: JsonPropertyName("node")] int Node,
     [property: JsonPropertyName("geometry_ref")] string GeometryRef,
-    [property: JsonPropertyName("material_ref")] string? MaterialRef,
+    [property: JsonPropertyName("material_overrides")] IReadOnlyList<NativeMaterialSlotOverride> MaterialOverrides,
     [property: JsonPropertyName("visible")] bool Visible);
+
+internal sealed record NativeMaterialSlotOverride(
+    [property: JsonPropertyName("slot_id")] Guid SlotId,
+    [property: JsonPropertyName("material_ref")] string MaterialRef,
+    [property: JsonPropertyName("layout_revision")] string LayoutRevision);
 
 internal sealed record NativeCameras(
     [property: JsonPropertyName("perspective")] IReadOnlyList<NativePerspectiveCamera>? Perspective);
@@ -62,6 +67,7 @@ internal sealed record NativePerspectiveCamera(
     [property: JsonPropertyName("node")] int Node,
     [property: JsonPropertyName("fov_y")] float FieldOfViewY,
     [property: JsonPropertyName("aspect_ratio")] float AspectRatio,
+    [property: JsonPropertyName("aspect_mode")] string AspectMode,
     [property: JsonPropertyName("near_plane")] float NearPlane,
     [property: JsonPropertyName("far_plane")] float FarPlane,
     [property: JsonPropertyName("aperture_f")] float ApertureF,

@@ -4,6 +4,7 @@
 
 using System.Collections.Immutable;
 using System.Text.Json;
+using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Managed.Assets.Catalog;
 
 namespace Oxygen.Editor.ContentPipeline;
@@ -41,19 +42,26 @@ public sealed partial class BuiltinGeometryCatalog
     {
         using var document = JsonDocument.Parse(json);
         var root = document.RootElement;
-        if (!string.Equals(root.GetProperty("schema").GetString(), "oxygen.builtin-geometry-catalog.v2", StringComparison.Ordinal))
+        if (!string.Equals(root.GetProperty("schema").GetString(), "oxygen.builtin-geometry-catalog.v3", StringComparison.Ordinal))
         {
             throw new InvalidDataException("The engine builtin geometry catalog version is not supported.");
         }
 
         var mount = RequiredString(root, "mount");
         var material = ReadContribution(root.GetProperty("default_material"));
-        var geometries = root.GetProperty("geometries").EnumerateArray().Select(static item => new BuiltinGeometryDefinition(
-            new Uri(RequiredString(item, "asset_uri"), UriKind.Absolute),
-            RequiredString(item, "name"),
-            RequiredString(item, "canonical_name"),
-            ReadContribution(item),
-            ReadAuthoringCategory(item))).ToImmutableArray();
+        var inventories = CookedGeometryReport.Parse(JsonSerializer.Serialize(new
+        {
+            schema_version = 1,
+            geometries = root.GetProperty("geometries").EnumerateArray().Select(static item => item.GetProperty("material_slot_inventory")).ToArray(),
+        }));
+        var geometries = root.GetProperty("geometries").EnumerateArray().Select(item =>
+        {
+            var uri = new Uri(RequiredString(item, "asset_uri"), UriKind.Absolute);
+            var key = item.GetProperty("material_slot_inventory").GetProperty("geometry_asset_key").GetGuid();
+            return new BuiltinGeometryDefinition(uri, RequiredString(item, "name"), RequiredString(item, "canonical_name"),
+                ReadContribution(item), ReadAuthoringCategory(item),
+                inventories.Find(uri, key) ?? throw new InvalidDataException("A builtin geometry has no native material-slot inventory."));
+        }).ToImmutableArray();
         var identities = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         return geometries.Any(item => !identities.Add(item.AssetUri.AbsoluteUri))
             ? throw new InvalidDataException("The engine builtin catalog contains duplicate authored identities.")

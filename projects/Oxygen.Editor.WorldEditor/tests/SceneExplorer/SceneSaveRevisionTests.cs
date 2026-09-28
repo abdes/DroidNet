@@ -217,7 +217,7 @@ public sealed class SceneSaveRevisionTests
                 default,
                 new StrongReferenceMessenger(),
                 Mock.Of<IOperationResultPublisher>(),
-                new OperationStatusReducer());
+                new OperationStatusReducer(), Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(), Moq.Mock.Of<Oxygen.Editor.Projects.IProjectContextService>());
         }
 
         public SceneDocumentCommandContext Context { get; }

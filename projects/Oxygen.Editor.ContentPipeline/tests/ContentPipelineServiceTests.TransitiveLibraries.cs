@@ -116,7 +116,7 @@ public sealed partial class ContentPipelineServiceTests
         _ = cooked.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, cooked.Diagnostics.Select(static issue => issue.TechnicalMessage ?? issue.Message)));
 
         var source = JsonNode.Parse(library.ReadText(material))!;
-        source["PbrMetallicRoughness"]!["RoughnessFactor"] = 0.9;
+        source["parameters"]!["roughness"] = 0.9;
         library.WriteText(material, source.ToJsonString());
         _ = (await producer.CookAssetAsync(new("asset:///" + material), this.TestContext.CancellationToken).ConfigureAwait(false)).IsPublished.Should().BeTrue();
         var workers = runner.Count;
@@ -137,7 +137,7 @@ public sealed partial class ContentPipelineServiceTests
     private static void WriteMaterialRoughness(TempWorkspace workspace, string path, double value)
     {
         var source = JsonNode.Parse(workspace.ReadText(path))!;
-        source["PbrMetallicRoughness"]!["RoughnessFactor"] = value;
+        source["parameters"]!["roughness"] = value;
         workspace.WriteText(path, source.ToJsonString());
     }
 }

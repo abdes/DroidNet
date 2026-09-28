@@ -53,7 +53,7 @@ public sealed partial class InspectorControlTests
         }
         else if (string.Equals(action, "Clear", StringComparison.Ordinal))
         {
-            _ = (await fixture.Commands.EditMaterialSlotAsync(fixture.Context, [nodes[0].Id], 0, newMaterialUri: null, EditSessionToken.OneShot).ConfigureAwait(true)).Succeeded.Should().BeTrue();
+            _ = (await fixture.Commands.EditMaterialSlotAsync(fixture.Context, [nodes[0].Id], await fixture.ReadSingleMaterialSlotAsync(nodes[0].Id, cancellationToken).ConfigureAwait(true), newMaterialUri: null, EditSessionToken.OneShot).ConfigureAwait(true)).Succeeded.Should().BeTrue();
         }
         else
         {

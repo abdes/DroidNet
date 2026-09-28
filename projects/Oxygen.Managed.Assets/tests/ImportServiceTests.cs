@@ -41,7 +41,7 @@ public sealed class ImportServiceTests
         var result = await service.ImportAsync(request, CancellationToken.None).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeFalse();
-        var diagnostic = result.Diagnostics.Should().ContainSingle(d => d.Code == "OXYIMPORT_NATIVE_SCENE_COOK_REQUIRED").Which;
+        var diagnostic = result.Diagnostics.Should().ContainSingle(d => d.Code == "OXYIMPORT_NATIVE_COOK_REQUIRED").Which;
         _ = diagnostic.Severity.Should().Be(ImportDiagnosticSeverity.Error);
         _ = diagnostic.SourcePath.Should().Be(sourcePath);
         _ = diagnostic.VirtualPath.Should().Be("/Content/Scenes/Main.oscene");
@@ -68,27 +68,25 @@ public sealed class ImportServiceTests
 
         var first = await service.ImportAsync(request, CancellationToken.None).ConfigureAwait(false);
         _ = first.Succeeded.Should().BeFalse();
-        _ = first.Diagnostics.Should().ContainSingle(d => d.Code == "OXYIMPORT_NATIVE_SCENE_COOK_REQUIRED");
+        _ = first.Diagnostics.Should().ContainSingle(d => d.Code == "OXYIMPORT_NATIVE_COOK_REQUIRED");
         var writesAfterFirst = files.WriteCount;
         var second = await service.ImportAsync(request, CancellationToken.None).ConfigureAwait(false);
 
         _ = importer.ImportCallCount.Should().Be(1);
         _ = second.Succeeded.Should().BeFalse();
         _ = second.Diagnostics.Should().ContainSingle(d => d.Code == "OXYIMPORT_UP_TO_DATE");
-        _ = second.Diagnostics.Should().ContainSingle(d => d.Code == "OXYIMPORT_NATIVE_SCENE_COOK_REQUIRED");
+        _ = second.Diagnostics.Should().ContainSingle(d => d.Code == "OXYIMPORT_NATIVE_COOK_REQUIRED");
         _ = files.WriteCount.Should().Be(writesAfterFirst);
         _ = files.TryGet(".cooked/Content/container.index.bin", out _).Should().BeFalse();
     }
 
     [TestMethod]
-    public async Task ImportAsync_ShouldSelectMaterialImporterAndWriteCookedOutput()
+    public async Task ImportAsync_ShouldRequireNativeMaterialCookingWithoutWritingCookedOutput()
     {
         const string sourcePath = "Content/Materials/Wood.omat.json";
         const string json = """
         {
-          "Schema": "oxygen.material.v1",
-          "Type": "PBR",
-          "Name": "Wood"
+          "name": "Wood"
         }
         """;
 
@@ -110,25 +108,12 @@ public sealed class ImportServiceTests
 
         var result = await service.ImportAsync(request, CancellationToken.None).ConfigureAwait(false);
 
-        _ = result.Succeeded.Should().BeTrue();
-        _ = result.Diagnostics.Should().BeEmpty();
+        _ = result.Succeeded.Should().BeFalse();
+        _ = result.Diagnostics.Should().ContainSingle(d => d.Code == "OXYIMPORT_NATIVE_COOK_REQUIRED");
         _ = result.Imported.Should().ContainSingle();
         _ = result.Imported[0].VirtualPath.Should().Be("/Content/Materials/Wood.omat");
-
-        _ = files.TryGet(".cooked/Content/Materials/Wood.omat", out var cooked).Should().BeTrue();
-        _ = cooked.Should().HaveCount(357);
-
-        _ = files.TryGet(".cooked/Content/container.index.bin", out var indexBytes).Should().BeTrue();
-        var ms = new MemoryStream(indexBytes);
-        try
-        {
-            var doc = LooseCookedIndex.Read(ms);
-            _ = doc.Assets.Should().ContainSingle(a => a.VirtualPath == "/Content/Materials/Wood.omat");
-        }
-        finally
-        {
-            await ms.DisposeAsync().ConfigureAwait(false);
-        }
+        _ = files.TryGet(".cooked/Content/Materials/Wood.omat", out _).Should().BeFalse();
+        _ = files.TryGet(".cooked/Content/container.index.bin", out _).Should().BeFalse();
     }
 
     [TestMethod]
@@ -154,14 +139,12 @@ public sealed class ImportServiceTests
     }
 
     [TestMethod]
-    public async Task ImportAsync_WhenUnchangedAndSidecarAvailable_ShouldNoOp()
+    public async Task ImportAsync_WhenMaterialUnchanged_ShouldKeepNativeCookingRequirement()
     {
         const string sourcePath = "Content/Materials/Wood.omat.json";
         const string json = """
         {
-          "Schema": "oxygen.material.v1",
-          "Type": "PBR",
-          "Name": "Wood"
+          "name": "Wood"
         }
         """;
 
@@ -183,12 +166,12 @@ public sealed class ImportServiceTests
             Options: new ImportOptions(FailFast: true));
 
         var first = await service.ImportAsync(request, CancellationToken.None).ConfigureAwait(false);
-        _ = first.Succeeded.Should().BeTrue();
+        _ = first.Succeeded.Should().BeFalse();
         _ = importer.ImportCallCount.Should().Be(1);
         var writesAfterFirst = files.WriteCount;
 
         var second = await service.ImportAsync(request, CancellationToken.None).ConfigureAwait(false);
-        _ = second.Succeeded.Should().BeTrue();
+        _ = second.Succeeded.Should().BeFalse();
         _ = importer.ImportCallCount.Should().Be(1);
         _ = second.Imported.Should().BeEmpty();
         _ = files.WriteCount.Should().Be(writesAfterFirst);
@@ -202,11 +185,11 @@ public sealed class ImportServiceTests
 
         const string json = """
         {
-          "Schema": "oxygen.material.v1",
-          "Type": "PBR",
-          "Name": "Wood",
-          "PbrMetallicRoughness": {
-            "BaseColorTexture": { "Source": "asset:///Content/Textures/Wood_BaseColor.png" }
+          "name": "Wood",
+          "textures": {
+            "base_color": {
+              "virtual_path": "/Content/Textures/Wood_BaseColor.png"
+            }
           }
         }
         """;
@@ -230,18 +213,18 @@ public sealed class ImportServiceTests
             Options: new ImportOptions(FailFast: true));
 
         var first = await service.ImportAsync(request, CancellationToken.None).ConfigureAwait(false);
-        _ = first.Succeeded.Should().BeTrue();
+        _ = first.Succeeded.Should().BeFalse();
         _ = importer.ImportCallCount.Should().Be(1);
 
         var second = await service.ImportAsync(request, CancellationToken.None).ConfigureAwait(false);
-        _ = second.Succeeded.Should().BeTrue();
+        _ = second.Succeeded.Should().BeFalse();
         _ = importer.ImportCallCount.Should().Be(1);
         _ = second.Imported.Should().BeEmpty();
 
         files.AddUtf8(texPath, "v2");
 
         var third = await service.ImportAsync(request, CancellationToken.None).ConfigureAwait(false);
-        _ = third.Succeeded.Should().BeTrue();
+        _ = third.Succeeded.Should().BeFalse();
         _ = importer.ImportCallCount.Should().Be(2);
         _ = third.Imported.Should().NotBeEmpty();
     }

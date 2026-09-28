@@ -80,8 +80,12 @@ public sealed partial class SceneDescriptorGeneratorTests
             Name = "Geometry",
             Geometry = new AssetReference<GeometryAsset>(AssetUris.BuildGeneratedUri("BasicShapes/Cube")),
         };
+        var catalogProvider = new BuiltinCatalogFixture();
+        var catalog = await catalogProvider.GetBuiltinGeometryCatalogAsync(workspace.Root, "Content", this.TestContext.CancellationToken).ConfigureAwait(false);
+        var slots = catalog.Find(geometry.Geometry.Uri)!.MaterialSlots;
         geometry.OverrideSlots.Add(new MaterialsSlot
         {
+            Target = new(geometry.Geometry.Uri, slots.Slots[0].SlotId, slots.LayoutRevision),
             Material = new AssetReference<MaterialAsset>(new Uri("asset:///Content/Materials/Red.omat.json")),
         });
         _ = node.AddComponent(geometry);
@@ -115,11 +119,14 @@ public sealed partial class SceneDescriptorGeneratorTests
 
         using var document = JsonDocument.Parse(await File.ReadAllTextAsync(result.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false));
         var root = document.RootElement;
-        _ = root.GetProperty("version").GetInt32().Should().Be(8);
+        _ = root.GetProperty("version").GetInt32().Should().Be(9);
         _ = root.GetProperty("name").GetString().Should().Be("Main");
         _ = root.GetProperty("renderables")[0].GetProperty("geometry_ref").GetString()
             .Should().Be("/Content/Geometry/Engine_Generated_BasicShapes_Cube.ogeo");
-        _ = root.GetProperty("renderables")[0].GetProperty("material_ref").GetString()
+        var assignments = root.GetProperty("renderables")[0].GetProperty("material_overrides");
+        _ = assignments.GetArrayLength().Should().Be(1);
+        _ = assignments[0].GetProperty("slot_id").GetGuid().Should().Be(slots.Slots[0].SlotId);
+        _ = assignments[0].GetProperty("material_ref").GetString()
             .Should().Be("/Content/Materials/Red.omat");
         _ = root.GetProperty("references").GetProperty("materials")[0].GetString()
             .Should().Be("/Content/Materials/Red.omat");
@@ -183,8 +190,8 @@ public sealed partial class SceneDescriptorGeneratorTests
         _ = result.Diagnostics.Should().BeEmpty();
         using var document = JsonDocument.Parse(await File.ReadAllTextAsync(result.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false));
         var root = document.RootElement;
-        _ = root.GetProperty("$schema").GetString().Should().Be("oxygen.scene-descriptor.v8");
-        _ = root.GetProperty("version").GetInt32().Should().Be(8);
+        _ = root.GetProperty("$schema").GetString().Should().Be("oxygen.scene-descriptor.v9");
+        _ = root.GetProperty("version").GetInt32().Should().Be(9);
         var nodes = root.GetProperty("nodes");
         _ = nodes.GetArrayLength().Should().Be(2);
         _ = nodes[1].GetProperty("parent").GetInt32().Should().Be(0);
@@ -352,10 +359,10 @@ public sealed partial class SceneDescriptorGeneratorTests
             .Should().Be("/Content/Geometry/Foo.ogeo");
     }
 
-    /// <summary>Rejects a scene with no nodes.</summary>
+    /// <summary>Preserves an empty scene and its environment without synthetic nodes.</summary>
     /// <returns>The test task.</returns>
     [TestMethod]
-    public async Task GenerateAsyncWhenSceneHasNoNodesShouldReturnDescriptorDiagnostic()
+    public async Task GenerateAsyncWhenSceneHasNoNodesPreservesEnvironment()
     {
         using var workspace = new TempWorkspace();
         var scope = CreateScope(workspace);
@@ -364,10 +371,12 @@ public sealed partial class SceneDescriptorGeneratorTests
 
         var result = await generator.GenerateAsync(scene, scope, this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        _ = result.Diagnostics.Should().ContainSingle(diagnostic =>
-            diagnostic.Code == ContentPipelineDiagnosticCodes.SceneDescriptorGenerationFailed
-            && diagnostic.Severity == DiagnosticSeverity.Error);
-        _ = File.Exists(result.DescriptorPath).Should().BeFalse();
+        _ = result.Diagnostics.Should().NotContain(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+        _ = result.Dependencies.Should().BeEmpty();
+        using var document = JsonDocument.Parse(await File.ReadAllTextAsync(result.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false));
+        _ = document.RootElement.GetProperty("nodes").GetArrayLength().Should().Be(0);
+        _ = document.RootElement.GetProperty("environment").GetProperty("post_process_volume")
+            .GetProperty("exposure_mode").GetInt32().Should().Be((int)ExposureMode.Auto);
     }
 
     private static Scene CreateScene(IProject project)

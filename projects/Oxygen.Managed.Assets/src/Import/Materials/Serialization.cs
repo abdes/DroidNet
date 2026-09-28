@@ -25,8 +25,4 @@ internal static class Serialization
         UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
     };
 
-    /// <summary>
-    /// Gets the source-generated serialization context configured with <see cref="Options"/>.
-    /// </summary>
-    internal static readonly SerializationContext Context = new(Options);
 }

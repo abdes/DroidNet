@@ -41,7 +41,12 @@ internal sealed partial class NativeRuntimeCommandTransport(EngineContext contex
                 this.world.SetGeometry(value.NodeId, value.AssetPath, (generation, message) => this.OnAssetLoadFailed(request, generation, message), generation => this.OnAssetLoadSucceeded(request, generation));
                 break;
             case RuntimeSetMaterialOverride value:
-                this.world.SetMaterialOverride(value.NodeId, value.SlotIndex, value.MaterialPath, (generation, message) => this.OnAssetLoadFailed(request, generation, message), generation => this.OnAssetLoadSucceeded(request, generation));
+                if (!Enum.IsDefined(value.Intent))
+                {
+                    throw new ArgumentOutOfRangeException(nameof(request), "Unknown material assignment intent.");
+                }
+
+                this.world.SetMaterialOverride(value.NodeId, value.GeometryPath, value.SlotId, value.LayoutRevision, value.MaterialPath, (byte)value.Intent, (generation, message) => this.OnAssetLoadFailed(request, generation, message), generation => this.OnAssetLoadSucceeded(request, generation));
                 break;
             case RuntimeSetBackgroundColor value:
                 this.world.SetBackgroundColor(value.Color);
@@ -147,7 +152,7 @@ internal sealed partial class NativeRuntimeCommandTransport(EngineContext contex
         switch (command)
         {
             case RuntimeAttachPerspectiveCamera value:
-                this.world.AttachPerspectiveCamera(value.NodeId, value.FieldOfViewYRadians, value.AspectRatio, value.NearPlane, value.FarPlane);
+                this.world.AttachPerspectiveCamera(value.NodeId, value.FieldOfViewYRadians, value.AspectRatio, value.NearPlane, value.FarPlane, (byte)value.AspectMode);
                 break;
             case RuntimeDetachCamera value:
                 this.world.DetachCamera(value.NodeId);

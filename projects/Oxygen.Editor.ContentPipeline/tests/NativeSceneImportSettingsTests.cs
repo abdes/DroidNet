@@ -27,7 +27,7 @@ public sealed class NativeSceneImportSettingsTests
         var settings = CreateSettings();
         var parsed = NativeSceneImportSettings.Parse(settings.ToBytes());
         _ = parsed.Importer.Should().Be(NativeSceneImportSettings.ImporterIdentity);
-        _ = parsed.SchemaVersion.Should().Be(3);
+        _ = parsed.SchemaVersion.Should().Be(4);
         _ = parsed.OutputPrefixes.Should().Equal("/Content/Materials/Model/", "/Content/Geometry/Model/", "/Content/Scenes/Model/");
         _ = parsed.CreateLayout().Should().Be(new ContentImportLayout("/Content")
         {

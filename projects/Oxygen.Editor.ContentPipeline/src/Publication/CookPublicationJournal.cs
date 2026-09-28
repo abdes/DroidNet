@@ -46,6 +46,9 @@ internal sealed record CookPublicationJournal(
     /// <summary>Gets the reviewed retained-source directory installed with this generation.</summary>
     public SourceBundle? SourceReplacement { get; init; }
 
+    /// <summary>Gets ordinary source-sidecar updates outside any replaced source directory.</summary>
+    public ImmutableArray<CookProducedSourceFile> SourceFiles { get; init; } = [];
+
     /// <summary>A retained source bundle and the complete before/after directory identities.</summary>
     /// <param name="BundleName">The single retained-source directory name.</param>
     /// <param name="Before">The reviewed original source and settings.</param>

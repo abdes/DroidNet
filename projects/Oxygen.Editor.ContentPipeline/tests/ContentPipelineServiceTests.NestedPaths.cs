@@ -35,17 +35,24 @@ public sealed partial class ContentPipelineServiceTests
         descriptor["lods"]![0]!["submeshes"]![0]!["material_ref"] = "/" + first[..^5];
         workspace.WriteText(geometry, descriptor.ToJsonString());
         File.Delete(original);
-        AddGeometryNode(workspace, new("asset:///" + geometry), "Mesh");
-        workspace.Scene.RootNodes[^1].Components.OfType<GeometryComponent>().Single().OverrideSlots.Add(
-            new MaterialsSlot { Material = new AssetReference<MaterialAsset>(new Uri("asset:///" + second)) });
-        await workspace.WriteSceneAsync(scene).ConfigureAwait(false);
         using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
         var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
+        var geometryUri = new Uri("asset:///" + geometry);
+        _ = (await service.CookAssetAsync(geometryUri, this.TestContext.CancellationToken).ConfigureAwait(false)).IsPublished.Should().BeTrue();
+        var inventory = await service.ReadAsync(workspace.ProjectContext, geometryUri, this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = inventory.Should().NotBeNull();
+        AddGeometryNode(workspace, geometryUri, "Mesh");
+        workspace.Scene.RootNodes[^1].Components.OfType<GeometryComponent>().Single().OverrideSlots.Add(new MaterialsSlot
+        {
+            Target = new(geometryUri, inventory!.Slots.Single().SlotId, inventory.LayoutRevision),
+            Material = new AssetReference<MaterialAsset>(new Uri("asset:///" + second)),
+        });
+        await workspace.WriteSceneAsync(scene).ConfigureAwait(false);
         var result = await service.CookCurrentSceneAsync(new("asset:///" + scene), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.TechnicalMessage ?? issue.Message)));
         var inputs = new[] { first, second, geometry, scene };
-        _ = result.CookedAssets.Select(static asset => asset.CookedAssetUri).Should().BeEquivalentTo(inputs.Select(static path => new Uri("asset:///" + path[..^5])));
+        _ = result.CookedAssets.Concat(result.ReusedAssets).Select(static asset => asset.CookedAssetUri).Should().BeEquivalentTo(inputs.Select(static path => new Uri("asset:///" + path[..^5])));
         foreach (var path in inputs)
         {
             _ = File.Exists(Path.Combine(workspace.Root, ".cooked", path[..^5])).Should().BeTrue(path);

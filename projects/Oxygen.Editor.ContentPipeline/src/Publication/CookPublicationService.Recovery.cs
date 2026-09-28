@@ -81,7 +81,7 @@ public sealed partial class CookPublicationService
             }
 
             var receipt = JsonSerializer.Deserialize<CookPublicationReceipt>(snapshot.Content.AsSpan());
-            if (receipt is null || receipt.Version != 1 || receipt.ProjectId != project.ProjectId)
+            if (receipt is null || receipt.Version != 2 || receipt.ProjectId != project.ProjectId)
             {
                 return false;
             }
@@ -195,7 +195,7 @@ public sealed partial class CookPublicationService
 
         var receipt = JsonSerializer.Deserialize<CookPublicationReceipt>(receiptFile.Content.AsSpan())
             ?? throw new InvalidDataException("The publication receipt is empty.");
-        if (receipt.Version != 1 || receipt.ProjectId != project.ProjectId || receipt.Roots.IsDefaultOrEmpty || receipt.Roots.Any(static root => root is null))
+        if (receipt.Version != 2 || receipt.ProjectId != project.ProjectId || receipt.Roots.IsDefaultOrEmpty || receipt.Roots.Any(static root => root is null))
         {
             throw new InvalidDataException("The publication receipt does not belong to this project.");
         }

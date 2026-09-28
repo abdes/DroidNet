@@ -221,16 +221,62 @@ public sealed partial class ContentPipelineServiceTests
         _ = workspace.ReadText(source).Should().Be(descriptor.ToJsonString());
     }
 
-    /// <summary>The scalar editor cook must not silently discard a saved texture reference.</summary>
+    /// <summary>Every material channel follows the existing texture dependency and image capture path.</summary>
+    /// <returns>The asynchronous dependency regression.</returns>
+    [TestMethod]
+    public async Task MaterialDiscoveryIncludesIndependentTexturesImagesAndLibraryReferences()
+    {
+        using var workspace = new TempWorkspace();
+        const string source = "Content/Materials/Channels.omat.json";
+        workspace.WriteText(source, """
+            { "name":"Channels", "textures": {
+                "base_color":{"virtual_path":"/Content/Textures/Shared.otex"},
+                "normal":{"virtual_path":"/Content/Textures/Shared.otex","uv_set":1},
+                "metallic":{"virtual_path":"/Content/Textures/Metal.otex"},
+                "roughness":{"virtual_path":"/Content/Textures/Rough.otex"},
+                "emissive":{"virtual_path":"/Library/Textures/Emit.otex"}
+            } }
+            """);
+        foreach (var name in new[] { "Shared", "Metal", "Rough" })
+        {
+            workspace.WriteText($"Content/Textures/{name}.otex.json", $$"""{"source":"{{name}}.png"}""");
+            workspace.WriteText($"Content/Textures/{name}.png", "saved image bytes");
+        }
+
+        var materialUri = new Uri("asset:///" + source);
+        var input = CookInputResolver.Resolve(workspace.ProjectContext, materialUri, ContentCookInputRole.Primary);
+        var graph = await new CookDependencyDiscovery(workspace.Documents).DiscoverAsync(workspace.ProjectContext, [input], this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = graph.Diagnostics.Should().BeEmpty();
+        _ = graph.Assets.Should().HaveCount(4);
+        _ = graph.Dependencies[materialUri].Should().BeEquivalentTo(new Uri[]
+        {
+            new("asset:///Content/Textures/Shared.otex.json"),
+            new("asset:///Content/Textures/Metal.otex.json"),
+            new("asset:///Content/Textures/Rough.otex.json"),
+            new("asset:///Library/Textures/Emit.otex"),
+        });
+        _ = graph.Files.Count(static file => file.RelativePath.EndsWith(".png", StringComparison.Ordinal)).Should().Be(3);
+        _ = graph.PublishedReferences.Should().ContainSingle().Which.Should().Be(new Uri("asset:///Library/Textures/Emit.otex"));
+        var capture = new CookInputSnapshotCapture(workspace.Documents, workspace.CookCoordinator);
+        var captured = await workspace.CookCoordinator.RunAsync(
+            (operation, token) => capture.CaptureAsync(operation, _ => Task.FromResult<IReadOnlyList<CookSnapshotInput>>(graph.Files), "compatible-fixture-artifacts", token),
+            this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = captured.Snapshot.Should().NotBeNull();
+        workspace.WriteText("Content/Textures/Metal.png", "new image bytes");
+        var saved = await File.ReadAllTextAsync(Path.Combine(captured.Snapshot!.InputRoot, "Content/Textures/Metal.png"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = saved.Should().Be("saved image bytes");
+    }
+
+    /// <summary>A missing texture descriptor blocks native work without changing the authored material.</summary>
     /// <returns>The asynchronous test operation.</returns>
     [TestMethod]
-    public async Task TextureBearingMaterialFailsBeforeNativeImport()
+    public async Task MissingMaterialTextureFailsBeforeNativeImport()
     {
         using var workspace = new TempWorkspace();
         const string source = "Content/Materials/Red.omat.json";
         workspace.WriteMaterial(source, "Red");
         var material = JsonNode.Parse(workspace.ReadText(source))!;
-        material["PbrMetallicRoughness"]!["BaseColorTexture"] = JsonNode.Parse("""{"Source":"asset:///Content/Textures/Red.png"}""");
+        material["textures"] = JsonNode.Parse("""{"base_color":{"virtual_path":"/Content/Textures/Red.otex.json"}}""");
         workspace.WriteText(source, material.ToJsonString());
         var api = CreateSuccessfulApi(workspace);
         var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(workspace, []), api);
@@ -238,8 +284,7 @@ public sealed partial class ContentPipelineServiceTests
         var result = await service.CookAssetAsync(new("asset:///" + source), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.Status.Should().Be(OperationStatus.Failed);
-        _ = result.Diagnostics.Should().ContainSingle(diagnostic => diagnostic.Message.Contains("scalar", StringComparison.Ordinal));
-        _ = workspace.CookCoordinator.Runs.Single().Assets.Values.Should().ContainSingle(asset => asset.AssetUri == new Uri("asset:///" + source) && asset.State == Cooking.CookAssetState.Failed);
+        _ = result.Diagnostics.Should().ContainSingle(diagnostic => diagnostic.AffectedVirtualPath == "/Content/Textures/Red.otex.json");
         _ = api.ImportedManifest.Should().BeNull();
         _ = workspace.ReadText(source).Should().Be(material.ToJsonString());
     }

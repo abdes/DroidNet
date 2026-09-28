@@ -3,12 +3,12 @@
 // SPDX-License-Identifier: MIT
 
 using System.Security.Cryptography;
-using Oxygen.Managed.Core;
+using System.Text.Json;
 
 namespace Oxygen.Managed.Assets.Import.Materials;
 
 /// <summary>
-/// Imports authoring material source JSON (<c>*.omat.json</c>) and writes a cooked runtime <c>.omat</c> output.
+/// Discovers canonical material source identity and dependencies; native tools own cooking.
 /// </summary>
 public sealed class MaterialSourceImporter : IAssetImporter
 {
@@ -67,7 +67,7 @@ public sealed class MaterialSourceImporter : IAssetImporter
             material = MaterialSourceReader.Read(jsonUtf8);
             return true;
         }
-        catch (Exception ex) when (ex is InvalidDataException or FormatException)
+        catch (Exception ex) when (ex is InvalidDataException or FormatException or JsonException)
         {
             context.Diagnostics.Add(
                 ImportDiagnosticSeverity.Error,
@@ -124,10 +124,10 @@ public sealed class MaterialSourceImporter : IAssetImporter
         Add(ImportedDependencyKind.SourceFile, sourcePath);
         Add(ImportedDependencyKind.Sidecar, sourcePath + ".import.json");
 
-        AddAssetUri(material.PbrMetallicRoughness.BaseColorTexture?.Source);
-        AddAssetUri(material.PbrMetallicRoughness.MetallicRoughnessTexture?.Source);
-        AddAssetUri(material.NormalTexture?.Source);
-        AddAssetUri(material.OcclusionTexture?.Source);
+        foreach (var path in material.EnumerateTextureVirtualPaths())
+        {
+            Add(ImportedDependencyKind.ReferencedResource, path[1..]);
+        }
 
         deps.Sort(static (a, b) =>
         {
@@ -152,57 +152,6 @@ public sealed class MaterialSourceImporter : IAssetImporter
             }
         }
 
-        void AddAssetUri(string? assetUri)
-        {
-            if (string.IsNullOrWhiteSpace(assetUri))
-            {
-                return;
-            }
-
-            if (TryGetProjectRelativePathFromAssetUri(assetUri, out var projectRelativePath))
-            {
-                Add(ImportedDependencyKind.ReferencedResource, projectRelativePath);
-            }
-        }
-    }
-
-    private static bool TryGetProjectRelativePathFromAssetUri(string assetUri, out string projectRelativePath)
-    {
-        var prefix = $"{AssetUris.Scheme}://";
-
-        if (!assetUri.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-        {
-            projectRelativePath = string.Empty;
-            return false;
-        }
-
-        // Important: we parse manually instead of using <see cref="Uri"/> for the mount point because
-        // Uri normalizes the host to lowercase, but our mount point tokens are case-sensitive in practice.
-        var rest = assetUri[prefix.Length..].TrimStart('/');
-        var slash = rest.IndexOf('/', StringComparison.Ordinal);
-        if (slash <= 0)
-        {
-            projectRelativePath = string.Empty;
-            return false;
-        }
-
-        var mountPoint = rest[..slash];
-        var relativePath = rest[(slash + 1)..];
-
-        var delimiter = relativePath.IndexOfAny(['?', '#']);
-        if (delimiter >= 0)
-        {
-            relativePath = relativePath[..delimiter];
-        }
-
-        if (string.IsNullOrWhiteSpace(mountPoint) || string.IsNullOrWhiteSpace(relativePath))
-        {
-            projectRelativePath = string.Empty;
-            return false;
-        }
-
-        projectRelativePath = mountPoint + "/" + Uri.UnescapeDataString(relativePath);
-        return true;
     }
 
     private static string DeriveVirtualPath(ImportInput input)

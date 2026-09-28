@@ -194,7 +194,7 @@ public sealed partial class InspectorControlTests
                 materials.Object,
                 this.Sync.Object,
                 new Oxygen.Testing.BuiltinCatalogDiscoveryFixture(),
-                contentDemand ?? Mock.Of<ISceneContentDemandService>());
+                contentDemand ?? Mock.Of<ISceneContentDemandService>(), this.Slots.Object, this.Projects);
         }
 
         public void ConfigureObservedSync(SceneEngineSync throttle, List<DateTimeOffset> previews, Action terminal)

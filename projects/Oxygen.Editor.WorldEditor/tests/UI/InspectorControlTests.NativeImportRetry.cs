@@ -61,7 +61,7 @@ public sealed partial class InspectorControlTests
             _ = retried.Request.ScopeUri.Should().Be(failed.Request.ScopeUri);
             var material = retried.Assets.Values.Single(asset => asset.Kind == ContentCookAssetKind.Material).AssetUri;
             var node = fixture.Source.RootNodes[0].Id;
-            _ = (await fixture.Commands.EditMaterialSlotAsync(fixture.Context, [node], 0, material, EditSessionToken.OneShot).ConfigureAwait(true)).Succeeded.Should().BeTrue();
+            _ = (await fixture.Commands.EditMaterialSlotAsync(fixture.Context, [node], await fixture.ReadSingleMaterialSlotAsync(node, timeout.Token).ConfigureAwait(true), material, EditSessionToken.OneShot).ConfigureAwait(true)).Succeeded.Should().BeTrue();
             _ = await WaitForNodeAsync(fixture, node, value => value.MaterialBaseColors.Length == 1 && Vector4.Distance(value.MaterialBaseColors[0], new(0.8f, 0.2f, 0.1f, 1)) < 0.001f, timeout.Token).ConfigureAwait(true);
         }
         finally

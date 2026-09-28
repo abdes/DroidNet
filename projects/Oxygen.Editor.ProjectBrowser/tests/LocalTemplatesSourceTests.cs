@@ -90,7 +90,7 @@ public class LocalTemplatesSourceTests
         {
             var material = MaterialSourceReader.Read(File.ReadAllBytes(materialPath));
 
-            Assert.AreEqual("oxygen.material.v1", material.Schema, materialPath);
+            Assert.IsTrue(MaterialSourceWriter.ToJson(material).ContainsKey("parameters"), materialPath);
         }
     }
 
@@ -200,16 +200,19 @@ public class LocalTemplatesSourceTests
             Path.Combine(root, "Content", "Materials", "Default.omat.json"),
             """
             {
-              "Schema": "oxygen.material.v1",
-              "Type": "PBR",
-              "Name": "Default",
-              "PbrMetallicRoughness": {
-                "BaseColorFactor": [1, 1, 1, 1],
-                "MetallicFactor": 0,
-                "RoughnessFactor": 0.5
-              },
-              "AlphaMode": "OPAQUE",
-              "DoubleSided": false
+              "name": "Default",
+              "alpha_mode": "opaque",
+              "parameters": {
+                "base_color": [
+                  1,
+                  1,
+                  1,
+                  1
+                ],
+                "metalness": 0,
+                "roughness": 0.5,
+                "double_sided": false
+              }
             }
             """);
         File.WriteAllText(Path.Combine(root, "Template.json"), TemplateJson);

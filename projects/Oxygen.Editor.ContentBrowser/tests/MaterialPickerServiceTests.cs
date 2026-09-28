@@ -308,8 +308,6 @@ public sealed class MaterialPickerServiceTests
         MaterialSourceWriter.Write(
             stream,
             new MaterialSource(
-                "oxygen.material.v1",
-                "PBR",
                 "Wood",
                 new MaterialPbrMetallicRoughness(
                     r,

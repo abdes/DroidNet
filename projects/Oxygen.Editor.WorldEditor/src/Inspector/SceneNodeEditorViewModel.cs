@@ -17,6 +17,8 @@ using Microsoft.UI.Dispatching;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentBrowser.Materials;
 using Oxygen.Editor.ContentPipeline.Discovery;
+using Oxygen.Editor.ContentPipeline.Inspection;
+using Oxygen.Editor.Projects;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Inspector.Geometry;
@@ -65,6 +67,8 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     /// <param name="sceneEngineSync">The scene engine-sync service that reports buffered live-sync work.</param>
     /// <param name="builtins">The shared native catalog for engine choices.</param>
     /// <param name="contentDemand">The saved-asset preview request owner.</param>
+    /// <param name="materialSlots">The current native geometry slot inventories.</param>
+    /// <param name="projectContexts">The active project lifetime.</param>
     /// <param name="loggerFactory">
     ///     Optional factory for creating loggers. If provided, enables detailed logging of the
     ///     recognition process. If <see langword="null" />, logging is disabled.
@@ -81,6 +85,8 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         ISceneEngineSync sceneEngineSync,
         IBuiltinCatalogDiscovery builtins,
         ISceneContentDemandService contentDemand,
+        IGeometryMaterialSlotProvider materialSlots,
+        IProjectContextService projectContexts,
         ILoggerFactory? loggerFactory = null)
         : base(loggerFactory)
     {
@@ -102,6 +108,8 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
             materialPickerService,
             builtins,
             contentDemand,
+            materialSlots,
+            projectContexts,
             loggerFactory);
         this.environmentEditor = new EnvironmentViewModel(commandService, this.CreateCommandContext);
 
@@ -365,6 +373,8 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         IMaterialPickerService materialPickerService,
         IBuiltinCatalogDiscovery builtins,
         ISceneContentDemandService contentDemand,
+        IGeometryMaterialSlotProvider materialSlots,
+        IProjectContextService projectContexts,
         ILoggerFactory? loggerFactory)
         => new()
         {
@@ -378,6 +388,8 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
                 materialPickerService,
                 builtins,
                 contentDemand,
+                materialSlots,
+                projectContexts,
                 this.commandService,
                 this.CreateCommandContext),
             [typeof(PerspectiveCamera)] = _ => new PerspectiveCameraViewModel(

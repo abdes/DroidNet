@@ -38,7 +38,8 @@ public sealed partial class ContentPipelineServiceTests
         _ = result.IsPublished.Should().BeTrue();
         _ = result.CookedAssets.Should().Contain(asset => asset.Kind == ContentCookAssetKind.Geometry);
         _ = result.CookedAssets.Should().Contain(asset => asset.Kind == ContentCookAssetKind.Scene);
-        _ = result.CookedAssets.Should().OnlyContain(asset => asset.SourceAssetUri == source && asset.VirtualPath.StartsWith("/Content/Models/Model/", StringComparison.Ordinal));
+        var expectedPrefixes = new[] { "/Content/Geometry/Models/Model/", "/Content/Materials/Models/Model/", "/Content/Scenes/Models/Model/" };
+        _ = result.CookedAssets.Should().OnlyContain(asset => asset.SourceAssetUri == source && expectedPrefixes.Any(prefix => asset.VirtualPath.StartsWith(prefix, StringComparison.Ordinal)));
         var count = runner.Count;
         var reopened = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
         var repeat = await reopened.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -154,14 +155,14 @@ public sealed partial class ContentPipelineServiceTests
         var sourceRoot = Path.Combine(first.Root, "Content/SourceMedia/DCC/Model");
         var copyRoot = Path.Combine(second.Root, "Content/SourceMedia/DCC/Model");
         _ = Directory.CreateDirectory(copyRoot);
+        using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
+        var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
+        var one = await CreateService(first, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility).CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
         foreach (var file in Directory.EnumerateFiles(sourceRoot))
         {
             File.Copy(file, Path.Combine(copyRoot, Path.GetFileName(file)));
         }
 
-        using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
-        var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-        var one = await CreateService(first, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility).CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
         var two = await CreateService(second, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility).CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = one.IsPublished.Should().BeTrue();
         _ = two.IsPublished.Should().BeTrue();
@@ -208,8 +209,7 @@ public sealed partial class ContentPipelineServiceTests
         await File.WriteAllBytesAsync(Path.Combine(directory, filename), bytes, cancellationToken).ConfigureAwait(false);
         var retained = new RetainedImportSource(relative, filename, [new(filename, Convert.ToHexString(SHA256.HashData(bytes)))]);
 
-        // Existing model-folder imports must retain their saved paths after the type-folder layout ships.
-        var settings = NativeSceneImportSettings.Create(retained, "Content", name, "Models/" + name) with { SchemaVersion = 2 };
+        var settings = NativeSceneImportSettings.Create(retained, "Content", name, "Models/" + name);
         _ = await settings.SaveNewAsync(workspace.Root, new NativeAtomicFileStore(new RealFileSystem()), cancellationToken).ConfigureAwait(false);
         return new Uri("asset:///" + relative + "/" + filename);
     }

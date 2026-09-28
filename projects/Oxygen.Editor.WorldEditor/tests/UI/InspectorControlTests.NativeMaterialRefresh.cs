@@ -26,7 +26,7 @@ public sealed partial class InspectorControlTests
         var root = Path.Combine(fixture.ProjectRoot, ".cooked", "Content");
         await fixture.InitializeAsync(timeout.Token, root).ConfigureAwait(true);
         var node = fixture.Source.RootNodes.Single();
-        _ = (await fixture.Commands.EditMaterialSlotAsync(fixture.Context, [node.Id], 0, uri, EditSessionToken.OneShot).ConfigureAwait(true)).Succeeded.Should().BeTrue();
+        _ = (await fixture.Commands.EditMaterialSlotAsync(fixture.Context, [node.Id], await fixture.ReadSingleMaterialSlotAsync(node.Id, timeout.Token).ConfigureAwait(true), uri, EditSessionToken.OneShot).ConfigureAwait(true)).Succeeded.Should().BeTrue();
         _ = await WaitForNodeAsync(fixture, node.Id, value => value.MaterialBaseColors.Length == 1 && Vector4.Distance(value.MaterialBaseColors[0], red) < 0.001f, timeout.Token).ConfigureAwait(true);
         var source = fixture.Source;
         var revision = fixture.Context.Metadata.ChangeVersion;

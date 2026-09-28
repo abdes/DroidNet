@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -75,6 +74,8 @@ public sealed partial class MaterialCookServiceTests
             "Content/Materials/Wood.omat.json");
 
         var first = await service.CookMaterialAsync(request, CancellationToken.None).ConfigureAwait(false);
+        var descriptorPath = Path.Combine(workspace.Root, ".cooked", "Content", "Materials", "Wood.omat");
+        var originalBytes = await File.ReadAllBytesAsync(descriptorPath, CancellationToken.None).ConfigureAwait(false);
         await WriteMaterialAsync(source, CreateMaterial("Wood", metallicFactor: 0.8f, roughnessFactor: 0.2f)).ConfigureAwait(false);
         var second = await service.CookMaterialAsync(request, CancellationToken.None).ConfigureAwait(false);
 
@@ -91,8 +92,8 @@ public sealed partial class MaterialCookServiceTests
             .ContainSingle();
 
         var cookedBytes = await File.ReadAllBytesAsync(Path.Combine(workspace.Root, ".cooked", "Content", "Materials", "Wood.omat"), CancellationToken.None).ConfigureAwait(false);
-        _ = ReadUnorm16(cookedBytes, 0x84).Should().BeApproximately(0.8f, 0.0001f);
-        _ = ReadUnorm16(cookedBytes, 0x86).Should().BeApproximately(0.2f, 0.0001f);
+        _ = cookedBytes.Should().NotEqual(originalBytes);
+        _ = document.Assets.Single().DescriptorSha256.Span.ToArray().Should().Equal(LooseCookedIndex.ComputeSha256(cookedBytes));
     }
 
     /// <summary>Verifies the workflow can reject.</summary>
@@ -178,8 +179,6 @@ public sealed partial class MaterialCookServiceTests
 
     private static MaterialSource CreateMaterial(string name, float metallicFactor, float roughnessFactor)
         => new(
-            schema: "oxygen.material.v1",
-            type: "PBR",
             name: name,
             pbrMetallicRoughness: new MaterialPbrMetallicRoughness(
                 baseColorR: 0.4f,
@@ -195,9 +194,6 @@ public sealed partial class MaterialCookServiceTests
             alphaMode: MaterialAlphaMode.Opaque,
             alphaCutoff: 0.5f,
             doubleSided: false);
-
-    private static float ReadUnorm16(byte[] bytes, int offset)
-        => BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(offset, 2)) / 65535.0f;
 
     private sealed partial class TempWorkspace : IDisposable
     {

@@ -9,6 +9,7 @@ using System.Text.Json;
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Import;
+using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
@@ -40,21 +41,36 @@ public sealed partial class InspectorControlTests
             _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             var name = "M" + index.ToString("D4", CultureInfo.InvariantCulture);
             var source = $$"""
-                { "Schema": "oxygen.material.v1", "Type": "PBR", "Name": "{{name}}",
-                  "PbrMetallicRoughness": { "BaseColorFactor": [0.6, 0.3, 0.15, 1], "MetallicFactor": 0, "RoughnessFactor": 0.5 } }
+                {
+                  "name": "{{name}}",
+                  "parameters": {
+                    "base_color": [
+                      0.6,
+                      0.3,
+                      0.15,
+                      1
+                    ],
+                    "metalness": 0,
+                    "roughness": 0.5
+                  }
+                }
                 """;
             await File.WriteAllTextAsync(path, source, cancellationToken).ConfigureAwait(true);
         }
 
         var scene = fixture.Source;
-        SeedCatalogWorkloadScene(scene, builtins, mesh);
+        var inventories = builtins.AuthoringGeometries.ToDictionary(static definition => definition.AssetUri, static definition => definition.MaterialSlots);
+        var importedSlots = await ((IGeometryMaterialSlotProvider)pipeline).ReadAsync(project, mesh, cancellationToken).ConfigureAwait(true);
+        _ = importedSlots.Should().NotBeNull();
+        inventories.Add(mesh, importedSlots!);
+        SeedCatalogWorkloadScene(scene, builtins, mesh, inventories);
         var manager = new ProjectManagerService(new DroidNet.Storage.Native.NativeStorageProvider(new Testably.Abstractions.RealFileSystem()));
         _ = (await manager.SaveSceneAsync(scene).ConfigureAwait(true)).Should().BeTrue();
         var cooked = await pipeline.CookProjectAsync(cancellationToken).ConfigureAwait(true);
         _ = cooked.IsPublished.Should().BeTrue(DescribeWorkloadCook(cooked));
     }
 
-    private static void SeedCatalogWorkloadScene(Scene scene, BuiltinGeometryCatalog builtins, Uri mesh)
+    private static void SeedCatalogWorkloadScene(Scene scene, BuiltinGeometryCatalog builtins, Uri mesh, IReadOnlyDictionary<Uri, GeometryMaterialSlotMetadata> inventories)
     {
         var authoringGeometries = builtins.AuthoringGeometries.ToArray();
         for (var index = 0; index < 98; index++)
@@ -62,7 +78,9 @@ public sealed partial class InspectorControlTests
             var node = new SceneNode(scene) { Name = "Geometry " + index.ToString(CultureInfo.InvariantCulture), IsActive = true, CastsShadows = true, ReceivesShadows = true };
             var geometryUri = index >= 90 ? mesh : authoringGeometries[index % authoringGeometries.Length].AssetUri;
             var geometry = new GeometryComponent { Name = "Geometry", Geometry = new AssetReference<GeometryAsset>(geometryUri) };
-            geometry.OverrideSlots.Add(new MaterialsSlot { Material = new AssetReference<MaterialAsset>(new Uri("asset:///" + WorkloadMaterialPath(index % 2 == 0 ? 0 : index))) });
+            var inventory = inventories[geometryUri];
+            var target = new MaterialSlotTarget(geometryUri, inventory.Slots.Should().ContainSingle().Which.SlotId, inventory.LayoutRevision);
+            geometry.OverrideSlots.Add(new MaterialsSlot { Target = target, Material = new AssetReference<MaterialAsset>(new Uri("asset:///" + WorkloadMaterialPath(index % 2 == 0 ? 0 : index))) });
             _ = node.AddComponent(geometry);
             var position = new Vector3(index % 10, index / 10, 0);
             position *= 2;

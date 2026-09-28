@@ -2,15 +2,16 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Runtime.InteropServices;
+
 namespace Oxygen.Editor.Runtime.Engine;
 
 /// <summary>Serializes dispatch with lifetime invalidation; never blocks on native frame progress.</summary>
 internal sealed partial class RuntimeCommandDispatcher : IRuntimeWorldCommands, IRuntimeInputCommands
 {
-    private const int EnvironmentMaskSlot = -2;
     private readonly Lock gate = new();
     private readonly Dictionary<ulong, RuntimeViewTarget> views = [];
-    private readonly Dictionary<(Guid nodeId, int slot), RuntimeAssetRequestStatus> assetOperations = [];
+    private readonly Dictionary<AssetRequestTarget, RuntimeAssetRequestStatus> assetOperations = [];
     private IRuntimeCommandTransport? transport;
     private Task? loop;
     private TaskCompletionSource ended = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -21,6 +22,13 @@ internal sealed partial class RuntimeCommandDispatcher : IRuntimeWorldCommands, 
 
     /// <inheritdoc/>
     public event EventHandler<RuntimeAssetLoadFailedEventArgs>? AssetLoadFailed;
+
+    private enum AssetRequestKind
+    {
+        Geometry,
+        Material,
+        EnvironmentMask,
+    }
 
     /// <inheritdoc/>
     public Guid RunId
@@ -156,12 +164,12 @@ internal sealed partial class RuntimeCommandDispatcher : IRuntimeWorldCommands, 
         }
     }
 
-    private static (Guid nodeId, int slot)? AssetTarget(RuntimeWorldCommand command)
+    private static AssetRequestTarget? AssetTarget(RuntimeWorldCommand command)
         => command switch
         {
-            RuntimeSetGeometry geometry => (geometry.NodeId, -1),
-            RuntimeSetMaterialOverride material when material.SlotIndex >= 0 => (material.NodeId, material.SlotIndex),
-            RuntimeSetEnvironment => (Guid.Empty, EnvironmentMaskSlot),
+            RuntimeSetGeometry geometry => new(geometry.NodeId, AssetRequestKind.Geometry),
+            RuntimeSetMaterialOverride material when material.SlotId != Guid.Empty => new(material.NodeId, AssetRequestKind.Material, material.SlotId, material.GeometryPath),
+            RuntimeSetEnvironment => new(Guid.Empty, AssetRequestKind.EnvironmentMask),
             _ => null,
         };
 
@@ -400,7 +408,7 @@ internal sealed partial class RuntimeCommandDispatcher : IRuntimeWorldCommands, 
 
     private void ForgetAssetOperations(Guid nodeId)
     {
-        foreach (var target in this.assetOperations.Keys.Where(value => value.nodeId == nodeId).ToArray())
+        foreach (var target in this.assetOperations.Keys.Where(value => value.NodeId == nodeId).ToArray())
         {
             _ = this.assetOperations.Remove(target);
         }
@@ -423,4 +431,7 @@ internal sealed partial class RuntimeCommandDispatcher : IRuntimeWorldCommands, 
                 ? new(operationId, requestedRun, RuntimeCommandStatus.Unavailable, "The runtime is not running.")
                 : requestedRun != this.runId
                     ? new(operationId, requestedRun, RuntimeCommandStatus.Rejected, "The runtime run is no longer current.") : null;
+
+    [StructLayout(LayoutKind.Auto)]
+    private readonly record struct AssetRequestTarget(Guid NodeId, AssetRequestKind Kind, Guid SlotId = default, string? GeometryPath = null);
 }

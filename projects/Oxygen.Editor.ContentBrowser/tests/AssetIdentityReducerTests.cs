@@ -296,8 +296,6 @@ public sealed partial class AssetIdentityReducerTests
         MaterialSourceWriter.Write(
             stream,
             new MaterialSource(
-                "oxygen.material.v1",
-                "PBR",
                 "Material",
                 new MaterialPbrMetallicRoughness(
                     1.0f,

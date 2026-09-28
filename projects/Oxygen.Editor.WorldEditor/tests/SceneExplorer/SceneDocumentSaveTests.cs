@@ -51,7 +51,7 @@ public sealed class SceneDocumentSaveTests
             default,
             new StrongReferenceMessenger(),
             results.Object,
-            new OperationStatusReducer());
+            new OperationStatusReducer(), Moq.Mock.Of<Oxygen.Editor.ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(), Moq.Mock.Of<Oxygen.Editor.Projects.IProjectContextService>());
         var scene = new Scene(Mock.Of<IProject>(project => project.ProjectInfo == Mock.Of<IProjectInfo>(info => info.Location == "H:/SceneSaveTest"))) { Name = "Test Scene" };
         var metadata = new SceneDocumentMetadata(scene.Id) { Title = scene.Name, IsDirty = true };
         var context = new SceneDocumentCommandContext(scene.Id, metadata, scene, new HistoryKeeper(scene));

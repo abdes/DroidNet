@@ -7,8 +7,11 @@
 #pragma once
 #pragma managed(push, on)
 
+#include <Oxygen/Core/Types/CameraAspectMode.h>
+
 #include <array>
 #include <cstddef>
+#include <optional>
 #include <cstdint>
 #include <string>
 #include <utility>
@@ -31,6 +34,8 @@ struct PropertyEntry;
 enum class ComponentId : std::uint16_t;
 class SetGeometryCommand;
 class SetMaterialOverrideCommand;
+struct MaterialSlotTarget;
+enum class MaterialSlotAssignmentIntent : std::uint8_t;
 class SetVisibilityCommand;
 class ReparentSceneNodeCommand;
 class ReparentSceneNodesCommand;
@@ -73,7 +78,8 @@ namespace Oxygen::Interop::World {
 
     virtual oxygen::interop::module::SetMaterialOverrideCommand*
       CreateSetMaterialOverride(oxygen::scene::NodeHandle handle,
-        std::size_t slotIndex, std::string materialUri);
+        oxygen::interop::module::MaterialSlotTarget target, std::optional<std::string> materialUri,
+        oxygen::interop::module::MaterialSlotAssignmentIntent intent);
 
     virtual oxygen::interop::module::SetBackgroundColorCommand*
       CreateSetBackgroundColor(glm::vec3 color);
@@ -89,7 +95,7 @@ namespace Oxygen::Interop::World {
     virtual oxygen::interop::module::AttachPerspectiveCameraCommand*
       CreateAttachPerspectiveCamera(oxygen::scene::NodeHandle handle,
         float fieldOfViewYRadians, float aspectRatio, float nearPlane,
-        float farPlane);
+        float farPlane, oxygen::CameraAspectMode aspectMode);
 
     virtual oxygen::interop::module::DetachCameraCommand*
       CreateDetachCamera(oxygen::scene::NodeHandle handle);

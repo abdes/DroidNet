@@ -24,7 +24,7 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <param name="proceduralGeometryDescriptors">The generated geometry descriptor service.</param>
 public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescriptorService proceduralGeometryDescriptors) : ISceneDescriptorGenerator
 {
-    private const int NativeSceneDescriptorVersion = 8;
+    private const int NativeSceneDescriptorVersion = 9;
     private const double MaximumExposureLogLuminance = 32;
     private static readonly Lazy<EditorSchemaCatalog> SceneSchemas = new(() =>
         EditorSchemaCatalog.LoadFromDirectory(Path.Combine(
@@ -84,23 +84,6 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
                 },
             });
             return new(sceneInput.AssetUri, descriptorPath, descriptorVirtualPath, Dependencies: [], diagnostics);
-        }
-
-        if (!scene.RootNodes.Any())
-        {
-            diagnostics.Add(CreateDiagnostic(
-                operationId,
-                DiagnosticSeverity.Error,
-                ContentPipelineDiagnosticCodes.SceneDescriptorGenerationFailed,
-                $"Scene `{scene.Name}` cannot be cooked because it has no nodes.",
-                descriptorPath,
-                descriptorVirtualPath));
-            return new SceneDescriptorGenerationResult(
-                sceneInput.AssetUri,
-                descriptorPath,
-                descriptorVirtualPath,
-                Dependencies: [],
-                diagnostics);
         }
 
         var lightIssue = LightValidation.ValidateScene(scene);
@@ -265,6 +248,7 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
                     nodeIndex,
                     camera.FieldOfView * (MathF.PI / 180f),
                     camera.AspectRatio,
+                    camera.AspectMode == Oxygen.Managed.Core.CameraAspectMode.Auto ? "auto" : "fixed",
                     camera.NearPlane,
                     camera.FarPlane,
                     camera.ApertureF,
@@ -373,30 +357,48 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
                 return;
             }
 
-            var materialUri = geometry.OverrideSlots.OfType<MaterialsSlot>().FirstOrDefault()?.Material.Uri;
-            string? materialRef;
-            try
+            var overrides = new List<NativeMaterialSlotOverride>();
+            var assignedSlots = new HashSet<Guid>();
+            foreach (var slot in geometry.OverrideSlots.OfType<MaterialsSlot>())
             {
-                materialRef = ResolveMaterialRef(materialUri);
-            }
-            catch (ArgumentException ex)
-            {
-                diagnostics.Add(CreateDiagnostic(
-                    operationId,
-                    DiagnosticSeverity.Error,
-                    ContentPipelineDiagnosticCodes.SceneDescriptorGenerationFailed,
-                    $"Scene node `{node.Name}` references material `{materialUri}` that cannot be normalized: {ex.Message}",
-                    descriptorPath,
-                    descriptorVirtualPath));
-                return;
-            }
+                if (slot.Target.GeometryUri != geometry.Geometry.Uri || slot.Target.SlotId == Guid.Empty
+                    || !assignedSlots.Add(slot.Target.SlotId))
+                {
+                    diagnostics.Add(CreateDiagnostic(operationId, DiagnosticSeverity.Error,
+                        ContentPipelineDiagnosticCodes.SceneDescriptorGenerationFailed,
+                        $"Scene node '{node.Name}' has an invalid or unresolved material-slot assignment.",
+                        descriptorPath, descriptorVirtualPath));
+                    return;
+                }
 
-            if (materialRef is not null)
-            {
+                string? materialRef;
+                try
+                {
+                    materialRef = ResolveMaterialRef(slot.Material.Uri);
+                }
+                catch (ArgumentException exception)
+                {
+                    diagnostics.Add(CreateDiagnostic(operationId, DiagnosticSeverity.Error,
+                        ContentPipelineDiagnosticCodes.SceneDescriptorGenerationFailed,
+                        $"Scene node '{node.Name}' references invalid material '{slot.Material.Uri}': {exception.Message}",
+                        descriptorPath, descriptorVirtualPath));
+                    return;
+                }
+
+                if (materialRef is null)
+                {
+                    diagnostics.Add(CreateDiagnostic(operationId, DiagnosticSeverity.Error,
+                        ContentPipelineDiagnosticCodes.SceneDescriptorGenerationFailed,
+                        $"Scene node '{node.Name}' has an empty material assignment. Clear removes the slot override.",
+                        descriptorPath, descriptorVirtualPath));
+                    return;
+                }
+
                 _ = materialRefs.Add(materialRef);
+                overrides.Add(new(slot.Target.SlotId, materialRef, slot.Target.LayoutRevision));
             }
 
-            renderables.Add(new NativeRenderable(nodeIndex, geometryRef, materialRef, node.IsVisible));
+            renderables.Add(new NativeRenderable(nodeIndex, geometryRef, overrides, node.IsVisible));
         }
     }
 
@@ -415,7 +417,7 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
     private static IEnumerable<ContentCookInput> ResolveMaterialDependencies(Scene scene, ContentCookScope scope)
         => scene.AllNodes
             .SelectMany(static node => node.Components.OfType<GeometryComponent>())
-            .Select(static geometry => geometry.OverrideSlots.OfType<MaterialsSlot>().FirstOrDefault()?.Material.Uri)
+            .SelectMany(static geometry => geometry.OverrideSlots.OfType<MaterialsSlot>().Select(static slot => slot.Material.Uri))
             .Where(static uri => uri is not null && !IsEmptyAssetUri(uri))
             .Cast<Uri>()
             .Distinct()

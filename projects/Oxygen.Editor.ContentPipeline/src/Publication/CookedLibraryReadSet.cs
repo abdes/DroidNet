@@ -114,6 +114,22 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
         return asset is not null && !this.ProjectSourceWins(nativeUri, root);
     }
 
+    /// <summary>Finds the selected library asset while this read set retains its files.</summary>
+    /// <param name="uri">The authored or cooked identity.</param>
+    /// <returns>The preferred physical root and index entry, or null when the project wins.</returns>
+    public (string CookedRoot, AssetRecord Asset)? FindPreferredAsset(Uri uri)
+    {
+        var nativeUri = uri.AbsolutePath.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ? new Uri(uri.AbsoluteUri[..^5]) : uri;
+        var (root, asset) = this.FindUri(nativeUri);
+        if (asset is null || this.ProjectSourceWins(nativeUri, root))
+        {
+            return null;
+        }
+
+        var selected = this.FindKey(asset.Cooked!.AssetKey.ToString());
+        return (selected.root.Path, selected.asset);
+    }
+
     /// <summary>Resolves embedded keys separately from authored virtual-path references.</summary>
     /// <param name="consumer">The source whose dependency closure is being captured.</param>
     /// <param name="references">Direct authored references read from this source.</param>

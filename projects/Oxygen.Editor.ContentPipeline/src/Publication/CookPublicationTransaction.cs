@@ -59,6 +59,7 @@ internal sealed partial class CookPublicationTransaction
     /// <param name="cancellationToken">Cancels before publication.</param>
     /// <param name="checkpoint">Optional controlled boundary observer.</param>
     /// <param name="sourceReplacement">The reviewed source bundle and its original bytes, when replacing an import.</param>
+    /// <param name="producedSourceFiles">Native source metadata committed with the cooked roots.</param>
     /// <returns>The durable prepared transaction.</returns>
     public static async Task<CookPublicationTransaction> PrepareAsync(
         ContentCookOperation operation,
@@ -67,11 +68,17 @@ internal sealed partial class CookPublicationTransaction
         IAtomicFileStore files,
         CancellationToken cancellationToken,
         Func<string, Task>? checkpoint = null,
-        CookSourceReplacement? sourceReplacement = null)
+        CookSourceReplacement? sourceReplacement = null,
+        ImmutableArray<CookProducedSourceFile> producedSourceFiles = default)
     {
         ArgumentNullException.ThrowIfNull(operation);
         ArgumentNullException.ThrowIfNull(staging);
         ArgumentNullException.ThrowIfNull(metadata);
+        producedSourceFiles = producedSourceFiles.IsDefault ? [] : producedSourceFiles;
+        if (producedSourceFiles.Select(static file => file.RelativePath).ToHashSet(StringComparer.OrdinalIgnoreCase).Count != producedSourceFiles.Length)
+        {
+            throw new InvalidDataException("A publication cannot update the same retained source settings twice.");
+        }
         if (staging.Roots.IsDefaultOrEmpty || !metadata.ContainsKey(PublicationMetadata))
         {
             throw new InvalidDataException("Publication requires validated roots and a publication receipt.");
@@ -105,9 +112,27 @@ internal sealed partial class CookPublicationTransaction
             metadataFiles.Add(new(relative, before.Version.Exists ? before.Content.ToArray() : null, bytes.ToArray()));
         }
 
-        var preparedJournal = new CookPublicationJournal(1, operation.Project.ProjectId, operation.OperationId, CookPublicationPhase.Prepared, roots.ToImmutable(), metadataFiles.ToImmutable())
+        var sourceFiles = ImmutableArray.CreateBuilder<CookProducedSourceFile>();
+        foreach (var update in producedSourceFiles)
         {
-            SourceReplacement = sourceReplacement is null ? null : await CaptureSourceReplacementAsync(operation, sourceReplacement, cancellationToken).ConfigureAwait(false),
+            var path = ProducedSourcePath(operation.Project, update);
+            if (sourceReplacement is not null && IsWithinSourceBundle(operation.Project, sourceReplacement.BundleName, update.RelativePath))
+            {
+                continue;
+            }
+
+            if ((await files.ReadAsync(path, cancellationToken).ConfigureAwait(false)).Version != Version(update.Before))
+            {
+                throw new StorageWriteConflictException("Retained source settings changed while native cooking was in progress.");
+            }
+
+            sourceFiles.Add(update);
+        }
+
+        var preparedJournal = new CookPublicationJournal(2, operation.Project.ProjectId, operation.OperationId, CookPublicationPhase.Prepared, roots.ToImmutable(), metadataFiles.ToImmutable())
+        {
+            SourceReplacement = sourceReplacement is null ? null : await CaptureSourceReplacementAsync(operation, sourceReplacement, producedSourceFiles, cancellationToken).ConfigureAwait(false),
+            SourceFiles = sourceFiles.ToImmutable(),
         };
         var transaction = new CookPublicationTransaction(operation.Project, files, preparedJournal, FileVersion.Missing, checkpoint);
         await transaction.WriteJournalAsync(CookPublicationPhase.Prepared, cancellationToken).ConfigureAwait(false);
@@ -204,6 +229,13 @@ internal sealed partial class CookPublicationTransaction
 
     private async Task CommitInstalledRootsAsync(ICookPublicationPreview? preview, CookOutputWriteLease writer, Action verifyOwner)
     {
+        foreach (var update in this.journal.SourceFiles)
+        {
+            verifyOwner();
+            _ = await this.files.WriteAsync(ProducedSourcePath(this.project, update), update.After, Version(update.Before), CancellationToken.None).ConfigureAwait(false);
+            await this.checkpoint("SourceFile:" + update.RelativePath).ConfigureAwait(false);
+        }
+
         if (preview is not null)
         {
             await preview.MountAsync(this.GetPublishedRoots(), writer).ConfigureAwait(false);
@@ -259,6 +291,14 @@ internal sealed partial class CookPublicationTransaction
 
     private async Task VerifyBaselinesAsync(CancellationToken cancellationToken)
     {
+        foreach (var update in this.journal.SourceFiles)
+        {
+            if ((await this.files.ReadAsync(ProducedSourcePath(this.project, update), cancellationToken).ConfigureAwait(false)).Version != Version(update.Before))
+            {
+                throw new StorageWriteConflictException("Retained source settings changed after publication was prepared.");
+            }
+        }
+
         foreach (var root in this.Directories())
         {
             var current = await CookRootImage.CaptureAsync(root.Published, copyTo: null, cancellationToken).ConfigureAwait(false);

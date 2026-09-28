@@ -5,8 +5,7 @@
 using AwesomeAssertions;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentBrowser.Materials;
-using Oxygen.Managed.Assets.Import;
-using Oxygen.Managed.Assets.Import.Materials;
+using Oxygen.Managed.Assets.Persistence.LooseCooked.V1;
 
 namespace Oxygen.Editor.World.Tests;
 
@@ -24,19 +23,16 @@ public sealed partial class InspectorControlTests
             var color = baseColor ?? System.Numerics.Vector4.One;
             var factor = System.Text.Json.JsonSerializer.Serialize(new[] { color.X, color.Y, color.Z, color.W });
             var source = $$"""
-                { "Schema": "oxygen.material.v1", "Type": "PBR", "Name": "{{name}}",
-                  "PbrMetallicRoughness": { "BaseColorFactor": {{factor}}, "MetallicFactor": 0, "RoughnessFactor": 0.5 } }
+                { "name": "{{name}}",
+                  "parameters": { "base_color": {{factor}}, "metalness": 0, "roughness": 0.5 } }
                 """;
             await File.WriteAllTextAsync(path, source, cancellationToken).ConfigureAwait(true);
-            var registry = new ImporterRegistry();
-            registry.Register(new MaterialSourceImporter());
-            var importer = new ImportService(registry);
-            var result = await importer.ImportAsync(
-                new ImportRequest(root, [new ImportInput(relative, "Content")], new ImportOptions(FailFast: true)),
-                cancellationToken).ConfigureAwait(true);
-            _ = result.Succeeded.Should().BeTrue("the material fixture must be cooked by the production importer");
-            var asset = result.Imported.Should().ContainSingle().Which;
+            var native = this.MaterialPipelineFor(root);
             var uri = new Uri($"asset:///{relative}");
+            var result = await native.Pipeline.CookAssetAsync(uri, cancellationToken).ConfigureAwait(true);
+            _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.TechnicalMessage ?? issue.Message)));
+            using var indexStream = File.OpenRead(Path.Combine(root, ".cooked", "Content", "container.index.bin"));
+            var asset = LooseCookedIndex.Read(indexStream).Assets.Single(value => value.VirtualPath == $"/Content/Materials/{name}.omat");
             if (projectRoot is null)
             {
                 var row = new MaterialPickerResult(uri, name, AssetState.Descriptor, AssetState.Cooked, AssetRuntimeAvailability.Mounted, path, Path.Combine(root, ".cooked", "Content", "Materials", $"{name}.omat"), BaseColorPreview: null);

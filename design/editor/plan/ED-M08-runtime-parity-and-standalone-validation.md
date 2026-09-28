@@ -2,6 +2,12 @@
 
 Status: **in progress — M08.1**
 
+Next: [M08.1 canonical data](#m081--native-canonical-data-producers-and-primitives).
+See [owners](#2-implementation-document-map), [remaining increments](#m081-remaining-increments)
+and [exit checklist](#7-exit-checklist). Captured-sky IBL is delivered by
+[VX-IBL-01](../../../projects/Oxygen.Engine/design/vortex/milestones/VX-IBL-01/README.md);
+its rendering, precision and publication contracts remain unchanged.
+
 ## 1. Outcome
 
 The editor and native engine implement one canonical V0.1 authoring contract.
@@ -121,6 +127,77 @@ an entry dependency.
 
 ### M08.1 — Native canonical data, producers and primitives
 
+Completed foundations: canonical primitives and axial Physics mapping;
+Local/Inherit native records; atmospheric role records, import and conflict
+validation; captured-sky toggle removal; native slot IDs, inventory validation
+and revision hashing. Their remaining rendered/editor qualification stays in
+the owning later slices.
+
+#### M08.1 remaining increments
+
+| Increment                        | State       | Deliverable and acceptance                                                                                                                                                                                                                                                                                                                                      |
+| -------------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M08.1.1 Slots                    | in_progress | Preserve source declarations through mesh optimization; native provenance, cooked inventories/assignments, Inspector metadata and identity-based instance APIs. Reimport/cache deletion preserve proven IDs; replacement never transfers overrides by ordinal. Test nonzero slots, distinct equal-material declarations, all LOD bindings and clear-to-default. |
+| M08.1.2 Cameras                  | in_progress | Auto/Fixed source, native/managed records and command transport; hydrate every camera. Resolve projection per target without rewriting authored ratio. Test imports, round trips, invalid inputs and target resize. Fixed bars/metering remain M08.2.                                                                                                           |
+| M08.1.3 Emission                 | in_progress | Float32 cooked RGB and canonical colour/intensity sources; native version rejection, editor templates/adapters and fixture producers. Retire the affected managed binary writer route. Test finite HDR, 9.7 precision and source colour preservation at zero intensity.                                                                                         |
+| M08.1.4 Cutover                  | in_progress | Publish standalone retained imports as immutable generations through Cooker/Content; upgrade maintained editor projects and retained settings, recook demo/source imports and PAKs, refresh SDK/Interop, and verify normal editor loading. Reject retired formats; retain no compatibility reader or dual source representation.                                |
+| M08.1.5 Runtime identities       | planned     | Intern full typed identities with mounted-source instance identity; reuse opaque IDs in cache, dependencies and in-flight work. Remove hash-as-identity, duplicate reverse registries and packed runtime source IDs. Prove forced-collision separation, same-SourceKey refresh isolation, lazy reload after eviction and bounded locator metadata.              |
+| M08.1.6 Automatic load ownership | planned     | Content-owned automatic checkout controls, explicit borrowing and residency pins; remove manual release balancing. Prove per-request ownership across coalesced loads, dependency transfers, cancellation, off-thread destruction and shutdown; preserve allocation-free IBL inspection.                                                                        |
+| M08.1.7 Integrity inventory      | planned     | Native loose index owns complete file sizes/digests and membership; protected readers reuse verification. Remove duplicate managed output proofs. Reject tampering, missing/extra members and stale verification; bump the index format and recook.                                                                                                             |
+| M08.1.8 Project publication      | planned     | Select one immutable ordered root set through an atomic project head; retain authored-source CAS and preview rollback. Remove cooked-directory swap/recovery phases. Keep existing incremental staging seed copies initially. Qualify multi-root crash recovery, conflicts and old readers.                                                                     |
+| M08.1.9 Native analysis          | planned     | Batch native source dependency/output analysis against captured input proofs. Managed orchestration keeps project resolution, dirty state and snapshot ownership. Remove parallel descriptor dependency parsers; prove analyzed/cooked closure equality and bounded process launches.                                                                           |
+
+Execute M08.1.5 → .6 → .7 → .8 → .9 after the current-format M08.1.4
+checkpoint. These are the approved simplification order; M08.1 remains open
+until .9 passes. The separately planned [M08.F1 format milestone](ED-M08.F1-descriptor-local-references.md)
+then precedes M08.2. Each format change owns its own migration and recook;
+M08.1.4 verification is not deferred until F1.
+
+Qualify the engine and all maintained examples before editor validation: finish
+native content migration, retained reimport, loose/PAK loading and bounded runtime
+checks first. Keep the existing IBL rendering and performance contracts intact.
+
+Cutover includes shared [Base filesystem support](../../../projects/Oxygen.Engine/src/Oxygen/Base/Docs/Filesystem.md)
+at native I/O boundaries. Qualify retained imports beyond Windows' legacy path
+limit, logical record paths, and DemoShell library restoration by authored record.
+
+M08.1.4 includes genuine zero-node cooked scenes. Preserve scene-level environment
+and authored identity without placeholder nodes or omitted outputs. Qualify
+descriptor generation, native cooking/loading and both formerly blocked
+`NewScene2` project scenes; keep invalid component references rejected.
+
+Owner contracts: [Content identities/ownership](../../../projects/Oxygen.Engine/src/Oxygen/Content/Docs/deps_and_cache.md#planned-identity-and-ownership-simplification),
+[native integrity inventory](../../../projects/Oxygen.Engine/src/Oxygen/Content/Docs/loose_cooked_content.md#planned-complete-integrity-inventory),
+and [project publication/analysis](../lld/content-pipeline.md#22-planned-content-pipeline-simplification).
+Fix the wrong-type cache-checkout retain and qualify physics-sidecar hashes after
+PAK relocation as focused correctness work, separately from the ownership and
+format redesigns.
+
+M08.1.1 also delivers the approved native retained-model publication contract:
+immutable per-source generations under existing Content, selected atomically
+with native provenance in the authored import record. DemoShell and CLI use the
+same Cooker API; no writes beside external inputs or whole-root copies. Validate
+interruption, concurrent publication, settings changes and old-reader lifetime.
+The [Cooker owner design](../../../projects/Oxygen.Engine/src/Oxygen/Cooker/Docs/Import/async_import_pipeline_v2.md#retained-model-publication)
+owns storage and lifecycle details.
+
+Editor persistence, descriptor export and existing command transports move with
+these contracts so upgraded projects remain usable. New inspector/repair UX and
+the general migration/recovery workflow retain M08.4/M08.5 ownership. One-time
+cutover scripts and recoverable backups stay in ignored local output.
+
+Resolve slot identity at import, load, edit and geometry replacement, then use
+the existing indexed render cache. Do not add UUID lookup, provenance hashing
+or extra allocations to draw submission. Separate source declarations retain
+independent bindings even when their default material matches.
+
+The implementation review uses UE5.7.4 at `F:/Epic Games/UE_5.7`:
+`StaticMesh.h`/`StaticMeshComponent.cpp` for slot/default ownership,
+`CameraComponent.h`/`CameraStackTypes.cpp` for authored versus target aspect,
+and `Math/Color.h` for linear float32 colour. Importer-specific continuity and
+Oxygen's established vertical-FOV convention remain authoritative. Detailed
+contracts and reference rationale belong in the owner documents below.
+
 Implement engine-owned schemas/versioned records for flag source modes, slot
 identity/overrides, camera aspect policy, atmospheric slots and float32 emission.
 Schema validation covers shape/range/count limits; semantic validation covers
@@ -171,6 +248,13 @@ Checks: schema/round trips; slot continuity and structural changes; nonzero
 slot overrides; Local/Inherit; hidden/off role conflicts; Auto/Fixed records;
 finite HDR precision; primitive bounds/attributes/sidedness; obsolete format
 rejection. Cook and inspect through native tools, never managed binary decoding.
+
+### M08.F1 — Descriptor-local reference format
+
+Status: **planned**. Depends on M08.1.9; prerequisite for M08.2 and subsequent
+qualification. The [permanent format plan](ED-M08.F1-descriptor-local-references.md)
+owns execution, version changes and recooking. Data and Cooker own the wire
+contract and packaging behavior; this milestone introduces no compatibility reader.
 
 ### M08.2 — Native rendering and view behavior
 

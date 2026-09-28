@@ -18,7 +18,7 @@ namespace Oxygen.Editor.ContentPipeline.Import;
 /// <param name="PrimaryRelativePath">The primary source relative to its bundle.</param>
 /// <param name="SourceHash">The primary bytes used to discover the initial dependency set.</param>
 /// <param name="Files">The discovered bundle-relative files, including the primary.</param>
-/// <param name="OutputDirectory">The model's relative group within each type folder; version 2 stores the older common output directory.</param>
+/// <param name="OutputDirectory">The model's relative group within each type folder.</param>
 public sealed record NativeSceneImportSettings(
     int SchemaVersion,
     string Importer,
@@ -35,6 +35,9 @@ public sealed record NativeSceneImportSettings(
 
     /// <summary>The native static/scalar importer contract.</summary>
     public const string ImporterIdentity = "Oxygen.Cooker.Scene/v1";
+
+    /// <summary>Gets the native identities published with this source's geometry.</summary>
+    public required NativeMaterialSlotProvenance MaterialSlotProvenance { get; init; }
 
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
     private static readonly Lazy<JsonSchema> Schema = new(static () =>
@@ -62,9 +65,7 @@ public sealed record NativeSceneImportSettings(
 
     /// <summary>Gets the source-owned output directories for the persisted layout version.</summary>
     [JsonIgnore]
-    public ImmutableArray<string> OutputDirectories => this.SchemaVersion == 2
-        ? [this.OutputDirectory]
-        : ["Materials/" + this.OutputDirectory, "Geometry/" + this.OutputDirectory, "Scenes/" + this.OutputDirectory];
+    public ImmutableArray<string> OutputDirectories => ["Materials/" + this.OutputDirectory, "Geometry/" + this.OutputDirectory, "Scenes/" + this.OutputDirectory];
 
     /// <summary>Gets every native namespace owned by the imported source.</summary>
     [JsonIgnore]
@@ -72,9 +73,7 @@ public sealed record NativeSceneImportSettings(
 
     /// <summary>Builds the native layout without rewriting older imported asset identities.</summary>
     /// <returns>The layout used for this source's next cook.</returns>
-    public ContentImportLayout CreateLayout() => this.SchemaVersion == 2
-        ? new("/" + this.MountPoint) { DescriptorsDirectory = this.OutputDirectory }
-        : new("/" + this.MountPoint)
+    public ContentImportLayout CreateLayout() => new("/" + this.MountPoint)
         {
             DescriptorsDirectory = string.Empty,
             MaterialsDirectory = this.NamedAssetDirectory("Materials"),
@@ -92,7 +91,7 @@ public sealed record NativeSceneImportSettings(
     {
         ArgumentNullException.ThrowIfNull(source);
         var settings = new NativeSceneImportSettings(
-            3,
+            4,
             ImporterIdentity,
             mountPoint,
             name,
@@ -100,7 +99,10 @@ public sealed record NativeSceneImportSettings(
             source.PrimaryRelativePath,
             source.Files.Single(file => string.Equals(file.RelativePath, source.PrimaryRelativePath, StringComparison.Ordinal)).Sha256,
             source.Files.Select(static file => file.RelativePath).ToImmutableArray(),
-            outputDirectory);
+            outputDirectory)
+        {
+            MaterialSlotProvenance = NativeMaterialSlotProvenance.Create(),
+        };
         _ = settings.ToBytes();
         return settings;
     }

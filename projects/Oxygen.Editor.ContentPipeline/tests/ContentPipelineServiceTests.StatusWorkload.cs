@@ -49,7 +49,8 @@ public sealed partial class ContentPipelineServiceTests
         var cooked = await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = cooked.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, cooked.Diagnostics.Select(static issue => issue.Message)));
         _ = cooked.CookedAssets.Count(static asset => asset.Kind == ContentCookAssetKind.Geometry).Should().Be(256);
-        var missing = new Uri("asset:///Content/Models/Many/Geometry/model/Missing.ogeo");
+        var geometry = cooked.CookedAssets.First(static asset => asset.Kind == ContentCookAssetKind.Geometry);
+        var missing = new Uri(geometry.CookedAssetUri, "Missing.ogeo");
         var requested = cooked.CookedAssets.Select(static asset => asset.CookedAssetUri).Prepend(source).Append(missing).ToArray();
         var workers = runner.Count;
         var watch = Stopwatch.StartNew();

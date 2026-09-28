@@ -5,6 +5,7 @@
 using AwesomeAssertions;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Tests;
 
@@ -15,7 +16,7 @@ public class CameraComponentTests
     public void PerspectiveCamera_Defaults_ShouldUseEditorDegreeUnits()
     {
         var cam = new PerspectiveCamera { Name = "Camera" };
-        var data = new PerspectiveCameraData { Name = "Camera" };
+        var data = new PerspectiveCameraData { Name = "Camera", AspectMode = Oxygen.Managed.Core.CameraAspectMode.Auto };
 
         _ = cam.FieldOfView.Should().Be(60f);
         _ = cam.AspectRatio.Should().Be(16f / 9f);
@@ -26,7 +27,7 @@ public class CameraComponentTests
     [TestMethod]
     public void PerspectiveCamera_Hydrate_Dehydrate_RoundTrip()
     {
-        var cam = new PerspectiveCamera { Name = "MainCam", NearPlane = 0.3f, FarPlane = 500f, FieldOfView = 45f, AspectRatio = 4f / 3f, ApertureF = 2.8f, ShutterRate = 250f, Iso = 400f };
+        var cam = new PerspectiveCamera { Name = "MainCam", NearPlane = 0.3f, FarPlane = 500f, FieldOfView = 45f, AspectRatio = 4f / 3f, AspectMode = CameraAspectMode.Fixed, ApertureF = 2.8f, ShutterRate = 250f, Iso = 400f };
 
         var dto = cam.Dehydrate();
 
@@ -37,6 +38,7 @@ public class CameraComponentTests
         _ = pd.FarPlane.Should().Be(500f);
         _ = pd.FieldOfView.Should().Be(45f);
         _ = pd.AspectRatio.Should().Be(4f / 3f);
+        _ = pd.AspectMode.Should().Be(CameraAspectMode.Fixed);
 
         var recreated = GameComponent.CreateAndHydrate(pd) as PerspectiveCamera;
         _ = recreated.Should().NotBeNull();
@@ -45,6 +47,7 @@ public class CameraComponentTests
         _ = recreated.FarPlane.Should().Be(500f);
         _ = recreated.FieldOfView.Should().Be(45f);
         _ = recreated.AspectRatio.Should().Be(4f / 3f);
+        _ = recreated.AspectMode.Should().Be(CameraAspectMode.Fixed);
         _ = recreated.ApertureF.Should().Be(2.8f);
         _ = recreated.ShutterRate.Should().Be(250f);
         _ = recreated.Iso.Should().Be(400f);

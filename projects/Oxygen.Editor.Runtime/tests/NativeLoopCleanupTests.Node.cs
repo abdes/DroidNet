@@ -33,6 +33,7 @@ public sealed partial class NativeLoopCleanupTests
         new(2, 4, 8f),
         new(2, 5, 60f),
         new(2, 6, 200f),
+        new(2, 7, (float)Oxygen.Managed.Core.CameraAspectMode.Auto),
         new(3, 0, 0.2f),
         new(3, 1, 0.3f),
         new(3, 2, 0.4f),
@@ -71,7 +72,7 @@ public sealed partial class NativeLoopCleanupTests
         void Send(RuntimeWorldCommand command)
             => _ = commands.Execute(new RuntimeWorldRequest(Guid.NewGuid(), target, command), this.TestContext.CancellationToken).Succeeded.Should().BeTrue();
 
-        Send(new RuntimeAttachPerspectiveCamera(node, 1f, 1.5f, 0.1f, 1000f));
+        Send(new RuntimeAttachPerspectiveCamera(node, 1f, 1.5f, 0.1f, 1000f, Oxygen.Managed.Core.CameraAspectMode.Auto));
         Send(new RuntimeAttachDirectionalLight(node, 1000f, 0.01f, Vector3.One, AffectsWorld: true, Mobility: 0, CastsShadows: true, ShadowBias: 0, ShadowNormalBias: 0, ContactShadows: false, ShadowResolutionHint: 0, ExposureCompensation: 0, AtmosphereLightSlot: 1, UsePerPixelAtmosphereTransmittance: true, AtmosphereDiskLuminanceScaleRgb: Vector3.One, CascadeCount: 4, SplitMode: 0, MaxShadowDistance: 1000f, CascadeDistances: new Vector4(50, 150, 400, 1000), DistributionExponent: 2, TransitionFraction: 0.1f, DistanceFadeoutFraction: 0.1f));
         var expected = ObservedNodeProperties();
         Send(new RuntimeSetProperties(node, expected));
@@ -105,6 +106,14 @@ public sealed partial class NativeLoopCleanupTests
         _ = observed.State.VertexCount.Should().BePositive();
         _ = observed.State.IndexCount.Should().Be(36);
         _ = observed.State.MaterialKeys.Should().ContainSingle();
+        Send(new RuntimeSetProperties(node,
+            [new(2, 7, (float)Oxygen.Managed.Core.CameraAspectMode.Fixed)]));
+        var fixedCamera = await commands.ObserveNodeAsync(Guid.NewGuid(), target, node, timeout.Token).ConfigureAwait(false);
+        _ = fixedCamera.Outcome.Succeeded.Should().BeTrue();
+        _ = fixedCamera.State!.Properties.Single(value => value.ComponentId == 2 && value.FieldId == 7)
+            .Value.Should().Be((float)Oxygen.Managed.Core.CameraAspectMode.Fixed);
+        _ = fixedCamera.State.Properties.Single(value => value.ComponentId == 2 && value.FieldId == 1)
+            .Value.Should().Be(1.6f);
         Send(new RuntimeRemoveSceneNodes([node]));
         var missing = await commands.ObserveNodeAsync(Guid.NewGuid(), target, node, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = missing.Outcome.Succeeded.Should().BeTrue();

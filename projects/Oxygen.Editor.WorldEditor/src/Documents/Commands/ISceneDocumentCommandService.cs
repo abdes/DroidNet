@@ -7,6 +7,7 @@ using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
+using Oxygen.Editor.World.Slots;
 
 #pragma warning disable IDE0130 // Authoring commands use the established WorldEditor namespace across this assembly.
 
@@ -88,16 +89,18 @@ public interface ISceneDocumentCommandService
     /// </summary>
     /// <param name="context">The document command context.</param>
     /// <param name="nodeIds">The node ids to edit.</param>
-    /// <param name="slotIndex">The material slot index.</param>
+    /// <param name="target">The native slot and inventory observed before the edit.</param>
     /// <param name="newMaterialUri">The new material URI, or <see langword="null"/> to clear the override.</param>
     /// <param name="session">The edit session token.</param>
+    /// <param name="cancellationToken">Cancels metadata acquisition before any mutation.</param>
     /// <returns>The command result.</returns>
     public Task<SceneCommandResult> EditMaterialSlotAsync(
         SceneDocumentCommandContext context,
         IReadOnlyList<Guid> nodeIds,
-        int slotIndex,
+        MaterialSlotTarget target,
         Uri? newMaterialUri,
-        EditSessionToken session);
+        EditSessionToken session,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Edits perspective camera component values on one or more nodes.

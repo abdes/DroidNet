@@ -88,7 +88,21 @@ public sealed partial class InspectorControlTests
         _ = choice.RuntimeAvailability.Should().Be(AssetRuntimeAvailability.Mounted);
         _ = File.Exists(choice.CookedPath).Should().BeTrue();
         var nodes = fixture.Source.RootNodes.Select(static node => node.Id).ToArray();
-        _ = (await fixture.Commands.EditMaterialSlotAsync(fixture.Context, nodes, 0, choice.MaterialUri, EditSessionToken.OneShot).ConfigureAwait(true)).Succeeded.Should().BeTrue();
+        fixture.Context.History.BeginChangeSet("Assign shared material");
+        try
+        {
+            foreach (var nodeId in nodes)
+            {
+                var target = await fixture.ReadSingleMaterialSlotAsync(nodeId, cancellationToken).ConfigureAwait(true);
+                var result = await fixture.Commands.EditMaterialSlotAsync(
+                    fixture.Context, [nodeId], target, choice.MaterialUri, EditSessionToken.OneShot, cancellationToken).ConfigureAwait(true);
+                _ = result.Succeeded.Should().BeTrue();
+            }
+        }
+        finally
+        {
+            fixture.Context.History.EndChangeSet();
+        }
         var first = await WaitForNodeAsync(fixture, nodes[0], value => value.MaterialBaseColors.Length == 1 && Vector4.Distance(value.MaterialBaseColors[0], red) < 0.001f, cancellationToken).ConfigureAwait(true);
         _ = await WaitForNodeAsync(fixture, nodes[1], value => value.MaterialBaseColors.Length == 1 && Vector4.Distance(value.MaterialBaseColors[0], red) < 0.001f, cancellationToken).ConfigureAwait(true);
         return first.MaterialKeys.Single();

@@ -20,7 +20,7 @@ public sealed partial class InspectorControlTests
     /// <returns>The test task.</returns>
     [TestMethod]
     [DataRow("New")]
-    [DataRow("None")]
+    [DataRow("Clear override")]
     [DataRow("Default")]
     public Task MaterialPickerMixedSelectionHistoryAndReopenReachNativeState(string choice) => EnqueueAsync(async () =>
     {
@@ -39,11 +39,12 @@ public sealed partial class InspectorControlTests
         var nodes = fixture.Source.RootNodes.Select(node => node.Id).ToArray();
         var defaultState = await AssertGeometryAsync(fixture, nodes[1], "Cube", timeout.Token).ConfigureAwait(true);
         var defaultKey = defaultState.MaterialKeys.Should().ContainSingle().Which;
-        _ = (await fixture.Commands.EditMaterialSlotAsync(fixture.Context, [nodes[0]], 0, originalUri, EditSessionToken.OneShot).ConfigureAwait(true)).Succeeded.Should().BeTrue();
+        _ = (await fixture.Commands.EditMaterialSlotAsync(fixture.Context, [nodes[0]], await fixture.ReadSingleMaterialSlotAsync(nodes[0], timeout.Token).ConfigureAwait(true), originalUri, EditSessionToken.OneShot).ConfigureAwait(true)).Succeeded.Should().BeTrue();
         await AssertMaterialAsync(fixture, nodes[0], originalKey, timeout.Token).ConfigureAwait(true);
         fixture.Context.History.Clear();
         using var host = fixture.CreateInspectorHost(fixture.Source.RootNodes.ToList());
         var model = host.PropertyEditors.OfType<GeometryViewModel>().Single();
+        await model.RefreshMaterialSlotsAsync().ConfigureAwait(true);
         var view = new GeometryView { ViewModel = model };
         var scroller = new ScrollViewer { Content = view, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         await LoadTestContentAsync(scroller).ConfigureAwait(true);
@@ -53,7 +54,7 @@ public sealed partial class InspectorControlTests
         _ = fixture.Context.History.UndoStack.Should().ContainSingle();
         var expected = string.Equals(choice, "New", StringComparison.Ordinal) ? nextKey : defaultKey;
         await AssertMaterialPairAsync(fixture, nodes, expected, expected, timeout.Token).ConfigureAwait(true);
-        _ = button.Content.Should().Be(choice);
+        _ = button.Content.Should().Be(choice == "Clear override" ? "Geometry default" : choice);
         await fixture.Context.History.UndoAsync(timeout.Token).ConfigureAwait(true);
         await AssertMaterialPairAsync(fixture, nodes, originalKey, defaultKey, timeout.Token).ConfigureAwait(true);
         _ = button.Content.Should().Be("--");

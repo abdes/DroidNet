@@ -15,6 +15,10 @@
 
     <ItemGroup>
         <EmbeddedResource Include="Import\Schemas\*.schema.json" />
+        <EmbeddedResource Include="$(ProjectsRoot)\Oxygen.Engine\src\Oxygen\Cooker\Tools\Inspector\Schemas\oxygen.cooked-geometries.schema.json"
+                          LogicalName="oxygen.cooked-geometries.schema.json" />
+        <EmbeddedResource Include="$(ProjectsRoot)\Oxygen.Engine\src\Oxygen\Cooker\Import\Schemas\oxygen.material-slot-provenance.schema.json"
+                          LogicalName="oxygen.material-slot-provenance.schema.json" />
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
         <InternalsVisibleTo Include="Oxygen.Editor.ContentPipeline.Tests" />
         <InternalsVisibleTo Include="Oxygen.Editor.ContentPipeline.WorkerProbe" />

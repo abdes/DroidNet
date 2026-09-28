@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Collections.Immutable;
+using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline;
@@ -15,4 +17,8 @@ public sealed record NativeImportResult(bool Succeeded, IReadOnlyList<Diagnostic
 {
     /// <summary>Gets the exact files produced by source-model jobs, when native reporting was requested.</summary>
     public IReadOnlyList<string>? OutputFiles { get; init; }
+
+    /// <summary>Gets native allocation records keyed by their captured source-relative paths.</summary>
+    public ImmutableDictionary<string, NativeMaterialSlotProvenance> MaterialSlotProvenance { get; init; }
+        = ImmutableDictionary<string, NativeMaterialSlotProvenance>.Empty;
 }

@@ -48,7 +48,7 @@ public sealed partial class ContentBrowserAssetProviderTests
         content = content with { Revision = 2, State = RuntimeContentState.Mounted, Roots = [workspace.SourcePath(".cooked/Content")] };
         engine.Raise(value => value.ContentStatusChanged += null, new RuntimeContentChangedEventArgs(content));
         _ = rows.Single().PrimaryBadge.Should().Be("Ready");
-        var request = new RuntimeWorldRequest(Guid.NewGuid(), new RuntimeSceneTarget(runId, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid()) { ProjectId = projectId }, new RuntimeSetMaterialOverride(Guid.NewGuid(), 0, "/Content/Materials/Red.omat"));
+        var request = new RuntimeWorldRequest(Guid.NewGuid(), new RuntimeSceneTarget(runId, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid()) { ProjectId = projectId }, new RuntimeSetMaterialOverride(Guid.NewGuid(), "/Content/Mesh.ogeo", Guid.NewGuid(), new string('0', 64), "/Content/Materials/Red.omat", MaterialSlotAssignmentIntent.ObservedEdit));
         foreach (var (success, text) in new (bool?, string)[] { (null, "Updating preview"), (false, "Preview issue"), (true, "Ready") })
         {
             requests = [new(request, 9, success, success == false ? "Material rejected" : null)];

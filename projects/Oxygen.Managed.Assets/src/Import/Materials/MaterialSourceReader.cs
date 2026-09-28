@@ -2,163 +2,142 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Numerics;
 using System.Text.Json;
+using Json.Schema;
+using Oxygen.Managed.Assets.Filesystem;
 
 namespace Oxygen.Managed.Assets.Import.Materials;
 
-/// <summary>
-/// Reads material sources from the authoring JSON format (<c>*.omat.json</c>).
-/// </summary>
-[System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0046:Convert to conditional expression", Justification = "code clarity")]
+/// <summary>Reads the canonical engine material descriptor without legacy conversion.</summary>
 public static class MaterialSourceReader
 {
-    private const string ExpectedSchema = "oxygen.material.v1";
-    private const string ExpectedType = "PBR";
+    private static readonly Lazy<JsonSchema> Schema = new(LoadSchema);
 
-    /// <summary>
-    /// Reads a <see cref="MaterialSource"/> from JSON text.
-    /// </summary>
-    /// <param name="jsonUtf8">The JSON payload as UTF-8 bytes.</param>
-    /// <returns>The parsed material source.</returns>
+    /// <summary>Reads schema-valid source while retaining all unedited native fields.</summary>
+    /// <param name="jsonUtf8">Canonical UTF-8 descriptor bytes.</param>
+    /// <returns>The immutable authoring snapshot.</returns>
     public static MaterialSource Read(ReadOnlySpan<byte> jsonUtf8)
     {
-        var input = JsonSerializer.Deserialize(jsonUtf8, Serialization.Context.MaterialSourceData)
-            ?? throw new InvalidDataException("Material JSON is empty or invalid.");
-
-        if (!string.Equals(input.Schema, ExpectedSchema, StringComparison.Ordinal))
+        using var document = JsonDocument.Parse(jsonUtf8.ToArray(), new JsonDocumentOptions
         {
-            throw new InvalidDataException($"Unsupported material schema '{input.Schema}'.");
-        }
-
-        if (string.IsNullOrWhiteSpace(input.Type))
-        {
-            throw new InvalidDataException("Material JSON is missing required field 'Type'.");
-        }
-
-        if (!string.Equals(input.Type, ExpectedType, StringComparison.Ordinal))
-        {
-            throw new InvalidDataException($"Unsupported material type '{input.Type}'.");
-        }
-
-        var alphaMode = ParseAlphaMode(input.AlphaMode);
-        var alphaCutoff = Clamp01(input.AlphaCutoff ?? 0.5f);
-
-        var pbrModel = ParsePbrMetallicRoughness(input.PbrMetallicRoughness);
-        var normalTexture = ParseNormalTexture(input.NormalTexture);
-        var occlusionTexture = ParseOcclusionTexture(input.OcclusionTexture);
-
+            AllowTrailingCommas = true,
+            CommentHandling = JsonCommentHandling.Skip,
+        });
+        var descriptor = document.RootElement;
+        Validate(descriptor);
+        var parameters = descriptor.TryGetProperty("parameters", out var values) ? values : default;
+        var textures = descriptor.TryGetProperty("textures", out var bindings) ? bindings : default;
+        var baseColor = Vector(parameters, "base_color", [1.0f, 1.0f, 1.0f, 1.0f]);
+        var emission = Vector(parameters, "emissive_color", [1.0f, 1.0f, 1.0f]);
+        var normal = Texture(textures, "normal");
+        var occlusion = Texture(textures, "ambient_occlusion");
+        var metallicRoughness = MaterialSource.PackedMetallicRoughnessPath(textures);
         return new MaterialSource(
-            schema: input.Schema,
-            type: input.Type,
-            name: input.Name,
-            pbrMetallicRoughness: pbrModel,
-            normalTexture: normalTexture,
-            occlusionTexture: occlusionTexture,
-            alphaMode: alphaMode,
-            alphaCutoff: alphaCutoff,
-            doubleSided: input.DoubleSided ?? false);
-    }
-
-    private static MaterialPbrMetallicRoughness ParsePbrMetallicRoughness(PbrMetallicRoughnessData? input)
-    {
-        var pbr = input ?? new PbrMetallicRoughnessData();
-        var baseColor = pbr.BaseColorFactor ?? [1.0f, 1.0f, 1.0f, 1.0f];
-        if (baseColor.Length != 4)
+            name: descriptor.TryGetProperty("name", out var name) ? name.GetString() : null,
+            pbrMetallicRoughness: new MaterialPbrMetallicRoughness(
+                baseColor[0], baseColor[1], baseColor[2], baseColor[3],
+                Scalar(parameters, "metalness", 0.0f), MaterialSource.ResolveRoughness(parameters),
+                Texture(textures, "base_color"), metallicRoughness is null ? null : new MaterialTextureRef(metallicRoughness)),
+            normalTexture: normal is { } normalRef
+                ? new NormalTextureRef(normalRef.Source, Scalar(parameters, "normal_scale", 1.0f)) : null,
+            occlusionTexture: occlusion is { } occlusionRef
+                ? new OcclusionTextureRef(occlusionRef.Source, Scalar(parameters, "ambient_occlusion", 1.0f)) : null,
+            alphaMode: MaterialSource.ResolveAlphaMode(descriptor),
+            alphaCutoff: Scalar(parameters, "alpha_cutoff", 0.5f),
+            doubleSided: parameters.ValueKind == JsonValueKind.Object
+                && parameters.TryGetProperty("double_sided", out var sided) && sided.GetBoolean(),
+            emissiveColor: new Vector3(emission[0], emission[1], emission[2]),
+            emissiveIntensity: Scalar(parameters, "emissive_intensity", 0.0f))
         {
-            throw new InvalidDataException("PbrMetallicRoughness.BaseColorFactor must have exactly 4 components.");
-        }
-
-        return new MaterialPbrMetallicRoughness(
-            baseColorR: Clamp01(baseColor[0]),
-            baseColorG: Clamp01(baseColor[1]),
-            baseColorB: Clamp01(baseColor[2]),
-            baseColorA: Clamp01(baseColor[3]),
-            metallicFactor: Clamp01(pbr.MetallicFactor ?? 1.0f),
-            roughnessFactor: Clamp01(pbr.RoughnessFactor ?? 1.0f),
-            baseColorTexture: ParseTextureRef(pbr.BaseColorTexture),
-            metallicRoughnessTexture: ParseTextureRef(pbr.MetallicRoughnessTexture));
-    }
-
-    private static MaterialTextureRef? ParseTextureRef(TextureRefData? input)
-    {
-        if (input is null)
-        {
-            return null;
-        }
-
-        if (string.IsNullOrWhiteSpace(input.Source))
-        {
-            throw new InvalidDataException("Texture reference is missing required field 'Source'.");
-        }
-
-        if (input.Scale is not null || input.Strength is not null)
-        {
-            throw new InvalidDataException("Texture reference contains unexpected properties (only 'Source' is allowed here).");
-        }
-
-        return new MaterialTextureRef(input.Source);
-    }
-
-    private static NormalTextureRef? ParseNormalTexture(TextureRefData? input)
-    {
-        if (input is null)
-        {
-            return null;
-        }
-
-        if (string.IsNullOrWhiteSpace(input.Source))
-        {
-            throw new InvalidDataException("NormalTexture is missing required field 'Source'.");
-        }
-
-        if (input.Strength is not null)
-        {
-            throw new InvalidDataException("NormalTexture contains unexpected property 'Strength'.");
-        }
-
-        return new NormalTextureRef(
-            Source: input.Source,
-            Scale: Math.Max(0.0f, input.Scale ?? 1.0f));
-    }
-
-    private static OcclusionTextureRef? ParseOcclusionTexture(TextureRefData? input)
-    {
-        if (input is null)
-        {
-            return null;
-        }
-
-        if (string.IsNullOrWhiteSpace(input.Source))
-        {
-            throw new InvalidDataException("OcclusionTexture is missing required field 'Source'.");
-        }
-
-        if (input.Scale is not null)
-        {
-            throw new InvalidDataException("OcclusionTexture contains unexpected property 'Scale'.");
-        }
-
-        return new OcclusionTextureRef(
-            Source: input.Source,
-            Strength: Clamp01(input.Strength ?? 1.0f));
-    }
-
-    private static MaterialAlphaMode ParseAlphaMode(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return MaterialAlphaMode.Opaque;
-        }
-
-        return value switch
-        {
-            "OPAQUE" => MaterialAlphaMode.Opaque,
-            "MASK" => MaterialAlphaMode.Mask,
-            "BLEND" => MaterialAlphaMode.Blend,
-            _ => throw new InvalidDataException($"Unsupported AlphaMode '{value}'."),
+            Descriptor = descriptor.Clone(),
         };
     }
 
-    private static float Clamp01(float value)
-        => Math.Clamp(value, 0.0f, 1.0f);
+    internal static void Validate(JsonElement descriptor)
+    {
+        if (!Schema.Value.Evaluate(descriptor).IsValid)
+        {
+            throw new InvalidDataException("Material source does not match oxygen.material-descriptor.schema.json.");
+        }
+
+        if (descriptor.TryGetProperty("parameters", out var parameters))
+        {
+            ValidateFloat32(parameters);
+        }
+
+        if (descriptor.TryGetProperty("textures", out var textures))
+        {
+            foreach (var texture in textures.EnumerateObject())
+            {
+                var binding = texture.Value;
+                var path = binding.GetProperty("virtual_path").GetString()!;
+                if (!VirtualPath.IsCanonicalAbsolute(path) || path.IndexOf('/', 1) < 2)
+                {
+                    throw new InvalidDataException($"Texture '{texture.Name}' requires a canonical virtual asset path, received '{path}'.");
+                }
+
+                if (binding.TryGetProperty("uv_transform", out var transform))
+                {
+                    ValidateFloat32(transform);
+                }
+            }
+        }
+    }
+
+    private static void ValidateFloat32(JsonElement value)
+    {
+        switch (value.ValueKind)
+        {
+            case JsonValueKind.Number when !value.TryGetSingle(out var number) || !float.IsFinite(number):
+                throw new InvalidDataException("Material numeric values must fit finite float32 storage.");
+            case JsonValueKind.Array:
+                foreach (var element in value.EnumerateArray())
+                {
+                    ValidateFloat32(element);
+                }
+
+                break;
+            case JsonValueKind.Object:
+                foreach (var property in value.EnumerateObject())
+                {
+                    ValidateFloat32(property.Value);
+                }
+
+                break;
+        }
+    }
+
+    private static JsonSchema LoadSchema()
+    {
+        using var stream = typeof(MaterialSourceReader).Assembly.GetManifestResourceStream(
+            "oxygen.material-descriptor.schema.json")
+            ?? throw new InvalidOperationException("The canonical material schema is missing.");
+        using var reader = new StreamReader(stream);
+        return JsonSchema.FromText(reader.ReadToEnd());
+    }
+
+    private static float Scalar(JsonElement parent, string name, float fallback)
+    {
+        var value = parent.ValueKind == JsonValueKind.Object && parent.TryGetProperty(name, out var property)
+            ? property.GetSingle() : fallback;
+        return float.IsFinite(value) ? value
+            : throw new InvalidDataException($"Material parameter '{name}' exceeds finite float32 range.");
+    }
+
+    private static float[] Vector(JsonElement parent, string name, float[] fallback)
+    {
+        if (parent.ValueKind != JsonValueKind.Object || !parent.TryGetProperty(name, out var property))
+        {
+            return fallback;
+        }
+
+        var result = property.EnumerateArray().Select(static item => item.GetSingle()).ToArray();
+        return result.All(float.IsFinite) ? result
+            : throw new InvalidDataException($"Material parameter '{name}' exceeds finite float32 range.");
+    }
+
+    private static MaterialTextureRef? Texture(JsonElement textures, string name)
+        => textures.ValueKind == JsonValueKind.Object && textures.TryGetProperty(name, out var binding)
+            ? new MaterialTextureRef(binding.GetProperty("virtual_path").GetString()!) : null;
 }

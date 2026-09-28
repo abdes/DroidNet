@@ -38,7 +38,8 @@ public sealed partial class ContentPipelineServiceTests
             Name = "Geometry",
             Geometry = new AssetReference<GeometryAsset>(AssetUris.BuildGeneratedUri("BasicShapes/Cube")),
         };
-        geometry.OverrideSlots.Add(new MaterialsSlot { Material = new AssetReference<MaterialAsset>(materialUri) });
+        geometry.OverrideSlots.Add(await CreateBuiltinMaterialSlotAsync(
+            workspace, geometry, materialUri, this.TestContext.CancellationToken).ConfigureAwait(false));
         _ = node.AddComponent(geometry);
         workspace.Scene.RootNodes.Add(node);
         workspace.Scene.SetEnvironment(new SceneEnvironmentData

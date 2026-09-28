@@ -73,22 +73,22 @@ public sealed class ImportService : IImportService
         cancellationToken.ThrowIfCancellationRequested();
 
         var state = this.CreateState(request);
-        var sceneCookingRejected = false;
+        var nativeCookingRequired = false;
 
         try
         {
             await this.ProcessInputsAsync(state, cancellationToken).ConfigureAwait(false);
-            if (LooseCookedBuildService.FindSceneRequiringNativeCooking(state.Imported.Concat(state.UpToDateImported)) is { } scene)
+            if (LooseCookedBuildService.FindAssetRequiringNativeCooking(state.Imported.Concat(state.UpToDateImported)) is { } asset)
             {
                 // No managed cook has started, so neither partial output nor index repair is appropriate.
-                sceneCookingRejected = true;
+                nativeCookingRequired = true;
                 state.HadFailure = true;
                 state.Diagnostics.Add(
                     ImportDiagnosticSeverity.Error,
-                    code: "OXYIMPORT_NATIVE_SCENE_COOK_REQUIRED",
-                    message: $"Scene '{scene.VirtualPath}' requires the native content pipeline. Managed scene cooking is not supported.",
-                    sourcePath: scene.Source.SourcePath,
-                    virtualPath: scene.VirtualPath);
+                    code: "OXYIMPORT_NATIVE_COOK_REQUIRED",
+                    message: $"{asset.AssetType} '{asset.VirtualPath}' requires the native content pipeline.",
+                    sourcePath: asset.Source.SourcePath,
+                    virtualPath: asset.VirtualPath);
                 return state.ToResult();
             }
 
@@ -116,7 +116,7 @@ public sealed class ImportService : IImportService
         finally
         {
             // Keep cooked roots mountable even after partial failures by repairing file records.
-            if (!sceneCookingRejected && !cancellationToken.IsCancellationRequested && state.HadFailure)
+            if (!nativeCookingRequired && !cancellationToken.IsCancellationRequested && state.HadFailure)
             {
                 await TryRepairCookedIndexAsync(state, cancellationToken).ConfigureAwait(false);
             }

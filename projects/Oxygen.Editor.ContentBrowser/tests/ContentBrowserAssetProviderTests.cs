@@ -215,8 +215,6 @@ public sealed partial class ContentBrowserAssetProviderTests
         MaterialSourceWriter.Write(
             stream,
             new MaterialSource(
-                "oxygen.material.v1",
-                "PBR",
                 "Material",
                 new MaterialPbrMetallicRoughness(
                     1.0f,

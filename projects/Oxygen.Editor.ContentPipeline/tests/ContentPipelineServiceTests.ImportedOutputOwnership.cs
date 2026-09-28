@@ -140,7 +140,7 @@ public sealed partial class ContentPipelineServiceTests
         var result = await (scope switch
         {
             "asset" => service.CookAssetAsync(geometry.CookedAssetUri, this.TestContext.CancellationToken),
-            "folder" => service.CookFolderAsync(new("asset:///Content/Models"), this.TestContext.CancellationToken),
+            "folder" => service.CookFolderAsync(new Uri(geometry.CookedAssetUri, "."), this.TestContext.CancellationToken),
             _ => service.CookCurrentSceneAsync(new("asset:///Content/Scenes/Main.oscene.json"), this.TestContext.CancellationToken),
         }).ConfigureAwait(false);
         _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.TechnicalMessage ?? issue.Message)));
@@ -171,7 +171,11 @@ public sealed partial class ContentPipelineServiceTests
             before = await File.ReadAllBytesAsync(index, this.TestContext.CancellationToken).ConfigureAwait(false);
         }
 
-        var result = await service.CookAssetAsync(new("asset:///Content/Models/Model/Geometry/model/Missing.ogeo"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var settingsPath = Path.Combine(workspace.Root, Uri.UnescapeDataString(source.AbsolutePath).TrimStart('/') + ".import.json");
+        var settings = NativeSceneImportSettings.Parse(await File.ReadAllBytesAsync(settingsPath, this.TestContext.CancellationToken).ConfigureAwait(false));
+        var layout = settings.CreateLayout();
+        var missing = new Uri("asset://" + layout.VirtualMountRoot + "/" + layout.GeometryDirectory + "/Missing.ogeo");
+        var result = await service.CookAssetAsync(missing, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.Status.Should().Be(OperationStatus.Failed);
         _ = result.IsPublished.Should().BeFalse();
         _ = result.Diagnostics.Should().Contain(issue => issue.Message.Contains("does not produce", StringComparison.Ordinal));
