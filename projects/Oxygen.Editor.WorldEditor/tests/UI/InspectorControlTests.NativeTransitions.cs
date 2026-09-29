@@ -7,6 +7,7 @@ using CommunityToolkit.WinUI;
 using DroidNet.Tests;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Inspector;
+using Oxygen.Editor.World.Services;
 
 namespace Oxygen.Editor.World.Tests;
 
@@ -69,9 +70,21 @@ public sealed partial class InspectorControlTests
 
     private static async Task AssertComponentPresenceAsync(NativeSceneFixture fixture, SceneNodeEditorViewModel host, Guid nodeId, bool camera, bool present, CancellationToken cancellationToken)
     {
-        var componentId = camera ? 2 : 3;
+        var componentId = camera ? EngineComponentId.PerspectiveCamera : EngineComponentId.DirectionalLight;
         var native = await fixture.ReadNodeAsync(nodeId, cancellationToken).ConfigureAwait(true);
-        _ = native.Properties.Count(value => value.ComponentId == componentId).Should().Be(present ? camera ? 4 : 25 : 0);
+        var fields = native.Properties.Where(value => value.ComponentId == (ushort)componentId).Select(static value => value.FieldId);
+        if (present)
+        {
+            var expected = camera
+                ? Enum.GetValues<PerspectiveCameraField>().Select(static field => (ushort)field)
+                : Enum.GetValues<DirectionalLightField>().Select(static field => (ushort)field);
+            _ = fields.Should().BeEquivalentTo(expected);
+        }
+        else
+        {
+            _ = fields.Should().BeEmpty();
+        }
+
         _ = host.PropertyEditors.Any(editor => camera ? editor is PerspectiveCameraViewModel : editor is DirectionalLightViewModel).Should().Be(present);
         _ = fixture.Source.RootNodes.Single(node => node.Id == nodeId).Components.Any(component => camera ? component is PerspectiveCamera : component is DirectionalLightComponent).Should().Be(present);
     }

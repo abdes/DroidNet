@@ -929,7 +929,7 @@ references; remote issue closure awaits integration.
 
 ### ED-M08 - Runtime Parity And Standalone Validation
 
-Status: `in_progress; M08.1 native implementation; runtime qualification pending`
+Status: `in_progress; M08.1.1–M08.1.4 validated; paused before M08.1.5`
 
 Outcome: one canonical V0.1 authoring contract across engine and editor, with
 semantic/image qualification through development-only native and embedded paths.
@@ -988,8 +988,25 @@ readers. Primary/Secondary names remain unchanged.
       109 asset and 151 scene-editor tests, including publication rollback for
       project-owned sources and native slot identity/revision validation.
 
-      Remaining: normal migrated-project editor workflow and editor Release
-      qualification. Approved M08.1.5–M08.1.9 work follows in order:
+      M08.1.1–M08.1.4 are validated. Release SDK/Interop, normal editor and UI
+      test builds pass. Thirteen native UI cases cover slots, mixed selection,
+      Undo/Redo, Save/reload, component transitions and automatic/shared-material
+      publication. Transition checks compare the exact canonical field IDs.
+      Test Cooking, EX07, Vortex and Sidedness Validation open, render and Save
+      through the normal editor. Test Cooking automatically cooks/publishes and
+      resumes its preview without expired upload results; its zero-node NewScene2
+      survives Save and reopen with its environment intact. Source triangle
+      imports retain their missing-index/tangent warnings; cooking succeeds.
+
+      Upload results now follow consumer lifetime; resource maintenance continues
+      without views, with bounded completion/reclamation and transactional stable
+      descriptor updates. Full Debug/Release/Tracy engine builds, 193/184 focused
+      native tests, scoped tidy, native IBL/debug-layer replacement checks and the
+      [maintenance baseline](plan/ED-M08-runtime-parity-and-standalone-validation.md#m081-remaining-increments)
+      pass. Existing IBL contracts are preserved. Temporary logs/captures are not
+      repository artifacts.
+
+      Paused before M08.1.5. Approved M08.1.5–M08.1.9 work follows in order:
       runtime identities → automatic load ownership → native integrity inventory
       → immutable project publication → batched native source analysis.
       Rendered flag behavior remains M08.2 work; supplemental captures do not
