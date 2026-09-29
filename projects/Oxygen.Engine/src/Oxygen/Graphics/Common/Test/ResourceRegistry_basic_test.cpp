@@ -4,19 +4,29 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <array>
 #include <atomic>
-#include <optional>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <iostream>
+#include <memory>
+#include <ratio>
+#include <span>
+#include <stdexcept>
 #include <thread>
+#include <utility>
 #include <vector>
 
-#include <Oxygen/Composition/Object.h>
-#include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
+#include <Oxygen/Graphics/Common/DescriptorHandle.h>
 #include <Oxygen/Graphics/Common/Detail/FixedDescriptorSegment.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Test/Bindless/Mocks/MockDescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Test/Fakes/FakeResource.h>
+#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Testing/GTest.h>
 
 using oxygen::graphics::DescriptorAllocationHandle;
@@ -757,18 +767,10 @@ NOLINT_TEST_F(
   std::atomic start_flag { false };
   std::vector<std::thread> threads;
   std::vector<std::shared_ptr<FakeResource>> resources(num_threads);
-  // Give each thread its own allocator to isolate allocator effects while
-  // sharing the same ResourceRegistry instance to test registry concurrency.
-  std::vector<std::shared_ptr<MockDescriptorAllocator>> allocators(num_threads);
-  for (int i = 0; i < num_threads; ++i) {
-    resources[i] = std::make_shared<FakeResource>();
-    allocators[i]
-      = std::make_shared<testing::NiceMock<MockDescriptorAllocator>>();
-    allocators[i]->ext_segment_factory_
-      = [](auto capacity, auto base_index, auto view_type, auto visibility) {
-          return std::make_unique<FixedDescriptorSegment>(
-            capacity, base_index, view_type, visibility);
-        };
+  // One Graphics owner has one descriptor namespace. Its allocator synchronizes
+  // allocation/release while the registry handles concurrent ownership changes.
+  for (auto& resource : resources) {
+    resource = std::make_shared<FakeResource>();
   }
   threads.reserve(num_threads);
   for (int t = 0; t < num_threads; ++t) {
@@ -778,21 +780,23 @@ NOLINT_TEST_F(
       }
       for (int i = 0; i < num_iterations; ++i) {
         // Register/unregister against the shared registry
-        registry_->Register(resources[t]);
+        registry_->Register(resources.at(static_cast<std::size_t>(t)));
         TestViewDesc desc { .view_type = ResourceViewType::kConstantBuffer,
           .visibility = DescriptorVisibility::kShaderVisible,
           .id = static_cast<uint64_t>(i) };
-        // Allocate descriptor using thread-local allocator to avoid contention
+        // Allocate from the shared, thread-safe descriptor namespace.
         DescriptorAllocationHandle descriptor
-          = allocators[t]->AllocateRaw(desc.view_type, desc.visibility);
+          = allocator_->AllocateRaw(desc.view_type, desc.visibility);
         if (!descriptor.IsValid()) {
           ADD_FAILURE() << "failed to allocate descriptor in thread";
           continue;
         }
         auto view
-          = registry_->RegisterView(*resources[t], std::move(descriptor), desc);
+          = registry_->RegisterView(*resources.at(static_cast<std::size_t>(t)),
+            std::move(descriptor), desc);
         EXPECT_TRUE(view->IsValid());
-        registry_->UnRegisterResource(*resources[t]);
+        registry_->UnRegisterResource(
+          *resources.at(static_cast<std::size_t>(t)));
       }
     });
   }
@@ -849,9 +853,9 @@ NOLINT_TEST_F(ResourceRegistryConcurrencyTest,
 
   std::vector<std::shared_ptr<MockDescriptorAllocator>> allocators(num_threads);
   for (int index = 0; index < num_threads; ++index) {
-    allocators[index]
+    allocators.at(static_cast<std::size_t>(index))
       = std::make_shared<testing::NiceMock<MockDescriptorAllocator>>();
-    allocators[index]->ext_segment_factory_
+    allocators.at(static_cast<std::size_t>(index))->ext_segment_factory_
       = [](auto capacity, auto base_index, auto view_type, auto visibility) {
           return std::make_unique<FixedDescriptorSegment>(
             capacity, base_index, view_type, visibility);
@@ -863,8 +867,8 @@ NOLINT_TEST_F(ResourceRegistryConcurrencyTest,
       while (!start_flag.load()) {
         std::this_thread::yield();
       }
-      auto handle
-        = allocators[index]->AllocateRaw(desc.view_type, desc.visibility);
+      auto handle = allocators.at(static_cast<std::size_t>(index))
+                      ->AllocateRaw(desc.view_type, desc.visibility);
       ASSERT_TRUE(handle.IsValid());
       auto acquired = registry_->AcquireViewRegistration(
         *resource1_, std::move(handle), desc);
@@ -883,6 +887,76 @@ NOLINT_TEST_F(ResourceRegistryConcurrencyTest,
   EXPECT_EQ(owning_calls.load(), 1);
   EXPECT_TRUE(registry_->Contains(*resource1_, desc));
   registry_->UnRegisterViews(*resource1_);
+}
+
+NOLINT_TEST_F(ResourceRegistryBasicTest,
+  DuplicateDescriptorNamespaceCannotOverwriteLiveOwner)
+{
+  const TestViewDesc first { .id = 11U };
+  const TestViewDesc second { .id = 22U };
+  auto allocation = allocator_->AllocateRaw(first.view_type, first.visibility);
+  ASSERT_TRUE(allocation.IsValid());
+  const auto index = allocation.GetBindlessHandle();
+  const auto original
+    = registry_->RegisterView(*resource1_, std::move(allocation), first);
+  auto foreign = std::make_shared<testing::NiceMock<MockDescriptorAllocator>>();
+  foreign->ext_segment_factory_
+    = [](auto capacity, auto base, auto type, auto visibility) {
+        return std::make_unique<FixedDescriptorSegment>(
+          capacity, base, type, visibility);
+      };
+  auto conflicting = foreign->AllocateRaw(second.view_type, second.visibility);
+  ASSERT_EQ(conflicting.GetBindlessHandle(), index);
+  EXPECT_THROW(
+    (void)registry_->RegisterView(*resource2_, std::move(conflicting), second),
+    std::logic_error);
+  EXPECT_EQ(registry_->Find(*resource1_, first), original);
+  EXPECT_FALSE(registry_->Contains(*resource2_, second));
+  EXPECT_EQ(
+    foreign->GetAllocatedDescriptorsCount(second.view_type, second.visibility)
+      .get(),
+    0U);
+  EXPECT_EQ(
+    allocator_->GetAllocatedDescriptorsCount(first.view_type, first.visibility)
+      .get(),
+    1U);
+}
+
+class ResourceRegistryLookupBenchmark : public ResourceRegistryBasicTest { };
+
+NOLINT_TEST_F(
+  ResourceRegistryLookupBenchmark, DISABLED_UnrelatedResourcesDoNotScaleRemoval)
+{
+  for (const auto count : { 0U, 1024U, 8192U }) {
+    std::vector<std::shared_ptr<FakeResource>> background;
+    background.reserve(count);
+    for (unsigned index = 0U; index < count; ++index) {
+      auto resource = std::make_shared<FakeResource>();
+      registry_->Register(resource);
+      (void)RegisterView(*resource, TestViewDesc { .id = 1U });
+      background.push_back(std::move(resource));
+    }
+    std::vector<double> samples;
+    constexpr unsigned kSamples = 64U;
+    samples.reserve(kSamples);
+    for (unsigned sample = 0U; sample < kSamples; ++sample) {
+      const auto target = std::make_shared<FakeResource>();
+      registry_->Register(target);
+      (void)RegisterView(*target, TestViewDesc { .id = 1U });
+      const auto start = std::chrono::steady_clock::now();
+      registry_->UnRegisterResource(*target);
+      samples.push_back(std::chrono::duration<double, std::micro>(
+        std::chrono::steady_clock::now() - start)
+          .count());
+    }
+    std::ranges::sort(samples);
+    std::cout << "registry_removal background=" << count
+              << " median_us=" << samples.at(samples.size() / 2U) << " p95_us="
+              << samples.at((samples.size() * 95U + 99U) / 100U - 1U) << '\n';
+    for (const auto& resource : background) {
+      registry_->UnRegisterResource(*resource);
+    }
+  }
 }
 
 } // namespace

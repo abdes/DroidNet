@@ -970,6 +970,10 @@ public:
   void SetFailSubmission(bool value) { fail_submission_ = value; }
   void SetFailRecording(bool value) { fail_recording_ = value; }
   void SetThrowOnCreateBuffer(const bool v) { throw_on_create_buffer_ = v; }
+  void SetThrowOnTextureViewCreation(const bool value)
+  {
+    throw_texture_views_ = value;
+  }
   auto GetDescriptorAllocator() const
     -> const graphics::DescriptorAllocator& override
   {
@@ -1011,9 +1015,10 @@ public:
       OXYGEN_TYPED(FakeTexture)
     public:
       FakeTexture(const std::string_view name, TextureDesc desc,
-        SrvViewCreationLog* srv_view_log)
+        SrvViewCreationLog* srv_view_log, observer_ptr<const bool> view_failure)
         : Texture(name)
         , desc_(std::move(desc))
+        , view_failure_(view_failure)
         , srv_view_log_(srv_view_log)
       {
       }
@@ -1040,6 +1045,9 @@ public:
         graphics::TextureSubResourceSet /*sub_resources*/) const
         -> graphics::NativeView override
       {
+        if (view_failure_ && *view_failure_) {
+          throw std::runtime_error("Injected texture view creation failure");
+        }
         if (srv_view_log_ != nullptr) {
           const auto index = view_handle.GetAllocator() != nullptr
             ? view_handle.GetAllocator()
@@ -1108,12 +1116,14 @@ public:
 
     private:
       TextureDesc desc_ {};
+      observer_ptr<const bool> view_failure_;
       SrvViewCreationLog* srv_view_log_ {
         nullptr,
       };
     };
 
-    return std::make_shared<FakeTexture>("FakeTexture", desc, &srv_view_log_);
+    return std::make_shared<FakeTexture>("FakeTexture", desc, &srv_view_log_,
+      make_observer(&throw_texture_views_));
   }
   [[nodiscard]] auto CreateTextureFromNativeObject(const TextureDesc& /*desc*/,
     const graphics::NativeResource& /*native*/) const
@@ -1395,6 +1405,7 @@ public:
     false,
   };
   bool fail_constant_buffer_views_ { false };
+  bool throw_texture_views_ { false };
   mutable bool fail_map_ {
     false,
   };

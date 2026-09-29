@@ -73,10 +73,16 @@ target_link_libraries(
   PRIVATE
     oxygen::input
 )
+cmake_path(
+  CONVERT
+  "${Python3_EXECUTABLE}"
+  TO_CMAKE_PATH_LIST _content_test_python
+  NORMALIZE
+)
 target_compile_definitions(
   "${META_MODULE_NAME}.AssetLoader.Tests"
   PRIVATE
-    OXYGEN_CONTENT_TEST_PYTHON_EXECUTABLE="${Python3_EXECUTABLE}"
+    OXYGEN_CONTENT_TEST_PYTHON_EXECUTABLE="${_content_test_python}"
 )
 
 m_gtest_program(

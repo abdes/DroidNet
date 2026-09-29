@@ -155,15 +155,42 @@ M08.1.4 verification is not deferred until F1.
 
 M08.1.4 closes in small reviewed checkpoints:
 
-| Checkpoint                   | Status      | Exit check                                                                                                                                                                                         |
-| ---------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Retained upload results      | validated   | Debug/Release full engine builds; 103/102 upload, geometry and texture tests; delayed consumers, reentrant close/progress, cancellation, device loss and Debug allocation failure.                 |
-| Bounded resource maintenance | planned     | Pending-only publication, immediate logical geometry invalidation, bounded LOD reclamation and resource-local view-cache unlinking; stale reload/fairness tests and large-unload CPU measurements. |
-| SDK/editor workflows         | in_progress | Refresh installed SDK; qualify normal project open, automatic publication, scene replacement and empty-scene Save/reopen.                                                                          |
+| Checkpoint                   | Status      | Exit check                                                                                                                                                                            |
+| ---------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Retained upload results      | validated   | Debug/Release full engine builds; 103/102 upload, geometry and texture tests; delayed consumers, reentrant close/progress, cancellation, device loss and Debug allocation failure.    |
+| Bounded resource maintenance | validated   | Full Debug/Release/Tracy builds; 193 Debug and 184 Release resource/lifecycle tests; scoped tidy clean; native scene replacement with debug-layer and IBL checks. CPU baseline below. |
+| SDK/editor workflows         | in_progress | Refresh installed SDK; qualify normal project open, automatic publication, scene replacement and empty-scene Save/reopen.                                                             |
 
 The [upload owner](../../../projects/Oxygen.Engine/design/vortex/lld/upload.md#result-ownership)
 defines lifetime and maintenance contracts. Each checkpoint keeps its tests and
 owner documentation with the code; no expiry workaround or GPU wait is introduced.
+
+**Maintenance baseline — 2026-09-29.** Ryzen 9 9950X, RTX 3080 (610.62),
+MSVC 14.51, Release; source is the bounded-maintenance checkpoint containing
+this table. CPU tests use FakeGraphics, five runs with default 64-LOD reclamation.
+Registry rows report the median across runs; geometry reports the observed range.
+
+| Measurement                                                    | Result                                                           |
+| -------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Remove one resource with 0 / 1,024 / 8,192 unrelated resources | 0.2 / 0.2 / 0.2 µs median                                        |
+| Repoint one equivalent view with 64 / 1,024 / 8,192 aliases    | 0.1 / 0.2 / 0.2 µs median                                        |
+| Reclaim 4,096 geometry assets, 64 LODs/frame                   | First frame 0.131–0.192 ms; p95 0.127–0.143 ms; maximum 0.251 ms |
+| Native geometry completion publication                         | 444 Tracy samples; p95 0.120 µs; maximum 63.881 µs               |
+| Native texture completion publication                          | 888 Tracy samples; p95 0.401 µs; maximum 77.798 µs               |
+
+Reproduce CPU measurements from `projects/Oxygen.Engine` with Release binaries
+`Oxygen.Graphics.Common.ResourceRegistry.Tests.exe` and
+`Oxygen.Vortex.GeometryUploader.Tests.exe` under `out/build-ninja/bin/Release`,
+using `--gtest_also_run_disabled_tests --gtest_filter=*Benchmark.* --gtest_repeat=5`.
+
+The native baseline uses RenderScene's `ibl_persist_and_replace` UI test at
+1920×1080, 60-FPS cap, Sponza → Lantern → Sponza, with isolated settings and
+`OXYGEN_UI_TEST_FILTER=ibl_persist_and_replace`. Run the Tracy preset and export
+`Vortex.Geometry` / `Vortex.Texture` zones with `tracy-csvexport -u -f`.
+This replacement retains cached assets; the native timings measure publication,
+not large-unload driver cost. Large-unload bounds and viewless cleanup are covered
+by the CPU baseline and lifecycle regression. The separate debug-layer run passed
+in 11.69 s with no D3D12 errors. Traces, screenshots and logs stay outside Git.
 
 Qualify the engine and all maintained examples before editor validation: finish
 native content migration, retained reimport, loose/PAK loading and bounded runtime

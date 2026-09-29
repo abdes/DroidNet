@@ -129,6 +129,9 @@ public:
       = 64ULL * 1024ULL * 1024ULL;
     static constexpr std::size_t kDefaultMaxDeferredRetriesPerFrame = 4U;
 
+    std::size_t max_completion_visits_per_frame { 128U };
+    std::size_t max_upload_visits_per_frame { 128U };
+    std::size_t max_eviction_visits_per_frame { 64U };
     std::size_t max_upload_bytes_per_frame { kDefaultMaxUploadBytesPerFrame };
     std::size_t max_pending_upload_bytes { kDefaultMaxPendingUploadBytes };
     std::size_t deferred_retry_low_watermark_bytes {
@@ -172,7 +175,10 @@ public:
     const content::ResourceKey& key) const noexcept -> bool;
 
   //! Must be called once per frame before any GetOrAllocate() calls.
+  //! Bounded completion and eviction maintenance; starts no new loads.
   OXGN_VRTX_API auto OnFrameStart() -> void;
+  //! Submit queued uploads and retry loads once for a frame with active demand.
+  OXGN_VRTX_API auto EnsureFrameResources() -> void;
 
   //! Must be called once per frame after all rendering.
   OXGN_VRTX_API auto OnFrameEnd() -> void;

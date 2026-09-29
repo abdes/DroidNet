@@ -81,7 +81,8 @@ auto GeometryUploaderTest::SetUp() -> void
     },
     observer_ptr {
       asset_loader_.get(),
-    });
+    },
+    GeometryLimits());
 }
 
 auto GeometryUploaderTest::TearDown() -> void

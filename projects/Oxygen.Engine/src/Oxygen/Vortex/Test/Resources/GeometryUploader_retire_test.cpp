@@ -137,4 +137,63 @@ NOLINT_TEST_F(GeometryUploaderRetireTest, RecycledSlotPublishesCompletedBuffers)
   EXPECT_EQ(geometry_uploader.GetPendingUploadCount(), 0U);
 }
 
+class GeometryUploaderBudgetTest : public GeometryUploaderTest {
+protected:
+  auto GeometryLimits() const
+    -> oxygen::vortex::resources::GeometryUploader::MaintenanceLimits override
+  {
+    return { .max_pending_upload_visits_per_frame = 1U,
+      .max_reclaimed_lods_per_frame = 1U };
+  }
+};
+
+NOLINT_TEST_F(GeometryUploaderBudgetTest, CompletionBudgetCountsUnreadyVisits)
+{
+  BeginFrame(Slot { 0 });
+  auto& geometry = GeoUploader();
+  for (const auto* name : { "waiting", "canceled" }) {
+    (void)geometry.GetOrAllocate({ .asset_key = MakeGeometryAssetKey(name),
+      .lod_index = 0U,
+      .mesh = MakeValidTriangleMesh(name, false) });
+  }
+  geometry.EnsureFrameResources();
+  const auto tickets = geometry.GetPendingUploadTickets();
+  ASSERT_EQ(tickets.size(), 2U);
+  ASSERT_TRUE(tickets.back().Cancel());
+  geometry.OnFrameStart(RendererTagFactory::Get(), Slot { 1 });
+  EXPECT_EQ(geometry.GetPendingUploadCount(), 2U);
+  geometry.OnFrameStart(RendererTagFactory::Get(), Slot { 0 });
+  EXPECT_EQ(geometry.GetPendingUploadCount(), 1U);
+  Uploader().OnFrameStart(RendererTagFactory::Get(), Slot { 1 });
+  geometry.OnFrameStart(RendererTagFactory::Get(), Slot { 1 });
+  EXPECT_EQ(geometry.GetPendingUploadCount(), 0U);
+  EXPECT_TRUE(tickets.front().Await().success);
+}
+
+NOLINT_TEST_F(GeometryUploaderBudgetTest, StaleWorkCannotClearReplacementTicket)
+{
+  BeginFrame(Slot { 0 });
+  auto& geometry = GeoUploader();
+  auto reference = oxygen::vortex::sceneprep::GeometryRef {
+    .asset_key = MakeGeometryAssetKey("budgeted replacement"),
+    .lod_index = 0U,
+    .mesh = MakeValidTriangleMesh("Old", false),
+  };
+  const auto handle = geometry.GetOrAllocate(reference);
+  geometry.EnsureFrameResources();
+  reference.mesh = MakeValidTriangleMesh("New", false);
+  geometry.Update(handle, reference);
+  geometry.EnsureFrameResources();
+  ASSERT_EQ(geometry.GetPendingUploadCount(), 1U);
+  Uploader().OnFrameStart(RendererTagFactory::Get(), Slot { 1 });
+  geometry.OnFrameStart(RendererTagFactory::Get(), Slot { 1 });
+  EXPECT_EQ(geometry.GetPendingUploadCount(), 1U);
+  EXPECT_FALSE(
+    geometry.GetShaderVisibleIndices(handle).vertex_srv_index.IsValid());
+  geometry.OnFrameStart(RendererTagFactory::Get(), Slot { 0 });
+  EXPECT_EQ(geometry.GetPendingUploadCount(), 0U);
+  EXPECT_TRUE(
+    geometry.GetShaderVisibleIndices(handle).vertex_srv_index.IsValid());
+}
+
 } // namespace

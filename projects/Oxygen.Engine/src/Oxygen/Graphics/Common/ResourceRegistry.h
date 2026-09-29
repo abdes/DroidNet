@@ -24,6 +24,7 @@
 #include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
 #include <Oxygen/Graphics/Common/Concepts.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
@@ -605,9 +606,9 @@ public:
 
    ### Failure Handling
 
-   If view creation fails after acquiring the descriptor from the previous
-   owner, the descriptor handle is released and the index becomes free. This
-   matches Replace() behavior and ensures no resource leaks or invalid states.
+   Failure preserves the original descriptor, native view and resource mapping.
+   Native creation exceptions propagate; an invalid native view returns false.
+   Callers can retry or repoint the same slot to an error resource.
 
    ### Performance Characteristics
 
@@ -646,8 +647,7 @@ public:
            failed (resource not registered, invalid index, view creation
            failure, etc.).
 
-   @note If view creation fails, the descriptor is released and the index
-         becomes free, requiring re-registration for future use.
+   @note Failed repointing preserves the original descriptor and binding.
 
    @see RegisterView, Replace, UnRegisterView
   */
@@ -672,112 +672,74 @@ public:
       return false;
     }
 
-    // Find existing owner and take ownership of the descriptor handle entry
-    DescriptorAllocationHandle owned_descriptor;
-    NativeView old_view_obj; // for cache purge
-    NativeResource old_res_obj; // original owner
-    if (const auto owner_it = descriptor_to_resource_.find(index);
-      owner_it != descriptor_to_resource_.end()) {
-      old_res_obj = owner_it->second;
-      if (const auto old_res_it = resources_.find(old_res_obj);
-        old_res_it != resources_.end()) {
-        auto& old_descriptors = old_res_it->second.descriptors;
-        if (const auto ve_it = old_descriptors.find(index);
-          ve_it != old_descriptors.end()) {
-          old_view_obj = ve_it->second.view_object;
-          owned_descriptor = std::move(ve_it->second.descriptor);
-          old_descriptors.erase(ve_it);
-          // Clear mapping while we attempt update; will be re-added on success
-          descriptor_to_resource_.erase(index);
-
-        } else {
-          // Inconsistent state: owner resource has no view entry for index.
-          // Programming error; self-heal by erasing stale mapping and fail.
-          DCHECK_F(false, "UpdateView: missing view entry for index");
-          // ReSharper disable once CppUnreachableCode
-          descriptor_to_resource_.erase(index);
-          return false;
-        }
-      } else {
-        // Inconsistent state: mapped owner resource missing from registry.
-        // Programming error; self-heal by erasing stale mapping and fail.
-        DCHECK_F(false, "UpdateView: owner resource not registered");
-        // ReSharper disable once CppUnreachableCode
-        descriptor_to_resource_.erase(index);
-        return false;
-      }
-    } else {
-      // Unknown index
+    const auto owner = descriptor_to_resource_.find(index);
+    if (owner == descriptor_to_resource_.end()) {
       return false;
     }
-
-    // Create the new native view at the same descriptor slot using the owned
-    // descriptor handle.
-    NativeView new_view;
-    try {
-      new_view = resource.GetNativeView(owned_descriptor, desc);
-    } catch (...) {
-      // Failure -> release the temporary descriptor and purge old cache; the
-      // index becomes free and no registration remains for it.
-      if (owned_descriptor.IsValid()) {
-        owned_descriptor.Release();
-      }
-      // Remove any cache entry for the old view using the prior key when known
-      if (old_view_obj->IsValid()) {
-        std::erase_if(view_cache_, [&](const auto& it) -> auto {
-          return it.first.resource == old_res_obj
-            && it.second.view_object == old_view_obj;
-        });
-      }
-      throw; // Propagate
+    const auto old_res_obj = owner->second;
+    const auto source = resources_.find(old_res_obj);
+    if (source == resources_.end()) {
+      throw std::logic_error("View descriptor owner is not registered");
     }
+    auto& old_descriptors = source->second.descriptors;
+    const auto old_view = old_descriptors.find(index);
+    if (old_view == old_descriptors.end()) {
+      throw std::logic_error("View descriptor is missing from its owner");
+    }
+    auto& previous = old_view->second;
+    auto description = std::any(desc);
+    const bool same_resource = old_res_obj == new_res_obj;
+    auto& destination_descriptors = new_res_it->second.descriptors;
+    ResourceEntry::ViewEntry* destination = &previous;
+    bool committed = false;
+    const ScopeGuard rollback_destination([&]() noexcept {
+      if (!committed && !same_resource && destination != &previous) {
+        destination_descriptors.erase(index);
+      }
+    });
+    if (!same_resource) {
+      const auto [inserted, unique] = destination_descriptors.try_emplace(index,
+        NativeView {}, DescriptorAllocationHandle {}, std::move(description),
+        key_hash, std::nullopt);
+      if (!unique) {
+        throw std::logic_error(
+          "View destination already owns the descriptor index");
+      }
+      destination = &inserted->second;
+    }
+    const auto [target_group, new_group] = view_cache_.try_emplace(
+      CacheKey { .resource = new_res_obj, .view_desc_hash = key_hash },
+      nullptr);
+    const ScopeGuard rollback_group([&]() noexcept {
+      if (!committed && new_group) {
+        view_cache_.erase(target_group);
+      }
+    });
+
+    // Every allocation precedes the native write. Backends must likewise
+    // validate/resolve handles before changing the descriptor slot.
+    const auto new_view = resource.GetNativeView(previous.descriptor, desc);
     if (!new_view->IsValid()) {
-      // Failure -> release the temporary descriptor and purge old cache; the
-      // index becomes free and no registration remains for it.
-      if (owned_descriptor.IsValid()) {
-        owned_descriptor.Release();
-      }
-      // Remove any cache entry for the old view object if present.
-      if (old_view_obj->IsValid()) {
-        std::erase_if(view_cache_, [&](const auto& it) -> auto {
-          return it.first.resource == old_res_obj
-            && it.second.view_object == old_view_obj;
-        });
-      }
       return false;
     }
 
-    // Attach descriptor to the new resource and update caches/mappings.
-    auto& new_descriptors = new_res_it->second.descriptors;
-    new_descriptors[index] = ResourceEntry::ViewEntry {
-      .view_object = new_view,
-      .descriptor = std::move(owned_descriptor),
-    };
-    descriptor_to_resource_[index] = new_res_obj;
-
-    // Update cache entry: erase prior by key first, then insert the new entry
-    if (old_view_obj->IsValid()) {
-      std::erase_if(view_cache_, [&](const auto& it) -> auto {
-        return it.first.resource == old_res_obj
-          && it.second.view_object == old_view_obj;
-      });
+    // Commit uses existing nodes and no-throw metadata moves only.
+    if (!same_resource || previous.description_hash != key_hash) {
+      UnlinkViewNoLock(old_res_obj, previous);
     }
-
-    // Insert/overwrite new cache entry
-    ViewCacheEntry cache_entry {
-      .view_object = new_view,
-      .view_description = std::any(desc),
-      .descriptor_index = index,
-      .domain = std::nullopt,
-    };
-    const CacheKey new_cache_key {
-      .resource = new_res_obj,
-      .view_desc_hash = key_hash,
-    };
-    StoreViewNoLock(new_cache_key, std::move(cache_entry), QueryView(desc));
-    // Diagnostic: log repointing for runtime validation of descriptor updates
-    DLOG_F(2, "ResourceRegistry::UpdateView: repointed index {} to {}", index,
-      new_res_obj);
+    if (same_resource) {
+      destination->view_description = std::move(description);
+      destination->description_hash = key_hash;
+    } else {
+      destination->descriptor = std::move(previous.descriptor);
+    }
+    destination->view_object = new_view;
+    PrependViewNoLock(*destination, target_group->second);
+    owner->second = new_res_obj;
+    if (!same_resource) {
+      old_descriptors.erase(old_view);
+    }
+    committed = true;
     return true;
   }
 
@@ -935,23 +897,14 @@ public:
       std::vector<bindless::HeapIndex> indices
         = CollectDescriptorIndicesForResource(old_obj);
 
-      // Helper to find cached description for a given view object.
-      const auto find_desc_any
-        = [&](const NativeView& view_obj) -> std::optional<std::any> {
-        for (const auto& [key, entry] : view_cache_) {
-          if (key.resource == old_obj && entry.view_object == view_obj) {
-            return entry.view_description;
-          }
-        }
-        return std::nullopt;
-      };
-
       for (const auto index : indices) {
         auto ve_it = old_entry.descriptors.find(index);
         if (ve_it == old_entry.descriptors.end()) {
           continue;
         }
 
+        auto description = std::move(ve_it->second.view_description);
+        UnlinkViewNoLock(old_obj, ve_it->second);
         DescriptorAllocationHandle owned_descriptor
           = std::move(ve_it->second.descriptor);
         const NativeView view_obj = ve_it->second.view_object;
@@ -967,14 +920,9 @@ public:
         // Apply updater policy: if it yields a new description and view
         // creation succeeds, recreate in place; otherwise, release the handle.
         try {
-          auto desc_any = find_desc_any(view_obj);
-          if (!desc_any.has_value()) {
-            throw std::logic_error(
-              "Registered view description is unavailable");
-          }
           const auto& typed_desc
             = std::any_cast<const typename Resource::ViewDescriptionT&>(
-              desc_any.value());
+              description);
           if (auto next_desc = updater(typed_desc); next_desc.has_value()) {
             auto new_view
               = new_resource->GetNativeView(owned_descriptor, *next_desc);
@@ -1019,8 +967,8 @@ public:
       NotifyResourceForgottenNoLock(old_entry.native_resource);
     }
     RemoveNativeOwnershipNoLock(old_entry);
-    resources_.erase(old_obj);
     PurgeCachedViewsForResource(old_obj);
+    resources_.erase(old_obj);
   }
 
   template <ResourceWithViews Resource>
@@ -1494,8 +1442,29 @@ private:
 
     // Descriptors associated with this resource
     struct ViewEntry {
-      NativeView view_object; // Native view object
-      DescriptorAllocationHandle descriptor; // Handle to descriptor heap entry
+      ViewEntry(NativeView view, DescriptorAllocationHandle allocation,
+        std::any description, std::size_t hash,
+        std::optional<bindless::DomainToken> allocation_domain)
+        : view_object(std::move(view))
+        , descriptor(std::move(allocation))
+        , view_description(std::move(description))
+        , description_hash(hash)
+        , domain(allocation_domain)
+      {
+      }
+      ~ViewEntry() = default;
+      OXYGEN_MAKE_NON_COPYABLE(ViewEntry)
+      OXYGEN_MAKE_NON_MOVABLE(ViewEntry)
+
+      NativeView view_object;
+      DescriptorAllocationHandle descriptor;
+      std::any view_description;
+      std::size_t description_hash { 0 };
+      std::optional<bindless::DomainToken> domain;
+      // Descriptor-map nodes retain their addresses across rehash.
+      ViewEntry* cache_previous { nullptr };
+      ViewEntry* cache_next { nullptr };
+      bool cached { false };
     };
 
     // Map from descriptor index to view entry
@@ -1529,18 +1498,15 @@ private:
     }
   };
 
-  //! View cache entry that stores both the view and its description.
-  struct ViewCacheEntry {
-    NativeView view_object; //!< The native object holding the view.
-    std::any view_description; //!< The original view description.
-    bindless::HeapIndex descriptor_index { kInvalidBindlessHeapIndex };
-    std::optional<bindless::DomainToken> domain;
-  };
-
-  OXGN_GFX_NDAPI auto FindViewNoLock(const NativeResource& resource,
-    std::size_t key_hash, ViewQuery query) const -> const ViewCacheEntry*;
-  OXGN_GFX_API auto StoreViewNoLock(
-    const CacheKey& key, ViewCacheEntry entry, ViewQuery query) -> void;
+  OXGN_GFX_NDAPI auto FindViewNoLock(
+    const NativeResource& resource, std::size_t key_hash, ViewQuery query) const
+    -> const ResourceEntry::ViewEntry*;
+  OXGN_GFX_API static auto PrependViewNoLock(ResourceEntry::ViewEntry& entry,
+    ResourceEntry::ViewEntry*& head) noexcept -> void;
+  OXGN_GFX_API auto LinkViewNoLock(
+    const NativeResource& resource, ResourceEntry::ViewEntry& entry) -> void;
+  OXGN_GFX_API auto UnlinkViewNoLock(const NativeResource& resource,
+    ResourceEntry::ViewEntry& entry) noexcept -> void;
 
   std::shared_ptr<detail::ResourceRegistryState> state_;
   // References retain the existing registry implementation over stable state.
@@ -1549,7 +1515,7 @@ private:
   std::unordered_map<NativeResource, ResourceEntry>& resources_;
   std::unordered_map<bindless::HeapIndex, NativeResource>&
     descriptor_to_resource_;
-  std::unordered_multimap<CacheKey, ViewCacheEntry, CacheKeyHasher>&
+  std::unordered_map<CacheKey, ResourceEntry::ViewEntry*, CacheKeyHasher>&
     view_cache_;
   std::function<void(const NativeResource&)>& on_resource_unregistered_;
   std::string debug_name_; //!< Debug name for the registry.
@@ -1563,8 +1529,9 @@ namespace detail {
       resources;
     std::unordered_map<bindless::HeapIndex, NativeResource>
       descriptor_to_resource;
-    std::unordered_multimap<ResourceRegistry::CacheKey,
-      ResourceRegistry::ViewCacheEntry, ResourceRegistry::CacheKeyHasher>
+    std::unordered_map<ResourceRegistry::CacheKey,
+      ResourceRegistry::ResourceEntry::ViewEntry*,
+      ResourceRegistry::CacheKeyHasher>
       view_cache;
     std::function<void(const NativeResource&)> on_resource_unregistered;
     std::weak_ptr<Graphics> backend_owner;

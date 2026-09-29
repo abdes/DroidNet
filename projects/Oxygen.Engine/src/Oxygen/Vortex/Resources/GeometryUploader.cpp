@@ -5,11 +5,12 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <deque>
 #include <expected>
+#include <list>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -23,10 +24,10 @@
 
 #include <fmt/format.h>
 
-#include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Content/EvictionEvents.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Core/Bindless/Types.h>
@@ -48,6 +49,11 @@
 #include <Oxygen/Vortex/Upload/Types.h>
 #include <Oxygen/Vortex/Upload/UploadCoordinator.h>
 #include <Oxygen/Vortex/Upload/UploadHelpers.h> // For EnsureBufferAndSrv
+#include <Oxygen/Vortex/Upload/UploadTicket.h>
+#ifdef OXYGEN_WITH_TRACY
+#  include <Oxygen/Profiling/CpuProfileScope.h>
+#  include <Oxygen/Profiling/ProfileScope.h>
+#endif
 
 namespace {
 
@@ -150,7 +156,7 @@ public:
   Impl(observer_ptr<Graphics> gfx,
     observer_ptr<vortex::upload::UploadCoordinator> uploader,
     observer_ptr<vortex::upload::StagingProvider> provider,
-    observer_ptr<content::IAssetLoader> asset_loader);
+    observer_ptr<content::IAssetLoader> asset_loader, MaintenanceLimits limits);
 
   ~Impl();
 
@@ -178,7 +184,7 @@ public:
   [[nodiscard]] auto GetPendingUploadCount() const -> std::size_t;
 
   [[nodiscard]] auto GetPendingUploadTickets() const
-    -> std::span<const vortex::upload::UploadTicket>;
+    -> std::vector<vortex::upload::UploadTicket>;
 
 private:
   using ReuseStrategy = nexus::FrameDrivenIndexReuse<bindless::HeapIndex>;
@@ -197,31 +203,25 @@ private:
     bool alive { true };
   };
 
+  using LodHandles
+    = std::unordered_map<std::uint32_t, vortex::sceneprep::GeometryHandle>;
+  using AssetHandles = std::unordered_map<data::AssetKey, LodHandles>;
+
   struct PendingAssetEviction {
     data::AssetKey asset_key;
-    content::EvictionReason reason { content::EvictionReason::kRefCountZero };
+    AssetHandles::node_type detached;
   };
 
-  struct GeometryIdentityKey {
-    data::AssetKey asset_key;
-    std::uint32_t lod_index { 0U };
-
-    [[nodiscard]] auto operator==(
-      const GeometryIdentityKey& other) const noexcept -> bool
-    {
-      return asset_key == other.asset_key && lod_index == other.lod_index;
-    }
+  enum class UploadBufferKind : std::uint8_t { kVertex, kIndex };
+  struct PendingCompletion {
+    vortex::sceneprep::GeometryHandle handle;
+    std::uint64_t content_revision { 0U };
+    UploadBufferKind kind { UploadBufferKind::kVertex };
+    vortex::upload::TicketId ticket_id { 0 };
   };
 
-  struct GeometryIdentityKeyHash {
-    auto operator()(const GeometryIdentityKey& k) const noexcept -> size_t
-    {
-      size_t seed = 0;
-      oxygen::HashCombine(seed, k.asset_key);
-      oxygen::HashCombine(seed, k.lod_index);
-      return seed;
-    }
-  };
+  [[nodiscard]] auto FindPendingTicket(const PendingCompletion& work) const
+    -> const vortex::upload::UploadTicket*;
 
   struct GeometryEntry {
     data::AssetKey asset_key;
@@ -245,11 +245,8 @@ private:
 
     std::optional<vortex::upload::UploadTicket> pending_vertex_ticket;
     std::optional<vortex::upload::UploadTicket> pending_index_ticket;
-    std::uint64_t pending_vertex_generation { 0U };
-    std::uint64_t pending_index_generation { 0U };
 
-    // When source indices are 16-bit, we widen to 32-bit for GPU consumption
-    // and keep this staging buffer alive until the upload ticket retires.
+    // Widened source storage is needed only until synchronous staging packing.
     std::shared_ptr<std::vector<std::uint32_t>> pending_widened_indices;
   };
 
@@ -259,7 +256,11 @@ private:
   auto UploadIndexBuffer(GeometryEntry& dirty_entry)
     -> std::expected<vortex::upload::UploadRequest, bool>;
   auto RetireCompletedUploads() -> void;
-  auto ProcessEvictions() -> void;
+  auto AcceptEvictions() -> void;
+  auto ReclaimEvictedGeometry() -> void;
+  auto SubmitBufferUpload(GeometryEntry& entry,
+    vortex::sceneprep::GeometryHandle handle, UploadBufferKind kind,
+    const vortex::upload::UploadRequest& request) -> void;
   auto ReleaseEntryBuffers(GeometryEntry& entry) -> void;
 
   observer_ptr<Graphics> gfx_;
@@ -269,7 +270,9 @@ private:
 
   std::shared_ptr<CallbackGate> callback_gate_;
   std::mutex eviction_mutex_;
-  std::deque<PendingAssetEviction> pending_evictions_;
+  std::list<PendingAssetEviction> pending_evictions_;
+  std::atomic_bool has_pending_evictions_ { false };
+  std::list<PendingAssetEviction> reclaiming_assets_;
   content::IAssetLoader::EvictionSubscription eviction_subscription_;
 
   std::uint32_t next_handle_index_ { 0U };
@@ -281,17 +284,25 @@ private:
   bool frame_resources_ensured_ { false };
 
   std::vector<GeometryEntry> geometry_entries_;
-  std::unordered_map<GeometryIdentityKey, vortex::sceneprep::GeometryHandle,
-    GeometryIdentityKeyHash>
-    mesh_identity_to_handle_;
-  std::vector<vortex::upload::UploadTicket> pending_upload_tickets_;
+  AssetHandles assets_;
+  std::list<PendingCompletion> pending_completions_;
+  MaintenanceLimits limits_;
 };
 
 GeometryUploader::GeometryUploader(observer_ptr<Graphics> gfx,
-  const observer_ptr<vortex::upload::UploadCoordinator> uploader,
+  observer_ptr<vortex::upload::UploadCoordinator> uploader,
   observer_ptr<vortex::upload::StagingProvider> provider,
   observer_ptr<content::IAssetLoader> asset_loader)
-  : impl_(std::make_unique<Impl>(gfx, uploader, provider, asset_loader))
+  : GeometryUploader(
+      gfx, uploader, provider, asset_loader, MaintenanceLimits {})
+{
+}
+
+GeometryUploader::GeometryUploader(observer_ptr<Graphics> gfx,
+  observer_ptr<vortex::upload::UploadCoordinator> uploader,
+  observer_ptr<vortex::upload::StagingProvider> provider,
+  observer_ptr<content::IAssetLoader> asset_loader, MaintenanceLimits limits)
+  : impl_(std::make_unique<Impl>(gfx, uploader, provider, asset_loader, limits))
 {
 }
 
@@ -300,7 +311,7 @@ GeometryUploader::~GeometryUploader() = default;
 GeometryUploader::Impl::Impl(observer_ptr<Graphics> gfx,
   const observer_ptr<vortex::upload::UploadCoordinator> uploader,
   observer_ptr<vortex::upload::StagingProvider> provider,
-  observer_ptr<content::IAssetLoader> asset_loader)
+  observer_ptr<content::IAssetLoader> asset_loader, MaintenanceLimits limits)
   : gfx_(gfx)
   , uploader_(uploader)
   , staging_provider_(provider)
@@ -313,7 +324,10 @@ GeometryUploader::Impl::Impl(observer_ptr<Graphics> gfx,
           free_indices->push_back(index);
         }
       })
+  , limits_(limits)
 {
+  CHECK_GT_F(limits_.max_pending_upload_visits_per_frame, 0U);
+  CHECK_GT_F(limits_.max_reclaimed_lods_per_frame, 0U);
   DCHECK_NOTNULL_F(gfx_, "Graphics cannot be null");
   DCHECK_NOTNULL_F(uploader_, "UploadCoordinator cannot be null");
   DCHECK_NOTNULL_F(staging_provider_, "StagingProvider cannot be null");
@@ -347,8 +361,9 @@ GeometryUploader::Impl::Impl(observer_ptr<Graphics> gfx,
       std::scoped_lock eviction_lock(eviction_mutex_);
       pending_evictions_.push_back(PendingAssetEviction {
         .asset_key = *event.asset_key,
-        .reason = event.reason,
+        .detached = {},
       });
+      has_pending_evictions_.store(true, std::memory_order_release);
     });
 }
 
@@ -404,8 +419,9 @@ GeometryUploader::Impl::~Impl()
   }
   geometry_entries_.clear();
 
-  pending_upload_tickets_.clear();
-  mesh_identity_to_handle_.clear();
+  pending_completions_.clear();
+  reclaiming_assets_.clear();
+  assets_.clear();
 }
 
 auto GeometryUploader::GetOrAllocate(
@@ -451,6 +467,14 @@ auto GeometryUploader::Impl::TryGetCurrentEntry_(
   if (entry.handle_generation != handle.GenerationValue().get()) {
     return nullptr;
   }
+  const auto asset = assets_.find(entry.asset_key);
+  if (asset == assets_.end()) {
+    return nullptr;
+  }
+  const auto lod = asset->second.find(entry.lod_index);
+  if (lod == asset->second.end() || lod->second != handle) {
+    return nullptr;
+  }
   return &entry;
 }
 
@@ -472,6 +496,14 @@ auto GeometryUploader::Impl::TryGetCurrentEntry_(
     return nullptr;
   }
   if (entry.handle_generation != handle.GenerationValue().get()) {
+    return nullptr;
+  }
+  const auto asset = assets_.find(entry.asset_key);
+  if (asset == assets_.end()) {
+    return nullptr;
+  }
+  const auto lod = asset->second.find(entry.lod_index);
+  if (lod == asset->second.end() || lod->second != handle) {
     return nullptr;
   }
   return &entry;
@@ -497,62 +529,64 @@ auto GeometryUploader::Impl::GetOrAllocate(
     return vortex::sceneprep::kInvalidGeometryHandle;
   }
 
+  AcceptEvictions();
   const auto& mesh = *geometry.mesh;
-  const GeometryIdentityKey key {
-    .asset_key = geometry.asset_key,
-    .lod_index = geometry.lod_index,
-  };
-  DLOG_F(3, "lod index    = {}", key.lod_index);
-  if (auto it = mesh_identity_to_handle_.find(key);
-    it != mesh_identity_to_handle_.end()) {
-    const auto h = it->second;
-    auto* entry = TryGetCurrentEntry_(h);
-    if (entry == nullptr) {
-      mesh_identity_to_handle_.erase(it);
-    } else {
-      // Found identity - update criticality only if stronger than before.
-      entry->is_critical |= is_critical;
+  DLOG_F(3, "lod index    = {}", geometry.lod_index);
+  if (const auto asset = assets_.find(geometry.asset_key);
+    asset != assets_.end()) {
+    auto& lods = asset->second;
+    if (auto it = lods.find(geometry.lod_index); it != lods.end()) {
+      const auto h = it->second;
+      auto* entry = TryGetCurrentEntry_(h);
+      if (entry == nullptr) {
+        lods.erase(it);
+      } else {
+        // Found identity - update criticality only if stronger than before.
+        entry->is_critical |= is_critical;
 
-      // If the mesh instance changed for the same stable identity
-      // (hot-reload), update and mark dirty to ensure data is reuploaded.
-      if (entry->mesh != geometry.mesh) {
-        // Validate only when we see a new mesh instance. This avoids repeated
-        // O(N) scans on cache hits.
-        DLOG_F(3, "mesh name     = {}", mesh.GetName());
-        DLOG_F(3, "mesh vertices = {}", mesh.Vertices().size());
-        DLOG_F(3, "mesh indices  = {}", mesh.IndexBuffer().Count());
+        // If the mesh instance changed for the same stable identity
+        // (hot-reload), update and mark dirty to ensure data is reuploaded.
+        if (entry->mesh != geometry.mesh) {
+          // Validate only when we see a new mesh instance. This avoids repeated
+          // O(N) scans on cache hits.
+          DLOG_F(3, "mesh name     = {}", mesh.GetName());
+          DLOG_F(3, "mesh vertices = {}", mesh.Vertices().size());
+          DLOG_F(3, "mesh indices  = {}", mesh.IndexBuffer().Count());
 
-        std::string error_msg;
-        if (!ValidateMesh(mesh, error_msg)) {
-          LOG_F(ERROR, "GeometryUploader::GetOrAllocate hot-reload ignored: {}",
-            error_msg);
-          DCHECK_F(false, "GetOrAllocate received invalid mesh: {}", error_msg);
-          return h;
+          std::string error_msg;
+          if (!ValidateMesh(mesh, error_msg)) {
+            LOG_F(ERROR,
+              "GeometryUploader::GetOrAllocate hot-reload ignored: {}",
+              error_msg);
+            DCHECK_F(
+              false, "GetOrAllocate received invalid mesh: {}", error_msg);
+            return h;
+          }
+
+          frame_resources_ensured_ = false;
+          ++entry->content_revision;
+          entry->mesh = geometry.mesh;
+          entry->is_dirty = true;
+
+          // Do not render with stale SRVs; publish only after new upload
+          // completes.
+          if (entry->pending_vertex_srv_index == kInvalidShaderVisibleIndex
+            && entry->vertex_srv_index.IsValid()) {
+            entry->pending_vertex_srv_index = entry->vertex_srv_index;
+          }
+          if (entry->pending_index_srv_index == kInvalidShaderVisibleIndex
+            && entry->index_srv_index.IsValid()) {
+            entry->pending_index_srv_index = entry->index_srv_index;
+          }
+          entry->vertex_srv_index = kInvalidShaderVisibleIndex;
+          entry->index_srv_index = kInvalidShaderVisibleIndex;
+          entry->pending_vertex_ticket.reset();
+          entry->pending_index_ticket.reset();
         }
 
-        frame_resources_ensured_ = false;
-        ++entry->content_revision;
-        entry->mesh = geometry.mesh;
-        entry->is_dirty = true;
-
-        // Do not render with stale SRVs; publish only after new upload
-        // completes.
-        if (entry->pending_vertex_srv_index == kInvalidShaderVisibleIndex
-          && entry->vertex_srv_index.IsValid()) {
-          entry->pending_vertex_srv_index = entry->vertex_srv_index;
-        }
-        if (entry->pending_index_srv_index == kInvalidShaderVisibleIndex
-          && entry->index_srv_index.IsValid()) {
-          entry->pending_index_srv_index = entry->index_srv_index;
-        }
-        entry->vertex_srv_index = kInvalidShaderVisibleIndex;
-        entry->index_srv_index = kInvalidShaderVisibleIndex;
-        entry->pending_vertex_ticket.reset();
-        entry->pending_index_ticket.reset();
+        entry->handle_generation = h.GenerationValue().get();
+        return h;
       }
-
-      entry->handle_generation = h.GenerationValue().get();
-      return h;
     }
   }
 
@@ -568,6 +602,23 @@ auto GeometryUploader::Impl::GetOrAllocate(
     return vortex::sceneprep::kInvalidGeometryHandle;
   }
 
+  const auto asset = assets_.try_emplace(geometry.asset_key).first;
+  auto& lods = asset->second;
+  const ScopeGuard rollback_asset([&]() noexcept {
+    if (lods.empty()) {
+      assets_.erase(asset);
+    }
+  });
+  const auto inserted_lod
+    = lods
+        .emplace(geometry.lod_index, vortex::sceneprep::kInvalidGeometryHandle)
+        .first;
+  bool admitted = false;
+  const ScopeGuard rollback_identity([&]() noexcept {
+    if (!admitted) {
+      lods.erase(inserted_lod);
+    }
+  });
   bindless::HeapIndex handle_index {};
   if (free_indices_->empty()) {
     if (free_indices_->capacity() <= next_handle_index_) {
@@ -616,15 +667,14 @@ auto GeometryUploader::Impl::GetOrAllocate(
   entry.pending_index_srv_index = kInvalidShaderVisibleIndex;
   entry.pending_vertex_ticket.reset();
   entry.pending_index_ticket.reset();
-  entry.pending_vertex_generation = 0U;
-  entry.pending_index_generation = 0U;
   entry.pending_widened_indices.reset();
 
   DLOG_F(3, "asset key   : {}", oxygen::data::to_string(entry.asset_key));
   DLOG_F(3, "is dirty    : {}", entry.is_dirty);
   DLOG_F(3, "is critical : {}", is_critical);
 
-  mesh_identity_to_handle_[key] = handle;
+  inserted_lod->second = handle;
+  admitted = true;
 
   return handle;
 }
@@ -638,6 +688,7 @@ auto GeometryUploader::Update(vortex::sceneprep::GeometryHandle handle,
 auto GeometryUploader::Impl::Update(vortex::sceneprep::GeometryHandle handle,
   const vortex::sceneprep::GeometryRef& geometry) -> void
 {
+  AcceptEvictions();
   auto* entry = TryGetCurrentEntry_(handle);
   if (entry == nullptr) {
     LOG_F(WARNING, "GeometryUploader::Update ignored stale/invalid handle {}",
@@ -672,12 +723,6 @@ auto GeometryUploader::Impl::Update(vortex::sceneprep::GeometryHandle handle,
       return;
     }
   }
-
-  const GeometryIdentityKey key {
-    .asset_key = geometry.asset_key,
-    .lod_index = geometry.lod_index,
-  };
-  mesh_identity_to_handle_[key] = handle;
 
   entry->asset_key = geometry.asset_key;
   entry->lod_index = geometry.lod_index;
@@ -719,7 +764,8 @@ auto GeometryUploader::Impl::OnFrameStart(frame::Slot slot) -> void
   frame_resources_ensured_ = false;
 
   // Clean up completed upload tickets
-  ProcessEvictions();
+  AcceptEvictions();
+  ReclaimEvictedGeometry();
   RetireCompletedUploads();
 }
 
@@ -759,97 +805,79 @@ auto GeometryUploader::Impl::EnsureFrameResources() -> void
 
 //=== Eviction handling =====================================================//
 
-/*!
- Drain pending geometry asset evictions and invalidate all GPU residency for
- matching entries.
-
- This runs on the render thread during OnFrameStart(). Handles become invalid
- until the asset is reloaded and GetOrAllocate() repopulates the entry.
-*/
-auto GeometryUploader::Impl::ProcessEvictions() -> void
+auto GeometryUploader::Impl::AcceptEvictions() -> void
 {
-  std::deque<PendingAssetEviction> evictions;
+
+  if (!has_pending_evictions_.load(std::memory_order_acquire)) {
+    return;
+  }
+#ifdef OXYGEN_WITH_TRACY
+  static const profiling::CpuProfileScopeDesc kScope { .label
+    = "Vortex.Geometry.AcceptEvictions",
+    .category = profiling::ProfileCategory::kUpload };
+  const profiling::CpuProfileScope profile(kScope);
+#endif
+  std::list<PendingAssetEviction>::iterator first;
   {
-    std::scoped_lock lock(eviction_mutex_);
+    const std::scoped_lock lock(eviction_mutex_);
     if (pending_evictions_.empty()) {
+      has_pending_evictions_.store(false, std::memory_order_release);
       return;
     }
-    evictions.swap(pending_evictions_);
+    first = pending_evictions_.begin();
+    reclaiming_assets_.splice(reclaiming_assets_.end(), pending_evictions_);
+    has_pending_evictions_.store(false, std::memory_order_release);
   }
+  for (auto it = first; it != reclaiming_assets_.end();) {
+    it->detached = assets_.extract(it->asset_key);
+    if (it->detached.empty()) {
+      it = reclaiming_assets_.erase(it);
+    } else {
+      ++it;
+    }
+  }
+}
 
-  DCHECK_NOTNULL_F(gfx_, "Graphics cannot be null");
-
-  std::size_t evictions_without_resident_geometry = 0U;
-
-  for (const auto& eviction : evictions) {
-    std::size_t matched_entries = 0U;
-    for (std::size_t entry_index = 0; entry_index < geometry_entries_.size();
-      ++entry_index) {
-      auto& entry = geometry_entries_.at(entry_index);
-      if (entry.asset_key != eviction.asset_key) {
-        continue;
-      }
-
-      ++matched_entries;
-      if (entry.evicted) {
-        continue;
-      }
-
-      const GeometryIdentityKey key {
-        .asset_key = entry.asset_key,
-        .lod_index = entry.lod_index,
-      };
-      mesh_identity_to_handle_.erase(key);
-
-      if (entry.handle_generation != 0U) {
-        const auto handle = vortex::sceneprep::GeometryHandle {
-          vortex::sceneprep::GeometryHandle::Index {
-            static_cast<std::uint32_t>(entry_index) },
-          vortex::sceneprep::GeometryHandle::Generation {
-            entry.handle_generation },
-        };
-        if (handle.IsValid()) {
-          slot_reuse_.Release(ToVersionedIndex_(handle));
-        }
-      }
-
+auto GeometryUploader::Impl::ReclaimEvictedGeometry() -> void
+{
+#ifdef OXYGEN_WITH_TRACY
+  static const profiling::CpuProfileScopeDesc kScope { .label
+    = "Vortex.Geometry.ReclaimEvictedGeometry",
+    .category = profiling::ProfileCategory::kUpload };
+  const profiling::CpuProfileScope profile(kScope);
+#endif
+  for (auto remaining = limits_.max_reclaimed_lods_per_frame;
+    remaining != 0U && !reclaiming_assets_.empty(); --remaining) {
+    auto& lods = reclaiming_assets_.front().detached.mapped();
+    if (lods.empty()) {
+      reclaiming_assets_.pop_front();
+      continue;
+    }
+    const auto lod = lods.begin();
+    const auto handle = lod->second;
+    auto& entry = geometry_entries_.at(handle.get());
+    if (entry.handle_generation == handle.GenerationValue().get()) {
+      // Keep the detached handle until all releases succeed, so a failed
+      // admission can be retried without losing the reclamation owner.
+      ReleaseEntryBuffers(entry);
+      slot_reuse_.Release(ToVersionedIndex_(handle));
       entry.evicted = true;
       entry.handle_generation = 0U;
       ++entry.content_revision;
-
       entry.pending_vertex_ticket.reset();
       entry.pending_index_ticket.reset();
-      entry.pending_vertex_generation = 0U;
-      entry.pending_index_generation = 0U;
       entry.pending_widened_indices.reset();
-
       entry.vertex_srv_index = kInvalidShaderVisibleIndex;
       entry.index_srv_index = kInvalidShaderVisibleIndex;
       entry.pending_vertex_srv_index = kInvalidShaderVisibleIndex;
       entry.pending_index_srv_index = kInvalidShaderVisibleIndex;
-
-      ReleaseEntryBuffers(entry);
       entry.mesh.reset();
       entry.is_dirty = false;
-
-      LOG_F(2,
-        "GeometryUploader: eviction processed for asset {} "
-        "(reason={})",
-        data::to_string(eviction.asset_key), eviction.reason);
     }
-    if (matched_entries == 0U) {
-      ++evictions_without_resident_geometry;
-      LOG_F(2,
-        "GeometryUploader: eviction for asset {} (reason={}) had no resident "
-        "geometry entries (likely never uploaded this run or already released)",
-        data::to_string(eviction.asset_key), eviction.reason);
+    lods.erase(lod);
+    if (lods.empty()) {
+      reclaiming_assets_.pop_front();
     }
-  }
-
-  if (evictions_without_resident_geometry != 0U) {
-    LOG_F(INFO,
-      "GeometryUploader: {} eviction(s) had no resident geometry entries",
-      evictions_without_resident_geometry);
   }
 }
 
@@ -862,27 +890,21 @@ auto GeometryUploader::Impl::ReleaseEntryBuffers(GeometryEntry& entry) -> void
 
   auto& registry = gfx_->GetResourceRegistry();
   auto& reclaimer = gfx_->GetDeferredReclaimer();
-  std::uint64_t released_vertex_bytes = 0U;
-  std::uint64_t released_index_bytes = 0U;
 
   if (entry.vertex_buffer) {
-    released_vertex_bytes = entry.vertex_buffer->GetDescriptor().size_bytes;
+    auto release = reclaimer.PrepareDeferredAction(
+      [buffer = entry.vertex_buffer]() mutable { buffer.reset(); });
     registry.UnRegisterResource<graphics::Buffer>(*entry.vertex_buffer);
-    reclaimer.RegisterDeferredRelease(std::move(entry.vertex_buffer));
+    reclaimer.CommitDeferredAction(std::move(release));
+    entry.vertex_buffer.reset();
   }
 
   if (entry.index_buffer) {
-    released_index_bytes = entry.index_buffer->GetDescriptor().size_bytes;
+    auto release = reclaimer.PrepareDeferredAction(
+      [buffer = entry.index_buffer]() mutable { buffer.reset(); });
     registry.UnRegisterResource<graphics::Buffer>(*entry.index_buffer);
-    reclaimer.RegisterDeferredRelease(std::move(entry.index_buffer));
-  }
-
-  if (released_vertex_bytes != 0U || released_index_bytes != 0U) {
-    LOG_F(INFO,
-      "GeometryUploader: released GPU buffers for asset {} lod={} "
-      "(vertex_bytes={}, index_bytes={}, total={})",
-      data::to_string(entry.asset_key), entry.lod_index, released_vertex_bytes,
-      released_index_bytes, released_vertex_bytes + released_index_bytes);
+    reclaimer.CommitDeferredAction(std::move(release));
+    entry.index_buffer.reset();
   }
 }
 
@@ -892,14 +914,17 @@ auto GeometryUploader::Impl::UploadBuffers() -> void
 
   DLOG_SCOPE_FUNCTION(3);
 
-  for (auto& entry : geometry_entries_) {
-    if (!entry.is_dirty) {
+  for (std::size_t index = 0; index < geometry_entries_.size(); ++index) {
+    auto& entry = geometry_entries_.at(index);
+    if (!entry.is_dirty || entry.mesh == nullptr || entry.evicted) {
       continue;
     }
-    if (entry.mesh == nullptr) {
-      continue;
-    }
-    if (entry.evicted) {
+    const auto handle = vortex::sceneprep::GeometryHandle {
+      vortex::sceneprep::GeometryHandle::Index {
+        static_cast<std::uint32_t>(index) },
+      vortex::sceneprep::GeometryHandle::Generation { entry.handle_generation },
+    };
+    if (TryGetCurrentEntry_(handle) == nullptr) {
       continue;
     }
 
@@ -911,16 +936,7 @@ auto GeometryUploader::Impl::UploadBuffers() -> void
     if (entry.vertex_srv_index == kInvalidShaderVisibleIndex
       && !entry.pending_vertex_ticket.has_value()) {
       if (auto req = UploadVertexBuffer(entry)) {
-        auto ticket_exp = uploader_->Submit(req.value(), *staging_provider_);
-        if (ticket_exp.has_value()) {
-          entry.pending_vertex_ticket = ticket_exp.value();
-          entry.pending_vertex_generation = entry.content_revision;
-        } else {
-          const std::error_code ec = ticket_exp.error();
-          LOG_F(ERROR,
-            "GeometryUploader: Vertex upload submission failed: [{}] {}",
-            ec.category().name(), ec.message());
-        }
+        SubmitBufferUpload(entry, handle, UploadBufferKind::kVertex, *req);
       } else {
         LOG_F(ERROR, "-failed- vertex buffer preparation, will retry");
       }
@@ -930,17 +946,10 @@ auto GeometryUploader::Impl::UploadBuffers() -> void
     if (entry.mesh->IsIndexed()
       && entry.index_srv_index == kInvalidShaderVisibleIndex
       && !entry.pending_index_ticket.has_value()) {
+      const ScopeGuard release_source(
+        [&entry]() noexcept { entry.pending_widened_indices.reset(); });
       if (auto req = UploadIndexBuffer(entry)) {
-        auto ticket_exp = uploader_->Submit(req.value(), *staging_provider_);
-        if (ticket_exp.has_value()) {
-          entry.pending_index_ticket = ticket_exp.value();
-          entry.pending_index_generation = entry.content_revision;
-        } else {
-          const std::error_code ec = ticket_exp.error();
-          LOG_F(ERROR,
-            "GeometryUploader: Index upload submission failed: [{}] {}",
-            ec.category().name(), ec.message());
-        }
+        SubmitBufferUpload(entry, handle, UploadBufferKind::kIndex, *req);
       } else {
         LOG_F(ERROR, "-failed- index buffer preparation, will retry");
       }
@@ -957,18 +966,34 @@ auto GeometryUploader::Impl::UploadBuffers() -> void
     // failed submissions are retried.
     entry.is_dirty = !(vertex_pending_or_ready && index_pending_or_ready);
   }
+}
 
-  // Rebuild the pending ticket list from per-entry state.
-  pending_upload_tickets_.clear();
-  pending_upload_tickets_.reserve(geometry_entries_.size() * 2);
-  for (const auto& entry : geometry_entries_) {
-    if (entry.pending_vertex_ticket.has_value()) {
-      pending_upload_tickets_.push_back(*entry.pending_vertex_ticket);
+auto GeometryUploader::Impl::SubmitBufferUpload(GeometryEntry& entry,
+  vortex::sceneprep::GeometryHandle handle, const UploadBufferKind kind,
+  const vortex::upload::UploadRequest& request) -> void
+{
+  const auto work = pending_completions_.emplace(pending_completions_.end(),
+    PendingCompletion { .handle = handle,
+      .content_revision = entry.content_revision,
+      .kind = kind,
+      .ticket_id = vortex::upload::TicketId { 0 } });
+  bool submitted = false;
+  const ScopeGuard rollback([&]() noexcept {
+    if (!submitted) {
+      pending_completions_.erase(work);
     }
-    if (entry.pending_index_ticket.has_value()) {
-      pending_upload_tickets_.push_back(*entry.pending_index_ticket);
-    }
+  });
+  const auto result = uploader_->Submit(request, *staging_provider_);
+  if (!result) {
+    const std::error_code error = result.error();
+    LOG_F(ERROR, "Geometry upload submission failed: {}", error.message());
+    return;
   }
+  auto& ticket = kind == UploadBufferKind::kVertex ? entry.pending_vertex_ticket
+                                                   : entry.pending_index_ticket;
+  ticket = *result;
+  work->ticket_id = result->Id();
+  submitted = true;
 }
 
 auto GeometryUploader::Impl::UploadVertexBuffer(GeometryEntry& dirty_entry)
@@ -1105,103 +1130,52 @@ auto GeometryUploader::Impl::GetShaderVisibleIndices(
 
 auto GeometryUploader::Impl::RetireCompletedUploads() -> void
 {
-  if (!uploader_) {
-    return;
-  }
-
-  std::size_t completed_count = 0;
-  std::size_t error_count = 0;
-
-  auto retire_one
-    = [&](auto& entry, std::optional<vortex::upload::UploadTicket>& ticket_opt,
-        ShaderVisibleIndex& published, ShaderVisibleIndex& pending,
-        std::uint64_t& pending_generation) -> void {
-    if (!ticket_opt.has_value()) {
-      return;
-    }
-
-    if (entry.evicted || pending_generation != entry.content_revision) {
-      ticket_opt.reset();
-      pending = kInvalidShaderVisibleIndex;
-      pending_generation = 0U;
-      return;
-    }
-
-    const auto ticket = *ticket_opt;
-    const auto u_ticket_id = ticket.Id().get();
-    const auto result = ticket.TryGetResult();
-    if (!result) {
-      return;
-    }
-    ++completed_count;
-    if (!result->success) {
-      ++error_count;
-      DCHECK_F(result->error.has_value());
-      const std::error_code ec
-        = result->error.value_or(vortex::upload::UploadError::kSubmitFailed);
-      LOG_F(ERROR, "GeometryUploader: Upload failed for ticket {}: [{}] {}",
-        u_ticket_id, ec.category().name(), ec.message());
-      entry.is_dirty = true;
-    } else {
-      // Only publish indices after data is known good.
-      if (pending.IsValid()) {
-        published = pending;
-      }
-      DLOG_F(2, "GeometryUploader: Upload completed successfully ({} bytes)",
-        result->bytes_uploaded);
-    }
-
-    ticket_opt.reset();
-    pending_generation = 0U;
-  };
-
-  for (auto& entry : geometry_entries_) {
-    if (entry.mesh == nullptr) {
-      entry.pending_vertex_ticket.reset();
-      entry.pending_index_ticket.reset();
-      entry.pending_vertex_generation = 0U;
-      entry.pending_index_generation = 0U;
-      entry.pending_widened_indices.reset();
+#ifdef OXYGEN_WITH_TRACY
+  static const profiling::CpuProfileScopeDesc kScope { .label
+    = "Vortex.Geometry.RetireCompletedUploads",
+    .category = profiling::ProfileCategory::kUpload };
+  const profiling::CpuProfileScope profile(kScope);
+#endif
+  const auto visits = std::min(
+    pending_completions_.size(), limits_.max_pending_upload_visits_per_frame);
+  for (std::size_t visit = 0; visit < visits; ++visit) {
+    const auto work = pending_completions_.begin();
+    auto* entry = TryGetCurrentEntry_(work->handle);
+    if (entry == nullptr || entry->content_revision != work->content_revision) {
+      pending_completions_.erase(work);
       continue;
     }
-
-    retire_one(entry, entry.pending_vertex_ticket, entry.vertex_srv_index,
-      entry.pending_vertex_srv_index, entry.pending_vertex_generation);
-
-    const bool had_index_ticket = entry.pending_index_ticket.has_value();
-    retire_one(entry, entry.pending_index_ticket, entry.index_srv_index,
-      entry.pending_index_srv_index, entry.pending_index_generation);
-    if (had_index_ticket && !entry.pending_index_ticket.has_value()) {
-      entry.pending_widened_indices.reset();
+    const bool vertex = work->kind == UploadBufferKind::kVertex;
+    auto& ticket
+      = vertex ? entry->pending_vertex_ticket : entry->pending_index_ticket;
+    if (!ticket || ticket->Id() != work->ticket_id) {
+      pending_completions_.erase(work);
+      continue;
     }
-
-    // Dirty until all required resources are published.
-    const bool vertex_ready = entry.vertex_srv_index.IsValid();
-    const bool index_ready
-      = !entry.mesh->IsIndexed() || entry.index_srv_index.IsValid();
-    entry.is_dirty = !(vertex_ready && index_ready);
-  }
-
-  // Rebuild pending tickets.
-  pending_upload_tickets_.clear();
-  pending_upload_tickets_.reserve(geometry_entries_.size() * 2);
-  for (const auto& entry : geometry_entries_) {
-    if (entry.pending_vertex_ticket.has_value()) {
-      pending_upload_tickets_.push_back(*entry.pending_vertex_ticket);
+    const auto result = ticket->TryGetResult();
+    if (!result) {
+      pending_completions_.splice(
+        pending_completions_.end(), pending_completions_, work);
+      continue;
     }
-    if (entry.pending_index_ticket.has_value()) {
-      pending_upload_tickets_.push_back(*entry.pending_index_ticket);
-    }
-  }
-
-  if (completed_count > 0 || error_count > 0) {
-    if (error_count > 0) {
-      LOG_F(WARNING, "GeometryUploader: Retired {} upload tickets ({} errors)",
-        completed_count, error_count);
+    auto& published = vertex ? entry->vertex_srv_index : entry->index_srv_index;
+    auto& pending = vertex ? entry->pending_vertex_srv_index
+                           : entry->pending_index_srv_index;
+    if (result->success) {
+      published = pending;
     } else {
-      DLOG_F(2, "GeometryUploader: Retired {} completed upload tickets",
-        completed_count);
+      const std::error_code error
+        = result->error.value_or(vortex::upload::UploadError::kSubmitFailed);
+      LOG_F(
+        ERROR, "Geometry upload {} failed: {}", ticket->Id(), error.message());
     }
+    ticket.reset();
+    if (!vertex) {
+      entry->pending_widened_indices.reset();
+    }
+    entry->is_dirty = !entry->vertex_srv_index.IsValid()
+      || (entry->mesh->IsIndexed() && !entry->index_srv_index.IsValid());
+    pending_completions_.erase(work);
   }
 }
 
@@ -1212,19 +1186,43 @@ auto GeometryUploader::GetPendingUploadCount() const -> std::size_t
 
 auto GeometryUploader::Impl::GetPendingUploadCount() const -> std::size_t
 {
-  return pending_upload_tickets_.size();
+  return static_cast<std::size_t>(std::ranges::count_if(pending_completions_,
+    [this](const auto& work) { return FindPendingTicket(work) != nullptr; }));
 }
 
 auto GeometryUploader::GetPendingUploadTickets() const
-  -> std::span<const vortex::upload::UploadTicket>
+  -> std::vector<vortex::upload::UploadTicket>
 {
   return impl_->GetPendingUploadTickets();
 }
 
 auto GeometryUploader::Impl::GetPendingUploadTickets() const
-  -> std::span<const vortex::upload::UploadTicket>
+  -> std::vector<vortex::upload::UploadTicket>
 {
-  return pending_upload_tickets_;
+  std::vector<vortex::upload::UploadTicket> tickets;
+  tickets.reserve(pending_completions_.size());
+  for (const auto& work : pending_completions_) {
+    if (const auto* ticket = FindPendingTicket(work)) {
+      tickets.push_back(*ticket);
+    }
+  }
+  return tickets;
+}
+
+auto GeometryUploader::Impl::FindPendingTicket(
+  const PendingCompletion& work) const -> const vortex::upload::UploadTicket*
+{
+  const auto* entry = TryGetCurrentEntry_(work.handle);
+  if (entry == nullptr || entry->content_revision != work.content_revision) {
+    return nullptr;
+  }
+  const auto& ticket = work.kind == UploadBufferKind::kVertex
+    ? entry->pending_vertex_ticket
+    : entry->pending_index_ticket;
+  if (!ticket || ticket->Id() != work.ticket_id) {
+    return nullptr;
+  }
+  return &*ticket;
 }
 
 } // namespace oxygen::vortex::resources

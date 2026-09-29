@@ -109,32 +109,53 @@ Resumed coroutine work is not represented as constant-time polling.
 
 ## Consumer maintenance
 
-Result retention removes the need to move binder `OnFrameStart` routines into
-the global renderer tick. Scene collection, new uploads, descriptor publication,
-atlas reset and bulk eviction stay with their owning resource services.
+`SceneRenderer::BeginFrame` advances InitViews resource maintenance even when
+there are no scene views. InitViews guards the frame sequence/slot so standalone
+restoration and view preparation cannot spend the same budget twice. Environment
+and post-process retirement run first, releasing their frame leases.
 
-Geometry and texture completion publication use pending-only round-robin work
-queues. A per-frame visit budget bounds checks as well as successful publications;
-unready work yields its turn. Every work item verifies its handle/content revision
-and ticket identity before applying a result. Delayed consumers retain results,
-so budget pressure cannot turn a valid upload into an expired-ticket retry.
-Ticket snapshots are built on demand from pending work, not every resident entry.
+Texture `OnFrameStart` accepts evictions, retires bounded resource/completion
+work and discards stale decoded uploads. `EnsureFrameResources` submits uploads
+and retries loads only when a view needs them. Geometry submission, transform,
+material and draw-atlas resets, and scene collection remain in view preparation.
+The sky-cubemap and exposure-mask binders use the same maintenance/demand split.
+
+| Work                                      | Default per-frame limit |
+| ----------------------------------------- | ----------------------: |
+| Geometry completion visits                |                     128 |
+| Geometry LOD reclamations                 |                      64 |
+| Texture completion visits                 |                     128 |
+| Texture eviction visits                   |                      64 |
+| Decoded texture cleanup/submission visits |                128 each |
+
+Completion queues contain pending work only and rotate unready items without
+allocation. Every visit counts, including stale and pinned items. Handle/content
+revision and ticket identity checks prevent late publication into replacements.
+Owned ticket snapshots are built on demand; no resident-table scan maintains them.
+Texture byte admission limits remain in force alongside the visit limits.
 
 Geometry eviction replaces the composite asset/LOD identity map with one
 asset-indexed collection of LOD handles; it does not add a second reverse registry.
 Logical invalidation occurs when the render-thread owner accepts and detaches a
-queued eviction, before reclamation. Detached old asset generations cannot
+queued eviction, before reclamation or new geometry admission. Detached old asset generations cannot
 admit new reads or publish late completions, and their cleanup cannot erase a
 reload. Reclamation budgets count resident LOD entries, not merely asset events.
 Existing Nexus handle generations and Graphics deferred release remain the
-physical lifetime authorities. Texture accepted-revision leases retain their
-existing pinning semantics; no new residency contract is introduced for symmetry.
+physical lifetime authorities. Texture eviction work captures the descriptor
+generation at acceptance; delayed duplicates cannot evict a reload. Pinned
+accepted-revision leases remain usable, while unpinned pending evictions deny new
+ready leases and upload work. Prepare deferred actions before releasing registry
+or entry ownership; failed preparation retains the work for retry.
 
-Measure large-unload CPU tails with Tracy and bound owner cleanup admission;
-enqueueing an entire unload into one Graphics retirement bucket only postpones
-a spike. An operation budget does not promise a hard wall-time ceiling for an
-individual driver release. No queue flush, blocking upload wait or larger expiry
-window is an acceptable substitute for ownership.
+Graphics owns [view indexing and transactional repointing](../../../src/Oxygen/Graphics/Common/README.md#view-indexing-and-removal).
+Removal touches owned views only. Failed repointing preserves the original slot
+and binding, maintaining TextureBinder's lifetime-stable index contract.
+
+Tracy scopes separate geometry acceptance/reclamation/completion and texture
+eviction/publication. Measure native scene replacement and viewless cleanup;
+reproducible CPU baselines isolate registry unrelated-resource growth,
+equivalent-view fanout and a 4,096-asset geometry unload. Frame maintenance polls
+completion and uses deferred release; GPU draining belongs to shutdown.
 
 **Checks:** delayed polling across arbitrary frame cycles; ticket copies/moves and
 coordinator close; independent timelines with equal numeric IDs; cancellation

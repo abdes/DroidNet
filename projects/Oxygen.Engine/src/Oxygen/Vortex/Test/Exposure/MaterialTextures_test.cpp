@@ -600,6 +600,7 @@ NOLINT_TEST_F(
     observer_ptr { &renderer_->GetUploadCoordinator() },
     observer_ptr<content::IAssetLoader> { owned_asset_loader_.get() });
   binder->OnFrameStart();
+  binder->EnsureFrameResources();
 
   for (const bool wide : {
          false,
@@ -664,6 +665,7 @@ NOLINT_TEST_F(
         vortex::internal::RendererTagFactory::Get(),
         frame::Slot { (attempt + 1U) % 3U });
       binder->OnFrameStart();
+      binder->EnsureFrameResources();
       ctx_.frame_sequence = frame::SequenceNumber {
         ctx_.frame_sequence.get() + 1U,
       };
@@ -755,6 +757,7 @@ NOLINT_TEST_F(ExposureGpuTest,
     observer_ptr { &renderer_->GetUploadCoordinator() },
     observer_ptr<content::IAssetLoader> { owned_asset_loader_.get() });
   binder->OnFrameStart();
+  binder->EnsureFrameResources();
 
   data::pak::core::TextureResourceDesc desc {};
   desc.texture_type = static_cast<std::uint8_t>(TextureType::kTextureCube);
@@ -817,6 +820,7 @@ NOLINT_TEST_F(ExposureGpuTest,
       vortex::internal::RendererTagFactory::Get(),
       frame::Slot { (attempt + 1U) % 3U });
     binder->OnFrameStart();
+    binder->EnsureFrameResources();
     ready = refresh(ready.probe_state);
   }
   auto state = ready.probe_state;

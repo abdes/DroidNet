@@ -4,22 +4,34 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <Windows.h> // IWYU pragma: keep
+
+#include <cstdint>
 #include <stdexcept>
+#include <string_view>
+#include <type_traits>
 #include <utility>
 
+#include <basetsd.h>
 #include <d3d12.h>
+#include <dxgiformat.h>
 
-#include <Oxygen/Base/logging.h>
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Core/Detail/FormatUtils.h>
+#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Graphics/Common/AllocationBudget.h>
-#include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
+#include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/ObjectRelease.h>
+#include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/ResourceAccessMode.h>
 #include <Oxygen/Graphics/Direct3D12/Allocator/D3D12MemAlloc.h>
 #include <Oxygen/Graphics/Direct3D12/Bindless/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/Converters.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/FormatUtils.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/TextureReadback.h>
-#include <Oxygen/Graphics/Direct3D12/Detail/dx12_utils.h>
+#include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
 #include <Oxygen/Graphics/Direct3D12/GraphicResource.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/Texture.h>
@@ -263,8 +275,8 @@ auto Texture::CreateShaderResourceView(
 
   const auto* allocator = GetDescriptorAllocator(view_handle);
   auto cpu_handle = allocator->GetCpuHandle(view_handle);
-  CreateShaderResourceView(cpu_handle, format, dimension, sub_resources);
   auto gpu_handle = allocator->GetGpuHandle(view_handle);
+  CreateShaderResourceView(cpu_handle, format, dimension, sub_resources);
   return { gpu_handle.ptr, ClassTypeId() };
 }
 
@@ -283,8 +295,8 @@ auto Texture::CreateUnorderedAccessView(
 
   const auto* allocator = GetDescriptorAllocator(view_handle);
   auto cpu_handle = allocator->GetCpuHandle(view_handle);
-  CreateUnorderedAccessView(cpu_handle, format, dimension, sub_resources);
   auto gpu_handle = allocator->GetGpuHandle(view_handle);
+  CreateUnorderedAccessView(cpu_handle, format, dimension, sub_resources);
   return { gpu_handle.ptr, ClassTypeId() };
 }
 

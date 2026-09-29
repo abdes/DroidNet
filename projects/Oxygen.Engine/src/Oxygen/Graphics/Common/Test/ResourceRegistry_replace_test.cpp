@@ -5,19 +5,23 @@
 //===----------------------------------------------------------------------===//
 
 #include <atomic>
+#include <cstdint>
+#include <memory>
 #include <optional>
+#include <set>
+#include <stdexcept>
 #include <thread>
-#include <vector>
+#include <utility>
 
-#include <Oxygen/Testing/GTest.h>
-
-#include <Oxygen/Composition/Object.h>
-#include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
+#include <Oxygen/Graphics/Common/DescriptorHandle.h>
 #include <Oxygen/Graphics/Common/Detail/FixedDescriptorSegment.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Test/Bindless/Mocks/MockDescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Test/Fakes/FakeResource.h>
+#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
+#include <Oxygen/Testing/GTest.h>
 
 using oxygen::graphics::DescriptorAllocationHandle;
 using oxygen::graphics::DescriptorVisibility;
@@ -800,6 +804,28 @@ NOLINT_TEST_F(ResourceRegistryReplaceTest, Replace_SucceedsAfterPreviousFailure)
   // Assert post 2
   EXPECT_TRUE(registry_->Contains(*new_resource_, desc));
   EXPECT_TRUE(registry_->UpdateView(*new_resource_, idx2, desc));
+}
+
+NOLINT_TEST_F(
+  ResourceRegistryReplaceTest, NativeAliasesKeepTheirOwnDescriptions)
+{
+  old_resource_->WithViewBehavior(
+    [](const DescriptorAllocationHandle&, const TestViewDesc&) {
+      return NativeView { std::uint64_t { 77U }, FakeResource::ClassTypeId() };
+    });
+  const TestViewDesc first { .id = 11U, .force_hash_collision = true };
+  const TestViewDesc second { .id = 22U, .force_hash_collision = true };
+  ASSERT_EQ(
+    RegisterView(*old_resource_, first), RegisterView(*old_resource_, second));
+  std::set<std::uint64_t> seen;
+  registry_->Replace(
+    *old_resource_, new_resource_, [&](const TestViewDesc& description) {
+      seen.insert(description.id);
+      return std::optional { description };
+    });
+  EXPECT_EQ(seen, (std::set<std::uint64_t> { first.id, second.id }));
+  EXPECT_TRUE(registry_->Contains(*new_resource_, first));
+  EXPECT_TRUE(registry_->Contains(*new_resource_, second));
 }
 
 } // namespace

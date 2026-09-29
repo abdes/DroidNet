@@ -4,20 +4,33 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <atomic>
+#include <algorithm>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <iostream>
+#include <memory>
 #include <optional>
-#include <thread>
+#include <ratio>
+#include <stdexcept>
+#include <utility>
 #include <vector>
 
-#include <Oxygen/Testing/GTest.h>
-
-#include <Oxygen/Composition/Object.h>
-#include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
+#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Graphics/Common/DescriptorHandle.h>
 #include <Oxygen/Graphics/Common/Detail/FixedDescriptorSegment.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Test/Bindless/Mocks/MockDescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Test/Fakes/FakeResource.h>
+#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
+#if defined(_MSC_VER) && defined(_DEBUG)
+#  include <new>
+
+#  include <Oxygen/Graphics/Common/Test/HeapAllocationFailure.h>
+#endif
+#include <Oxygen/Testing/GTest.h>
 
 using oxygen::graphics::DescriptorAllocationHandle;
 using oxygen::graphics::DescriptorVisibility;
@@ -274,7 +287,7 @@ NOLINT_TEST_F(ResourceRegistryUpdateViewTest,
  old cache, and leave index free.
 */
 NOLINT_TEST_F(ResourceRegistryUpdateViewTest,
-  Update_NewViewInvalid_ReleasesDescriptor_PurgesOldCache)
+  Update_NewViewInvalid_PreservesBindingAndCanRetry)
 {
   // Arrange
   constexpr TestViewDesc desc1 {
@@ -299,19 +312,22 @@ NOLINT_TEST_F(ResourceRegistryUpdateViewTest,
 
   // Assert
   EXPECT_FALSE(updated);
-  EXPECT_FALSE(registry_->Contains(*resource1_, desc1));
+  EXPECT_EQ(registry_->Find(*resource1_, desc1), view);
   EXPECT_FALSE(registry_->Contains(*resource2_, desc2));
   const auto after = allocator_->GetAllocatedDescriptorsCount(
     desc1.view_type, desc1.visibility);
-  EXPECT_EQ(after, before) << "descriptor must be released on failure";
+  EXPECT_EQ(after.get(), before.get() + 1U);
+  resource2_->WithDefaultView();
+  EXPECT_TRUE(registry_->UpdateView(*resource2_, index, desc2));
+  EXPECT_FALSE(registry_->Contains(*resource1_, desc1));
+  EXPECT_TRUE(registry_->Contains(*resource2_, desc2));
 }
 
 /*!\
- New view creation throws: UpdateView should propagate exception, release the
- owned descriptor, purge old cache, and leave index free.
+ New view creation throws: preserve the original binding and allow retry.
 */
 NOLINT_TEST_F(ResourceRegistryUpdateViewTest,
-  Update_NewViewThrows_ReleasesDescriptorAndPurgesCache)
+  Update_NewViewThrows_PreservesBindingAndCanRetry)
 {
   // Arrange
   constexpr TestViewDesc desc_throw {
@@ -330,12 +346,15 @@ NOLINT_TEST_F(ResourceRegistryUpdateViewTest,
   EXPECT_THROW((void)registry_->UpdateView(*resource2_, index, desc_throw),
     std::runtime_error);
 
-  // Post-conditions: no leaks; old cache purged; index free
+  // The same allocation and original view remain available for retry.
   const auto after = allocator_->GetAllocatedDescriptorsCount(
     desc_throw.view_type, desc_throw.visibility);
-  EXPECT_EQ(after, before) << "descriptor must be released on exception";
-  EXPECT_FALSE(registry_->Contains(*resource1_, desc_throw));
+  EXPECT_EQ(after.get(), before.get() + 1U);
+  EXPECT_EQ(registry_->Find(*resource1_, desc_throw), view);
   EXPECT_FALSE(registry_->Contains(*resource2_, desc_throw));
+  resource2_->WithDefaultView();
+  EXPECT_TRUE(registry_->UpdateView(*resource2_, index, desc_throw));
+  EXPECT_TRUE(registry_->Contains(*resource2_, desc_throw));
 }
 
 /*!\
@@ -392,6 +411,146 @@ NOLINT_TEST_F(ResourceRegistryUpdateViewTest,
   EXPECT_TRUE(updated);
   EXPECT_FALSE(registry_->Contains(*resource1_, desc));
   EXPECT_TRUE(registry_->Contains(*resource2_, desc));
+}
+
+NOLINT_TEST_F(ResourceRegistryUpdateViewTest,
+  SharedPlaceholderViewsRemainIndexedThroughRehashAndRemoval)
+{
+  ON_CALL(*allocator_, GetShaderVisibleIndex(::testing::_))
+    .WillByDefault([](const DescriptorAllocationHandle& handle) {
+      return oxygen::bindless::ShaderVisibleIndex {
+        handle.GetBindlessHandle().get()
+      };
+    });
+  constexpr std::uint64_t kViewCount = 512U;
+  const TestViewDesc shared { .id = 10000U };
+  std::vector<RegisteredViewInfo> views;
+  for (std::uint64_t id = 1U; id <= kViewCount; ++id) {
+    views.push_back(
+      RegisterViewGetIndex(*resource1_, TestViewDesc { .id = id }));
+    ASSERT_TRUE(registry_->UpdateView(*resource2_, views.back().index, shared));
+  }
+  for (std::size_t remaining = views.size(); remaining > 0U; --remaining) {
+    const auto& view = views.at(remaining - 1U);
+    const auto current = registry_->FindShaderVisibleIndex(*resource2_, shared);
+    if (current.has_value()) {
+      EXPECT_EQ(current->get(), view.index.get());
+    } else {
+      FAIL() << "Shared view lost its descriptor mapping";
+    }
+    ASSERT_TRUE(registry_->UpdateView(*resource1_, view.index,
+      TestViewDesc { .id = static_cast<std::uint64_t>(remaining) }));
+    EXPECT_EQ(registry_->Contains(*resource2_, shared), remaining > 1U);
+  }
+}
+
+NOLINT_TEST_F(ResourceRegistryUpdateViewTest,
+  UpdatingOneNativeAliasPreservesOtherDescription)
+{
+  ON_CALL(*allocator_, GetShaderVisibleIndex(::testing::_))
+    .WillByDefault([](const DescriptorAllocationHandle& handle) {
+      return oxygen::bindless::ShaderVisibleIndex {
+        handle.GetBindlessHandle().get()
+      };
+    });
+  resource1_->WithViewBehavior(
+    [](const DescriptorAllocationHandle&, const TestViewDesc&) {
+      return NativeView { std::uint64_t { 77U }, FakeResource::ClassTypeId() };
+    });
+  const TestViewDesc first { .id = 11U, .force_hash_collision = true };
+  const TestViewDesc second { .id = 22U, .force_hash_collision = true };
+  const auto a = RegisterViewGetIndex(*resource1_, first);
+  const auto b = RegisterViewGetIndex(*resource1_, second);
+  ASSERT_EQ(a.view, b.view);
+  ASSERT_TRUE(registry_->UpdateView(*resource2_, a.index, first));
+  EXPECT_FALSE(registry_->Contains(*resource1_, first));
+  EXPECT_TRUE(registry_->Contains(*resource1_, second));
+  const auto remaining = registry_->FindShaderVisibleIndex(*resource1_, second);
+  if (remaining.has_value()) {
+    EXPECT_EQ(remaining->get(), b.index.get());
+  } else {
+    FAIL() << "Unchanged alias lost its descriptor mapping";
+  }
+}
+
+#if defined(_MSC_VER) && defined(_DEBUG)
+NOLINT_TEST_F(ResourceRegistryUpdateViewTest,
+  AllocationFailuresPrecedeNativeMutationAndPreserveBinding)
+{
+  const TestViewDesc original_desc { .id = 11U };
+  const TestViewDesc replacement_desc { .id = 22U };
+  const auto original = RegisterViewGetIndex(*resource1_, original_desc);
+  resource2_->WithDefaultView();
+  bool succeeded = false;
+  unsigned failures = 0U;
+  for (int allowed = 0; allowed < 64 && !succeeded; ++allowed) {
+    bool allocation_failed = false;
+    {
+      const oxygen::graphics::testing::HeapAllocationFailure fail(allowed);
+      try {
+        succeeded = registry_->UpdateView(
+          *resource2_, original.index, replacement_desc);
+      } catch (const std::bad_alloc&) {
+        allocation_failed = true;
+      }
+    }
+    if (allocation_failed) {
+      ++failures;
+      EXPECT_EQ(resource2_->CallCount(), 0);
+      EXPECT_EQ(registry_->Find(*resource1_, original_desc), original.view);
+      EXPECT_FALSE(registry_->Contains(*resource2_, replacement_desc));
+      EXPECT_EQ(allocator_
+                  ->GetAllocatedDescriptorsCount(
+                    original_desc.view_type, original_desc.visibility)
+                  .get(),
+        1U);
+    }
+  }
+  EXPECT_TRUE(succeeded);
+  EXPECT_GT(failures, 0U);
+  EXPECT_EQ(resource2_->CallCount(), 1);
+  EXPECT_TRUE(registry_->Contains(*resource2_, replacement_desc));
+}
+#endif
+
+class ResourceRegistryAliasBenchmark : public ResourceRegistryUpdateViewTest {
+};
+
+NOLINT_TEST_F(ResourceRegistryAliasBenchmark,
+  DISABLED_EquivalentViewFanoutDoesNotScaleUnlink)
+{
+  for (const auto count : { 64U, 1024U, 8192U }) {
+    const TestViewDesc shared { .id = 10000U };
+    std::vector<RegisteredViewInfo> views;
+    views.reserve(count);
+    for (unsigned index = 0U; index < count; ++index) {
+      views.push_back(
+        RegisterViewGetIndex(*resource1_, TestViewDesc { .id = index + 1U }));
+      ASSERT_TRUE(
+        registry_->UpdateView(*resource2_, views.back().index, shared));
+    }
+    std::vector<double> samples;
+    constexpr unsigned kSamples = 64U;
+    samples.reserve(kSamples);
+    for (unsigned sample = 0U; sample < kSamples; ++sample) {
+      const auto& view = views.at((sample * count) / kSamples);
+      const TestViewDesc changed { .id = sample + 1U };
+      const auto start = std::chrono::steady_clock::now();
+      const auto updated
+        = registry_->UpdateView(*resource1_, view.index, changed);
+      const auto elapsed = std::chrono::duration<double, std::micro>(
+        std::chrono::steady_clock::now() - start)
+                             .count();
+      ASSERT_TRUE(updated);
+      samples.push_back(elapsed);
+    }
+    std::ranges::sort(samples);
+    std::cout << "registry_alias_update fanout=" << count
+              << " median_us=" << samples.at(samples.size() / 2U) << " p95_us="
+              << samples.at((samples.size() * 95U + 99U) / 100U - 1U) << '\n';
+    registry_->UnRegisterViews(*resource1_);
+    registry_->UnRegisterViews(*resource2_);
+  }
 }
 
 } // namespace

@@ -5,14 +5,22 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <compare>
+#if !defined(NDEBUG)
+#  include <limits>
+#endif
 #include <cstdint>
 #include <cstring>
-#include <limits>
+#include <memory>
 #include <utility>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Detail/FormatUtils.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Graphics/Common/DescriptorHandle.h>
+#include <Oxygen/Graphics/Common/NativeObject.h>
+#include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/ResourceAccessMode.h>
 #include <Oxygen/Graphics/Headless/Texture.h>
 
 namespace oxygen::graphics::headless {
@@ -187,12 +195,13 @@ auto Texture::CreateShaderResourceView(
   auto typed = new (raw) SRV { this, Format::kUnknown, TextureType::kTexture2D,
     resolved, base_offset, total_size };
   const void* payload_ptr = typed;
-  owned_view_payloads_.emplace_back(raw, [](void* p) {
+  ViewPayloadPtr payload(raw, [](void* p) {
     if (p) {
       static_cast<SRV*>(p)->~SRV();
       operator delete(p);
     }
   });
+  owned_view_payloads_.push_back(std::move(payload));
   return NativeView(const_cast<void*>(payload_ptr), ClassTypeId());
 }
 
@@ -218,12 +227,13 @@ auto Texture::CreateUnorderedAccessView(
   auto typed = new (raw) UAV { this, Format::kUnknown, TextureType::kTexture2D,
     resolved, base_offset, total_size };
   const void* payload_ptr = typed;
-  owned_view_payloads_.emplace_back(raw, [](void* p) {
+  ViewPayloadPtr payload(raw, [](void* p) {
     if (p) {
       static_cast<UAV*>(p)->~UAV();
       operator delete(p);
     }
   });
+  owned_view_payloads_.push_back(std::move(payload));
   return NativeView(const_cast<void*>(payload_ptr), ClassTypeId());
 }
 
@@ -237,12 +247,13 @@ auto Texture::CreateRenderTargetView(
   auto typed = new (raw)
     RTV { this, Format::kUnknown, TextureType::kTexture2D, resolved };
   const void* payload_ptr = typed;
-  owned_view_payloads_.emplace_back(raw, [](void* p) {
+  ViewPayloadPtr payload(raw, [](void* p) {
     if (p) {
       static_cast<RTV*>(p)->~RTV();
       operator delete(p);
     }
   });
+  owned_view_payloads_.push_back(std::move(payload));
   return NativeView(const_cast<void*>(payload_ptr), ClassTypeId());
 }
 
@@ -255,12 +266,13 @@ auto Texture::CreateDepthStencilView(
   auto typed = new (raw) DSV { this, Format::kUnknown, TextureType::kTexture2D,
     resolved, is_read_only };
   const void* payload_ptr = typed;
-  owned_view_payloads_.emplace_back(raw, [](void* p) {
+  ViewPayloadPtr payload(raw, [](void* p) {
     if (p) {
       static_cast<DSV*>(p)->~DSV();
       operator delete(p);
     }
   });
+  owned_view_payloads_.push_back(std::move(payload));
   return NativeView(const_cast<void*>(payload_ptr), ClassTypeId());
 }
 

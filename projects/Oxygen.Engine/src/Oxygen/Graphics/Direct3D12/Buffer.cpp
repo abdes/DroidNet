@@ -4,21 +4,37 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <Windows.h> // IWYU pragma: keep
+
 #include <cassert>
+#include <cstdint>
 #include <cstring>
+#include <exception>
 #include <memory>
 #include <stdexcept>
+#include <string_view>
 #include <utility>
 
+#include <d3d12.h>
+#include <dxgiformat.h>
+#include <minwindef.h>
+
 #include <Oxygen/Base/Logging.h>
+#if !defined(NDEBUG)
+#  include <Oxygen/Base/NoStd.h>
+#endif
 #include <Oxygen/Base/Windows/ComError.h>
-#include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
+#include <Oxygen/Core/Detail/FormatUtils.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Graphics/Common/Buffer.h>
+#include <Oxygen/Graphics/Common/DescriptorHandle.h>
+#include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/ObjectRelease.h>
 #include <Oxygen/Graphics/Direct3D12/Allocator/D3D12MemAlloc.h>
 #include <Oxygen/Graphics/Direct3D12/Bindless/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Direct3D12/Buffer.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/FormatUtils.h>
-#include <Oxygen/Graphics/Direct3D12/Detail/dx12_utils.h>
+#include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
 #include <Oxygen/Graphics/Direct3D12/GraphicResource.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 
@@ -280,9 +296,8 @@ auto Buffer::CreateConstantBufferView(
       & ~255u,
   };
 
-  CurrentDevice()->CreateConstantBufferView(&cbv_desc, cpu_handle);
-
   auto [gpu_ptr] = allocator->GetGpuHandle(view_handle);
+  CurrentDevice()->CreateConstantBufferView(&cbv_desc, cpu_handle);
   return { gpu_ptr, ClassTypeId() };
 }
 
@@ -350,10 +365,10 @@ auto Buffer::CreateShaderResourceView(
   }
 
   try {
+    auto [gpu_ptr] = allocator->GetGpuHandle(view_handle);
     CurrentDevice()->CreateShaderResourceView(
       GetResource(), &srv_desc, cpu_handle);
 
-    auto [gpu_ptr] = allocator->GetGpuHandle(view_handle);
     return { gpu_ptr, ClassTypeId() };
   } catch (const std::exception& e) {
     LOG_F(ERROR, "Failed to create SRV for buffer {}: {}", Base::GetName(),
@@ -430,9 +445,9 @@ auto Buffer::CreateUnorderedAccessView(
   try {
     const auto* allocator = GetDescriptorAllocator(view_handle);
     auto cpu_handle = allocator->GetCpuHandle(view_handle);
+    auto [gpu_ptr] = allocator->GetGpuHandle(view_handle);
     CurrentDevice()->CreateUnorderedAccessView(
       GetResource(), nullptr, &uav_desc, cpu_handle);
-    auto [gpu_ptr] = allocator->GetGpuHandle(view_handle);
     return { gpu_ptr, ClassTypeId() };
   } catch (const std::exception& e) {
     LOG_F(ERROR, "Failed to create UAV for buffer {}: {}", Base::GetName(),

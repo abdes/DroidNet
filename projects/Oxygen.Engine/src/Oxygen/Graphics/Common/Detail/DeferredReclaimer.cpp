@@ -5,10 +5,19 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <array>
+#include <atomic>
+#include <cstddef>
+#include <cstdint>
+#include <functional>
+#include <memory>
+#include <mutex>
+#include <utility>
+#include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
-#include <Oxygen/Graphics/Common/Internal/CommandListPool.h>
 
 using oxygen::graphics::detail::DeferredReclaimer;
 
@@ -86,23 +95,6 @@ auto DeferredReclaimer::ReleaseDeferredResources(const frame::Slot frame_slot)
   CHECK_LT_F(frame_slot, frame::kMaxSlot, "Frame slot out of bounds");
   const auto u_frame_slot = frame_slot.get();
 
-  // Acquire lock, swap vector with a local one and release lock so that the
-  // callbacks can run without holding the mutex. This allows worker threads
-  // to register actions concurrently.
-  Impl::Bucket detached;
-  {
-    std::lock_guard<std::mutex> lock(impl_->deferred_mutexes_[u_frame_slot]);
-    std::swap(detached, impl_->deferred_releases_[u_frame_slot]);
-  }
-
-#if !defined(NDEBUG)
-  if (!detached.ordinary.empty() || detached.prepared) {
-    LOG_SCOPE_FUNCTION(2);
-    DLOG_F(2, "Frame [{}]", frame_slot);
-    DLOG_F(2, "{} ordinary actions to release", detached.ordinary.size());
-  }
-#endif // NDEBUG
-
   const auto dispatch = [](std::function<void()>& action) noexcept {
     try {
       action();
@@ -110,6 +102,30 @@ auto DeferredReclaimer::ReleaseDeferredResources(const frame::Slot frame_slot)
       LOG_F(ERROR, "Deferred action threw; continuing detached releases");
     }
   };
+
+  std::unique_lock lock(impl_->deferred_mutexes_.at(u_frame_slot));
+  auto& bucket = impl_->deferred_releases_.at(u_frame_slot);
+  if (bucket.ordinary.empty()) {
+    // Detaching a prepared chain needs no container allocation, including
+    // checked-iterator bookkeeping in MSVC Debug builds.
+    auto prepared = std::move(bucket.prepared);
+    bucket.tail = nullptr;
+    bucket.next_sequence = 0U;
+    lock.unlock();
+    while (prepared) {
+      auto node = std::move(prepared);
+      prepared = std::move(node->next);
+      dispatch(node->action);
+    }
+    return;
+  }
+
+  // Mixed queues preserve enqueue order. Callbacks execute without the lock,
+  // so reentrant actions belong to the next drain.
+  Impl::Bucket detached;
+  std::swap(detached, bucket);
+  lock.unlock();
+
   auto ordinary = detached.ordinary.begin();
   while (ordinary != detached.ordinary.end() || detached.prepared) {
     if (detached.prepared
@@ -162,8 +178,8 @@ auto DeferredReclaimer::RegisterDeferredAction(std::function<void()> action)
 {
   const auto frame_idx
     = impl_->current_frame_slot.load(std::memory_order_acquire);
-  auto& bucket = impl_->deferred_releases_[frame_idx];
-  std::lock_guard<std::mutex> lock(impl_->deferred_mutexes_[frame_idx]);
+  auto& bucket = impl_->deferred_releases_.at(frame_idx);
+  std::lock_guard<std::mutex> lock(impl_->deferred_mutexes_.at(frame_idx));
   bucket.ordinary.push_back({ bucket.next_sequence, std::move(action) });
   ++bucket.next_sequence;
 }
@@ -184,8 +200,8 @@ auto DeferredReclaimer::CommitDeferredAction(
     return;
   }
   const auto index = impl_->current_frame_slot.load(std::memory_order_acquire);
-  std::lock_guard lock(impl_->deferred_mutexes_[index]);
-  auto& bucket = impl_->deferred_releases_[index];
+  std::lock_guard lock(impl_->deferred_mutexes_.at(index));
+  auto& bucket = impl_->deferred_releases_.at(index);
   action.node_->sequence = bucket.next_sequence++;
   auto* tail = action.node_.get();
   if (bucket.tail) {
