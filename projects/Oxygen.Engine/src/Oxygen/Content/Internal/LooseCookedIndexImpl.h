@@ -16,6 +16,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include <Oxygen/Content/LooseCookedIndex.h>
 #include <Oxygen/Content/api_export.h> // For tests only
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
@@ -84,12 +85,23 @@ public:
     data::loose_cooked::FileKind kind) const noexcept
     -> std::optional<uint64_t>;
 
+  OXGN_CNTT_NDAPI auto GetFileInventory() const
+    -> std::vector<lc::FileIntegrity>;
+  OXGN_CNTT_NDAPI auto CheckContent(const std::filesystem::path& cooked_root,
+    lc::IntegrityCheck check) const -> std::vector<lc::FileIntegrityIssue>;
+  OXGN_CNTT_API auto ValidateContent(const std::filesystem::path& cooked_root,
+    lc::IntegrityCheck check) const -> void;
+  OXGN_CNTT_NDAPI auto FindFileSha256(
+    data::loose_cooked::FileKind kind) const noexcept
+    -> std::optional<std::span<const uint8_t, data::loose_cooked::kSha256Size>>;
+
 private:
   struct IndexLoadContext;
 
   struct FileInfo {
     uint32_t relpath_offset = 0;
     uint64_t size = 0;
+    base::Sha256Digest sha256 {};
   };
 
   struct FileKindHash {
@@ -106,6 +118,7 @@ private:
   std::vector<data::loose_cooked::FileKind> file_kinds_;
   std::unordered_map<data::loose_cooked::FileKind, FileInfo, FileKindHash>
     kind_to_file_;
+  std::vector<FileInfo> auxiliary_files_;
   data::SourceKey guid_;
 
   static auto LoadAndValidateHeader(IndexLoadContext& context) -> void;

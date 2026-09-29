@@ -80,6 +80,19 @@ def main():
         assert first["published_generation"] != replayed["published_generation"]
         original_record = record.read_bytes()
 
+        generations = content / ".cooked" / "imports" / replayed["material_slot_provenance"]["source_identity"]
+        previous = generations / first["published_generation"]["id"]
+        selected = generations / replayed["published_generation"]["id"]
+        assert previous.is_dir() and selected.is_dir()
+        run(["reclaim", "--record", record], succeeds=True)
+        assert not previous.exists() and selected.is_dir()
+        assert record.read_bytes() == original_record
+        assert buffer.read_bytes() == positions
+        run(["reclaim", "--record", record], succeeds=True)
+        assert selected.is_dir() and record.read_bytes() == original_record
+        run(["reclaim", "--record", root / "missing.import.json"], succeeds=False)
+        assert selected.is_dir() and record.read_bytes() == original_record
+
         buffer.write_bytes(positions[:-1])
         run(["gltf", "--record", record], succeeds=False)
         assert record.read_bytes() == original_record
@@ -103,7 +116,7 @@ def main():
         run(apply_recipe, succeeds=False)
         assert record.read_bytes() == original_record
 
-    print("Retained CLI recipe, replay, identity and conflict checks passed.")
+    print("Retained CLI recipe, replay, reclamation, identity and conflict checks passed.")
 
 
 if __name__ == "__main__":

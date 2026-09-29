@@ -6,13 +6,25 @@
 
 #include <array>
 #include <chrono>
+#include <cstddef>
+#include <exception>
 #include <filesystem>
+#include <memory>
+#include <optional>
+#include <span>
+#include <stdexcept>
+#include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/ImportProgress.h>
+#include <Oxygen/Cooker/Import/ImportReport.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/ResourceDescriptorEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/TextureEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/ImageDecode.h>
@@ -20,11 +32,17 @@
 #include <Oxygen/Cooker/Import/Internal/Jobs/TextureImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/TextureImportPolicy.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/TexturePipeline.h>
-#include <Oxygen/Cooker/Import/Internal/TextureSourceAssembly_internal.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
+#include <Oxygen/Cooker/Import/ScratchImage.h>
 #include <Oxygen/Cooker/Import/TextureImportDesc.h>
 #include <Oxygen/Cooker/Import/TextureImportError.h>
+#include <Oxygen/Cooker/Import/TextureImportTypes.h>
 #include <Oxygen/Cooker/Import/TextureSourceAssembly.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/OxCo/Algorithms.h>
+#include <Oxygen/OxCo/Co.h>
 
 namespace {
 
@@ -175,6 +193,18 @@ namespace oxygen::content::import::detail {
 */
 auto TextureImportJob::ExecuteAsync() -> co::Co<ImportReport>
 {
+  const auto& request = Request();
+  if (!request.texture_virtual_path.empty()
+    && (!internal::IsCanonicalVirtualPath(request.texture_virtual_path)
+      || !internal::TryVirtualPathToRelPath(
+        request, request.texture_virtual_path, descriptor_relative_path_)
+      || std::filesystem::path(descriptor_relative_path_).extension()
+        != ".otex")) {
+    throw std::invalid_argument(
+      "Texture virtual_path must name an .otex descriptor within its mount: "
+      + request.texture_virtual_path);
+  }
+
   DLOG_F(INFO, "Starting job: job_id={} path={}", JobId(),
     Request().source_path.string());
 
@@ -231,15 +261,15 @@ auto TextureImportJob::ExecuteAsync() -> co::Co<ImportReport>
 
   EnsureCookedRoot();
 
-  ImportSession session(Request(), FileReader(), FileWriter(), ThreadPool(),
-    TableRegistry(), IndexRegistry());
+  auto& session = Session();
 
-  TexturePipeline pipeline(*ThreadPool(),
+  auto& pipeline = CreatePipeline<TexturePipeline>(*ThreadPool(),
     TexturePipeline::Config {
       .with_content_hashing
       = EffectiveContentHashingEnabled(Request().options.with_content_hashing),
+      .file_reader = {},
+      .on_io_duration = {},
     });
-  StartPipeline(pipeline);
 
   ReportPhaseProgress(ImportPhase::kLoading, 0.0f, "Loading texture source...");
   const auto load_start = std::chrono::steady_clock::now();
@@ -316,13 +346,8 @@ auto TextureImportJob::ExecuteAsync() -> co::Co<ImportReport>
     }
     auto fallback_descriptor_emit_failed = false;
     try {
-      const auto [name_hint, stable_id]
-        = BuildTextureDescriptorNamingIdentity(Request());
-      [[maybe_unused]] const auto relpath
-        = session.ResourceDescriptorEmitter().EmitTexture(
-          name_hint.empty() ? stable_id : name_hint,
-          stable_id.empty() ? name_hint : stable_id,
-          data::pak::core::kFallbackResourceIndex, *descriptor);
+      EmitDescriptor(
+        session, data::pak::core::kFallbackResourceIndex, *descriptor);
     } catch (const std::exception& ex) {
       session.AddDiagnostic({
         .severity = ImportSeverity::kError,
@@ -550,7 +575,7 @@ auto TextureImportJob::LoadSource(ImportSession& session)
     TextureSourceSet sources;
 
     for (size_t i = 0; i < kCubeFaceCount; ++i) {
-      const auto& face_path = (*discovered)[i];
+      const auto& face_path = discovered->at(i);
       const auto read_start = std::chrono::steady_clock::now();
       auto read_result = co_await reader.get()->ReadFile(face_path);
       const auto read_end = std::chrono::steady_clock::now();
@@ -735,8 +760,8 @@ auto TextureImportJob::CookTexture(
   item.desc = desc;
   item.packing_policy_id = tuning.enabled ? tuning.packing_policy_id : "d3d12";
   item.output_format_policy = tuning.enabled
-      ? TexturePipeline::OutputFormatPolicy::kExplicit
-      : TexturePipeline::OutputFormatPolicy::kPreserveSource;
+    ? TexturePipeline::OutputFormatPolicy::kExplicit
+    : TexturePipeline::OutputFormatPolicy::kPreserveSource;
   item.failure_policy = FailurePolicyForTextureTuning(tuning);
   item.equirect_to_cubemap = tuning.equirect_to_cubemap;
   item.cubemap_face_size = tuning.cubemap_face_size;
@@ -834,13 +859,8 @@ auto TextureImportJob::EmitTexture(
       });
       co_return false;
     }
-    const auto [name_hint, stable_id]
-      = BuildTextureDescriptorNamingIdentity(Request());
-    [[maybe_unused]] const auto relpath
-      = session.ResourceDescriptorEmitter().EmitTexture(
-        name_hint.empty() ? stable_id : name_hint,
-        stable_id.empty() ? name_hint : stable_id,
-        data::pak::core::ResourceIndexT { index }, *descriptor);
+    EmitDescriptor(
+      session, data::pak::core::ResourceIndexT { index }, *descriptor);
     const auto emit_end = std::chrono::steady_clock::now();
     session.AddEmitDuration(
       std::chrono::duration_cast<std::chrono::microseconds>(
@@ -857,6 +877,26 @@ auto TextureImportJob::EmitTexture(
     });
     co_return false;
   }
+}
+
+//! Apply the effective layout to both ordinary and fallback texture
+//! descriptors.
+auto TextureImportJob::EmitDescriptor(ImportSession& session,
+  const data::pak::core::ResourceIndexT index,
+  const data::pak::core::TextureResourceDesc& descriptor) -> void
+{
+  const auto& request = Request();
+  if (!descriptor_relative_path_.empty()) {
+    static_cast<void>(session.ResourceDescriptorEmitter().EmitTextureAtRelPath(
+      descriptor_relative_path_, index, descriptor));
+    return;
+  }
+
+  const auto [name_hint, stable_id]
+    = BuildTextureDescriptorNamingIdentity(request);
+  static_cast<void>(session.ResourceDescriptorEmitter().EmitTexture(
+    name_hint.empty() ? stable_id : name_hint,
+    stable_id.empty() ? name_hint : stable_id, index, descriptor));
 }
 
 //! Finalize the session and return the import report.

@@ -28,6 +28,7 @@
 #  include <unistd.h>
 #endif
 
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Pak/PakBuildReport.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
@@ -279,8 +280,10 @@ private:
     entry.virtual_path_offset = virtual_path_offset;
     entry.asset_type = static_cast<uint8_t>(asset.asset_type);
     entry.descriptor_size = asset.descriptor_size;
-    std::ranges::copy(
-      asset.descriptor_sha, std::begin(entry.descriptor_sha256));
+    const auto digest = base::IsAllZero(asset.descriptor_sha)
+      ? base::ComputeSha256(descriptor_bytes)
+      : asset.descriptor_sha;
+    std::ranges::copy(digest, std::begin(entry.descriptor_sha256));
     asset_entries.push_back(entry);
   }
 
@@ -295,11 +298,12 @@ private:
     entry.kind = file.kind;
     entry.relpath_offset = relpath_offset;
     entry.size = static_cast<uint64_t>(file.payload.size());
+    entry.sha256 = base::ComputeSha256(file.payload);
     file_entries.push_back(entry);
   }
 
   auto header = lc::IndexHeader {};
-  header.version = 1U;
+  header.version = lc::kIndexVersion;
   header.flags = static_cast<uint32_t>(lc::kHasVirtualPaths);
   if (!file_entries.empty()) {
     header.flags |= static_cast<uint32_t>(lc::kHasFileRecords);

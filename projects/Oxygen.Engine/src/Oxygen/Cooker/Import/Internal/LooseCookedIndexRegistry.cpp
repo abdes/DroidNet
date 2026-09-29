@@ -4,11 +4,27 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Cooker/Import/Internal/LooseCookedIndexRegistry.h>
-
+#include <cstdint>
+#include <exception>
+#include <filesystem>
+#include <memory>
+#include <mutex>
+#include <optional>
+#include <stdexcept>
+#include <string>
+#include <string_view>
 #include <utility>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Cooker/Import/Internal/ImportSessionToken.h>
+#include <Oxygen/Cooker/Import/Internal/LooseCookedIndexRegistry.h>
+#include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
+#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/LooseCookedIndexFormat.h>
+#include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/OxCo/Co.h>
 
 namespace oxygen::content::import {
 
@@ -18,15 +34,29 @@ auto LooseCookedIndexRegistry::NormalizeKey(
   return cooked_root.lexically_normal().string();
 }
 
-auto LooseCookedIndexRegistry::BeginSession(
-  const std::filesystem::path& cooked_root,
-  const std::optional<data::SourceKey>& source_key) -> void
+auto LooseCookedIndexRegistry::GetEntry(
+  const std::filesystem::path& cooked_root) -> std::shared_ptr<Entry>
 {
   const auto key = NormalizeKey(cooked_root);
   std::scoped_lock lock(mutex_);
+  if (const auto found = entries_.find(key); found != entries_.end()) {
+    return found->second;
+  }
+  auto state = std::make_shared<Entry>();
+  entries_.emplace(key, state);
+  return state;
+}
 
-  auto& entry = entries_[key];
+auto LooseCookedIndexRegistry::BeginSession(
+  const std::filesystem::path& cooked_root,
+  const std::optional<data::SourceKey>& source_key) -> ImportSessionToken
+{
+  const auto key = NormalizeKey(cooked_root);
+  const auto state = GetEntry(cooked_root);
+  std::scoped_lock lock(state->mutex);
+  auto& entry = *state;
   if (!entry.writer) {
+    entry.aborted = false;
     entry.writer = std::make_unique<LooseCookedWriter>(cooked_root);
     if (source_key.has_value()) {
       entry.writer->SetSourceKey(source_key);
@@ -41,9 +71,12 @@ auto LooseCookedIndexRegistry::BeginSession(
     }
   }
 
+  auto participation = ImportSessionToken(this, key);
+  if (entry.active_sessions == 0) {
+    entry.completion = std::make_shared<Completion>();
+  }
   ++entry.active_sessions;
-  DLOG_F(
-    INFO, "Session started for '{}' (count={})", key, entry.active_sessions);
+  return participation;
 }
 
 auto LooseCookedIndexRegistry::RegisterExternalFile(
@@ -51,10 +84,11 @@ auto LooseCookedIndexRegistry::RegisterExternalFile(
   const data::loose_cooked::FileKind kind, std::string_view relpath) -> void
 {
   const auto key = NormalizeKey(cooked_root);
-  std::scoped_lock lock(mutex_);
-
-  auto& entry = entries_[key];
+  const auto state = GetEntry(cooked_root);
+  std::scoped_lock lock(state->mutex);
+  auto& entry = *state;
   if (!entry.writer) {
+    entry.aborted = false;
     entry.writer = std::make_unique<LooseCookedWriter>(cooked_root);
   }
 
@@ -70,10 +104,11 @@ auto LooseCookedIndexRegistry::RegisterExternalAssetDescriptor(
   const std::optional<base::Sha256Digest>& descriptor_sha256) -> void
 {
   const auto storage_key = NormalizeKey(cooked_root);
-  std::scoped_lock lock(mutex_);
-
-  auto& entry = entries_[storage_key];
+  const auto state = GetEntry(cooked_root);
+  std::scoped_lock lock(state->mutex);
+  auto& entry = *state;
   if (!entry.writer) {
+    entry.aborted = false;
     entry.writer = std::make_unique<LooseCookedWriter>(cooked_root);
   }
 
@@ -84,49 +119,90 @@ auto LooseCookedIndexRegistry::RegisterExternalAssetDescriptor(
     std::string(descriptor_relpath), storage_key);
 }
 
-auto LooseCookedIndexRegistry::EndSession(
-  const std::filesystem::path& cooked_root)
-  -> std::optional<LooseCookedWriteResult>
+auto LooseCookedIndexRegistry::EndSession(ImportSessionToken& participation)
+  -> co::Co<Publication>
 {
-  const auto key = NormalizeKey(cooked_root);
-  std::unique_ptr<LooseCookedWriter> writer;
-  uint32_t remaining = 0;
+  participation.Validate(this);
+  std::shared_ptr<Entry> state;
   {
     std::scoped_lock lock(mutex_);
-    const auto it = entries_.find(key);
-    if (it == entries_.end()) {
-      LOG_F(WARNING, "End session without start for '{}'", key);
-      return std::nullopt;
+    state = entries_.at(participation.key_);
+  }
+  std::shared_ptr<Completion> completion;
+  std::optional<LooseCookedWriteResult> result;
+  bool publishes = false;
+  {
+    std::scoped_lock lock(state->mutex);
+    if (state->active_sessions == 0 || !state->writer) {
+      throw std::logic_error("End index session without matching BeginSession");
     }
-
-    if (it->second.active_sessions == 0) {
-      LOG_F(WARNING, "Session count underflow for '{}'", key);
-    } else {
-      --it->second.active_sessions;
-    }
-
-    remaining = it->second.active_sessions;
-    if (remaining == 0) {
-      writer = std::move(it->second.writer);
-      entries_.erase(it);
-    } else {
-      DLOG_F(INFO, "Session ended for '{}' (remaining={})", key, remaining);
-      if (it->second.writer) {
-        DLOG_F(
-          INFO, "Incremental flush for '{}' (remaining={})", key, remaining);
-        const auto result = it->second.writer->Finish();
-        DLOG_F(INFO, "Incremental index flushed for '{}' assets={} files={}",
-          key, result.assets.size(), result.files.size());
+    completion = state->completion;
+    --state->active_sessions;
+    participation.active_ = false;
+    publishes = state->active_sessions == 0;
+    if (publishes) {
+      auto writer = std::move(state->writer);
+      state->source_key.reset();
+      state->completion.reset();
+      completion->aborted = state->aborted;
+      if (!completion->aborted) {
+        try {
+          auto written = writer->Finish();
+          completion->source_key = written.source_key;
+          result = std::move(written);
+        } catch (...) {
+          completion->failure = std::current_exception();
+        }
       }
-      return std::nullopt;
     }
   }
 
-  LOG_F(INFO, "Finalizing index for '{}'", key);
-  auto result = writer->Finish();
-  LOG_F(INFO, "Index finalized for '{}' assets={} files={}", key,
-    result.assets.size(), result.files.size());
-  return result;
+  // Trigger resumes waiters synchronously; their callbacks may admit new work.
+  if (publishes) {
+    completion->ready.Trigger();
+  }
+  co_await completion->ready;
+  if (completion->aborted) {
+    throw std::runtime_error(
+      "Index publication aborted by an interrupted import session");
+  }
+  if (completion->failure) {
+    std::rethrow_exception(completion->failure);
+  }
+  co_return Publication {
+    .source_key = completion->source_key,
+    .write_result = std::move(result),
+  };
+}
+
+auto LooseCookedIndexRegistry::AbortSession(ImportSessionToken& participation)
+  -> void
+{
+  participation.Validate(this);
+  std::shared_ptr<Entry> state;
+  {
+    std::scoped_lock lock(mutex_);
+    state = entries_.at(participation.key_);
+  }
+  std::shared_ptr<Completion> completion;
+  {
+    std::scoped_lock lock(state->mutex);
+    if (state->active_sessions == 0) {
+      throw std::logic_error(
+        "Abort index session without matching BeginSession");
+    }
+    state->aborted = true;
+    participation.active_ = false;
+    if (--state->active_sessions == 0) {
+      state->writer.reset();
+      state->source_key.reset();
+      completion = std::move(state->completion);
+      completion->aborted = true;
+    }
+  }
+  if (completion) {
+    completion->ready.Trigger();
+  }
 }
 
 } // namespace oxygen::content::import

@@ -18,6 +18,7 @@
 #include <Oxygen/Cooker/Import/ScratchImage.h>
 #include <Oxygen/Cooker/Import/TextureImportTypes.h>
 #include <Oxygen/Cooker/Import/TextureSourceAssembly.h>
+#include <Oxygen/Data/PakFormat_core.h>
 
 namespace oxygen::content::import {
 class ImportSession;
@@ -38,6 +39,8 @@ public:
   using ImportJob::ImportJob;
 
 private:
+  std::string descriptor_relative_path_;
+
   //! Decoded texture source data.
   struct TextureSource {
     bool success = false;
@@ -68,6 +71,10 @@ private:
 
   [[nodiscard]] auto EmitTexture(
     CookedTexturePayload cooked, ImportSession& session) -> co::Co<bool>;
+
+  auto EmitDescriptor(ImportSession& session,
+    data::pak::core::ResourceIndexT index,
+    const data::pak::core::TextureResourceDesc& descriptor) -> void;
 
   [[nodiscard]] auto FinalizeSession(ImportSession& session)
     -> co::Co<ImportReport>;

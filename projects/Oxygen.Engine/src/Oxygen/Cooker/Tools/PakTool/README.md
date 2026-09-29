@@ -103,9 +103,10 @@ builder:
 - no bytecode is invented if it was not already cooked
 - the source cooked root is never mutated
 
-Path resolution for external script sources is relative to the loose-cooked
-root parent, after normalization. Unresolvable or escaping paths are hard build
-errors.
+Pass each authored content directory with `--script-source-root <directory>`.
+External script paths resolve against those roots in the supplied order. Missing
+sources and paths escaping a declared root fail the build. Moving cooked output
+does not change the authored content root.
 
 ## Patch Precedence
 

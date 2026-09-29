@@ -7,8 +7,11 @@
 #include <chrono>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Cooker/Import/ImportProgress.h>
+#include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/AudioImportJob.h>
+#include <Oxygen/OxCo/Co.h>
 
 namespace oxygen::content::import::detail {
 
@@ -60,8 +63,7 @@ auto AudioImportJob::ExecuteAsync() -> co::Co<ImportReport>
 
   EnsureCookedRoot();
 
-  ImportSession session(Request(), FileReader(), FileWriter(), ThreadPool(),
-    TableRegistry(), IndexRegistry());
+  auto& session = Session();
 
   ReportPhaseProgress(ImportPhase::kLoading, 0.0f, "Loading audio source...");
   const auto load_start = std::chrono::steady_clock::now();

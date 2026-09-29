@@ -90,6 +90,14 @@ Common options:
 Texture options include intent/format/mips/cubemap/decode controls.
 Run `texture --help` for the full list.
 
+For a named texture consumed by material or scene references, use a
+`texture-descriptor` job with `virtual_path` in its descriptor, for example
+`"virtual_path": "/Content/Textures/Meter.otex"` under a `/Content` virtual
+mount. The producer writes that exact descriptor location and keeps texture
+tables/data in the configured resource directory. The path is validated before
+import work; both normal and fallback output use it. Omitting `virtual_path`
+retains hashed naming for anonymous resources.
+
 ### `fbx`
 
 Imports one FBX scene.
@@ -158,6 +166,18 @@ Recipe application and record replay accept reporting and execution options;
 content overrides require a direct source or an updated recipe. Worker budgets
 belong to `--thread-pool-size`/`--concurrency`, outside retained recipes.
 
+Reclaim unused generations without another import:
+
+```powershell
+Oxygen.Cooker.ImportTool reclaim --record H:/Game/Content/imports/model.import.json
+```
+
+This uses the retained publisher's record lock and generation leases. It keeps
+the selected generation and any active reader/writer generations, and leaves the
+authored record and original sources unchanged. Repeat after readers release
+their old generations. The [Content workflow](../../../../../Examples/Content/README.md)
+owns the example import, recook, packaging and cleanup commands.
+
 ### Staged model imports
 
 Project transactions and SDK batches may use explicit output roots. Their host
@@ -194,10 +214,15 @@ Options:
 - `--compile <true|false>`
 - `--compile-mode <debug|optimized>`
 - `--script-storage <embedded|external>`
+- `--script-source-root <directory>`: authored content root, required for external storage
 
 Rules:
 
 - `compile=true` with `script-storage=external` is rejected.
+- External source paths are stored relative to `--script-source-root`; the source file
+  must be inside that directory. In batch manifests, set `source_root` on the
+  script job or `defaults.script`. Relative roots resolve from the manifest
+  directory, independently of the input `--root` and cooked output location.
 - In this tool, script compile is wired through Luau compiler callback.
 
 Script import writes script descriptors (`*.oscript`) and script payload tables:

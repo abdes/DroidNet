@@ -20,6 +20,7 @@
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/Internal/ImportSessionToken.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Cooker/Import/MaterialSlotProvenance.h>
 #include <Oxygen/Cooker/api_export.h>
@@ -248,6 +249,8 @@ public:
    @return Import report with success flag, diagnostics, and asset counts.
   */
   OXGN_COOK_NDAPI auto Finalize() -> co::Co<ImportReport>;
+  //! Called after producers join; retain emitters through callback-write drain.
+  OXGN_COOK_NDAPI auto DrainAndRetire() -> co::Co<>;
 
 private:
   ImportRequest request_;
@@ -271,6 +274,8 @@ private:
   std::mutex slot_provenance_mutex_;
   std::vector<MaterialSlotGeometryProvenance> slot_provenance_;
   bool material_slot_source_processed_ = false;
+  std::optional<ImportSessionToken> table_participation_;
+  std::optional<ImportSessionToken> index_participation_;
   std::vector<ImportDiagnostic> diagnostics_;
   std::unordered_set<std::string> diagnostic_keys_;
   bool has_errors_ = false;

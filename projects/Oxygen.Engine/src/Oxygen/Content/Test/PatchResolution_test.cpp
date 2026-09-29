@@ -21,6 +21,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Base/Span.h>
 #include <Oxygen/Content/Internal/PatchResolutionPolicy.h>
 #include <Oxygen/Content/VirtualPathResolver.h>
@@ -350,7 +351,7 @@ auto WriteSingleAssetIndex(const std::filesystem::path& cooked_root,
   strings.push_back('\0');
 
   IndexHeader header {};
-  header.version = 1;
+  header.version = oxygen::data::loose_cooked::kIndexVersion;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
     | oxygen::data::loose_cooked::kHasFileRecords;
@@ -385,6 +386,7 @@ auto WriteSingleAssetIndex(const std::filesystem::path& cooked_root,
   entry.virtual_path_offset = off_vpath;
   entry.asset_type = 0;
   entry.descriptor_size = 0;
+  std::ranges::copy(oxygen::base::ComputeSha256({}), entry.descriptor_sha256);
 
   const auto index_path = cooked_root / "container.index.bin";
   std::ofstream out(index_path, std::ios::binary);

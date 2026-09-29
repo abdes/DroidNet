@@ -109,7 +109,7 @@ auto WriteMinimalLooseCookedIndex(const std::filesystem::path& cooked_root)
 
   IndexHeader header {};
   FillTestGuid(header);
-  header.version = 1;
+  header.version = oxygen::data::loose_cooked::kIndexVersion;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
     | oxygen::data::loose_cooked::kHasFileRecords;
@@ -242,7 +242,7 @@ auto WriteLooseCookedMaterialWithTexture(
 
   IndexHeader header {};
   FillTestGuid(header);
-  header.version = 1;
+  header.version = oxygen::data::loose_cooked::kIndexVersion;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
     | oxygen::data::loose_cooked::kHasFileRecords;
@@ -322,7 +322,7 @@ auto WriteLooseCookedIndexWithInvalidTexturesTable(
 
   IndexHeader header {};
   FillTestGuid(header);
-  header.version = 1;
+  header.version = oxygen::data::loose_cooked::kIndexVersion;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
     | oxygen::data::loose_cooked::kHasFileRecords;
@@ -414,7 +414,7 @@ auto WriteLooseCookedSceneForCatalog(const std::filesystem::path& cooked_root,
 
   IndexHeader header {};
   FillTestGuid(header);
-  header.version = 1;
+  header.version = oxygen::data::loose_cooked::kIndexVersion;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
     | oxygen::data::loose_cooked::kHasFileRecords;
@@ -555,7 +555,7 @@ auto WriteLooseCookedInputAssets(const std::filesystem::path& cooked_root,
 
   IndexHeader header {};
   FillTestGuid(header);
-  header.version = 1;
+  header.version = oxygen::data::loose_cooked::kIndexVersion;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
     | oxygen::data::loose_cooked::kHasFileRecords;

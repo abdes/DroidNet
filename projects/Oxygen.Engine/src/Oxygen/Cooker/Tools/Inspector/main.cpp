@@ -25,6 +25,7 @@
 #include "AssetKeyMap.h"
 #include "DependencyReport.h"
 #include "GeometryMetadata.h"
+#include "InventoryReport.h"
 #include "SceneMetadata.h"
 #include <fmt/format.h>
 
@@ -1101,7 +1102,8 @@ auto BuildCli(ValidateOptions& validate_opts, DumpOptions& dump_opts,
   oxygen::content::inspection::DependencyReportOptions& dependency_opts,
   oxygen::content::inspection::AssetKeyMapOptions& key_map_opts,
   oxygen::content::inspection::SceneMetadataOptions& scene_metadata_opts,
-  oxygen::content::inspection::GeometryMetadataOptions& geometry_metadata_opts)
+  oxygen::content::inspection::GeometryMetadataOptions& geometry_metadata_opts,
+  oxygen::content::inspection::InventoryReportOptions& inventory_opts)
   -> std::unique_ptr<Cli>
 {
   auto validate_root = Option::Positional("cooked_root")
@@ -1283,6 +1285,8 @@ auto BuildCli(ValidateOptions& validate_opts, DumpOptions& dump_opts,
       scene_metadata_opts))
     .WithCommand(oxygen::content::inspection::BuildGeometryMetadataCommand(
       geometry_metadata_opts))
+    .WithCommand(
+      oxygen::content::inspection::BuildInventoryReportCommand(inventory_opts))
     .Build();
 }
 
@@ -1318,12 +1322,13 @@ auto main(int argc, char** argv) -> int
     oxygen::content::inspection::AssetKeyMapOptions key_map_opts;
     oxygen::content::inspection::SceneMetadataOptions scene_metadata_opts;
     oxygen::content::inspection::GeometryMetadataOptions geometry_metadata_opts;
+    oxygen::content::inspection::InventoryReportOptions inventory_opts;
 
     const auto cli
       = BuildCli(validate_opts, dump_opts, buffers_opts, textures_opts,
         physics_opts, script_slots_opts, script_params_opts, input_actions_opts,
         input_mappings_opts, physics_assets_opts, dependency_opts, key_map_opts,
-        scene_metadata_opts, geometry_metadata_opts);
+        scene_metadata_opts, geometry_metadata_opts, inventory_opts);
     const auto context = cli->Parse(argc, const_cast<const char**>(argv));
 
     const auto command_path = context.active_command->PathAsString();
@@ -1360,6 +1365,9 @@ auto main(int argc, char** argv) -> int
     } else if (command_path == "geometries") {
       exit_code = oxygen::content::inspection::RunGeometryMetadataReport(
         geometry_metadata_opts);
+    } else if (command_path == "inventory") {
+      exit_code
+        = oxygen::content::inspection::RunInventoryReport(inventory_opts);
     } else if (command_path == "scenes") {
       exit_code = oxygen::content::inspection::RunSceneMetadataReport(
         scene_metadata_opts);

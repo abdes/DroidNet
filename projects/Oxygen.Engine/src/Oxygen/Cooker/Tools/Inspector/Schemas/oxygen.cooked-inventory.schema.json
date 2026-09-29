@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Oxygen verified cooked inventory",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "source_key",
+    "index_size",
+    "index_sha256",
+    "files",
+    "assets",
+    "resources",
+    "issues"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "source_key": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "index_size": {
+      "type": "integer",
+      "minimum": 256
+    },
+    "index_sha256": {
+      "$ref": "#/$defs/digest"
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["relative_path", "size", "file_kind", "sha256"],
+        "properties": {
+          "relative_path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "file_kind": {
+            "type": ["integer", "null"],
+            "minimum": 0,
+            "maximum": 11
+          },
+          "sha256": {
+            "$ref": "#/$defs/digest"
+          }
+        }
+      }
+    },
+    "assets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "asset_key",
+          "asset_type",
+          "virtual_path",
+          "descriptor_relative_path"
+        ],
+        "properties": {
+          "asset_key": {
+            "type": "string",
+            "minLength": 1
+          },
+          "asset_type": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 255
+          },
+          "virtual_path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "descriptor_relative_path": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "resources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "descriptor_relative_path", "resource_index"],
+        "properties": {
+          "kind": { "const": "texture" },
+          "descriptor_relative_path": { "type": "string", "minLength": 1 },
+          "resource_index": {
+            "type": ["integer", "null"],
+            "minimum": 0,
+            "maximum": 4294967294
+          }
+        }
+      }
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["relative_path", "reason"],
+        "properties": {
+          "relative_path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "reason": {
+            "enum": [
+              "missing",
+              "unexpected",
+              "size_mismatch",
+              "digest_mismatch",
+              "linked_path",
+              "not_regular"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

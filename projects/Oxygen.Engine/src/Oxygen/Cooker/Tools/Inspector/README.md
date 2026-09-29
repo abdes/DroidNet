@@ -3,6 +3,10 @@
 A developer diagnostics tool to validate and inspect **loose cooked** content
 roots.
 
+Use [validation](#validate-a-cooked-root) for a pass/fail check,
+[inventory](#export-the-integrity-inventory) for machine-readable file results,
+or [index inspection](#dump-the-index) for asset and resource metadata.
+
 The tool loads and validates `container.index.bin` and prints a human-readable
 summary of its contents.
 
@@ -56,6 +60,24 @@ Example:
 Oxygen.Cooker.Inspector.exe validate F:/path/to/loose_cooked_root
 ```
 
+### Export the integrity inventory
+
+```powershell
+Oxygen.Cooker.Inspector.exe inventory <cooked_root> --output <report.json>
+```
+
+The report includes the index identity, complete member sizes/digests and native
+file roles, keyed asset identities, resource descriptors and integrity issues.
+Texture resource rows carry a validated table index when the root is healthy;
+they remain separate from keyed assets. Native validation checks OTEX encoding,
+index bounds and agreement with the texture table. Place reports outside the root.
+An empty `issues` array means full file verification succeeded. Exit code zero
+means the report was produced; automation must also check `issues` before accepting
+the content. The installed `oxygen.cooked-inventory.schema.json` defines the report.
+
+Use this command for publication and explicit validation. Normal runtime mounting
+checks metadata without scanning every payload; it can opt into full hashing.
+
 ### Dump the index
 
 ```powershell
@@ -65,7 +87,7 @@ Oxygen.Cooker.Inspector.exe index <cooked_root> [--assets true] [--files true] [
 Notes:
 
 - If neither `--assets` nor `--files` is specified, both sections are printed.
-- `--digests` includes SHA-256 values if present in the index.
+- `--digests` includes the mandatory SHA-256 values recorded in the index.
 - Asset entries include the cooked `type` (e.g. `material`, `geometry`,
   `scene`).
 

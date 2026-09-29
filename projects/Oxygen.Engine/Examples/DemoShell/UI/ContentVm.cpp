@@ -835,6 +835,13 @@ auto ContentVm::PrunePersistedMountedSource(
     return;
   }
 
+  // A failed generation mount does not remove the authored library intent.
+  // Retained records remain retryable until the user explicitly clears them.
+  if (source_kind == SceneSourceKind::kLooseIndex
+    && FindRetainedRecord(path).has_value()) {
+    return;
+  }
+
   const auto normalized_target = NormalizePathForKey(path);
   auto remove_matching_path
     = [&normalized_target](std::vector<std::filesystem::path>& paths) -> bool {
@@ -854,11 +861,6 @@ auto ContentVm::PrunePersistedMountedSource(
       settings_->SetMountedPakPaths(pak_paths);
     }
   } else {
-    if (const auto record = FindRetainedRecord(path)) {
-      std::erase(loaded_import_records_, *record);
-      settings_->SetMountedImportRecords(loaded_import_records_);
-      removed = true;
-    }
     auto index_paths = settings_->GetMountedIndexPaths();
     removed = remove_matching_path(index_paths) || removed;
     if (removed) {

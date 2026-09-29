@@ -43,7 +43,7 @@ namespace {
       ? ResolveDefaultContentRoot()
       : config.content_root;
     const auto cooked_root = config.cooked_root.empty()
-      ? content_root / ".cooked"
+      ? content_root / ".cooked" / "main"
       : config.cooked_root;
 
     return ContentRootPaths {

@@ -9,12 +9,11 @@
 #include <string>
 #include <type_traits>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ScriptImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/ScriptImportSettings.h>
 #include <Oxygen/Core/Meta/Scripting/ScriptCompileMode.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 
@@ -82,7 +81,9 @@ NOLINT_TEST(ScriptImportRequestBuilderTest, BuildScriptAssetRequestValidInput)
 
   const auto request = BuildScriptAssetRequest(settings, errors);
 
-  ASSERT_TRUE(request.has_value());
+  if (!request.has_value()) {
+    FAIL();
+  }
   EXPECT_TRUE(errors.str().empty());
   EXPECT_EQ(
     request->options.scripting.import_kind, ScriptingImportKind::kScriptAsset);
@@ -91,7 +92,9 @@ NOLINT_TEST(ScriptImportRequestBuilderTest, BuildScriptAssetRequestValidInput)
     request->options.scripting.compile_mode, ScriptCompileMode::kOptimized);
   EXPECT_EQ(
     request->options.scripting.script_storage, ScriptStorageMode::kEmbedded);
-  ASSERT_TRUE(request->cooked_root.has_value());
+  if (!request->cooked_root.has_value()) {
+    FAIL();
+  }
   EXPECT_TRUE(request->cooked_root->is_absolute());
 }
 
@@ -108,6 +111,59 @@ NOLINT_TEST(ScriptImportRequestBuilderTest,
   EXPECT_TRUE(errors.str().find(
                 "compile_scripts=true is invalid with script_storage=external")
     != std::string::npos);
+}
+
+NOLINT_TEST(
+  ScriptImportRequestBuilderTest, ExternalScriptRequiresExplicitAuthoringRoot)
+{
+  auto settings = MakeValidScriptAssetSettings();
+  settings.compile_scripts = false;
+  settings.script_storage = "external";
+  std::ostringstream errors;
+
+  EXPECT_FALSE(BuildScriptAssetRequest(settings, errors).has_value());
+  EXPECT_NE(errors.str().find("source_root"), std::string::npos);
+}
+
+NOLINT_TEST(
+  ScriptImportRequestBuilderTest, ExternalScriptRootIsIndependentOfCookedOutput)
+{
+  auto settings = MakeValidScriptAssetSettings();
+  settings.compile_scripts = false;
+  settings.script_storage = "external";
+  const auto authoring_root
+    = std::filesystem::temp_directory_path() / "script_authoring";
+  settings.source_root = authoring_root.string();
+  settings.source_path = (authoring_root / "scripts" / "main.lua").string();
+  std::ostringstream errors;
+
+  const auto request = BuildScriptAssetRequest(settings, errors);
+
+  if (!request.has_value()) {
+    FAIL() << errors.str();
+  }
+  EXPECT_EQ(request->options.scripting.source_root, authoring_root);
+  if (!request->cooked_root.has_value()) {
+    FAIL() << "Expected an explicit cooked root";
+  }
+  EXPECT_NE(request->cooked_root->parent_path(), authoring_root);
+}
+
+NOLINT_TEST(ScriptImportRequestBuilderTest,
+  ExternalScriptRejectsSourceOutsideAuthoringRoot)
+{
+  auto settings = MakeValidScriptAssetSettings();
+  settings.compile_scripts = false;
+  settings.script_storage = "external";
+  const auto authoring_root
+    = std::filesystem::temp_directory_path() / "script_authoring";
+  settings.source_root = authoring_root.string();
+  settings.source_path
+    = (authoring_root.parent_path() / "outside.lua").string();
+  std::ostringstream errors;
+
+  EXPECT_FALSE(BuildScriptAssetRequest(settings, errors).has_value());
+  EXPECT_NE(errors.str().find("source_root"), std::string::npos);
 }
 
 NOLINT_TEST(ScriptImportRequestBuilderTest,
@@ -159,13 +215,17 @@ NOLINT_TEST(
 
   const auto request = BuildScriptingSidecarRequest(settings, errors);
 
-  ASSERT_TRUE(request.has_value());
+  if (!request.has_value()) {
+    FAIL();
+  }
   EXPECT_TRUE(errors.str().empty());
   EXPECT_EQ(request->options.scripting.import_kind,
     ScriptingImportKind::kScriptingSidecar);
   EXPECT_EQ(request->options.scripting.target_scene_virtual_path,
     settings.target_scene_virtual_path);
-  ASSERT_TRUE(request->cooked_root.has_value());
+  if (!request->cooked_root.has_value()) {
+    FAIL();
+  }
   EXPECT_TRUE(request->cooked_root->is_absolute());
 }
 
@@ -177,7 +237,9 @@ NOLINT_TEST(
 
   const auto request = BuildScriptingSidecarRequest(settings, errors);
 
-  ASSERT_TRUE(request.has_value());
+  if (!request.has_value()) {
+    FAIL();
+  }
   EXPECT_TRUE(errors.str().empty());
   EXPECT_EQ(request->options.scripting.import_kind,
     ScriptingImportKind::kScriptingSidecar);
@@ -189,7 +251,9 @@ NOLINT_TEST(
   EXPECT_TRUE(
     request->options.scripting.inline_bindings_json.find("script_virtual_path")
     != std::string::npos);
-  ASSERT_TRUE(request->cooked_root.has_value());
+  if (!request->cooked_root.has_value()) {
+    FAIL();
+  }
   EXPECT_TRUE(request->cooked_root->is_absolute());
 }
 
@@ -204,7 +268,9 @@ NOLINT_TEST(ScriptImportRequestBuilderTest,
 
   const auto request = BuildScriptingSidecarRequest(settings, errors);
 
-  ASSERT_TRUE(request.has_value());
+  if (!request.has_value()) {
+    FAIL();
+  }
   EXPECT_TRUE(errors.str().empty());
   EXPECT_TRUE(
     request->options.scripting.inline_bindings_json.find("\"bindings\"")

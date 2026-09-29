@@ -377,9 +377,9 @@ $tools.Paths.Values | Sort-Object
         (tree / "CMakeCache.txt").write_text("CMAKE_BUILD_TYPE:STRING=Release\n", encoding="utf-8")
         self.fake_tool(tree / "bin/Release", "Oxygen.Cooker.ImportTool")
         self.fake_tool(tree / "bin/Release", "Oxygen.Cooker.Inspector")
-        self.copy_workflow("Examples/RenderScene/reimport_scenes.ps1")
-        self.copy_workflow("Examples/RenderScene/reimport-sources.schema.json")
-        folder = self.root / "Examples/RenderScene"
+        self.copy_workflow("Examples/Content/import_models.ps1")
+        self.copy_workflow("Examples/Content/import-sources.schema.json")
+        folder = self.root / "Examples/Content"
         cooked = self.root / "Examples/Content/.cooked"
         cooked.mkdir(parents=True)
         (cooked / "keep.bin").write_bytes(b"previous generation")
@@ -392,7 +392,7 @@ function global:cmake {
     if ($args[0] -eq '--build') { Write-Host 'BUILD_FAILED'; $global:LASTEXITCODE = 17; return }
     & $global:realCmake @args
 }
-& (Join-Path $PSScriptRoot 'Examples/RenderScene/reimport_scenes.ps1') (Join-Path $PSScriptRoot 'Examples/RenderScene/sources.json')
+& (Join-Path $PSScriptRoot 'Examples/Content/import_models.ps1') (Join-Path $PSScriptRoot 'Examples/Content/sources.json')
 """, expect=1)
         self.assertIn("BUILD_FAILED", output)
         self.assertNotIn("ARG1=", output)
@@ -426,11 +426,54 @@ Invoke-OxygenTool -Context $tools -Target oxygen-cooker-importtool
 """)
         self.assertIn("FRESH_RELEASE", output)
 
+    def retained_record(self):
+        self.copy_workflow("Examples/Content/import_models.ps1")
+        self.copy_workflow("src/Oxygen/Cooker/Import/Schemas/oxygen.retained-model-import.schema.json")
+        record = self.root / "Examples/Content/imports/model.import.json"
+        record.parent.mkdir(parents=True)
+        record.write_text(json.dumps({
+            "schema_version": 1,
+            "content_root": "..",
+            "recipe": {"jobs": [{"type": "gltf", "source": "original.gltf"}]},
+            "material_slot_provenance": {},
+            "published_generation": None,
+        }), encoding="utf-8")
+        return record
+
+    def test_retained_record_preflight_needs_no_tools_and_preserves_record(self):
+        record = self.retained_record()
+        before = record.read_bytes()
+        output = self.command("""
+$script = Join-Path $PSScriptRoot 'Examples/Content/import_models.ps1'
+& $script -All -WhatIf
+& $script -All -Reclaim -WhatIf
+& $script -Record (Join-Path $PSScriptRoot 'Examples/Content/imports/model.import.json') -WhatIf
+""")
+        self.assertIn("Publish 1 retained model imports", output)
+        self.assertIn("Reclaim unused generations for 1 retained model imports", output)
+        self.assertEqual(record.read_bytes(), before)
+
+    def test_record_replay_with_explicit_tool_propagates_failure_without_build(self):
+        record = self.retained_record()
+        before = record.read_bytes()
+        directory = self.root / "bin/Release"
+        importer = self.fake_tool(directory, "Oxygen.Cooker.ImportTool", 23)
+        importer.write_bytes(b"@echo off\r\necho ARGS=%*\r\nexit /b 23\r\n")
+        self.fake_tool(directory, "Oxygen.Cooker.Inspector")
+        output = self.command("""
+function global:cmake { throw 'Unexpected build invocation' }
+& (Join-Path $PSScriptRoot 'Examples/Content/import_models.ps1') -Record (Join-Path $PSScriptRoot 'Examples/Content/imports/model.import.json') -ToolPath (Join-Path $PSScriptRoot 'bin/Release/Oxygen.Cooker.ImportTool.cmd')
+""", expect=1)
+        self.assertIn("--record", output)
+        self.assertNotIn("--recipe", output)
+        self.assertNotIn("Unexpected build invocation", output)
+        self.assertEqual(record.read_bytes(), before)
+
     def test_packaging_propagates_shared_tool_failure(self):
         tree = self.tree("ninja")
         self.fake_tool(tree / "bin/Release", "Oxygen.Cooker.PakTool", 29)
         self.copy_workflow("Examples/Content/pak_content.ps1")
-        (self.root / "Examples/Content/.cooked").mkdir()
+        (self.root / "Examples/Content/.cooked/main").mkdir(parents=True)
         output = self.command("""
 & (Join-Path $PSScriptRoot 'Examples/Content/pak_content.ps1')
 exit $LASTEXITCODE
@@ -440,9 +483,9 @@ exit $LASTEXITCODE
         self.assertNotIn("Published artifacts:", output)
 
     def test_cooker_callers_have_no_private_launch_paths(self):
-        for relative in ("Examples/Content/cook_scenes.ps1", "Examples/Content/pak_content.ps1", "Examples/RenderScene/reimport_scenes.ps1"):
+        for relative in ("Examples/Content/cook_scenes.ps1", "Examples/Content/pak_content.ps1", "Examples/Content/import_models.ps1"):
             text = (ENGINE / relative).read_text(encoding="utf-8")
-            self.assertIn("Build-OxygenExecutables" if "reimport_scenes" in relative else "Resolve-OxygenExecutables", text)
+            self.assertIn("Build-OxygenExecutables" if "import_models" in relative else "Resolve-OxygenExecutables", text)
             self.assertIn("Invoke-OxygenTool", text)
             self.assertNotIn("Resolve-OxygenBuildSelection", text)
             self.assertNotIn("Invoke-OxygenSelectedExecutable", text)
@@ -479,7 +522,7 @@ exit $LASTEXITCODE
         self.assertFalse((self.root / "out").exists())
 
     def test_make_pak_imports_current_cooker_api(self):
-        helper = ENGINE / "Examples/Content/make_pak.py"
+        helper = ENGINE / "Examples/Content/internal/make_pak.py"
         expected = ENGINE / "src/Oxygen/Cooker/Tools/PakGen/src/pakgen/api.py"
         command = (
             "import importlib.util, inspect; from pathlib import Path; "

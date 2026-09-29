@@ -20,8 +20,8 @@
 
 namespace oxygen::content::lc::testing {
 
-inline auto CreateDummyIndex(
-  const std::filesystem::path& index_path, uint16_t version = 1) -> void
+inline auto CreateDummyIndex(const std::filesystem::path& index_path,
+  uint16_t version = data::loose_cooked::kIndexVersion) -> void
 {
   using oxygen::data::loose_cooked::AssetEntry;
   using oxygen::data::loose_cooked::FileKind;
@@ -45,10 +45,10 @@ inline auto CreateDummyIndex(
 
   IndexHeader header {};
   std::ranges::iota(header.source_identity, static_cast<uint8_t>(1));
-  header.source_identity[6]
-    = static_cast<uint8_t>((header.source_identity[6] & 0x0FU) | 0x70U);
-  header.source_identity[8]
-    = static_cast<uint8_t>((header.source_identity[8] & 0x3FU) | 0x80U);
+  header.source_identity.at(6)
+    = static_cast<uint8_t>((header.source_identity.at(6) & 0x0FU) | 0x70U);
+  header.source_identity.at(8)
+    = static_cast<uint8_t>((header.source_identity.at(8) & 0x3FU) | 0x80U);
   header.version = version;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
@@ -74,7 +74,7 @@ inline auto CreateDummyIndex(
   constexpr size_t kShaLastIndex = 31;
 
   auto key_bytes = std::array<uint8_t, oxygen::data::AssetKey::kSizeBytes> {};
-  key_bytes[0] = kKeyFirst;
+  key_bytes.at(0) = kKeyFirst;
   const auto key = oxygen::data::AssetKey::FromBytes(key_bytes);
   AssetEntry entry {};
   entry.asset_key = key;
@@ -89,11 +89,13 @@ inline auto CreateDummyIndex(
   record.kind = FileKind::kBuffersTable;
   record.relpath_offset = off_file;
   record.size = kRecordTableSize;
+  record.sha256.fill(1);
 
   FileRecord record2 {};
   record2.kind = FileKind::kBuffersData;
   record2.relpath_offset = off_file_data;
   record2.size = kRecordDataSize;
+  record2.sha256.fill(2);
 
   oxygen::serio::FileStream<> stream(
     index_path, std::ios::out | std::ios::binary | std::ios::trunc);

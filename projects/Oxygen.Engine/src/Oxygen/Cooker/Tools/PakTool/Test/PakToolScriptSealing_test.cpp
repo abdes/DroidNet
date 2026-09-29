@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
 #include <atomic>
 #include <cstdint>
 #include <cstring>
@@ -84,6 +85,11 @@ protected:
     return root_;
   }
 
+  [[nodiscard]] auto TestRoot() const -> const std::filesystem::path&
+  {
+    return cleanup_root_;
+  }
+
   static auto WriteTextFile(
     const std::filesystem::path& path, const std::string_view content) -> void
   {
@@ -116,7 +122,7 @@ NOLINT_TEST_P(PakToolScriptSealingTest,
   ExternalScriptAssetIsSealedIntoEmbeddedSourceInStagedRoot)
 {
   const auto content_root = Root() / "Examples" / "Content";
-  const auto cooked_root = content_root / ".cooked";
+  const auto cooked_root = Root() / "derived" / "unrelated" / "main";
   const auto external_script_path
     = content_root / "scenes" / "proc-cubes" / "proc_cubes.lua";
   WriteTextFile(external_script_path, "return { update = function() end }\n");
@@ -154,8 +160,8 @@ NOLINT_TEST_P(PakToolScriptSealingTest,
     },
   };
 
-  const auto sealed
-    = SealLooseCookedSourcesForPakBuild(request, Root() / "staging");
+  const auto sealed = SealLooseCookedSourcesForPakBuild(
+    request, Root() / "staging", std::span { &content_root, 1 });
   ASSERT_TRUE(sealed.has_value())
     << sealed.error().error_code << ": " << sealed.error().error_message;
   ASSERT_EQ(sealed->sealed_script_assets, 1U);
@@ -219,6 +225,47 @@ NOLINT_TEST_P(PakToolScriptSealingTest,
     std::filesystem::exists(oxygen::base::ToNativePath(staged_root)));
   EXPECT_FALSE(
     std::filesystem::exists(oxygen::base::ToNativePath(staged_parent)));
+}
+
+NOLINT_TEST_P(PakToolScriptSealingTest, RejectsWindowsRootedScriptPaths)
+{
+  const auto content_root = Root() / "Content";
+  const auto outside = TestRoot() / "outside.lua";
+  WriteTextFile(outside, "return 1");
+  WriteTextFile(content_root / "inside.lua", "return 2");
+  const std::array paths {
+    std::string("\\") + outside.relative_path().generic_string(),
+    content_root.root_name().generic_string() + "inside.lua",
+  };
+  size_t index = 0;
+  for (const auto& stored : paths) {
+    const auto cooked = Root() / ("rooted-script-" + std::to_string(index++));
+    ScriptAssetDesc descriptor {};
+    descriptor.header.asset_type = static_cast<uint8_t>(AssetType::kScript);
+    descriptor.flags = ScriptAssetFlags::kAllowExternalSource;
+    ASSERT_LT(stored.size(), sizeof(descriptor.external_source_path));
+    std::memcpy(descriptor.external_source_path, stored.data(), stored.size());
+    LooseCookedWriter writer(cooked);
+    const auto layout = LooseCookedLayout {};
+    const auto virtual_path = layout.ScriptVirtualPath("rooted");
+    writer.WriteAssetDescriptor(AssetKey::FromVirtualPath(virtual_path),
+      AssetType::kScript, virtual_path,
+      layout.ScriptDescriptorRelPath("rooted"),
+      std::as_bytes(std::span { &descriptor, 1 }));
+    static_cast<void>(writer.Finish());
+    PakBuildRequest request {};
+    request.mode = BuildMode::kFull;
+    request.sources = { CookedSource {
+      .kind = CookedSourceKind::kLooseCooked,
+      .path = cooked,
+    } };
+    const auto sealed = SealLooseCookedSourcesForPakBuild(
+      request, Root() / "staging", std::span { &content_root, 1 });
+    EXPECT_FALSE(sealed.has_value()) << stored;
+    if (sealed.has_value()) {
+      CleanupStagedLooseRoots(sealed->staged_loose_roots);
+    }
+  }
 }
 
 INSTANTIATE_TEST_SUITE_P(

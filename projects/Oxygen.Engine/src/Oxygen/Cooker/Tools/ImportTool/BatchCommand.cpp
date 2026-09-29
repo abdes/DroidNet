@@ -1285,6 +1285,7 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
     std::vector<bool> predecessor_failed(jobs.size(), false);
     auto remaining_dependencies = dependency_remaining;
     auto ready_queue = std::deque<size_t> {};
+    // A completed producer is consumable only after its root's index is sealed.
     for (size_t index = 0; index < remaining_dependencies.size(); ++index) {
       if (remaining_dependencies.at(index) == 0U) {
         ready_queue.push_back(index);

@@ -6,11 +6,24 @@
 
 #include <algorithm>
 #include <cctype>
+#include <filesystem>
+#include <optional>
+#include <string>
+#include <string_view>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
+#include <Oxygen/Base/Result.h>
+#include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/Pak/PakCatalogIo.h>
+#include <Oxygen/Cooker/Tools/PakTool/ArtifactPublication.h>
+#include <Oxygen/Cooker/Tools/PakTool/PakToolOptions.h>
 #include <Oxygen/Cooker/Tools/PakTool/RequestPreparation.h>
+#include <Oxygen/Cooker/Tools/PakTool/RequestSnapshot.h>
+#include <Oxygen/Data/CookedSource.h>
+#include <Oxygen/Data/PakCatalog.h>
+#include <Oxygen/Data/SourceKey.h>
 
 namespace oxygen::content::pak::tool {
 
@@ -436,6 +449,19 @@ auto PreparePakToolRequest(const pak::BuildMode mode,
       validated.error());
   }
 
+  std::vector<std::filesystem::path> script_roots;
+  script_roots.reserve(options.request.script_source_roots.size());
+  for (const auto& input : options.request.script_source_roots) {
+    std::error_code error;
+    const auto root
+      = std::filesystem::absolute(input, error).lexically_normal();
+    if (input.empty() || error || !fs.IsDirectory(root)) {
+      return MakeError("paktool.prepare.script_source_root_invalid",
+        "Script source root must be an existing directory", input);
+    }
+    script_roots.push_back(root);
+  }
+
   auto build_request = pak::PakBuildRequest {};
   build_request.mode = mode;
   build_request.sources = options.request.sources;
@@ -467,6 +493,7 @@ auto PreparePakToolRequest(const pak::BuildMode mode,
       .request_snapshot = PakToolRequestSnapshot {
         .request = build_request,
         .base_catalog_paths = std::move(base_catalog_paths),
+        .script_source_roots = std::move(script_roots),
       },
       .publication_plan = publication_plan,
     });

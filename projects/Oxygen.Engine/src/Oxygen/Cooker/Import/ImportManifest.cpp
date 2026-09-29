@@ -690,7 +690,7 @@ namespace {
           obj, "script_storage", settings.script_storage, errors)) {
       return false;
     }
-    return true;
+    return ReadStringField(obj, "source_root", settings.source_root, errors);
   }
 
   auto ApplyScriptingSidecarOverrides(const json& obj,
@@ -1404,6 +1404,10 @@ auto ImportManifest::Parse(const std::string_view text,
   }
 
   ResolveCookedRootsRelativeToManifest(manifest_dir, manifest.defaults);
+  if (!manifest.defaults.script.source_root.empty()) {
+    manifest.defaults.script.source_root
+      = ResolveSourcePath(manifest_dir, manifest.defaults.script.source_root);
+  }
 
   if (!json_data->contains("jobs") || !(*json_data).at("jobs").is_array()) {
     error_stream << "ERROR: manifest.jobs must be an array\n";
@@ -1715,6 +1719,10 @@ auto ImportManifest::Parse(const std::string_view text,
     }
     if (!ApplyScriptAssetOverrides(job, manifest_job.script, error_stream)) {
       return std::nullopt;
+    }
+    if (!manifest_job.script.source_root.empty()) {
+      manifest_job.script.source_root
+        = ResolveSourcePath(manifest_dir, manifest_job.script.source_root);
     }
     if (!ApplyScriptingSidecarOverrides(
           job, manifest_job.scripting_sidecar, error_stream)) {

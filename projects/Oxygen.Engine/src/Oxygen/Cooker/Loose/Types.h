@@ -31,6 +31,7 @@ struct FileEntry {
   FileKind kind = FileKind::kUnknown;
   std::string relpath;
   uint64_t size = 0;
+  base::Sha256Digest sha256 {};
 };
 
 } // namespace oxygen::content::lc

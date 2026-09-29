@@ -264,7 +264,7 @@ Tracy attribution. Freeze scene/settings/shader/build identities between paired
 runs, run GPU workloads serially and keep diagnostic readback outside timed work.
 RenderDoc replay timings and Tracy-instrumented FPS are not the acceptance metric.
 
-Use the existing [RenderScene capture CLI](../../../../Examples/RenderScene/DEVELOPMENT.md#gpu-captures-and-native-screenshots)
+Use the existing [RenderScene capture CLI](../../../../Examples/RenderScene/README.md#capture-a-loaded-scene)
 and [Vortex analysis helpers](../../../../tools/vortex/README.md). Choose captures
 from the required generation/readiness state, rather than a hard-coded warmup
 frame. Extend those tools only for the named IBL checks; do not launch a general

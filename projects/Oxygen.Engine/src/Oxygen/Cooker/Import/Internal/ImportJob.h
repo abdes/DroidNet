@@ -12,6 +12,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
@@ -34,6 +35,7 @@ class ThreadPool;
 } // namespace oxygen::co
 
 namespace oxygen::content::import {
+class ImportSession;
 class IAsyncFileReader;
 class IAsyncFileWriter;
 class ResourceTableRegistry;
@@ -93,10 +95,8 @@ public:
   OXGN_COOK_API void SetName(std::string_view name) noexcept override;
 
 protected:
-  //! Keeps the caller's session alive until generation-local callback writes
-  //! finish, including when its work is cancelled or throws.
-  OXGN_COOK_NDAPI auto RunWithWriteDrain(co::Co<ImportReport> work)
-    -> co::Co<ImportReport>;
+  //! One session owned through producer shutdown and callback-write drain.
+  OXGN_COOK_NDAPI auto Session() -> ImportSession&;
 
   //! Execute the job-specific import work.
   /*!
@@ -172,8 +172,9 @@ protected:
   template <typename TaskFactory>
   auto StartTask(TaskFactory&& task_factory) -> void
   {
-    DCHECK_F(nursery_ != nullptr, "ImportJob nursery is not open");
-    nursery_->Start(std::forward<TaskFactory>(task_factory));
+    DCHECK_F(
+      producer_nursery_ != nullptr, "ImportJob producer nursery is not open");
+    producer_nursery_->Start(std::forward<TaskFactory>(task_factory));
   }
 
   //! Start pipeline workers in the job nursery.
@@ -183,8 +184,20 @@ protected:
   */
   template <typename Pipeline> auto StartPipeline(Pipeline& pipeline) -> void
   {
-    DCHECK_F(nursery_ != nullptr, "ImportJob nursery is not open");
-    pipeline.Start(*nursery_);
+    DCHECK_F(
+      producer_nursery_ != nullptr, "ImportJob producer nursery is not open");
+    pipeline.Start(*producer_nursery_);
+  }
+
+  //! Own a standalone pipeline until its producer tasks have joined.
+  template <typename Pipeline, typename... Args>
+  auto CreatePipeline(Args&&... args) -> Pipeline&
+  {
+    auto pipeline = std::make_unique<Pipeline>(std::forward<Args>(args)...);
+    auto& result = *pipeline;
+    pipelines_.push_back(std::move(pipeline));
+    StartPipeline(result);
+    return result;
   }
 
   //! Access the progress callback (may be empty).
@@ -203,7 +216,8 @@ protected:
 
 private:
   [[nodiscard]] auto WritableCookedRoot() const -> std::filesystem::path;
-  [[nodiscard]] auto DrainGenerationWrites() -> co::Co<>;
+  auto RequestProducerStop() -> void;
+  [[nodiscard]] auto RunOwnedSessionToCompletion() -> co::Co<>;
   [[nodiscard]] auto ExecuteAndPublishAsync() -> co::Co<ImportReport>;
   [[nodiscard]] auto MainAsync() -> co::Co<>;
 
@@ -238,6 +252,9 @@ private:
 
   std::unique_ptr<NamingService> naming_service_;
 
+  std::unique_ptr<ImportSession> session_;
+  std::vector<std::unique_ptr<Object>> pipelines_;
+  co::Nursery* producer_nursery_ = nullptr;
   co::Nursery* nursery_ = nullptr;
   co::Event completed_;
   bool started_ = false;

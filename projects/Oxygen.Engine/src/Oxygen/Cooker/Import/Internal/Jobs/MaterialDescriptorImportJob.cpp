@@ -376,8 +376,7 @@ auto MaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
 
   EnsureCookedRoot();
 
-  auto session = ImportSession(Request(), FileReader(), FileWriter(),
-    ThreadPool(), TableRegistry(), IndexRegistry());
+  auto& session = Session();
 
   const auto& descriptor = Request().material_descriptor;
   if (!descriptor.has_value()) {
@@ -601,14 +600,13 @@ auto MaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
 
   ReportPhaseProgress(
     ImportPhase::kWorking, 0.5F, "Importing material descriptor...");
-  auto pipeline = MaterialPipeline(*ThreadPool(),
+  auto& pipeline = CreatePipeline<MaterialPipeline>(*ThreadPool(),
     MaterialPipeline::Config {
       .queue_capacity = Concurrency().material.queue_capacity,
       .worker_count = Concurrency().material.workers,
       .with_content_hashing
       = EffectiveContentHashingEnabled(Request().options.with_content_hashing),
     });
-  StartPipeline(pipeline);
 
   co_await pipeline.Submit(std::move(item));
   pipeline.Close();

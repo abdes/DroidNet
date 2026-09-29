@@ -47,6 +47,7 @@
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/OxCo/Awaitables.h>
 #include <Oxygen/OxCo/Co.h>
 
 namespace oxygen::content::import {
@@ -112,13 +113,12 @@ namespace {
   }
 
   auto BuildPackagingSummary(const ImportReport& report,
-    const std::optional<LooseCookedWriteResult>& write_result,
-    const bool index_write_deferred) -> ImportPackagingSummary
+    const std::optional<LooseCookedWriteResult>& write_result)
+    -> ImportPackagingSummary
   {
     ImportPackagingSummary summary {};
     summary.outputs_written = static_cast<uint32_t>(report.outputs.size());
     summary.index_written = write_result.has_value();
-    summary.index_write_deferred = index_write_deferred;
 
     for (const auto& diagnostic : report.diagnostics) {
       switch (diagnostic.severity) {
@@ -289,11 +289,52 @@ ImportSession::ImportSession(const ImportRequest& request,
     cooked_writer_.SetSourceKey(request_.source_key);
   }
 
-  table_registry_->BeginSession(cooked_root_);
-  index_registry_->BeginSession(cooked_root_, request_.source_key);
+  table_participation_.emplace(table_registry_->BeginSession(cooked_root_));
+  try {
+    index_participation_.emplace(
+      index_registry_->BeginSession(cooked_root_, request_.source_key));
+  } catch (...) {
+    table_registry_->AbortSession(*table_participation_);
+    throw;
+  }
 }
 
 ImportSession::~ImportSession() { DLOG_F(INFO, "Session destroyed"); }
+
+auto ImportSession::DrainAndRetire() -> co::Co<>
+{
+  std::exception_ptr failure;
+  try {
+    const auto flushed = co_await co::NonCancellable(file_writer_->Flush());
+    if (!flushed) {
+      throw std::runtime_error(
+        "Import write drain failed: " + flushed.error().message);
+    }
+  } catch (...) {
+    failure = std::current_exception();
+  }
+  try {
+    if (index_participation_ && index_participation_->IsActive()) {
+      index_registry_->AbortSession(*index_participation_);
+    }
+  } catch (...) {
+    if (!failure) {
+      failure = std::current_exception();
+    }
+  }
+  try {
+    if (table_participation_ && table_participation_->IsActive()) {
+      table_registry_->AbortSession(*table_participation_);
+    }
+  } catch (...) {
+    if (!failure) {
+      failure = std::current_exception();
+    }
+  }
+  if (failure) {
+    std::rethrow_exception(failure);
+  }
+}
 
 auto ImportSession::Request() const noexcept -> const ImportRequest&
 {
@@ -576,6 +617,12 @@ auto ImportSession::HasErrors() const noexcept -> bool
 
 auto ImportSession::Finalize() -> co::Co<ImportReport>
 {
+  if (!table_participation_.has_value() || !index_participation_.has_value()) {
+    throw std::logic_error(
+      "Import finalization requires both registry participations");
+  }
+  auto& table_participation = *table_participation_;
+  auto& index_participation = *index_participation_;
   DLOG_F(INFO, "Finalize starting");
 
   if (texture_emitter_.has_value()) {
@@ -654,7 +701,8 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
     = asset_emitter_.has_value() ? (*asset_emitter_)->Records().size() : 0U;
 #endif // NDEBUG
 
-  const auto ok = co_await table_registry_->EndSession(cooked_root_);
+  const auto ok = co_await co::NonCancellable(
+    table_registry_->EndSession(table_participation));
   if (!ok) {
     AddDiagnostic({
       .severity = ImportSeverity::kError,
@@ -770,24 +818,26 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
       const auto records = (*resource_descriptor_emitter_)->Records();
       report.outputs.reserve(report.outputs.size() + records.size());
       for (const auto& rec : records) {
+        index_registry_->RegisterExternalFile(
+          cooked_root_, FileKind::kAuxiliary, rec.relpath);
         output_missing
           |= !AppendOutputRecord(report.outputs, report.diagnostics,
             cooked_root_, rec.relpath, request_.source_path.string());
       }
     }
 
-    const auto write_result = index_registry_->EndSession(cooked_root_);
-    const bool index_write_deferred = !write_result.has_value();
+    const auto publication
+      = co_await index_registry_->EndSession(index_participation);
+    const auto& write_result = publication.write_result;
+    report.source_key = publication.source_key;
     if (write_result.has_value()) {
       LOG_F(INFO, "Index write completed: assets={} files={} cooked_root='{}'",
         write_result->assets.size(), write_result->files.size(),
         cooked_root_.string());
-      report.source_key = write_result->source_key;
       output_missing |= !AppendOutputRecord(report.outputs, report.diagnostics,
         cooked_root_, kIndexFileName, request_.source_path.string());
     } else {
-      DLOG_F(INFO,
-        "Index write deferred (other sessions active) for cooked_root='{}'",
+      DLOG_F(INFO, "Index published by another session for cooked_root='{}'",
         cooked_root_.string());
     }
 
@@ -876,18 +926,16 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
           = request_.material_slot_provenance->Serialize();
       }
     }
-    report.packaging
-      = BuildPackagingSummary(report, write_result, index_write_deferred);
+    report.packaging = BuildPackagingSummary(report, write_result);
 
     LOG_F(INFO,
       "Packaging summary: success={} outputs={} index_written={} "
-      "index_deferred={} diagnostics(info/warn/error)={}/{}/{} "
+      "diagnostics(info/warn/error)={}/{}/{} "
       "dedup(texture/buffer)={}/{} index_collisions(assets/files/keep/replace/"
       "reject)={}/{}/{}/{}/{}",
       report.success, report.packaging.outputs_written,
-      report.packaging.index_written, report.packaging.index_write_deferred,
-      report.packaging.diagnostics_info, report.packaging.diagnostics_warning,
-      report.packaging.diagnostics_error,
+      report.packaging.index_written, report.packaging.diagnostics_info,
+      report.packaging.diagnostics_warning, report.packaging.diagnostics_error,
       report.packaging.texture_dedup_collisions,
       report.packaging.buffer_dedup_collisions,
       report.packaging.index_asset_collisions,

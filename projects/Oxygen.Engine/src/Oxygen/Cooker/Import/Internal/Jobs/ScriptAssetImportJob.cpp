@@ -6,14 +6,20 @@
 
 #include <chrono>
 #include <string>
+#include <utility>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/ImportProgress.h>
+#include <Oxygen/Cooker/Import/ImportReport.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/ScriptAssetImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScriptAssetImportPipeline.h>
+#include <Oxygen/OxCo/Co.h>
 
 namespace oxygen::content::import::detail {
 
@@ -66,8 +72,7 @@ auto ScriptAssetImportJob::ExecuteAsync() -> co::Co<ImportReport>
 
   EnsureCookedRoot();
 
-  auto session = ImportSession(Request(), FileReader(), FileWriter(),
-    ThreadPool(), TableRegistry(), IndexRegistry());
+  auto& session = Session();
 
   if (Request().options.scripting.import_kind
     != ScriptingImportKind::kScriptAsset) {
@@ -92,11 +97,11 @@ auto ScriptAssetImportJob::ExecuteAsync() -> co::Co<ImportReport>
 
   ReportPhaseProgress(ImportPhase::kWorking, 0.5F, "Importing script asset...");
 
-  auto pipeline = ScriptAssetImportPipeline(ScriptAssetImportPipeline::Config {
-    .queue_capacity = Concurrency().scene.queue_capacity,
-    .worker_count = Concurrency().scene.workers,
-  });
-  StartPipeline(pipeline);
+  auto& pipeline = CreatePipeline<ScriptAssetImportPipeline>(
+    ScriptAssetImportPipeline::Config {
+      .queue_capacity = Concurrency().scene.queue_capacity,
+      .worker_count = Concurrency().scene.workers,
+    });
 
   co_await pipeline.Submit(ScriptAssetImportPipeline::WorkItem {
     .source_id = Request().source_path.string(),
@@ -138,6 +143,7 @@ auto ScriptAssetImportJob::LoadSource(ImportSession& session)
       "script.asset.reader_unavailable", "Async file reader is not available");
     co_return LoadedSource {
       .success = false,
+      .bytes = {},
     };
   }
 
@@ -148,6 +154,7 @@ auto ScriptAssetImportJob::LoadSource(ImportSession& session)
       "Failed to read source file: " + read.error().ToString());
     co_return LoadedSource {
       .success = false,
+      .bytes = {},
     };
   }
 

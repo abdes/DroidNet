@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "output": "../../.cooked",
+  "output": "../../.cooked/main",
   "jobs": [
     {
       "id": "floor.material",
@@ -413,5 +413,10 @@
         "physics.material.bouncy"
       ]
     }
-  ]
+  ],
+  "defaults": {
+    "script": {
+      "source_root": "../.."
+    }
+  }
 }

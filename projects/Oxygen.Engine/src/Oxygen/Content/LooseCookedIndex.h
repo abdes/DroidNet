@@ -10,8 +10,11 @@
 #include <memory>
 #include <optional>
 #include <span>
+#include <string>
 #include <string_view>
+#include <vector>
 
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/api_export.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
@@ -22,6 +25,31 @@ class LooseCookedIndexImpl;
 }
 
 namespace oxygen::content::lc {
+
+enum class IntegrityCheck : uint8_t { kMetadata, kFull };
+
+//! One indexed descriptor or resource file. The index itself is selected
+//! externally.
+struct FileIntegrity final {
+  std::string relative_path;
+  uint64_t size = 0;
+  base::Sha256Digest sha256 {};
+  std::optional<data::loose_cooked::FileKind> kind {};
+};
+
+enum class IntegrityFailure : uint8_t {
+  kMissing,
+  kUnexpected,
+  kSizeMismatch,
+  kDigestMismatch,
+  kLinkedPath,
+  kNotRegular,
+};
+
+struct FileIntegrityIssue final {
+  std::string relative_path;
+  IntegrityFailure reason = IntegrityFailure::kMissing;
+};
 
 class LooseCookedIndex final {
 public:
@@ -67,6 +95,22 @@ public:
     -> std::optional<std::string_view>;
   OXGN_CNTT_NDAPI auto FindFileSize(FileKind kind) const noexcept
     -> std::optional<uint64_t>;
+
+  //! Snapshot of all content members, sorted by canonical relative path.
+  OXGN_CNTT_NDAPI auto GetFileInventory() const -> std::vector<FileIntegrity>;
+
+  //! Inspect every member, retaining per-file failures for incremental repair.
+  OXGN_CNTT_NDAPI auto CheckContent(const std::filesystem::path& cooked_root,
+    IntegrityCheck check) const -> std::vector<FileIntegrityIssue>;
+
+  //! Validate membership and sizes; kFull additionally verifies every digest.
+  //! The caller protects files for the duration and any subsequent result
+  //! reuse.
+  OXGN_CNTT_API auto ValidateContent(const std::filesystem::path& cooked_root,
+    IntegrityCheck check) const -> void;
+
+  OXGN_CNTT_NDAPI auto FindFileSha256(FileKind kind) const noexcept
+    -> std::optional<std::span<const uint8_t, data::loose_cooked::kSha256Size>>;
 
 private:
   explicit LooseCookedIndex(

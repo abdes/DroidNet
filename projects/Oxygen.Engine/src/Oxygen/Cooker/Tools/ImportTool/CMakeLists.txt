@@ -51,6 +51,8 @@ add_executable(
   "MessageWriter.h"
   "PhysicsSidecarCommand.cpp"
   "PhysicsSidecarCommand.h"
+  "ReclaimCommand.cpp"
+  "ReclaimCommand.h"
   "ReportJson.cpp"
   "ReportJson.h"
   "SourceInspectionCommand.cpp"

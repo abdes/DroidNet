@@ -1,5 +1,5 @@
 {
-  "$schema": "./reimport-sources.schema.json",
+  "$schema": "./import-sources.schema.json",
   "version": 1,
   "sources": [
     { "name": "rgb_cubes", "source": "C:/Models/rgb_cubes.fbx" },

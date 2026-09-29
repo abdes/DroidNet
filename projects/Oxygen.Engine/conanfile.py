@@ -119,7 +119,7 @@ class OxygenConan(ConanFile):
         "!Examples/RenderScene/pak/**",
         "!Examples/RenderScene/demo_settings.json",
         "!Examples/RenderScene/.reimport-runs/**",
-        "!Examples/RenderScene/reimport-sources.local.json",
+        "!Examples/Content/import-sources.local.json",
     )
 
     @staticmethod

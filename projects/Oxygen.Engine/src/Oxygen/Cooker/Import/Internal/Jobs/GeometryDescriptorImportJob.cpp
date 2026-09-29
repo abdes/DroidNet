@@ -1080,8 +1080,7 @@ auto GeometryDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   };
 
   EnsureCookedRoot();
-  auto session = ImportSession(Request(), FileReader(), FileWriter(),
-    ThreadPool(), TableRegistry(), IndexRegistry());
+  auto& session = Session();
 
   const auto& descriptor = Request().geometry_descriptor;
   if (!descriptor.has_value()) {
@@ -1138,14 +1137,13 @@ auto GeometryDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   LoadMountedInspections(context);
 
   if (descriptor_doc.contains("buffers")) {
-    auto pipeline = BufferPipeline(*ThreadPool(),
+    auto& pipeline = CreatePipeline<BufferPipeline>(*ThreadPool(),
       BufferPipeline::Config {
         .queue_capacity = Concurrency().buffer.queue_capacity,
         .worker_count = Concurrency().buffer.workers,
         .with_content_hashing = EffectiveContentHashingEnabled(
           Request().options.with_content_hashing),
       });
-    StartPipeline(pipeline);
 
     auto submitter
       = BufferImportSubmitter(session, Request(), FileReader(), StopToken());

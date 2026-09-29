@@ -6,14 +6,17 @@
 
 #include <filesystem>
 #include <fstream>
+#include <ios>
 #include <optional>
 #include <sstream>
 #include <string_view>
-
-#include <Oxygen/Testing/GTest.h>
+#include <system_error>
 
 #include <Oxygen/Cooker/Import/TextureDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/TextureDescriptorImportSettings.h>
+#include <Oxygen/Cooker/Import/TextureImportTypes.h>
+#include <Oxygen/Core/Types/ColorSpace.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 
@@ -62,6 +65,7 @@ NOLINT_TEST(TextureDescriptorImportRequestBuilderTest,
   WriteTextFile(descriptor_path,
     R"({
       "source": "images/brick_albedo.png",
+      "virtual_path": "/Content/Textures/brick.otex",
       "intent": "albedo",
       "decode": {
         "flip_y": true
@@ -81,9 +85,15 @@ NOLINT_TEST(TextureDescriptorImportRequestBuilderTest,
 
   const auto request = BuildTextureDescriptorRequest(settings, errors);
 
-  ASSERT_TRUE(request.has_value()) << errors.str();
+  if (!request.has_value()) {
+    FAIL() << errors.str();
+  }
   EXPECT_TRUE(errors.str().empty());
-  ASSERT_TRUE(request->cooked_root.has_value());
+  EXPECT_EQ(
+    request.value().texture_virtual_path, "/Content/Textures/brick.otex");
+  if (!request->cooked_root.has_value()) {
+    FAIL();
+  }
   EXPECT_TRUE(request->cooked_root->is_absolute());
   EXPECT_EQ(request->source_path,
     (descriptor_path.parent_path() / "images" / "brick_albedo.png")

@@ -5,31 +5,42 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
+#include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <exception>
 #include <limits>
 #include <optional>
 #include <span>
+#include <stop_token>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/AssetEmitter.h>
+#include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedIndexRegistry.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScriptAssetImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScriptImportPipelineCommon.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/ImportSettingsUtils.h>
 #include <Oxygen/Core/Meta/Scripting/ScriptCompileMode.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
 
 namespace oxygen::content::import {
 
@@ -348,11 +359,17 @@ namespace {
     desc.flags = ScriptAssetFlags::kAllowExternalSource;
     const auto external_source_path
       = script_import::BuildExternalSourcePath(request);
+    if (!external_source_path) {
+      script_import::AddDiagnostic(session, request, ImportSeverity::kError,
+        "script.asset.source_root_invalid",
+        "External scripts require a source_root containing the source file");
+      return false;
+    }
     const auto external_path_span
       = std::span<char, sizeof(desc.external_source_path)>(
         desc.external_source_path);
     if (!script_import::CopyNullTerminated(
-          external_source_path, external_path_span)) {
+          *external_source_path, external_path_span)) {
       script_import::AddDiagnostic(session, request, ImportSeverity::kError,
         "script.asset.external_path_too_long",
         "External script source path exceeds ScriptAssetDesc capacity");

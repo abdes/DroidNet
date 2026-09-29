@@ -60,6 +60,7 @@
 #include <Oxygen/Cooker/Tools/ImportTool/InputCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/MessageWriter.h>
 #include <Oxygen/Cooker/Tools/ImportTool/PhysicsSidecarCommand.h>
+#include <Oxygen/Cooker/Tools/ImportTool/ReclaimCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/ScriptCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/ScriptingSidecarCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/SourceInspectionCommand.h>
@@ -749,6 +750,7 @@ auto main(int argc, char** argv) -> int
     GltfCommand gltf_command(&global_options);
     InputCommand input_command(&global_options);
     PhysicsSidecarCommand physics_sidecar_command(&global_options);
+    oxygen::content::import::tool::ReclaimCommand reclaim_command;
     ScriptCommand script_command(&global_options);
     ScriptingSidecarCommand scripting_sidecar_command(&global_options);
     TextureCommand texture_command(&global_options);
@@ -763,6 +765,7 @@ auto main(int argc, char** argv) -> int
       &batch_command,
       &builtin_catalog_command,
       &source_inspection_command,
+      &reclaim_command,
     };
 
     AsyncImportService::Config service_config {};

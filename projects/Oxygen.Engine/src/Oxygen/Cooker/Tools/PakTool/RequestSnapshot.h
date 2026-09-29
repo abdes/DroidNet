@@ -16,6 +16,7 @@ namespace oxygen::content::pak::tool {
 struct PakToolRequestSnapshot {
   pak::PakBuildRequest request;
   std::vector<std::filesystem::path> base_catalog_paths;
+  std::vector<std::filesystem::path> script_source_roots {};
 };
 
 } // namespace oxygen::content::pak::tool

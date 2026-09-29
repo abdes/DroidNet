@@ -116,9 +116,8 @@ namespace {
 auto FbxImportJob::ExecuteAsync() -> co::Co<ImportReport>
 {
   EnsureCookedRoot();
-  ImportSession session(Request(), FileReader(), FileWriter(), ThreadPool(),
-    TableRegistry(), IndexRegistry());
-  co_return co_await RunWithWriteDrain(ExecuteSessionAsync(session));
+  auto& session = Session();
+  co_return co_await ExecuteSessionAsync(session);
 }
 
 auto FbxImportJob::ExecuteSessionAsync(ImportSession& session)

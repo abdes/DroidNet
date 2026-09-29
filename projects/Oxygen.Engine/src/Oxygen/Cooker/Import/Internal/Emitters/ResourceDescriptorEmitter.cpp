@@ -184,16 +184,32 @@ auto ResourceDescriptorEmitter::EmitTexture(std::string_view name_hint,
   const data::pak::core::ResourceIndexT resource_index,
   const data::pak::core::TextureResourceDesc& descriptor) -> std::string
 {
+  const auto stem = BuildStem(name_hint, stable_id, "texture");
+  return EmitTextureAtRelPath(
+    layout_.TextureDescriptorRelPath(stem), resource_index, descriptor);
+}
+
+auto ResourceDescriptorEmitter::EmitTextureAtRelPath(
+  const std::string_view relpath,
+  const data::pak::core::ResourceIndexT resource_index,
+  const data::pak::core::TextureResourceDesc& descriptor) -> std::string
+{
+  const auto path = std::filesystem::path(relpath);
+  if (path.empty() || path.has_root_path()
+    || std::ranges::any_of(
+      path, [](const auto& part) { return part == ".."; })) {
+    throw std::invalid_argument(
+      "texture descriptor path must remain within its cooked root");
+  }
+
   TextureSidecarFile file {};
   file.resource_index = resource_index;
   file.descriptor = descriptor;
 
-  const auto stem = BuildStem(name_hint, stable_id, "texture");
-  auto relpath = layout_.TextureDescriptorRelPath(stem);
   auto bytes = std::make_shared<std::vector<std::byte>>(SerializePod(file));
-  record_sizes_[relpath] = bytes->size();
-  QueueWrite(std::move(relpath), std::move(bytes));
-  return layout_.TextureDescriptorRelPath(stem);
+  record_sizes_.insert_or_assign(std::string(relpath), bytes->size());
+  QueueWrite(std::string(relpath), std::move(bytes));
+  return std::string(relpath);
 }
 
 auto ResourceDescriptorEmitter::EmitBuffer(std::string_view name_hint,

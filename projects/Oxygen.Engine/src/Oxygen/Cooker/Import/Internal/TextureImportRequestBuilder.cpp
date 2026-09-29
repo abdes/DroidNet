@@ -6,12 +6,14 @@
 
 #include <filesystem>
 #include <optional>
+#include <ostream>
 #include <string>
 
 #include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/TextureImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ImportSettingsUtils.h>
-#include <Oxygen/Cooker/Import/TextureSourceAssembly.h>
+#include <Oxygen/Cooker/Import/TextureImportSettings.h>
 
 namespace oxygen::content::import::internal {
 
@@ -20,6 +22,7 @@ auto BuildTextureRequest(const TextureImportSettings& settings,
 {
   ImportRequest request {};
   request.source_path = settings.source_path;
+  request.texture_virtual_path = settings.virtual_path;
 
   if (settings.cooked_root.empty()) {
     error_stream << "ERROR: --output or --cooked-root is required\n";

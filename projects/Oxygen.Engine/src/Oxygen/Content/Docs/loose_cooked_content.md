@@ -1,6 +1,7 @@
 # Loose cooked content (filesystem-backed cooked source)
 
-Planned next: [complete integrity inventory](#planned-complete-integrity-inventory) (M08.1.7).
+Read [published generations](#published-generations) for lifetime and replacement,
+[complete integrity inventory](#complete-integrity-inventory) for admission and validation.
 
 This document specifies how Oxygen Content loads **cooked Oxygen runtime formats** from a **directory of loose cooked files** (“loose cooked”), in addition to `.pak` containers.
 
@@ -197,7 +198,7 @@ The cooked index is required for loose cooked roots. It provides:
 
 - `AssetKey -> descriptor relative path`.
 - Optional virtual path mapping (`VirtualPath <-> AssetKey`) when enabled by index header flags.
-- Resource file metadata (names, sizes, optional SHA-256 digests).
+- Resource file metadata (names, sizes, mandatory SHA-256 digests).
 
 Mount-time expectations:
 
@@ -205,7 +206,8 @@ Mount-time expectations:
 - Index header flags must be self-consistent.
 - Section layout must be valid (no overlaps, no out-of-range spans).
 - Referenced descriptor and resource files must exist.
-- If a non-zero SHA-256 digest is recorded for a referenced file, the runtime validates it on mount.
+- Normal mounts validate inventory membership, sizes and bounds. Full digest verification
+  is opt-in at runtime and required for cook/publication validation.
 - All paths recorded in the index must be canonical:
   - container-relative, `/` separators
   - no `..`, no `\\`, no `//`
@@ -277,7 +279,7 @@ This section merges the editor capabilities required to use loose cooked roots a
   - `AssetKey -> descriptor relative path`
   - virtual-path mapping as enabled by header flags
   - resource file names and metadata
-  - per-file size metadata and optional SHA-256 digests
+  - per-file size metadata and mandatory SHA-256 digests
 - Enforce index correctness at cook time (fail early):
   - header flags consistent with included sections
   - no overlapping/invalid section ranges
@@ -287,7 +289,7 @@ This section merges the editor capabilities required to use loose cooked roots a
 - Provide an editor-facing validation command that:
   - verifies referenced files exist
   - verifies recorded sizes
-  - verifies hashes when present
+  - verifies every indexed digest during full integrity validation
   - reports actionable diagnostics
 
 ### 6) Runtime provisioning for PIE
@@ -356,16 +358,16 @@ This section merges the editor capabilities required to use loose cooked roots a
 - Cook outputs: `container.index.bin`, `assets/**`, `resources/*.table` + `resources/*.data` are present and complete.
 - Index correctness: required sections present; header flags match; no duplicates.
 - Path hygiene: recorded paths are canonical (container-relative, `/` separators, no dot segments).
-- Integrity: recorded sizes match; hashes validate when digests are provided.
+- Integrity: recorded sizes match; every member has a digest; full validation compares it with the file bytes.
 - Container closure: cooked container includes full dependency closure.
 - Registration order: sources register deterministically.
 - Resolution: virtual-path lookup uses cooked index; collisions are diagnosed deterministically.
 - Diagnostics: mount failures and asset misses report searched sources (and virtual path when available).
 
-## Planned complete integrity inventory
+## Complete integrity inventory
 
-Status: planned for M08.1.7. Extend the existing native loose index; do not add a
-second output manifest. Published descriptors and resource table/data files have
+The native loose index owns the complete output inventory. Published descriptors
+and resource table/data files have
 canonical relative paths, exact sizes and mandatory SHA-256 digests. Inventory
 membership is complete. The index's own digest lives in the selecting publication
 record; `.generation.lock` is the explicit non-content exception.
@@ -375,12 +377,40 @@ resource tables finish. Reuse emitter hashes only for the exact finalized bytes;
 otherwise hash after the final write barrier. Native validation checks bytes,
 membership and bounds. Neither timestamps nor zero digests establish integrity.
 
+Concurrent imports into one root retire participation before awaiting the shared
+index publication. Successful completion guarantees that publication finished;
+all participants receive its source identity. A participant's import diagnostics
+remain local, while publication failure or an aborted cohort reaches every waiter.
+The registry owns this barrier, so batch dependency scheduling uses job outcomes
+without a separate root-publication tracker.
+
 Inspector exports the native inventory. Protected readers may reuse verification
 only within the same valid read lease. Managed publication/provenance references
 that inventory instead of duplicating descriptor/file proofs or rehashing merely
 to translate proof models. Keep consumed-input and reuse fingerprints distinct.
 
-Bump the loose-index format and recook; retain no old reader. Qualification covers
+The V2 format requires recooking earlier content. Qualification covers
 tampered/truncated data, absent/extra files, changed index, stale leases and measured
 removal of redundant file reads. This does not remove incremental staging copies;
 that is a different writer-granularity problem.
+
+Runtime admission checks the current index format, canonical paths, complete
+membership, exact sizes and bounds. Full SHA-256 verification is mandatory for
+cook/publication validation and explicit integrity checks; normal mounts retain
+opt-in `verify_content_hashes`. Metadata-only admission does not detect same-size
+payload corruption. This avoids scanning every resource blob before normal loading.
+UE5.7's `IPlatformFilePak.cpp` likewise separates `ShouldCheckPak` whole-container
+checks from requested-block signature verification; Oxygen does not add block
+signatures in this slice.
+
+A verified result belongs to the exact index digest and protected file opening.
+The editor retains its write-denying member handles and rechecks membership;
+`.generation.lock` alone is cooperative generation-lifetime protection, not proof
+against member edits. Unprotected readers cannot cache verification by path,
+file timestamp or generation name. Input fingerprints remain separate.
+
+The maintained demo content store uses sibling containers: `.cooked/main` for
+shared cooked scenes and `.cooked/imports/<source>/<generation>` for retained
+models. Authored scenes and `imports/*.import.json` remain under Content.
+The physical relocation preserves asset keys and the existing virtual namespace.
+No container includes another container's files or ignores arbitrary nested indexes.

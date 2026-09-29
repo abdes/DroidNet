@@ -21,7 +21,9 @@
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
 #include <Oxygen/Content/Loaders/MaterialLoader.h>
 #include <Oxygen/Content/Loaders/SceneLoader.h>
+#include <Oxygen/Content/LooseCookedIndex.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
+#include <Oxygen/Cooker/Loose/Types.h>
 #include <Oxygen/Cooker/Loose/Validation.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
@@ -34,7 +36,8 @@
 
 namespace oxygen::content::lc {
 
-auto ValidateRoot(const std::filesystem::path& cooked_root) -> void
+auto ValidateRoot(
+  const std::filesystem::path& cooked_root, const IntegrityCheck check) -> void
 {
   using oxygen::data::AssetType;
   using oxygen::data::pak::core::AssetHeader;
@@ -46,8 +49,16 @@ auto ValidateRoot(const std::filesystem::path& cooked_root) -> void
   using oxygen::serio::FileStream;
   using oxygen::serio::Reader;
 
+  const auto index = LooseCookedIndex::LoadFromRoot(cooked_root);
+  index.ValidateContent(cooked_root, check);
   oxygen::content::lc::Inspection inspection;
   inspection.LoadFromRoot(cooked_root);
+  for (const auto& file : inspection.Files()) {
+    if (file.kind == FileKind::kAuxiliary
+      && std::filesystem::path(file.relpath).extension() == ".otex") {
+      static_cast<void>(inspection.ReadTextureDescriptor(file.relpath));
+    }
+  }
   std::unordered_map<data::AssetKey, std::unique_ptr<data::GeometryAsset>>
     geometries;
   std::vector<std::unique_ptr<data::SceneAsset>> scenes;

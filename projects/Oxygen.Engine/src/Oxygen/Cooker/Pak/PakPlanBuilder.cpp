@@ -1885,6 +1885,7 @@ auto CollectSourceFiles(PlanningState& state, SourceCollection& context) -> void
         .offset = file_offset,
       };
       break;
+    case data::loose_cooked::FileKind::kAuxiliary:
     case data::loose_cooked::FileKind::kUnknown:
       break;
     }

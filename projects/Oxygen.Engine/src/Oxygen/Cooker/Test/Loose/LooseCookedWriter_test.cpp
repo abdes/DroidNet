@@ -6,17 +6,24 @@
 
 #include <algorithm>
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <ios>
+#include <stdexcept>
 #include <string>
+#include <string_view>
+#include <system_error>
 #include <vector>
 
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
+#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/LooseCookedIndexFormat.h>
+#include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Serio/FileStream.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -53,17 +60,17 @@ namespace {
   {
     std::array<uint8_t, 16> bytes {};
     for (uint8_t i = 0; i < 16; ++i) {
-      bytes[i] = static_cast<uint8_t>(seed + i);
+      bytes.at(i) = static_cast<uint8_t>(seed + i);
     }
-    bytes[6] = static_cast<uint8_t>((bytes[6] & 0x0FU) | 0x70U);
-    bytes[8] = static_cast<uint8_t>((bytes[8] & 0x3FU) | 0x80U);
+    bytes.at(6) = static_cast<uint8_t>((bytes.at(6) & 0x0FU) | 0x70U);
+    bytes.at(8) = static_cast<uint8_t>((bytes.at(8) & 0x3FU) | 0x80U);
     return SourceKey::FromBytes(bytes).value();
   }
 
   auto MakeTestAssetKey(const uint8_t seed) -> AssetKey
   {
     auto bytes = std::array<uint8_t, AssetKey::kSizeBytes> {};
-    bytes[0] = seed;
+    bytes.at(0) = seed;
     return AssetKey::FromBytes(bytes);
   }
 
@@ -658,12 +665,8 @@ namespace {
     EXPECT_EQ(inspection.Assets().size(), 2U);
   }
 
-  //! Test: Disabling SHA-256 emits zero hashes
-  /*!
-   Scenario: Disables hashing, writes an asset descriptor, finishes.
-   Verifies the emitted descriptor SHA-256 (if present) is all-zero.
-  */
-  NOLINT_TEST(LooseCookedWriterTest, FinishComputeSha256DisabledEmitsZeroHashes)
+  //! Every finalized descriptor has its exact content digest.
+  NOLINT_TEST(LooseCookedWriterTest, FinishAlwaysEmitsDescriptorDigest)
   {
     // Arrange
     const auto cooked_root = MakeTempCookedRoot("loose_cooked_writer_no_sha");
@@ -678,7 +681,6 @@ namespace {
     };
 
     LooseCookedWriter writer(cooked_root);
-    writer.SetComputeSha256(false);
     writer.WriteAssetDescriptor(key, AssetType::kMaterial,
       "/.cooked/Materials/"
         + LooseCookedLayout::MaterialDescriptorFileName("A"),
@@ -693,9 +695,10 @@ namespace {
     // Assert
     ASSERT_EQ(inspection.Assets().size(), 1U);
     const auto& asset = inspection.Assets().front();
-    if (asset.descriptor_sha256.has_value()) {
-      EXPECT_TRUE(IsAllZerosDigest(*asset.descriptor_sha256));
+    if (!asset.descriptor_sha256.has_value()) {
+      FAIL();
     }
+    EXPECT_EQ(*asset.descriptor_sha256, oxygen::base::ComputeSha256(bytes));
   }
 
   //! Test: Invalid virtual path strings throw

@@ -188,6 +188,7 @@ set(
   "Import/Internal/ImportPipeline.h"
   "Import/Internal/ImportPlanner.h"
   "Import/Internal/ImportSession.h"
+  "Import/Internal/ImportSessionToken.h"
   "Import/Internal/ImportSourceSnapshot.h"
   "Import/Internal/ImportedLightSemantics.h"
   "Import/Internal/JobEntry.h"

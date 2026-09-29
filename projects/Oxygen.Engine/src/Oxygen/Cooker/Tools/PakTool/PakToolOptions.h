@@ -23,6 +23,7 @@ struct PakToolOutputOptions {
 
 struct PakToolRequestOptions {
   std::vector<data::CookedSource> sources;
+  std::vector<std::filesystem::path> script_source_roots;
   std::filesystem::path output_pak;
   std::filesystem::path catalog_output;
   uint16_t content_version = 0;

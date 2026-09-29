@@ -37,6 +37,8 @@ add_executable(
   "SceneMetadata.h"
   "GeometryMetadata.cpp"
   "GeometryMetadata.h"
+  "InventoryReport.cpp"
+  "InventoryReport.h"
 )
 
 oxygen_embed_json_schemas(
@@ -86,6 +88,7 @@ if(${META_PROJECT_ID}_INSTALL)
     FILES
       "${CMAKE_CURRENT_SOURCE_DIR}/Schemas/oxygen.cooked-scenes.schema.json"
       "${CMAKE_CURRENT_SOURCE_DIR}/Schemas/oxygen.cooked-geometries.schema.json"
+      "${CMAKE_CURRENT_SOURCE_DIR}/Schemas/oxygen.cooked-inventory.schema.json"
     DESTINATION "${OXYGEN_INSTALL_SCHEMAS}"
     COMPONENT ${META_PROJECT_NAME}_data
   )

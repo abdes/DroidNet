@@ -86,6 +86,7 @@ m_gtest_program(
     "Import/ImageProcessing_test.cpp"
     "Import/ImportEventLoop_test.cpp"
     "Import/ImportJob_test.cpp"
+    "Import/ImportJobLifetime_test.cpp"
     "Import/ImportSession_test.cpp"
     "Import/Naming_test.cpp"
     "Import/PipelineConformance_test.cpp"

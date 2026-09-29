@@ -11,3 +11,17 @@ Scene-authored environment coverage:
 - The directional sun is a scene light explicitly assigned to the Primary atmosphere slot, with four meter-scale shadow cascades.
 
 The city uses one procedural cube geometry with scene-authored `renderables[].material_ref` overrides, so material variety validates the runtime scene material-override path directly.
+
+## Run and inspect
+
+From the Content directory, cook the scene using the [content workflow](../../README.md):
+
+```powershell
+./cook_scenes.cmd -Scene city-environment-validation -NoTUI
+```
+
+Select `CityEnvironmentValidation` in RenderScene Library and choose **Use Scene**
+to restore its authored environment. Compare near buildings with the distant
+skyline when checking aerial perspective and fog. Use the authored camera for
+repeatable comparisons; see the [RenderScene guide](../../../RenderScene/README.md)
+for camera reset, exposure and verification controls.

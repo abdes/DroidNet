@@ -87,11 +87,8 @@ struct ImportPackagingSummary final {
   //! Number of produced output records in the report.
   uint32_t outputs_written = 0;
 
-  //! True when `container.index.bin` was written by this finalize call.
+  //! True when this session wrote the shared index.
   bool index_written = false;
-
-  //! True when index write was deferred because another session is active.
-  bool index_write_deferred = false;
 
   //! Diagnostics counts by severity.
   uint32_t diagnostics_info = 0;

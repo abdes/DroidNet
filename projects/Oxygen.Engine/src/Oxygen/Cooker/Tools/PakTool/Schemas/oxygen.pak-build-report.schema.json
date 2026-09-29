@@ -207,6 +207,13 @@
         },
         "patch_compatibility": {
           "$ref": "#/definitions/patch_compatibility"
+        },
+        "script_source_roots": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
         }
       },
       "required": [
@@ -216,7 +223,8 @@
         "sources",
         "base_catalogs",
         "options",
-        "patch_compatibility"
+        "patch_compatibility",
+        "script_source_roots"
       ]
     },
     "pak_artifact": {

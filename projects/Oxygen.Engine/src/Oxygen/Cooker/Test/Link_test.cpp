@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <filesystem>
 
+#include <Oxygen/Content/LooseCookedIndex.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Cooker/Loose/Validation.h>
 
@@ -18,7 +19,9 @@ auto main(int /*argc*/, char** /*argv*/) -> int
   [[maybe_unused]] const auto files = inspection.Files();
   [[maybe_unused]] const auto source_identity = inspection.Guid();
 
-  using ValidateRootFn = auto (*)(const std::filesystem::path&)->void;
+  using ValidateRootFn = auto (*)(
+    const std::filesystem::path&, oxygen::content::lc::IntegrityCheck)
+                           ->void;
   volatile ValidateRootFn validate_root = &oxygen::content::lc::ValidateRoot;
 
   return validate_root == nullptr ? EXIT_FAILURE : EXIT_SUCCESS;

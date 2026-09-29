@@ -44,6 +44,7 @@ struct LooseCookedFileRecord final {
   std::string relpath;
 
   uint64_t size = 0;
+  base::Sha256Digest sha256 {};
 };
 
 //! Collision decisions recorded while building/updating index records.
@@ -77,7 +78,7 @@ struct LooseCookedWriteResult final {
  - writing asset descriptor files,
  - writing optional resource table/data files,
  - emitting a valid `container.index.bin` matching
-   oxygen::data::loose_cooked::v1.
+   the current oxygen::data::loose_cooked index format.
 
  It is designed to be used by importers (FBX/glTF) and other cook pipelines.
 
@@ -111,14 +112,6 @@ public:
 
   //! Set the cook-defined content version recorded in the index header.
   OXGN_COOK_API auto SetContentVersion(uint16_t version) -> void;
-
-  //! Enable or disable SHA-256 hashing in emitted file records.
-  /*!
-   When disabled, the writer emits all-zero hashes.
-
-   @note Runtime validation policy may still check size and existence.
-  */
-  OXGN_COOK_API auto SetComputeSha256(bool enabled) -> void;
 
   //! Configure collision handling for duplicate asset/file entries.
   OXGN_COOK_API auto SetCollisionPolicy(CollisionPolicy policy) -> void;
@@ -207,8 +200,7 @@ public:
    @param descriptor_size Size of the descriptor bytes. If zero, the size will
      be read from disk.
    @param descriptor_sha256 Optional SHA-256 digest of the descriptor bytes.
-     When `SetComputeSha256(false)` was selected, the writer records an
-     all-zero hash.
+     If absent, the writer computes the digest from the completed file.
 
    @throw std::runtime_error if the file does not exist, paths are invalid, or
      metadata is inconsistent.

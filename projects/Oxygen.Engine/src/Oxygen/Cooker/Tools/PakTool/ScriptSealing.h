@@ -34,7 +34,8 @@ struct ScriptSealingResult {
 
 [[nodiscard]] auto SealLooseCookedSourcesForPakBuild(
   const pak::PakBuildRequest& build_request,
-  const std::filesystem::path& staging_parent)
+  const std::filesystem::path& staging_parent,
+  std::span<const std::filesystem::path> script_source_roots)
   -> Result<ScriptSealingResult, ScriptSealingError>;
 
 auto CleanupStagedLooseRoots(

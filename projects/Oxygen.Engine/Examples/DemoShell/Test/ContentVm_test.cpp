@@ -9,6 +9,7 @@
 #include <fstream>
 #include <future>
 #include <optional>
+#include <stdexcept>
 #include <system_error>
 #include <vector>
 
@@ -195,6 +196,29 @@ namespace {
     ASSERT_FALSE(vm.GetDiagnostics().empty());
     EXPECT_NE(vm.GetDiagnostics().back().message.find(".import.json"),
       std::string::npos);
+  }
+
+  NOLINT_TEST_F(ContentVmTest, FailedRetainedMountPreservesRecordForRetry)
+  {
+    settings_.records = { record_ };
+    ui::ContentVm vm(
+      observer_ptr { &settings_ }, observer_ptr { &browser_ }, nullptr);
+    vm.SetOnGenerationPublished([](const auto&) -> void {
+      throw std::runtime_error("Cooked generation temporarily unavailable");
+    });
+    vm.RestorePersistedLibraryState();
+    vm.PrunePersistedMountedSource(
+      ui::SceneSourceKind::kLooseIndex, generation_ / "container.index.bin");
+    vm.PersistLibraryState();
+    EXPECT_EQ(settings_.records, std::vector { record_ });
+
+    std::vector<std::filesystem::path> mounted;
+    vm.SetOnGenerationPublished([&](const auto& publication) -> void {
+      mounted.push_back(publication.cooked_root);
+    });
+    vm.LoadImportRecord(record_);
+    EXPECT_EQ(mounted, std::vector { generation_ });
+    EXPECT_EQ(settings_.records, std::vector { record_ });
   }
 
 } // namespace

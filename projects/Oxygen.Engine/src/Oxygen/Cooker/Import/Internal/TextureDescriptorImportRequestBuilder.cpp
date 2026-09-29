@@ -4,19 +4,26 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
 #include <filesystem>
-#include <nlohmann/json-schema.hpp>
-#include <nlohmann/json.hpp>
 #include <optional>
+#include <ostream>
 #include <string>
 #include <string_view>
 #include <utility>
 
+#include <nlohmann/json-schema.hpp>
+#include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
+
+#include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/TextureImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/DescriptorDocument.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 #include <Oxygen/Cooker/Import/TextureDescriptorImportRequestBuilder.h>
+#include <Oxygen/Cooker/Import/TextureDescriptorImportSettings.h>
+#include <Oxygen/Cooker/Import/TextureImportSettings.h>
 
 namespace oxygen::content::import::internal {
 
@@ -100,6 +107,10 @@ namespace {
 
     if (descriptor_doc.contains("name")) {
       settings.job_name = descriptor_doc.at("name").get<std::string>();
+    }
+    if (descriptor_doc.contains("virtual_path")) {
+      settings.virtual_path
+        = descriptor_doc.at("virtual_path").get<std::string>();
     }
     if (descriptor_doc.contains("content_hashing")) {
       settings.with_content_hashing

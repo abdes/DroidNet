@@ -3,7 +3,7 @@
 Packages this Content directory's loose-cooked output with Oxygen PakTool.
 
 .DESCRIPTION
-This script packages `.cooked` into `pak`, both beside the script. An installed
+This script packages `.cooked/main` into `pak`, both beside the script. An installed
 SDK uses its bundled PakTool; a source checkout uses an existing build.
 
 By default it emits:
@@ -19,10 +19,13 @@ explicit replacement is intended.
 Base filename for emitted artifacts in the pak output directory.
 
 .PARAMETER CookedRoot
-Loose-cooked root to package. Defaults to `.cooked` beside this script.
+Loose-cooked root to package. Defaults to `ContentRoot/.cooked/main`.
+
+.PARAMETER ContentRoot
+Authored Content root for external script sources and default input/output paths.
 
 .PARAMETER OutputDir
-Directory for published pak artifacts. Defaults to `pak` beside this script.
+Directory for published pak artifacts. Defaults to `ContentRoot/pak`.
 
 .PARAMETER ContentVersion
 Pak content version passed to PakTool. Defaults to `1`.
@@ -71,6 +74,8 @@ param(
 
     [string]$CookedRoot,
 
+    [string]$ContentRoot = $PSScriptRoot,
+
     [string]$OutputDir,
 
     [ValidateRange(0, 65535)]
@@ -99,8 +104,8 @@ if ($Help) {
 }
 
 $ErrorActionPreference = "Stop"
-if ([string]::IsNullOrWhiteSpace($CookedRoot)) { $CookedRoot = Join-Path $PSScriptRoot '.cooked' }
-if ([string]::IsNullOrWhiteSpace($OutputDir)) { $OutputDir = Join-Path $PSScriptRoot 'pak' }
+if ([string]::IsNullOrWhiteSpace($CookedRoot)) { $CookedRoot = Join-Path $ContentRoot '.cooked/main' }
+if ([string]::IsNullOrWhiteSpace($OutputDir)) { $OutputDir = Join-Path $ContentRoot 'pak' }
 
 function Get-FullPath([string]$Path) {
     return [System.IO.Path]::GetFullPath($(if ([IO.Path]::IsPathRooted($Path)) { $Path } else { Join-Path $PWD.Path $Path }))
@@ -131,6 +136,7 @@ $ManifestPath = Join-Path $OutputDir ($BaseName + ".manifest.json")
 $Arguments = @(
     "build",
     "--loose-source", $CookedRoot,
+    "--script-source-root", (Get-FullPath $ContentRoot),
     "--out", $PakPath,
     "--catalog-out", $CatalogPath,
     "--content-version", $ContentVersion.ToString(),

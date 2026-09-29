@@ -2,7 +2,7 @@
 
 This directory is the canonical physics-sidecar authoring sample for
 Oxygen Engine. It demonstrates **all seven sidecar binding families**
-in a single, visually interesting scene.
+in a single scene with scripted controls and runtime hydration.
 
 ## What It Shows
 
@@ -81,16 +81,19 @@ in a single, visually interesting scene.
 
 ### Scene & Sidecar
 
-- `physics_domains.scene.json` — 21-node scene graph
+- `physics_domains.scene.json` — 23-node scene graph
 - `physics_domains.physics-sidecar.json` — 7-family sidecar bindings
-- `import-manifest.json` — 35-job import manifest
+- `import-manifest.json` — 41-job import manifest, including the benchmark variant
 
 ## Run
 
-From repository root:
+From the Content directory, follow the [content workflow](../../README.md):
 
 ```powershell
-.\out\build-ninja\bin\Debug\Oxygen.Cooker.ImportTool.exe --no-tui batch --manifest .\Examples\Content\scenes\physics_domains\import-manifest.json
+./cook_scenes.cmd -Scene physics_domains -NoTUI
 ```
 
-Expected output root: `Examples/Content/.cooked`
+Open RenderScene, select `physics_domains` in Library, and use **Use Scene** to
+inspect authored lighting. Check the load diagnostics for completed physics
+sidecar hydration before assessing bodies, joints or vehicle motion. The
+[RenderScene guide](../../../RenderScene/README.md) covers launch and verification.

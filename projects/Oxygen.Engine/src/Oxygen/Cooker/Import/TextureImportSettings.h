@@ -24,6 +24,7 @@ struct TextureImportSettings {
   std::vector<TextureSourceMapping> sources;
   std::string cooked_root;
   std::string job_name;
+  std::string virtual_path;
   std::string report_path;
   bool verbose = false;
   std::string intent;

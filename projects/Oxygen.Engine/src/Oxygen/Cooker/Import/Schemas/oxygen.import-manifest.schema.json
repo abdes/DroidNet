@@ -666,6 +666,11 @@
         },
         "script_storage": {
           "$ref": "#/definitions/script_storage_mode"
+        },
+        "source_root": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Authoring root for external script source paths, relative to this manifest."
         }
       },
       "additionalProperties": false
@@ -1042,6 +1047,11 @@
         },
         "cooked_context_roots": {
           "$ref": "#/definitions/cooked_context_roots"
+        },
+        "source_root": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Authoring root for external script source paths, relative to this manifest."
         }
       },
       "additionalProperties": false

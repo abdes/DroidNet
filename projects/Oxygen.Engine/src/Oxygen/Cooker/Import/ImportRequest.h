@@ -128,6 +128,9 @@ struct ImportRequest final {
   //! Source file (FBX, glTF, GLB, or primary texture).
   std::filesystem::path source_path;
 
+  //! Explicit standalone texture descriptor identity; empty uses hashed naming.
+  std::string texture_virtual_path {};
+
   //! Optional additional source files for multi-source imports.
   std::vector<ImportSource> additional_sources {};
 

@@ -3,3 +3,4 @@ pak/
 !glb/*.glb
 glb/
 scripts.bin
+import-sources.local.json

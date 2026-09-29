@@ -28,77 +28,58 @@ public:
     , generation_lock_(std::move(generation_lock))
     , index_(LooseCookedIndexImpl::LoadFromFile(
         cooked_root_ / "container.index.bin"))
-    , verify_content_hashes_(verify_content_hashes)
   {
     using oxygen::data::loose_cooked::FileKind;
 
-    ValidateDescriptorFilesExistAndMatchIndex();
+    index_.ValidateContent(cooked_root_,
+      verify_content_hashes ? lc::IntegrityCheck::kFull
+                            : lc::IntegrityCheck::kMetadata);
 
     if (const auto rel = index_.FindFileRelPath(FileKind::kBuffersTable); rel) {
       buffers_table_path_ = cooked_root_ / std::filesystem::path(*rel);
-      ValidateFileRecordExistsAndMatchesSize(
-        FileKind::kBuffersTable, *buffers_table_path_);
       InitializeBufferTable();
     }
 
     if (const auto rel = index_.FindFileRelPath(FileKind::kTexturesTable);
       rel) {
       textures_table_path_ = cooked_root_ / std::filesystem::path(*rel);
-      ValidateFileRecordExistsAndMatchesSize(
-        FileKind::kTexturesTable, *textures_table_path_);
       InitializeTextureTable();
     }
 
     if (const auto rel = index_.FindFileRelPath(FileKind::kBuffersData); rel) {
       buffers_data_path_ = cooked_root_ / std::filesystem::path(*rel);
-      ValidateFileRecordExistsAndMatchesSize(
-        FileKind::kBuffersData, *buffers_data_path_);
     }
 
     if (const auto rel = index_.FindFileRelPath(FileKind::kTexturesData); rel) {
       textures_data_path_ = cooked_root_ / std::filesystem::path(*rel);
-      ValidateFileRecordExistsAndMatchesSize(
-        FileKind::kTexturesData, *textures_data_path_);
     }
 
     if (const auto rel = index_.FindFileRelPath(FileKind::kScriptsTable); rel) {
       scripts_table_path_ = cooked_root_ / std::filesystem::path(*rel);
-      ValidateFileRecordExistsAndMatchesSize(
-        FileKind::kScriptsTable, *scripts_table_path_);
       InitializeScriptTable();
     }
 
     if (const auto rel = index_.FindFileRelPath(FileKind::kScriptsData); rel) {
       scripts_data_path_ = cooked_root_ / std::filesystem::path(*rel);
-      ValidateFileRecordExistsAndMatchesSize(
-        FileKind::kScriptsData, *scripts_data_path_);
     }
 
     if (const auto rel = index_.FindFileRelPath(FileKind::kScriptBindingsTable);
       rel) {
       script_bindings_table_path_ = cooked_root_ / std::filesystem::path(*rel);
-      ValidateFileRecordExistsAndMatchesSize(
-        FileKind::kScriptBindingsTable, *script_bindings_table_path_);
     }
 
     if (const auto rel = index_.FindFileRelPath(FileKind::kScriptBindingsData);
       rel) {
       script_bindings_data_path_ = cooked_root_ / std::filesystem::path(*rel);
-      ValidateFileRecordExistsAndMatchesSize(
-        FileKind::kScriptBindingsData, *script_bindings_data_path_);
     }
 
     if (const auto rel = index_.FindFileRelPath(FileKind::kPhysicsTable); rel) {
       physics_table_path_ = cooked_root_ / std::filesystem::path(*rel);
-      ValidateFileRecordExistsAndMatchesSize(
-        FileKind::kPhysicsTable, *physics_table_path_);
       InitializePhysicsTable();
     }
 
     if (const auto rel = index_.FindFileRelPath(FileKind::kPhysicsData); rel) {
       physics_data_path_ = cooked_root_ / std::filesystem::path(*rel);
-      ValidateFileRecordExistsAndMatchesSize(
-        FileKind::kPhysicsData, *physics_data_path_);
     }
 
     ValidateTableDataPairs();
@@ -404,132 +385,6 @@ private:
     }
   }
 
-  auto ValidateFileRecordExistsAndMatchesSize(
-    oxygen::data::loose_cooked::FileKind kind,
-    const std::filesystem::path& absolute_path) const -> void
-  {
-    const auto t0 = std::chrono::steady_clock::now();
-
-    std::error_code ec;
-    if (!std::filesystem::exists(base::ToNativePath(absolute_path), ec) || ec) {
-      throw std::runtime_error(
-        "Loose cooked root missing file: " + absolute_path.string());
-    }
-
-    const auto expected_size_opt = index_.FindFileSize(kind);
-    if (!expected_size_opt) {
-      return;
-    }
-
-    const auto actual_size
-      = std::filesystem::file_size(base::ToNativePath(absolute_path), ec);
-    if (ec) {
-      throw std::runtime_error(
-        "Failed to stat file: " + absolute_path.string());
-    }
-
-    if (actual_size != *expected_size_opt) {
-      throw std::runtime_error(
-        "Loose cooked file size mismatch: " + absolute_path.string()
-        + " expected=" + std::to_string(*expected_size_opt)
-        + " actual=" + std::to_string(actual_size));
-    }
-
-    const auto t1 = std::chrono::steady_clock::now();
-    LOG_F(INFO,
-      "LooseCookedSource: validated file record kind={} path={} time_ms={}",
-      static_cast<int>(kind), absolute_path.string(),
-      std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count());
-  }
-
-  auto ValidateDescriptorFilesExistAndMatchIndex() const -> void
-  {
-    const auto keys = index_.GetAllAssetKeys();
-    LOG_F(INFO,
-      "LooseCookedSource: validating descriptors begin root={} assets={} "
-      "verify_hashes={}",
-      cooked_root_.string(), keys.size(),
-      verify_content_hashes_ ? "yes" : "no");
-
-    const auto t0 = std::chrono::steady_clock::now();
-    std::chrono::nanoseconds stat_time { 0 };
-    std::chrono::nanoseconds sha_time { 0 };
-    size_t sha_assets = 0;
-    size_t sha_disabled = 0;
-    size_t sha_skipped_all_zero = 0;
-    size_t sha_missing = 0;
-
-    std::error_code ec;
-    for (const auto& key : keys) {
-      const auto t_stat0 = std::chrono::steady_clock::now();
-      const auto rel_opt = index_.FindDescriptorRelPath(key);
-      const auto size_opt = index_.FindDescriptorSize(key);
-      const auto sha_opt = index_.FindDescriptorSha256(key);
-      if (!rel_opt || !size_opt) {
-        throw std::runtime_error(
-          "Loose cooked index missing descriptor metadata for an asset");
-      }
-
-      const auto abs = cooked_root_ / std::filesystem::path(*rel_opt);
-      if (!std::filesystem::exists(base::ToNativePath(abs), ec) || ec) {
-        throw std::runtime_error(
-          "Loose cooked root missing descriptor: " + abs.string());
-      }
-
-      const auto actual_size
-        = std::filesystem::file_size(base::ToNativePath(abs), ec);
-      if (ec) {
-        throw std::runtime_error("Failed to stat descriptor: " + abs.string());
-      }
-
-      if (actual_size != *size_opt) {
-        throw std::runtime_error("Loose cooked descriptor size mismatch: "
-          + abs.string() + " expected=" + std::to_string(*size_opt)
-          + " actual=" + std::to_string(actual_size));
-      }
-
-      const auto t_stat1 = std::chrono::steady_clock::now();
-      stat_time += std::chrono::duration_cast<std::chrono::nanoseconds>(
-        t_stat1 - t_stat0);
-
-      if (sha_opt) {
-        Sha256Digest expected = {};
-        std::copy_n(sha_opt->data(), expected.size(), expected.begin());
-        if (!IsAllZero(expected)) {
-          if (verify_content_hashes_) {
-            const auto t_sha0 = std::chrono::steady_clock::now();
-            const auto actual_sha = ComputeFileSha256(abs);
-            const auto t_sha1 = std::chrono::steady_clock::now();
-            sha_time += std::chrono::duration_cast<std::chrono::nanoseconds>(
-              t_sha1 - t_sha0);
-            ++sha_assets;
-            if (actual_sha != expected) {
-              throw std::runtime_error(
-                "Loose cooked descriptor SHA-256 mismatch: " + abs.string());
-            }
-          } else {
-            ++sha_disabled;
-          }
-        } else {
-          ++sha_skipped_all_zero;
-        }
-      } else {
-        ++sha_missing;
-      }
-    }
-
-    const auto t1 = std::chrono::steady_clock::now();
-    LOG_F(INFO,
-      "LooseCookedSource: validating descriptors end root={} assets={} "
-      "time_ms={} stat_ms={} sha_ms={} sha_assets={} sha_disabled={} "
-      "sha_skipped={} sha_missing={}",
-      cooked_root_.string(), keys.size(),
-      std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count(),
-      std::chrono::duration_cast<std::chrono::milliseconds>(stat_time).count(),
-      std::chrono::duration_cast<std::chrono::milliseconds>(sha_time).count(),
-      sha_assets, sha_disabled, sha_skipped_all_zero, sha_missing);
-  }
-
   auto InitializeBufferTable() -> void
   {
     if (!buffers_table_path_) {
@@ -747,8 +602,6 @@ private:
   std::string debug_name_;
   serio::FileLock generation_lock_;
   LooseCookedIndexImpl index_;
-
-  bool verify_content_hashes_ { false };
 
   std::optional<std::filesystem::path> buffers_table_path_;
   std::optional<std::filesystem::path> textures_table_path_;

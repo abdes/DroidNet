@@ -146,7 +146,7 @@ auto WriteLooseCookedSceneWithSingleRootNode(
 
   IndexHeader header {};
   FillTestGuid(header);
-  header.version = 1;
+  header.version = oxygen::data::loose_cooked::kIndexVersion;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::kHasVirtualPaths;
   header.string_table_offset = sizeof(IndexHeader);

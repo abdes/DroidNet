@@ -104,6 +104,7 @@ set(
   "Internal/InputContextHydration.cpp"
   "Internal/LooseCookedIndexImpl.h"
   "Internal/LooseCookedIndexImpl.cpp"
+  "Internal/LooseCookedIndexValidation.cpp"
   "Internal/LooseCookedIndexCodec.h"
   "Internal/LooseCookedSource.h"
   "Internal/PatchResolutionPolicy.h"

@@ -303,7 +303,7 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
   const auto& demo_root = runtime_paths.showcase;
   shell_config.content_roots = {
     .content_root = runtime_paths.content,
-    .cooked_root = demo_root / ".cooked",
+    .cooked_root = demo_root / ".cooked" / "main",
   };
   shell_config.panel_config.content_loader = true;
   shell_config.panel_config.camera_controls = true;
@@ -390,7 +390,7 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
     pending_physics_sidecar_.reset();
     active_scene_load_key_.reset();
 
-    const auto cooked_index = runtime_paths.content / ".cooked"
+    const auto cooked_index = runtime_paths.content / ".cooked" / "main"
       / std::filesystem::path(kLooseCookedIndexFileName);
     pending_source_requests_.push_back(PendingSourceRequest {
       .action = PendingSourceAction::kMountIndex,
@@ -733,7 +733,7 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
           } catch (const std::exception& ex) {
             LOG_F(ERROR,
               "RenderScene: Failed to restore/mount persisted loose cooked "
-              "source '{}': {}. Removing persisted entry.",
+              "source '{}': {}.",
               normalized_index.string(), ex.what());
             mounted_loose_index_write_times_.erase(normalized);
             if (const auto vm = shell.GetContentVm()) {

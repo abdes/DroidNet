@@ -9,7 +9,7 @@
 Run from any directory.
 
 Example:
-    python make_pak.py cube_scene_spec.yaml
+    python internal/make_pak.py cube_scene_spec.yaml
 
 Outputs:
     pak/<name>.pak
@@ -29,8 +29,8 @@ if TYPE_CHECKING:
 
 
 def _workspace_root_from_here() -> Path:
-    # Examples/Content/make_pak.py -> Content -> Examples -> engine root.
-    return Path(__file__).resolve().parents[2]
+    # Examples/Content/internal/make_pak.py -> engine root.
+    return Path(__file__).resolve().parents[3]
 
 
 def _import_pakgen_api(
@@ -77,7 +77,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     cwd = Path.cwd()
-    output_dir = Path(__file__).resolve().parent / "pak"
+    output_dir = Path(__file__).resolve().parents[1] / "pak"
 
     def build_one(input_path: Path) -> None:
         input_path = input_path.resolve()

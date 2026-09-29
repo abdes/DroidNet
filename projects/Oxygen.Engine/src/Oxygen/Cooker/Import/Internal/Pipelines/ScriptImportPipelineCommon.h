@@ -96,39 +96,19 @@ inline auto NormalizeForPathComparison(const std::filesystem::path& path)
   return absolute_path.lexically_normal();
 }
 
-inline auto BuildExternalSourcePath(const ImportRequest& request) -> std::string
+inline auto BuildExternalSourcePath(const ImportRequest& request)
+  -> std::optional<std::string>
 {
-  const auto source_path = request.source_path.lexically_normal();
-
-  // External script descriptors are expected to be relative to the runtime
-  // script roots (typically the cooked root parent, e.g. Examples/Content).
-  if (request.cooked_root.has_value()) {
-    const auto normalized_root
-      = NormalizeForPathComparison(*request.cooked_root);
-    const auto normalized_source = NormalizeForPathComparison(source_path);
-    if (normalized_root.has_value() && normalized_source.has_value()) {
-      const auto source_root = normalized_root->parent_path();
-      if (!source_root.empty()) {
-        if (const auto relative = TryMakeExternalPathRelativeToRoot(
-              *normalized_source, source_root)) {
-          return *relative;
-        }
-      }
-    }
+  if (request.options.scripting.source_root.empty()) {
+    return std::nullopt;
   }
-
-  if (!source_path.is_absolute() && !HasParentTraversal(source_path)) {
-    const auto relative_path = source_path.generic_string();
-    if (!relative_path.empty() && relative_path != ".") {
-      return relative_path;
-    }
+  const auto source = NormalizeForPathComparison(request.source_path);
+  const auto root
+    = NormalizeForPathComparison(request.options.scripting.source_root);
+  if (!source || !root) {
+    return std::nullopt;
   }
-
-  auto filename = source_path.filename().generic_string();
-  if (!filename.empty()) {
-    return filename;
-  }
-  return "script.luau";
+  return TryMakeExternalPathRelativeToRoot(*source, *root);
 }
 
 template <size_t N>

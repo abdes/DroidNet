@@ -5,16 +5,24 @@
 //===----------------------------------------------------------------------===//
 
 #include <chrono>
+#include <cstddef>
 #include <cstring>
+#include <stdexcept>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportProgress.h>
+#include <Oxygen/Cooker/Import/ImportReport.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/PhysicsSidecarImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/PhysicsSidecarImportPipeline.h>
+#include <Oxygen/OxCo/Co.h>
 
 namespace oxygen::content::import::detail {
 
@@ -67,8 +75,7 @@ auto PhysicsSidecarImportJob::ExecuteAsync() -> co::Co<ImportReport>
 
   EnsureCookedRoot();
 
-  auto session = ImportSession(Request(), FileReader(), FileWriter(),
-    ThreadPool(), TableRegistry(), IndexRegistry());
+  auto& session = Session();
 
   if (!Request().physics.has_value()) {
     AddDiagnostic(session, Request(), ImportSeverity::kError,
@@ -91,12 +98,11 @@ auto PhysicsSidecarImportJob::ExecuteAsync() -> co::Co<ImportReport>
   ReportPhaseProgress(
     ImportPhase::kWorking, 0.5F, "Applying physics sidecar...");
 
-  auto pipeline
-    = PhysicsSidecarImportPipeline(PhysicsSidecarImportPipeline::Config {
+  auto& pipeline = CreatePipeline<PhysicsSidecarImportPipeline>(
+    PhysicsSidecarImportPipeline::Config {
       .queue_capacity = Concurrency().scene.queue_capacity,
       .worker_count = Concurrency().scene.workers,
     });
-  StartPipeline(pipeline);
 
   co_await pipeline.Submit(PhysicsSidecarImportPipeline::WorkItem {
     .source_id = Request().source_path.string(),
@@ -127,6 +133,10 @@ auto PhysicsSidecarImportJob::LoadSource(ImportSession& session)
   -> co::Co<LoadedSource>
 {
   const auto& req = Request();
+  if (!req.physics.has_value()) {
+    throw std::logic_error(
+      "Physics sidecar loading requires a physics request");
+  }
   const auto& inline_bindings = req.physics->inline_bindings_json;
   if (!inline_bindings.empty()) {
     auto bytes = std::vector<std::byte> {};
@@ -146,6 +156,7 @@ auto PhysicsSidecarImportJob::LoadSource(ImportSession& session)
       "Physics sidecar import requires source_path or inline bindings");
     co_return LoadedSource {
       .success = false,
+      .bytes = {},
     };
   }
 
@@ -156,6 +167,7 @@ auto PhysicsSidecarImportJob::LoadSource(ImportSession& session)
       "Async file reader is not available");
     co_return LoadedSource {
       .success = false,
+      .bytes = {},
     };
   }
 
@@ -166,6 +178,7 @@ auto PhysicsSidecarImportJob::LoadSource(ImportSession& session)
       "Failed to read source file: " + read.error().ToString());
     co_return LoadedSource {
       .success = false,
+      .bytes = {},
     };
   }
 

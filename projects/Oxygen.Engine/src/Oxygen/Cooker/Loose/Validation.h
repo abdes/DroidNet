@@ -8,11 +8,12 @@
 
 #include <filesystem>
 
+#include <Oxygen/Content/LooseCookedIndex.h>
 #include <Oxygen/Cooker/api_export.h>
 
 namespace oxygen::content::lc {
 
-OXGN_COOK_API auto ValidateRoot(const std::filesystem::path& cooked_root)
-  -> void;
+OXGN_COOK_API auto ValidateRoot(const std::filesystem::path& cooked_root,
+  IntegrityCheck check = IntegrityCheck::kFull) -> void;
 
 } // namespace oxygen::content::lc

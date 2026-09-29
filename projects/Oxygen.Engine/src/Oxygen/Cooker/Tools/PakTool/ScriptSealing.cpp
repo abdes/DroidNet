@@ -210,42 +210,28 @@ namespace {
   }
 
   [[nodiscard]] auto ResolveExternalSourcePath(
-    const std::filesystem::path& cooked_root,
+    const std::span<const std::filesystem::path> source_roots,
     const std::string_view external_source_path)
     -> std::optional<std::filesystem::path>
   {
-    if (external_source_path.empty()) {
+    const auto stored
+      = std::filesystem::path(external_source_path).lexically_normal();
+    if (stored.empty() || stored.has_root_path()
+      || HasParentTraversal(stored)) {
       return std::nullopt;
     }
-
-    std::error_code ec;
-    const auto normalized_root = cooked_root.is_absolute()
-      ? cooked_root.lexically_normal()
-      : std::filesystem::absolute(cooked_root, ec).lexically_normal();
-    if (ec) {
-      return std::nullopt;
+    for (const auto& root : source_roots) {
+      const auto candidate = (root / stored).lexically_normal();
+      const auto relative = candidate.lexically_relative(root);
+      if (relative.empty() || relative.has_root_path()
+        || HasParentTraversal(relative)) {
+        continue;
+      }
+      if (std::filesystem::is_regular_file(base::ToNativePath(candidate))) {
+        return candidate;
+      }
     }
-
-    const auto root_parent = normalized_root.parent_path().lexically_normal();
-    if (root_parent.empty()) {
-      return std::nullopt;
-    }
-
-    const auto stored_path
-      = std::filesystem::path(std::string(external_source_path))
-          .lexically_normal();
-    if (stored_path.empty() || stored_path.is_absolute()
-      || HasParentTraversal(stored_path)) {
-      return std::nullopt;
-    }
-
-    const auto resolved = (root_parent / stored_path).lexically_normal();
-    const auto relative = resolved.lexically_relative(root_parent);
-    if (relative.empty() || relative.is_absolute()
-      || HasParentTraversal(relative)) {
-      return std::nullopt;
-    }
-    return resolved;
+    return std::nullopt;
   }
 
   [[nodiscard]] auto NormalizeLooseCookedRoot(const std::filesystem::path& root)
@@ -456,7 +442,8 @@ namespace {
   [[nodiscard]] auto RewriteStagedScriptDescriptor(
     const std::filesystem::path& original_root,
     const std::filesystem::path& staged_root, const lc::AssetEntry& asset_entry,
-    ScriptTables& tables) -> Result<bool, ScriptSealingError>
+    ScriptTables& tables, std::span<const std::filesystem::path> source_roots)
+    -> Result<bool, ScriptSealingError>
   {
     const auto context = ReadScriptAssetContext(staged_root, asset_entry);
     if (!context.has_value()) {
@@ -492,13 +479,12 @@ namespace {
       }
 
       const auto resolved_path
-        = ResolveExternalSourcePath(original_root, *external_source);
+        = ResolveExternalSourcePath(source_roots, *external_source);
       if (!resolved_path.has_value()) {
         return Result<bool, ScriptSealingError>::Err(ScriptSealingError {
           .error_code = "paktool.script_seal.external_source_unresolvable",
-          .error_message
-          = "External script source path could not be resolved relative to "
-            "the loose-cooked root parent.",
+          .error_message = "External script source was not found under the "
+                           "declared script source roots.",
           .source_path = original_root,
           .descriptor_path = context->descriptor_path,
           .external_source_path = std::string(*external_source),
@@ -654,7 +640,8 @@ namespace {
   }
 
   [[nodiscard]] auto SealLooseCookedSource(const data::CookedSource& source,
-    const std::filesystem::path& staging_parent, const size_t source_index)
+    const std::filesystem::path& staging_parent, const size_t source_index,
+    const std::span<const std::filesystem::path> source_roots)
     -> Result<SealedLooseSourceResult, ScriptSealingError>
   {
     const auto normalized_root = NormalizeLooseCookedRoot(source.path);
@@ -750,7 +737,7 @@ namespace {
         continue;
       }
       const auto sealed = RewriteStagedScriptDescriptor(
-        *normalized_root, staged_root, asset, *tables);
+        *normalized_root, staged_root, asset, *tables, source_roots);
       if (!sealed.has_value()) {
         cleanup_staged_root();
         return Result<SealedLooseSourceResult, ScriptSealingError>::Err(
@@ -801,7 +788,8 @@ namespace {
 
 auto SealLooseCookedSourcesForPakBuild(
   const pak::PakBuildRequest& build_request,
-  const std::filesystem::path& staging_parent)
+  const std::filesystem::path& staging_parent,
+  const std::span<const std::filesystem::path> source_roots)
   -> Result<ScriptSealingResult, ScriptSealingError>
 {
   auto sealed_request = build_request;
@@ -814,7 +802,8 @@ auto SealLooseCookedSourcesForPakBuild(
       continue;
     }
 
-    const auto sealed_root = SealLooseCookedSource(source, staging_parent, i);
+    const auto sealed_root
+      = SealLooseCookedSource(source, staging_parent, i, source_roots);
     if (!sealed_root.has_value()) {
       CleanupStagedLooseRoots(
         std::span<const std::filesystem::path>(staged_loose_roots));

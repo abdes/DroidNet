@@ -1556,8 +1556,7 @@ auto SceneDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   };
 
   EnsureCookedRoot();
-  auto session = ImportSession(Request(), FileReader(), FileWriter(),
-    ThreadPool(), TableRegistry(), IndexRegistry());
+  auto& session = Session();
 
   const auto& descriptor = Request().scene_descriptor;
   if (!descriptor.has_value()) {
@@ -1698,14 +1697,13 @@ auto SceneDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   const auto& prepared = *prepared_opt;
   auto request_for_pipeline = Request();
   request_for_pipeline.source_path = std::filesystem::path(prepared.scene_name);
-  auto pipeline = ScenePipeline(*ThreadPool(),
+  auto& pipeline = CreatePipeline<ScenePipeline>(*ThreadPool(),
     ScenePipeline::Config {
       .queue_capacity = Concurrency().scene.queue_capacity,
       .worker_count = Concurrency().scene.workers,
       .with_content_hashing
       = EffectiveContentHashingEnabled(Request().options.with_content_hashing),
     });
-  StartPipeline(pipeline);
 
   auto adapter = std::make_shared<SceneDescriptorAdapter>(prepared.build);
   auto item = ScenePipeline::WorkItem::MakeWorkItem(std::move(adapter),

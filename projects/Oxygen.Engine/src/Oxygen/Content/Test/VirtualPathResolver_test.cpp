@@ -4,26 +4,35 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <ios>
 #include <span>
+#include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
 
-#include <Oxygen/Testing/GTest.h>
-
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/VirtualPathResolver.h>
+#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
+#include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/PatchManifest.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 
 auto MakeAssetKey(const std::uint8_t seed) -> oxygen::data::AssetKey
 {
   auto bytes = std::array<std::uint8_t, oxygen::data::AssetKey::kSizeBytes> {};
-  bytes[0] = seed;
+  bytes.at(0) = seed;
   return oxygen::data::AssetKey::FromBytes(bytes);
 }
 
@@ -52,7 +61,7 @@ auto WriteSingleAssetIndex(const std::filesystem::path& cooked_root,
   strings.push_back('\0');
 
   IndexHeader header {};
-  header.version = 1;
+  header.version = oxygen::data::loose_cooked::kIndexVersion;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
     | oxygen::data::loose_cooked::kHasFileRecords;
@@ -60,12 +69,12 @@ auto WriteSingleAssetIndex(const std::filesystem::path& cooked_root,
   // The runtime loader rejects indexes with an all-zero GUID.
   // For these tests we only need a valid (non-zero) value.
   for (size_t i = 0; i < sizeof(header.source_identity); ++i) {
-    header.source_identity[i] = static_cast<uint8_t>(i + 1);
+    header.source_identity.at(i) = static_cast<uint8_t>(i + 1);
   }
-  header.source_identity[6]
-    = static_cast<uint8_t>((header.source_identity[6] & 0x0FU) | 0x70U);
-  header.source_identity[8]
-    = static_cast<uint8_t>((header.source_identity[8] & 0x3FU) | 0x80U);
+  header.source_identity.at(6)
+    = static_cast<uint8_t>((header.source_identity.at(6) & 0x0FU) | 0x70U);
+  header.source_identity.at(8)
+    = static_cast<uint8_t>((header.source_identity.at(8) & 0x3FU) | 0x80U);
 
   header.string_table_offset = sizeof(IndexHeader);
   header.string_table_size = static_cast<uint64_t>(strings.size());
@@ -84,6 +93,7 @@ auto WriteSingleAssetIndex(const std::filesystem::path& cooked_root,
   entry.virtual_path_offset = off_vpath;
   entry.asset_type = 0;
   entry.descriptor_size = 0;
+  std::ranges::copy(oxygen::base::ComputeSha256({}), entry.descriptor_sha256);
 
   const auto index_path = cooked_root / "container.index.bin";
   std::ofstream out(index_path, std::ios::binary);
@@ -109,12 +119,12 @@ auto WriteSingleAssetPakWithBrowseIndex(const std::filesystem::path& pak_path,
 
   PakHeader header {};
   for (size_t i = 0; i < sizeof(header.source_identity); ++i) {
-    header.source_identity[i] = static_cast<uint8_t>(i + 1);
+    header.source_identity.at(i) = static_cast<uint8_t>(i + 1);
   }
-  header.source_identity[6]
-    = static_cast<uint8_t>((header.source_identity[6] & 0x0FU) | 0x70U);
-  header.source_identity[8]
-    = static_cast<uint8_t>((header.source_identity[8] & 0x3FU) | 0x80U);
+  header.source_identity.at(6)
+    = static_cast<uint8_t>((header.source_identity.at(6) & 0x0FU) | 0x70U);
+  header.source_identity.at(8)
+    = static_cast<uint8_t>((header.source_identity.at(8) & 0x3FU) | 0x80U);
 
   std::string strings;
   const auto off_vpath = static_cast<uint32_t>(strings.size());
@@ -183,7 +193,9 @@ NOLINT_TEST(VirtualPathResolverTest, ResolveAssetKeyFoundReturnsKey)
   const auto resolved = resolver.ResolveAssetKey("/.cooked/A.bin");
 
   // Assert
-  EXPECT_TRUE(resolved.has_value());
+  if (!resolved.has_value()) {
+    FAIL() << "Expected a resolved asset key";
+  }
   EXPECT_EQ(*resolved, key);
 }
 
@@ -215,7 +227,9 @@ NOLINT_TEST(VirtualPathResolverTest, ResolveAssetKeyDuplicatePathLastWins)
   const auto resolved = resolver.ResolveAssetKey("/.cooked/A.bin");
 
   // Assert
-  EXPECT_TRUE(resolved.has_value());
+  if (!resolved.has_value()) {
+    FAIL() << "Expected a resolved asset key";
+  }
   EXPECT_EQ(*resolved, key1);
 }
 
@@ -331,7 +345,9 @@ NOLINT_TEST(
   const auto resolved = resolver.ResolveAssetKey("/.cooked/Pak.bin");
 
   // Assert
-  EXPECT_TRUE(resolved.has_value());
+  if (!resolved.has_value()) {
+    FAIL() << "Expected a resolved asset key";
+  }
   EXPECT_EQ(*resolved, key);
 }
 

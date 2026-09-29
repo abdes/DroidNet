@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <exception>
 #include <filesystem>
 #include <memory>
 #include <mutex>
@@ -14,9 +15,12 @@
 #include <unordered_map>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Cooker/Import/Internal/ImportSessionToken.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Event.h>
 
 namespace oxygen::content::import {
 
@@ -31,14 +35,19 @@ namespace oxygen::content::import {
 */
 class LooseCookedIndexRegistry final {
 public:
+  struct Publication {
+    data::SourceKey source_key {};
+    std::optional<LooseCookedWriteResult> write_result {};
+  };
+
   OXGN_COOK_API LooseCookedIndexRegistry() = default;
 
   OXYGEN_MAKE_NON_COPYABLE(LooseCookedIndexRegistry)
   OXYGEN_MAKE_NON_MOVABLE(LooseCookedIndexRegistry)
 
   //! Register a new session for the cooked root.
-  OXGN_COOK_API auto BeginSession(const std::filesystem::path& cooked_root,
-    const std::optional<data::SourceKey>& source_key) -> void;
+  OXGN_COOK_NDAPI auto BeginSession(const std::filesystem::path& cooked_root,
+    const std::optional<data::SourceKey>& source_key) -> ImportSessionToken;
 
   //! Register a file record in the shared index writer.
   OXGN_COOK_API auto RegisterExternalFile(
@@ -53,22 +62,40 @@ public:
     const std::optional<base::Sha256Digest>& descriptor_sha256 = std::nullopt)
     -> void;
 
-  //! Complete a session and write the index if this was the last session.
-  OXGN_COOK_API auto EndSession(const std::filesystem::path& cooked_root)
-    -> std::optional<LooseCookedWriteResult>;
+  //! Retire participation and await the cohort's index publication.
+  /*! All participants receive the published identity. Only the writing session
+      receives the full write result. Publication failure reaches every waiter.
+   */
+  OXGN_COOK_API auto EndSession(ImportSessionToken& participation)
+    -> co::Co<Publication>;
+
+  OXGN_COOK_API auto AbortSession(ImportSessionToken& participation) -> void;
 
 private:
+  struct Completion {
+    co::Event ready {};
+    data::SourceKey source_key {};
+    std::exception_ptr failure {};
+    bool aborted = false;
+  };
+
   struct Entry {
-    std::unique_ptr<LooseCookedWriter> writer;
+    std::mutex mutex;
+    std::unique_ptr<LooseCookedWriter> writer {};
     uint32_t active_sessions = 0;
-    std::optional<data::SourceKey> source_key;
+    bool aborted = false;
+    std::optional<data::SourceKey> source_key {};
+    std::shared_ptr<Completion> completion {};
   };
 
   auto NormalizeKey(const std::filesystem::path& cooked_root) const
     -> std::string;
 
+  auto GetEntry(const std::filesystem::path& cooked_root)
+    -> std::shared_ptr<Entry>;
+
   std::mutex mutex_;
-  std::unordered_map<std::string, Entry> entries_;
+  std::unordered_map<std::string, std::shared_ptr<Entry>> entries_;
 };
 
 } // namespace oxygen::content::import

@@ -7,12 +7,12 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <exception>
 #include <filesystem>
 #include <limits>
-#include <nlohmann/json-schema.hpp>
-#include <nlohmann/json.hpp>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -20,10 +20,17 @@
 #include <utility>
 #include <vector>
 
+#include <nlohmann/json-schema.hpp>
+#include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/VirtualPathResolver.h>
-#include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/ImportProgress.h>
+#include <Oxygen/Cooker/Import/ImportReport.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/AssetEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/PhysicsResourceEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
@@ -37,6 +44,8 @@
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/PakFormat_physics.h>
+#include <Oxygen/OxCo/Co.h>
 
 namespace oxygen::content::import::detail {
 
@@ -500,9 +509,7 @@ namespace {
       return;
     }
     const auto values = doc.at(field).get<std::array<float, 3>>();
-    out[0] = values[0];
-    out[1] = values[1];
-    out[2] = values[2];
+    std::ranges::copy(values, out);
   }
 
   auto CopyQuat(const json& doc, const std::string_view field, float (&out)[4])
@@ -512,10 +519,7 @@ namespace {
       return;
     }
     const auto values = doc.at(field).get<std::array<float, 4>>();
-    out[0] = values[0];
-    out[1] = values[1];
-    out[2] = values[2];
-    out[3] = values[3];
+    std::ranges::copy(values, out);
   }
 
   auto ApplyShapeSpecificParameters(ImportSession& session,
@@ -537,9 +541,7 @@ namespace {
     case phys::ShapeType::kBox: {
       const auto half_extents
         = descriptor_doc.at("half_extents").get<std::array<float, 3>>();
-      descriptor.shape_params.box.half_extents[0] = half_extents[0];
-      descriptor.shape_params.box.half_extents[1] = half_extents[1];
-      descriptor.shape_params.box.half_extents[2] = half_extents[2];
+      std::ranges::copy(half_extents, descriptor.shape_params.box.half_extents);
       break;
     }
     case phys::ShapeType::kCylinder:
@@ -557,9 +559,7 @@ namespace {
     case phys::ShapeType::kPlane: {
       const auto normal
         = descriptor_doc.at("normal").get<std::array<float, 3>>();
-      descriptor.shape_params.plane.normal[0] = normal[0];
-      descriptor.shape_params.plane.normal[1] = normal[1];
-      descriptor.shape_params.plane.normal[2] = normal[2];
+      std::ranges::copy(normal, descriptor.shape_params.plane.normal);
       descriptor.shape_params.plane.distance
         = descriptor_doc.at("distance").get<float>();
       break;
@@ -572,12 +572,13 @@ namespace {
         = descriptor_doc.at("limits_min").get<std::array<float, 3>>();
       const auto limits_max
         = descriptor_doc.at("limits_max").get<std::array<float, 3>>();
-      for (size_t i = 0; i < limits_min.size(); ++i) {
-        descriptor.shape_params.world_boundary.limits_min[i] = limits_min[i];
-        descriptor.shape_params.world_boundary.limits_max[i] = limits_max[i];
-      }
-      if (limits_min[0] > limits_max[0] || limits_min[1] > limits_max[1]
-        || limits_min[2] > limits_max[2]) {
+      std::ranges::copy(
+        limits_min, descriptor.shape_params.world_boundary.limits_min);
+      std::ranges::copy(
+        limits_max, descriptor.shape_params.world_boundary.limits_max);
+      if (limits_min.at(0) > limits_max.at(0)
+        || limits_min.at(1) > limits_max.at(1)
+        || limits_min.at(2) > limits_max.at(2)) {
         AddDiagnostic(session, request, ImportSeverity::kError,
           "physics.shape.world_boundary_limits_invalid",
           "limits_min must be <= limits_max for each axis", "limits_min");
@@ -724,7 +725,7 @@ namespace {
       const auto child_path = "children[" + std::to_string(i) + "]";
       auto child_desc = phys::CompoundShapeChildDesc {};
       if (!ParseCompoundChild(
-            children[i], child_path, session, request, child_desc)) {
+            children.at(i), child_path, session, request, child_desc)) {
         continue;
       }
       out_children.push_back(child_desc);
@@ -760,10 +761,10 @@ auto CollisionShapeDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   };
 
   EnsureCookedRoot();
-  auto session = ImportSession(Request(), FileReader(), FileWriter(),
-    ThreadPool(), TableRegistry(), IndexRegistry());
+  auto& session = Session();
 
-  if (!Request().collision_shape_descriptor.has_value()) {
+  const auto& request_payload = Request().collision_shape_descriptor;
+  if (!request_payload.has_value()) {
     AddDiagnostic(session, Request(), ImportSeverity::kError,
       "physics.shape.request_invalid",
       "CollisionShapeDescriptorImportJob requires request "
@@ -776,8 +777,7 @@ auto CollisionShapeDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   auto descriptor_doc = json {};
   auto parse_exception = std::optional<std::string> {};
   try {
-    descriptor_doc = json::parse(
-      Request().collision_shape_descriptor->normalized_descriptor_json);
+    descriptor_doc = json::parse(request_payload->normalized_descriptor_json);
   } catch (const std::exception& ex) {
     parse_exception = ex.what();
   }
@@ -923,14 +923,13 @@ auto CollisionShapeDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
     descriptor.cooked_shape_ref.payload_type = payload->payload_type;
   }
 
-  auto pipeline = CollisionShapeImportPipeline(*ThreadPool(),
+  auto& pipeline = CreatePipeline<CollisionShapeImportPipeline>(*ThreadPool(),
     CollisionShapeImportPipeline::Config {
       .queue_capacity = Concurrency().material.queue_capacity,
       .worker_count = Concurrency().material.workers,
       .with_content_hashing
       = EffectiveContentHashingEnabled(Request().options.with_content_hashing),
     });
-  StartPipeline(pipeline);
 
   auto item = CollisionShapeImportPipeline::WorkItem {
     .source_id = target->virtual_path,

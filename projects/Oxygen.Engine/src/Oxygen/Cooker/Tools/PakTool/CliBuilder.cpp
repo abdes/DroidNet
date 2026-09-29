@@ -8,6 +8,7 @@
 #  error OXYGEN_PAKTOOL_VERSION must be defined for PakTool CLI version.
 #endif
 
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -18,8 +19,9 @@
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
-
 #include <Oxygen/Cooker/Tools/PakTool/CliBuilder.h>
+#include <Oxygen/Cooker/Tools/PakTool/PakToolOptions.h>
+#include <Oxygen/Data/CookedSource.h>
 
 namespace oxygen::content::pak::tool {
 
@@ -85,6 +87,18 @@ namespace {
             .kind = data::CookedSourceKind::kLooseCooked,
             .path = path,
           });
+        })
+        .Build());
+
+    group->Add(Option::WithKey("script-source-root")
+        .About(
+          "Authoring root for external scripts; searched in declaration order")
+        .Long("script-source-root")
+        .WithValue<std::filesystem::path>()
+        .UserFriendlyName("DIR")
+        .Repeatable()
+        .CallOnEachValue([&options](const std::filesystem::path& path) {
+          options.script_source_roots.push_back(path);
         })
         .Build());
 

@@ -16,6 +16,7 @@
 #include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportProgress.h>
@@ -23,6 +24,7 @@
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/ImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/ImportJobParams.h>
+#include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSourceSnapshot.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedIndexRegistry.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
@@ -301,29 +303,29 @@ auto ImportJob::ProgressCallback() const noexcept
   return on_progress_;
 }
 
-auto ImportJob::DrainGenerationWrites() -> co::Co<>
+auto ImportJob::Session() -> ImportSession&
 {
-  static_cast<void>(co_await co::NonCancellable(generation_writer_->Flush()));
+  if (!session_) {
+    session_ = std::make_unique<ImportSession>(request_, file_reader_,
+      file_writer_, thread_pool_, table_registry_, index_registry_);
+  }
+  return *session_;
 }
 
-auto ImportJob::RunWithWriteDrain(co::Co<ImportReport> work)
-  -> co::Co<ImportReport>
+auto ImportJob::RequestProducerStop() -> void
 {
-  if (!generation_writer_) {
-    co_return co_await std::move(work);
+  stop_source_.request_stop();
+  if (producer_nursery_) {
+    producer_nursery_->Cancel();
   }
-  const auto drain = [this] -> co::Co<> { return DrainGenerationWrites(); };
-  auto [report, drained]
-    = co_await co::AnyOf(std::move(work), co::UntilCancelledAnd(drain));
-  if (!report) {
-    co_return MakeCancelledReport(request_);
-  }
-  co_return std::move(*report);
 }
 
 auto ImportJob::ExecuteAndPublishAsync() -> co::Co<ImportReport>
 {
-  static_cast<void>(WritableCookedRoot());
+  const auto cooked_root = WritableCookedRoot();
+  if (table_registry_) {
+    co_await table_registry_->WaitForFinalization(cooked_root);
+  }
   if (retained_import_) {
     co_await thread_pool_->Run(
       [publication = retained_import_](
@@ -367,113 +369,116 @@ auto ImportJob::ExecuteAndPublishAsync() -> co::Co<ImportReport>
 
 auto ImportJob::MainAsync() -> co::Co<>
 {
-  bool finalized = false;
+  // Cancellation stops producers. The owning orchestrator stays alive to join
+  // them and then drain callbacks before destroying session-owned emitters.
+  co_await co::AnyOf(co::NonCancellable(RunOwnedSessionToCompletion()),
+    co::UntilCancelledAnd([this]() -> co::Co<> {
+      RequestProducerStop();
+      co_return;
+    }));
+}
 
-  ReportJobEvent(
-    ProgressEventKind::kJobStarted, ImportPhase::kPending, 0.0F, "Job started");
-
-  auto make_exception_report = [&](std::string_view message) -> ImportReport {
-    auto report = ImportReport {};
+auto ImportJob::RunOwnedSessionToCompletion() -> co::Co<>
+{
+  const auto completion = ScopeGuard([this]() noexcept {
+    completed_.Trigger();
+    Stop();
+  });
+  ImportReport report {};
+  bool execution_completed = false;
+  std::exception_ptr execution_failure;
+  std::exception_ptr drain_failure;
+  const auto fail = [&](const std::string_view message) {
+    report.success = false;
     report.cooked_root
       = request_.cooked_root.value_or(request_.source_path.parent_path());
-    report.success = false;
-
     report.diagnostics.push_back({
       .severity = ImportSeverity::kError,
       .code = "import.exception",
       .message = std::string(message),
       .source_path = request_.source_path.string(),
+      .object_path = {},
     });
-
-    return report;
   };
-
-  auto finalize = [&](ImportReport report) -> void {
-    if (finalized) {
-      return;
+  try {
+    ReportJobEvent(ProgressEventKind::kJobStarted, ImportPhase::kPending, 0.0F,
+      "Job started");
+    OXCO_WITH_NURSERY(producers)
+    {
+      producer_nursery_ = &producers;
+      if (IsStopped() || (cancel_event_ && cancel_event_->Triggered())) {
+        co_return co::kCancel;
+      }
+      if (cancel_event_) {
+        producers.Start([this]() -> co::Co<> {
+          co_await *cancel_event_;
+          RequestProducerStop();
+        });
+      }
+      report = co_await ExecuteAndPublishAsync();
+      execution_completed = true;
+      co_return co::kCancel;
+    };
+  } catch (...) {
+    execution_failure = std::current_exception();
+  }
+  producer_nursery_ = nullptr;
+  pipelines_.clear();
+  try {
+    if (session_) {
+      co_await session_->DrainAndRetire();
+      session_.reset();
     }
-    finalized = true;
+  } catch (...) {
+    drain_failure = std::current_exception();
+  }
 
-    const auto phase
-      = report.success ? ImportPhase::kComplete : ImportPhase::kFailed;
-    ReportJobEvent(ProgressEventKind::kJobFinished, phase, 1.0F,
-      report.success ? "Job finished" : "Job failed");
-
-    DLOG_F(2, "Finalize: job_id={} success={}", job_id_, report.success);
-
-    if (on_complete_) {
-      on_complete_(job_id_, report);
-    }
-
-    completed_.Trigger();
-
-    // Close the job nursery after reporting completion. This lets the parent
-    // importer await job completion by joining the ActivateAsync task.
-    Stop();
-  };
-
-  // Guarantee: call on_complete exactly once, even if this coroutine is
-  // canceled by importer shutdown. Note that code after a cancellable
-  // await is not guaranteed to run, so finalization must be done inside the
-  // branches.
-  co_await co::AnyOf(
-    [&] -> co::Co<> {
-      auto run_work = [&] -> co::Co<ImportReport> {
-        if (cancel_event_ && cancel_event_->Triggered()) {
-          stop_source_.request_stop();
-          co_return MakeCancelledReport(request_);
-        }
-
-        if (cancel_event_) {
-          auto [canceled, maybe_report]
-            = co_await co::AnyOf(*cancel_event_, ExecuteAndPublishAsync());
-          if (canceled.has_value()) {
-            stop_source_.request_stop();
-            co_return MakeCancelledReport(request_);
+  // Diagnostics may allocate. Teardown must finish even when the original
+  // failure was allocation failure in table/index finalization.
+  const auto describe_failure
+    = [&](const std::exception_ptr& failure) noexcept {
+        report.success = false;
+        try {
+          try {
+            std::rethrow_exception(failure);
+          } catch (const std::exception& error) {
+            fail(error.what());
+          } catch (...) {
+            fail("Unknown import exception");
           }
-
-          DCHECK_F(maybe_report.has_value());
-          co_return std::move(*maybe_report);
+        } catch (...) {
+          // A minimal failed report still carries completion during memory
+          // exhaustion.
         }
-
-        co_return co_await ExecuteAndPublishAsync();
       };
-
-      try {
-        finalize(co_await run_work());
-      } catch (const std::exception& ex) {
-        const bool canceled = stop_source_.stop_requested()
-          || (cancel_event_ && cancel_event_->Triggered());
-        if (canceled) {
-          finalize(MakeCancelledReport(request_));
-        } else {
-          LOG_F(ERROR, "Job failed: {}", ex.what());
-          finalize(make_exception_report(ex.what()));
-        }
-      } catch (...) {
-        const bool canceled = stop_source_.stop_requested()
-          || (cancel_event_ && cancel_event_->Triggered());
-        if (canceled) {
-          finalize(MakeCancelledReport(request_));
-        } else {
-          LOG_F(ERROR, "Job failed: unknown exception");
-          finalize(make_exception_report("unknown exception"));
-        }
-      }
-      co_return;
-    }(),
-    co::UntilCancelledAnd([&] -> co::Co<> {
-      if (finalized) {
-        co_return;
-      }
-
-      DLOG_F(2, "Job main canceled: job_id={}", job_id_);
-      stop_source_.request_stop();
-      finalize(MakeCancelledReport(request_));
-      co_return;
-    }));
-
-  co_return;
+  if (execution_failure && !IsStopped()) {
+    describe_failure(execution_failure);
+  } else if (!execution_completed) {
+    try {
+      report = MakeCancelledReport(request_);
+    } catch (...) {
+      report.success = false;
+    }
+  }
+  if (drain_failure) {
+    describe_failure(drain_failure);
+  }
+  try {
+    ReportJobEvent(ProgressEventKind::kJobFinished,
+      report.success ? ImportPhase::kComplete : ImportPhase::kFailed, 1.0F,
+      report.success ? "Job finished" : "Job failed");
+  } catch (...) {
+    describe_failure(std::current_exception());
+  }
+  if (on_complete_) {
+    try {
+      on_complete_(job_id_, report);
+    } catch (const std::exception& error) {
+      LOG_F(ERROR, "Import completion callback failed: {}", error.what());
+    } catch (...) {
+      LOG_F(ERROR, "Import completion callback threw an unknown exception");
+    }
+  }
 }
 
 auto ImportJob::MakeCancelledReport(const ImportRequest& request) const

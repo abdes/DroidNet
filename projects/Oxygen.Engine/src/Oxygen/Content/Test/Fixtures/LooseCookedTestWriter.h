@@ -19,6 +19,7 @@
 
 #include "./LooseCookedTestLayout.h"
 
+#include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
@@ -38,26 +39,21 @@ public:
   explicit LooseCookedTestWriter(std::filesystem::path cooked_root)
     : cooked_root_(std::move(cooked_root))
   {
-    std::filesystem::create_directories(cooked_root_);
+    std::filesystem::create_directories(base::ToNativePath(cooked_root_));
   }
 
   auto SetSourceKey(const data::SourceKey key) -> void { source_key_ = key; }
-
-  auto SetComputeSha256(const bool enabled) -> void
-  {
-    compute_sha256_ = enabled;
-  }
 
   auto WriteFile(data::loose_cooked::FileKind kind, std::string relpath,
     std::span<const std::byte> bytes) -> void
   {
     const auto absolute_path = cooked_root_ / std::filesystem::path(relpath);
     if (const auto parent = absolute_path.parent_path(); !parent.empty()) {
-      std::filesystem::create_directories(parent);
+      std::filesystem::create_directories(base::ToNativePath(parent));
     }
 
-    std::ofstream out(
-      absolute_path, std::ios::binary | std::ios::trunc | std::ios::out);
+    std::ofstream out(base::ToNativePath(absolute_path),
+      std::ios::binary | std::ios::trunc | std::ios::out);
     if (!bytes.empty()) {
       out.write(reinterpret_cast<const char*>(bytes.data()),
         static_cast<std::streamsize>(bytes.size()));
@@ -67,6 +63,7 @@ public:
       .kind = kind,
       .relpath = std::move(relpath),
       .size = static_cast<uint64_t>(bytes.size()),
+      .sha256 = base::ComputeSha256(bytes),
     });
   }
 
@@ -77,21 +74,17 @@ public:
     const auto absolute_path
       = cooked_root_ / std::filesystem::path(descriptor_relpath);
     if (const auto parent = absolute_path.parent_path(); !parent.empty()) {
-      std::filesystem::create_directories(parent);
+      std::filesystem::create_directories(base::ToNativePath(parent));
     }
 
-    std::ofstream out(
-      absolute_path, std::ios::binary | std::ios::trunc | std::ios::out);
+    std::ofstream out(base::ToNativePath(absolute_path),
+      std::ios::binary | std::ios::trunc | std::ios::out);
     if (!bytes.empty()) {
       out.write(reinterpret_cast<const char*>(bytes.data()),
         static_cast<std::streamsize>(bytes.size()));
     }
 
-    std::array<uint8_t, data::loose_cooked::kSha256Size> digest_bytes {};
-    if (compute_sha256_) {
-      const auto digest = base::ComputeSha256(bytes);
-      std::copy_n(digest.begin(), digest.size(), digest_bytes.begin());
-    }
+    const auto digest_bytes = base::ComputeSha256(bytes);
 
     assets_.push_back(PendingAssetRecord {
       .asset_key = asset_key,
@@ -136,6 +129,7 @@ public:
       record.kind = pending_file.kind;
       record.relpath_offset = AppendString(strings, pending_file.relpath);
       record.size = pending_file.size;
+      record.sha256 = pending_file.sha256;
       file_records.push_back(record);
     }
 
@@ -145,7 +139,7 @@ public:
     } else {
       std::ranges::copy(source_key_.get(), std::begin(header.source_identity));
     }
-    header.version = 1;
+    header.version = data::loose_cooked::kIndexVersion;
     header.content_version = 0;
     header.flags = data::loose_cooked::kHasVirtualPaths
       | data::loose_cooked::kHasFileRecords;
@@ -161,7 +155,8 @@ public:
     header.file_record_size = sizeof(FileRecord);
 
     const auto index_path = cooked_root_ / layout_.index_file_name;
-    std::ofstream out(index_path, std::ios::binary | std::ios::trunc);
+    std::ofstream out(
+      base::ToNativePath(index_path), std::ios::binary | std::ios::trunc);
     out.write(reinterpret_cast<const char*>(&header),
       static_cast<std::streamsize>(sizeof(header)));
     out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
@@ -196,6 +191,7 @@ private:
     data::loose_cooked::FileKind kind = data::loose_cooked::FileKind::kUnknown;
     std::string relpath;
     uint64_t size = 0;
+    base::Sha256Digest sha256 {};
   };
 
   [[nodiscard]] static auto AppendString(
@@ -221,7 +217,6 @@ private:
   std::filesystem::path cooked_root_;
   LooseCookedLayout layout_ {};
   data::SourceKey source_key_ {};
-  bool compute_sha256_ = true;
   std::vector<PendingAssetRecord> assets_;
   std::vector<PendingFileRecord> files_;
 };
