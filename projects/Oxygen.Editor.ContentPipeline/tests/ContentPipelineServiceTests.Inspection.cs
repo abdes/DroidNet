@@ -6,6 +6,8 @@ using AwesomeAssertions;
 using Moq;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core.Compatibility;
+using Oxygen.Testing;
 
 namespace Oxygen.Editor.ContentPipeline.Tests;
 
@@ -62,7 +64,7 @@ public sealed partial class ContentPipelineServiceTests
         var changed = await pipeline.InspectCookedOutputAsync(scopeUri: null, this.TestContext.CancellationToken, validate: true).ConfigureAwait(false);
         _ = changed.Roots.Single().Provenance.Should().NotContain(origin => origin.CookedAssetUri.AbsolutePath == entry.VirtualPath);
         _ = changed.Roots.Single().Validation!.Succeeded.Should().BeFalse();
-        _ = changed.Roots.Single().Validation!.Diagnostics.Should().Contain(issue => issue.Message.Contains("published content", StringComparison.Ordinal));
+        _ = changed.Roots.Single().Validation!.Diagnostics.Should().Contain(issue => issue.AffectedPath == path);
     }
 
     /// <summary>Project reports include every authoring mount and represent never-cooked roots without native work.</summary>
@@ -89,19 +91,18 @@ public sealed partial class ContentPipelineServiceTests
         var root = Path.Combine(workspace.Root, ".cooked", "Content");
         Directory.CreateDirectory(root);
         var index = Path.Combine(root, "container.index.bin");
-        await File.WriteAllTextAsync(index, "index", this.TestContext.CancellationToken).ConfigureAwait(false);
+        NativeInventoryFixture.WriteIndex(root, []);
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var api = new Mock<IEngineContentPipelineApi>();
-        _ = api.Setup(value => value.InspectLooseCookedRootAsync(root, It.IsAny<CancellationToken>())).Returns(async () =>
+        _ = api.Setup(value => value.ReadInventoryAsync(root, It.IsAny<NativeArtifactLease?>(), It.IsAny<CancellationToken>())).Returns(async () =>
         {
             var write = () => File.WriteAllText(index, "replace");
             _ = write.Should().Throw<IOException>();
             entered.SetResult();
             await release.Task.ConfigureAwait(false);
-            return new CookInspectionResult(root, Succeeded: true, SourceIdentity: null, [], [], []);
+            return NativeInventoryFixture.Read(root);
         });
-        _ = api.Setup(value => value.ValidateLooseCookedRootAsync(root, It.IsAny<CancellationToken>())).ReturnsAsync(new CookValidationResult(root, Succeeded: true, []));
         var pipeline = CreateService(workspace, new CapturingSceneDescriptorGenerator(workspace, []), api.Object);
         var inspection = pipeline.InspectCookedOutputAsync(scopeUri: null, this.TestContext.CancellationToken, validate: true);
         try
@@ -129,14 +130,14 @@ public sealed partial class ContentPipelineServiceTests
         using var workspace = new TempWorkspace();
         var root = Path.Combine(workspace.Root, ".cooked", "Content");
         var index = Path.Combine(root, "container.index.bin");
-        await File.WriteAllTextAsync(index, "index", this.TestContext.CancellationToken).ConfigureAwait(false);
+        NativeInventoryFixture.WriteIndex(root, []);
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var api = new Mock<IEngineContentPipelineApi>();
-        _ = api.Setup(value => value.InspectLooseCookedRootAsync(root, It.IsAny<CancellationToken>())).Returns(async (string _, CancellationToken token) =>
+        _ = api.Setup(value => value.ReadInventoryAsync(root, It.IsAny<NativeArtifactLease?>(), It.IsAny<CancellationToken>())).Returns(async (string _, NativeArtifactLease? _, CancellationToken token) =>
         {
             entered.SetResult();
             await Task.Delay(Timeout.Infinite, token).ConfigureAwait(false);
-            return new CookInspectionResult(root, Succeeded: true, SourceIdentity: null, [], [], []);
+            return NativeInventoryFixture.Read(root);
         });
         var pipeline = CreateService(workspace, new CapturingSceneDescriptorGenerator(workspace, []), api.Object);
         var inspection = pipeline.InspectCookedOutputAsync(scopeUri: null, this.TestContext.CancellationToken);
@@ -147,7 +148,7 @@ public sealed partial class ContentPipelineServiceTests
         await File.WriteAllTextAsync(index, "reader released", this.TestContext.CancellationToken).ConfigureAwait(false);
         var obsolete = () => pipeline.InspectCookedOutputAsync(scopeUri: null, this.TestContext.CancellationToken, expectedProject: workspace.ProjectContext);
         _ = await obsolete.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
-        api.Verify(value => value.InspectLooseCookedRootAsync(root, It.IsAny<CancellationToken>()), Times.Once);
+        api.Verify(value => value.ReadInventoryAsync(root, It.IsAny<NativeArtifactLease?>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     /// <summary>A local cooked mount resolves to its declared physical root and scopes by native descriptor location.</summary>
@@ -158,7 +159,6 @@ public sealed partial class ContentPipelineServiceTests
         using var workspace = new TempWorkspace();
         var root = Path.Combine(workspace.Root, "ExternalLibrary");
         Directory.CreateDirectory(root);
-        await File.WriteAllTextAsync(Path.Combine(root, "container.index.bin"), "index", this.TestContext.CancellationToken).ConfigureAwait(false);
         var project = workspace.ProjectContext with { LocalFolderMounts = [new("Library", root)] };
         workspace.ContextService.Activate(project);
         var api = new Mock<IEngineContentPipelineApi>();
@@ -167,7 +167,16 @@ public sealed partial class ContentPipelineServiceTests
             new("/Foreign/Mesh.ogeo", ContentCookAssetKind.Geometry) { DescriptorRelativePath = "Geometry/Mesh.ogeo" },
             new("/Foreign/Blue.omat", ContentCookAssetKind.Material) { DescriptorRelativePath = "Materials/Blue.omat" },
         ];
-        _ = api.Setup(value => value.InspectLooseCookedRootAsync(root, It.IsAny<CancellationToken>())).ReturnsAsync(new CookInspectionResult(root, Succeeded: true, SourceIdentity: Guid.NewGuid(), entries, [], []));
+        foreach (var entry in entries)
+        {
+            var descriptor = Path.Combine(root, entry.DescriptorRelativePath!);
+            Directory.CreateDirectory(Path.GetDirectoryName(descriptor)!);
+            await File.WriteAllTextAsync(descriptor, "controlled descriptor", this.TestContext.CancellationToken).ConfigureAwait(false);
+        }
+
+        NativeInventoryFixture.WriteIndex(root, entries);
+        _ = api.Setup(value => value.ReadInventoryAsync(root, It.IsAny<NativeArtifactLease?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => NativeInventoryFixture.Read(root));
         var pipeline = CreateService(workspace, new CapturingSceneDescriptorGenerator(workspace, []), api.Object);
         var report = await pipeline.InspectCookedOutputAsync(new("asset:///Library/Geometry"), this.TestContext.CancellationToken, expectedProject: project).ConfigureAwait(false);
         var inspected = report.Roots.Should().ContainSingle().Subject;

@@ -64,7 +64,7 @@ public sealed partial class InspectorControlTests
         public async Task ApplyContentPriorityAsync(ProjectContext project, CancellationToken cancellationToken)
         {
             var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, this.compatibility);
-            var service = new CookedContentMountService(new NativeStorageProvider(new RealFileSystem()), api);
+            var service = new CookedContentMountService();
             var mounts = await service.PrepareAsync(project, CookedContentMountService.FindProjectRoots(project), await CookOutputLease.AcquireReadAsync(project.ProjectRoot, cancellationToken).ConfigureAwait(true), cancellationToken).ConfigureAwait(true);
             await this.engine.RefreshProjectCookedRootsAsync(mounts.Roots, mounts).ConfigureAwait(true);
         }

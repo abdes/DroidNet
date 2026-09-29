@@ -6,7 +6,6 @@ using System.Collections.Immutable;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Oxygen.Editor.Schemas;
-using Oxygen.Managed.Assets.Persistence.LooseCooked.V1;
 
 namespace Oxygen.Editor.ContentPipeline.Inspection;
 
@@ -34,10 +33,10 @@ public sealed record CookedDependencyReport(Guid SourceIdentity, ImmutableDictio
         using var document = JsonDocument.Parse(json);
         var root = document.RootElement;
         var assets = root.GetProperty("assets").EnumerateArray().Select(static asset => new CookedAssetDependencies(
-            IndexKey(asset.GetProperty("asset_key").GetString()!),
+            asset.GetProperty("asset_key").GetGuid().ToString("D"),
             asset.GetProperty("asset_type").GetByte(),
             asset.GetProperty("virtual_path").GetString()!,
-            asset.GetProperty("dependencies").EnumerateArray().Select(static key => IndexKey(key.GetString()!)).ToImmutableArray(),
+            asset.GetProperty("dependencies").EnumerateArray().Select(static key => key.GetGuid().ToString("D")).ToImmutableArray(),
             asset.GetProperty("complete").GetBoolean(),
             asset.TryGetProperty("diagnostic", out var diagnostic) ? diagnostic.GetString() : null)).ToArray();
         var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -46,9 +45,4 @@ public sealed record CookedDependencyReport(Guid SourceIdentity, ImmutableDictio
             : new(root.GetProperty("source_key").GetGuid(), assets.ToImmutableDictionary(static asset => asset.AssetKey, StringComparer.OrdinalIgnoreCase), json);
     }
 
-    /// <summary>Preserves native key bytes when converting canonical text to the managed index representation.</summary>
-    /// <param name="nativeKey">Canonical native key text.</param>
-    /// <returns>The index key text for the same sixteen bytes.</returns>
-    internal static string IndexKey(string nativeKey)
-        => AssetKey.FromBytes(Guid.Parse(nativeKey).ToByteArray(bigEndian: true)).ToString();
 }

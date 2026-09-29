@@ -3,11 +3,12 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
+using System.Security.Cryptography;
 using AwesomeAssertions;
 using DroidNet.Storage.Native;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Assets.Catalog.LooseCooked;
-using Oxygen.Managed.Assets.Persistence.LooseCooked.V1;
+using Oxygen.Managed.Assets.Persistence.LooseCooked.V2;
 using Testably.Abstractions.Testing;
 
 namespace Oxygen.Managed.Assets.Tests;
@@ -36,21 +37,21 @@ public sealed class LooseCookedIndexAssetCatalogTests
                     VirtualPath: "/Content/A.asset",
                     AssetType: 1,
                     DescriptorSize: 0,
-                    DescriptorSha256: new byte[LooseCookedIndex.Sha256Size]),
+                    DescriptorSha256: SHA256.HashData([])),
                 new AssetEntry(
                     AssetKey: new AssetKey(3, 4),
                     DescriptorRelativePath: "assets/B.asset",
                     VirtualPath: "/Engine/B.asset",
                     AssetType: 1,
                     DescriptorSize: 0,
-                    DescriptorSha256: new byte[LooseCookedIndex.Sha256Size]),
+                    DescriptorSha256: SHA256.HashData([])),
             ],
             Files: []);
 
         var ms = new MemoryStream();
         await using (ms.ConfigureAwait(false))
         {
-            LooseCookedIndex.Write(ms, indexDoc);
+            Oxygen.Testing.LooseCookedIndexFixture.Write(ms, indexDoc);
             await fs.File.WriteAllBytesAsync(@"C:\Cooked\container.index.bin", ms.ToArray(), this.TestContext.CancellationToken).ConfigureAwait(true);
         }
 
@@ -65,7 +66,7 @@ public sealed class LooseCookedIndexAssetCatalogTests
         _ = results.Select(r => r.Uri).Should().Contain(new Uri("asset:///Content/A.asset"));
         _ = results.Select(r => r.Uri).Should().Contain(new Uri("asset:///Engine/B.asset"));
         var first = results.Single(record => record.Uri == new Uri("asset:///Content/A.asset"));
-        _ = first.Cooked.Should().Be(new CookedAssetMetadata(@"C:\Cooked", "assets/A.asset", indexDoc.SourceGuid, new AssetKey(1, 2), 1, 0, new string('0', 64)) { VirtualPath = "/Content/A.asset" });
+        _ = first.Cooked.Should().Be(new CookedAssetMetadata(@"C:\Cooked", "assets/A.asset", indexDoc.SourceGuid, new AssetKey(1, 2), 1, 0, Convert.ToHexString(SHA256.HashData([]))) { VirtualPath = "/Content/A.asset" });
     }
 
     /// <summary>Reloaded records retain native types and content revisions without deriving them from a filename.</summary>
@@ -75,7 +76,7 @@ public sealed class LooseCookedIndexAssetCatalogTests
     {
         var fs = new MockFileSystem();
         _ = fs.Directory.CreateDirectory(@"C:\Cooked");
-        var entry = new AssetEntry(new AssetKey(1, 2), "payloads/7.bin", "/Content/Materials/Wood.png", AssetType: 1, DescriptorSize: 17, new byte[LooseCookedIndex.Sha256Size]);
+        var entry = new AssetEntry(new AssetKey(1, 2), "payloads/7.bin", "/Content/Materials/Wood.png", AssetType: 1, DescriptorSize: 17, SHA256.HashData(new byte[17]));
         var document = new Document(1, IndexFeatures.HasVirtualPaths, Guid.CreateVersion7(), [entry], []);
         await WriteIndexAsync(document).ConfigureAwait(false);
         using var catalog = new LooseCookedIndexAssetCatalog(new NativeStorageProvider(fs), new LooseCookedIndexAssetCatalogOptions { CookedRootFolderPath = @"C:\Cooked" });
@@ -96,7 +97,7 @@ public sealed class LooseCookedIndexAssetCatalogTests
         {
             var stream = new MemoryStream();
             await using var streamLifetime = stream.ConfigureAwait(false);
-            LooseCookedIndex.Write(stream, value);
+            Oxygen.Testing.LooseCookedIndexFixture.Write(stream, value);
             await fs.File.WriteAllBytesAsync(@"C:\Cooked\container.index.bin", stream.ToArray(), this.TestContext.CancellationToken).ConfigureAwait(false);
         }
     }
@@ -108,11 +109,11 @@ public sealed class LooseCookedIndexAssetCatalogTests
     {
         var fs = new MockFileSystem();
         _ = fs.Directory.CreateDirectory(@"C:\Cooked");
-        var entry = new AssetEntry(new AssetKey(1, 2), "payloads/7.bin", "/Content/Shape", AssetType: 2, DescriptorSize: 17, new byte[LooseCookedIndex.Sha256Size]);
-        var document = new Document(1, IndexFeatures.HasVirtualPaths, Guid.CreateVersion7(), [entry, entry with { AssetKey = new AssetKey(3, 4) }], []);
+        var entry = new AssetEntry(new AssetKey(1, 2), "payloads/7.bin", "/Content/Shape", AssetType: 2, DescriptorSize: 17, SHA256.HashData(new byte[17]));
+        var document = new Document(1, IndexFeatures.HasVirtualPaths, Guid.CreateVersion7(), [entry, entry with { AssetKey = new AssetKey(3, 4), DescriptorRelativePath = "payloads/8.bin" }], []);
         var stream = new MemoryStream();
         await using var streamLifetime = stream.ConfigureAwait(false);
-        LooseCookedIndex.Write(stream, document);
+        Oxygen.Testing.LooseCookedIndexFixture.Write(stream, document);
         await fs.File.WriteAllBytesAsync(@"C:\Cooked\container.index.bin", stream.ToArray(), this.TestContext.CancellationToken).ConfigureAwait(false);
         using var catalog = new LooseCookedIndexAssetCatalog(new NativeStorageProvider(fs), new LooseCookedIndexAssetCatalogOptions { CookedRootFolderPath = @"C:\Cooked" });
         Func<Task> query = () => catalog.QueryAsync(new(AssetQueryScope.All), this.TestContext.CancellationToken);

@@ -27,7 +27,8 @@ public sealed class ContentImportManifestBuilderTests
             "/Content/Scenes/Main.oscene", [texture], Diagnostics: []);
         var manifest = new ContentImportManifestBuilder().BuildSceneManifest(scope, scene);
         _ = manifest.Jobs.Select(static job => job.Type).Should().Equal("texture-descriptor", "scene-descriptor");
-        _ = manifest.Jobs[0].Layout!.TextureDescriptorsDirectory.Should().Be("Textures");
+        _ = manifest.Jobs[0].Layout!.VirtualMountRoot.Should().Be("/Content");
+        _ = manifest.Jobs[0].Layout!.TextureDescriptorsDirectory.Should().BeNull();
         _ = manifest.Jobs[1].DependsOn.Should().Equal(manifest.Jobs[0].Id);
     }
 
@@ -35,7 +36,11 @@ public sealed class ContentImportManifestBuilderTests
     public void BuildSceneManifest_ShouldOrderDependenciesBeforeSceneAndUseNativeJobTypes()
     {
         using var workspace = new TempWorkspace();
-        var scope = CreateScope(workspace);
+        var scope = CreateScope(workspace) with
+        {
+            InputDependencies = System.Collections.Immutable.ImmutableDictionary<Uri, System.Collections.Immutable.ImmutableArray<Uri>>.Empty
+                .Add(AssetUris.BuildGeneratedUri("BasicShapes/Cube"), [new("asset:///Content/Materials/Red.omat.json")]),
+        };
         var sceneDescriptorPath = Path.Combine(workspace.Root, ".pipeline", "Scenes", "Main.oscene.json");
         var sceneDescriptor = new SceneDescriptorGenerationResult(
             new Uri("asset:///Content/Scenes/Main.oscene.json"),
@@ -128,12 +133,12 @@ public sealed class ContentImportManifestBuilderTests
 
     private static ContentCookInput CreateMaterialInput(TempWorkspace workspace, string sourceRelativePath)
         => new(
-            new Uri("asset:///Content/Materials/Red.omat.json"),
+            new Uri("asset:///" + sourceRelativePath.Replace('\\', '/')),
             ContentCookAssetKind.Material,
             "Content",
             sourceRelativePath,
             Path.Combine(workspace.Root, sourceRelativePath.Replace('\\', Path.DirectorySeparatorChar)),
-            "/Content/Materials/Red.omat",
+            "/" + sourceRelativePath.Replace('\\', '/')[..^5],
             ContentCookInputRole.Dependency);
 
     private static ContentCookInput CreateGeometryInput(TempWorkspace workspace, string sourceRelativePath)

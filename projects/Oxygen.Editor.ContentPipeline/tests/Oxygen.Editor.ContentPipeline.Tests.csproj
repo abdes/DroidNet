@@ -20,6 +20,7 @@
         <None Update="Fixtures\BuiltinGeometryCatalog.json" CopyToOutputDirectory="PreserveNewest" />
         <None Include="..\..\Oxygen.Engine\src\Oxygen\Cooker\Test\Import\Models\static_scalar_triangle.*" Link="Fixtures\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
         <Compile Include="..\..\Oxygen.Managed.Core\testsupport\TemporaryNativeArtifacts.cs" Link="TemporaryNativeArtifacts.cs" />
+        <Compile Include="..\testsupport\NativeInventoryFixture.cs" Link="NativeInventoryFixture.cs" />
         <Compile Include="..\testsupport\NativeContentPipelineFixture.cs" Link="NativeContentPipelineFixture.cs" />
     </ItemGroup>
     <Target Name="CopyContentWorkerProbe" AfterTargets="Build" Condition="'$(TargetFramework)' != ''">
@@ -35,4 +36,7 @@
         </ItemGroup>
         <Copy SourceFiles="@(_ContentWorkerProbeFiles)" DestinationFolder="$(OutDir)WorkerProbe" SkipUnchangedFiles="true" />
     </Target>
+    <ItemGroup>
+        <Compile Include="$(ProjectsRoot)\Oxygen.Managed.Assets\testsupport\LooseCookedIndexFixture.cs" Link="LooseCookedIndexFixture.cs" />
+    </ItemGroup>
 </Project>

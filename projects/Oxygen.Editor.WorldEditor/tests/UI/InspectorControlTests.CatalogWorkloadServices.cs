@@ -31,7 +31,7 @@ public sealed partial class InspectorControlTests
             var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), processRunner ?? new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, this.compatibility);
             this.Scopes = new ProjectCookScopeProvider(this.Storage);
             this.Publication = new(this.Runs, this.Projects, files);
-            this.Mounts = new(this.Storage, api);
+            this.Mounts = new();
             this.Pipeline = new ContentPipelineService(this.Projects, this.Runs, this.Scopes, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), new ContentImportManifestBuilder(), new ContentImportManifestValidator(), api, this.Documents, this.compatibility, files, this.Publication);
             var paths = new Mock<IPathFinder>();
             _ = paths.SetupGet(value => value.LocalAppState).Returns(Path.Combine(fixture.ProjectRoot, ".state"));

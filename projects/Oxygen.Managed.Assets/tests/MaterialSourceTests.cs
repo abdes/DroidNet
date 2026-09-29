@@ -6,7 +6,7 @@ using System.Numerics;
 using System.Text;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
-using Oxygen.Managed.Assets.Import.Materials;
+using Oxygen.Managed.Assets.Authoring.Materials;
 
 namespace Oxygen.Managed.Assets.Tests;
 

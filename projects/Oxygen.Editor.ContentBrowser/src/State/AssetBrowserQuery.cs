@@ -49,7 +49,7 @@ public sealed partial class AssetBrowserQuery : ObservableObject
         new("Unsaved changes", static asset => asset.CookStatus?.HasUnsavedChanges == true || asset.CookActivity?.State == CookRunState.NeedsSave),
         new("In progress", static asset => asset.CookActivity?.State is CookRunState.Queued or CookRunState.Preparing or CookRunState.Cooking or CookRunState.Validating or CookRunState.Publishing or CookRunState.Cancelling
             || asset.RuntimeAvailability == AssetRuntimeAvailability.Updating),
-        new("Cooked", static asset => !asset.IsBuiltin && (asset.CookStatus is { Freshness: AssetCookFreshness.Current, HasVerifiedOutput: true }
+        new("Cooked", static asset => !asset.IsBuiltin && (asset.CookStatus is { Freshness: AssetCookFreshness.Current, OutputAvailability: CookedOutputAvailability.Present }
             || (asset.CookStatus is null && asset.PrimaryState == AssetState.Cooked))),
         new("Built-in", static asset => asset.IsBuiltin),
         new("Problems", HasProblems),
@@ -99,7 +99,7 @@ public sealed partial class AssetBrowserQuery : ObservableObject
     private static bool HasProblems(ContentBrowserAssetItem asset)
         => asset.HasDiagnostics || asset.PrimaryState is AssetState.Broken or AssetState.Missing
             || asset.CookStatus?.Freshness is AssetCookFreshness.MissingSource or AssetCookFreshness.InvalidSource
-            || asset.CookStatus is { HasPublishedOutput: true, HasVerifiedOutput: false }
+            || asset.CookStatus is { HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Missing }
             || asset.CookActivity?.State == CookRunState.Failed || asset.RuntimeAvailability == AssetRuntimeAvailability.Failed;
 
     [RelayCommand]

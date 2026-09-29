@@ -48,8 +48,16 @@ public sealed record ContentCookScope(
     /// <summary>Gets sources whose validated products should be omitted from native manifests.</summary>
     internal System.Collections.Immutable.ImmutableHashSet<Uri> ReusableSources { get; init; } = [];
 
+    /// <summary>Gets discovered source dependencies used to order native jobs within this scope.</summary>
+    internal System.Collections.Immutable.ImmutableDictionary<Uri, System.Collections.Immutable.ImmutableArray<Uri>> InputDependencies { get; init; }
+        = System.Collections.Immutable.ImmutableDictionary<Uri, System.Collections.Immutable.ImmutableArray<Uri>>.Empty;
+
     /// <summary>Gets prior source ownership used to reject imported-output collisions.</summary>
     internal Incremental.CookProvenance? PreviousProvenance { get; init; }
+
+    /// <summary>Gets prior native inventory metadata for imported-output identity checks.</summary>
+    internal System.Collections.Immutable.ImmutableDictionary<string, Inspection.CookedInventoryReport> PreviousInventories { get; init; }
+        = System.Collections.Immutable.ImmutableDictionary<string, Inspection.CookedInventoryReport>.Empty;
 
     /// <summary>Gets the explicit source replacement captured instead of the currently retained bytes.</summary>
     internal Import.SceneImportRequest? ImportReplacement { get; init; }

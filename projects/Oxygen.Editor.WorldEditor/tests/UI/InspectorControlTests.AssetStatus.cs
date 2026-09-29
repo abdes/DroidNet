@@ -174,7 +174,7 @@ public sealed partial class InspectorControlTests
             DiagnosticCodes: [],
             IsSelectable: true)
         {
-            CookStatus = new(uri, AssetCookFreshness.Current, HasPublishedOutput: true, HasVerifiedOutput: true, [], [], []),
+            CookStatus = new(uri, AssetCookFreshness.Current, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [], [], []),
         };
     }
 }

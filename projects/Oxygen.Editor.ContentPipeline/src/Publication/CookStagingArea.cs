@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Immutable;
+using Oxygen.Editor.ContentPipeline.Inspection;
 
 namespace Oxygen.Editor.ContentPipeline.Publication;
 
@@ -28,7 +29,7 @@ internal sealed partial class CookStagingArea : IDisposable
     /// <param name="mounts">Distinct physical authoring mount names.</param>
     /// <param name="cancellationToken">Cancels private preparation.</param>
     /// <returns>The operation's private output owner.</returns>
-    public static async Task<CookStagingArea> CreateAsync(ContentCookOperation operation, IEnumerable<string> mounts, CancellationToken cancellationToken)
+    public static async Task<CookStagingArea> CreateAsync(ContentCookOperation operation, IEnumerable<string> mounts, CancellationToken cancellationToken, IReadOnlySet<string>? emptyRoots = null)
     {
         var names = ValidateMounts(mounts);
         using var reader = await CookOutputLease.AcquireInspectionAsync(operation.Project.ProjectRoot, cancellationToken).ConfigureAwait(false);
@@ -54,7 +55,7 @@ internal sealed partial class CookStagingArea : IDisposable
                 CookOutputLease.RejectReparsePoint(Path.GetDirectoryName(published)!);
                 var staging = Path.Combine(output, name);
                 _ = Directory.CreateDirectory(staging);
-                var before = await CookRootImage.CaptureAsync(published, staging, cancellationToken).ConfigureAwait(false);
+                var before = await CookRootImage.CaptureAsync(published, emptyRoots?.Contains(name) == true ? null : staging, cancellationToken).ConfigureAwait(false);
                 var after = await CookRootImage.CaptureAsync(published, copyTo: null, cancellationToken).ConfigureAwait(false);
                 if (!before.Matches(after))
                 {
@@ -90,6 +91,57 @@ internal sealed partial class CookStagingArea : IDisposable
 
     /// <summary>Transfers cleanup to the publication journal, which may need staging after an interruption.</summary>
     public void RetainForPublication() => this.retained = true;
+
+    /// <summary>Checks the captured seed against accepted native facts before any importer can rewrite hashes.</summary>
+    public void VerifyAcceptedInventories(IReadOnlyDictionary<string, CookedInventoryReport> inventories, IReadOnlySet<string> emptyRoots)
+    {
+        foreach (var root in this.Roots)
+        {
+            if (root.Before.Files.Count == 0)
+            {
+                if (inventories.ContainsKey(root.Mount))
+                {
+                    throw new IOException($"Cooked root disappeared after verification: '{root.Mount}'. Retry the cook.");
+                }
+
+                continue;
+            }
+
+            if (!inventories.TryGetValue(root.Mount, out var inventory)
+                || !root.Before.Files.TryGetValue("container.index.bin", out var index)
+                || index.Size != inventory.IndexSize
+                || !string.Equals(index.Sha256, inventory.IndexSha256, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new IOException($"Cooked index changed before staging '{root.Mount}'. Retry the cook.");
+            }
+
+            var damaged = inventory.Issues.Select(static issue => issue.RelativePath).ToHashSet(StringComparer.Ordinal);
+            var missing = inventory.Issues.Where(static issue => issue.Reason == "missing").Select(static issue => issue.RelativePath).ToHashSet(StringComparer.Ordinal);
+            foreach (var (path, expected) in inventory.Files)
+            {
+                if (!root.Before.Files.TryGetValue(path, out var actual))
+                {
+                    if (missing.Contains(path))
+                    {
+                        continue;
+                    }
+
+                    throw new IOException($"Cooked file disappeared before staging '{root.Mount}/{path}'. Retry the cook.");
+                }
+
+                if (!emptyRoots.Contains(root.Mount) && !damaged.Contains(path)
+                    && (actual.Size != expected.Size || !string.Equals(actual.Sha256, expected.Sha256, StringComparison.OrdinalIgnoreCase)))
+                {
+                    throw new IOException($"Cooked file changed after verification: '{root.Mount}/{path}'. Retry the cook.");
+                }
+            }
+
+            if (root.Before.Files.Keys.Any(path => path is not ("container.index.bin" or ".generation.lock") && !inventory.Files.ContainsKey(path)))
+            {
+                throw new IOException($"Cooked membership changed before staging '{root.Mount}'. Retry the cook.");
+            }
+        }
+    }
 
     /// <inheritdoc />
     public void Dispose()

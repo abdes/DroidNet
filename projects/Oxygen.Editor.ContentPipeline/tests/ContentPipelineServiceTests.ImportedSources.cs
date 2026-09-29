@@ -40,11 +40,11 @@ public sealed partial class ContentPipelineServiceTests
         _ = result.CookedAssets.Should().Contain(asset => asset.Kind == ContentCookAssetKind.Scene);
         var expectedPrefixes = new[] { "/Content/Geometry/Models/Model/", "/Content/Materials/Models/Model/", "/Content/Scenes/Models/Model/" };
         _ = result.CookedAssets.Should().OnlyContain(asset => asset.SourceAssetUri == source && expectedPrefixes.Any(prefix => asset.VirtualPath.StartsWith(prefix, StringComparison.Ordinal)));
-        var count = runner.Count;
+        var count = runner.ImportCount;
         var reopened = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
         var repeat = await reopened.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = repeat.IsUpToDate.Should().BeTrue();
-        _ = runner.Count.Should().Be(count, "unchanged imports must reuse native output without another worker");
+        _ = runner.ImportCount.Should().Be(count, "unchanged imports must verify and reuse native output without recooking");
         _ = repeat.ReusedAssets.Select(static asset => asset.CookedAssetUri).Should().BeEquivalentTo(result.CookedAssets.Select(static asset => asset.CookedAssetUri));
     }
 
@@ -88,9 +88,9 @@ public sealed partial class ContentPipelineServiceTests
         await File.WriteAllTextAsync(path, content.ToJsonString(), this.TestContext.CancellationToken).ConfigureAwait(false);
         var changed = await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = changed.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, changed.Diagnostics.Select(static issue => issue.TechnicalMessage ?? issue.Message)));
-        var afterChange = runner.Count;
+        var afterChange = runner.ImportCount;
         _ = (await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false)).IsUpToDate.Should().BeTrue();
-        _ = runner.Count.Should().Be(afterChange);
+        _ = runner.ImportCount.Should().Be(afterChange);
     }
 
     /// <summary>A renamed native output cannot replace published identities hidden by old staged files.</summary>
@@ -135,11 +135,11 @@ public sealed partial class ContentPipelineServiceTests
         var settingsPath = Path.Combine(workspace.Root, "Content/SourceMedia/DCC/Second/model.gltf.import.json");
         var settings = NativeSceneImportSettings.Parse(await File.ReadAllBytesAsync(settingsPath, this.TestContext.CancellationToken).ConfigureAwait(false));
         await File.WriteAllBytesAsync(settingsPath, (settings with { OutputDirectory = "Models/First" }).ToBytes(), this.TestContext.CancellationToken).ConfigureAwait(false);
-        var before = runner.Count;
+        var before = runner.ImportCount;
         var result = await service.CookAssetAsync(second, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.Status.Should().Be(OperationStatus.Failed);
         _ = result.IsPublished.Should().BeFalse();
-        _ = runner.Count.Should().Be(before);
+        _ = runner.ImportCount.Should().Be(before);
         _ = result.Diagnostics.Should().Contain(issue => issue.Message.Contains("overlaps", StringComparison.Ordinal));
     }
 
@@ -194,9 +194,9 @@ public sealed partial class ContentPipelineServiceTests
         var changed = await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = changed.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, changed.Diagnostics.Select(static issue => issue.Message)));
         _ = changed.InputSnapshot!.Inputs.Should().Contain(file => file.RelativePath.EndsWith("mesh data.bin", StringComparison.Ordinal));
-        var count = runner.Count;
+        var count = runner.ImportCount;
         _ = (await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false)).IsUpToDate.Should().BeTrue();
-        _ = runner.Count.Should().Be(count);
+        _ = runner.ImportCount.Should().Be(count);
     }
 
     private static async Task<Uri> WriteRetainedModelAsync(TempWorkspace workspace, string name, string extension, CancellationToken cancellationToken)
@@ -220,9 +220,16 @@ public sealed partial class ContentPipelineServiceTests
 
         public int Count { get; private set; }
 
+        public int ImportCount { get; private set; }
+
         public Task<ContentPipelineProcessResult> RunAsync(ContentPipelineProcessRequest request, CancellationToken cancellationToken)
         {
             this.Count++;
+            if (request.Arguments.Contains("batch", StringComparer.Ordinal))
+            {
+                this.ImportCount++;
+            }
+
             return this.inner.RunAsync(request, cancellationToken);
         }
     }

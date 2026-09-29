@@ -34,12 +34,12 @@ public sealed partial class BuiltinCatalogDiscovery : IBuiltinCatalogDiscovery, 
     /// <param name="paths">The editor's application-state location.</param>
     /// <param name="logger">Discovery and cache diagnostics.</param>
     /// <param name="compatibility">The cooking SDK identity check.</param>
-    public BuiltinCatalogDiscovery(IBuiltinGeometryCatalogProvider nativeCatalog, IAtomicFileStore files, IPathFinder paths, ILogger<BuiltinCatalogDiscovery> logger, INativeCompatibilityService? compatibility = null)
+    public BuiltinCatalogDiscovery(IBuiltinGeometryCatalogProvider nativeCatalog, IAtomicFileStore files, IPathFinder paths, ILogger<BuiltinCatalogDiscovery> logger, INativeCompatibilityService compatibility)
     {
         this.nativeCatalog = nativeCatalog;
         this.files = files;
         this.logger = logger;
-        this.compatibility = compatibility ?? EditorNativeCompatibilityService.ForCooking();
+        this.compatibility = compatibility;
         this.cacheRoot = Path.Combine(paths.LocalAppState, "cache", "builtins", EditorNativeCompatibilityService.CurrentConfiguration);
         this.cachePath = Path.Combine(this.cacheRoot, "catalog.json");
         this.queryRoot = Path.Combine(paths.Temp, "Oxygen", "BuiltinCatalog", EditorNativeCompatibilityService.CurrentConfiguration);

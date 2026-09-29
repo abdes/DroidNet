@@ -75,6 +75,7 @@ public sealed partial class ContentBrowserAssetProvider : IContentBrowserAssetPr
             .Subscribe(_ => this.OnProjectChanged());
         this.documents.StateChanged += this.OnDocumentStateChanged;
         this.cooks.RunChanged += this.OnCookRunChanged;
+        this.cookStatus.Changed += this.OnFreshnessChanged;
         this.engine.ContentStatusChanged += this.OnRuntimeContentChanged;
         this.engine.StateChanged += this.OnRuntimeStateChanged;
         this.runtimeWorld.AssetStatusChanged += this.OnRuntimeAssetStatusChanged;
@@ -161,6 +162,7 @@ public sealed partial class ContentBrowserAssetProvider : IContentBrowserAssetPr
         this.projectSubscription.Dispose();
         this.documents.StateChanged -= this.OnDocumentStateChanged;
         this.cooks.RunChanged -= this.OnCookRunChanged;
+        this.cookStatus.Changed -= this.OnFreshnessChanged;
         this.engine.ContentStatusChanged -= this.OnRuntimeContentChanged;
         this.engine.StateChanged -= this.OnRuntimeStateChanged;
         this.runtimeWorld.AssetStatusChanged -= this.OnRuntimeAssetStatusChanged;
@@ -180,7 +182,8 @@ public sealed partial class ContentBrowserAssetProvider : IContentBrowserAssetPr
                     : item.ImportSourceUri is not null && item.DescriptorPath is null ? AssetState.Cooked : AssetState.Descriptor,
             },
             DerivedState = !state.HasPublishedOutput ? null
-                : !state.HasVerifiedOutput ? AssetState.Broken
+                : state.OutputAvailability == CookedOutputAvailability.Missing ? AssetState.Missing
+                : state.OutputAvailability == CookedOutputAvailability.Unknown ? null
                 : state.Freshness == AssetCookFreshness.Current && !state.HasUnsavedChanges ? AssetState.Cooked : AssetState.Stale,
             IsSelectable = state.Freshness is not (AssetCookFreshness.InvalidSource or AssetCookFreshness.MissingSource),
         };
@@ -219,7 +222,7 @@ public sealed partial class ContentBrowserAssetProvider : IContentBrowserAssetPr
             && File.Exists(path + Oxygen.Editor.ContentPipeline.Import.NativeSceneImportSettings.SidecarSuffix)
                 ? item with { ImportSourceUri = item.IdentityUri, ImportSourcePath = path } : item).ToArray();
         var candidates = source.Where(item => item.Generated is not null || item.ImportSourceUri is not null
-            || (item.DescriptorPath is not null && item.Kind is AssetKind.Material or AssetKind.Geometry or AssetKind.Scene)
+            || (item.DescriptorPath is not null && item.Kind is AssetKind.Material or AssetKind.Geometry or AssetKind.Scene or AssetKind.Texture)
             || IsProjectCookedOutput(project, item)).ToArray();
         if (candidates.Length == 0)
         {
@@ -228,7 +231,7 @@ public sealed partial class ContentBrowserAssetProvider : IContentBrowserAssetPr
 
         var states = (await this.cookStatus.ReadAsync(project, candidates.Select(static item => item.IdentityUri).ToArray(), cancellationToken).ConfigureAwait(false))
             .ToDictionary(static state => state.AssetUri);
-        var origins = source.Where(item => item.Generated is not null && states.TryGetValue(item.IdentityUri, out var state) && state.HasVerifiedOutput)
+        var origins = source.Where(item => item.Generated is not null && states.TryGetValue(item.IdentityUri, out var state) && state.HasAvailableOutput)
             .SelectMany(item => states[item.IdentityUri].Outputs.Select(output => new VerifiedBuiltinSource(Path.GetFullPath(Path.Combine(project.ProjectRoot, ".cooked", output.MountName)), output.CookedAssetUri, item)))
             .GroupBy(static entry => entry.CookedUri)
             .Where(static group => group.Select(entry => entry.Origin.IdentityUri).Distinct().Take(2).Count() == 1)

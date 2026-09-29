@@ -7,7 +7,7 @@ using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using DroidNet.Storage;
 using Oxygen.Managed.Assets.Catalog.FileSystem;
-using Oxygen.Managed.Assets.Persistence.LooseCooked.V1;
+using Oxygen.Managed.Assets.Persistence.LooseCooked.V2;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Managed.Assets.Catalog.LooseCooked;
@@ -16,9 +16,9 @@ namespace Oxygen.Managed.Assets.Catalog.LooseCooked;
 /// A catalog provider backed by a runtime-compatible loose cooked index (<c>container.index.bin</c>).
 /// </summary>
 /// <remarks>
-/// This provider treats the v1 index as the source of truth for cooked asset enumeration.
-/// It maps v1 <c>VirtualPath</c> values (e.g. <c>/Content/Textures/Wood.png</c>) to canonical
-/// asset URIs (e.g. <c>asset:///Content/Textures/Wood.png</c>).
+/// This provider enumerates keyed assets from the current v2 index.
+/// It maps native <c>VirtualPath</c> values (e.g. <c>/Content/Materials/Wood.omat</c>)
+/// to canonical asset URIs (e.g. <c>asset:///Content/Materials/Wood.omat</c>).
 /// </remarks>
 public sealed class LooseCookedIndexAssetCatalog : IAssetCatalog, IRefreshableAssetCatalog, IDisposable
 {

@@ -149,24 +149,30 @@ public sealed partial class CookPublicationTransactionTests
         const string producer = "native-producer";
         var beforeFingerprint = CookIncrementalPlanner.Fingerprint(input, producer, consumed, graph);
         var reuseFingerprint = CookIncrementalPlanner.Fingerprint(input, producer, accepted, graph);
-        var output = new ContentCookedAsset(uri, new("asset:///Content/Geometry/Model.ogeo"), ContentCookAssetKind.Geometry, "Content", "/Content/Geometry/Model.ogeo");
+        var output = new ContentCookedAsset(uri, new("asset:///Content/Geometry/Model.ogeo"), ContentCookAssetKind.Geometry, "Content", "/Content/Geometry/Model.ogeo")
+        {
+            DescriptorRelativePath = "Geometry/Model.ogeo",
+        };
         var path = Path.Combine(project.Root, ".cooked/Content/Geometry/Model.ogeo");
         _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         await File.WriteAllTextAsync(path, "geometry", this.TestContext.CancellationToken).ConfigureAwait(false);
         var product = new CookProvenance.Product(uri, beforeFingerprint, [], [new(output, "Content")]) { ReuseFingerprint = reuseFingerprint };
-        var root = new CookProvenance.Root("Content", [Proof("container.index.bin", "old:Content")],
-            [new(new(output.VirtualPath, output.Kind) { DescriptorRelativePath = "Geometry/Model.ogeo" }, Proof("Geometry/Model.ogeo", "geometry"))]);
+        var rootPath = Path.Combine(project.Root, ".cooked", "Content");
+        Oxygen.Testing.NativeInventoryFixture.WriteIndex(rootPath, [new(output.VirtualPath, output.Kind) { DescriptorRelativePath = "Geometry/Model.ogeo" }]);
+        var inventory = Oxygen.Testing.NativeInventoryFixture.Read(rootPath);
+        var native = Oxygen.Testing.NativeInventoryFixture.CreateApi();
+        var root = new CookProvenance.Root("Content", inventory.SourceKey, inventory.IndexSha256);
         var previous = new CookProvenance(CookProvenance.CurrentVersion, project.Context.ProjectId, [root], [product]);
-        var plan = await CookIncrementalPlanner.PlanAsync(project.Context, producer, accepted, graph, previous, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var verified = await CookIncrementalPlanner.ReadInventoriesAsync(project.Context, ["Content"], native, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var plan = CookIncrementalPlanner.CreatePlan(producer, accepted, graph, previous, verified);
         _ = plan.Reusable.Keys.Should().Contain(uri);
         _ = product.Fingerprint.Should().Be(beforeFingerprint).And.NotBe(reuseFingerprint);
         _ = consumed.Single().DiscoveryHash.Should().Be(update.BeforeHash);
         var changed = accepted.SetItem(0, accepted[0] with { DiscoveryHash = new string('F', 64) });
-        var edited = await CookIncrementalPlanner.PlanAsync(project.Context, producer, changed, graph, previous, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var edited = CookIncrementalPlanner.CreatePlan(producer, changed, graph, previous, verified);
         _ = edited.Reusable.Should().BeEmpty();
 
-        static CookProvenance.FileProof Proof(string relative, string bytes)
-            => new(relative, Encoding.UTF8.GetByteCount(bytes), Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(bytes))));
+
     }
 
     private async Task<CookProducedSourceFile> CreateSourceUpdateAsync(PublicationProject project, string bundle, bool projectOwned = false)

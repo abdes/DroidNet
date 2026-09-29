@@ -76,6 +76,7 @@ public sealed partial class ContentPipelineService : IGeometryMaterialSlotProvid
         {
             if (libraries.FindPreferredAsset(geometryUri) is { } library)
             {
+                await libraries.ValidateNativeAsync(this.engineContentPipelineApi, token).ConfigureAwait(false);
                 var native = library.Asset.Cooked;
                 if (native is null || native.AssetType != 2 || native.VirtualPath is not { Length: > 0 } virtualPath)
                 {
@@ -104,15 +105,15 @@ public sealed partial class ContentPipelineService : IGeometryMaterialSlotProvid
 
             var selected = matches[0];
             var owner = prior.Products.SelectMany(static product => product.Outputs).SingleOrDefault(output => output.Asset == selected);
-            var indexed = owner is null ? null : prior.Roots.FirstOrDefault(root => string.Equals(root.Mount, owner.RootMount, StringComparison.Ordinal))?.Assets
-                .SingleOrDefault(asset => string.Equals(asset.Entry.VirtualPath, selected.VirtualPath, StringComparison.Ordinal));
-            if (owner is null || indexed?.Entry.AssetKey is not { Length: > 0 } expectedKey)
-            {
-                return null;
-            }
-
+            var expectedRoot = owner is null ? null : prior.Roots.FirstOrDefault(root => string.Equals(root.Mount, owner.RootMount, StringComparison.Ordinal));
+            if (owner is null || expectedRoot is null) { return null; }
             var cookedRoot = Path.GetDirectoryName(CookIncrementalPlanner.ResolveOutputPath(project.ProjectRoot, owner.RootMount, "container.index.bin"))!;
             await using var files = await CookOutputReadLease.AcquireAsync(cookedRoot, token).ConfigureAwait(false);
+            var inventory = await files.ReadInventoryAsync(this.engineContentPipelineApi, token).ConfigureAwait(false);
+            if (!expectedRoot.Matches(inventory) || !inventory.IsValid) { return null; }
+            var indexed = inventory.Assets.SingleOrDefault(asset => string.Equals(asset.VirtualPath, selected.VirtualPath, StringComparison.Ordinal));
+            if (indexed is null) { return null; }
+            var expectedKey = indexed.Key.ToString();
             CookedGeometryReport geometryReport;
             try
             {
@@ -138,11 +139,11 @@ public sealed partial class ContentPipelineService : IGeometryMaterialSlotProvid
     }
 
     private static bool HasCurrentGeometryOutput(AssetCookStatus status)
-        => status.Freshness == AssetCookFreshness.Current && status.HasVerifiedOutput && !status.HasUnsavedChanges;
+        => status.Freshness == AssetCookFreshness.Current && status.HasAvailableOutput && !status.HasUnsavedChanges;
 
     private static GeometryMaterialSlotMetadata? VerifyInventoryKey(GeometryMaterialSlotMetadata? metadata, string expectedIndexKey)
     {
-        if (metadata is not null && !string.Equals(CookedDependencyReport.IndexKey(metadata.NativeGeometryKey.ToString("D")), expectedIndexKey, StringComparison.OrdinalIgnoreCase))
+        if (metadata is not null && !string.Equals(metadata.NativeGeometryKey.ToString("D"), expectedIndexKey, StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidDataException("Native geometry metadata does not match the selected source's asset identity.");
         }

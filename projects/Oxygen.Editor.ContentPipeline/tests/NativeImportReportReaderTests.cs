@@ -21,7 +21,7 @@ public sealed class NativeImportReportReaderTests
         var (execution, report) = CreateReport();
         var result = NativeImportReportReader.Read(report.ToJsonString(), execution, 0);
         _ = result.Succeeded.Should().BeTrue();
-        _ = result.OutputFiles.Should().Equal("Models/Model/Geometry/Triangle.ogeo");
+        _ = result.OutputsBySource["model.gltf"].Should().Equal("Models/Model/Geometry/Triangle.ogeo");
         _ = result.Diagnostics.Should().ContainSingle(issue => issue.OperationId == execution.OperationId
             && issue.Severity == DiagnosticSeverity.Warning && issue.Code == "source.warning"
             && issue.AffectedPath == Path.Combine(execution.InputRoot, "model.gltf"));

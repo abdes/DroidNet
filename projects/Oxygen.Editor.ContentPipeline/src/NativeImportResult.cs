@@ -15,8 +15,9 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <param name="Diagnostics">Adapted native diagnostics.</param>
 public sealed record NativeImportResult(bool Succeeded, IReadOnlyList<DiagnosticRecord> Diagnostics)
 {
-    /// <summary>Gets the exact files produced by source-model jobs, when native reporting was requested.</summary>
-    public IReadOnlyList<string>? OutputFiles { get; init; }
+    /// <summary>Gets the native job's emitted paths keyed by captured source-relative path.</summary>
+    public ImmutableDictionary<string, ImmutableArray<string>> OutputsBySource { get; init; }
+        = ImmutableDictionary<string, ImmutableArray<string>>.Empty;
 
     /// <summary>Gets native allocation records keyed by their captured source-relative paths.</summary>
     public ImmutableDictionary<string, NativeMaterialSlotProvenance> MaterialSlotProvenance { get; init; }

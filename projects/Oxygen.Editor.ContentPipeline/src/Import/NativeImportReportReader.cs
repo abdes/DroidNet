@@ -41,7 +41,7 @@ internal static class NativeImportReportReader
             throw new InvalidDataException("The native import report has an incomplete job set.");
         }
 
-        var outputs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var outputsBySource = ImmutableDictionary.CreateBuilder<string, ImmutableArray<string>>(StringComparer.Ordinal);
         var diagnostics = new List<DiagnosticRecord>();
         var provenance = ImmutableDictionary.CreateBuilder<string, NativeMaterialSlotProvenance>(StringComparer.Ordinal);
         var succeeded = exitCode == 0;
@@ -56,9 +56,11 @@ internal static class NativeImportReportReader
             }
 
             succeeded &= string.Equals(job.GetProperty("status").GetString(), "succeeded", StringComparison.Ordinal);
-            AddOutputs(job, outputs);
+            var emitted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            AddOutputs(job, emitted);
 
             var requested = execution.Manifest.Jobs[index];
+            outputsBySource.Add(requested.Source, [.. emitted.Order(StringComparer.Ordinal)]);
             if (requested.MaterialSlotProvenance is { } previous
                 && string.Equals(job.GetProperty("status").GetString(), "succeeded", StringComparison.Ordinal))
             {
@@ -103,7 +105,7 @@ internal static class NativeImportReportReader
 
         return new(succeeded, diagnostics)
         {
-            OutputFiles = outputs.Order(StringComparer.Ordinal).ToArray(),
+            OutputsBySource = outputsBySource.ToImmutable(),
             MaterialSlotProvenance = succeeded ? provenance.ToImmutable() : ImmutableDictionary<string, NativeMaterialSlotProvenance>.Empty,
         };
     }

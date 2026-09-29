@@ -43,27 +43,26 @@ public sealed partial class AssetCookStatusReaderTests
         var after = (await reader.ReadAsync(project.Project, [uri], this.TestContext.CancellationToken).ConfigureAwait(false)).Single();
         _ = after.Freshness.Should().Be(AssetCookFreshness.OutOfDate);
         _ = after.HasPublishedOutput.Should().BeTrue();
-        _ = after.HasVerifiedOutput.Should().Be(!damageOutput);
+        _ = after.HasAvailableOutput.Should().Be(!damageOutput);
     }
 
-    /// <summary>A source saved while native identity is being checked cannot receive a stale Current result.</summary>
+    /// <summary>A producer invalidated during status evaluation cannot receive a stale Current result.</summary>
     /// <returns>The asynchronous concurrent-input regression.</returns>
     [TestMethod]
-    public async Task SourceChangedDuringInspectionCannotBeCurrent()
+    public async Task ProducerChangedDuringStatusCannotBeCurrent()
     {
         using var project = new StatusProject();
         await project.PublishAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         var native = new Mock<INativeCompatibilityService>(MockBehavior.Strict);
-        _ = native.Setup(service => service.VerifyAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-            .Returns(async (Guid operation, CancellationToken token) =>
-            {
-                await File.WriteAllTextAsync(project.SourcePath, StatusProject.CreateMaterialJson(0.8f), token).ConfigureAwait(false);
-                return await project.VerifyNativeAsync(operation, token).ConfigureAwait(false);
-            });
+        var verified = await project.VerifyNativeAsync(Guid.NewGuid(), this.TestContext.CancellationToken).ConfigureAwait(false);
+        await using var artifacts = verified.Artifacts!;
+        _ = native.SetupSequence(service => service.Observation)
+            .Returns(new NativeProducerObservation(1, artifacts.Fingerprint, []))
+            .Returns(new NativeProducerObservation(2, null, []));
         var status = (await project.CreateReader(native.Object).ReadAsync(project.Project, [StatusProject.SourceUri], this.TestContext.CancellationToken).ConfigureAwait(false)).Single();
         _ = status.Freshness.Should().Be(AssetCookFreshness.Unknown);
-        _ = status.HasVerifiedOutput.Should().BeTrue();
-        _ = status.Diagnostics.Should().Contain(issue => issue.Code == "asset_status.input_changed");
+        _ = status.HasAvailableOutput.Should().BeTrue();
+        native.Verify(service => service.VerifyAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     /// <summary>An unavailable native producer does not erase prior output or pretend it is current.</summary>
@@ -74,10 +73,11 @@ public sealed partial class AssetCookStatusReaderTests
         using var project = new StatusProject();
         await project.PublishAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         await File.WriteAllTextAsync(Path.Combine(project.Root, "producer.bin"), "changed producer", this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await project.VerifyNativeAsync(Guid.NewGuid(), this.TestContext.CancellationToken).ConfigureAwait(false);
         var status = await project.ReadAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = status.Freshness.Should().Be(AssetCookFreshness.Unknown);
         _ = status.HasPublishedOutput.Should().BeTrue();
-        _ = status.HasVerifiedOutput.Should().BeTrue();
+        _ = status.HasAvailableOutput.Should().BeTrue();
         _ = status.Diagnostics.Should().NotBeEmpty();
     }
 
@@ -91,9 +91,11 @@ public sealed partial class AssetCookStatusReaderTests
         var producer = Path.Combine(project.Root, "producer.bin");
         await File.WriteAllTextAsync(producer, "new producer", this.TestContext.CancellationToken).ConfigureAwait(false);
         using var native = new Oxygen.Testing.TemporaryNativeArtifacts([new NativeArtifactLocation("producer", producer)]);
+        var verifiedProducer = await native.VerifyAsync(Guid.NewGuid(), this.TestContext.CancellationToken).ConfigureAwait(false);
+        await using var producerLifetime = verifiedProducer.Artifacts!;
         var status = (await project.CreateReader(native).ReadAsync(project.Project, [StatusProject.SourceUri], this.TestContext.CancellationToken).ConfigureAwait(false)).Single();
         _ = status.Freshness.Should().Be(AssetCookFreshness.OutOfDate);
-        _ = status.HasVerifiedOutput.Should().BeTrue();
+        _ = status.HasAvailableOutput.Should().BeTrue();
         _ = status.Diagnostics.Should().BeEmpty();
     }
 
@@ -110,7 +112,7 @@ public sealed partial class AssetCookStatusReaderTests
         var status = await project.ReadAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = status.Freshness.Should().Be(AssetCookFreshness.MissingSource);
         _ = status.HasUnsavedChanges.Should().BeTrue();
-        _ = status.HasVerifiedOutput.Should().BeTrue();
+        _ = status.HasAvailableOutput.Should().BeTrue();
     }
 
     private sealed partial class StatusProject

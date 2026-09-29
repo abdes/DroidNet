@@ -283,6 +283,9 @@ public sealed partial class ContentPipelineServiceTests
                 : result;
         }
 
+        public Task<Inspection.CookedInventoryReport> ReadInventoryAsync(string root, NativeArtifactLease? artifacts, CancellationToken cancellationToken)
+            => native.ReadInventoryAsync(root, artifacts, cancellationToken);
+
         public Task<CookInspectionResult> InspectLooseCookedRootAsync(string cookedRoot, CancellationToken cancellationToken) => native.InspectLooseCookedRootAsync(cookedRoot, cancellationToken);
 
         public Task<CookValidationResult> ValidateLooseCookedRootAsync(string cookedRoot, CancellationToken cancellationToken) => native.ValidateLooseCookedRootAsync(cookedRoot, cancellationToken);

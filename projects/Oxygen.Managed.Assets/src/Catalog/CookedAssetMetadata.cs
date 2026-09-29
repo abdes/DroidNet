@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Managed.Assets.Persistence.LooseCooked.V1;
+using Oxygen.Managed.Assets.Persistence.LooseCooked.V2;
 
 namespace Oxygen.Managed.Assets.Catalog;
 

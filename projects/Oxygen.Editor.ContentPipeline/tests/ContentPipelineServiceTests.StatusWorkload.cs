@@ -57,7 +57,7 @@ public sealed partial class ContentPipelineServiceTests
         var states = await service.ReadAsync(workspace.ProjectContext, requested, this.TestContext.CancellationToken).ConfigureAwait(false);
         this.TestContext.WriteLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Shared-source status: outputs={cooked.CookedAssets.Count}; elapsed={watch.Elapsed.TotalMilliseconds:F2}ms"));
         _ = states.Select(static state => state.AssetUri).Should().BeEquivalentTo(requested);
-        _ = states.Where(state => state.AssetUri != missing).Should().OnlyContain(static state => state.Freshness == AssetCookFreshness.Current && state.HasVerifiedOutput);
+        _ = states.Where(state => state.AssetUri != missing).Should().OnlyContain(static state => state.Freshness == AssetCookFreshness.Current && state.HasAvailableOutput);
         _ = states.Single(state => state.AssetUri == missing).HasPublishedOutput.Should().BeFalse();
         _ = states.Single(state => state.AssetUri == missing).Freshness.Should().Be(AssetCookFreshness.NeedsCooking);
         _ = runner.Count.Should().Be(workers);

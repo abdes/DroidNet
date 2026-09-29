@@ -74,7 +74,7 @@ public sealed partial class ContentPipelineServiceTests
 
     private async Task AssertReaderRetainedUntilDrainAsync(Task work, TempWorkspace consumer, Action openForWrite, TaskCompletionSource drain)
     {
-        Func<Task> observe = () => work;
+        Func<Task> observe = () => work.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken);
         var failure = await observe.Should().ThrowAsync<ContentPipelineTerminationException>().ConfigureAwait(false);
         _ = openForWrite.Should().Throw<IOException>();
         var next = consumer.CookCoordinator.RunAsync(
@@ -98,8 +98,15 @@ public sealed partial class ContentPipelineServiceTests
 
         public Func<Task>? BeforeDependencyInspection { get; set; }
 
+        public Func<Task>? BeforeInventoryInspection { get; set; }
+
         public async Task<ContentPipelineProcessResult> RunAsync(ContentPipelineProcessRequest request, CancellationToken cancellationToken)
         {
+            if (this.BeforeInventoryInspection is not null && request.Arguments.Contains("inventory", StringComparer.Ordinal))
+            {
+                await this.BeforeInventoryInspection().ConfigureAwait(false);
+            }
+
             if (this.BeforeDependencyInspection is not null && request.Arguments.Contains("dependencies", StringComparer.Ordinal))
             {
                 await this.BeforeDependencyInspection().ConfigureAwait(false);

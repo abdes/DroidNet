@@ -62,8 +62,8 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
                     files = await CookOutputReadLease.AcquireAsync(path, cancellationToken).ConfigureAwait(false);
                     using var catalog = new LooseCookedIndexAssetCatalog(new NativeStorageProvider(new RealFileSystem()), new LooseCookedIndexAssetCatalogOptions { CookedRootFolderPath = path });
                     var records = await catalog.QueryAsync(new(AssetQueryScope.All), cancellationToken).ConfigureAwait(false);
-                    await files.VerifyDescriptorsAsync(records, cancellationToken).ConfigureAwait(false);
-                    var fingerprint = await CookedDependencyCache.FingerprintAsync(files, cancellationToken).ConfigureAwait(false);
+                    var index = await CookedIndexSnapshot.ReadAsync(path, cancellationToken).ConfigureAwait(false);
+                    var fingerprint = index.Fingerprint;
                     var metadata = await CookedDependencyCache.ReadAsync(project.ProjectRoot, fingerprint, records, cancellationToken).ConfigureAwait(false);
                     result.roots.Add(new(mount.Name, path, records, fingerprint, files) { Dependencies = metadata });
                     files = null;
@@ -279,7 +279,8 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
     {
         foreach (var root in this.roots)
         {
-            var result = await native.ValidateLooseCookedRootAsync(root.Path, cancellationToken).ConfigureAwait(false);
+            var inventory = await root.Reader.ReadInventoryAsync(native, cancellationToken).ConfigureAwait(false);
+            var result = inventory.ToValidation(root.Path);
             if (!result.Succeeded)
             {
                 throw new CookInputDiscoveryException(result.Diagnostics);

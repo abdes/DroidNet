@@ -2,6 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.ContentPipeline.Inspection;
+using Oxygen.Managed.Core.Compatibility;
+
 namespace Oxygen.Editor.ContentPipeline;
 
 /// <summary>
@@ -18,6 +21,13 @@ public interface IEngineContentPipelineApi
     public Task<NativeImportResult> ImportAsync(
         ContentImportExecution execution,
         CancellationToken cancellationToken);
+
+    /// <summary>Verifies all native inventory members while the caller holds its output read lease.</summary>
+    /// <param name="cookedRoot">The protected physical root.</param>
+    /// <param name="artifacts">Optional native artifact lease already owned by this operation.</param>
+    /// <param name="cancellationToken">Cancels the native worker and waits for its ownership drain.</param>
+    /// <returns>Expected inventory metadata and observed per-file failures.</returns>
+    public Task<CookedInventoryReport> ReadInventoryAsync(string cookedRoot, NativeArtifactLease? artifacts, CancellationToken cancellationToken);
 
     /// <summary>
     /// Inspects a loose cooked root.

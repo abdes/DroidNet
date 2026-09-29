@@ -26,6 +26,8 @@ public sealed partial class ContentPipelineServiceTests
     [DataRow("external")]
     [DataRow("external retry")]
     [DataRow("missing")]
+    [DataRow("repair")]
+    [DataRow("repair dependency conflict")]
     public async Task ReplacementPublishesSourceAndOutputTogether(string failure)
     {
         using var workspace = new TempWorkspace();
@@ -33,19 +35,62 @@ public sealed partial class ContentPipelineServiceTests
         try
         {
             var source = await WriteRetainedModelAsync(workspace, "Model", "gltf", this.TestContext.CancellationToken).ConfigureAwait(false);
+            var repair = failure.StartsWith("repair", StringComparison.Ordinal);
+            if (repair)
+            {
+                workspace.WriteMaterial("Content/Materials/Unrelated.omat.json", "Unrelated");
+            }
+
+            if (failure == "repair dependency conflict")
+            {
+                workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
+                WriteAuthoredGeometry(workspace, withBuffer: true);
+                const string retainedPath = "Content/SourceMedia/DCC/Model/model.gltf";
+                var retained = System.Text.Json.Nodes.JsonNode.Parse(workspace.ReadText(retainedPath))!;
+                var uri = retained["buffers"]![0]!["uri"]!.GetValue<string>();
+                var buffer = Convert.FromBase64String(uri[(uri.IndexOf(',', StringComparison.Ordinal) + 1)..]);
+                await File.WriteAllBytesAsync(Path.Combine(workspace.Root, "Content/SourceMedia/DCC/Model/retired.bin"), buffer, this.TestContext.CancellationToken).ConfigureAwait(false);
+                retained["buffers"]![0]!["uri"] = "retired.bin";
+                workspace.WriteText(retainedPath, retained.ToJsonString());
+                var settingsPath = Path.Combine(workspace.Root, retainedPath + NativeSceneImportSettings.SidecarSuffix);
+                var settings = NativeSceneImportSettings.Parse(await File.ReadAllBytesAsync(settingsPath, this.TestContext.CancellationToken).ConfigureAwait(false)) with
+                {
+                    Files = ["model.gltf", "retired.bin"],
+                    SourceHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(await File.ReadAllBytesAsync(Path.Combine(workspace.Root, retainedPath), this.TestContext.CancellationToken).ConfigureAwait(false))),
+                };
+                await File.WriteAllBytesAsync(settingsPath, settings.ToBytes(), this.TestContext.CancellationToken).ConfigureAwait(false);
+                var geometry = System.Text.Json.Nodes.JsonNode.Parse(workspace.ReadText("Content/Geometry/AuthoredCube.ogeo.json"))!;
+                geometry["buffers"]![0]!["uri"] = "../SourceMedia/DCC/Model/retired.bin";
+                workspace.WriteText("Content/Geometry/AuthoredCube.ogeo.json", geometry.ToJsonString());
+            }
             using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
             var runner = new FailImportBatchRunner { Fail = false };
             var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
             var publication = new CookPublicationService(workspace.CookCoordinator, workspace.ContextService, new NativeAtomicFileStore(new Testably.Abstractions.RealFileSystem()));
             var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility, publication);
-            var first = await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
+            var first = repair
+                ? await service.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false)
+                : await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
             _ = first.IsPublished.Should().BeTrue();
+            if (repair)
+            {
+                var payload = Directory.EnumerateFiles(Path.Combine(workspace.Root, ".cooked"), "buffers.data", SearchOption.AllDirectories).Single();
+                var damaged = await File.ReadAllBytesAsync(payload, this.TestContext.CancellationToken).ConfigureAwait(false);
+                damaged[^1] ^= 0xFF;
+                await File.WriteAllBytesAsync(payload, damaged, this.TestContext.CancellationToken).ConfigureAwait(false);
+            }
             var primary = Path.Combine(workspace.Root, "Content/SourceMedia/DCC/Model/model.gltf");
             var originalBytes = await File.ReadAllBytesAsync(primary, this.TestContext.CancellationToken).ConfigureAwait(false);
             var incoming = Path.Combine(external.FullName, "replacement.gltf");
             var json = System.Text.Json.Nodes.JsonNode.Parse(originalBytes)!;
             json["materials"]![0]!["pbrMetallicRoughness"]!["roughnessFactor"] = 0.1;
-            await this.WriteReplacementCandidateAsync(json, incoming, failure is "external" or "external retry").ConfigureAwait(false);
+            if (failure == "repair dependency conflict")
+            {
+                var bytes = await File.ReadAllBytesAsync(Path.Combine(Path.GetDirectoryName(primary)!, "retired.bin"), this.TestContext.CancellationToken).ConfigureAwait(false);
+                json["buffers"]![0]!["uri"] = "data:application/octet-stream;base64," + Convert.ToBase64String(bytes);
+            }
+
+            await this.WriteReplacementCandidateAsync(json, incoming, failure is "external" or "external retry" or "repair dependency conflict").ConfigureAwait(false);
             if (string.Equals(failure, "missing", StringComparison.Ordinal))
             {
                 File.Delete(primary);
@@ -58,6 +103,15 @@ public sealed partial class ContentPipelineServiceTests
             using var registration = string.Equals(failure, "publication", StringComparison.Ordinal) ? publication.RegisterPreview(workspace.ProjectContext, () => Task.FromResult<ICookPublicationPreview?>(preview)) : null;
             runner.Fail = failure is "native" or "external retry";
             var result = await service.ImportSourceAsync(request, this.TestContext.CancellationToken).ConfigureAwait(false);
+            if (failure == "repair dependency conflict")
+            {
+                _ = result.IsPublished.Should().BeFalse();
+                _ = result.Diagnostics.Should().Contain(static diagnostic => diagnostic.Code == "asset_cook.replacement_dependency_missing"
+                    && diagnostic.AffectedPath != null && diagnostic.AffectedPath.EndsWith("retired.bin", StringComparison.Ordinal));
+                _ = (await File.ReadAllBytesAsync(primary, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Equal(originalBytes);
+                return;
+            }
+
             if (failure is "native" or "publication" or "external retry")
             {
                 _ = result.Status.Should().Be(OperationStatus.Failed);

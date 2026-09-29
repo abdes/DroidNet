@@ -30,7 +30,7 @@ public sealed class AssetInformationTests
         var output = new Uri("asset:///Content/Materials/Blue.omat");
         var status = asset.CookStatus! with
         {
-            Freshness = AssetCookFreshness.OutOfDate, HasPublishedOutput = true, HasVerifiedOutput = true,
+            Freshness = AssetCookFreshness.OutOfDate, HasPublishedOutput = true, OutputAvailability = CookedOutputAvailability.Present,
             Outputs =
             [
                 new(asset.IdentityUri, output, ContentCookAssetKind.Material, "Content", output.AbsolutePath),
@@ -108,7 +108,7 @@ public sealed class AssetInformationTests
             [],
             IsSelectable: true)
         {
-            CookStatus = new(uri, AssetCookFreshness.NeedsCooking, HasPublishedOutput: false, HasVerifiedOutput: false, [], [], []),
+            CookStatus = new(uri, AssetCookFreshness.NeedsCooking, HasPublishedOutput: false, OutputAvailability: CookedOutputAvailability.Missing, [], [], []),
         };
     }
 }

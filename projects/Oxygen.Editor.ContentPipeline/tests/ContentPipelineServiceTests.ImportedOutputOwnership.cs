@@ -104,7 +104,7 @@ public sealed partial class ContentPipelineServiceTests
         var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
         var first = await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = first.IsPublished.Should().BeTrue();
-        var count = runner.Count;
+        var count = runner.ImportCount;
         foreach (var output in first.CookedAssets)
         {
             var result = await service.CookAssetAsync(output.CookedAssetUri, this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -112,7 +112,7 @@ public sealed partial class ContentPipelineServiceTests
             _ = result.ReusedAssets.Should().Contain(asset => asset.CookedAssetUri == output.CookedAssetUri && asset.SourceAssetUri == source);
         }
 
-        _ = runner.Count.Should().Be(count);
+        _ = runner.ImportCount.Should().Be(count);
     }
 
     /// <summary>Saved source settings resolve named outputs and scene dependencies in a project with no derived metadata.</summary>
@@ -206,7 +206,7 @@ public sealed partial class ContentPipelineServiceTests
         var count = runner.Count;
         var statuses = await service.ReadAsync(workspace.ProjectContext, uris, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = statuses.Select(static status => status.AssetUri).Should().BeEquivalentTo(uris);
-        _ = statuses.Should().OnlyContain(static status => status.Freshness == AssetCookFreshness.Current && status.HasVerifiedOutput);
+        _ = statuses.Should().OnlyContain(static status => status.Freshness == AssetCookFreshness.Current && status.HasAvailableOutput);
         await File.AppendAllTextAsync(Path.Combine(workspace.Root, "Content/SourceMedia/DCC/Model/model.gltf"), " ", this.TestContext.CancellationToken).ConfigureAwait(false);
         statuses = await service.ReadAsync(workspace.ProjectContext, uris, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = statuses.Should().OnlyContain(static status => status.Freshness == AssetCookFreshness.OutOfDate && status.HasPublishedOutput);

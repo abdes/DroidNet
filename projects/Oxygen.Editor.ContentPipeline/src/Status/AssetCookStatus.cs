@@ -12,7 +12,7 @@ namespace Oxygen.Editor.ContentPipeline.Status;
 /// <param name="AssetUri">The requested authored identity.</param>
 /// <param name="Freshness">The saved-input and producer comparison.</param>
 /// <param name="HasPublishedOutput">Whether committed provenance contains an output for the source.</param>
-/// <param name="HasVerifiedOutput">Whether the prior output and its recorded dependencies remain intact.</param>
+/// <param name="OutputAvailability">Observed publication availability, independent of payload integrity.</param>
 /// <param name="Outputs">The committed source-to-cooked identity mapping.</param>
 /// <param name="UnsavedDocuments">Unsaved owners in the required saved dependency closure.</param>
 /// <param name="Diagnostics">Read, validation or native-availability issues for this status.</param>
@@ -20,11 +20,14 @@ public sealed record AssetCookStatus(
     Uri AssetUri,
     AssetCookFreshness Freshness,
     bool HasPublishedOutput,
-    bool HasVerifiedOutput,
+    CookedOutputAvailability OutputAvailability,
     ImmutableArray<ContentCookedAsset> Outputs,
     ImmutableArray<CookDocumentState> UnsavedDocuments,
     ImmutableArray<DiagnosticRecord> Diagnostics)
 {
+    /// <summary>Gets whether the published output is present, without claiming payload integrity.</summary>
+    public bool HasAvailableOutput => this.OutputAvailability == CookedOutputAvailability.Present;
+
     /// <summary>Gets saved authoring paths in this asset's dependency closure, for live document overlays.</summary>
     public ImmutableArray<string> SourcePaths { get; init; } = [];
 

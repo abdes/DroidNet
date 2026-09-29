@@ -10,7 +10,7 @@ using Oxygen.Managed.Assets.Catalog;
 namespace Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
 
 /// <summary>Projects the engine's current or last-known metadata into the composed project catalog.</summary>
-public sealed partial class EngineBuiltinAssetCatalog : IAssetCatalog, IRefreshableAssetCatalog, IDisposable
+public sealed partial class EngineBuiltinAssetCatalog : IAssetCatalog, IDisposable
 {
     private readonly IBuiltinCatalogDiscovery discovery;
     private readonly Lock sync = new();
@@ -43,13 +43,6 @@ public sealed partial class EngineBuiltinAssetCatalog : IAssetCatalog, IRefresha
         }
 
         return await current.QueryAsync(query, cancellationToken).ConfigureAwait(false);
-    }
-
-    /// <inheritdoc />
-    public async Task RefreshAsync(CancellationToken cancellationToken = default)
-    {
-        _ = await this.discovery.RefreshAsync(cancellationToken).ConfigureAwait(false);
-        this.OnDiscoveryChanged(this, EventArgs.Empty);
     }
 
     /// <inheritdoc />

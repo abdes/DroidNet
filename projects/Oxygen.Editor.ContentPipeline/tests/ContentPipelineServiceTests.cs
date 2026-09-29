@@ -543,7 +543,16 @@ public sealed partial class ContentPipelineServiceTests
                 await File.WriteAllBytesAsync(path, new byte[checked((int)file.Size)], cancellationToken).ConfigureAwait(false);
             }
 
+            Oxygen.Testing.NativeInventoryFixture.WriteIndex(manifest.Output, this.inspected.Assets, this.inspected.SourceIdentity);
             return importResult ?? new NativeImportResult(Succeeded: true, Diagnostics: []);
+        }
+
+        public Task<Inspection.CookedInventoryReport> ReadInventoryAsync(string root, Oxygen.Managed.Core.Compatibility.NativeArtifactLease? artifacts, CancellationToken cancellationToken)
+        {
+            this.InspectedRoot = root;
+            if (!this.inspected.Succeeded) { throw new InvalidDataException("Controlled native index inspection failure."); }
+            this.ValidatedRoot = root;
+            return Task.FromResult(Oxygen.Testing.NativeInventoryFixture.Read(root, forceFailure: !validation.Succeeded));
         }
 
         public Task<CookInspectionResult> InspectLooseCookedRootAsync(

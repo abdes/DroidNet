@@ -44,7 +44,7 @@ public sealed partial class EngineService(
     // This gate has no wait handles and remains available for concurrent/repeated cleanup.
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "Cleanup remains callable after disposal; SemaphoreSlim.AvailableWaitHandle is never used.")]
     private readonly SemaphoreSlim lifecycleGate = new(1, 1);
-    private readonly Func<CancellationToken, Task<EngineSession>> sessionFactory = token => CreateCompatibleSessionAsync(hostingContext, nativeCompatibility ?? EditorNativeCompatibilityService.ForCurrentProcess(), token);
+    private readonly Func<CancellationToken, Task<EngineSession>> sessionFactory = token => CreateCompatibleSessionAsync(hostingContext, nativeCompatibility, token);
     private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, int> documentSurfaceCounts = new();
     private readonly System.Collections.Concurrent.ConcurrentDictionary<ViewportSurfaceKey, ViewportSurfaceLease> activeLeases = new();
     private readonly RuntimeCommandDispatcher commandDispatcher = new();
@@ -159,8 +159,10 @@ public sealed partial class EngineService(
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
     private static EngineSession CreateNativeSession(HostingContext hostingContext, NativeArtifactLease artifacts) => new NativeEngineSession(hostingContext, artifacts);
 
-    private static async Task<EngineSession> CreateCompatibleSessionAsync(HostingContext hostingContext, INativeCompatibilityService compatibility, CancellationToken cancellationToken)
+    private static async Task<EngineSession> CreateCompatibleSessionAsync(HostingContext hostingContext, INativeCompatibilityService? compatibility, CancellationToken cancellationToken)
     {
+        using var ownedCompatibility = compatibility is null ? EditorNativeCompatibilityService.ForCurrentProcess() : null;
+        compatibility ??= ownedCompatibility!;
         var result = await compatibility.VerifyAsync(Guid.NewGuid(), cancellationToken).ConfigureAwait(false);
         if (!result.Succeeded)
         {

@@ -17,6 +17,10 @@ public sealed partial class ContentBrowserAssetProvider
     [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "Non-owning alias; the scan's using scope disposes this source after its readers drain.")]
     private CancellationTokenSource? scanCancellation;
     private long catalogRevision;
+    private long publishedRevision = -1;
+    private ProjectContext? publishedProject;
+
+    private void OnFreshnessChanged(object? sender, EventArgs args) => this.OnCatalogChanged();
 
     private Task RequestRefresh(bool invalidate)
     {
@@ -30,6 +34,12 @@ public sealed partial class ContentBrowserAssetProvider
 
             if (this.refreshCompletion is null)
             {
+                if (this.publishedRevision == this.catalogRevision
+                    && ReferenceEquals(this.publishedProject, this.projectContextService.ActiveProject))
+                {
+                    return Task.CompletedTask;
+                }
+
                 var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
                 this.refreshCompletion = completion;
                 _ = Task.Run(() => this.RefreshLoopAsync(completion), CancellationToken.None);
@@ -109,7 +119,6 @@ public sealed partial class ContentBrowserAssetProvider
 
                 if (this.TryPublishSnapshot(revision, project, snapshot, completion))
                 {
-                    this.RefreshLibraryMetadata(project, revision);
                     return;
                 }
             }
@@ -145,6 +154,8 @@ public sealed partial class ContentBrowserAssetProvider
             }
 
             this.refreshCompletion = null;
+            this.publishedRevision = revision;
+            this.publishedProject = project;
             this.items.OnNext(this.ApplyLiveState(snapshot));
             _ = completion.TrySetResult();
             return true;

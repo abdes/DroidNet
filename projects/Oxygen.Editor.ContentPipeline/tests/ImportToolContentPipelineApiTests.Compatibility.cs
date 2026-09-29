@@ -16,7 +16,8 @@ public sealed partial class ImportToolContentPipelineApiTests
     [TestMethod]
     public async Task InstalledCookerInputsMatchEditorSchemas()
     {
-        var result = await EditorNativeCompatibilityService.ForCooking().VerifyAsync(Guid.NewGuid(), this.TestContext.CancellationToken).ConfigureAwait(false);
+        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var result = await compatibility.VerifyAsync(Guid.NewGuid(), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.Succeeded.Should().BeTrue(string.Join("; ", result.Diagnostics.Select(static value => value.TechnicalMessage ?? value.Message)));
         await result.Artifacts!.DisposeAsync().ConfigureAwait(false);
     }
@@ -29,7 +30,8 @@ public sealed partial class ImportToolContentPipelineApiTests
         var root = Directory.CreateTempSubdirectory("OxygenInstalledCatalog-");
         try
         {
-            var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance);
+            using var compatibility = EditorNativeCompatibilityService.ForCooking();
+            var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
             var catalog = await api.GetBuiltinGeometryCatalogAsync(root.FullName, "Content", this.TestContext.CancellationToken).ConfigureAwait(false);
             _ = catalog.AuthoringGeometries.Should().Contain(value => string.Equals(value.CanonicalName, "Cube", StringComparison.Ordinal));
             _ = catalog.MountName.Should().Be("Content");

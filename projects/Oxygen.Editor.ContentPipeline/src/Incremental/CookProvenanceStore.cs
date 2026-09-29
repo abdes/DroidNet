@@ -68,10 +68,12 @@ internal sealed class CookProvenanceStore(IAtomicFileStore files)
     private static bool IsValid(CookProvenance cache, ProjectContext project)
     {
         if (cache.Version != CookProvenance.CurrentVersion || cache.ProjectId != project.ProjectId || cache.Roots.IsDefault || cache.Products.IsDefault
-            || cache.Roots.Any(static root => root?.SharedFiles.IsDefaultOrEmpty != false || root.SharedFiles.Any(static file => file is null) || root.Assets.IsDefault)
-            || cache.Roots.Any(static root => root.Assets.Any(static asset => asset is null || asset.Entry is null || string.IsNullOrWhiteSpace(asset.Entry.VirtualPath) || asset.File is null))
+            || cache.Roots.Any(static root => root is null || root.SourceKey == Guid.Empty
+                || root.IndexSha256 is not { Length: 64 } || !root.IndexSha256.All(Uri.IsHexDigit))
             || cache.Products.Any(static product => product?.SourceUri is null || !product.SourceUri.IsAbsoluteUri || product.Fingerprint is not { Length: 64 } || !product.Fingerprint.All(Uri.IsHexDigit)
                 || product.ReuseFingerprint is not { Length: 64 } || !product.ReuseFingerprint.All(Uri.IsHexDigit) || product.Dependencies.IsDefault || product.Outputs.IsDefaultOrEmpty || product.Diagnostics.IsDefault || product.Diagnostics.Any(static diagnostic => diagnostic is null)
+                || product.AuxiliaryFiles.IsDefault || product.AuxiliaryFiles.Any(static path => string.IsNullOrWhiteSpace(path)
+                    || path.Contains('\\') || path.Contains(':') || path.Split('/').Any(static segment => segment is "" or "." or ".."))
                 || product.CookedDependencies.IsDefault || product.CookedDependencies.Any(static dependency => dependency?.AssetUri?.IsAbsoluteUri != true
                     || string.IsNullOrWhiteSpace(dependency.SourceName) || !Path.IsPathFullyQualified(dependency.RootPath)
                     || string.IsNullOrWhiteSpace(dependency.AssetKey) || dependency.ContentFingerprint is not { Length: 64 } || !dependency.ContentFingerprint.All(Uri.IsHexDigit)))
@@ -85,25 +87,14 @@ internal sealed class CookProvenanceStore(IAtomicFileStore files)
         {
             foreach (var root in cache.Roots)
             {
-                if (!root.SharedFiles.Any(static file => string.Equals(file.RelativePath, "container.index.bin", StringComparison.Ordinal)))
-                {
-                    return false;
-                }
-
-                foreach (var proof in root.SharedFiles.Concat(root.Assets.Select(static asset => asset.File)))
-                {
-                    if (proof is null || proof.Size < 0 || proof.Sha256 is not { Length: 64 } || !proof.Sha256.All(Uri.IsHexDigit))
-                    {
-                        return false;
-                    }
-
-                    _ = CookIncrementalPlanner.ResolveOutputPath(project.ProjectRoot, root.Mount, proof.RelativePath);
-                }
+                _ = CookIncrementalPlanner.ResolveOutputPath(project.ProjectRoot, root.Mount, "container.index.bin");
             }
 
             return cache.Products.SelectMany(static product => product.Outputs).All(output => output?.Asset is not null
-                && cache.Roots.Any(root => string.Equals(root.Mount, output.RootMount, StringComparison.Ordinal)
-                    && root.Assets.Any(asset => string.Equals(asset.Entry.VirtualPath, output.Asset.VirtualPath, StringComparison.Ordinal))));
+                && !string.IsNullOrWhiteSpace(output.Asset.VirtualPath)
+                && output.Asset.DescriptorRelativePath is { Length: > 0 } descriptor
+                && CookIncrementalPlanner.ResolveOutputPath(project.ProjectRoot, output.RootMount, descriptor).Length != 0
+                && cache.Roots.Any(root => string.Equals(root.Mount, output.RootMount, StringComparison.Ordinal)));
         }
         catch (Exception exception) when (exception is InvalidDataException or ArgumentException)
         {

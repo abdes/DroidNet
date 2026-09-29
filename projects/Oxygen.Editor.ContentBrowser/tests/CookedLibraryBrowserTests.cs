@@ -12,7 +12,7 @@ using Oxygen.Editor.ContentPipeline.Discovery;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
 using Oxygen.Managed.Assets.Catalog;
-using Oxygen.Managed.Assets.Persistence.LooseCooked.V1;
+using Oxygen.Managed.Assets.Persistence.LooseCooked.V2;
 using Testably.Abstractions;
 
 namespace Oxygen.Editor.ContentBrowser.Tests;
@@ -119,7 +119,7 @@ public sealed partial class CookedLibraryBrowserTests
             byte[] bytes = [value];
             File.WriteAllBytes(Path.Combine(root, "payloads", "shared.bin"), bytes);
             using var stream = File.Create(Path.Combine(root, "container.index.bin"));
-            LooseCookedIndex.Write(stream, new Document(
+            Oxygen.Testing.LooseCookedIndexFixture.Write(stream, new Document(
                 1,
                 IndexFeatures.HasVirtualPaths,
                 Guid.CreateVersion7(),

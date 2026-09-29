@@ -117,7 +117,7 @@ public sealed partial class ContentPipelineServiceTests
         var identities = catalog.CreateCatalogRecords().Select(static record => record.Uri).ToArray();
         var runCount = workspace.CookCoordinator.Runs.Count;
         var statuses = await pipeline.ReadAsync(workspace.ProjectContext, identities, this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = statuses.Should().HaveCount(11).And.OnlyContain(status => status.HasVerifiedOutput && status.HasPublishedOutput);
+        _ = statuses.Should().HaveCount(11).And.OnlyContain(status => status.HasAvailableOutput && status.HasPublishedOutput);
         _ = statuses.Should().OnlyContain(status => status.SourcePaths.IsEmpty && status.Diagnostics.IsEmpty && !status.Outputs.IsEmpty);
         _ = statuses.Should().OnlyContain(status => status.Outputs.All(output => output.SourceAssetUri == status.AssetUri));
         _ = workspace.CookCoordinator.Runs.Count.Should().Be(runCount, "origin discovery never cooks built-ins");
@@ -137,7 +137,7 @@ public sealed partial class ContentPipelineServiceTests
             var combined = await pipeline.ReadAsync(workspace.ProjectContext, requested, this.TestContext.CancellationToken).ConfigureAwait(false);
             _ = missingSources.Should().BeEmpty("cooked built-in companions have engine-owned recipes, not authored JSON descriptors");
             _ = combined.Select(static status => status.AssetUri).Should().BeEquivalentTo(requested);
-            _ = combined.Should().OnlyContain(status => status.HasVerifiedOutput && status.HasPublishedOutput && status.SourcePaths.IsEmpty && status.Diagnostics.IsEmpty);
+            _ = combined.Should().OnlyContain(status => status.HasAvailableOutput && status.HasPublishedOutput && status.SourcePaths.IsEmpty && status.Diagnostics.IsEmpty);
         }
         finally
         {
@@ -149,8 +149,10 @@ public sealed partial class ContentPipelineServiceTests
         await File.WriteAllTextAsync(path, "unrelated replacement", this.TestContext.CancellationToken).ConfigureAwait(false);
         var changed = await pipeline.ReadAsync(workspace.ProjectContext, [shape.AssetUri, new Uri("asset://" + shape.Contribution.VirtualPath)], this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = changed.Should().HaveCount(2).And.OnlyContain(
-            static status => status.HasPublishedOutput && !status.HasVerifiedOutput && status.SourcePaths.IsEmpty,
-            "both identities retain the same owner, but corrupt output is never verified");
+            static status => status.HasPublishedOutput && status.HasAvailableOutput && status.SourcePaths.IsEmpty,
+            "availability preserves publication ownership without certifying payload integrity");
+        var integrity = await pipeline.InspectCookedOutputAsync(scopeUri: null, this.TestContext.CancellationToken, validate: true).ConfigureAwait(false);
+        _ = integrity.Roots.Should().Contain(root => root.Validation != null && !root.Validation.Succeeded);
 
         workspace.WriteMaterial("Content/Materials/OxygenEditor_Default.omat.json", "Authored replacement");
         Uri authoredDefault = new("asset:///Content/Materials/OxygenEditor_Default.omat.json");

@@ -2,20 +2,14 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using DroidNet.Storage;
 using Oxygen.Editor.ContentPipeline.Incremental;
-using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
-using Oxygen.Managed.Assets.Catalog;
-using Oxygen.Managed.Assets.Catalog.LooseCooked;
 
 namespace Oxygen.Editor.ContentPipeline.Mounting;
 
 /// <summary>Prepares the same saved source order for startup, recooking and explicit mount changes.</summary>
-/// <param name="storage">The storage provider used for cooked-index discovery.</param>
-/// <param name="native">The shared cooked-root inspection boundary.</param>
-public sealed class CookedContentMountService(IStorageProvider storage, IEngineContentPipelineApi native)
+public sealed class CookedContentMountService
 {
     /// <summary>Finds project-owned roots in deterministic order without including external libraries.</summary>
     /// <param name="project">The owning project.</param>
@@ -41,7 +35,7 @@ public sealed class CookedContentMountService(IStorageProvider storage, IEngineC
         try
         {
             var roots = ResolveRoots(project, projectRoots);
-            foreach (var (path, isLibrary) in roots)
+            foreach (var path in roots)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var files = await CookOutputReadLease.AcquireAsync(path, cancellationToken).ConfigureAwait(false);
@@ -51,39 +45,12 @@ public sealed class CookedContentMountService(IStorageProvider storage, IEngineC
                     throw new InvalidDataException($"Cooked content has no index: {path}.");
                 }
 
-                using var catalog = new LooseCookedIndexAssetCatalog(storage, new LooseCookedIndexAssetCatalogOptions { CookedRootFolderPath = path });
-                var records = await catalog.QueryAsync(new(AssetQueryScope.All), cancellationToken).ConfigureAwait(false);
-                var protectedPaths = files.GetFiles().Select(static file => file.RelativePath).ToHashSet(StringComparer.Ordinal);
-                if (records.Any(record => record.Cooked is null || !protectedPaths.Contains(record.Cooked.DescriptorRelativePath)))
-                {
-                    throw new InvalidDataException($"Cooked index references a descriptor outside its protected file set: {path}.");
-                }
+                var index = await CookedIndexSnapshot.ReadAsync(path, cancellationToken).ConfigureAwait(false);
+                index.ValidateMetadata(files.GetFiles());
 
-                if (isLibrary)
-                {
-                    await files.VerifyDescriptorsAsync(records, cancellationToken).ConfigureAwait(false);
-                    if (native is ICookedDependencyInspector inspector)
-                    {
-                        var fingerprint = await CookedDependencyCache.FingerprintAsync(files, cancellationToken).ConfigureAwait(false);
-                        _ = await CookedDependencyCache.EnsureAsync(project.ProjectRoot, path, fingerprint, records, inspector, Path.Combine(project.ProjectRoot, ".build", "cook", Guid.NewGuid().ToString("N")), cancellationToken).ConfigureAwait(false);
-                    }
-                }
-
-                var validation = await native.ValidateLooseCookedRootAsync(path, cancellationToken).ConfigureAwait(false);
-                if (!validation.Succeeded)
-                {
-                    throw new InvalidDataException(string.Join(Environment.NewLine, validation.Diagnostics.Select(static diagnostic => diagnostic.Message)));
-                }
             }
 
-            return new(roots.Select(static root => root.path).ToArray(), readers);
-        }
-        catch (ContentPipelineTerminationException failure)
-        {
-            var retained = readers.ToArray();
-            readers.Clear();
-            var drain = ReleaseAfterInspectionAsync(failure.DrainCompletion, retained);
-            throw new ContentPipelineTerminationException(failure.InnerException ?? failure, drain);
+            return new(roots, readers);
         }
         catch
         {
@@ -96,41 +63,26 @@ public sealed class CookedContentMountService(IStorageProvider storage, IEngineC
         }
     }
 
-    private static async Task ReleaseAfterInspectionAsync(Task drain, IReadOnlyList<IDisposable> readers)
+    private static string[] ResolveRoots(ProjectContext project, IReadOnlyList<string> projectRoots)
     {
-        try
-        {
-            await drain.ConfigureAwait(false);
-        }
-        finally
-        {
-            foreach (var reader in readers.Reverse())
-            {
-                reader.Dispose();
-            }
-        }
-    }
-
-    private static (string path, bool isLibrary)[] ResolveRoots(ProjectContext project, IReadOnlyList<string> projectRoots)
-    {
-        var roots = new List<(string path, bool isLibrary)>();
+        var roots = new List<string>();
         var order = CookedContentOrdering.Resolve(project.LocalFolderMounts, project.CookedContentOrder);
         foreach (var source in order)
         {
             if (source.Kind == CookedContentSourceKind.ProjectOutput)
             {
-                roots.AddRange(projectRoots.Order(StringComparer.Ordinal).Select(static path => (Path.GetFullPath(path), false)));
+                roots.AddRange(projectRoots.Order(StringComparer.Ordinal).Select(Path.GetFullPath));
             }
             else
             {
                 var folder = project.LocalFolderMounts.Single(mount => string.Equals(mount.Name, source.Name, StringComparison.OrdinalIgnoreCase));
                 if (File.Exists(Path.Combine(folder.AbsolutePath, "container.index.bin")))
                 {
-                    roots.Add((Path.GetFullPath(folder.AbsolutePath), true));
+                    roots.Add(Path.GetFullPath(folder.AbsolutePath));
                 }
             }
         }
 
-        return roots.AsEnumerable().Reverse().DistinctBy(static root => root.path, StringComparer.OrdinalIgnoreCase).Reverse().ToArray();
+        return roots.AsEnumerable().Reverse().Distinct(StringComparer.OrdinalIgnoreCase).Reverse().ToArray();
     }
 }

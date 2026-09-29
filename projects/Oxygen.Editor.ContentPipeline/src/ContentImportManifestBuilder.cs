@@ -28,7 +28,7 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
             throw new InvalidOperationException("One content import manifest cannot span multiple authoring mounts.");
         }
 
-        var jobs = CreateDependencyJobs(scope.Inputs);
+        var jobs = CreateDependencyJobs(scope, scope.Inputs);
 
         return new ContentImportManifest(
             Version: 1,
@@ -57,30 +57,11 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
         }
 
         var mountName = GetSingleMountName(scope);
-        var jobs = new List<ContentImportJob>();
-        var jobIdsBySource = new Dictionary<string, string>(StringComparer.Ordinal);
-        var materialJobIds = new List<string>();
-        foreach (var dependency in sceneDescriptors
-                     .SelectMany(static descriptor => descriptor.Dependencies)
-                     .Concat(scope.Inputs.Where(static input => input.Kind is not ContentCookAssetKind.Scene))
-                     .OrderBy(static input => input.Kind)
-                     .ThenBy(static input => input.SourceRelativePath, StringComparer.Ordinal))
-        {
-            if (jobIdsBySource.ContainsKey(dependency.SourceRelativePath))
-            {
-                continue;
-            }
-
-            var dependencyJob = CreateJob(
-                dependency,
-                dependency.Kind == ContentCookAssetKind.Geometry ? materialJobIds : []);
-            jobs.Add(dependencyJob);
-            jobIdsBySource.Add(dependency.SourceRelativePath, dependencyJob.Id);
-            if (dependency.Kind == ContentCookAssetKind.Material)
-            {
-                materialJobIds.Add(dependencyJob.Id);
-            }
-        }
+        var inputs = sceneDescriptors.SelectMany(static descriptor => descriptor.Dependencies)
+            .Concat(scope.Inputs.Where(static input => input.Kind != ContentCookAssetKind.Scene))
+            .DistinctBy(static input => input.SourceRelativePath, StringComparer.Ordinal).ToArray();
+        var jobs = CreateDependencyJobs(scope, inputs);
+        var jobIdsBySource = inputs.ToDictionary(static input => input.SourceRelativePath, BuildJobId, StringComparer.Ordinal);
 
         foreach (var descriptor in sceneDescriptors.OrderBy(static item => item.DescriptorPath, StringComparer.Ordinal))
         {
@@ -106,20 +87,18 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
             Jobs: jobs);
     }
 
-    private static List<ContentImportJob> CreateDependencyJobs(IReadOnlyList<ContentCookInput> inputs)
+    private static List<ContentImportJob> CreateDependencyJobs(ContentCookScope scope, IReadOnlyList<ContentCookInput> inputs)
     {
         var jobs = new List<ContentImportJob>();
-        var materialJobIds = new List<string>();
+        var jobIds = inputs.ToDictionary(static input => input.AssetUri, BuildJobId);
         foreach (var input in inputs
                      .OrderBy(static item => item.Kind)
                      .ThenBy(static item => item.SourceRelativePath, StringComparer.Ordinal))
         {
-            var job = CreateJob(input, input.Kind == ContentCookAssetKind.Geometry ? materialJobIds : []);
+            var dependencies = scope.InputDependencies.TryGetValue(input.AssetUri, out var declared)
+                ? declared.Where(jobIds.ContainsKey).Select(uri => jobIds[uri]).Distinct(StringComparer.Ordinal).ToArray() : [];
+            var job = CreateJob(input, dependencies);
             jobs.Add(job);
-            if (input.Kind == ContentCookAssetKind.Material)
-            {
-                materialJobIds.Add(job.Id);
-            }
         }
 
         return jobs;
@@ -172,7 +151,7 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
             ContentCookAssetKind.Material => layout with { MaterialsDirectory = folder },
             ContentCookAssetKind.Geometry => layout with { GeometryDirectory = folder },
             ContentCookAssetKind.Scene => layout with { ScenesDirectory = folder },
-            ContentCookAssetKind.Texture => layout with { TextureDescriptorsDirectory = folder },
+            ContentCookAssetKind.Texture => layout,
             _ => null,
         };
     }

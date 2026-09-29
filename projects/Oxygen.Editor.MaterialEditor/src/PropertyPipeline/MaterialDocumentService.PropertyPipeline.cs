@@ -5,7 +5,7 @@
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Schemas;
-using Oxygen.Managed.Assets.Import.Materials;
+using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.MaterialEditor;

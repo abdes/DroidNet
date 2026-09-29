@@ -2,25 +2,21 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Managed.Assets.Import.Materials;
+using Oxygen.Managed.Assets.Authoring.Materials;
 
 namespace Oxygen.Managed.Assets.Model;
 
 /// <summary>
 /// Represents a material asset.
 /// </summary>
-/// <remarks>
-/// This is a minimal implementation for Phase 4. Material properties and metadata
-/// will be expanded in future phases.
-/// </remarks>
 public sealed class MaterialAsset : Asset
 {
     /// <summary>
     /// Gets or sets the source data for this material.
     /// </summary>
     /// <remarks>
-    /// This property is populated when loading from source (e.g. via <see cref="Resolvers.FileSystemAssetResolver"/>).
-    /// It may be null when loading from cooked data if the source is not available or not parsed.
+    /// Authoring services populate this from a source descriptor. A catalog-only
+    /// cooked representation has no source data attached.
     /// </remarks>
     public MaterialSource? Source { get; set; }
 }

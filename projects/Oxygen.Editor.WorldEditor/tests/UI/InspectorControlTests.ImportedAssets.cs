@@ -181,7 +181,7 @@ public sealed partial class InspectorControlTests
             uri,
             AssetCookFreshness.Current,
             HasPublishedOutput: true,
-            HasVerifiedOutput: true,
+            OutputAvailability: CookedOutputAvailability.Present,
             [
                 new(uri, new("asset:///Content/Models/Crate/Geometry/Main.ogeo"), ContentCookAssetKind.Geometry, "Content", "/Content/Models/Crate/Geometry/Main.ogeo"),
                 new(uri, new("asset:///Content/Models/Crate/Materials/Paint.omat"), ContentCookAssetKind.Material, "Content", "/Content/Models/Crate/Materials/Paint.omat"),

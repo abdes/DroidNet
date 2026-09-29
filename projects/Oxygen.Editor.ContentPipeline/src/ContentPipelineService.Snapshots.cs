@@ -53,6 +53,13 @@ public sealed partial class ContentPipelineService
         var snapshot = scope.Snapshot ?? throw new InvalidOperationException("Texture preparation requires captured input.");
         var bytes = await File.ReadAllTextAsync(input.SourceAbsolutePath, cancellationToken).ConfigureAwait(false);
         var descriptor = JsonNode.Parse(bytes) ?? throw new InvalidDataException("The captured texture descriptor is empty.");
+        if (descriptor["virtual_path"] is { } authoredPath
+            && !string.Equals(authoredPath.GetValue<string>(), input.OutputVirtualPath, StringComparison.Ordinal))
+        {
+            throw new InvalidDataException($"Texture virtual_path conflicts with its project identity '{input.OutputVirtualPath}'.");
+        }
+
+        descriptor["virtual_path"] = input.OutputVirtualPath;
         var relative = Path.Combine(".pipeline", "Textures", input.SourceRelativePath).Replace('\\', '/');
         var output = Path.Combine(scope.InputRoot, relative);
         var originalDirectory = Path.GetDirectoryName(Path.Combine(scope.Project.ProjectRoot, input.SourceRelativePath))!;
@@ -207,7 +214,7 @@ public sealed partial class ContentPipelineService
     {
         if (resolveScopes().SingleOrDefault(static scope => scope.ImportReplacement is not null) is { } replacement)
         {
-            return await this.CaptureReplacementAsync(operation, replacement, artifacts, previous, imports, cancellationToken).ConfigureAwait(false);
+            return await this.CaptureReplacementAsync(operation, replacement, resolveScopes, artifacts, previous, imports, libraries, cancellationToken).ConfigureAwait(false);
         }
 
         CookDependencyGraph? graph = null;
@@ -218,13 +225,7 @@ public sealed partial class ContentPipelineService
             {
                 var scopes = resolveScopes();
                 var inputs = scopes.SelectMany(static scope => scope.Inputs).ToArray();
-                graph = await new CookDependencyDiscovery(
-                    cookDocuments,
-                    importedSources: previous.Products.Where(static product => product.ImportedSource is not null).ToDictionary(static product => product.SourceUri, static product => product.ImportedSource!),
-                    discoverImported: (input, queryToken) => this.DiscoverChangedImportedSourceAsync(operation, input, artifacts, queryToken),
-                    resolveImported: uri => imports.ResolveOutput(operation.Project, uri, ContentCookInputRole.Dependency),
-                    preferCookedReference: libraries.IsLibraryPreferred,
-                    expandCookedReferences: (input, references, queryToken) => libraries.ExpandReferencesAsync(input, references, this.engineContentPipelineApi as Inspection.ICookedDependencyInspector, Path.Combine(operation.Project.ProjectRoot, ".build", "cook", operation.OperationId.ToString("N")), artifacts, queryToken))
+                graph = await this.CreateDependencyDiscovery(operation, artifacts, previous, imports, libraries)
                     .DiscoverAsync(operation.Project, inputs, token).ConfigureAwait(false);
                 graph = graph with { ImportedReferences = [.. graph.ImportedReferences.Union(scopes.SelectMany(static scope => scope.RequiredImportedOutputs))] };
                 return HasError(graph.Diagnostics) ? throw new CookInputDiscoveryException(graph.Diagnostics) : graph.Files;
@@ -239,6 +240,17 @@ public sealed partial class ContentPipelineService
             _ => throw new InvalidOperationException("Input capture did not produce a snapshot."),
         };
     }
+
+    private CookDependencyDiscovery CreateDependencyDiscovery(ContentCookOperation operation, NativeArtifactLease artifacts,
+        Incremental.CookProvenance previous, Import.ImportedSourceIndex imports, CookedLibraryReadSet libraries)
+        => new(
+            cookDocuments,
+            importedSources: previous.Products.Where(static product => product.ImportedSource is not null).ToDictionary(static product => product.SourceUri, static product => product.ImportedSource!),
+            discoverImported: (input, token) => this.DiscoverChangedImportedSourceAsync(operation, input, artifacts, token),
+            resolveImported: uri => imports.ResolveOutput(operation.Project, uri, ContentCookInputRole.Dependency),
+            preferCookedReference: libraries.IsLibraryPreferred,
+            expandCookedReferences: (input, references, token) => libraries.ExpandReferencesAsync(input, references, this.engineContentPipelineApi as Inspection.ICookedDependencyInspector,
+                Path.Combine(operation.Project.ProjectRoot, ".build", "cook", operation.OperationId.ToString("N")), artifacts, token));
 
     private async Task<bool> InputsAreCurrentAsync(
         CookInputSnapshot snapshot,

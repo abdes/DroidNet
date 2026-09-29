@@ -5,11 +5,12 @@
 using System.Collections.Immutable;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Incremental;
+using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Managed.Assets.Import.Materials;
+using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
@@ -39,7 +40,7 @@ public sealed partial class ContentPipelineService(
     IContentImportManifestValidator manifestValidator,
     IEngineContentPipelineApi engineContentPipelineApi,
     ICookDocumentRegistry cookDocuments,
-    INativeCompatibilityService? nativeCompatibility = null,
+    INativeCompatibilityService nativeCompatibility,
     DroidNet.Storage.IAtomicFileStore? provenanceFiles = null,
     Publication.CookPublicationService? publication = null) : IContentPipelineService
 {
@@ -48,7 +49,7 @@ public sealed partial class ContentPipelineService(
         WriteIndented = true,
     };
 
-    private readonly INativeCompatibilityService nativeCompatibility = nativeCompatibility ?? EditorNativeCompatibilityService.ForCooking();
+    private readonly INativeCompatibilityService nativeCompatibility = nativeCompatibility;
     private readonly CookProvenanceStore provenanceStore = new(provenanceFiles ?? new DroidNet.Storage.Native.NativeAtomicFileStore(new Testably.Abstractions.RealFileSystem()));
     private readonly Publication.CookPublicationService publication = publication ?? new(cookCoordinator, projectContextService, provenanceFiles ?? new DroidNet.Storage.Native.NativeAtomicFileStore(new Testably.Abstractions.RealFileSystem()));
 
@@ -136,6 +137,8 @@ public sealed partial class ContentPipelineService(
         {
             MaterialSlotProvenance = results.SelectMany(static result => result.MaterialSlotProvenance)
                 .ToImmutableDictionary(static entry => entry.Key, static entry => entry.Value, StringComparer.Ordinal),
+            AuxiliaryFilesBySource = results.SelectMany(static result => result.AuxiliaryFilesBySource)
+                .ToImmutableDictionary(static entry => entry.Key, static entry => entry.Value),
         };
     }
 
@@ -191,16 +194,39 @@ public sealed partial class ContentPipelineService(
     private static List<ContentCookedAsset> CreateCookedAssets(
         ContentCookScope scope,
         CookInspectionResult inspection,
-        IReadOnlyList<string>? outputFiles)
+        CookedInventoryReport inventory,
+        NativeImportResult import)
     {
         var result = new List<ContentCookedAsset>();
         foreach (var asset in inspection.Assets)
         {
             var input = scope.Inputs.FirstOrDefault(input => input.OwnsOutput(asset.VirtualPath));
             if (input is not null && (input.Kind != ContentCookAssetKind.ForeignSource
-                || (asset.DescriptorRelativePath is not null && outputFiles?.Contains(asset.DescriptorRelativePath, StringComparer.OrdinalIgnoreCase) == true)))
+                || (asset.DescriptorRelativePath is not null
+                    && import.OutputsBySource.TryGetValue(input.SourceRelativePath, out var outputs)
+                    && outputs.Contains(asset.DescriptorRelativePath, StringComparer.OrdinalIgnoreCase))))
             {
-                result.Add(new(input.AssetUri, ToAssetUri(asset.VirtualPath), asset.Kind, input.MountName, asset.VirtualPath));
+                result.Add(new(input.AssetUri, ToAssetUri(asset.VirtualPath), asset.Kind, input.MountName, asset.VirtualPath)
+                {
+                    DescriptorRelativePath = asset.DescriptorRelativePath,
+                });
+            }
+        }
+
+        if (inventory.IsValid)
+        {
+            foreach (var input in scope.Inputs.Where(static input => input.Kind == ContentCookAssetKind.Texture))
+            {
+                var virtualPath = input.OutputVirtualPath ?? throw new InvalidDataException("A texture requires an explicit output identity.");
+                var prefix = ContentPipelinePaths.GetVirtualMountRoot(input.MountName) + "/";
+                var relative = virtualPath.StartsWith(prefix, StringComparison.Ordinal) ? virtualPath[prefix.Length..]
+                    : throw new InvalidDataException("Texture output is outside its mount.");
+                var descriptor = inventory.Resources.SingleOrDefault(resource => resource.Kind == "texture" && resource.DescriptorPath == relative)
+                    ?? throw new InvalidDataException($"Native cooking did not produce texture '{virtualPath}'.");
+                result.Add(new(input.AssetUri, ToAssetUri(virtualPath), ContentCookAssetKind.Texture, input.MountName, virtualPath)
+                {
+                    DescriptorRelativePath = descriptor.DescriptorPath,
+                });
             }
         }
 
@@ -695,46 +721,60 @@ public sealed partial class ContentPipelineService(
                 Validation: null);
         }
 
-        var validated = await this.ValidateImportedOutputAsync(operationId, targetKind, scope, manifest, allDiagnostics, importResult.OutputFiles, cancellationToken).ConfigureAwait(false);
-        return validated with { MaterialSlotProvenance = importResult.MaterialSlotProvenance };
+        var validated = await this.ValidateImportedOutputAsync(operationId, targetKind, scope, manifest, allDiagnostics, importResult, cancellationToken).ConfigureAwait(false);
+        var resources = validated.NativeInventory?.Files.Where(static file => file.Value.Kind == Oxygen.Managed.Assets.Persistence.LooseCooked.V2.FileKind.Auxiliary)
+            .Select(static file => file.Key).ToHashSet(StringComparer.Ordinal) ?? [];
+        return validated with
+        {
+            MaterialSlotProvenance = importResult.MaterialSlotProvenance,
+            AuxiliaryFilesBySource = scope.Inputs.Where(input => importResult.OutputsBySource.ContainsKey(input.SourceRelativePath))
+                .ToImmutableDictionary(static input => input.AssetUri,
+                    input => importResult.OutputsBySource[input.SourceRelativePath].Where(resources.Contains).ToImmutableArray()),
+        };
     }
 
-    private async Task<ContentCookResult> ValidateImportedOutputAsync(Guid operationId, CookTargetKind targetKind, ContentCookScope scope, ContentImportManifest manifest, List<DiagnosticRecord> allDiagnostics, IReadOnlyList<string>? outputFiles, CancellationToken cancellationToken)
+    private async Task<ContentCookResult> ValidateImportedOutputAsync(Guid operationId, CookTargetKind targetKind, ContentCookScope scope, ContentImportManifest manifest, List<DiagnosticRecord> allDiagnostics, NativeImportResult import, CancellationToken cancellationToken)
     {
-        var outputLease = await CookOutputReadLease.AcquireAsync(manifest.Output, cancellationToken).ConfigureAwait(false);
-        await using var outputLifetime = outputLease.ConfigureAwait(false);
-        CookRunContext.Report(new(Message: "Inspecting cooked output.", State: CookRunState.Validating));
-        var inspection = await this.engineContentPipelineApi.InspectLooseCookedRootAsync(manifest.Output, cancellationToken)
-            .ConfigureAwait(false);
-        allDiagnostics.AddRange(inspection.Diagnostics);
-        if (!inspection.Succeeded)
+        CookRunContext.Report(new(Message: "Verifying cooked inventory.", State: CookRunState.Validating));
+        CookedInventoryReport inventory;
+        try
         {
+            var outputLease = await CookOutputReadLease.AcquireAsync(manifest.Output, cancellationToken).ConfigureAwait(false);
+            await using var outputLifetime = outputLease.ConfigureAwait(false);
+            inventory = await outputLease.ReadInventoryAsync(this.engineContentPipelineApi, cancellationToken, scope.Artifacts).ConfigureAwait(false);
+        }
+        catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException or System.Text.Json.JsonException or System.ComponentModel.Win32Exception)
+        {
+            var diagnostic = new DiagnosticRecord
+            {
+                OperationId = operationId,
+                Domain = FailureDomain.ContentPipeline,
+                Severity = DiagnosticSeverity.Error,
+                Code = ContentPipelineDiagnosticCodes.InspectFailed,
+                Message = "The cooked output could not be inspected.",
+                TechnicalMessage = error.Message,
+                ExceptionType = error.GetType().FullName,
+                AffectedPath = manifest.Output,
+            };
+            allDiagnostics.Add(diagnostic);
             return new ContentCookResult(
-                operationId,
-                targetKind,
-                OperationStatus.Failed,
-                NormalizeDiagnostics(operationId, allDiagnostics),
-                CookedAssets: [],
-                inspection,
+                operationId, targetKind, OperationStatus.Failed,
+                NormalizeDiagnostics(operationId, allDiagnostics), CookedAssets: [],
+                new CookInspectionResult(manifest.Output, Succeeded: false, SourceIdentity: null, [], [], [diagnostic]),
                 Validation: null);
         }
 
-        CookRunContext.Report(new(Message: "Validating cooked output."));
-        var validation = await this.engineContentPipelineApi.ValidateLooseCookedRootAsync(manifest.Output, cancellationToken)
-            .ConfigureAwait(false);
+        var inspection = inventory.ToInspection(manifest.Output);
+        var validation = inventory.ToValidation(manifest.Output);
         allDiagnostics.AddRange(validation.Diagnostics);
-
-        var proof = validation.Succeeded && outputLease.HasIndex
-            ? await outputLease.CaptureAsync(scope.Inputs[0].MountName, inspection, cancellationToken).ConfigureAwait(false)
-            : null;
+        var proof = inventory.IsValid ? new CookProvenance.Root(scope.Inputs[0].MountName, inventory.SourceKey, inventory.IndexSha256) : null;
         return new ContentCookResult(
-            operationId,
-            targetKind,
-            GetStatus(allDiagnostics, validation),
-            NormalizeDiagnostics(operationId, allDiagnostics),
-            CreateCookedAssets(scope, inspection, outputFiles),
-            inspection,
-            validation) { VerifiedRoot = proof };
+            operationId, targetKind, GetStatus(allDiagnostics, validation), NormalizeDiagnostics(operationId, allDiagnostics),
+            CreateCookedAssets(scope, inspection, inventory, import), inspection, validation)
+        {
+            VerifiedRoot = proof,
+            NativeInventory = inventory,
+        };
     }
 
     private Task<NativeImportResult> ImportManifestAsync(Guid operationId, ContentCookScope scope, ContentImportManifest manifest, CancellationToken cancellationToken)

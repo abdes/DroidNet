@@ -79,7 +79,7 @@ public sealed partial class ImportToolContentPipelineApiTests
             _ => execution with { OperationId = Guid.Empty },
         };
         var runner = new CapturingRunner(new(0, string.Empty, string.Empty));
-        var api = new ImportToolContentPipelineApi(new FixedToolLocator("unused.exe"), runner, NullLogger<ImportToolContentPipelineApi>.Instance);
+        var api = new ImportToolContentPipelineApi(new FixedToolLocator("unused.exe"), runner, NullLogger<ImportToolContentPipelineApi>.Instance, workspace.Compatibility);
         Func<Task> import = () => api.ImportAsync(execution, this.TestContext.CancellationToken);
 
         _ = await import.Should().ThrowAsync<ArgumentException>().ConfigureAwait(false);

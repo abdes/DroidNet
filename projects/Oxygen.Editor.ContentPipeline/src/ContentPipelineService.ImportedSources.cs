@@ -111,15 +111,14 @@ public sealed partial class ContentPipelineService
             return IdentityFailure(operationId, source, result, message);
         }
 
-        if (previous is not null)
+        if (previous is not null && scope.PreviousInventories.TryGetValue(source.MountName, out var previousInventory))
         {
-            var oldEntries = scope.PreviousProvenance!.Roots.Where(root => string.Equals(root.Mount, source.MountName, StringComparison.Ordinal))
-                .SelectMany(static root => root.Assets).ToDictionary(static asset => asset.Entry.VirtualPath, StringComparer.Ordinal);
+            var oldEntries = previousInventory.Assets.ToDictionary(static asset => asset.VirtualPath, StringComparer.Ordinal);
             var newEntries = result.Inspection!.Assets.ToDictionary(static asset => asset.VirtualPath, StringComparer.Ordinal);
             foreach (var output in previous.Outputs)
             {
-                if (oldEntries.TryGetValue(output.Asset.VirtualPath, out var old) && old.Entry.AssetKey is { } key
-                    && !string.Equals(key, newEntries[output.Asset.VirtualPath].AssetKey, StringComparison.Ordinal))
+                if (oldEntries.TryGetValue(output.Asset.VirtualPath, out var old)
+                    && !string.Equals(old.Key.ToString(), newEntries[output.Asset.VirtualPath].AssetKey, StringComparison.Ordinal))
                 {
                     return IdentityFailure(operationId, source, result, $"Reimport would change the native identity of '{output.Asset.VirtualPath}'. Import into a new destination.");
                 }
@@ -220,7 +219,7 @@ public sealed partial class ContentPipelineService
         }
 
         var merged = MergeProjectResults(operationId, results) with { TargetKind = scope.TargetKind };
-        return merged with { VerifiedRoot = results[^1].VerifiedRoot, Inspection = results[^1].Inspection, Validation = results[^1].Validation };
+        return merged with { VerifiedRoot = results[^1].VerifiedRoot, NativeInventory = results[^1].NativeInventory, Inspection = results[^1].Inspection, Validation = results[^1].Validation };
     }
 
     private async Task<DiagnosticRecord?> FindImportedOutputCollisionAsync(Guid operationId, ContentCookScope scope, ContentCookInput source, NativeSceneImportSettings settings, CancellationToken cancellationToken)

@@ -12,7 +12,7 @@ using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
-using Oxygen.Managed.Assets.Import.Materials;
+using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.MaterialEditor.Tests;
@@ -397,7 +397,7 @@ public sealed partial class MaterialDocumentServiceTests
             Path.Combine(workspace.Root, ".cooked", "Content", "Materials", "RoundTrip.omat"), cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
         var indexStream = File.OpenRead(Path.Combine(workspace.Root, ".cooked", "Content", "container.index.bin"));
         await using var indexLifetime = indexStream.ConfigureAwait(false);
-        var index = Oxygen.Managed.Assets.Persistence.LooseCooked.V1.LooseCookedIndex.Read(indexStream);
+        var index = Oxygen.Managed.Assets.Persistence.LooseCooked.V2.LooseCookedIndex.Read(indexStream);
         var materialEntry = index.Assets.Single(static asset => string.Equals(asset.VirtualPath, "/Content/Materials/RoundTrip.omat", StringComparison.Ordinal));
         _ = cookedBytes.Should().HaveCount(checked((int)materialEntry.DescriptorSize));
         _ = ReadSingle(cookedBytes, 0x70).Should().BeApproximately(0.25f, 0.0001f);

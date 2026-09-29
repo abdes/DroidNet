@@ -52,9 +52,16 @@ public sealed record ContentCookResult(
     /// <summary>Gets the output evidence captured under the native validation read lease.</summary>
     internal Incremental.CookProvenance.Root? VerifiedRoot { get; init; }
 
+    /// <summary>Gets native candidate metadata used to preserve unrelated descriptor identities.</summary>
+    internal global::Oxygen.Editor.ContentPipeline.Inspection.CookedInventoryReport? NativeInventory { get; init; }
+
     /// <summary>Gets native source-allocation candidates awaiting journaled publication.</summary>
     internal ImmutableDictionary<string, NativeMaterialSlotProvenance> MaterialSlotProvenance { get; init; }
         = ImmutableDictionary<string, NativeMaterialSlotProvenance>.Empty;
+
+    /// <summary>Gets native-reported auxiliary file ownership for imported source products.</summary>
+    internal ImmutableDictionary<Uri, ImmutableArray<string>> AuxiliaryFilesBySource { get; init; }
+        = ImmutableDictionary<Uri, ImmutableArray<string>>.Empty;
 
     /// <summary>Gets source settings emitted by the native producer and committed with its outputs.</summary>
     internal ImmutableArray<Publication.CookProducedSourceFile> ProducedSourceFiles { get; init; } = [];

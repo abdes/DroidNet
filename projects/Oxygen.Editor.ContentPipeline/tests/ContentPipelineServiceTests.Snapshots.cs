@@ -113,7 +113,11 @@ public sealed partial class ContentPipelineServiceTests
         workspace.WriteText(image, "saved mask image bytes");
         workspace.WriteText(source, JsonSerializer.Serialize(new { source = absolute ? Path.Combine(workspace.Root, image) : "meter.png" }));
         var authored = workspace.ReadText(source);
-        var api = new CapturingEngineContentPipelineApi(new(workspace.Root, Succeeded: true, []), SucceededInspection(workspace))
+        var inspection = SucceededInspection(workspace) with
+        {
+            Assets = [new("/Content/Textures/Meter.otex", ContentCookAssetKind.Texture) { DescriptorRelativePath = "Textures/Meter.otex" }],
+        };
+        var api = new CapturingEngineContentPipelineApi(new(workspace.Root, Succeeded: true, []), inspection)
         {
             BeforeImport = async (execution, token) =>
             {

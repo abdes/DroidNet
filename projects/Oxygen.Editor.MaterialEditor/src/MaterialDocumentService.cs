@@ -11,7 +11,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Projects;
-using Oxygen.Managed.Assets.Import.Materials;
+using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Assets.Model;
 using Oxygen.Managed.Core.Diagnostics;
 

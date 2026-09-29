@@ -30,29 +30,55 @@ public sealed partial class ContentPipelineService
         });
         var token = cancellation.Token;
         token.ThrowIfCancellationRequested();
-        using var publicationRead = await CookOutputLease.AcquireInspectionAsync(project.ProjectRoot, token).ConfigureAwait(false);
-        var (provenance, _) = await this.provenanceStore.ReadAsync(project, token).ConfigureAwait(false);
-        if (!await this.publication.HasCommittedMetadataUnderLeaseAsync(project, token).ConfigureAwait(false))
+        IDisposable? publicationRead = await CookOutputLease.AcquireInspectionAsync(project.ProjectRoot, token).ConfigureAwait(false);
+        try
         {
-            provenance = new(Incremental.CookProvenance.CurrentVersion, project.ProjectId, [], []);
-        }
+            var (provenance, _) = await this.provenanceStore.ReadAsync(project, token).ConfigureAwait(false);
+            if (!await this.publication.HasCommittedMetadataUnderLeaseAsync(project, token).ConfigureAwait(false))
+            {
+                provenance = new(Incremental.CookProvenance.CurrentVersion, project.ProjectId, [], []);
+            }
 
-        var requestedRoots = ResolveInspectionRoots(project, scopeUri);
-        if (scopeUri is not null && requestedRoots.All(static root => !root.IsLocal))
-        {
-            var imports = await Import.ImportedSourceIndex.ReadAsync(project, cookDocuments, provenance, token).ConfigureAwait(false);
-            requestedRoots = ResolveImportedInspectionRoots(project, scopeUri, requestedRoots, imports.GetInspectionOutputScopes(scopeUri));
-        }
+            var requestedRoots = ResolveInspectionRoots(project, scopeUri);
+            if (scopeUri is not null && requestedRoots.All(static root => !root.IsLocal))
+            {
+                var imports = await Import.ImportedSourceIndex.ReadAsync(project, cookDocuments, provenance, token).ConfigureAwait(false);
+                requestedRoots = ResolveImportedInspectionRoots(project, scopeUri, requestedRoots, imports.GetInspectionOutputScopes(scopeUri));
+            }
 
-        var roots = new List<CookedRootReport>();
-        foreach (var root in requestedRoots)
-        {
+            var roots = new List<CookedRootReport>();
+            foreach (var root in requestedRoots)
+            {
+                token.ThrowIfCancellationRequested();
+                roots.Add(await this.InspectRootAsync(root, provenance, validate, token).ConfigureAwait(false));
+            }
+
             token.ThrowIfCancellationRequested();
-            roots.Add(await this.InspectRootAsync(root, provenance, validate, token).ConfigureAwait(false));
+            return new(project.ProjectId, scopeUri, DateTimeOffset.UtcNow, roots);
         }
+        catch (ContentPipelineTerminationException failure)
+        {
+            var retained = publicationRead;
+            publicationRead = null;
+            var drain = ReleaseInspectionGateAsync(failure.DrainCompletion, retained);
+            throw new ContentPipelineTerminationException(failure.InnerException ?? failure, drain);
+        }
+        finally
+        {
+            publicationRead?.Dispose();
+        }
+    }
 
-        token.ThrowIfCancellationRequested();
-        return new(project.ProjectId, scopeUri, DateTimeOffset.UtcNow, roots);
+    private static async Task ReleaseInspectionGateAsync(Task drain, IDisposable reader)
+    {
+        try
+        {
+            await drain.ConfigureAwait(false);
+        }
+        finally
+        {
+            reader.Dispose();
+        }
     }
 
     private static InspectionRoot[] ResolveInspectionRoots(ProjectContext project, Uri? scope)
@@ -90,24 +116,21 @@ public sealed partial class ContentPipelineService
     private static CookedAssetProvenance[] GetInspectionProvenance(
         InspectionRoot root,
         CookProvenance provenance,
-        IReadOnlyDictionary<string, CookProvenance.FileProof> actual)
+        CookedInventoryReport actual)
     {
         var known = root.IsLocal ? null : provenance.Roots.FirstOrDefault(item => string.Equals(item.Mount, root.Name, StringComparison.Ordinal));
-        if (known?.SharedFiles.All(Matches) != true)
-        {
-            return [];
-        }
-
-        var valid = known.Assets.Where(asset => Matches(asset.File)).Select(static asset => asset.Entry.VirtualPath).ToHashSet(StringComparer.Ordinal);
+        if (known is null) { return []; }
+        var (shared, valid) = known.Compare(actual, provenance.Products.SelectMany(static product => product.Outputs));
+        if (!shared) { return []; }
         return provenance.Products.SelectMany(product => product.Outputs
-                .Where(output => string.Equals(output.RootMount, root.Name, StringComparison.Ordinal) && valid.Contains(output.Asset.VirtualPath))
+                .Where(output => string.Equals(output.RootMount, root.Name, StringComparison.Ordinal)
+                    && output.Asset.DescriptorRelativePath is { } path && valid.Contains(path))
                 .Select(output => new CookedAssetProvenance(output.Asset.CookedAssetUri, product.SourceUri, product.Dependencies)))
             .GroupBy(static association => association.CookedAssetUri)
             .Where(static group => group.Take(2).Count() == 1)
             .Select(static group => group.Single()).ToArray();
 
-        bool Matches(CookProvenance.FileProof proof) => actual.TryGetValue(proof.RelativePath, out var file)
-            && file.Size == proof.Size && string.Equals(file.Sha256, proof.Sha256, StringComparison.Ordinal);
+
     }
 
     private static bool IsInspectedAssetInScope(CookedAssetEntry asset, InspectionRoot root, IReadOnlyList<CookedAssetProvenance> provenance)
@@ -173,23 +196,19 @@ public sealed partial class ContentPipelineService
                 return new(root.Name, IsPresent: false, new(root.Path, Succeeded: true, SourceIdentity: null, [], [], []), Validation: null, []);
             }
 
-            var inspection = await this.engineContentPipelineApi.InspectLooseCookedRootAsync(root.Path, cancellationToken).ConfigureAwait(false);
-            var validation = validate ? await this.engineContentPipelineApi.ValidateLooseCookedRootAsync(root.Path, cancellationToken).ConfigureAwait(false) : null;
+            var actual = await lease.ReadInventoryAsync(this.engineContentPipelineApi, cancellationToken).ConfigureAwait(false);
+            var inspection = actual.ToInspection(root.Path);
+            var validation = validate ? actual.ToValidation(root.Path) : null;
             var known = root.IsLocal ? null : provenance.Roots.FirstOrDefault(item => string.Equals(item.Mount, root.Name, StringComparison.Ordinal));
-            var actual = known is not null ? await lease.ReadHashesAsync(cancellationToken).ConfigureAwait(false) : new Dictionary<string, CookProvenance.FileProof>(StringComparer.Ordinal);
             var origins = GetInspectionProvenance(root, provenance, actual);
-            if (validation is not null && known is not null)
+            if (validation is not null && known is not null && !known.Matches(actual))
             {
-                var issues = known.SharedFiles.Concat(known.Assets.Select(static asset => asset.File))
-                    .Where(proof => !actual.TryGetValue(proof.RelativePath, out var file) || file.Size != proof.Size || !string.Equals(file.Sha256, proof.Sha256, StringComparison.Ordinal))
-                    .Select(proof => new DiagnosticRecord
-                    {
-                        OperationId = Guid.NewGuid(), Domain = FailureDomain.ContentPipeline, Severity = DiagnosticSeverity.Error,
-                        Code = ContentPipelineDiagnosticCodes.ValidateFailed,
-                        Message = $"Cooked file '{proof.RelativePath}' no longer matches its published content.",
-                        AffectedPath = Path.Combine(root.Path, proof.RelativePath),
-                    }).ToArray();
-                validation = validation with { Succeeded = validation.Succeeded && issues.Length == 0, Diagnostics = [.. validation.Diagnostics, .. issues] };
+                validation = validation with { Succeeded = false, Diagnostics = [.. validation.Diagnostics, new DiagnosticRecord
+                {
+                    OperationId = Guid.NewGuid(), Domain = FailureDomain.ContentPipeline, Severity = DiagnosticSeverity.Error,
+                    Code = ContentPipelineDiagnosticCodes.ValidateFailed, Message = "The cooked index no longer matches its publication.",
+                    AffectedPath = Path.Combine(root.Path, "container.index.bin"),
+                }] };
             }
 
             var scoped = inspection with
@@ -199,7 +218,7 @@ public sealed partial class ContentPipelineService
             };
             return new(root.Name, IsPresent: true, scoped, validation, origins);
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException or System.ComponentModel.Win32Exception)
+        catch (Exception exception) when (exception is IOException or InvalidDataException or UnauthorizedAccessException or InvalidOperationException or System.Text.Json.JsonException or System.ComponentModel.Win32Exception)
         {
             var diagnostic = new DiagnosticRecord
             {

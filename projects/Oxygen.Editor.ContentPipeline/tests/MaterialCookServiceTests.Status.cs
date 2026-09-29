@@ -24,7 +24,7 @@ public sealed partial class MaterialCookServiceTests
     [DataRow(AssetCookFreshness.Current, true, true, false, MaterialCookState.Cooked)]
     [DataRow(AssetCookFreshness.Current, true, true, true, MaterialCookState.Stale)]
     [DataRow(AssetCookFreshness.OutOfDate, true, true, false, MaterialCookState.Stale)]
-    [DataRow(AssetCookFreshness.OutOfDate, true, false, false, MaterialCookState.Failed)]
+    [DataRow(AssetCookFreshness.OutOfDate, true, false, false, MaterialCookState.NotCooked)]
     [DataRow(AssetCookFreshness.InvalidSource, true, true, false, MaterialCookState.Failed)]
     [DataRow(AssetCookFreshness.NeedsCooking, false, false, false, MaterialCookState.NotCooked)]
     public async Task ReadMaterialStateUsesSharedCookFacts(AssetCookFreshness freshness, bool published, bool verified, bool dirty, MaterialCookState expected)
@@ -36,7 +36,7 @@ public sealed partial class MaterialCookServiceTests
             uri,
             freshness,
             published,
-            verified,
+            verified ? CookedOutputAvailability.Present : CookedOutputAvailability.Missing,
             [],
             dirty ? [new CookDocumentState(Guid.NewGuid(), source, "Material", 2, 1, IsDirty: true, new string('A', 64))] : [],
             []);

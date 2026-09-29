@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Managed.Assets.Catalog;
-using Oxygen.Managed.Assets.Import.Materials;
+using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Assets.Model;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentBrowser.Materials;

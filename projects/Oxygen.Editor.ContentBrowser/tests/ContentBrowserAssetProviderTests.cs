@@ -11,7 +11,7 @@ using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
 using Oxygen.Managed.Assets.Catalog;
-using Oxygen.Managed.Assets.Import.Materials;
+using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Assets.Model;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -321,6 +321,8 @@ public sealed partial class ContentBrowserAssetProviderTests
 
     private sealed class EmptyCookStatusReader : IAssetCookStatusReader
     {
+        public event EventHandler? Changed { add { } remove { } }
+
         public Task<IReadOnlyList<AssetCookStatus>> ReadAsync(ProjectContext project, IReadOnlyList<Uri> assetUris, CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<AssetCookStatus>>([]);
     }

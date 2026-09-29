@@ -157,7 +157,7 @@ public sealed partial class InspectorControlTests
         using var fixture = new DemandFixture();
         fixture.Geometry.Geometry = new(fixture.GeometryUri);
         _ = fixture.Assets.Setup(value => value.ResolveAsync(fixture.GeometryUri, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(fixture.GeometryAsset with { CookStatus = fixture.GeometryAsset.CookStatus! with { Freshness = AssetCookFreshness.Current, HasVerifiedOutput = true } });
+            .ReturnsAsync(fixture.GeometryAsset with { CookStatus = fixture.GeometryAsset.CookStatus! with { Freshness = AssetCookFreshness.Current, OutputAvailability = CookedOutputAvailability.Present } });
         fixture.Geometry.OverrideSlots.Add(new MaterialsSlot { Target = fixture.Authoring.TargetFor(fixture.Geometry.Geometry!.Uri), Material = new(AssetUris.BuildGeneratedUri("Materials/Default")) });
         fixture.Activate();
         await WaitForRenderAsync().ConfigureAwait(true);
@@ -241,9 +241,9 @@ public sealed partial class InspectorControlTests
             this.GeometryAsset = CreateStatusAsset(0) with
             {
                 IdentityUri = this.GeometryUri, DisplayName = "Custom", Kind = AssetKind.Geometry, DerivedState = null,
-                CookStatus = new(this.GeometryUri, AssetCookFreshness.NeedsCooking, HasPublishedOutput: false, HasVerifiedOutput: false, [], [], []),
+                CookStatus = new(this.GeometryUri, AssetCookFreshness.NeedsCooking, HasPublishedOutput: false, OutputAvailability: CookedOutputAvailability.Missing, [], [], []),
             };
-            var material = CreateStatusAsset(1) with { IdentityUri = this.MaterialUri, CookStatus = new(this.MaterialUri, AssetCookFreshness.NeedsCooking, HasPublishedOutput: false, HasVerifiedOutput: false, [], [], []) };
+            var material = CreateStatusAsset(1) with { IdentityUri = this.MaterialUri, CookStatus = new(this.MaterialUri, AssetCookFreshness.NeedsCooking, HasPublishedOutput: false, OutputAvailability: CookedOutputAvailability.Missing, [], [], []) };
             _ = this.Assets.SetupGet(value => value.Items).Returns(Observable.Return<IReadOnlyList<ContentBrowserAssetItem>>([this.GeometryAsset, material]));
             _ = this.Assets.Setup(value => value.RefreshAsync(It.IsAny<AssetBrowserFilter>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
             _ = this.Assets.Setup(value => value.ResolveAsync(this.GeometryUri, It.IsAny<CancellationToken>())).ReturnsAsync(this.GeometryAsset);

@@ -33,7 +33,7 @@ public sealed record ContentImportLayout(
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? ScenesDirectory { get; init; }
 
-    /// <summary>Gets the mount-relative folder for texture descriptors.</summary>
+    /// <summary>Gets the folder for unnamed texture descriptors, relative to the native resources directory.</summary>
     [JsonPropertyName("texture_descriptors_subdir")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? TextureDescriptorsDirectory { get; init; }

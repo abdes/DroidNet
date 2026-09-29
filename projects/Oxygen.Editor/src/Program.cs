@@ -42,10 +42,9 @@ using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Services;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Workspace;
-using Oxygen.Managed.Assets.Import;
-using Oxygen.Managed.Assets.Import.Materials;
-using Oxygen.Managed.Assets.Import.Textures;
+using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Core.Diagnostics;
+using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Services;
 using Serilog;
 
@@ -391,20 +390,18 @@ public static partial class Program
 
     private static void RegisterAssetServices(IContainer container)
     {
-        container.Register<ImporterRegistry>(Reuse.Singleton);
-        container.Register<ImportPluginRegistration>(Reuse.Transient);
-
-        // Register Importers
-        container.Register<IAssetImporter, MaterialSourceImporter>(Reuse.Singleton);
-        container.Register<IAssetImporter, ImageTextureImporter>(Reuse.Singleton);
-
         container.Register<IProceduralGeometryDescriptorService, ProceduralGeometryDescriptorService>(Reuse.Singleton);
         container.Register<ISceneDescriptorGenerator, SceneDescriptorGenerator>(Reuse.Singleton);
         container.Register<IContentImportManifestBuilder, ContentImportManifestBuilder>(Reuse.Singleton);
         container.Register<IContentImportManifestValidator, ContentImportManifestValidator>(Reuse.Singleton);
         container.Register<IEngineContentPipelineToolLocator, EngineContentPipelineToolLocator>(Reuse.Singleton);
         container.Register<IContentPipelineProcessRunner, ContentPipelineProcessRunner>(Reuse.Singleton);
-        container.Register<ImportToolContentPipelineApi>(Reuse.Singleton);
+        container.RegisterDelegate<INativeCompatibilityService>(_ => EditorNativeCompatibilityService.ForCooking(),
+            Reuse.Singleton, serviceKey: EditorNativeCompatibilityService.CookingServiceKey);
+        container.RegisterDelegate<ImportToolContentPipelineApi>(resolver => new(
+            resolver.Resolve<IEngineContentPipelineToolLocator>(), resolver.Resolve<IContentPipelineProcessRunner>(),
+            resolver.Resolve<ILogger<ImportToolContentPipelineApi>>(),
+            resolver.Resolve<INativeCompatibilityService>(EditorNativeCompatibilityService.CookingServiceKey)), Reuse.Singleton);
         container.RegisterMapping<IEngineContentPipelineApi, ImportToolContentPipelineApi>();
         container.RegisterMapping<IBuiltinGeometryCatalogProvider, ImportToolContentPipelineApi>();
         container.RegisterMapping<Oxygen.Editor.ContentPipeline.Import.ISceneSourceInspector, ImportToolContentPipelineApi>();
@@ -413,7 +410,13 @@ public static partial class Program
         container.RegisterMapping<Oxygen.Editor.ContentPipeline.Cooking.ICookRunService, ContentCookCoordinator>();
         container.Register<Oxygen.Editor.ContentPipeline.Snapshots.ICookDocumentRegistry, Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentRegistry>(Reuse.Singleton);
         container.Register<Oxygen.Editor.World.SceneEditor.SceneCookInputRegistrar>(Reuse.Singleton);
-        container.Register<IContentPipelineService, ContentPipelineService>(Reuse.Singleton);
+        container.RegisterDelegate<IContentPipelineService>(resolver => new ContentPipelineService(
+            resolver.Resolve<IProjectContextService>(), resolver.Resolve<IContentCookCoordinator>(),
+            resolver.Resolve<IProjectCookScopeProvider>(), resolver.Resolve<ISceneDescriptorGenerator>(),
+            resolver.Resolve<IContentImportManifestBuilder>(), resolver.Resolve<IContentImportManifestValidator>(),
+            resolver.Resolve<IEngineContentPipelineApi>(), resolver.Resolve<Oxygen.Editor.ContentPipeline.Snapshots.ICookDocumentRegistry>(),
+            resolver.Resolve<INativeCompatibilityService>(EditorNativeCompatibilityService.CookingServiceKey),
+            resolver.Resolve<IAtomicFileStore>(), resolver.Resolve<Oxygen.Editor.ContentPipeline.Publication.CookPublicationService>()), Reuse.Singleton);
         container.RegisterDelegate<Oxygen.Editor.ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(
             resolver => (Oxygen.Editor.ContentPipeline.Inspection.IGeometryMaterialSlotProvider)resolver.Resolve<IContentPipelineService>(), Reuse.Singleton);
         container.Register<Oxygen.Editor.ContentPipeline.Publication.CookPublicationService>(Reuse.Singleton);
@@ -423,23 +426,6 @@ public static partial class Program
         container.Register<IMaterialSourcePathResolver, ProjectMaterialSourcePathResolver>(Reuse.Singleton);
         container.Register<IMaterialDocumentService, MaterialDocumentService>(Reuse.Singleton);
 
-        // Auto-register importers with the registry
-        container.RegisterDelegate<object>(
-            resolver =>
-            {
-                var registry = resolver.Resolve<ImporterRegistry>();
-                var importers = resolver.ResolveMany<IAssetImporter>();
-                foreach (var importer in importers)
-                {
-                    registry.Register(importer);
-                }
 
-                return new object();
-            },
-            Reuse.Singleton,
-            serviceKey: "AutoRegisterImporters");
-
-        // Ensure the delegate is invoked
-        _ = container.Resolve<object>("AutoRegisterImporters");
     }
 }

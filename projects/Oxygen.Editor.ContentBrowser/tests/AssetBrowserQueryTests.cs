@@ -52,7 +52,7 @@ public sealed class AssetBrowserQueryTests
         var current = CreateAsset("Current", AssetKind.Material, AssetCookFreshness.Current);
         _ = query.Matches(current).Should().BeFalse();
         _ = query.Matches(current with { RuntimeAvailability = AssetRuntimeAvailability.Failed }).Should().BeTrue();
-        _ = query.Matches(current with { CookStatus = current.CookStatus! with { HasVerifiedOutput = false } }).Should().BeTrue();
+        _ = query.Matches(current with { CookStatus = current.CookStatus! with { OutputAvailability = CookedOutputAvailability.Missing } }).Should().BeTrue();
         _ = query.Matches(CreateAsset("Missing", AssetKind.Geometry, AssetCookFreshness.MissingSource)).Should().BeTrue();
         query.ClearFiltersCommand.Execute(parameter: null);
         Select(query.StatusOptions, "In progress");
@@ -104,7 +104,7 @@ public sealed class AssetBrowserQueryTests
             [],
             IsSelectable: true)
         {
-            CookStatus = new(uri, freshness, HasPublishedOutput: current, HasVerifiedOutput: current, [], [], []),
+            CookStatus = new(uri, freshness, HasPublishedOutput: current, OutputAvailability: current ? CookedOutputAvailability.Present : CookedOutputAvailability.Missing, [], [], []),
         };
     }
 }

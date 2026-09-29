@@ -16,7 +16,7 @@ using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
-using Oxygen.Managed.Assets.Import.Materials;
+using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Core.Compatibility;
 
 namespace Oxygen.Editor.ContentPipeline.Tests;
@@ -29,19 +29,19 @@ public sealed partial class AssetCookStatusReaderTests
     /// <summary>Gets or sets the running test context.</summary>
     public TestContext TestContext { get; set; } = null!;
 
-    /// <summary>Changing bytes while preserving timestamps changes freshness, not publication history.</summary>
+    /// <summary>Source changes affect freshness; cooked-byte integrity is checked explicitly.</summary>
     /// <param name="changeOutput">Whether to corrupt prior output instead of changing saved input.</param>
     /// <returns>The asynchronous hash-identity regression.</returns>
     [TestMethod]
     [DataRow(false)]
     [DataRow(true)]
-    public async Task EqualTimestampsCannotMakeChangedBytesCurrent(bool changeOutput)
+    public async Task FreshnessUsesSourceIdentityWhileIntegrityUsesValidation(bool changeOutput)
     {
         using var project = new StatusProject();
         await project.PublishAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         var initial = await project.ReadAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = initial.Freshness.Should().Be(AssetCookFreshness.Current);
-        _ = initial.HasVerifiedOutput.Should().BeTrue();
+        _ = initial.HasAvailableOutput.Should().BeTrue();
         var path = changeOutput ? project.OutputPath : project.SourcePath;
         var timestamp = File.GetLastWriteTimeUtc(path);
         if (changeOutput)
@@ -55,9 +55,10 @@ public sealed partial class AssetCookStatusReaderTests
 
         File.SetLastWriteTimeUtc(path, timestamp);
         var status = await project.ReadAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = status.Freshness.Should().Be(AssetCookFreshness.OutOfDate);
+        _ = status.Freshness.Should().Be(changeOutput ? AssetCookFreshness.Current : AssetCookFreshness.OutOfDate);
         _ = status.HasPublishedOutput.Should().BeTrue();
-        _ = status.HasVerifiedOutput.Should().Be(!changeOutput);
+        _ = status.HasAvailableOutput.Should().BeTrue();
+        _ = Oxygen.Testing.NativeInventoryFixture.Read(Path.GetDirectoryName(project.OutputPath)!).IsValid.Should().Be(!changeOutput);
         _ = status.Outputs.Should().ContainSingle();
         _ = Directory.EnumerateDirectories(Path.Combine(project.Root, ".build", "cook")).Count(path => Guid.TryParseExact(Path.GetFileName(path), "N", out _)).Should().Be(1);
     }
@@ -75,7 +76,7 @@ public sealed partial class AssetCookStatusReaderTests
         var status = await project.ReadAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = status.Freshness.Should().Be(AssetCookFreshness.Current);
         _ = status.HasUnsavedChanges.Should().BeTrue();
-        _ = status.HasVerifiedOutput.Should().BeTrue();
+        _ = status.HasAvailableOutput.Should().BeTrue();
     }
 
     /// <summary>Broken source does not erase evidence of the prior usable output.</summary>
@@ -88,7 +89,7 @@ public sealed partial class AssetCookStatusReaderTests
         await File.WriteAllTextAsync(project.SourcePath, "invalid json", this.TestContext.CancellationToken).ConfigureAwait(false);
         var status = await project.ReadAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = status.Freshness.Should().Be(AssetCookFreshness.InvalidSource);
-        _ = status.HasVerifiedOutput.Should().BeTrue();
+        _ = status.HasAvailableOutput.Should().BeTrue();
         _ = status.Diagnostics.Should().NotBeEmpty();
     }
 
@@ -126,6 +127,7 @@ public sealed partial class AssetCookStatusReaderTests
         private readonly NativeAtomicFileStore files = new(new Testably.Abstractions.RealFileSystem());
         private readonly Oxygen.Testing.TemporaryNativeArtifacts native;
         private readonly CookPublicationService publication;
+        private readonly Mock<IEngineContentPipelineApi> api = new();
 
         public StatusProject()
         {
@@ -139,6 +141,8 @@ public sealed partial class AssetCookStatusReaderTests
             var producer = Path.Combine(this.Root, "producer.bin");
             File.WriteAllText(producer, "producer");
             this.native = new([new NativeArtifactLocation("producer", producer)]);
+            this.api.Setup(value => value.ReadInventoryAsync(It.IsAny<string>(), It.IsAny<NativeArtifactLease?>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((string root, NativeArtifactLease? _, CancellationToken _) => Oxygen.Testing.NativeInventoryFixture.Read(root));
             this.publication = new(Mock.Of<IContentCookCoordinator>(), Mock.Of<IProjectContextService>(), this.files);
         }
 
@@ -184,30 +188,34 @@ public sealed partial class AssetCookStatusReaderTests
             var producer = verified.Artifacts!;
             await using var producerLifetime = producer.ConfigureAwait(false);
             _ = verified.Succeeded.Should().BeTrue();
-            var plan = await CookIncrementalPlanner.PlanAsync(this.Project, producer.Fingerprint, graph.Files, graph, new(CookProvenance.CurrentVersion, this.Project.ProjectId, [], []), cancellationToken).ConfigureAwait(false);
+            var plan = CookIncrementalPlanner.CreatePlan(producer.Fingerprint, graph.Files, graph,
+                new(CookProvenance.CurrentVersion, this.Project.ProjectId, [], []), ImmutableDictionary<string, Inspection.CookedInventoryReport>.Empty);
             using var staging = await CookStagingArea.CreateAsync(operation, ["Content"], cancellationToken).ConfigureAwait(false);
             var root = staging.Roots.Single().StagingPath;
             await File.WriteAllTextAsync(Path.Combine(root, "container.index.bin"), "index", cancellationToken).ConfigureAwait(false);
             var outputs = graph.Assets.Select(asset => new ContentCookedAsset(asset.AssetUri, new Uri("asset://" + asset.OutputVirtualPath), asset.Kind, "Content", asset.OutputVirtualPath ?? throw new InvalidOperationException("Expected a cooked path."))).ToArray();
-            var indexed = ImmutableArray.CreateBuilder<CookProvenance.IndexedAsset>();
+            var indexed = new List<CookedAssetEntry>();
             foreach (var output in outputs)
             {
                 var relative = output.VirtualPath["/Content/".Length..];
                 var path = Path.Combine(root, relative);
                 Directory.CreateDirectory(Path.GetDirectoryName(path)!);
                 await File.WriteAllTextAsync(path, "original", cancellationToken).ConfigureAwait(false);
-                indexed.Add(new(new CookedAssetEntry(output.VirtualPath, output.Kind) { DescriptorRelativePath = relative }, Proof(relative, "original")));
+                indexed.Add(new CookedAssetEntry(output.VirtualPath, output.Kind) { DescriptorRelativePath = relative });
             }
 
-            var evidence = new CookProvenance.Root("Content", [Proof("container.index.bin", "index")], indexed.ToImmutable());
+            Oxygen.Testing.NativeInventoryFixture.WriteIndex(root, indexed);
+            var inventory = Oxygen.Testing.NativeInventoryFixture.Read(root);
+            var evidence = new CookProvenance.Root("Content", inventory.SourceKey, inventory.IndexSha256);
             var provenance = new CookProvenance(
                 CookProvenance.CurrentVersion,
                 this.Project.ProjectId,
                 [evidence],
                 [
-                    .. outputs.Select(output => new CookProvenance.Product(output.SourceAssetUri, plan.Fingerprints[output.SourceAssetUri], graph.Dependencies[output.SourceAssetUri], [new(output, "Content")]) { ReuseFingerprint = plan.Fingerprints[output.SourceAssetUri] }),
+                    .. outputs.Select(output => new CookProvenance.Product(output.SourceAssetUri, plan.Fingerprints[output.SourceAssetUri], graph.Dependencies[output.SourceAssetUri],
+                        [new(output with { DescriptorRelativePath = output.VirtualPath["/Content/".Length..] }, "Content")]) { ReuseFingerprint = plan.Fingerprints[output.SourceAssetUri] }),
                 ]);
-            var receipt = new CookPublicationReceipt(2, this.Project.ProjectId, operation.OperationId, DateTimeOffset.UtcNow, producer.Fingerprint, new string('A', 64), graph.Files, [], [evidence], WasMounted: false);
+            var receipt = new CookPublicationReceipt(3, this.Project.ProjectId, operation.OperationId, DateTimeOffset.UtcNow, producer.Fingerprint, new string('A', 64), graph.Files, [], [evidence], WasMounted: false);
             var transaction = await CookPublicationTransaction.PrepareAsync(
                 operation,
                 staging,
@@ -227,10 +235,5 @@ public sealed partial class AssetCookStatusReaderTests
             this.directory.Delete(recursive: true);
         }
 
-        private static CookProvenance.FileProof Proof(string path, string text)
-        {
-            var bytes = Encoding.UTF8.GetBytes(text);
-            return new(path, bytes.Length, Convert.ToHexString(SHA256.HashData(bytes)));
-        }
     }
 }

@@ -9,7 +9,7 @@ using DroidNet.Controls;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Schemas;
-using Oxygen.Managed.Assets.Import.Materials;
+using Oxygen.Managed.Assets.Authoring.Materials;
 using Windows.UI;
 
 namespace Oxygen.Editor.MaterialEditor.Tests;

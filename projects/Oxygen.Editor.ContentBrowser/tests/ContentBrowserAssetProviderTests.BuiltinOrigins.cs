@@ -40,7 +40,7 @@ public sealed partial class ContentBrowserAssetProviderTests
             new(engineUri) { Generated = new("Default", "oxygen.material-descriptor.v1", cookedUri.AbsolutePath, GeneratedAssetCategory.Standard) },
             new(cookedUri) { Cooked = foreign, OverriddenCookedSources = [own] },
         ];
-        var state = new AssetCookStatus(engineUri, AssetCookFreshness.Current, HasPublishedOutput: true, HasVerifiedOutput: true, [new(engineUri, cookedUri, ContentCookAssetKind.Material, "Content", cookedUri.AbsolutePath)], [], []);
+        var state = new AssetCookStatus(engineUri, AssetCookFreshness.Current, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [new(engineUri, cookedUri, ContentCookAssetKind.Material, "Content", cookedUri.AbsolutePath)], [], []);
         var reader = new DelegateStatusReader((_, _, _) => Task.FromResult<IReadOnlyList<AssetCookStatus>>([state]));
         var projects = CreateProjectContextService(workspace);
         var runtime = Oxygen.Testing.AssetStatusFixture.CreateUnavailableRuntime();
@@ -76,7 +76,7 @@ public sealed partial class ContentBrowserAssetProviderTests
             record.Uri,
             AssetCookFreshness.Current,
             HasPublishedOutput: true,
-            HasVerifiedOutput: true,
+            OutputAvailability: CookedOutputAvailability.Present,
             [new(record.Uri, copies[index].Uri, copies[index].Uri.AbsolutePath.EndsWith(".omat", StringComparison.Ordinal) ? ContentCookAssetKind.Material : ContentCookAssetKind.Geometry, "Content", copies[index].Uri.AbsolutePath)],
             [],
             [])).ToArray();
@@ -135,7 +135,7 @@ public sealed partial class ContentBrowserAssetProviderTests
             records.Add(new(descriptorUri));
         }
 
-        var state = new AssetCookStatus(engineUri, AssetCookFreshness.Current, HasPublishedOutput: true, verified, [new(engineUri, cookedUri, ContentCookAssetKind.Material, "Content", cookedUri.AbsolutePath)], [], []);
+        var state = new AssetCookStatus(engineUri, AssetCookFreshness.Current, HasPublishedOutput: true, verified ? CookedOutputAvailability.Present : CookedOutputAvailability.Missing, [new(engineUri, cookedUri, ContentCookAssetKind.Material, "Content", cookedUri.AbsolutePath)], [], []);
         var reader = new DelegateStatusReader((_, _, _) => Task.FromResult<IReadOnlyList<AssetCookStatus>>([state]));
         var unavailableRuntime = Oxygen.Testing.AssetStatusFixture.CreateUnavailableRuntime();
         await using var runtimeLifetime = unavailableRuntime.ConfigureAwait(false);

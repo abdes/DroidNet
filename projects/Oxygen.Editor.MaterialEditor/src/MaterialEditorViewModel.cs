@@ -15,7 +15,7 @@ using Microsoft.UI.Xaml.Media;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Schemas;
-using Oxygen.Managed.Assets.Import.Materials;
+using Oxygen.Managed.Assets.Authoring.Materials;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.UI;
 using WindowId = Microsoft.UI.WindowId;

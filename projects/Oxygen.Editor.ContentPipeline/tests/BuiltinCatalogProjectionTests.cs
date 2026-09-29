@@ -7,11 +7,10 @@ using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Assets.Model;
-using Oxygen.Managed.Assets.Resolvers;
 
 namespace Oxygen.Editor.ContentPipeline.Tests;
 
-/// <summary>Checks discovery and resolver metadata against the native catalog fixture.</summary>
+/// <summary>Checks discovery and projected metadata against the native catalog fixture.</summary>
 [TestClass]
 [SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers public test classes with the repository discovery configuration.")]
 public sealed class BuiltinCatalogProjectionTests
@@ -44,17 +43,16 @@ public sealed class BuiltinCatalogProjectionTests
         _ = records.Should().NotContain(record => record.Generated!.AuthoringCategory == GeneratedAssetCategory.Internal);
     }
 
-    /// <summary>Resolvers receive the native LOD/submesh definitions instead of a separate shape list.</summary>
-    /// <returns>The asynchronous resolver projection test.</returns>
+    /// <summary>Managed projections retain every native LOD and submesh declaration.</summary>
+    /// <returns>The asynchronous metadata projection test.</returns>
     [TestMethod]
-    public async Task ResolverUsesEveryNativeLodAndSubmeshDeclaration()
+    public async Task ProjectionUsesEveryNativeLodAndSubmeshDeclaration()
     {
         var native = await this.ReadCatalogAsync().ConfigureAwait(false);
-        var resolver = new GeneratedAssetResolver(native.CreateAssets());
+        var projected = native.CreateAssets().OfType<GeometryAsset>().ToDictionary(static asset => asset.Uri);
         foreach (var definition in native.AuthoringGeometries)
         {
-            var resolved = await resolver.ResolveAsync(definition.AssetUri).ConfigureAwait(false);
-            var geometry = resolved.Should().BeOfType<GeometryAsset>().Which;
+            var geometry = projected[definition.AssetUri];
             _ = geometry.Uri.Should().Be(definition.AssetUri);
             var lods = definition.Contribution.Descriptor.GetProperty("lods").EnumerateArray().ToArray();
             _ = geometry.Lods.Should().HaveCount(lods.Length);

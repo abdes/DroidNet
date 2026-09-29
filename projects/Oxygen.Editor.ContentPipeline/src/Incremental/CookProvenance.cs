@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Immutable;
+using Oxygen.Editor.ContentPipeline.Inspection;
 
 namespace Oxygen.Editor.ContentPipeline.Incremental;
 
@@ -13,23 +14,35 @@ namespace Oxygen.Editor.ContentPipeline.Incremental;
 /// <param name="Products">The source fingerprints responsible for produced assets.</param>
 internal sealed record CookProvenance(int Version, Guid ProjectId, ImmutableArray<CookProvenance.Root> Roots, ImmutableArray<CookProvenance.Product> Products)
 {
-    internal const int CurrentVersion = 2;
-    /// <summary>A file's complete content identity within a cooked root.</summary>
-    /// <param name="RelativePath">The root-relative physical path.</param>
-    /// <param name="Size">The byte length.</param>
-    /// <param name="Sha256">The content hash.</param>
-    public sealed record FileProof(string RelativePath, long Size, string Sha256);
+    internal const int CurrentVersion = 3;
+    /// <summary>The exact native inventory selected for a physical publication mount.</summary>
+    /// <param name="Mount">The physical mount, independent of virtual asset names.</param>
+    /// <param name="SourceKey">The native source identity.</param>
+    /// <param name="IndexSha256">The digest of the complete native inventory.</param>
+    public sealed record Root(string Mount, Guid SourceKey, string IndexSha256)
+    {
+        /// <summary>Compares inventory identity, independently of observed file health.</summary>
+        /// <param name="inventory">The currently protected native inventory.</param>
+        /// <returns>Whether it is the committed inventory.</returns>
+        public bool Matches(CookedInventoryReport inventory) => this.SourceKey == inventory.SourceKey
+            && string.Equals(this.IndexSha256, inventory.IndexSha256, StringComparison.Ordinal);
 
-    /// <summary>A native index entry and its descriptor bytes.</summary>
-    /// <param name="Entry">The inspected asset identity and descriptor location.</param>
-    /// <param name="File">The descriptor proof.</param>
-    public sealed record IndexedAsset(CookedAssetEntry Entry, FileProof File);
-
-    /// <summary>The physical root, shared resource/index files and individual descriptors.</summary>
-    /// <param name="Mount">The physical publication mount, independent of an asset's virtual namespace.</param>
-    /// <param name="SharedFiles">Index and shared resource identities.</param>
-    /// <param name="Assets">The indexed descriptor identities.</param>
-    public sealed record Root(string Mount, ImmutableArray<FileProof> SharedFiles, ImmutableArray<IndexedAsset> Assets);
+        /// <summary>Preserves selective descriptor repair while shared data and membership remain valid.</summary>
+        /// <param name="inventory">The protected native verification result.</param>
+        /// <param name="outputs">Source-associated outputs, including standalone resource descriptors.</param>
+        /// <returns>Shared-file validity and the usable physical descriptor paths.</returns>
+        public (bool SharedFilesValid, ImmutableHashSet<string> ValidDescriptors) Compare(CookedInventoryReport inventory, IEnumerable<Output> outputs)
+        {
+            if (!this.Matches(inventory)) { return (false, []); }
+            var descriptors = inventory.Assets.Select(static asset => asset.DescriptorPath).ToHashSet(StringComparer.Ordinal);
+            descriptors.UnionWith(outputs.Where(output => output.RootMount == this.Mount && output.Asset.DescriptorRelativePath is not null)
+                .Select(static output => output.Asset.DescriptorRelativePath!));
+            if (inventory.Issues.Any(issue => !descriptors.Contains(issue.RelativePath)
+                || issue.Reason is not ("missing" or "size_mismatch" or "digest_mismatch"))) { return (false, []); }
+            var damaged = inventory.Issues.Select(static issue => issue.RelativePath).ToHashSet(StringComparer.Ordinal);
+            return (true, descriptors.Where(path => inventory.Files.ContainsKey(path) && !damaged.Contains(path)).ToImmutableHashSet(StringComparer.Ordinal));
+        }
+    }
 
     /// <summary>A source-owned output and the physical root that contains it.</summary>
     /// <param name="Asset">The authored-to-cooked identity mapping.</param>
@@ -50,6 +63,9 @@ internal sealed record CookProvenance(int Version, Guid ProjectId, ImmutableArra
 
         /// <summary>Gets source discovery needed to reuse an imported product without another native query.</summary>
         public Import.ImportedSourceDependencyState? ImportedSource { get; init; }
+
+        /// <summary>Gets native-reported auxiliary files emitted by this imported source, without duplicating inventory digests.</summary>
+        public ImmutableArray<string> AuxiliaryFiles { get; init; } = [];
 
         /// <summary>Gets warnings that still apply when the unchanged product is reused.</summary>
         public ImmutableArray<Oxygen.Managed.Core.Diagnostics.DiagnosticRecord> Diagnostics { get; init; } = [];

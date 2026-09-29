@@ -5,11 +5,10 @@
 using System.Security.Cryptography;
 using AwesomeAssertions;
 using DroidNet.Storage.Native;
-using Moq;
 using Oxygen.Editor.ContentPipeline.Mounting;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
-using Oxygen.Managed.Assets.Persistence.LooseCooked.V1;
+using Oxygen.Managed.Assets.Persistence.LooseCooked.V2;
 using Testably.Abstractions;
 
 namespace Oxygen.Editor.ContentPipeline.Tests;
@@ -69,33 +68,23 @@ public sealed partial class CookedContentMountServiceTests
         using var fixture = new Fixture();
         using var reader = new TrackingReader();
         var path = Path.Combine(fixture.First, "Materials", "Shared.omat");
-        File.WriteAllBytes(path, [8, 8, 8]);
+        File.WriteAllBytes(path, [8, 8, 8, 8]);
         Func<Task> prepare = () => fixture.Service.PrepareAsync(fixture.Project, [fixture.ProjectOutput], reader, this.TestContext.CancellationToken);
-        _ = await prepare.Should().ThrowAsync<InvalidDataException>().WithMessage("*integrity check*").ConfigureAwait(false);
+        _ = await prepare.Should().ThrowAsync<InvalidDataException>().WithMessage("*metadata does not match*").ConfigureAwait(false);
         _ = reader.Disposed.Should().BeTrue();
         File.WriteAllBytes(path, [9]);
-        fixture.Native.VerifyNoOtherCalls();
     }
 
     /// <summary>Cancellation waits for preparation to end and releases every acquired file reader.</summary>
     /// <returns>The asynchronous cancellation regression.</returns>
     [TestMethod]
-    public async Task CancelledValidationReleasesThePreparedSourceSet()
+    public async Task CancelledPreparationReleasesTheBorrowedReader()
     {
         using var fixture = new Fixture();
         using var reader = new TrackingReader();
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(this.TestContext.CancellationToken);
-        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        _ = fixture.Native.Setup(value => value.ValidateLooseCookedRootAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .Returns(async (string path, CancellationToken token) =>
-            {
-                entered.SetResult();
-                await Task.Delay(Timeout.InfiniteTimeSpan, token).ConfigureAwait(false);
-                return new CookValidationResult(path, Succeeded: true, []);
-            });
-        var preparation = fixture.Service.PrepareAsync(fixture.Project, [fixture.ProjectOutput], reader, cancellation.Token);
-        await entered.Task.WaitAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         await cancellation.CancelAsync().ConfigureAwait(false);
+        var preparation = fixture.Service.PrepareAsync(fixture.Project, [fixture.ProjectOutput], reader, cancellation.Token);
         Func<Task> finish = () => preparation;
         _ = await finish.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
         _ = reader.Disposed.Should().BeTrue();
@@ -123,9 +112,7 @@ public sealed partial class CookedContentMountServiceTests
                 ProjectId = Guid.NewGuid(), Name = "Mounts", Category = Category.Games, ProjectRoot = this.directory.FullName,
                 AuthoringMounts = [new("Content", "Content")], LocalFolderMounts = [new("First", this.First), new("Second", this.Second)], Scenes = [],
             };
-            _ = this.Native.Setup(value => value.ValidateLooseCookedRootAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync((string path, CancellationToken _) => new CookValidationResult(path, Succeeded: true, []));
-            this.Service = new(new NativeStorageProvider(new RealFileSystem()), this.Native.Object);
+            this.Service = new();
         }
 
         public string ProjectOutput { get; }
@@ -135,8 +122,6 @@ public sealed partial class CookedContentMountServiceTests
         public string Second { get; }
 
         public ProjectContext Project { get; }
-
-        public Mock<IEngineContentPipelineApi> Native { get; } = new(MockBehavior.Strict);
 
         public CookedContentMountService Service { get; }
 
@@ -149,7 +134,7 @@ public sealed partial class CookedContentMountServiceTests
             byte[] bytes = [value, value, value];
             File.WriteAllBytes(Path.Combine(root, "Materials", "Shared.omat"), bytes);
             using var index = File.Create(Path.Combine(root, "container.index.bin"));
-            LooseCookedIndex.Write(index, new Document(1, IndexFeatures.HasVirtualPaths, Guid.CreateVersion7(), [new(new AssetKey(1, 2), "Materials/Shared.omat", "/Content/Materials/Shared.omat", 1, (ulong)bytes.Length, SHA256.HashData(bytes))], []));
+            Oxygen.Testing.LooseCookedIndexFixture.Write(index, new Document(1, IndexFeatures.HasVirtualPaths, Guid.CreateVersion7(), [new(new AssetKey(1, 2), "Materials/Shared.omat", "/Content/Materials/Shared.omat", 1, (ulong)bytes.Length, SHA256.HashData(bytes))], []));
             return root;
         }
     }

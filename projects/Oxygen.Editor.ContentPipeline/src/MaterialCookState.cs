@@ -9,6 +9,9 @@ namespace Oxygen.Editor.ContentPipeline;
 /// </summary>
 public enum MaterialCookState
 {
+    /// <summary>Freshness is awaiting current producer or publication facts.</summary>
+    Unknown,
+
     /// <summary>
     /// The material has no cooked output.
     /// </summary>

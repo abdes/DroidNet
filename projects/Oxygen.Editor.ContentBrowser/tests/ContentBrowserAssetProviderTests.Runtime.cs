@@ -34,7 +34,7 @@ public sealed partial class ContentBrowserAssetProviderTests
         var reader = new DelegateStatusReader((_, _, _) =>
         {
             reads++;
-            return Task.FromResult<IReadOnlyList<AssetCookStatus>>([new(uri, AssetCookFreshness.Current, HasPublishedOutput: true, HasVerifiedOutput: true, [], [], [])]);
+            return Task.FromResult<IReadOnlyList<AssetCookStatus>>([new(uri, AssetCookFreshness.Current, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [], [], [])]);
         });
         using var provider = new ContentBrowserAssetProvider(new TestProjectAssetCatalog([new AssetRecord(uri)]), context, new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer(), reader, new CookDocumentRegistry(), EmptyCookRuns(), engine.Object);
         using var picker = new MaterialPickerService(provider);
@@ -55,7 +55,7 @@ public sealed partial class ContentBrowserAssetProviderTests
             commands.Raise(value => value.AssetStatusChanged += null, EventArgs.Empty);
             _ = rows.Single().PrimaryBadge.Should().Be(text);
             _ = choices.Single().StatusText.Should().Be(text);
-            _ = rows.Single().CookStatus!.HasVerifiedOutput.Should().BeTrue();
+            _ = rows.Single().CookStatus!.HasAvailableOutput.Should().BeTrue();
         }
 
         requests = [new(request with { Target = request.Target with { ProjectId = Guid.NewGuid() } }, 10, Succeeded: false, "Other project")];

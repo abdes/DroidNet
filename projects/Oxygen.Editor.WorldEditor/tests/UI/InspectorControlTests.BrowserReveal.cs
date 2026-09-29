@@ -34,7 +34,6 @@ using Oxygen.Editor.ContentPipeline.Discovery;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Catalog;
-using Oxygen.Managed.Assets.Import;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions;
 

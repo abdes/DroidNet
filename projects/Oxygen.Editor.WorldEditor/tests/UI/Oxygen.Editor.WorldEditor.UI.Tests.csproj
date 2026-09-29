@@ -25,4 +25,7 @@
         </None>
     </ItemGroup>
     <Import Project="$(ProjectsRoot)\UITests.Shared\src\UITests.Shared.projitems" Label="Shared" />
+    <ItemGroup>
+        <Compile Include="$(ProjectsRoot)\Oxygen.Managed.Assets\testsupport\LooseCookedIndexFixture.cs" Link="LooseCookedIndexFixture.cs" />
+    </ItemGroup>
 </Project>

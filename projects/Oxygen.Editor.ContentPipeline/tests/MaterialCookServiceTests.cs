@@ -7,9 +7,9 @@ using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
-using Oxygen.Managed.Assets.Import.Materials;
+using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Assets.Model;
-using Oxygen.Managed.Assets.Persistence.LooseCooked.V1;
+using Oxygen.Managed.Assets.Persistence.LooseCooked.V2;
 
 namespace Oxygen.Editor.ContentPipeline.Tests;
 
@@ -93,7 +93,7 @@ public sealed partial class MaterialCookServiceTests
 
         var cookedBytes = await File.ReadAllBytesAsync(Path.Combine(workspace.Root, ".cooked", "Content", "Materials", "Wood.omat"), CancellationToken.None).ConfigureAwait(false);
         _ = cookedBytes.Should().NotEqual(originalBytes);
-        _ = document.Assets.Single().DescriptorSha256.Span.ToArray().Should().Equal(LooseCookedIndex.ComputeSha256(cookedBytes));
+        _ = document.Assets.Single().DescriptorSha256.Span.ToArray().Should().Equal(System.Security.Cryptography.SHA256.HashData(cookedBytes));
     }
 
     /// <summary>Verifies the workflow can reject.</summary>

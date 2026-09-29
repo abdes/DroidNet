@@ -38,6 +38,7 @@ public sealed partial class ContentBrowserAssetProviderTests
         using var runs = new ContentCookCoordinator(projects, NullLogger<ContentCookCoordinator>.Instance);
         var files = new NativeAtomicFileStore(new RealFileSystem());
         var native = new Mock<INativeCompatibilityService>(MockBehavior.Strict);
+        var content = new Mock<IEngineContentPipelineApi>(MockBehavior.Strict);
         var statuses = new AssetCookStatusReader(documents, new CookPublicationService(runs, projects, files), native.Object, files);
         using var catalog = new ProjectAssetCatalog(projects, new NativeStorageProvider(new RealFileSystem()), CreateEmptyImportBuiltins());
         var runtime = Oxygen.Testing.AssetStatusFixture.CreateUnavailableRuntime();
@@ -70,6 +71,8 @@ public sealed partial class ContentBrowserAssetProviderTests
         _ = cold.Should().BeLessThan(TimeSpan.FromSeconds(5));
         _ = samples[94].Should().BeLessThanOrEqualTo(250);
         _ = runs.Runs.Should().BeEmpty();
+        native.VerifyAdd(service => service.ObservationChanged += It.IsAny<EventHandler>(), Times.Once);
         native.VerifyNoOtherCalls();
+        content.VerifyNoOtherCalls();
     }
 }

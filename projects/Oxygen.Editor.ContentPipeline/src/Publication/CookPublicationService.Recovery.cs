@@ -4,6 +4,7 @@
 
 using System.Text.Json;
 using DroidNet.Storage;
+using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.Projects;
 
 namespace Oxygen.Editor.ContentPipeline.Publication;
@@ -81,7 +82,7 @@ public sealed partial class CookPublicationService
             }
 
             var receipt = JsonSerializer.Deserialize<CookPublicationReceipt>(snapshot.Content.AsSpan());
-            if (receipt is null || receipt.Version != 2 || receipt.ProjectId != project.ProjectId)
+            if (receipt is null || receipt.Version != 3 || receipt.ProjectId != project.ProjectId)
             {
                 return false;
             }
@@ -195,7 +196,7 @@ public sealed partial class CookPublicationService
 
         var receipt = JsonSerializer.Deserialize<CookPublicationReceipt>(receiptFile.Content.AsSpan())
             ?? throw new InvalidDataException("The publication receipt is empty.");
-        if (receipt.Version != 2 || receipt.ProjectId != project.ProjectId || receipt.Roots.IsDefaultOrEmpty || receipt.Roots.Any(static root => root is null))
+        if (receipt.Version != 3 || receipt.ProjectId != project.ProjectId || receipt.Roots.IsDefaultOrEmpty || receipt.Roots.Any(static root => root is null))
         {
             throw new InvalidDataException("The publication receipt does not belong to this project.");
         }
@@ -203,24 +204,24 @@ public sealed partial class CookPublicationService
         _ = CookStagingArea.ValidateMounts(receipt.Roots.Select(static root => root.Mount));
         CookOutputLease.RejectReparsePoint(Path.Combine(project.ProjectRoot, ".cooked"));
         var current = await CookPublicationTransaction.LoadReadOnlyUnderLeaseAsync(project, receipt.OperationId, files, cancellationToken).ConfigureAwait(false);
-        await current.VerifyCommittedUnderLeaseAsync().ConfigureAwait(false);
+        await current.VerifyCommittedMetadataUnderLeaseAsync().ConfigureAwait(false);
 
         foreach (var root in receipt.Roots)
         {
-            if (root.SharedFiles.IsDefaultOrEmpty || root.Assets.IsDefault)
+            if (root.SourceKey == Guid.Empty || root.IndexSha256 is not { Length: 64 } || !root.IndexSha256.All(Uri.IsHexDigit))
             {
-                throw new InvalidDataException("The publication receipt contains incomplete root evidence.");
+                throw new InvalidDataException("The publication receipt contains an invalid inventory reference.");
             }
 
-            var image = await CookRootImage.CaptureAsync(Path.Combine(project.ProjectRoot, ".cooked", root.Mount), copyTo: null, cancellationToken).ConfigureAwait(false);
-            foreach (var proof in root.SharedFiles.Concat(root.Assets.Select(static asset => asset.File)))
+            var rootPath = Path.Combine(project.ProjectRoot, ".cooked", root.Mount);
+            await using var reader = await CookOutputReadLease.AcquireAsync(rootPath, cancellationToken).ConfigureAwait(false);
+            var index = await CookedIndexSnapshot.ReadAsync(rootPath, cancellationToken).ConfigureAwait(false);
+            if (root.SourceKey != index.Index.SourceGuid || !string.Equals(root.IndexSha256, index.Fingerprint, StringComparison.OrdinalIgnoreCase))
             {
-                if (!image.Files.TryGetValue(proof.RelativePath, out var file) || file.Size != proof.Size
-                    || !string.Equals(file.Sha256, proof.Sha256, StringComparison.OrdinalIgnoreCase))
-                {
-                    throw new InvalidDataException($"Cooked content changed in '{root.Mount}'. Cook the affected content before mounting it.");
-                }
+                throw new InvalidDataException($"Cooked content changed in '{root.Mount}'. Cook the affected content before mounting it.");
             }
+
+            index.ValidateMetadata(reader.GetFiles());
         }
     }
 

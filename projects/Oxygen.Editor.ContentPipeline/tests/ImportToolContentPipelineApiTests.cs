@@ -4,11 +4,12 @@
 
 using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
-using Oxygen.Managed.Assets.Persistence.LooseCooked.V1;
+using Oxygen.Managed.Assets.Persistence.LooseCooked.V2;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline.Tests;
@@ -97,7 +98,7 @@ public sealed partial class ImportToolContentPipelineApiTests
 
         var result = await api.InspectLooseCookedRootAsync(cookedRoot, CancellationToken.None).ConfigureAwait(false);
 
-        _ = result.Succeeded.Should().BeTrue();
+        _ = result.Succeeded.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static diagnostic => diagnostic.TechnicalMessage ?? diagnostic.Message)));
         _ = result.Diagnostics.Should().BeEmpty();
         _ = result.CookedRoot.Should().Be(cookedRoot);
         _ = result.Assets.Should().ContainSingle(asset =>
@@ -120,8 +121,9 @@ public sealed partial class ImportToolContentPipelineApiTests
 
         _ = result.Succeeded.Should().BeFalse();
         _ = result.Diagnostics.Should().ContainSingle();
-        _ = result.Diagnostics[0].Code.Should().Be(ContentPipelineDiagnosticCodes.InspectFailed);
-        _ = result.Diagnostics[0].TechnicalMessage.Should().Contain("Expected 128 bytes, found 256 bytes");
+        _ = result.Diagnostics[0].Code.Should().Be(ContentPipelineDiagnosticCodes.ValidateFailed);
+        _ = result.Diagnostics[0].AffectedPath.Should().Be(Path.Combine(cookedRoot, "Content/Materials/Red.omat"));
+        _ = result.Diagnostics[0].Message.Should().Contain("size_mismatch");
     }
 
     /// <summary>Verifies the workflow can return Diagnostic.</summary>
@@ -139,7 +141,8 @@ public sealed partial class ImportToolContentPipelineApiTests
         _ = result.Succeeded.Should().BeFalse();
         _ = result.Diagnostics.Should().ContainSingle();
         _ = result.Diagnostics[0].Code.Should().Be(ContentPipelineDiagnosticCodes.ValidateFailed);
-        _ = result.Diagnostics[0].TechnicalMessage.Should().Contain("Expected 128 bytes, found 256 bytes");
+        _ = result.Diagnostics[0].AffectedPath.Should().Be(Path.Combine(cookedRoot, "Content/Materials/Red.omat"));
+        _ = result.Diagnostics[0].Message.Should().Contain("size_mismatch");
     }
 
     /// <summary>Verifies the workflow can return Synthesized Diagnostic.</summary>
@@ -193,7 +196,7 @@ public sealed partial class ImportToolContentPipelineApiTests
         _ = result.Succeeded.Should().BeFalse();
         _ = result.Diagnostics.Should().ContainSingle();
         _ = result.Diagnostics[0].Code.Should().Be(ContentPipelineDiagnosticCodes.InspectFailed);
-        _ = result.Diagnostics[0].ExceptionType.Should().Be(typeof(NotSupportedException).FullName);
+        _ = result.Diagnostics[0].TechnicalMessage.Should().Contain("version");
     }
 
     /// <summary>Verifies the workflow can return Synthesized Diagnostic.</summary>
@@ -211,13 +214,13 @@ public sealed partial class ImportToolContentPipelineApiTests
         _ = result.Succeeded.Should().BeFalse();
         _ = result.Diagnostics.Should().ContainSingle();
         _ = result.Diagnostics[0].Code.Should().Be(ContentPipelineDiagnosticCodes.ValidateFailed);
-        _ = result.Diagnostics[0].ExceptionType.Should().Be(typeof(NotSupportedException).FullName);
+        _ = result.Diagnostics[0].TechnicalMessage.Should().Contain("version");
     }
 
     private static ImportToolContentPipelineApi CreateApi(TempWorkspace workspace)
         => new(
             new FixedToolLocator(Path.Combine(workspace.Root, "Oxygen.Cooker.ImportTool.exe")),
-            new CapturingRunner(new ContentPipelineProcessResult(0, string.Empty, string.Empty)),
+            new InventoryRunner(),
             NullLogger<ImportToolContentPipelineApi>.Instance,
             workspace.Compatibility);
 
@@ -260,12 +263,12 @@ public sealed partial class ImportToolContentPipelineApiTests
             Path.Combine(cookedRoot, "materials.bin"),
             actualFileBytes ?? new byte[(int)fileSize]);
         using var stream = File.Create(Path.Combine(cookedRoot, "container.index.bin"));
-        LooseCookedIndex.Write(
+        Oxygen.Testing.LooseCookedIndexFixture.Write(
             stream,
             new Document(
                 ContentVersion: 1,
                 Flags: IndexFeatures.HasVirtualPaths,
-                SourceGuid: Guid.NewGuid(),
+                SourceGuid: Guid.CreateVersion7(),
                 Assets:
                 [
                     new AssetEntry(
@@ -274,11 +277,11 @@ public sealed partial class ImportToolContentPipelineApiTests
                         "/Content/Materials/Red.omat",
                         AssetType: assetType,
                         DescriptorSize: descriptorSize,
-                        DescriptorSha256: new byte[32]),
+                        DescriptorSha256: SHA256.HashData(actualDescriptorBytes ?? new byte[(int)descriptorSize])),
                 ],
                 Files:
                 [
-                    new FileRecord(FileKind.BuffersData, "materials.bin", fileSize, Sha256: new byte[32]),
+                    new FileRecord(FileKind.Auxiliary, "materials.bin", fileSize, Sha256: SHA256.HashData(actualFileBytes ?? new byte[(int)fileSize])),
                 ]));
     }
 
@@ -287,8 +290,27 @@ public sealed partial class ImportToolContentPipelineApiTests
         Directory.CreateDirectory(cookedRoot);
         var header = new byte[LooseCookedIndex.HeaderSize];
         Encoding.ASCII.GetBytes("OXLCIDX\0").CopyTo(header, 0);
-        BinaryPrimitives.WriteUInt16LittleEndian(header.AsSpan(8, 2), 2);
+        BinaryPrimitives.WriteUInt16LittleEndian(header.AsSpan(8, 2), ushort.MaxValue);
         File.WriteAllBytes(Path.Combine(cookedRoot, "container.index.bin"), header);
+    }
+
+    private sealed class InventoryRunner : IContentPipelineProcessRunner
+    {
+        public async Task<ContentPipelineProcessResult> RunAsync(ContentPipelineProcessRequest request, CancellationToken cancellationToken)
+        {
+            _ = request.Arguments[0].Should().Be("inventory");
+            try
+            {
+                var json = Oxygen.Testing.NativeInventoryFixture.ReadJson(request.Arguments[1]);
+                var output = request.Arguments[request.Arguments.ToList().IndexOf("--output") + 1];
+                await File.WriteAllTextAsync(output, json, cancellationToken).ConfigureAwait(false);
+                return new(0, string.Empty, string.Empty);
+            }
+            catch (Exception error) when (error is IOException or InvalidDataException or NotSupportedException)
+            {
+                return new(1, string.Empty, error.Message);
+            }
+        }
     }
 
     private sealed class CapturingRunner(ContentPipelineProcessResult result) : IContentPipelineProcessRunner
@@ -308,7 +330,25 @@ public sealed partial class ImportToolContentPipelineApiTests
             var manifestPath = request.Arguments[manifestFlagIndex + 1];
             this.ManifestPath = manifestPath;
             this.ManifestJson = await File.ReadAllTextAsync(manifestPath, cancellationToken).ConfigureAwait(false);
-            _ = JsonDocument.Parse(this.ManifestJson);
+            using var manifest = JsonDocument.Parse(this.ManifestJson);
+            if (result.ExitCode == 0)
+            {
+                var reportPath = request.Arguments[request.Arguments.ToList().IndexOf("--report") + 1];
+                var report = JsonSerializer.Serialize(new
+                {
+                    report_version = "2",
+                    session = new { cooked_root = manifest.RootElement.GetProperty("output").GetString() },
+                    jobs = manifest.RootElement.GetProperty("jobs").EnumerateArray().Select(static (job, index) => new
+                    {
+                        index = index + 1,
+                        type = job.GetProperty("type").GetString(),
+                        status = "succeeded",
+                        outputs = Array.Empty<object>(),
+                        diagnostics = Array.Empty<object>(),
+                    }),
+                });
+                await File.WriteAllTextAsync(reportPath, report, cancellationToken).ConfigureAwait(false);
+            }
             return result;
         }
     }
@@ -326,6 +366,7 @@ public sealed partial class ImportToolContentPipelineApiTests
             Directory.CreateDirectory(this.Root);
             this.ToolPath = Path.Combine(this.Root, "Oxygen.Cooker.ImportTool.exe");
             File.WriteAllText(this.ToolPath, "Test tool");
+            File.WriteAllText(Path.Combine(this.Root, "Oxygen.Cooker.Inspector.exe"), "Test Inspector");
             this.Compatibility = new([new(Oxygen.Managed.Core.Compatibility.NativeArtifactInventory.ImportToolId, this.ToolPath)]);
         }
 

@@ -17,4 +17,8 @@ public sealed record ContentCookedAsset(
     Uri CookedAssetUri,
     ContentCookAssetKind Kind,
     string MountName,
-    string VirtualPath);
+    string VirtualPath)
+{
+    /// <summary>Gets the native inventory's physical descriptor path within the cooked root.</summary>
+    public string? DescriptorRelativePath { get; init; }
+}

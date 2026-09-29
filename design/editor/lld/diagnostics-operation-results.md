@@ -13,13 +13,13 @@ what the user can do next.
 
 ## 2. PRD Traceability
 
-| ID | Coverage |
-| --- | --- |
-| `REQ-022` | Save, sync, project, runtime, and pipeline workflows expose visible results. |
-| `REQ-023` | Engine/runtime and pipeline failures produce useful logs. |
-| `REQ-024` | Diagnostics identify whether failure is caused by authoring data, missing content, cook output, mount state, sync, or engine runtime state. |
-| `SUCCESS-006` | Import, descriptor generation, cook, mount, and standalone load states are visible in later milestones. |
-| `SUCCESS-009` | V0.1 acceptance includes visible failure reporting across the workflow. |
+| ID            | Coverage                                                                                                                                    |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `REQ-022`     | Save, sync, project, runtime, and pipeline workflows expose visible results.                                                                |
+| `REQ-023`     | Engine/runtime and pipeline failures produce useful logs.                                                                                   |
+| `REQ-024`     | Diagnostics identify whether failure is caused by authoring data, missing content, cook output, mount state, sync, or engine runtime state. |
+| `SUCCESS-006` | Import, descriptor generation, cook, mount, and standalone load states are visible in later milestones.                                     |
+| `SUCCESS-009` | V0.1 acceptance includes visible failure reporting across the workflow.                                                                     |
 
 ## 3. Architecture Links
 
@@ -42,7 +42,8 @@ The current codebase has useful pieces that should be reused:
   the workspace output panel.
 - WinUI first-chance and unhandled exception diagnostics are written to debug
   output.
-- `Oxygen.Managed.Assets.Import` has import diagnostics and import results.
+- `Oxygen.Editor.ContentPipeline` maps native importer diagnostics to correlated
+  operation results.
 - Project and runtime services log failures in many code paths.
 
 These are infrastructure assets, not the final user-facing result model. V0.1
@@ -102,15 +103,15 @@ Target invariants:
 
 ## 6. Ownership
 
-| Owner | Responsibility |
-| --- | --- |
-| owning subsystem | creates result and diagnostics for its own workflow |
-| `Oxygen.Managed.Core` | shared operation-result and diagnostic contracts |
-| `Oxygen.Editor` | host-level result store, publisher, DI composition, and log-correlation setup |
-| feature UI | presents workflow-local results near the triggering surface |
-| WorldEditor workspace shell | owns V0.1 output/log panel composition and global result affordances |
-| Project Browser shell | presents startup/open/create results before workspace exists |
-| output/log panel | shows adapted result summaries, correlated technical detail, and history |
+| Owner                       | Responsibility                                                                |
+| --------------------------- | ----------------------------------------------------------------------------- |
+| owning subsystem            | creates result and diagnostics for its own workflow                           |
+| `Oxygen.Managed.Core`       | shared operation-result and diagnostic contracts                              |
+| `Oxygen.Editor`             | host-level result store, publisher, DI composition, and log-correlation setup |
+| feature UI                  | presents workflow-local results near the triggering surface                   |
+| WorldEditor workspace shell | owns V0.1 output/log panel composition and global result affordances          |
+| Project Browser shell       | presents startup/open/create results before workspace exists                  |
+| output/log panel            | shows adapted result summaries, correlated technical detail, and history      |
 
 This LLD owns common vocabulary and contracts. It does not own every feature's
 presentation layout.
@@ -202,18 +203,18 @@ their assigned prefix.
 
 ED-M03 prefix allocations:
 
-| Prefix | Owner |
-| --- | --- |
-| `OXE.SCENE.*` | Scene authoring commands and scene explorer layout operations. |
-| `OXE.DOCUMENT.*` | Scene document open/save lifecycle. |
-| `OXE.LIVESYNC.*` | Command-triggered live scene sync failures. |
+| Prefix           | Owner                                                          |
+| ---------------- | -------------------------------------------------------------- |
+| `OXE.SCENE.*`    | Scene authoring commands and scene explorer layout operations. |
+| `OXE.DOCUMENT.*` | Scene document open/save lifecycle.                            |
+| `OXE.LIVESYNC.*` | Command-triggered live scene sync failures.                    |
 
 ED-M05 prefix allocations:
 
-| Prefix | Owner |
-| --- | --- |
-| `OXE.MATERIAL.*` | Material editor scalar authoring and material-document validation. |
-| `OXE.ASSETID.*` | Content browser / asset picker identity and resolve diagnostics. |
+| Prefix                  | Owner                                                                      |
+| ----------------------- | -------------------------------------------------------------------------- |
+| `OXE.MATERIAL.*`        | Material editor scalar authoring and material-document validation.         |
+| `OXE.ASSETID.*`         | Content browser / asset picker identity and resolve diagnostics.           |
 | `OXE.CONTENTPIPELINE.*` | Content-pipeline orchestration diagnostics surfaced by material workflows. |
 
 ED-M05 may also add material-specific codes under existing ED-M03 prefixes
@@ -224,9 +225,9 @@ when the owning domain remains unchanged:
 
 ED-M06 prefix allocations:
 
-| Prefix | Owner |
-| --- | --- |
-| `OXE.ASSETID.*` | Extended asset browse/reduce/resolve diagnostics. |
+| Prefix                       | Owner                                                                   |
+| ---------------------------- | ----------------------------------------------------------------------- |
+| `OXE.ASSETID.*`              | Extended asset browse/reduce/resolve diagnostics.                       |
 | `OXE.PROJECT.CONTENT_ROOT.*` | Browser-visible project content-root selection and restore diagnostics. |
 
 ED-M06 reuses `OXE.CONTENTPIPELINE.*` for stale/cooked-state warnings produced
@@ -238,16 +239,16 @@ from descriptor/cooked timestamp comparison. ED-M06 does not allocate
 
 ED-M07 prefix allocations:
 
-| Prefix | Owner |
-| --- | --- |
-| `OXE.CONTENTPIPELINE.SCENE.*` | editor scene to native descriptor generation. |
+| Prefix                           | Owner                                                 |
+| -------------------------------- | ----------------------------------------------------- |
+| `OXE.CONTENTPIPELINE.SCENE.*`    | editor scene to native descriptor generation.         |
 | `OXE.CONTENTPIPELINE.GEOMETRY.*` | generated procedural geometry descriptor preparation. |
-| `OXE.CONTENTPIPELINE.MANIFEST.*` | import manifest generation and validation. |
-| `OXE.CONTENTPIPELINE.INSPECT.*` | loose cooked inspection workflows. |
-| `OXE.CONTENTPIPELINE.VALIDATE.*` | cooked output validation workflows. |
-| `OXE.ASSETIMPORT.*` | source import execution and source-read failures. |
-| `OXE.ASSETCOOK.*` | cook execution and loose cooked index failures. |
-| `OXE.ASSETMOUNT.*` | runtime cooked-root mount refresh failures. |
+| `OXE.CONTENTPIPELINE.MANIFEST.*` | import manifest generation and validation.            |
+| `OXE.CONTENTPIPELINE.INSPECT.*`  | loose cooked inspection workflows.                    |
+| `OXE.CONTENTPIPELINE.VALIDATE.*` | cooked output validation workflows.                   |
+| `OXE.ASSETIMPORT.*`              | source import execution and source-read failures.     |
+| `OXE.ASSETCOOK.*`                | cook execution and loose cooked index failures.       |
+| `OXE.ASSETMOUNT.*`               | runtime cooked-root mount refresh failures.           |
 
 ED-M07 adds `OXE.ASSETID.RefreshFailed` under the existing `OXE.ASSETID.*`
 prefix for post-cook catalog refresh failures. It may continue to use
@@ -258,32 +259,32 @@ operation is still material-document scoped.
 
 Domains are stable vocabulary, not class names.
 
-| Domain | Active Milestone | Producer |
-| --- | --- | --- |
-| `ProjectBrowser` | ED-M01 | Project Browser open/create surfaces. |
-| `ProjectValidation` | ED-M01 | Project validation service. |
-| `ProjectPersistence` | ED-M01 | Project manifest/persistent-state service. |
-| `ProjectTemplate` | ED-M01 | Project creation/template service. |
-| `ProjectUsage` | ED-M01 | Recent project usage service. |
-| `ProjectContentRoots` | ED-M01 | Project content-root validation. |
-| `WorkspaceActivation` | ED-M01 | Shell activation coordinator. |
-| `WorkspaceRestoration` | ED-M01; reused by ED-M02 | Workspace restoration adapter and restored viewport-layout issues. |
-| `Unknown` | ED-M01 | Exception adapters when the narrow domain is not known. |
-| `RuntimeDiscovery` | ED-M02 | Workspace activation/runtime startup. |
-| `RuntimeSurface` | ED-M02 | Viewport control/runtime surface lease. |
-| `RuntimeView` | ED-M02 | Viewport control/runtime view calls. |
-| `AssetMount` | ED-M02 | Workspace cooked-root refresh when content availability is affected. |
-| `Settings` | ED-M02 | Scene editor runtime settings surface. |
-| `ProjectSettings` | ED-M07 | Project-scoped settings for content roots/cook scope. |
-| `Document` | ED-M03 | Document save/open workflow. |
-| `SceneAuthoring` | ED-M03 | Scene commands/property editing. |
-| `LiveSync` | ED-M03 | Live scene sync. |
-| `MaterialAuthoring` | ED-M05 | Material editor scalar authoring and descriptor validation. |
-| `AssetIdentity` | ED-M05 | Content browser/picker asset identity and resolve state. |
-| `ContentPipeline` | ED-M05 material cook slice; expanded ED-M07 | Content pipeline orchestration. |
-| `AssetImport` | ED-M05 | Asset import. |
-| `AssetCook` | ED-M07 | Cook execution. |
-| `StandaloneRuntime` | ED-M08 | Standalone load validation. |
+| Domain                 | Active Milestone                            | Producer                                                             |
+| ---------------------- | ------------------------------------------- | -------------------------------------------------------------------- |
+| `ProjectBrowser`       | ED-M01                                      | Project Browser open/create surfaces.                                |
+| `ProjectValidation`    | ED-M01                                      | Project validation service.                                          |
+| `ProjectPersistence`   | ED-M01                                      | Project manifest/persistent-state service.                           |
+| `ProjectTemplate`      | ED-M01                                      | Project creation/template service.                                   |
+| `ProjectUsage`         | ED-M01                                      | Recent project usage service.                                        |
+| `ProjectContentRoots`  | ED-M01                                      | Project content-root validation.                                     |
+| `WorkspaceActivation`  | ED-M01                                      | Shell activation coordinator.                                        |
+| `WorkspaceRestoration` | ED-M01; reused by ED-M02                    | Workspace restoration adapter and restored viewport-layout issues.   |
+| `Unknown`              | ED-M01                                      | Exception adapters when the narrow domain is not known.              |
+| `RuntimeDiscovery`     | ED-M02                                      | Workspace activation/runtime startup.                                |
+| `RuntimeSurface`       | ED-M02                                      | Viewport control/runtime surface lease.                              |
+| `RuntimeView`          | ED-M02                                      | Viewport control/runtime view calls.                                 |
+| `AssetMount`           | ED-M02                                      | Workspace cooked-root refresh when content availability is affected. |
+| `Settings`             | ED-M02                                      | Scene editor runtime settings surface.                               |
+| `ProjectSettings`      | ED-M07                                      | Project-scoped settings for content roots/cook scope.                |
+| `Document`             | ED-M03                                      | Document save/open workflow.                                         |
+| `SceneAuthoring`       | ED-M03                                      | Scene commands/property editing.                                     |
+| `LiveSync`             | ED-M03                                      | Live scene sync.                                                     |
+| `MaterialAuthoring`    | ED-M05                                      | Material editor scalar authoring and descriptor validation.          |
+| `AssetIdentity`        | ED-M05                                      | Content browser/picker asset identity and resolve state.             |
+| `ContentPipeline`      | ED-M05 material cook slice; expanded ED-M07 | Content pipeline orchestration.                                      |
+| `AssetImport`          | ED-M05                                      | Asset import.                                                        |
+| `AssetCook`            | ED-M07                                      | Cook execution.                                                      |
+| `StandaloneRuntime`    | ED-M08                                      | Standalone load validation.                                          |
 
 `ProjectSettings` is reserved for project-scoped settings. `Settings` is the
 global editor settings domain and is active in ED-M02 for runtime FPS/logging
@@ -488,33 +489,33 @@ uses.
 
 ED-M02 producers and operation kinds:
 
-| Producer | Operation Kind | Domain |
-| --- | --- | --- |
-| workspace activation/runtime startup | `Runtime.Start` | `RuntimeDiscovery` |
-| scene editor settings UI | `Runtime.Settings.Apply` | `Settings` |
-| viewport control/runtime service | `Runtime.Surface.Attach` | `RuntimeSurface` |
-| viewport control/runtime service | `Runtime.Surface.Resize` | `RuntimeSurface` |
-| viewport control/runtime service | `Runtime.View.Create` | `RuntimeView` |
-| viewport control/runtime service | `Runtime.View.Destroy` | `RuntimeView` |
-| viewport control/runtime service | `Runtime.View.SetCameraPreset` | `RuntimeView` |
-| scene editor viewport host | `Viewport.Layout.Change` | `WorkspaceRestoration` |
-| workspace cooked-root refresh | `Runtime.CookedRoot.Refresh` | `AssetMount` |
+| Producer                             | Operation Kind                 | Domain                 |
+| ------------------------------------ | ------------------------------ | ---------------------- |
+| workspace activation/runtime startup | `Runtime.Start`                | `RuntimeDiscovery`     |
+| scene editor settings UI             | `Runtime.Settings.Apply`       | `Settings`             |
+| viewport control/runtime service     | `Runtime.Surface.Attach`       | `RuntimeSurface`       |
+| viewport control/runtime service     | `Runtime.Surface.Resize`       | `RuntimeSurface`       |
+| viewport control/runtime service     | `Runtime.View.Create`          | `RuntimeView`          |
+| viewport control/runtime service     | `Runtime.View.Destroy`         | `RuntimeView`          |
+| viewport control/runtime service     | `Runtime.View.SetCameraPreset` | `RuntimeView`          |
+| scene editor viewport host           | `Viewport.Layout.Change`       | `WorkspaceRestoration` |
+| workspace cooked-root refresh        | `Runtime.CookedRoot.Refresh`   | `AssetMount`           |
 
 ED-M03 producers and operation kinds:
 
-| Producer | Operation Kind | Domain |
-| --- | --- | --- |
-| scene document command service | `Scene.Node.Create` | `SceneAuthoring` / `LiveSync` |
-| scene document command service | `Scene.Node.CreatePrimitive` | `SceneAuthoring` / `LiveSync` |
-| scene document command service | `Scene.Node.CreateLight` | `SceneAuthoring` / `LiveSync` |
-| scene document command service | `Scene.Node.Rename` | `SceneAuthoring` |
-| scene document command service | `Scene.Node.Delete` | `SceneAuthoring` / `LiveSync` |
-| scene document command service | `Scene.Node.Reparent` | `SceneAuthoring` / `LiveSync` |
-| scene document command service | `Scene.ExplorerFolder.Create` | `SceneAuthoring` |
-| scene document command service | `Scene.ExplorerFolder.Rename` | `SceneAuthoring` |
-| scene document command service | `Scene.ExplorerFolder.Delete` | `SceneAuthoring` |
-| scene document command service | `Scene.ExplorerLayout.MoveNode` | `SceneAuthoring` |
-| scene document save workflow | `Scene.Save` | `Document` |
+| Producer                       | Operation Kind                  | Domain                        |
+| ------------------------------ | ------------------------------- | ----------------------------- |
+| scene document command service | `Scene.Node.Create`             | `SceneAuthoring` / `LiveSync` |
+| scene document command service | `Scene.Node.CreatePrimitive`    | `SceneAuthoring` / `LiveSync` |
+| scene document command service | `Scene.Node.CreateLight`        | `SceneAuthoring` / `LiveSync` |
+| scene document command service | `Scene.Node.Rename`             | `SceneAuthoring`              |
+| scene document command service | `Scene.Node.Delete`             | `SceneAuthoring` / `LiveSync` |
+| scene document command service | `Scene.Node.Reparent`           | `SceneAuthoring` / `LiveSync` |
+| scene document command service | `Scene.ExplorerFolder.Create`   | `SceneAuthoring`              |
+| scene document command service | `Scene.ExplorerFolder.Rename`   | `SceneAuthoring`              |
+| scene document command service | `Scene.ExplorerFolder.Delete`   | `SceneAuthoring`              |
+| scene document command service | `Scene.ExplorerLayout.MoveNode` | `SceneAuthoring`              |
+| scene document save workflow   | `Scene.Save`                    | `Document`                    |
 
 Selection changes are not operation kinds in ED-M03. They are document-scoped
 state changes through `ISceneSelectionService`; stale/no-such-node selection
@@ -523,17 +524,17 @@ success results.
 
 ED-M05 producers and operation kinds:
 
-| Producer | Operation Kind | Domain |
-| --- | --- | --- |
-| material document service | `Material.Create` | `MaterialAuthoring` / `Document` |
-| material document service | `Material.Open` | `MaterialAuthoring` / `Document` |
-| material document service | `Material.EditScalar` | `MaterialAuthoring` |
-| material document service | `Material.Save` | `Document` |
-| material document service / content pipeline | `Material.Cook` | `ContentPipeline` |
-| geometry material slot command | `Material.AssignToGeometry` | `SceneAuthoring` / `AssetIdentity` / `LiveSync` |
-| material picker/content browser | `Asset.Query` | `AssetIdentity` |
-| material picker/content browser | `Asset.Resolve` | `AssetIdentity` |
-| material picker/content browser | `Material.Pick` | `AssetIdentity` |
+| Producer                                     | Operation Kind              | Domain                                          |
+| -------------------------------------------- | --------------------------- | ----------------------------------------------- |
+| material document service                    | `Material.Create`           | `MaterialAuthoring` / `Document`                |
+| material document service                    | `Material.Open`             | `MaterialAuthoring` / `Document`                |
+| material document service                    | `Material.EditScalar`       | `MaterialAuthoring`                             |
+| material document service                    | `Material.Save`             | `Document`                                      |
+| material document service / content pipeline | `Material.Cook`             | `ContentPipeline`                               |
+| geometry material slot command               | `Material.AssignToGeometry` | `SceneAuthoring` / `AssetIdentity` / `LiveSync` |
+| material picker/content browser              | `Asset.Query`               | `AssetIdentity`                                 |
+| material picker/content browser              | `Asset.Resolve`             | `AssetIdentity`                                 |
+| material picker/content browser              | `Material.Pick`             | `AssetIdentity`                                 |
 
 ED-M05 implementation adds the corresponding `FailureDomain` values and
 diagnostic-code constants to `Oxygen.Managed.Core` before material workflows publish
@@ -541,15 +542,15 @@ results.
 
 ED-M06 producers and operation kinds:
 
-| Producer | Operation Kind | Domain |
-| --- | --- | --- |
-| content browser asset provider | `Asset.Browse` | `AssetIdentity` |
-| content browser / picker provider | `Asset.Query` | `AssetIdentity` |
-| content browser / picker provider | `Asset.Resolve` | `AssetIdentity` |
-| content browser shell | `ContentBrowser.Navigate` | `AssetIdentity` / `ProjectContentRoots` |
-| content browser shell | `ContentBrowser.Refresh` | `AssetIdentity` |
-| content browser row/details | `Asset.CopyIdentity` | `AssetIdentity` |
-| material picker | `Material.Pick` | `AssetIdentity` |
+| Producer                          | Operation Kind            | Domain                                  |
+| --------------------------------- | ------------------------- | --------------------------------------- |
+| content browser asset provider    | `Asset.Browse`            | `AssetIdentity`                         |
+| content browser / picker provider | `Asset.Query`             | `AssetIdentity`                         |
+| content browser / picker provider | `Asset.Resolve`           | `AssetIdentity`                         |
+| content browser shell             | `ContentBrowser.Navigate` | `AssetIdentity` / `ProjectContentRoots` |
+| content browser shell             | `ContentBrowser.Refresh`  | `AssetIdentity`                         |
+| content browser row/details       | `Asset.CopyIdentity`      | `AssetIdentity`                         |
+| material picker                   | `Material.Pick`           | `AssetIdentity`                         |
 
 ED-M06 operation results should be quiet for high-frequency filter/search
 changes. Results are required for refresh/query/resolve failures, broken
@@ -561,36 +562,36 @@ result; they are not a separate top-level operation kind in ED-M06.
 
 ED-M07 producers and operation kinds:
 
-| Producer | Operation Kind | Domain |
-| --- | --- | --- |
-| scene descriptor generator | `Content.Descriptor.Generate` | `ContentPipeline` |
-| manifest builder | `Content.Manifest.Generate` | `ContentPipeline` |
-| content pipeline / engine API adapter | `Content.Import` | `AssetImport` |
-| content pipeline | `Content.Cook.Asset` | `AssetCook` |
-| content pipeline | `Content.Cook.Scene` | `AssetCook` |
-| content pipeline | `Content.Cook.Folder` | `AssetCook` |
-| content pipeline | `Content.Cook.Project` | `AssetCook` |
-| inspect adapter | `Content.CookedOutput.Inspect` | `ContentPipeline` |
-| validation adapter | `Content.CookedOutput.Validate` | `ContentPipeline` |
-| catalog refresh adapter | `Content.Catalog.Refresh` | `AssetIdentity` |
-| workspace/runtime integration | `Runtime.CookedRoot.Refresh` | `AssetMount` |
+| Producer                              | Operation Kind                  | Domain            |
+| ------------------------------------- | ------------------------------- | ----------------- |
+| scene descriptor generator            | `Content.Descriptor.Generate`   | `ContentPipeline` |
+| manifest builder                      | `Content.Manifest.Generate`     | `ContentPipeline` |
+| content pipeline / engine API adapter | `Content.Import`                | `AssetImport`     |
+| content pipeline                      | `Content.Cook.Asset`            | `AssetCook`       |
+| content pipeline                      | `Content.Cook.Scene`            | `AssetCook`       |
+| content pipeline                      | `Content.Cook.Folder`           | `AssetCook`       |
+| content pipeline                      | `Content.Cook.Project`          | `AssetCook`       |
+| inspect adapter                       | `Content.CookedOutput.Inspect`  | `ContentPipeline` |
+| validation adapter                    | `Content.CookedOutput.Validate` | `ContentPipeline` |
+| catalog refresh adapter               | `Content.Catalog.Refresh`       | `AssetIdentity`   |
+| workspace/runtime integration         | `Runtime.CookedRoot.Refresh`    | `AssetMount`      |
 
 Required ED-M07 diagnostic codes:
 
-| Code | Domain |
-| --- | --- |
-| `OXE.CONTENTPIPELINE.SCENE.DescriptorGenerationFailed` | `ContentPipeline` |
-| `OXE.CONTENTPIPELINE.SCENE.UnsupportedField` | `ContentPipeline` |
+| Code                                                      | Domain            |
+| --------------------------------------------------------- | ----------------- |
+| `OXE.CONTENTPIPELINE.SCENE.DescriptorGenerationFailed`    | `ContentPipeline` |
+| `OXE.CONTENTPIPELINE.SCENE.UnsupportedField`              | `ContentPipeline` |
 | `OXE.CONTENTPIPELINE.GEOMETRY.DescriptorGenerationFailed` | `ContentPipeline` |
-| `OXE.CONTENTPIPELINE.MANIFEST.GenerationFailed` | `ContentPipeline` |
-| `OXE.ASSETIMPORT.SourceMissing` | `AssetImport` |
-| `OXE.ASSETIMPORT.ImportFailed` | `AssetImport` |
-| `OXE.ASSETCOOK.CookFailed` | `AssetCook` |
-| `OXE.ASSETCOOK.IndexInvalid` | `AssetCook` |
-| `OXE.CONTENTPIPELINE.INSPECT.Failed` | `ContentPipeline` |
-| `OXE.CONTENTPIPELINE.VALIDATE.Failed` | `ContentPipeline` |
-| `OXE.ASSETID.RefreshFailed` | `AssetIdentity` |
-| `OXE.ASSETMOUNT.RefreshFailed` | `AssetMount` |
+| `OXE.CONTENTPIPELINE.MANIFEST.GenerationFailed`           | `ContentPipeline` |
+| `OXE.ASSETIMPORT.SourceMissing`                           | `AssetImport`     |
+| `OXE.ASSETIMPORT.ImportFailed`                            | `AssetImport`     |
+| `OXE.ASSETCOOK.CookFailed`                                | `AssetCook`       |
+| `OXE.ASSETCOOK.IndexInvalid`                              | `AssetCook`       |
+| `OXE.CONTENTPIPELINE.INSPECT.Failed`                      | `ContentPipeline` |
+| `OXE.CONTENTPIPELINE.VALIDATE.Failed`                     | `ContentPipeline` |
+| `OXE.ASSETID.RefreshFailed`                               | `AssetIdentity`   |
+| `OXE.ASSETMOUNT.RefreshFailed`                            | `AssetMount`      |
 
 Native cooker/import diagnostic codes are preserved as technical detail and
 mapped to the nearest editor code above for the user-facing result.

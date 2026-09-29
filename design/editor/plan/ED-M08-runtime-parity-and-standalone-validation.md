@@ -1,8 +1,8 @@
 # ED-M08 — Runtime parity and standalone qualification
 
-Status: **in progress — M08.1.1–M08.1.6 validated; M08.1.7 next**
+Status: **in progress — M08.1.1–M08.1.7 validated; M08.1.8 next**
 
-Current: **M08.1.7 integrity inventory**. Commit each remaining sub-slice after its exit checks.
+Next: **M08.1.8 project publication**. Commit each remaining sub-slice after its exit checks.
 See [owners](#2-implementation-document-map), [remaining increments](#m081-remaining-increments)
 and [exit checklist](#7-exit-checklist). Captured-sky IBL is delivered by
 [VX-IBL-01](../../../projects/Oxygen.Engine/design/vortex/milestones/VX-IBL-01/README.md);
@@ -143,9 +143,27 @@ the owning later slices.
 | M08.1.4 Cutover                  | validated | Publish standalone retained imports as immutable generations through Cooker/Content; upgrade maintained editor projects and retained settings, recook demo/source imports and PAKs, refresh SDK/Interop, and verify normal editor loading. Reject retired formats; retain no compatibility reader or dual source representation.                                |
 | M08.1.5 Runtime identities       | validated | Intern full typed identities with mounted-source instance identity; reuse opaque IDs in cache, dependencies and in-flight work. Remove hash-as-identity, duplicate reverse registries and packed runtime source IDs. Prove forced-collision separation, same-SourceKey refresh isolation, lazy reload after eviction and bounded locator metadata.              |
 | M08.1.6 Automatic load ownership | validated | Content-owned automatic checkout controls, explicit borrowing and residency pins; remove manual release balancing. Prove per-request ownership across coalesced loads, dependency transfers, cancellation, off-thread destruction and shutdown; preserve allocation-free IBL inspection.                                                                        |
-| M08.1.7 Integrity inventory      | planned   | Native loose index owns complete file sizes/digests and membership; protected readers reuse verification. Remove duplicate managed output proofs. Reject tampering, missing/extra members and stale verification; bump the index format and recook.                                                                                                             |
+| M08.1.7 Integrity inventory      | validated | Native loose index owns complete file sizes/digests and membership; protected readers reuse verification. Remove duplicate managed output proofs. Reject tampering, missing/extra members and stale verification; bump the index format and recook.                                                                                                             |
 | M08.1.8 Project publication      | planned   | Select one immutable ordered root set through an atomic project head; retain authored-source CAS and preview rollback. Remove cooked-directory swap/recovery phases. Keep existing incremental staging seed copies initially. Qualify multi-root crash recovery, conflicts and old readers.                                                                     |
 | M08.1.9 Native analysis          | planned   | Batch native source dependency/output analysis against captured input proofs. Managed orchestration keeps project resolution, dirty state and snapshot ownership. Remove parallel descriptor dependency parsers; prove analyzed/cooked closure equality and bounded process launches.                                                                           |
+
+M08.1.7 also separates event-driven cooking freshness from integrity validation.
+Badge refreshes reuse status snapshots; they neither launch tools nor hash cooked
+payloads. Full native verification remains at cook reuse/publication and explicit
+validation; normal mounts retain metadata admission. Unknown availability is
+neutral, and observed missing output offers cooking.
+
+Damaged shared roots rebuild automatically from known sources into empty staging;
+unknown auxiliary ownership or missing sources fail without changing publication.
+Native per-source reports retain auxiliary-file ownership, without duplicating
+inventory hashes. Named texture descriptors participate in output association,
+freshness, repair and exact material/scene reference resolution. Native job order
+uses the captured dependency graph, including generated-shape default materials.
+
+M08.1.7 final gate: after the entire native/managed implementation, review the
+whole slice for unnecessary complexity, duplicate state, owner/API integration
+and readable, efficient C++20/23 use. Apply simplifications and rerun affected
+checks before the slice commits.
 
 Execute M08.1.5 → .6 → .7 → .8 → .9 after the current-format M08.1.4
 checkpoint. These are the approved simplification order; M08.1 remains open
@@ -285,7 +303,7 @@ descriptor generation, native cooking/loading and both formerly blocked
 `NewScene2` project scenes; keep invalid component references rejected.
 
 Owner contracts: [Content identities/ownership](../../../projects/Oxygen.Engine/src/Oxygen/Content/Docs/deps_and_cache.md#identities),
-[native integrity inventory](../../../projects/Oxygen.Engine/src/Oxygen/Content/Docs/loose_cooked_content.md#planned-complete-integrity-inventory),
+[native integrity inventory](../../../projects/Oxygen.Engine/src/Oxygen/Content/Docs/loose_cooked_content.md#complete-integrity-inventory),
 and [project publication/analysis](../lld/content-pipeline.md#22-planned-content-pipeline-simplification).
 Fix the wrong-type cache-checkout retain and qualify physics-sidecar hashes after
 PAK relocation as focused correctness work, separately from the ownership and

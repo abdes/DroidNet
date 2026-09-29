@@ -6,31 +6,36 @@ using System.Collections.Immutable;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Oxygen.Editor.ContentPipeline.Snapshots;
+using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core.Compatibility;
 
 namespace Oxygen.Editor.ContentPipeline.Incremental;
 
 /// <summary>Compares saved product inputs and complete output hashes without starting native work.</summary>
 internal static class CookIncrementalPlanner
 {
-    /// <summary>Resolves changed products within the requested saved dependency closure.</summary>
-    /// <param name="snapshot">The coherent inputs and producer identity.</param>
-    /// <param name="graph">The complete saved dependencies.</param>
-    /// <param name="previous">Previously accepted output provenance.</param>
-    /// <param name="cancellationToken">Cancels file verification.</param>
-    /// <returns>The products to reuse or rebuild.</returns>
-    public static Task<CookIncrementalPlan> PlanAsync(CookInputSnapshot snapshot, CookDependencyGraph graph, CookProvenance previous, CancellationToken cancellationToken)
-        => PlanAsync(snapshot.Operation.Project, snapshot.BuildFingerprint, snapshot.Inputs, graph, previous, cancellationToken);
+    /// <summary>Verifies published roots before input capture or reuse planning.</summary>
+    public static async Task<ImmutableDictionary<string, CookedInventoryReport>> ReadInventoriesAsync(
+        ProjectContext project, IEnumerable<string> mounts, IEngineContentPipelineApi native, CancellationToken cancellationToken, NativeArtifactLease? artifacts = null)
+    {
+        var inventories = ImmutableDictionary.CreateBuilder<string, CookedInventoryReport>(StringComparer.Ordinal);
+        foreach (var mount in mounts.Distinct(StringComparer.Ordinal))
+        {
+            var inventory = await ReadRootAsync(project.ProjectRoot, mount, native, cancellationToken, artifacts).ConfigureAwait(false);
+            if (inventory is not null)
+            {
+                inventories.Add(mount, inventory);
+            }
+        }
 
-    /// <summary>Inspects saved inputs and published output without creating a cook operation or private staging.</summary>
-    /// <param name="project">The project whose published products are inspected.</param>
-    /// <param name="producer">The current native producer identity.</param>
-    /// <param name="inputs">The saved file identities.</param>
-    /// <param name="graph">The saved dependency graph.</param>
-    /// <param name="previous">The committed product provenance.</param>
-    /// <param name="cancellationToken">Cancels read-only verification.</param>
-    /// <returns>Current fingerprints, reusable products, and verified prior output.</returns>
-    public static async Task<CookIncrementalPlan> PlanAsync(ProjectContext project, string producer, IReadOnlyList<CookSnapshotInput> inputs, CookDependencyGraph graph, CookProvenance previous, CancellationToken cancellationToken)
+        return inventories.ToImmutable();
+    }
+
+    /// <summary>Compares captured inputs with verified output facts without performing more I/O.</summary>
+    public static CookIncrementalPlan CreatePlan(string producer, IReadOnlyList<CookSnapshotInput> inputs,
+        CookDependencyGraph graph, CookProvenance previous, ImmutableDictionary<string, CookedInventoryReport> inventories,
+        IReadOnlySet<string>? rebuiltRoots = null)
     {
         var fingerprints = graph.Assets.ToImmutableDictionary(static input => input.AssetUri, input => Fingerprint(input, producer, inputs, graph));
         foreach (var builtin in CookIncrementalPlan.Builtins(graph))
@@ -42,16 +47,22 @@ internal static class CookIncrementalPlanner
         var validOutputs = new HashSet<(string root, string path)>();
         foreach (var root in previous.Roots)
         {
-            var (shared, assets) = await CheckRootAsync(project.ProjectRoot, root, cancellationToken).ConfigureAwait(false);
+            if (rebuiltRoots?.Contains(root.Mount) == true
+                || !inventories.TryGetValue(root.Mount, out var inventory) || !root.Matches(inventory))
+            {
+                continue;
+            }
+            var (shared, descriptors) = root.Compare(inventory, previous.Products.SelectMany(static product => product.Outputs));
             if (!shared)
             {
                 continue;
             }
 
             _ = sharedRoots.Add(root.Mount);
-            foreach (var virtualPath in assets)
+            foreach (var output in previous.Products.SelectMany(static product => product.Outputs)
+                .Where(output => output.RootMount == root.Mount && output.Asset.DescriptorRelativePath is { } path && descriptors.Contains(path)))
             {
-                _ = validOutputs.Add((root.Mount, virtualPath));
+                _ = validOutputs.Add((root.Mount, output.Asset.VirtualPath));
             }
         }
 
@@ -61,7 +72,7 @@ internal static class CookIncrementalPlanner
             && product.Outputs.All(output => validOutputs.Contains((output.RootMount, output.Asset.VirtualPath))))
             .ToImmutableDictionary(static product => product.SourceUri);
 
-        return new(fingerprints, reused, sharedRoots.ToImmutable()) { VerifiedOutputs = validOutputs.ToImmutableHashSet() };
+        return new(fingerprints, reused, sharedRoots.ToImmutable()) { VerifiedOutputs = validOutputs.ToImmutableHashSet(), PriorInventories = inventories };
     }
 
     /// <summary>Builds an engine-generated product identity from its recipe owner and producer.</summary>
@@ -110,21 +121,17 @@ internal static class CookIncrementalPlanner
 
     private static string Hash<T>(T value) => Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(value)));
 
-    private static async Task<(bool shared, ImmutableArray<string> assets)> CheckRootAsync(string projectRoot, CookProvenance.Root root, CancellationToken cancellationToken)
+    private static async Task<CookedInventoryReport?> ReadRootAsync(string projectRoot, string mount, IEngineContentPipelineApi native, CancellationToken cancellationToken, NativeArtifactLease? artifacts)
     {
         try
         {
-            var lease = await CookOutputReadLease.AcquireAsync(ContentPipelinePaths.GetCookedMountRoot(projectRoot, root.Mount), cancellationToken).ConfigureAwait(false);
+            var lease = await CookOutputReadLease.AcquireAsync(ContentPipelinePaths.GetCookedMountRoot(projectRoot, mount), cancellationToken).ConfigureAwait(false);
             await using var lifetime = lease.ConfigureAwait(false);
-            var actual = await lease.ReadHashesAsync(cancellationToken).ConfigureAwait(false);
-            var shared = root.SharedFiles.All(Matches);
-            return (shared, [.. root.Assets.Where(asset => Matches(asset.File)).Select(static asset => asset.Entry.VirtualPath)]);
-
-            bool Matches(CookProvenance.FileProof proof) => actual.TryGetValue(proof.RelativePath, out var file) && file.Size == proof.Size && string.Equals(file.Sha256, proof.Sha256, StringComparison.Ordinal);
+            return lease.HasIndex ? await lease.ReadInventoryAsync(native, cancellationToken, artifacts).ConfigureAwait(false) : null;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException)
         {
-            return (false, []);
+            return null;
         }
     }
 }

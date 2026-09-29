@@ -14,7 +14,7 @@ using Oxygen.Editor.ContentPipeline.Mounting;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Services;
-using Oxygen.Managed.Assets.Persistence.LooseCooked.V1;
+using Oxygen.Managed.Assets.Persistence.LooseCooked.V2;
 using Testably.Abstractions;
 
 namespace Oxygen.Editor.World.Tests;
@@ -113,7 +113,7 @@ public sealed partial class InspectorControlTests
             _ = catalog.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
             this.Roots = [this.ProjectOutput];
             this.ConfigureEngine();
-            this.Service = new(this.coordinator, this.Projects, this.manager, this.engine.Object, new CookedContentMountService(storage, api.Object), catalog.Object, CreateStatusHosting());
+            this.Service = new(this.coordinator, this.Projects, this.manager, this.engine.Object, new CookedContentMountService(), catalog.Object, CreateStatusHosting());
         }
 
         public MountAtomicStore Store { get; } = new();
@@ -207,7 +207,7 @@ public sealed partial class InspectorControlTests
             byte[] bytes = [1];
             File.WriteAllBytes(Path.Combine(root, "Material.omat"), bytes);
             using var stream = File.Create(Path.Combine(root, "container.index.bin"));
-            LooseCookedIndex.Write(stream, new Document(1, IndexFeatures.HasVirtualPaths, Guid.CreateVersion7(), [new(new AssetKey(1, 2), "Material.omat", "/Content/Material.omat", 1, 1, SHA256.HashData(bytes))], []));
+            Oxygen.Testing.LooseCookedIndexFixture.Write(stream, new Document(1, IndexFeatures.HasVirtualPaths, Guid.CreateVersion7(), [new(new AssetKey(1, 2), "Material.omat", "/Content/Material.omat", 1, 1, SHA256.HashData(bytes))], []));
             return root;
         }
     }

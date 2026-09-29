@@ -33,6 +33,18 @@ public sealed partial class ContentPipelineServiceTests
         await consumer.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
         var service = CreateService(consumer, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
         var scene = new Uri("asset:///Content/Scenes/Main.oscene.json");
+        var indexed = imported.Inspection!.Assets.Single(asset => asset.VirtualPath == geometry.AbsolutePath);
+        var descriptorPath = Path.Combine(root, indexed.DescriptorRelativePath!);
+        var original = await File.ReadAllBytesAsync(descriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var damaged = original.ToArray();
+        damaged[^1] ^= 1;
+        await File.WriteAllBytesAsync(descriptorPath, damaged, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var rejected = await service.CookCurrentSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = rejected.IsPublished.Should().BeFalse();
+        var dependencyCache = Path.Combine(consumer.Root, ".build/cache/cooked-dependencies-v1");
+        _ = (Directory.Exists(dependencyCache) && Directory.EnumerateFiles(dependencyCache, "*", SearchOption.AllDirectories).Any()).Should().BeFalse(
+            "damaged descriptor bytes must not seed a dependency cache under the unchanged index identity");
+        await File.WriteAllBytesAsync(descriptorPath, original, this.TestContext.CancellationToken).ConfigureAwait(false);
         var result = await service.CookCurrentSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.TechnicalMessage ?? issue.Message)));
         _ = result.CookedAssets.Should().ContainSingle().Which.SourceAssetUri.Should().Be(scene);
@@ -109,7 +121,7 @@ public sealed partial class ContentPipelineServiceTests
         consumer.ContextService.Activate(context);
         await File.WriteAllTextAsync(Path.Combine(root, "container.index.bin"), "broken", this.TestContext.CancellationToken).ConfigureAwait(false);
         var corruptStatus = (await service.ReadAsync(context, [scene], this.TestContext.CancellationToken).ConfigureAwait(false)).Single();
-        _ = corruptStatus.HasVerifiedOutput.Should().BeFalse();
+        _ = corruptStatus.HasAvailableOutput.Should().BeTrue("the scene's published output still exists; the library error affects its source dependencies");
         _ = corruptStatus.Freshness.Should().Be(AssetCookFreshness.InvalidSource);
         _ = corruptStatus.Diagnostics.Should().Contain(issue => issue.Code == "asset_cook.library_unavailable");
         var corrupt = await service.CookCurrentSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false);

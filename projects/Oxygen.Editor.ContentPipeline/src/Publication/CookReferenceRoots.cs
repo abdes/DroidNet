@@ -22,7 +22,7 @@ internal sealed partial class CookReferenceRoots : IDisposable
     /// <param name="plan">The reused products needed by the closure.</param>
     /// <param name="cancellationToken">Cancels reader acquisition.</param>
     /// <returns>The lookup paths and retained readers.</returns>
-    public static async Task<CookReferenceRoots> AcquireAsync(ProjectContext project, CookStagingArea staging, CookProvenance previous, CookIncrementalPlan plan, CancellationToken cancellationToken)
+    public static async Task<CookReferenceRoots> AcquireAsync(ProjectContext project, CookStagingArea staging, CookProvenance previous, CookIncrementalPlan plan, IEngineContentPipelineApi native, CancellationToken cancellationToken)
     {
         var result = new CookReferenceRoots();
         var paths = staging.Roots.ToDictionary(static root => root.Mount, static root => root.StagingPath, StringComparer.OrdinalIgnoreCase);
@@ -45,9 +45,8 @@ internal sealed partial class CookReferenceRoots : IDisposable
                 }
 
                 var expected = previous.Roots.Single(root => string.Equals(root.Mount, mount, StringComparison.OrdinalIgnoreCase));
-                var actual = await lease.ReadHashesAsync(cancellationToken).ConfigureAwait(false);
-                if (expected.SharedFiles.Concat(expected.Assets.Select(static asset => asset.File)).Any(file =>
-                    !actual.TryGetValue(file.RelativePath, out var observed) || observed.Size != file.Size || !string.Equals(observed.Sha256, file.Sha256, StringComparison.Ordinal)))
+                var actual = await lease.ReadInventoryAsync(native, cancellationToken).ConfigureAwait(false);
+                if (!expected.Matches(actual) || !actual.IsValid)
                 {
                     throw new IOException($"Cooked dependency mount '{mount}' changed before native lookup. Cook that content again.");
                 }

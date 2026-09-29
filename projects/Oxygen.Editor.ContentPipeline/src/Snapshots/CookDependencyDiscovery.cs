@@ -12,7 +12,7 @@ using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Slots;
-using Oxygen.Managed.Assets.Import.Materials;
+using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -40,11 +40,20 @@ public sealed class CookDependencyDiscovery(
     /// <param name="roots">Requested primary inputs.</param>
     /// <param name="cancellationToken">Cancels discovery.</param>
     /// <returns>The closure for coherent capture, planning and published-reference validation.</returns>
-    public async Task<CookDependencyGraph> DiscoverAsync(ProjectContext project, IReadOnlyList<ContentCookInput> roots, CancellationToken cancellationToken)
+    public Task<CookDependencyGraph> DiscoverAsync(ProjectContext project, IReadOnlyList<ContentCookInput> roots, CancellationToken cancellationToken)
+        => this.DiscoverAsync(project, roots, preparedImport: null, cancellationToken);
+
+    /// <summary>Includes a reviewed incoming import in the same dependency closure as ordinary sources.</summary>
+    internal async Task<CookDependencyGraph> DiscoverAsync(ProjectContext project, IReadOnlyList<ContentCookInput> roots, CookDependencyGraph? preparedImport, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(roots);
         var discovery = new Discovery(project, documents, allowUnsavedDocuments, importedSources, discoverImported, resolveImported, preferCookedReference, expandCookedReferences);
+        if (preparedImport is not null)
+        {
+            discovery.AddPreparedImport(preparedImport);
+        }
+
         foreach (var input in roots)
         {
             discovery.AddAsset(input);
@@ -82,6 +91,20 @@ public sealed class CookDependencyDiscovery(
         private readonly List<DiagnosticRecord> diagnostics = [];
         private readonly Dictionary<Uri, ImportedSourceDependencyState> imported = [];
         private Uri currentAsset = null!;
+
+        public void AddPreparedImport(CookDependencyGraph prepared)
+        {
+            var source = prepared.Assets.Single();
+            this.assets.Add(Path.GetFullPath(source.SourceAbsolutePath), source);
+            this.dependencies.Add(source.AssetUri, prepared.Dependencies[source.AssetUri]);
+            this.fileDependencies.Add(source.AssetUri, prepared.FileDependencies[source.AssetUri].ToHashSet(StringComparer.Ordinal));
+            this.imported.Add(source.AssetUri, prepared.ImportedSources[source.AssetUri]);
+            this.importedReferences.UnionWith(prepared.ImportedReferences);
+            foreach (var file in prepared.Files)
+            {
+                this.files.Add(Path.GetFullPath(Path.Combine(project.ProjectRoot, file.RelativePath)), file);
+            }
+        }
 
         public void AddAsset(ContentCookInput input)
         {
@@ -259,8 +282,9 @@ public sealed class CookDependencyDiscovery(
             path = Path.GetFullPath(path);
             var relative = this.RelativePath(path);
             _ = this.fileDependencies[this.currentAsset].Add(relative);
-            var hash = await CookSavedSourceReader.HashAsync(documents, path, cancellationToken, allowUnsavedDocuments).ConfigureAwait(false);
-            this.files[path] = new(assetUri, path, relative, hash);
+            var physical = this.files.TryGetValue(path, out var prepared) ? prepared.SourcePath : path;
+            var hash = await CookSavedSourceReader.HashAsync(documents, physical, cancellationToken, allowUnsavedDocuments).ConfigureAwait(false);
+            this.files[path] = new(assetUri ?? prepared?.AssetUri, physical, relative, hash);
             return hash;
         }
 
@@ -274,7 +298,8 @@ public sealed class CookDependencyDiscovery(
             }
 
             var relative = this.RelativePath(path);
-            var bytes = await CookSavedSourceReader.ReadAsync(documents, path, cancellationToken, allowUnsavedDocuments).ConfigureAwait(false);
+            var physical = this.files.TryGetValue(path, out var prepared) ? prepared.SourcePath : path;
+            var bytes = await CookSavedSourceReader.ReadAsync(documents, physical, cancellationToken, allowUnsavedDocuments).ConfigureAwait(false);
             this.discoveredBytes.Add(path, bytes);
             _ = this.files.TryAdd(path, new(assetUri, path, relative, Convert.ToHexString(SHA256.HashData(bytes))));
             return bytes;

@@ -28,7 +28,8 @@ public sealed partial class MaterialCookService
             var state = states.Single();
             return state.Freshness is AssetCookFreshness.InvalidSource or AssetCookFreshness.MissingSource ? MaterialCookState.Failed
                 : !state.HasPublishedOutput ? MaterialCookState.NotCooked
-                : !state.HasVerifiedOutput ? MaterialCookState.Failed
+                : state.Freshness == AssetCookFreshness.Unknown || state.OutputAvailability == CookedOutputAvailability.Unknown ? MaterialCookState.Unknown
+                : state.OutputAvailability == CookedOutputAvailability.Missing ? MaterialCookState.NotCooked
                 : state.Freshness == AssetCookFreshness.Current && !state.HasUnsavedChanges ? MaterialCookState.Cooked
                 : MaterialCookState.Stale;
         }

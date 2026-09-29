@@ -62,7 +62,7 @@ public sealed partial class InspectorControlTests
             var cooked = asset with
             {
                 CookedUri = new("asset:///Content/Materials/BlueMetal.omat"),
-                CookStatus = asset.CookStatus! with { Freshness = AssetCookFreshness.Current, HasPublishedOutput = true, HasVerifiedOutput = true },
+                CookStatus = asset.CookStatus! with { Freshness = AssetCookFreshness.Current, HasPublishedOutput = true, OutputAvailability = CookedOutputAvailability.Present },
             };
             updates.OnNext([cooked]);
             await WaitForRenderAsync().ConfigureAwait(true);

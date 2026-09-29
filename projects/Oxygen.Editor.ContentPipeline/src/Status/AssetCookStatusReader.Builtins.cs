@@ -28,15 +28,16 @@ public sealed partial class AssetCookStatusReader
     private static AssetCookStatus CreateBuiltinStatus(
         Uri uri,
         Dictionary<Uri, CookProvenance.Product> products,
-        CookIncrementalPlan plan,
+        FreshnessSnapshot plan,
         bool nativeAvailable,
         bool metadataUnavailable)
     {
         _ = products.TryGetValue(uri, out var product);
-        var verified = product is not null && VerifyPriorClosure(uri, products, plan.VerifiedOutputs, ImmutableDictionary<Uri, ImmutableArray<CookedDependencySnapshot>>.Empty, []);
+        var availability = metadataUnavailable ? CookedOutputAvailability.Unknown
+            : product is null ? CookedOutputAvailability.Missing : ReadOutputAvailability(uri, products, plan, []);
         var freshness = metadataUnavailable || !nativeAvailable ? AssetCookFreshness.Unknown
             : product is null ? AssetCookFreshness.NeedsCooking
-            : verified && plan.Reusable.ContainsKey(uri) ? AssetCookFreshness.Current : AssetCookFreshness.OutOfDate;
-        return new(uri, freshness, product is not null, verified, product is null ? [] : [.. product.Outputs.Select(static output => output.Asset)], [], []);
+            : availability == CookedOutputAvailability.Present && plan.CurrentProducts.Contains(uri) ? AssetCookFreshness.Current : AssetCookFreshness.OutOfDate;
+        return new(uri, freshness, product is not null, availability, product is null ? [] : [.. product.Outputs.Select(static output => output.Asset)], [], []);
     }
 }

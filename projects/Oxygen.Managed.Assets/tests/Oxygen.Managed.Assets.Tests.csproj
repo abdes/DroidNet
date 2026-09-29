@@ -15,6 +15,9 @@
     <ItemGroup>
         <PackageReference Include="System.Reactive" />
         <PackageReference Include="Testably.Abstractions.Testing" />
-        <PackageReference Include="SharpGLTF.Toolkit" />
+
+    </ItemGroup>
+    <ItemGroup>
+        <Compile Include="$(ProjectsRoot)\Oxygen.Managed.Assets\testsupport\LooseCookedIndexFixture.cs" Link="LooseCookedIndexFixture.cs" />
     </ItemGroup>
 </Project>

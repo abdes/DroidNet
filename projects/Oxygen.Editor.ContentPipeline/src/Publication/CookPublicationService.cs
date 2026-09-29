@@ -51,7 +51,7 @@ public sealed partial class CookPublicationService(IContentCookCoordinator coord
         {
             var snapshot = result.InputSnapshot ?? throw new InvalidOperationException("Publication requires captured saved inputs.");
             var receipt = new CookPublicationReceipt(
-                2,
+                3,
                 operation.Project.ProjectId,
                 operation.OperationId,
                 DateTimeOffset.UtcNow,

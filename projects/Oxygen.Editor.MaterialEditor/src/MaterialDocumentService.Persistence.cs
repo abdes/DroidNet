@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using DroidNet.Storage;
-using Oxygen.Managed.Assets.Import.Materials;
+using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.MaterialEditor;

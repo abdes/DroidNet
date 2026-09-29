@@ -76,7 +76,7 @@ public sealed partial class ContentBrowserAssetProviderTests
         _ = model.Information.Facts.Single(static fact => string.Equals(fact.Label, "Outputs", StringComparison.Ordinal)).Value.Should().Contain("Main (Geometry)").And.Contain("Paint (Material)").And.Contain("Crate (Scene)");
         var outputs = rows.Where(row => row.IdentityUri != source).ToArray();
         _ = outputs.Should().OnlyContain(row => row.ImportSourceUri == source && row.CanCook && row.CanReimport && row.DescriptorPath == null && row.SourcePath == null);
-        _ = outputs.Should().OnlyContain(row => row.CookStatus!.HasVerifiedOutput == verified);
+        _ = outputs.Should().OnlyContain(row => row.CookStatus!.HasAvailableOutput == verified);
         _ = outputs.Should().OnlyContain(row => row.Information.Facts.Any(fact => fact.Label == "Imported from" && fact.Value == source.AbsolutePath));
         _ = choices.Should().ContainSingle().Which.MaterialUri.Should().Be(state.Outputs.Single(static output => output.Kind == ContentCookAssetKind.Material).CookedAssetUri);
     }
@@ -159,7 +159,7 @@ public sealed partial class ContentBrowserAssetProviderTests
         source,
         verified ? AssetCookFreshness.Current : AssetCookFreshness.OutOfDate,
         HasPublishedOutput: true,
-        verified,
+        verified ? CookedOutputAvailability.Present : CookedOutputAvailability.Missing,
         [
             new(source, new("asset:///Content/Models/Crate/Geometry/Main.ogeo"), ContentCookAssetKind.Geometry, "Content", "/Content/Models/Crate/Geometry/Main.ogeo"),
             new(source, new("asset:///Content/Models/Crate/Materials/Paint.omat"), ContentCookAssetKind.Material, "Content", "/Content/Models/Crate/Materials/Paint.omat"),

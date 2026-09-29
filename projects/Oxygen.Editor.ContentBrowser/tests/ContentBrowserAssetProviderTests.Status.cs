@@ -20,6 +20,17 @@ public sealed partial class ContentBrowserAssetProviderTests
     /// <summary>Gets or sets the running test context.</summary>
     public TestContext TestContext { get; set; } = null!;
 
+    /// <summary>Unavailable evidence is a neutral status, not a corruption or runtime failure.</summary>
+    [TestMethod]
+    public void UnknownOutputAvailabilityDoesNotClaimDamage()
+    {
+        var status = new AssetCookStatus(new Uri("asset:///Content/Material.omat.json"), AssetCookFreshness.Current,
+            HasPublishedOutput: true, CookedOutputAvailability.Unknown, [], [], []);
+        _ = AssetStatusPresentation.GetText(status, activity: null).Should().Be("Status pending");
+        _ = AssetStatusPresentation.GetTone(status, activity: null).Should().Be("Neutral");
+        _ = AssetStatusPresentation.GetDescription(status, activity: null).Should().NotContain("damaged");
+    }
+
     /// <summary>Browser and picker retain the exact same saved-output evidence.</summary>
     /// <param name="freshness">The input comparison result.</param>
     /// <param name="published">Whether a committed product exists.</param>
@@ -29,7 +40,7 @@ public sealed partial class ContentBrowserAssetProviderTests
     [TestMethod]
     [DataRow(AssetCookFreshness.Current, true, true, AssetState.Cooked)]
     [DataRow(AssetCookFreshness.OutOfDate, true, true, AssetState.Stale)]
-    [DataRow(AssetCookFreshness.OutOfDate, true, false, AssetState.Broken)]
+    [DataRow(AssetCookFreshness.OutOfDate, true, false, AssetState.Missing)]
     [DataRow(AssetCookFreshness.NeedsCooking, false, false, null)]
     public async Task BrowserAndPickerUseTheSameCookFacts(AssetCookFreshness freshness, bool published, bool verified, AssetState? expected)
     {
@@ -37,7 +48,7 @@ public sealed partial class ContentBrowserAssetProviderTests
         WriteMaterial(workspace.SourcePath("Content/Materials/Red.omat.json"));
         var uri = new Uri("asset:///Content/Materials/Red.omat.json");
         var catalog = new TestProjectAssetCatalog([new AssetRecord(uri)]);
-        var state = new AssetCookStatus(uri, freshness, published, verified, [], [], []);
+        var state = new AssetCookStatus(uri, freshness, published, verified ? CookedOutputAvailability.Present : CookedOutputAvailability.Missing, [], [], []);
         var reader = new DelegateStatusReader((_, _, _) => Task.FromResult<IReadOnlyList<AssetCookStatus>>([state]));
         var unavailableRuntime = Oxygen.Testing.AssetStatusFixture.CreateUnavailableRuntime();
         await using var runtimeLifetime = unavailableRuntime.ConfigureAwait(false);
@@ -160,6 +171,10 @@ public sealed partial class ContentBrowserAssetProviderTests
 
     private sealed class DelegateStatusReader(Func<ProjectContext, IReadOnlyList<Uri>, CancellationToken, Task<IReadOnlyList<AssetCookStatus>>> read) : IAssetCookStatusReader
     {
+        public event EventHandler? Changed;
+
+        public void NotifyChanged() => this.Changed?.Invoke(this, EventArgs.Empty);
+
         public Task<IReadOnlyList<AssetCookStatus>> ReadAsync(ProjectContext project, IReadOnlyList<Uri> assetUris, CancellationToken cancellationToken = default)
             => read(project, assetUris, cancellationToken);
     }

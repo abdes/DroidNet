@@ -77,7 +77,7 @@ public sealed partial class InspectorControlTests
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = list.Assets.Should().ContainSingle().Which.Item.IdentityUri.Should().Be(material.IdentityUri);
         _ = tile.Assets.Should().ContainSingle().Which.Item.IdentityUri.Should().Be(material.IdentityUri);
-        updates.OnNext([material with { CookStatus = material.CookStatus! with { Freshness = AssetCookFreshness.Current, HasPublishedOutput = true, HasVerifiedOutput = true } }, other, mesh]);
+        updates.OnNext([material with { CookStatus = material.CookStatus! with { Freshness = AssetCookFreshness.Current, HasPublishedOutput = true, OutputAvailability = CookedOutputAvailability.Present } }, other, mesh]);
         await WaitForRenderAsync().ConfigureAwait(true);
         var clear = FindEmptyQueryReset(list, tile, assetsView);
         await this.CaptureQueryLayoutAsync(root, string.Create(System.Globalization.CultureInfo.InvariantCulture, $"browser-query-empty-{tiles}-{light}-{rasterizationScale}.png")).ConfigureAwait(true);
@@ -236,7 +236,7 @@ public sealed partial class InspectorControlTests
         var folder = kind == AssetKind.Material ? "Materials" : "Geometry";
         var asset = CreateNavigationAsset("/Content/" + folder + "/" + Uri.EscapeDataString(name), kind);
         var current = freshness == AssetCookFreshness.Current;
-        return asset with { DisplayName = name, CookStatus = new(asset.IdentityUri, freshness, HasPublishedOutput: current, HasVerifiedOutput: current, [], [], []) };
+        return asset with { DisplayName = name, CookStatus = new(asset.IdentityUri, freshness, HasPublishedOutput: current, OutputAvailability: current ? CookedOutputAvailability.Present : CookedOutputAvailability.Missing, [], [], []) };
     }
 
     private async Task CaptureQueryLayoutAsync(Grid root, string name)

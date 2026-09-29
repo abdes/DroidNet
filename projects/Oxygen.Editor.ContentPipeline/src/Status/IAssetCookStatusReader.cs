@@ -9,6 +9,9 @@ namespace Oxygen.Editor.ContentPipeline.Status;
 /// <summary>Shares saved-input and publication facts across browser, documents and pickers.</summary>
 public interface IAssetCookStatusReader
 {
+    /// <summary>Occurs when external producer facts require a fresh status snapshot.</summary>
+    public event EventHandler? Changed;
+
     /// <summary>Inspects an authored asset set without cooking, recovering or publishing content.</summary>
     /// <param name="project">The owning project.</param>
     /// <param name="assetUris">Authored identities or engine built-ins whose optional published contributions are inspected.</param>

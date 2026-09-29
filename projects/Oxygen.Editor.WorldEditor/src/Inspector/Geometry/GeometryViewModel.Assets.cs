@@ -83,7 +83,7 @@ public sealed partial class GeometryViewModel
         if (previousGeometry?.CookedMetadata != currentGeometry?.CookedMetadata
             || previousGeometry?.EffectiveCookedSource != currentGeometry?.EffectiveCookedSource
             || previousGeometry?.CookStatus?.Freshness != currentGeometry?.CookStatus?.Freshness
-            || previousGeometry?.CookStatus?.HasVerifiedOutput != currentGeometry?.CookStatus?.HasVerifiedOutput)
+            || previousGeometry?.CookStatus?.HasAvailableOutput != currentGeometry?.CookStatus?.HasAvailableOutput)
         {
             _ = this.RefreshMaterialSlotsAsync();
         }

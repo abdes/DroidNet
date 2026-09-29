@@ -9,7 +9,7 @@
         <AssemblyName>$(MSBuildProjectName)</AssemblyName>
 
         <Title>Oxygen Managed Assets</Title>
-        <Description>Oxygen.Managed.Assets is a non-UI, single-assembly asset pipeline providing canonical asset models, import→cook→annotate stages, index persistence and validation, and filesystem/pak adapters.</Description>
+        <Description>Oxygen managed authoring models, asset references, discovery and current native cooked-index metadata. Runtime import, cooking and integrity verification are owned by Oxygen.Cooker and Oxygen.Content.</Description>
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <PackageTags>oxygen;gameengine;assets;pipeline;editor</PackageTags>
         <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
@@ -19,9 +19,9 @@
         <PackageReference Include="JsonSchema.Net" />
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
         <PackageReference Include="System.Reactive" />
-        <PackageReference Include="SixLabors.ImageSharp" />
-        <PackageReference Include="SharpGLTF.Core" />
-        <PackageReference Include="SharpGLTF.Toolkit" />
+
+
+
     </ItemGroup>
 
     <ItemGroup>
