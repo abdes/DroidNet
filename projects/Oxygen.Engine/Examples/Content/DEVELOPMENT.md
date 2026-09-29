@@ -9,11 +9,10 @@ referenced work, not a certification of a newly installed SDK.
 The native ImportTool cooks the authored manifests in `scenes/` into the shared
 `.cooked` root. PakTool packages that root into `pak/all.pak` and its catalog
 and manifest. RenderScene can load either the loose root or the PAK.
-Scene descriptors use version 8; older cooked scenes must be recooked.
-For v7 source JSON, run `python tools/content/MigrateSceneV8.py old.scene.json new.scene.json`
-from the engine root. This removes the obsolete SkyLight scheduling boolean and
-preserves the remaining authored values. ImportTool rejects older source versions
-and the retired field.
+Scene descriptors use version 9. After a format change, rebuild the Release
+cooking tools and recook from current source descriptors; the reader rejects
+older cooked versions. External models use RenderScene's retained import records
+and [reimport workflow](../RenderScene/DEVELOPMENT.md).
 Atmosphere sources use explicit per-light slots, and scripted light changes use
 validated whole-candidate updates.
 
@@ -46,7 +45,7 @@ line.
 ## Scope of `-All`
 
 The script processes every `scenes/*/import-manifest.json` in name order.
-Currently, 13 manifests contain 140 jobs and produce 16 scene assets:
+The manifests include these scene assets:
 
 - bottle-on-box
 - CityEnvironmentValidation
@@ -58,6 +57,7 @@ Currently, 13 manifests contain 140 jobs and produce 16 scene assets:
 - PointShadowValidation
 - SceneProcCubes
 - backpack and chest
+- Lantern, SdkMaterials, tableRound, chair, lampRoundTable and pottedPlant
 - SpotShadowValidation
 - VsmBug1LargePlane and VsmBug1LargeThinCube
 - VsmTwoCubes

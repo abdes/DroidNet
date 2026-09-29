@@ -429,6 +429,74 @@ function Resolve-OxygenExecutables {
     return [pscustomobject]@{ Selection = $Selection; Targets = $resolved; Paths = $paths }
 }
 
+function Invoke-OxygenBuild {
+    param([Parameter(Mandatory)][ValidateNotNullOrEmpty()][string[]]$Targets,
+        [Parameter(Mandatory)]$Selection, [switch]$DryRun)
+
+    if (-not (Test-Path -LiteralPath (Join-Path $selection.BuildRoot 'CMakeCache.txt'))) {
+        throw "Build tree is not configured: $($selection.BuildRoot). Run build-tree generate <profile> or build-tree configure <preset> first."
+    }
+    $arguments = if ($selection.BuildPreset) { @('--build', '--preset', $selection.BuildPreset, '--target') }
+    else { @('--build', $selection.BuildRoot, '--config', $selection.Config, '--target') }
+    $arguments += $Targets
+    if ($DryRun) {
+        Write-Host "Would build: cmake $($arguments -join ' ')"
+        return
+    }
+    $savedEnvironment = [Environment]::GetEnvironmentVariables('Process')
+    Push-Location $selection.SourceRoot
+    try {
+        $cache = Get-OxygenCacheValues $selection.BuildRoot
+        $compiler = [string]$cache['CMAKE_CXX_COMPILER']
+        $index = Get-OxygenFileApiIndex $selection.BuildRoot
+        if ($index) {
+            $object = $index['objects'] | Where-Object { $_['kind'] -eq 'toolchains' } | Select-Object -First 1
+            if ($object) {
+                $path = Join-Path $selection.BuildRoot ".cmake/api/v1/reply/$($object['jsonFile'])"
+                $toolchains = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json -AsHashtable
+                $cxx = $toolchains['toolchains'] | Where-Object { $_['language'] -eq 'CXX' } | Select-Object -First 1
+                if ($cxx) { $compiler = [string]$cxx['compiler']['path'] }
+            }
+        }
+        if ($IsWindows -and $cache['CMAKE_GENERATOR'] -like 'Ninja*' -and
+            $compiler -match '^(.*)[/\\]VC[/\\]Tools[/\\]MSVC[/\\]([^/\\]+)[/\\]bin[/\\]Host[^/\\]+[/\\]([^/\\]+)[/\\]cl[.]exe$') {
+            $installation = $Matches[1]
+            $toolset = $Matches[2]
+            $architecture = $Matches[3]
+            $devShell = Join-Path $installation 'Common7/Tools/Microsoft.VisualStudio.DevShell.dll'
+            Import-Module $devShell -ErrorAction Stop
+            Enter-VsDevShell -VsInstallPath $installation -SkipAutomaticLocation -DevCmdArguments "-arch=$architecture -host_arch=x64 -vcvars_ver=$toolset" | Out-Host
+        }
+        $PSNativeCommandUseErrorActionPreference = $false
+        & cmake @arguments | ForEach-Object { Write-Host $_ }
+        if ($LASTEXITCODE -ne 0) {
+            $failure = [InvalidOperationException]::new("CMake build failed (exit $LASTEXITCODE).")
+            $failure.Data['NativeExitCode'] = $LASTEXITCODE
+            throw $failure
+        }
+    } finally {
+        Pop-Location
+        foreach ($key in @([Environment]::GetEnvironmentVariables('Process').Keys)) {
+            if (-not $savedEnvironment.Contains($key)) { Remove-Item -LiteralPath "Env:$key" -ErrorAction Stop }
+        }
+        foreach ($key in $savedEnvironment.Keys) {
+            [Environment]::SetEnvironmentVariable($key, $savedEnvironment[$key], 'Process')
+        }
+    }
+}
+
+function Build-OxygenExecutables {
+    param([Parameter(Mandatory)][ValidateNotNullOrEmpty()][string[]]$Targets,
+        [string]$SourceRoot = (Get-OxygenSourceRoot), [string]$BuildTree,
+        [string]$Config = 'Release', [string]$Preset)
+
+    # A configured tree is enough: missing executables must be built, not skipped.
+    $selection = Resolve-OxygenBuildSelection -SourceRoot $SourceRoot -BuildTree $BuildTree -Config $Config -Preset $Preset
+    Write-OxygenBuildSelection $selection
+    Invoke-OxygenBuild -Targets $Targets -Selection $selection
+    return Resolve-OxygenExecutables -SourceRoot $SourceRoot -Targets $Targets -Selection $selection
+}
+
 function Write-OxygenExecutableSelection($Context) {
     if ($Context.Selection.BuildRoot) { Write-OxygenBuildSelection $Context.Selection }
     else {

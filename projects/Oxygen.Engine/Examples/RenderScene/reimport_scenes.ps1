@@ -5,6 +5,7 @@ Reimports RenderScene models through native retained publication.
 .DESCRIPTION
 Each source has an authored record under Content/imports. Native publication
 selects a validated immutable generation; failures retain the prior selection.
+Builds a matched Release importer/inspector pair before starting any import.
 Existing readers keep their generation. Source files and demo settings are not
 modified. Temporary recipes and reports are deleted on exit.
 .PARAMETER SourceList
@@ -24,10 +25,6 @@ Full (default), None or Max. Max requires MaxMipLevels.
 param(
     [Parameter(Mandatory, ParameterSetName = 'Import', Position = 0)][string]$SourceList,
 
-    [string]$ToolPath,
-
-    [string]$InspectorPath,
-
     [string]$ContentRoot = (Join-Path $PSScriptRoot '../Content'),
 
     [ValidateSet('BC7', 'None')][string]$Compression = 'BC7',
@@ -36,15 +33,17 @@ param(
 
     [ValidateRange(1, 255)][int]$MaxMipLevels,
 
-    [ValidateSet('Fast', 'Default', 'High')][string]$BC7Quality = 'Default',
+    [ValidateSet('Fast', 'Default', 'High')][string]$BC7Quality = 'Fast',
 
-    [ValidateRange(1, 256)][int]$ThreadPoolSize = 8,
+    [ValidateSet('Box', 'Kaiser')][string]$MipFilter = 'Box',
 
-    [ValidateRange(1, 256)][int]$TextureWorkers = 2,
+    [ValidateRange(1, 256)][int]$ThreadPoolSize = [Math]::Clamp([Environment]::ProcessorCount, 2, 16),
+
+    [ValidateRange(1, 256)][int]$TextureWorkers = [Math]::Clamp($ThreadPoolSize - 2, 1, 8),
 
     [string]$BuildTree,
 
-    [string]$Config,
+    [ValidateSet('Release')][string]$Config = 'Release',
 
     [string]$Preset,
 
@@ -77,17 +76,8 @@ if ($TextureWorkers -gt $ThreadPoolSize) {
 }
 $engineRoot = Get-AbsolutePath '../..' $PSScriptRoot
 . (Join-Path $engineRoot 'tools/cli/BuildSelection.ps1')
-$tools = Resolve-OxygenExecutables -SourceRoot $engineRoot -Targets @('oxygen-cooker-importtool', 'oxygen-cooker-inspector') -BuildTree $BuildTree -Config $Config -Preset $Preset -Overrides @{
-    'oxygen-cooker-importtool' = $ToolPath
-    'oxygen-cooker-inspector' = $InspectorPath
-}
-Write-OxygenExecutableSelection $tools
-$ToolPath = $tools.Paths['oxygen-cooker-importtool']
-$InspectorPath = $tools.Paths['oxygen-cooker-inspector']
 $SourceList = Get-AbsolutePath $SourceList
-foreach ($file in @($SourceList, $ToolPath, $InspectorPath)) {
-    if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "Required file not found: $file" }
-}
+if (-not (Test-Path -LiteralPath $SourceList -PathType Leaf)) { throw "Source list not found: $SourceList" }
 $sourceJson = Get-Content -LiteralPath $SourceList -Raw
 if (-not (Test-Json -Json $sourceJson -SchemaFile (Join-Path $PSScriptRoot 'reimport-sources.schema.json'))) {
     throw 'Source list does not match reimport-sources.schema.json.'
@@ -119,9 +109,11 @@ $jobs = foreach ($source in $sources) {
 if (-not $PSCmdlet.ShouldProcess($ContentRoot, "Publish $(@($jobs).Count) retained model imports")) {
     return
 }
+$tools = Build-OxygenExecutables -SourceRoot $engineRoot -Targets @('oxygen-cooker-importtool', 'oxygen-cooker-inspector') -BuildTree $BuildTree -Config $Config -Preset $Preset
+Write-OxygenExecutableSelection $tools
 $texture = @{
     mip_policy = $MipPolicy.ToLowerInvariant()
-    mip_filter = 'kaiser'
+    mip_filter = $MipFilter.ToLowerInvariant()
     output_format = $(if ($Compression -eq 'BC7') { 'bc7_srgb' } else { 'rgba8_srgb' })
     data_format = $(if ($Compression -eq 'BC7') { 'bc7' } else { 'rgba8' })
     bc7_quality = $(if ($Compression -eq 'BC7') { $BC7Quality.ToLowerInvariant() } else { 'none' })

@@ -452,7 +452,7 @@
       "directional_inscattering_exponent": 4.0,
       "directional_inscattering_start_distance": 50.0,
       "end_distance_m": 5000.0,
-      "fog_cutoff_distance_m": 6000.0,
+      "fog_cutoff_distance_m": 0.0,
       "volumetric_fog_scattering_distribution": 0.2,
       "volumetric_fog_albedo": [0.8, 0.8, 0.8],
       "volumetric_fog_emissive": [0.0, 0.0, 0.0],

@@ -372,34 +372,59 @@ $tools.Paths.Values | Sort-Object
         self.assertIn("conan-ninja-debug", output)
         self.assertNotIn("bin\\Release", output)
 
-    def test_reimport_preflight_failure_preserves_existing_content(self):
+    def test_reimport_build_failure_preserves_existing_content(self):
         tree = self.tree("ninja")
-        self.fake_tool(tree / "bin/Release", "Oxygen.Cooker.ImportTool", 17)
+        (tree / "CMakeCache.txt").write_text("CMAKE_BUILD_TYPE:STRING=Release\n", encoding="utf-8")
+        self.fake_tool(tree / "bin/Release", "Oxygen.Cooker.ImportTool")
         self.fake_tool(tree / "bin/Release", "Oxygen.Cooker.Inspector")
         self.copy_workflow("Examples/RenderScene/reimport_scenes.ps1")
         self.copy_workflow("Examples/RenderScene/reimport-sources.schema.json")
         folder = self.root / "Examples/RenderScene"
-        cooked = folder / ".cooked"
-        cooked.mkdir()
+        cooked = self.root / "Examples/Content/.cooked"
+        cooked.mkdir(parents=True)
         (cooked / "keep.bin").write_bytes(b"previous generation")
         model = self.root / "original.gltf"
         model.write_text("{}", encoding="utf-8")
         (folder / "sources.json").write_text(json.dumps({"version": 1, "sources": [{"source": str(model), "name": "fixture"}]}), encoding="utf-8")
-        self.command("""
-function global:Get-Process { param($Name, $ErrorAction) }
+        output = self.command("""
+$global:realCmake = (Get-Command cmake -CommandType Application).Source
+function global:cmake {
+    if ($args[0] -eq '--build') { Write-Host 'BUILD_FAILED'; $global:LASTEXITCODE = 17; return }
+    & $global:realCmake @args
+}
 & (Join-Path $PSScriptRoot 'Examples/RenderScene/reimport_scenes.ps1') (Join-Path $PSScriptRoot 'Examples/RenderScene/sources.json')
-exit $LASTEXITCODE
 """, expect=1)
+        self.assertIn("BUILD_FAILED", output)
+        self.assertNotIn("ARG1=", output)
         self.assertEqual((cooked / "keep.bin").read_bytes(), b"previous generation")
-        reports = list((self.root / "out/renderscene-reimport").glob("*/result.json"))
-        self.assertEqual(len(reports), 1)
-        result = json.loads(reports[0].read_text(encoding="utf-8"))
-        self.assertEqual(result["status"], "failed")
-        self.assertIn("exited 17", result["error"])
-        self.assertFalse((reports[0].parent / "import.log").exists())
-        log = (reports[0].parent / "preflight.log").read_text(encoding="utf-8")
-        self.assertIn("RUNTIME=ninja-Release", log)
-        self.assertIn("ARG1=--no-tui", log)
+
+    def test_build_tools_creates_missing_release_executables_before_resolution(self):
+        tree = self.tree("ninja")
+        (tree / "CMakeCache.txt").write_text("CMAKE_BUILD_TYPE:STRING=Release\n", encoding="utf-8")
+        self.fake_tool(tree / "bin/Debug", "Oxygen.Cooker.ImportTool")
+        self.fake_tool(tree / "bin/Debug", "Oxygen.Cooker.Inspector")
+        output = self.command("""
+$global:realCmake = (Get-Command cmake -CommandType Application).Source
+function global:cmake {
+    if ($args[0] -eq '--build') {
+        if (($args -join ' ') -ne '--build --preset conan-ninja-release --target oxygen-cooker-importtool oxygen-cooker-inspector') { throw 'Wrong build/configuration' }
+        $directory = Join-Path $PSScriptRoot 'out/build-ninja/bin/Release'
+        [IO.Directory]::CreateDirectory($directory) | Out-Null
+        foreach ($name in @('ImportTool','Inspector')) {
+            [IO.File]::WriteAllText((Join-Path $directory "Oxygen.Cooker.$name.cmd"), "@echo off`r`necho FRESH_RELEASE`r`n")
+        }
+        $env:OXYGEN_TEST_BUILD_ENV = 'temporary'
+        $global:LASTEXITCODE = 0
+        return
+    }
+    & $global:realCmake @args
+}
+$tools = Build-OxygenExecutables -Targets oxygen-cooker-importtool,oxygen-cooker-inspector
+if ($tools.Selection.Config -ne 'Release') { throw 'Fell back to Debug' }
+if (Test-Path Env:OXYGEN_TEST_BUILD_ENV) { throw 'Leaked build environment' }
+Invoke-OxygenTool -Context $tools -Target oxygen-cooker-importtool
+""")
+        self.assertIn("FRESH_RELEASE", output)
 
     def test_packaging_propagates_shared_tool_failure(self):
         tree = self.tree("ninja")
@@ -417,7 +442,7 @@ exit $LASTEXITCODE
     def test_cooker_callers_have_no_private_launch_paths(self):
         for relative in ("Examples/Content/cook_scenes.ps1", "Examples/Content/pak_content.ps1", "Examples/RenderScene/reimport_scenes.ps1"):
             text = (ENGINE / relative).read_text(encoding="utf-8")
-            self.assertIn("Resolve-OxygenExecutables", text)
+            self.assertIn("Build-OxygenExecutables" if "reimport_scenes" in relative else "Resolve-OxygenExecutables", text)
             self.assertIn("Invoke-OxygenTool", text)
             self.assertNotIn("Resolve-OxygenBuildSelection", text)
             self.assertNotIn("Invoke-OxygenSelectedExecutable", text)

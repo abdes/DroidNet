@@ -221,7 +221,13 @@ auto ContentSettingsService::SetImportOptions(
 auto ContentSettingsService::GetTextureTuning() const
   -> content::import::ImportOptions::TextureTuning
 {
+  // Interactive imports keep full resolution and complete mip chains while
+  // using the faster filter and encoder tiers. Saved choices override these.
   content::import::ImportOptions::TextureTuning t;
+  t.enabled = true;
+  t.mip_policy = content::import::MipPolicy::kFullChain;
+  t.mip_filter = content::import::MipFilter::kBox;
+  t.bc7_quality = content::import::Bc7Quality::kFast;
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
 

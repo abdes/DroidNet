@@ -6,7 +6,7 @@ presets from their own location, so invoking them from a subdirectory is safe.
 | Command      | Purpose                                                         | Prerequisites                                                                                  |
 | ------------ | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
 | `build-tree` | Generate dependencies/build trees or configure an existing tree | Compiler environment, CMake, Conan and uv for generation; provisioned Python for configuration |
-| `oxybuild`   | Build a CMake target                                            | Initialized build tree, CMake 4.2+, configured compiler environment                            |
+| `oxybuild`   | Build a CMake target                                            | Initialized build tree and CMake 4.2+; Ninja/MSVC environment is selected automatically        |
 | `oxyrun`     | Build and run an executable target                              | Same as `oxybuild`; `-NoBuild` uses an existing executable                                     |
 | `oxytidy`    | Analyze selected C++ sources and headers                        | Repository Python environment, LLVM 23.x tools, compilation database                           |
 | `oxyformat`  | Check or format owned C++ files                                 | Repository Python environment, clang-format 23.x                                               |
@@ -34,8 +34,10 @@ build-tree generate profiles/windows-msvc.ini -Generator Ninja
 build-tree configure oxygen-ninja-default
 ```
 
-The engine profile defines aliases; your user profile owns compiler setup and
-automatic venv activation. Python tool launchers select this checkout's root
+The engine profile defines aliases. Ninja/MSVC builds initialize the Visual
+Studio environment identified by the configured compiler and restore the caller
+environment afterward. Other toolchains use the caller's configured environment.
+Your user profile owns automatic venv activation. Python tool launchers select this checkout's root
 `.venv` regardless of the caller's active environment. Provision it with root
 `uv sync --locked` or `build-tree generate`; tool invocation never installs packages.
 See the [repository Python workflow](../../../../tooling/PYTHON.md).

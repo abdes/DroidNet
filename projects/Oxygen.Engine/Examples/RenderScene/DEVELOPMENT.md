@@ -69,10 +69,11 @@ normals/tangents, retained nodes, normalized naming, and content hashing. Color
 textures use BC7 sRGB; data textures use linear BC7. The native retained record
 stores this profile with the source identity for replay.
 
-Use [reimport_scenes.ps1](reimport_scenes.ps1), which invokes the existing native
-ImportTool and Inspector. It selects an available built pair from CMake presets,
-preferring Release, ordinary builds, then Ninja. Use `-BuildTree`, `-Config`, or
-`-Preset` to constrain selection, or `-ToolPath` for an explicit executable. Create an ignored local source list from the
+Use [reimport_scenes.ps1](reimport_scenes.ps1). It builds a matched **Release**
+ImportTool/Inspector pair before importing, using the shared CMake launcher.
+Missing binaries are built; build failures stop before any publication. Ninja
+MSVC builds initialize the compiler's Visual Studio environment automatically.
+Use `-BuildTree` or `-Preset` to select a configured Release tree. Create an ignored local source list from the
 [schema-backed example](reimport-sources.example.json), then edit its paths:
 
 ```powershell
@@ -91,9 +92,9 @@ The script delegates executable-set resolution, runtime environment, logging,
 and invocation to the same library as `oxyrun`. Native Cooker owns recipe
 validation, provenance and publication.
 
-The defaults are **BC7 + Full**. Use `-BuildTree`, `-Config` or `-Preset` to
-constrain automatic tool selection, or `-ToolPath` for an explicit executable;
-Inspector defaults to the same directory. `-ContentRoot` selects the authored
+The defaults are **fast BC7 + box-filtered full mips**, also used by DemoShell's
+interactive imports unless saved texture choices override them. Source resolution
+and complete minification chains are retained. `-ContentRoot` selects the authored
 Content directory; the default is shared `Examples/Content`.
 Relative sources resolve against the source-list file, tree paths against the
 engine root, and other relative paths against the working directory. Use PowerShell 7.4 or newer.
@@ -103,8 +104,9 @@ engine root, and other relative paths against the working directory. Use PowerSh
 | `-Compression`                       | `BC7` (default): BC7 sRGB color / linear BC7 data. `None`: uncompressed RGBA8 sRGB color / linear RGBA8 data; larger output, faster cooking. Both are explicit 8-bit texture policies, not source-format/HDR preservation. |
 | `-MipPolicy`                         | `Full` (default): complete mip chain. `None`: base level only. `Max`: cap the chain at `-MaxMipLevels`. Mips improve minification and add storage.                                                                         |
 | `-MaxMipLevels`                      | Required only with `Max`; 1–255, including the base level.                                                                                                                                                                 |
-| `-BC7Quality`                        | `Fast`, `Default` (default), or `High`; compression time/quality tradeoff. Only valid with BC7.                                                                                                                            |
-| `-ThreadPoolSize`, `-TextureWorkers` | Defaults 8 / 2. Increase together for more texture throughput when memory permits; workers cannot exceed the pool. Source jobs remain sequential.                                                                          |
+| `-BC7Quality`                        | `Fast` (default), `Default`, or `High`; compression time/quality tradeoff. Only valid with BC7.                                                                                                                            |
+| `-ThreadPoolSize`, `-TextureWorkers` | CPU-scaled defaults: up to 16 pool threads / 8 texture workers. Workers cannot exceed the pool. Source jobs remain sequential.                                                                                             |
+| `-MipFilter`                         | `Box` (default) or `Kaiser`; Kaiser costs more when generating the chain.                                                                                                                                                  |
 | `-WhatIf`                            | Read-only source/path/parameter preflight; no tools, cook, or publication.                                                                                                                                                 |
 
 ```powershell
@@ -120,8 +122,18 @@ Each source publishes independently after native root/provenance validation.
 Failed or canceled imports keep that source's previous selection. Existing
 readers retain their generation; the native publisher reclaims unused generations.
 Temporary recipe and report files are deleted on exit. Camera and environment
-settings are preserved. Use the published record paths when mounting retained
-imports in DemoShell.
+settings are preserved. Mount the printed `.import.json` record paths in DemoShell Library. Records
+follow publication; an old manually mounted loose index still selects its old
+content. Remove superseded loose-library entries rather than mounting both.
+
+Import baseline (2026-09-29, Ryzen 9 9950X, Release): Sponza's 72 image inputs
+(1.89 GiB) cooked in 136.3 s with BC7 Default/Kaiser and 8 pool/2 texture workers,
+versus 23.9 s with Fast/Box and 16/8 workers. The RenderScene UI import completed
+in 23.4 s while rendering at 1920×1080. Both fast paths retain full resolution
+and full mip chains; compression effort and mip filtering are the quality tradeoff.
+Times cover import/publication, not subsequent GPU uploads. Reproduce the script
+comparison with `-BC7Quality Default -MipFilter Kaiser -ThreadPoolSize 8 -TextureWorkers 2`
+and the defaults against the same source list. Temporary outputs stay outside Git.
 
 Camera navigation has no separate default-input cook: DemoShell creates its
 camera actions and mapping contexts in C++. Scene-authored input contexts are
@@ -327,6 +339,12 @@ and point/spot-light scenes.
 | `physics_domains`, `physics_domains_vsm_benchmark` |        23 / 17 each | Physics families, scripts, and camera behavior; require sidecar hydration.            |
 | `SceneProcCubes`, `multi_script_scene`             |        3 / 0; 5 / 0 | Scripts create visible geometry after loading.                                        |
 | `backpack`, `chest`                                |            Imported | glTF textures/geometry and rotation script sidecars. Check camera and lighting.       |
+
+`VsmTwoCubes`, `CityEnvironmentValidation` and `physics_domains` keep the fog cutoff disabled. Fog end distance bounds horizontal
+integration; cutoff distance removes fog beyond the resulting ray length. A
+nearby nonzero cutoff therefore creates a hard angular boundary in the sky,
+exposing the dark lower atmosphere around this small ground mesh. Use cutoff
+only when intentionally excluding distant scenery from fog.
 
 Distinguish unlit front faces from culled backfaces. A single-sided backface is
 absent. A double-sided backface can render with its normal reversed for lighting.
