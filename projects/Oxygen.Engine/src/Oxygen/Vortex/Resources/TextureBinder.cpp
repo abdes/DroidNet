@@ -1650,10 +1650,6 @@ auto TextureBinder::Impl::OnTextureResourceLoaded(
   } else {
     ++lifecycle_async_enqueued_;
   }
-
-  if (texture_loader_) {
-    (void)texture_loader_->ReleaseResource(resource_key);
-  }
 }
 
 auto TextureBinder::Impl::FindEntryOrLog(

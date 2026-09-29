@@ -52,6 +52,7 @@ set(
   "api_export.h"
   "Asset.h"
   "AssetKey.h"
+  "AssetRuntimeBindings.h"
   "AssetType.h"
   "BufferResource.h"
   "BuiltinGeometry.h"

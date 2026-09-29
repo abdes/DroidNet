@@ -1,332 +1,159 @@
-# Asset dependency & caching deep dive (Content)
+# Content identity, ownership and caching
 
-This document complements `overview.md` and is the **deep dive** on how Content
-tracks dependencies and uses caching to enforce safe lifetimes for assets and
-resources. See also the [planned simplification](#planned-identity-and-ownership-simplification).
+Read [identities](#identities), [owning and borrowed access](#owning-and-borrowed-access),
+[loading and dependencies](#loading-and-dependencies), and
+[release processing](#release-processing). Implementation status belongs to
+[ED-M08.1](../../../../../../design/editor/plan/ED-M08-runtime-parity-and-standalone-validation.md).
 
-> Canonical status/roadmap: `implementation_plan.md`.
->
-> GPU upload / residency is out of scope for Content. Content ends at
-> **DecodedCPUReady**. GPU materialization is the Vortex/Graphics job (see
-> `src/Oxygen/Vortex/Upload/`, `src/Oxygen/Vortex/Resources/`, and
-> `src/Oxygen/Graphics/`).
+Content produces decoded CPU assets and resources. Vortex/Graphics own GPU upload,
+residency and fence retirement; returning a Content usage never waits for the GPU.
 
----
-
-## What problem this solves
-
-We need three things simultaneously:
-
-1. **Deduplication**: repeated requests for the same asset/resource return the
-   same instance.
-2. **Safety**: you cannot evict/unload something that is still in use, either
-   directly by callers or indirectly as a dependency of another cached object.
-3. **Low bookkeeping cost**: the dependency model should be cheap in memory and
-   simple to reason about.
-
-The chosen approach is:
-
-- One unified cache (`AnyCache`) for both assets and resources.
-- Forward-only dependency maps in `AssetLoader`.
-- Reference counting enforced by the cache eviction policy.
-
----
-
-## Key idea: “dependency registration increments lifetime”
-
-Dependencies are applied during the owning-thread **publish** step.
-
-Decode discovers dependency identities on worker threads, but worker-thread
-decode must not mutate loader state. Therefore, decode records dependencies into
-an identity-only collector, and publish applies them.
-
-Registration is not just metadata: it also increments the dependency’s
-reference count in the cache.
-
-Concretely:
-
-- `AddAssetDependency(dependent, dependency)` stores the edge and **Touch()**es
-  the dependency in the cache.
-- `AddResourceDependency(dependent, resource_key)` stores the edge and
-  **Touch()**es the resource in the cache.
-
-This is what ensures that once a dependency is discovered, it cannot be evicted
-while the dependent is still checked out.
-
----
-
-## The unified cache: exact semantics
-
-Content uses `AnyCache<uint64_t, RefCountedEviction<uint64_t>>`.
-
-Important behaviors (these match `AnyCache.h` and the `RefCountedEviction`
-policy):
-
-- **Store(key, value)**
-  - Inserts the value and sets refcount to **1** (the store operation assumes
-    the caller is “using” the item).
-- **CheckOut(key)**
-  - Returns a typed `shared_ptr<T>` and increments refcount.
-- **Touch(key)**
-  - Increments refcount but does not return the value.
-  - Content uses this to represent “held alive by dependency.”
-- **CheckIn(key)**
-  - Decrements refcount.
-  - When refcount reaches **0**, the cache evicts the entry and runs the
-    eviction callback.
-
-Eviction callback = “invoke the type’s unloader.”
-
-This is why unloading is deterministic: it happens **only** on eviction.
-
----
-
-## Dependency graph model (what is stored)
-
-`AssetLoader` stores _forward edges only_:
-
-- Asset→asset: `asset_dependencies_[dependent] = { dependency, ... }`
-- Asset→resource: `resource_dependencies_[dependent] = { resource_key, ... }`
-
-Asset and resource nodes use loader-allocated IDs from the same identity registry.
-`ResourceKey` wraps a resource ID; its value is the cache key. A stable AssetKey
-may have several source-instance nodes simultaneously. Full identity equality,
-not hash equality, selects an ID. `Data::Asset::GetSourceOrigin()` identifies the
-exact decoded opening; Content-owned shared-pointer deleters retain its source.
-
-Debug `GetDebugAssetDependencyMap()` exposes actual cache identities;
-`GetDebugAssetKey()` labels them. `ForEachDependent(AssetKey, ...)` resolves the
-current winner and scans its direct incoming edges. Contextual dependency lookup
-reads the parent's direct edges and resolves their IDs through the registry.
-
-### Dependency types
-
-#### Asset -> Asset
-
-- Example: GeometryAsset → MaterialAsset
-- Registration: `AddAssetDependency()`
-- Safety: enforced by cache refcounts (Touch on dependency)
-- Cycle handling: runtime has debug-only diagnostics; upstream pipeline must
-  reject cycles before runtime (see below)
-
-#### Asset → Resource
-
-- Example: MaterialAsset → TextureResource, GeometryAsset → BufferResource
-- Registration: `AddResourceDependency()`
-- Safety: enforced by cache refcounts (Touch on resource)
-
-#### Resource → (anything)
-
-- Not supported. Resources are leaf nodes from the Content subsystem’s point of
-  view.
-
----
-
-## Cycle policy and upstream rejection
-
-Cycles in asset→asset edges are invalid for two reasons:
-
-- They prevent a strict release order.
-- They create “immortal” graphs that never reach refcount zero naturally.
-
-Runtime cycle detection in `AssetLoader` is a debug-only structural guard.
-Release runtime does not enforce cycle rejection and assumes acyclicity has
-already been validated upstream.
-
-Notes:
-
-- Cycle detection runs in debug builds (DFS over forward edges) as a runtime
-  diagnostic.
-- Upstream import planning/authoring validation must reject cyclic graphs
-  before runtime. `ImportPlanner::MakePlan()` fails hard on cycles and is
-  covered by `ImportPlanner_test` cycle cases in CI.
-
----
-
-## Release and unload ordering (what happens on ReleaseAsset)
-
-Release is explicit: `ReleaseAsset(asset)` checks in that exact decoded origin.
-`ReleaseAsset(AssetKey)` addresses the current winner and is unsuitable for an
-object retained across source replacement. An object from an immutable generation
-retains its source lease after cache eviction and continues reading those bytes.
-Mutable refresh revokes the old opening. A worker finishing after revocation
-cannot publish its decoded result into the cache.
-
-The release algorithm is depth-first and ordered:
-
-1. Check-in resource dependencies
-2. Recurse into asset dependencies
-3. Check-in the asset itself
-
-When any check-in drives an entry’s refcount to zero, the cache evicts it and
-invokes the registered unloader.
-
-```mermaid
-flowchart TD
-   A["Caller: ReleaseAsset(asset)"] --> B["ReleaseAssetTree(cache identity)"]
-   B --> C["CheckIn all resource deps<br/>(resource_dependencies_[key])"]
-   C --> D["Recurse ReleaseAssetTree on asset deps<br/>(asset_dependencies_[key])"]
-   D --> E["CheckIn asset itself<br/>(source-qualified cache identity)"]
-   E --> F{"Refcount reaches 0?"}
-   F -- No --> G["Entry remains cached"]
-   F -- Yes --> H["Cache evicts entry"]
-   H --> I["Invoke registered unloader"]
-```
-
-### Unloader contract (important)
-
-Unloaders are registered per type via `AssetLoader::RegisterLoader(...)`. The
-contract encoded in `AssetLoader.h` is:
-
-- Called only on cache eviction (refcount hits zero).
-- Ordering: resource deps checked in first, asset deps released recursively,
-  then unloader runs.
-- Unloader should not trigger new loads (avoid re-entrancy).
-- Unloader must not throw.
-
----
-
-## How loaders should participate (practical guidance)
-
-### Do: record dependencies at point of discovery
-
-As you decode an asset descriptor, record every reference you discover
-immediately.
-
-In the async pipeline, worker-thread decode records dependencies via
-`internal::DependencyCollector` supplied in `LoaderContext`:
-
-- Asset dependencies are recorded as `data::AssetKey`.
-- Resource dependencies are recorded either as `ResourceKey` (already-bound) or
-  as `internal::ResourceRef` (container-relative reference), which is bound to
-  `ResourceKey` on the owning thread.
-
-Examples (decode code):
-
-- Asset reference:
-
-  ```cpp
-  context.dependency_collector->AddAssetDependency(other_asset_key);
-  ```
-
-- Resource reference (container-relative):
-
-  ```cpp
-  context.dependency_collector->AddResourceDependency(internal::ResourceRef{
-      .source = context.source_token,
-      .resource_type_id = ResourceT::ClassTypeId(),
-      .resource_index = index,
-  });
-  ```
-
-Publish (owning thread) binds `ResourceRef -> ResourceKey` and applies
-`Add*Dependency(...)` to mutate the dependency graph and Touch the cache.
-
-### Do: avoid “hidden” dependencies
-
-If an asset uses a resource/asset but does not register it, the cache refcount
-won’t reflect the true lifetime and eviction can become unsafe.
-
-### Do not: perform nested loads from loader functions
-
-Loader functions run on worker threads as part of decode. They must not call
-back into `AssetLoader` and must not trigger nested `Load*` operations.
-
-Rationale:
-
-- Nested loads from decode would reintroduce owning-thread mutation from worker
-  threads.
-- The orchestrator coroutine is responsible for loading dependencies, and
-  publish is responsible for applying dependency edges.
-
-### Do not: retain `LoaderContext` or readers
-
-The context is passed by value and contains pointers/readers valid only for the
-duration of the load call.
-
----
-
-## Limitations and roadmap linkage
-
-Current:
-
-- Assets and resources are cached in a unified refcounted cache.
-- Dependencies are identity-only and forward-only.
-- Async decode records dependency identities into `DependencyCollector`; publish
-  applies edges and Touches cache entries via `Add*Dependency(...)`.
-- Cycle detection remains a debug-focused safety check.
-
-Deferred / out of scope:
-
-- GPU residency and GPU-side lifetime management. Content eviction triggers
-  Content unloaders only; Renderer-owned GPU residency is handled separately.
-
-## Planned identity and ownership simplification
-
-Status: M08.1.5 identities validated; M08.1.6 automatic
-checkout ownership remains planned. The current release protocol above stays in
-place until that ownership migration.
+## Identities
 
 | Identity           | Fields                                                             |
 | ------------------ | ------------------------------------------------------------------ |
-| SourceOrigin       | Persistent SourceKey plus runtime SourceInstanceId.                |
+| SourceOrigin       | Persistent SourceKey and runtime SourceInstanceId.                 |
 | Asset              | SourceInstanceId and AssetKey.                                     |
-| Cooked resource    | SourceInstanceId, explicit ResourceKind and resource index.        |
-| Synthetic resource | ResourceKind and producer-owned serial/lifetime.                   |
-| ContentId          | Nonzero monotonic uint64, never reused within its loader lifetime. |
+| Cooked resource    | SourceInstanceId, ResourceKind and resource index.                 |
+| Synthetic resource | ResourceKind and producer-owned serial.                            |
+| ContentId          | Nonzero monotonic uint64, never reused within the loader lifetime. |
 
-Use Base NamedType for process-unique source instances and loader-local IDs.
-An already-active immutable generation mount is idempotent; reopening a retired
-generation or refreshing mutable content mints a new instance, including unchanged
-SourceKey/index bytes. Intern
-full identities using equality; hashes select buckets only. Interning/publication
-belongs to the loader thread; decode workers report identities without modifying
-registries. One owning identity map and nonowning ID index replace the asset and
-resource reverse registries, packed source IDs and hash-as-identity conversions.
-Nexus recycled-slot machinery is unnecessary for nonrecycled IDs.
+Full identity equality determines interning; hashes select buckets. One owning
+identity map and a nonowning ID index serve assets and resources. Base NamedType
+provides strong IDs. Nexus recycled-slot machinery serves different lifetimes;
+Content does not recycle its IDs.
 
-Register identities lazily on the loader thread. Key-creation APIs are non-const
-and may propagate allocation failure through the caller's load error boundary;
-missing source/resource results retain their existing optional result. Existing-ID
-lookup and cached inspection stay allocation-free. Do not pre-register complete
-resource tables at mount. Decoded assets carry their exact runtime source origin,
-so identical persistent keys cannot redirect old dependencies after a refresh.
-Refresh, trim and clear reclaim expired-source locators after eviction notifications;
-mounted/readable source locators survive decoded-payload eviction.
+Identity registration is lazy, owner-thread work. Creating a new key can allocate
+and fail; existing-ID lookup is allocation-free. Mounting does not pre-register
+whole resource tables. An already-active immutable generation mount is idempotent.
+Reopening a retired generation or refreshing mutable content creates a new runtime
+source instance, even when its persistent key and indices are unchanged.
 
-Source instances retain touched locator records while mounted/readable, even when
-decoded entries are evicted. This preserves lazy reload through a ResourceKey.
-Cooked locator entries cost O(distinct locators touched in readable or retained
-source instances). The loader is the synthetic producer: synthetic locators remain
-for its lifetime, including after payload eviction, and are measured separately.
-Hash tables retain bucket capacity for reuse; memory baselines include that capacity.
-Retirement removes current-winner eligibility. Immutable sources remain exactly
-readable through retained ownership; mutable roots revoke old read capability
-before path reuse. Distinct identity alone cannot preserve overwritten bytes.
+Retirement removes a source from current-winner selection. Retained immutable
+sources remain exactly readable. Mutable refresh revokes the old read capability
+before its files are reused; a new ID cannot preserve overwritten bytes. Decoded
+assets carry their exact SourceOrigin, and bound dependencies preserve their own
+origins across replacement of active roots.
 
-Owning acquisitions return aliasing shared_ptr checkout controls; the cache stores
-bare decoded pointers. Coalesce decoding, then create one control per accepted
-request with its exact internal/external role. Copies share that request's control.
-An in-flight residency hold protects the bare result until surviving requests have
-acquired their controls. Release that hold exactly once after delivery or when all
-waiters cancel; cancellation during delivery must leave neither an eviction gap
-nor an unowned hold.
-Each parent's dependency edge and Data child pointer share one internal control;
-there is no second Touch/pin or control-to-parent reference. Pins remain distinct
-residency requests. Explicit Peek/metadata inspection stays allocation-free and
-cannot be retained across suspension or source mutation.
+Cooked locators survive payload eviction while their source is readable or retained.
+Refresh, trim and clear prune expired sources after eviction notifications. Synthetic
+locators last for the loader's producer lifetime, including payload eviction, so
+provided bytes can reload the same key. Memory scales with distinct touched locators;
+hash-table bucket capacity is retained for reuse and included in memory baselines.
 
-Last-control destruction queues its already-allocated release record. Enqueue and
-shutdown closure must linearize: accepted releases drain on the owner thread;
-late destruction releases storage without invoking a destroyed loader. No throwing
-lock, allocation or GPU operation belongs in that destructor. Remove manual release
-balancing only after all callers migrate. Keep eviction policy unchanged initially;
-do not force child eviction while a valid extracted child pointer survives.
+## Owning and borrowed access
 
-Required checks: forced hash collisions; same-key mutable refresh; exact old-source
-reads; lazy reload after eviction; mixed-role coalesced requests; all-waiter and
-delivery-time cancellation; shared-parent and
-extracted-child lifetimes; off-thread destruction and shutdown races. Measure cache
-metadata and owning-acquisition costs; preserve IBL hot-path allocations and GPU
-retirement behavior. Reference: UE5.7.4 FStreamableHandle ownership in
-`Engine/Classes/Engine/StreamableManager.h`; Oxygen's CPU/GPU boundary remains its own.
+| Operation                  | Ownership                                                      |
+| -------------------------- | -------------------------------------------------------------- |
+| `Load*` / `StartLoad*`     | One external usage per accepted request.                       |
+| `Get*`                     | One external usage of the cached or context-bound publication. |
+| `Peek*` / `Has*`           | Allocation-free inspection; no residency usage.                |
+| Dependency binding         | One internal usage per distinct successfully bound child.      |
+| `PinAsset` / `PinResource` | A move-only ResidencyPin, independent of CPU-data pointers.    |
+
+Owning results are aliasing shared_ptr controls. Copies share that request's usage;
+separate requests acquire separate usages, even when decoding is coalesced. Dropping
+the last copy returns the usage automatically. The cache stores bare decoded data,
+never a control that reserves its own entry. Getters can allocate and propagate
+failure. Wrong-type requests return empty results without changing counts.
+
+Content peeks borrow until the next loader mutation or suspension. IBL metadata
+inspection uses `PeekTexture`; it does not allocate request controls. Core AnyCache's
+thread-safe `Peek` separately returns shared CPU storage without reserving residency.
+
+A Core UsageTicket records cache identity, entry incarnation, internal/external role
+and checkout/pin kind. Returning an old ticket cannot debit a replacement under the
+same ContentId. Explicit invalidation retires a publication even when clients retain
+its CPU data. A retained, uncached publication remains usable without charging any
+new cache entry. Pin destruction returns only that pin's exact usage.
+
+## Loading and dependencies
+
+The owner-thread pipeline resolves an exact source and joins or starts shared decode.
+Workers read and decode into CPU data plus an identity-only DependencyCollector.
+Decoder registrations and scheduling inputs are copied on the owner thread before
+work is queued. Workers do not mutate loader/cache state, start nested loads, or retain LoaderContext
+readers and spans beyond the decode call.
+
+After decode, typed owner-thread binders load dependencies and freeze the complete
+binding bundle before cache publication:
+
+| Parent                       | Bound children                                                                   |
+| ---------------------------- | -------------------------------------------------------------------------------- |
+| Material                     | Descriptor texture slots and additional collector texture references.            |
+| Geometry                     | Buffers and materials; mesh/submesh pointers share those controls.               |
+| Scene                        | Collected textures/buffers, renderable geometry, material overrides and scripts. |
+| Script                       | Source/bytecode resources and additional collector script references.            |
+| Input mapping context        | Mapping, linked-trigger and auxiliary input actions.                             |
+| Physics scene / input action | Leaves in this loading pipeline.                                                 |
+
+Each binder records attempted keys before awaiting, including failed loads. Repeated
+references to one missing or malformed dependency therefore make one attempt per
+parent. The supported dependency types form an acyclic hierarchy. New dependency
+kinds must preserve that contract; published bindings are immutable.
+
+Data::Asset retains the read-only AssetRuntimeBindings interface. Content's compact
+bundle stores child controls and exact publication metadata. It contains no back
+reference to its parent. Shared parents and extracted children keep their dependencies
+alive independently; clearing the cache does not dismantle a retained parent.
+Contextual getters use these exact bindings before resolving unbound references.
+There is no duplicate mutable dependency graph. Debug graph queries build snapshots
+from current cached parents; evicted parents retain their data but leave that snapshot.
+
+A shared decode result carries a temporary internal residency hold through waiter
+delivery. Each surviving waiter acquires its own control against the original entry
+incarnation. A callback can clear/reload the cache without redirecting later waiters
+onto the new entry. Warm acquisitions create one control directly. Failed cache
+admission can return valid uncached CPU data; revoked source results are rejected.
+
+Stop closes the request's captured release epoch. Queued requests and suspended
+work cannot publish or begin further child loads in a subsequent Run epoch. Run
+creates a fresh epoch; old controls never join it. Allocation failure while constructing
+a request control returns its ticket, and failed admission still reports committed
+evictions.
+
+## Release processing
+
+Final control destruction publishes a preallocated record to a Content-owned atomic
+queue. The normal return path allocates nothing, takes no throwing lock, invokes no
+loader callbacks and performs no GPU work. Records retain CPU storage until the
+owner thread processes them. Weak queue references avoid cycles through queued
+parents and their child controls.
+
+At engine frame start, including frames without views, ProcessPendingReleases handles
+up to 128 records. Detaching a batch is constant-time; processing neither reverses nor
+scans the backlog. An unfinished batch completes before newer arrivals, preventing
+starvation. A record may destroy a large payload, so the count limit bounds bookkeeping,
+not elapsed time. Measure the largest payload destruction separately.
+
+Explicit trim and memory-pressure recovery drain pending returns fully. Trim removes
+policy-eligible entries, drains child returns, and repeats until no further entries
+become eligible. Active callers, bound children and pins retain their usages. The
+RefCountedEviction cache keeps one baseline residency reference until trim, budget
+policy or explicit invalidation removes the entry. Its current default cost is one
+unit per entry; byte-weighted accounting remains
+[CNTT-BUDGET-01](implementation_plan.md#cpu-budget-accounting).
+
+Shutdown closes enqueueing before invalidating the cache. Remaining queued records
+then dispose CPU storage without touching cache accounting. Late pointer destruction
+also releases storage without accessing the former loader. Drains retain their queue
+through reentrant payload destruction; closure prevents further access to a retired
+cache. No callback from an old epoch can resume work in a replacement epoch.
+
+Eviction notifications carry the retired incarnation, payload and type. Callbacks run
+outside the cache lock. Their registration remains alive during dispatch; callbacks
+may reenter cache APIs. Committed events are delivered before a notification exception
+propagates, unless the cache itself has been destroyed.
+
+## Validation
+
+Native tests cover exact tickets, collision-safe IDs, source refresh/retirement, lazy
+reload, coalesced request controls, retained parents, extracted children, cancellation,
+allocation failure, reentrant callbacks and enqueue/close races. Release measurements
+track acquisition/return cost, bounded batches and largest-payload destruction.
+Renderer checks preserve allocation-free IBL inspection and existing GPU retirement.
+
+The reference model is UE5.7.4 FStreamableHandle request ownership
+(`Engine/Classes/Engine/StreamableManager.h` and `Private/StreamableManager.cpp`).
+Oxygen additionally supports any-thread final CPU-pointer destruction through its
+owner-thread release queue.

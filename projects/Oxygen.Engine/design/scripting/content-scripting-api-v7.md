@@ -136,14 +136,10 @@ Callback contract:
 
 ## 3.5 Lifecycle and Cache Control
 
-1. `assets.release_resource(resource_key: integer) -> boolean`
-2. `assets.release_asset(asset_guid: string) -> boolean`
-3. `assets.trim_cache() -> boolean`
-
-Semantics:
-
-1. `release_*` maps to loader checkout release behavior.
-2. `trim_cache` triggers loader cache trim and returns operation acceptance.
+`assets.trim_cache() -> boolean` removes idle cached CPU data and returns operation
+acceptance. Asset/resource userdata own their load or cached-acquisition usages;
+Lua garbage collection returns them automatically. Retained userdata keep their
+CPU data alive across cache invalidation. No key-only release call is needed.
 
 ## 3.6 Synthetic Runtime Keys
 
@@ -257,12 +253,9 @@ end
 ```lua
 local assets = oxygen.assets
 
-local tex_key = assets.mint_synthetic_texture_key()
-local ok = assets.release_resource(tex_key)
-if not ok then
-  oxygen.log.warn("synthetic key not checked out yet")
-end
-
+-- Drop the owning userdata when finished; trim can reclaim it after collection.
+texture = nil
+collectgarbage("collect")
 assets.trim_cache()
 ```
 
@@ -321,7 +314,7 @@ Legend:
 
 ## 10.5 Lifecycle / Cache
 
-1. `release_resource`, `release_asset`, `trim_cache`: `backed-now`.
+1. Owning userdata and `trim_cache`: `backed-now`.
 
 ## 10.6 Synthetic Keys
 
@@ -365,7 +358,7 @@ Legend:
 - [x] Implement GUID string -> `data::AssetKey` conversion using `oxygen.ids` conventions.
 - [x] Implement all cache query APIs (`has_*`, `get_*`) for resources and assets.
 - [x] Implement all async callback load APIs (`load_*_async`) with deterministic callback contract.
-- [x] Implement lifecycle APIs (`release_resource`, `release_asset`, `trim_cache`).
+- [x] Implement owning userdata lifetimes and `trim_cache`.
 - [x] Implement synthetic key APIs.
 - [x] Implement optional mount APIs with explicit policy gate and clear errors when disallowed.
 - [x] Implement procedural runtime creation APIs for geometry/material.

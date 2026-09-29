@@ -16,6 +16,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/NamedType.h>
 #include <Oxygen/Composition/TypeSystem.h>
+#include <Oxygen/Content/Internal/ContentPublication.h>
 #include <Oxygen/Content/OperationCancelledException.h>
 #include <Oxygen/Content/ResidencyPolicy.h>
 #include <Oxygen/OxCo/Co.h>
@@ -33,7 +34,7 @@ public:
 
   using OperationId
     = NamedType<uint64_t, struct InFlightOperationIdTag, Comparable>;
-  using SharedVoidOp = co::Shared<co::Co<std::shared_ptr<void>>>;
+  using SharedResultOp = co::Shared<co::Co<SharedContentResult>>;
   struct Stats final {
     uint64_t find_calls { 0 };
     uint64_t find_hits { 0 };
@@ -76,7 +77,7 @@ public:
     idle_.UnParkAll();
   }
   auto Find(TypeId type_id, uint64_t cache_key, const RequestMeta& request)
-    -> std::optional<SharedVoidOp>
+    -> std::optional<SharedResultOp>
   {
     ++stats_.find_calls;
     auto type_it = table_.find(type_id);
@@ -105,7 +106,7 @@ public:
     return it->second.request;
   }
   auto Insert(TypeId type_id, uint64_t cache_key, OperationId id,
-    SharedVoidOp op, const RequestMeta& request) -> void
+    SharedResultOp op, const RequestMeta& request) -> void
   {
     if (!accepting_) {
       throw OperationCancelledException("Asset loader is stopped");
@@ -173,7 +174,7 @@ public:
 
 private:
   struct Entry final {
-    SharedVoidOp op {};
+    SharedResultOp op {};
     RequestMeta request {};
     OperationId id { 0U };
   };

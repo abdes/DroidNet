@@ -30,30 +30,6 @@ namespace {
     return 1;
   }
 
-  auto AssetsReleaseResource(lua_State* state) -> int
-  {
-    const auto key = RequireResourceKey(state, 1);
-    const auto loader = GetAssetLoader(state);
-    if (loader == nullptr) {
-      lua_pushboolean(state, 0);
-      return 1;
-    }
-    lua_pushboolean(state, loader->ReleaseResource(key) ? 1 : 0);
-    return 1;
-  }
-
-  auto AssetsReleaseAsset(lua_State* state) -> int
-  {
-    const auto key = RequireAssetGuid(state, 1);
-    const auto loader = GetAssetLoader(state);
-    if (loader == nullptr) {
-      lua_pushboolean(state, 0);
-      return 1;
-    }
-    lua_pushboolean(state, loader->ReleaseAsset(key) ? 1 : 0);
-    return 1;
-  }
-
   auto AssetsTrimCache(lua_State* state) -> int
   {
     const auto loader = GetAssetLoader(state);
@@ -180,10 +156,6 @@ auto RegisterContentModuleAvailability(lua_State* state, const int module_index)
 auto RegisterContentModuleLifecycle(lua_State* state, const int module_index)
   -> void
 {
-  lua_pushcfunction(state, AssetsReleaseResource, "assets.release_resource");
-  lua_setfield(state, module_index, "release_resource");
-  lua_pushcfunction(state, AssetsReleaseAsset, "assets.release_asset");
-  lua_setfield(state, module_index, "release_asset");
   lua_pushcfunction(state, AssetsTrimCache, "assets.trim_cache");
   lua_setfield(state, module_index, "trim_cache");
 

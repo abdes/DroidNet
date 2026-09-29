@@ -183,6 +183,7 @@ public:
   }
 
   auto TrimCache() -> void override { textures_.clear(); }
+  auto ProcessPendingReleases() -> void override { }
 
   auto SetResidencyPolicy(const content::ResidencyPolicy& policy)
     -> void override
@@ -231,63 +232,65 @@ public:
   {
   }
 
-  [[nodiscard]] auto GetTexture(content::ResourceKey key) const noexcept
+  [[nodiscard]] auto PeekTexture(content::ResourceKey key) const
+    -> observer_ptr<const data::TextureResource> override
+  {
+    const auto found = textures_.find(key);
+    return observer_ptr<const data::TextureResource> {
+      found != textures_.end() ? found->second.get() : nullptr
+    };
+  }
+
+  [[nodiscard]] auto GetTexture(content::ResourceKey key)
     -> std::shared_ptr<data::TextureResource> override
   {
     const auto it = textures_.find(key);
     return it == textures_.end() ? nullptr : it->second;
   }
 
-  [[nodiscard]] auto GetBuffer(content::ResourceKey /*key*/) const noexcept
+  [[nodiscard]] auto GetBuffer(content::ResourceKey /*key*/)
     -> std::shared_ptr<data::BufferResource> override
   {
     return nullptr;
   }
 
-  [[nodiscard]] auto GetMaterialAsset(
-    const data::AssetKey&, const data::Asset&) const noexcept
+  [[nodiscard]] auto GetMaterialAsset(const data::AssetKey&, const data::Asset&)
     -> std::shared_ptr<data::MaterialAsset> override
   {
     return nullptr;
   }
 
-  [[nodiscard]] auto GetMaterialAsset(
-    const data::AssetKey& /*key*/) const noexcept
+  [[nodiscard]] auto GetMaterialAsset(const data::AssetKey& /*key*/)
     -> std::shared_ptr<data::MaterialAsset> override
   {
     return nullptr;
   }
 
-  [[nodiscard]] auto GetGeometryAsset(
-    const data::AssetKey&, const data::Asset&) const noexcept
+  [[nodiscard]] auto GetGeometryAsset(const data::AssetKey&, const data::Asset&)
     -> std::shared_ptr<data::GeometryAsset> override
   {
     return nullptr;
   }
 
-  [[nodiscard]] auto GetGeometryAsset(
-    const data::AssetKey& /*key*/) const noexcept
+  [[nodiscard]] auto GetGeometryAsset(const data::AssetKey& /*key*/)
     -> std::shared_ptr<data::GeometryAsset> override
   {
     return nullptr;
   }
 
-  [[nodiscard]] auto GetScriptAsset(
-    const data::AssetKey&, const data::Asset&) const noexcept
+  [[nodiscard]] auto GetScriptAsset(const data::AssetKey&, const data::Asset&)
     -> std::shared_ptr<data::ScriptAsset> override
   {
     return nullptr;
   }
 
-  [[nodiscard]] auto GetScriptAsset(
-    const data::AssetKey& /*key*/) const noexcept
+  [[nodiscard]] auto GetScriptAsset(const data::AssetKey& /*key*/)
     -> std::shared_ptr<data::ScriptAsset> override
   {
     return nullptr;
   }
 
-  [[nodiscard]] auto GetScriptResource(
-    content::ResourceKey /*key*/) const noexcept
+  [[nodiscard]] auto GetScriptResource(content::ResourceKey /*key*/)
     -> std::shared_ptr<data::ScriptResource> override
   {
     return nullptr;
@@ -337,15 +340,13 @@ public:
     return nullptr;
   }
 
-  [[nodiscard]] auto GetPhysicsSceneAsset(
-    const data::AssetKey& /*key*/) const noexcept
+  [[nodiscard]] auto GetPhysicsSceneAsset(const data::AssetKey& /*key*/)
     -> std::shared_ptr<data::PhysicsSceneAsset> override
   {
     return nullptr;
   }
 
-  [[nodiscard]] auto GetPhysicsResource(
-    content::ResourceKey /*key*/) const noexcept
+  [[nodiscard]] auto GetPhysicsResource(content::ResourceKey /*key*/)
     -> std::shared_ptr<data::PhysicsResource> override
   {
     return nullptr;
@@ -396,22 +397,19 @@ public:
     return std::nullopt;
   }
 
-  [[nodiscard]] auto GetInputActionAsset(
-    const data::AssetKey&, const data::Asset&) const noexcept
+  [[nodiscard]] auto GetInputActionAsset(const data::AssetKey&,
+    const data::Asset&) -> std::shared_ptr<data::InputActionAsset> override
+  {
+    return nullptr;
+  }
+
+  [[nodiscard]] auto GetInputActionAsset(const data::AssetKey& /*key*/)
     -> std::shared_ptr<data::InputActionAsset> override
   {
     return nullptr;
   }
 
-  [[nodiscard]] auto GetInputActionAsset(
-    const data::AssetKey& /*key*/) const noexcept
-    -> std::shared_ptr<data::InputActionAsset> override
-  {
-    return nullptr;
-  }
-
-  [[nodiscard]] auto GetInputMappingContextAsset(
-    const data::AssetKey& /*key*/) const noexcept
+  [[nodiscard]] auto GetInputMappingContextAsset(const data::AssetKey& /*key*/)
     -> std::shared_ptr<data::InputMappingContextAsset> override
   {
     return nullptr;
@@ -480,36 +478,15 @@ public:
     return false;
   }
 
-  auto ReleaseResource(content::ResourceKey key) -> bool override
+  auto PinResource(content::ResourceKey /*key*/)
+    -> content::ResidencyPin override
   {
-    return textures_.erase(key) > 0U;
+    return {};
   }
 
-  auto PinResource(content::ResourceKey /*key*/) -> bool override
+  auto PinAsset(const data::AssetKey& /*key*/) -> content::ResidencyPin override
   {
-    return false;
-  }
-
-  auto UnpinResource(content::ResourceKey /*key*/) -> bool override
-  {
-    return false;
-  }
-
-  auto ReleaseAsset(const data::Asset&) -> bool override { return false; }
-
-  auto ReleaseAsset(const data::AssetKey& /*key*/) -> bool override
-  {
-    return false;
-  }
-
-  auto PinAsset(const data::AssetKey& /*key*/) -> bool override
-  {
-    return false;
-  }
-
-  auto UnpinAsset(const data::AssetKey& /*key*/) -> bool override
-  {
-    return false;
+    return {};
   }
 
   auto SubscribeResourceEvictions(TypeId resource_type, EvictionHandler handler)
@@ -586,7 +563,7 @@ public:
   auto EmitTextureEviction(
     content::ResourceKey key, content::EvictionReason reason) -> void
   {
-    ReleaseResource(key);
+    textures_.erase(key);
     EmitResourceEviction(key, data::TextureResource::ClassTypeId(), reason);
   }
 

@@ -27,7 +27,7 @@ This section is normative. "MUST" and "MUST NOT" are strict requirements.
 5. Source-aware identity:
    Cache identity includes the exact runtime source instance. Full typed equality
    selects opaque IDs; hashes only select interning buckets.
-   Owner: [identity contract](Docs/deps_and_cache.md#planned-identity-and-ownership-simplification).
+   Owner: [identity contract](Docs/deps_and_cache.md#identities).
 
 6. Resource key construction boundary:
    `AssetLoader` interns keys on its owning thread. Workers hand off `ResourceRef`

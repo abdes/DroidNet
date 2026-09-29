@@ -16,6 +16,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Composition/TypeSystem.h>
 #include <Oxygen/Content/Internal/ContentIdentityRegistry.h>
+#include <Oxygen/Content/Internal/ContentPublication.h>
 #include <Oxygen/Content/Internal/ContentSourceRegistry.h>
 #include <Oxygen/Content/Internal/InFlightOperationTable.h>
 #include <Oxygen/Content/LoaderContext.h>
@@ -56,19 +57,18 @@ public:
     const ContentIdentityRegistry& identities,
     const ResourceLoaderMap& resource_loaders, ContentCache& content_cache,
     InFlightOperationTable& in_flight_ops,
+    const std::shared_ptr<ContentReleaseQueue>& releases,
     observer_ptr<co::ThreadPool> thread_pool, bool work_offline,
     Callbacks callbacks);
 
-  auto LoadErased(TypeId resource_type, ResourceKey key)
-    -> co::Co<std::shared_ptr<void>>;
   auto LoadErased(TypeId resource_type, ResourceKey key,
-    const LoadRequest& request) -> co::Co<std::shared_ptr<void>>;
+    LoadRequest request = {}, CheckoutOwner owner = CheckoutOwner::kExternal)
+    -> co::Co<ContentAcquisition>;
 
   auto LoadErasedFromCooked(TypeId resource_type, ResourceKey key,
-    std::span<const uint8_t> bytes) -> co::Co<std::shared_ptr<void>>;
-  auto LoadErasedFromCooked(TypeId resource_type, ResourceKey key,
-    std::span<const uint8_t> bytes, const LoadRequest& request)
-    -> co::Co<std::shared_ptr<void>>;
+    std::span<const uint8_t> bytes, LoadRequest request = {},
+    CheckoutOwner owner = CheckoutOwner::kExternal)
+    -> co::Co<ContentAcquisition>;
 
 private:
   const ContentSourceRegistry& source_registry_;
@@ -76,6 +76,7 @@ private:
   const ResourceLoaderMap& resource_loaders_;
   ContentCache& content_cache_;
   InFlightOperationTable& in_flight_ops_;
+  const std::shared_ptr<ContentReleaseQueue>& releases_;
   observer_ptr<co::ThreadPool> thread_pool_;
   bool work_offline_ { false };
   Callbacks callbacks_;

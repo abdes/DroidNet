@@ -660,7 +660,7 @@ SceneLoaderService::~SceneLoaderService()
 {
   physics_module_subscription_.Cancel();
   // Ensure any geometry pins are released if the loader is torn down early.
-  ReleasePinnedGeometryAssets();
+  ClearGeometryReadiness();
   LOG_F(INFO, "SceneLoader: Destroying loader.");
 }
 
@@ -710,7 +710,7 @@ void SceneLoaderService::MarkConsumed()
   runtime_nodes_.clear();
   active_camera_ = {};
   // Drop any pins that were never released due to early consumption.
-  ReleasePinnedGeometryAssets();
+  ClearGeometryReadiness();
   linger_frames_ = 2;
 }
 
@@ -740,7 +740,7 @@ void SceneLoaderService::OnSceneLoaded(std::shared_ptr<data::SceneAsset> asset)
     runtime_nodes_.clear();
     active_camera_ = {};
     pending_geometry_keys_.clear();
-    pinned_geometry_keys_.clear();
+    ready_geometry_keys_.clear();
 
     const auto scene_asset = std::move(asset);
     const auto sidecar_key_opt = ResolvePhysicsSidecarKey(*scene_asset);
@@ -2435,29 +2435,15 @@ void SceneLoaderService::QueueGeometryDependencies(
   (void)asset;
   ready_ = true;
   pending_geometry_keys_.clear();
-  pinned_geometry_keys_.clear();
+  ready_geometry_keys_.clear();
 }
 
-/*!
- Release loader-held geometry references after scene instantiation.
-
- Geometry assets are pinned only for the narrow window between scene load
- completion and runtime scene construction. Releasing here restores
- normal cache eviction behavior without leaving stale loader references
- behind.
-
- ### Performance Characteristics
-
- - Time Complexity: $O(n)$ over pinned geometry keys.
- - Memory: Releases pin bookkeeping.
- - Optimization: Early-out when nothing is pinned.
-*/
-void SceneLoaderService::ReleasePinnedGeometryAssets()
+//! Clear readiness tracking; owning scene/renderable pointers retain geometry.
+void SceneLoaderService::ClearGeometryReadiness()
 {
-  // Intentionally non-destructive: geometry dependency ownership is tracked by
-  // AssetLoader's scene/material dependency graph, and explicit ReleaseAsset()
-  // here can tear down live dependency edges.
-  pinned_geometry_keys_.clear();
+  // Scene bindings and runtime renderables own the geometry pointers; this
+  // collection tracks readiness only.
+  ready_geometry_keys_.clear();
   pending_geometry_keys_.clear();
 }
 
@@ -2485,7 +2471,7 @@ auto SceneLoaderService::BuildSceneAsync(scene::Scene& scene,
   SelectActiveCamera(asset);
   EnsureCameraAndViewport(scene);
   // Geometry pins are only needed until scene instantiation finishes.
-  ReleasePinnedGeometryAssets();
+  ClearGeometryReadiness();
   LogSceneHierarchy(scene);
 
   LOG_F(INFO, "SceneLoader: Runtime scene instantiation complete.");

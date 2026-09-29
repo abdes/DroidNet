@@ -79,7 +79,7 @@ portable.
 
 ### Runtime identities and decode handoff
 
-The [identity contract](deps_and_cache.md#planned-identity-and-ownership-simplification)
+The [identity contract](deps_and_cache.md#identities)
 defines exact asset, cooked-resource and synthetic identities. The loader interns
 those values using equality and issues opaque IDs shared by the cache, dependency
 graph and in-flight operations. IDs are not hashes or packed source indices.
@@ -124,7 +124,7 @@ provides:
 - `desc_reader` and `data_readers` (decode inputs).
 - `work_offline` (policy signal: no GPU side effects).
 - `current_asset_key` (for identity-only dependency recording).
-- `source_token` and optional `dependency_collector`.
+- `source_instance` and optional `dependency_collector`.
 - `parse_only` for tooling/unit tests.
 
 Rationale: explicit and minimal decode contract that works in both runtime and
@@ -171,10 +171,9 @@ by invoking callbacks with `nullptr`.
 3. **Decode** (thread pool): run the registered loader function; record
    dependencies via `DependencyCollector`.
 4. **Publish** (owning thread):
-   - Store the decoded object in the cache.
-   - Bind `ResourceRef` dependencies to `ResourceKey`.
-   - Mutate the dependency graph.
-   - Fulfill awaiters / invoke `StartLoad*` callbacks.
+   - Bind dependency identities and acquire their internal owning controls.
+   - Freeze the Data-owned binding bundle, then publish the decoded object.
+   - Give each waiter/callback its own request control.
 
 ### Resource load (`LoadResourceAsync<T>(ResourceKey)`)
 
@@ -240,8 +239,10 @@ Decode-time dependency recording uses `DependencyCollector`:
 - Assets and resources are cached by their source-qualified identities.
 - In-flight request deduplication ensures concurrent loads of the same identity
   join a single underlying task.
-- Cache publication and dependency-graph mutation occur during the owning-thread
-  publish step, providing a single point of serialization for state.
+- Binding and cache publication run on the owner thread. Published bindings are
+  immutable and own their child lifetimes; cached reads do not rebuild them.
+- Final pointer destruction queues an allocation-free return. See
+  [ownership and release processing](deps_and_cache.md#release-processing).
 
 ---
 

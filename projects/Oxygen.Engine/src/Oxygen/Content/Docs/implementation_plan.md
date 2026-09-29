@@ -1,12 +1,20 @@
 # Content subsystem implementation plan
 
-**Last updated:** 30 Dec 2025
+**Last updated:** 29 Sep 2026
 
-This file is the **single source of truth for roadmap and status** for the
-Content subsystem.
+Current integration work is tracked in
+[ED-M08.1](../../../../../../design/editor/plan/ED-M08-runtime-parity-and-standalone-validation.md).
+This document retains the wider Content roadmap. Read the
+[ownership contract](deps_and_cache.md), [work order](#implementation-tracking-ordered-task-list)
+and [remaining budget issue](#cpu-budget-accounting).
 
-Conceptual model and boundaries live in `overview.md`. If this plan conflicts
-with `overview.md`, update the plan.
+## CPU budget accounting
+
+The `cache_budget_bytes` setting currently configures a policy whose default cost
+is one unit per entry; `consumed_bytes` therefore also reports entry units. Payload
+byte costing needs a separate approved change to the cost estimator, telemetry and
+budget tests. Automatic ownership preserves the existing policy while fixing usage
+accounting and reclamation. Track this as **CNTT-BUDGET-01 — pending, P1**.
 
 ## Goals (what we are building)
 
@@ -30,8 +38,8 @@ This table is the **work order**. Higher rows unblock lower rows.
 |   # | Status | Priority | Deliverable                                                   | Design doc                    | Notes                                                                                                                                                                |
 | --: | :----: | :------: | ------------------------------------------------------------- | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 |   1 |   ✅   |    P0    | Keep `overview.md` authoritative and consistent               | `overview.md`                 | Enforce Content↔Renderer boundary and invariants                                                                                                                     |
-|   2 |   ✅   |    P0    | Forward-only deps + unified cache + refcount eviction         | `deps_and_cache.md`           | Implemented in `AssetLoader` + `AnyCache`                                                                                                                            |
-|   3 |   ✅   |    P0    | Safe unload ordering + tests + docs polish                    | (in plan)                     | Release cascade evicts/unloads safely; tests assert resource-before-asset ordering                                                                                   |
+|   2 |   ✅   |    P0    | Exact identities and automatic CPU ownership                  | `deps_and_cache.md`           | M08.1.5–.6 validated; exact identities and automatic request controls.                                                                                               |
+|   3 |   ✅   |    P0    | Bounded release, retained bindings and shutdown safety        | `deps_and_cache.md`           | M08.1.6 validated; frozen child bindings, bounded frame batches and full explicit drains.                                                                            |
 |   4 |   ✅   |    P0    | **Loose cooked content** (filesystem-backed)                  | `loose_cooked_content.md`     | End-to-end mount + descriptor discovery + table/data readers + focused tests + diagnostics are in place.                                                             |
 |   5 |   ✅   |    P0    | Loose cooked **index** (AssetKey→descriptor path, resources)  | `loose_cooked_content.md`     | `container.index.bin` v1 schema + parser + strict mount-time validation are complete; editor-facing virtual-path resolution is available via `VirtualPathResolver`.  |
 |   6 |   ❌   |    P0    | **Scene/Level asset** (editor maps/levels)                    | `scenes_and_levels.md`        | Biggest current hole; defines composition and references                                                                                                             |

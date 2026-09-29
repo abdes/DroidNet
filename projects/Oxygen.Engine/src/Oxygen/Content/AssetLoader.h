@@ -29,6 +29,7 @@
 #include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Content/OperationCancelledException.h>
 #include <Oxygen/Content/PakFile.h>
+#include <Oxygen/Content/ResidencyPin.h>
 #include <Oxygen/Content/ResidencyPolicy.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Content/api_export.h>
@@ -63,8 +64,11 @@ namespace oxygen::content {
 
 namespace internal {
   class ContentIdentityRegistry;
-  class DependencyGraphStore;
-  class DependencyReleaseEngine;
+  class ContentReleaseQueue;
+  class ContentBindingBuilder;
+  class ContentBindingBundle;
+  struct ContentAcquisition;
+  struct SharedContentResult;
   class EvictionRegistry;
   class InFlightOperationTable;
   class PhysicsQueryService;
@@ -249,7 +253,7 @@ public:
   OXGN_CNTT_API ~AssetLoader() override;
 
   OXYGEN_MAKE_NON_COPYABLE(AssetLoader)
-  OXYGEN_DEFAULT_MOVABLE(AssetLoader)
+  OXYGEN_MAKE_NON_MOVABLE(AssetLoader)
 
   OXGN_CNTT_API auto AddPakFile(const std::filesystem::path& path)
     -> void override;
@@ -305,6 +309,7 @@ public:
   OXGN_CNTT_API auto WaitForPendingLoadsAsync() -> co::Co<> override;
   //! Clear cached assets/resources without unmounting sources.
   OXGN_CNTT_API auto TrimCache() -> void override;
+  OXGN_CNTT_API auto ProcessPendingReleases() -> void override;
   OXGN_CNTT_API auto SetResidencyPolicy(const ResidencyPolicy& policy)
     -> void override;
   [[nodiscard]] OXGN_CNTT_NDAPI auto GetResidencyPolicy() const noexcept
@@ -328,40 +333,6 @@ public:
   [[nodiscard]] OXGN_CNTT_NDAPI auto IsTelemetryEnabled() const noexcept
     -> bool;
 
-  //=== Dependency Management ===---------------------------------------------//
-
-  //! Register an asset-to-asset dependency
-  /*!
-   Records that an asset depends on another asset for proper loading order
-   and reference counting. This will increment the reference count of the
-   dependency in the cache, ensuring it remains loaded until the dependency
-   is removed.
-
-   @param dependent The asset that has the dependency
-   @param dependency The asset that is depended upon
-
-   @note The dependency's reference count is incremented in the cache.
-   @see AddResourceDependency, ReleaseAsset
-   */
-  OXGN_CNTT_API virtual auto AddAssetDependency(
-    const data::AssetKey& dependent, const data::AssetKey& dependency) -> void;
-
-  //! Register an asset-to-resource dependency
-  /*!
-   Records that an asset depends on a resource for proper loading order
-   and reference counting. This will increment the reference count of the
-   resource in the cache, ensuring it remains loaded until the dependency
-   is removed.
-
-   @param dependent The asset that has the dependency
-   @param resource_key The resource key that is depended upon
-
-   @note The resource's reference count is incremented in the cache.
-   @see AddAssetDependency, ReleaseResource
-   */
-  OXGN_CNTT_API virtual auto AddResourceDependency(
-    const data::AssetKey& dependent, ResourceKey resource_key) -> void;
-
   //=== Asset Loading ===-----------------------------------------------------//
 
   //! Coroutine-based asset load by AssetKey.
@@ -374,7 +345,7 @@ public:
 
   */
   template <IsTyped T>
-  auto LoadAssetAsync(const data::AssetKey& key) -> co::Co<std::shared_ptr<T>>
+  auto LoadAssetAsync(data::AssetKey key) -> co::Co<std::shared_ptr<T>>
   {
     // Non-canonical convenience overload for call sites that do not classify
     // request intent/priority. Canonical execution uses the request-aware
@@ -383,7 +354,7 @@ public:
   }
 
   template <IsTyped T>
-  auto LoadAssetAsync(const data::AssetKey& key, LoadRequest request)
+  auto LoadAssetAsync(data::AssetKey key, LoadRequest request)
     -> co::Co<std::shared_ptr<T>>
   {
     co_return co_await ExecuteAssetLoadAsync<T>(key, std::nullopt, request);
@@ -391,7 +362,7 @@ public:
 
   //! Read exactly this source, including a retained retired generation.
   template <IsTyped T>
-  auto LoadAssetAsync(const data::AssetKey& key, data::SourceKey source_key,
+  auto LoadAssetAsync(data::AssetKey key, data::SourceKey source_key,
     LoadRequest request = {}) -> co::Co<std::shared_ptr<T>>
   {
     const auto source_id = ResolveExactSourceId(key, source_key);
@@ -433,41 +404,35 @@ public:
     StartAssetLoad<T>(key, source_key, request, std::move(on_complete));
   }
 
-  //! Get cached asset without loading
-  /*!
-   Returns an asset if it's already loaded in the cache, without triggering
-   a load operation.
-
-   @tparam T The asset type (must satisfy IsTyped)
-   @param key The asset key to check
-   @return Shared pointer to cached asset, or nullptr if not cached
-
-   @note Does not increment reference count
-  @see LoadAssetAsync, HasAsset
-  */
+  //! Acquire a cached asset. Each returned pointer owns one request usage.
   template <IsTyped T>
-  auto GetAsset(const data::AssetKey& key) const -> std::shared_ptr<T>
+  auto GetAsset(const data::AssetKey& key) -> std::shared_ptr<T>
   {
     const auto identity = ResolveAssetIdentityForKey(key);
-    if (!identity.has_value()) {
-      return nullptr;
-    }
-    if (auto cached = content_cache_.Peek<T>(identity->cache_key)) {
-      return cached;
-    }
-    return nullptr;
+    return identity ? std::static_pointer_cast<T>(
+                        AcquireCached(T::ClassTypeId(), identity->cache_key))
+                    : nullptr;
   }
 
-  //! Resolve a dependency in its origin; only absent keys use active roots.
+  //! Acquire the parent's bound publication, including after cache
+  //! invalidation.
   template <IsTyped T>
-  auto GetAsset(const data::AssetKey& key, const data::Asset& context) const
+  auto GetAsset(const data::AssetKey& key, const data::Asset& context)
     -> std::shared_ptr<T>
   {
-    const auto source = ResolveDependencySourceId(context, key);
-    if (!source) {
-      return nullptr;
-    }
-    return content_cache_.Peek<T>(FindAssetId(key, *source));
+    return std::static_pointer_cast<T>(
+      AcquireBoundAsset(T::ClassTypeId(), key, context));
+  }
+
+  //! Borrow until the next loader mutation or suspension; creates no control.
+  template <IsTyped T>
+  auto PeekAsset(const data::AssetKey& key) const -> observer_ptr<const T>
+  {
+    AssertOwningThread();
+    const auto identity = ResolveAssetIdentityForKey(key);
+    return observer_ptr<const T> {
+      identity ? content_cache_.Peek<T>(identity->cache_key).get() : nullptr
+    };
   }
 
   //! Check if asset is loaded in cache
@@ -487,38 +452,11 @@ public:
     if (!identity.has_value()) {
       return false;
     }
-    return content_cache_.Contains(identity->cache_key);
+    return content_cache_.Contains<T>(identity->cache_key);
   }
 
-  //! Release an asset, indicating it is no longer in use by the caller.
-  /*!
-   Assets are centrally cached and shared throughout the engine, with automatic
-   reference counting and dependency tracking. When an asset is no longer in
-   use, it should be explicitly released. Releasing an asset checks it back into
-   the cache, releases all of its resource dependencies first, and then
-   recursively releases all of its asset dependencies. This ensures that
-   transitive dependencies—whether resources or other assets—are properly
-   released in a safe and efficient order.
-
-   ### Deferred Unloading Behavior
-
-   Releasing an asset and its dependencies does not guarantee their immediate
-   unloading. Unloading (as a result of eviction from the cache) occurs only
-   when an asset or resource is no longer checked out for use, either directly
-   or as a dependency, by any part of the system.
-
-   @param key The asset key to release
-   @return True if this call caused the asset to be fully evicted from the
-   cache, false if the asset is still present or was not present.
-
-   @note There is no atomic, all-or-nothing eviction of dependency trees;
-   eviction is determined individually by reference counts and dependents.
-   @see LoadAsset, HasAsset, ReleaseResource
-  */
-  OXGN_CNTT_API auto ReleaseAsset(const data::AssetKey& key) -> bool override;
-  OXGN_CNTT_API auto ReleaseAsset(const data::Asset& asset) -> bool override;
-  OXGN_CNTT_API auto PinAsset(const data::AssetKey& key) -> bool override;
-  OXGN_CNTT_API auto UnpinAsset(const data::AssetKey& key) -> bool override;
+  OXGN_CNTT_NDAPI auto PinAsset(const data::AssetKey& key)
+    -> ResidencyPin override;
 
   //! Subscribe to resource eviction notifications for a resource type.
   OXGN_CNTT_API auto SubscribeResourceEvictions(TypeId resource_type,
@@ -805,15 +743,18 @@ public:
     }
 
     const auto origin = ResolveResourceSource(key);
+    const auto epoch = releases_;
+    EnsureLoadEpoch(epoch);
     BeginAcceptedLoad();
     auto completion = Finally([this]() noexcept -> auto { EndAcceptedLoad(); });
     nursery_->Start(
-      [this, key, request, origin, completion = std::move(completion),
+      [this, key, request, origin, epoch, completion = std::move(completion),
         on_complete = std::move(on_complete)]() mutable -> co::Co<> {
         static_cast<void>(completion);
         static_cast<void>(origin);
         std::shared_ptr<T> result;
         try {
+          EnsureLoadEpoch(epoch);
           result = co_await LoadResourceAsync<T>(key, request);
         } catch (const std::exception& e) {
           LOG_F(ERROR, "StartLoadResource failed: {}", e.what());
@@ -855,16 +796,19 @@ public:
         "AssetLoader requires a thread pool for StartLoadResource (cooked)");
     }
 
+    const auto epoch = releases_;
+    EnsureLoadEpoch(epoch);
     BeginAcceptedLoad();
     auto completion = Finally([this]() noexcept -> auto { EndAcceptedLoad(); });
     nursery_->Start(
-      [this, key = cooked.key,
+      [this, epoch, key = cooked.key,
         bytes = std::vector<uint8_t>(cooked.bytes.begin(), cooked.bytes.end()),
         request, completion = std::move(completion),
         on_complete = std::move(on_complete)]() mutable -> co::Co<> {
         static_cast<void>(completion);
         std::shared_ptr<T> result;
         try {
+          EnsureLoadEpoch(epoch);
           std::span<const uint8_t> span(bytes.data(), bytes.size());
           result = co_await LoadResourceAsync<T>(
             {
@@ -880,57 +824,60 @@ public:
       });
   }
 
-  [[nodiscard]] auto GetTexture(ResourceKey key) const noexcept
+  [[nodiscard]] auto PeekTexture(ResourceKey key) const
+    -> observer_ptr<const data::TextureResource> override
+  {
+    return PeekResource<data::TextureResource>(key);
+  }
+
+  [[nodiscard]] auto GetTexture(ResourceKey key)
     -> std::shared_ptr<data::TextureResource> override
   {
     return GetResource<data::TextureResource>(key);
   }
 
-  [[nodiscard]] auto GetBuffer(ResourceKey key) const noexcept
+  [[nodiscard]] auto GetBuffer(ResourceKey key)
     -> std::shared_ptr<data::BufferResource> override
   {
     return GetResource<data::BufferResource>(key);
   }
 
-  [[nodiscard]] auto GetMaterialAsset(
-    const data::AssetKey& key, const data::Asset& context) const noexcept
-    -> std::shared_ptr<data::MaterialAsset> override
+  [[nodiscard]] auto GetMaterialAsset(const data::AssetKey& key,
+    const data::Asset& context) -> std::shared_ptr<data::MaterialAsset> override
   {
     return GetAsset<data::MaterialAsset>(key, context);
   }
 
-  [[nodiscard]] auto GetMaterialAsset(const data::AssetKey& key) const noexcept
+  [[nodiscard]] auto GetMaterialAsset(const data::AssetKey& key)
     -> std::shared_ptr<data::MaterialAsset> override
   {
     return GetAsset<data::MaterialAsset>(key);
   }
 
-  [[nodiscard]] auto GetGeometryAsset(
-    const data::AssetKey& key, const data::Asset& context) const noexcept
-    -> std::shared_ptr<data::GeometryAsset> override
+  [[nodiscard]] auto GetGeometryAsset(const data::AssetKey& key,
+    const data::Asset& context) -> std::shared_ptr<data::GeometryAsset> override
   {
     return GetAsset<data::GeometryAsset>(key, context);
   }
 
-  [[nodiscard]] auto GetGeometryAsset(const data::AssetKey& key) const noexcept
+  [[nodiscard]] auto GetGeometryAsset(const data::AssetKey& key)
     -> std::shared_ptr<data::GeometryAsset> override
   {
     return GetAsset<data::GeometryAsset>(key);
   }
 
-  [[nodiscard]] auto GetScriptAsset(
-    const data::AssetKey& key, const data::Asset& context) const noexcept
-    -> std::shared_ptr<data::ScriptAsset> override
+  [[nodiscard]] auto GetScriptAsset(const data::AssetKey& key,
+    const data::Asset& context) -> std::shared_ptr<data::ScriptAsset> override
   {
     return GetAsset<data::ScriptAsset>(key, context);
   }
 
-  [[nodiscard]] auto GetScriptAsset(const data::AssetKey& key) const noexcept
+  [[nodiscard]] auto GetScriptAsset(const data::AssetKey& key)
     -> std::shared_ptr<data::ScriptAsset> override
   {
     return GetAsset<data::ScriptAsset>(key);
   }
-  [[nodiscard]] auto GetScriptResource(ResourceKey key) const noexcept
+  [[nodiscard]] auto GetScriptResource(ResourceKey key)
     -> std::shared_ptr<data::ScriptResource> override
   {
     return GetResource<data::ScriptResource>(key);
@@ -959,14 +906,13 @@ public:
     data::pak::core::ResourceIndexT resource_index) const
     -> std::shared_ptr<const data::ScriptResource> override;
 
-  [[nodiscard]] auto GetPhysicsSceneAsset(
-    const data::AssetKey& key) const noexcept
+  [[nodiscard]] auto GetPhysicsSceneAsset(const data::AssetKey& key)
     -> std::shared_ptr<data::PhysicsSceneAsset> override
   {
     return GetAsset<data::PhysicsSceneAsset>(key);
   }
 
-  [[nodiscard]] auto GetPhysicsResource(ResourceKey key) const noexcept
+  [[nodiscard]] auto GetPhysicsResource(ResourceKey key)
     -> std::shared_ptr<data::PhysicsResource> override
   {
     return GetResource<data::PhysicsResource>(key);
@@ -1001,21 +947,19 @@ public:
     -> std::optional<data::AssetKey> override;
 
   [[nodiscard]] auto GetInputActionAsset(
-    const data::AssetKey& key, const data::Asset& context) const noexcept
+    const data::AssetKey& key, const data::Asset& context)
     -> std::shared_ptr<data::InputActionAsset> override
   {
     return GetAsset<data::InputActionAsset>(key, context);
   }
 
-  [[nodiscard]] auto GetInputActionAsset(
-    const data::AssetKey& key) const noexcept
+  [[nodiscard]] auto GetInputActionAsset(const data::AssetKey& key)
     -> std::shared_ptr<data::InputActionAsset> override
   {
     return GetAsset<data::InputActionAsset>(key);
   }
 
-  [[nodiscard]] auto GetInputMappingContextAsset(
-    const data::AssetKey& key) const noexcept
+  [[nodiscard]] auto GetInputMappingContextAsset(const data::AssetKey& key)
     -> std::shared_ptr<data::InputMappingContextAsset> override
   {
     return GetAsset<data::InputMappingContextAsset>(key);
@@ -1072,42 +1016,21 @@ public:
     return HasAsset<data::InputMappingContextAsset>(key);
   }
 
-  //! Get cached resource without loading
-  /*!
-   Returns a resource if it's already loaded in the cache, without triggering
-   a load operation.
-
-   @tparam T The resource type (must satisfy PakResource concept)
-   @param key The resource key identifying the resource
-   @return Shared pointer to cached resource, or nullptr if not cached
-
-   @note Does not increment reference count
-   @see LoadResource, HasResource
-  */
+  //! Acquire cached CPU data; copying the pointer shares this request's
+  //! control.
   template <PakResource T>
-  auto GetResource(ResourceKey key) const noexcept -> std::shared_ptr<T>
+  auto GetResource(ResourceKey key) -> std::shared_ptr<T>
   {
-    return content_cache_.Peek<T>(key.get());
+    return std::static_pointer_cast<T>(
+      AcquireCached(T::ClassTypeId(), key.get()));
   }
 
-  //! Check out a resource, incrementing its usage count.
-  /*!
-   Use this when you need to hold a resource beyond a transient query. Each
-   checkout must be paired with a matching ReleaseResource call.
-
-   @tparam T The resource type (must satisfy PakResource concept)
-   @param key The resource key identifying the resource
-   @return Shared pointer to cached resource, or nullptr if not cached
-
-   @note This method increments the cache refcount.
-   @see GetResource, ReleaseResource
-  */
+  //! Borrow until the next loader mutation or suspension; creates no control.
   template <PakResource T>
-  auto CheckOutResource(ResourceKey key) const noexcept -> std::shared_ptr<T>
+  auto PeekResource(ResourceKey key) const -> observer_ptr<const T>
   {
-    const auto cache_key = key.get();
-    return content_cache_.CheckOut<T>(
-      cache_key, oxygen::CheckoutOwner::kExternal);
+    AssertOwningThread();
+    return observer_ptr<const T> { content_cache_.Peek<T>(key.get()).get() };
   }
 
   //! Check if resource is loaded
@@ -1124,29 +1047,10 @@ public:
   template <PakResource T>
   auto HasResource(ResourceKey key) const noexcept -> bool
   {
-    return content_cache_.Contains(key.get());
+    return content_cache_.Contains<T>(key.get());
   }
 
-  //! Releases (checks in) a resource usage.
-  /*!
-   This method decrements the usage count for the resource. The resource will
-   only be evicted from the cache when all users (including all asset
-   dependents) have released (checked in) their usage.
-
-   If this call returns false, you have released your usage, but the resource is
-   still in use elsewhere or not present. The resource will only be fully
-   evicted (and return true) when all users and dependents have released it.
-
-   @param key The resource key identifying the resource.
-   @return True if this call caused the resource to be fully evicted from the
-   cache, false if the resource is still present or was not present.
-
-   @note This method is idempotent: repeated calls after eviction return false.
-   @see LoadResource, HasResource, ReleaseAsset, AnyCache
-  */
-  OXGN_CNTT_API auto ReleaseResource(ResourceKey key) -> bool override;
-  OXGN_CNTT_API auto PinResource(ResourceKey key) -> bool override;
-  OXGN_CNTT_API auto UnpinResource(ResourceKey key) -> bool override;
+  OXGN_CNTT_NDAPI auto PinResource(ResourceKey key) -> ResidencyPin override;
 
   //! Mint a synthetic, texture-typed ResourceKey suitable for buffer-driven
   //! loads.
@@ -1253,8 +1157,8 @@ private:
 
   OXGN_CNTT_API auto DecodeAssetAsyncErasedImpl(TypeId type_id,
     const data::AssetKey& key,
-    std::optional<data::SourceInstanceId> preferred_source_id = std::nullopt)
-    -> co::Co<DecodedAssetAsyncResult>;
+    std::optional<data::SourceInstanceId> preferred_source_id,
+    LoadRequest request) -> co::Co<DecodedAssetAsyncResult>;
 
   template <IsTyped T>
   void StartAssetLoad(const data::AssetKey& key,
@@ -1280,9 +1184,11 @@ private:
       return;
     }
     const auto exact_source = *target;
+    const auto epoch = releases_;
+    EnsureLoadEpoch(epoch);
     BeginAcceptedLoad();
     auto completion = Finally([this]() noexcept -> auto { EndAcceptedLoad(); });
-    nursery_->Start([this, key, request, origin, exact_source,
+    nursery_->Start([this, key, request, origin, exact_source, epoch,
                       completion = std::move(completion),
                       on_complete
                       = std::move(on_complete)]() mutable -> co::Co<> {
@@ -1290,6 +1196,7 @@ private:
       static_cast<void>(origin);
       std::shared_ptr<T> result;
       try {
+        EnsureLoadEpoch(epoch);
         result = co_await ExecuteAssetLoadAsync<T>(key, exact_source, request);
       } catch (const std::exception& e) {
         LOG_F(ERROR, "StartLoadAsset failed: {}", e.what());
@@ -1304,9 +1211,6 @@ private:
     std::optional<data::SourceInstanceId> source_id, LoadRequest request)
     -> co::Co<std::shared_ptr<T>>
   {
-    BeginAcceptedLoad();
-    const auto completion
-      = Finally([this]() noexcept -> auto { EndAcceptedLoad(); });
     request = NormalizeLoadRequest(request);
     if constexpr (std::is_same_v<T, data::MaterialAsset>) {
       co_return co_await LoadMaterialAssetAsyncImpl(key, source_id, request);
@@ -1373,39 +1277,27 @@ private:
     -> co::Co<std::shared_ptr<void>>;
 
   struct Impl;
+  struct OperationLifetime;
   std::unique_ptr<Impl> impl_;
 
   // Nursery pointer for LiveObject activation. Set by
   // ActivateAsync/OpenNursery.
   co::Nursery* nursery_ {};
 
-  //=== Dependency Tracking ===-----------------------------------------------//
-
-  // Dependency graph storage is identity-only by design.
-  //
-  // This graph MUST NOT store access state such as locators, paths, streams, or
-  // readers. Resolution from identity to access is a separate concern.
-
-  std::unique_ptr<internal::DependencyGraphStore> dependency_graph_;
-  std::unique_ptr<internal::DependencyReleaseEngine> dependency_release_engine_;
-
-  //! Helper method for the recursive descent of asset dependencies when
-  //! releasing assets.
-  auto ReleaseAssetTree(uint64_t key) -> void;
-  auto DiscardRevokedAsset(data::SourceInstanceId source, uint64_t cache_key)
-    -> bool;
-  auto ReleaseAssetCacheEntry(uint64_t key) -> bool;
   auto AssetCacheKey(const data::Asset& asset) const -> uint64_t;
-  auto AddAssetDependency(uint64_t dependent, uint64_t dependency) -> void;
-  auto AddResourceDependency(uint64_t dependent, ResourceKey resource_key)
-    -> void;
 
   //=== Unified Content Cache ===---------------------------------------------//
 
   //! Unified content cache for both assets and resources
   mutable AnyCache<uint64_t, RefCountedEviction<uint64_t>> content_cache_;
+  std::shared_ptr<internal::ContentReleaseQueue> releases_;
 
   //! Find an existing asset ID without allocating locator metadata.
+  OXGN_CNTT_API auto AcquireCached(TypeId type, uint64_t key)
+    -> std::shared_ptr<void>;
+  OXGN_CNTT_API auto AcquireBoundAsset(TypeId type, const data::AssetKey& key,
+    const data::Asset& context) -> std::shared_ptr<void>;
+
   OXGN_CNTT_API auto FindAssetId(const data::AssetKey& key,
     data::SourceInstanceId source_id) const noexcept -> uint64_t;
   struct AssetLoadRequest final {
@@ -1413,6 +1305,50 @@ private:
     uint64_t cache_key = 0;
     std::shared_ptr<const internal::IContentSource> source {};
   };
+  template <typename T>
+  auto LoadAssetPublicationAsync(const data::AssetKey& key,
+    std::optional<data::SourceInstanceId> source, LoadRequest request,
+    CheckoutOwner role) -> co::Co<internal::ContentAcquisition>;
+  template <typename T>
+  auto DecodeAndPublishAssetAsync(data::AssetKey key, AssetLoadRequest target,
+    LoadRequest request, uint64_t operation_id,
+    std::shared_ptr<internal::ContentReleaseQueue> releases)
+    -> co::Co<internal::SharedContentResult>;
+  template <typename T>
+  auto BindAssetAsync(const data::AssetKey& key, const data::Asset& parent,
+    internal::ContentBindingBuilder& bindings, LoadRequest request)
+    -> co::Co<std::shared_ptr<T>>;
+  template <typename T>
+  auto BindResourceAsync(ResourceKey key,
+    internal::ContentBindingBuilder& bindings, LoadRequest request)
+    -> co::Co<std::shared_ptr<T>>;
+  template <typename T>
+  auto BindCollectedResourcesAsync(
+    const internal::DependencyCollector& collector,
+    internal::ContentBindingBuilder& bindings, LoadRequest request) -> co::Co<>;
+
+  auto BindDependenciesAsync(data::MaterialAsset& asset,
+    const internal::DependencyCollector& collector,
+    internal::ContentBindingBuilder& bindings, LoadRequest request) -> co::Co<>;
+  auto BindDependenciesAsync(data::GeometryAsset& asset,
+    const internal::DependencyCollector& collector,
+    internal::ContentBindingBuilder& bindings, LoadRequest request) -> co::Co<>;
+  auto BindDependenciesAsync(data::SceneAsset& asset,
+    const internal::DependencyCollector& collector,
+    internal::ContentBindingBuilder& bindings, LoadRequest request) -> co::Co<>;
+  auto BindDependenciesAsync(data::PhysicsSceneAsset& asset,
+    const internal::DependencyCollector& collector,
+    internal::ContentBindingBuilder& bindings, LoadRequest request) -> co::Co<>;
+  auto BindDependenciesAsync(data::ScriptAsset& asset,
+    const internal::DependencyCollector& collector,
+    internal::ContentBindingBuilder& bindings, LoadRequest request) -> co::Co<>;
+  auto BindDependenciesAsync(data::InputActionAsset& asset,
+    const internal::DependencyCollector& collector,
+    internal::ContentBindingBuilder& bindings, LoadRequest request) -> co::Co<>;
+  auto BindDependenciesAsync(data::InputMappingContextAsset& asset,
+    const internal::DependencyCollector& collector,
+    internal::ContentBindingBuilder& bindings, LoadRequest request) -> co::Co<>;
+
   OXGN_CNTT_API auto PrepareAssetLoadRequest(const data::AssetKey& key,
     std::optional<data::SourceInstanceId> preferred_source_id = std::nullopt)
     -> std::optional<AssetLoadRequest>;
@@ -1425,10 +1361,6 @@ private:
     = std::nullopt) const -> std::optional<ResolvedAssetIdentity>;
   OXGN_CNTT_API auto AssertSourceKeyConsistency(std::string_view context) const
     -> void;
-  OXGN_CNTT_API auto AssertDependencyEdgeRefcountSymmetry(
-    std::string_view context) const -> void;
-  OXGN_CNTT_API auto AssertMountStateResetCompleteness(std::string_view context,
-    bool expect_dependency_graphs_empty) const -> void;
   OXGN_CNTT_API auto AssertResourceMappingConsistency(
     std::string_view context) const -> void;
   OXGN_CNTT_API auto ResolveSourceIdForAsset(
@@ -1462,6 +1394,9 @@ private:
   std::unordered_map<TypeId, LoadFnErased> asset_loaders_;
   std::unordered_map<TypeId, LoadFnErased> resource_loaders_;
 
+  auto RetireCacheEntry(
+    const AnyCache<uint64_t, RefCountedEviction<uint64_t>>::RetiredEntry& entry,
+    EvictionReason reason) -> void;
   void UnloadObject(
     uint64_t cache_key, const oxygen::TypeId& type_id, EvictionReason reason);
   auto FlushResourceEvictionsForUncachedMappings(
@@ -1474,6 +1409,10 @@ private:
     TypeId type_id, std::string_view type_name, LoadFnErased&& loader) -> void;
 
   // Thread ownership for single-thread phase 1 policy.
+  auto AcquireScriptBytecode(const data::ScriptAsset& asset)
+    -> std::shared_ptr<data::ScriptResource>;
+  OXGN_CNTT_API auto EnsureLoadEpoch(
+    const std::shared_ptr<internal::ContentReleaseQueue>& epoch) const -> void;
   OXGN_CNTT_API auto BeginAcceptedLoad() -> void;
   OXGN_CNTT_API auto EndAcceptedLoad() noexcept -> void;
   std::thread::id owning_thread_id_;
@@ -1484,19 +1423,6 @@ private:
         "AssetLoader used from non-owning thread (owning-thread invariant)");
     }
   }
-
-  // Debug-only structural guard. In release builds this returns false and
-  // runtime relies on upstream import/authoring/CI acyclicity validation.
-  auto DetectCycle(uint64_t start, uint64_t target)
-    -> bool; // returns true if adding edge start->target introduces cycle
-
-  // Debug-only visited guard for ReleaseAssetTree recursion diagnostics.
-  struct ReleaseVisitGuard;
-
-  template <typename ResourceT>
-  auto PublishResourceDependenciesAsync(uint64_t dependent_cache_key,
-    const internal::DependencyCollector& collector, LoadRequest request = {})
-    -> co::Co<>;
 
   struct LoadedGeometryBuffer final {
     ResourceKey key {};
@@ -1509,23 +1435,10 @@ private:
   using LoadedGeometryMaterialsByKey
     = std::unordered_map<data::AssetKey, std::shared_ptr<data::MaterialAsset>>;
 
-  auto LoadGeometryBufferDependenciesAsync(
-    const internal::DependencyCollector& collector, LoadRequest request = {})
-    -> co::Co<LoadedGeometryBuffersByIndex>;
-
-  auto LoadGeometryMaterialDependenciesAsync(
-    const internal::DependencyCollector& collector,
-    const data::GeometryAsset& owner, LoadRequest request = {})
-    -> co::Co<LoadedGeometryMaterialsByKey>;
-
   auto BindMaterialTextureKeys(
     data::MaterialAsset& material, data::SourceInstanceId source) -> void;
 
   auto BindGeometryRuntimePointers(data::GeometryAsset& asset,
-    const LoadedGeometryBuffersByIndex& buffers_by_index,
-    const LoadedGeometryMaterialsByKey& materials_by_key) -> void;
-
-  auto PublishGeometryDependencyEdges(uint64_t dependent_cache_key,
     const LoadedGeometryBuffersByIndex& buffers_by_index,
     const LoadedGeometryMaterialsByKey& materials_by_key) -> void;
 
@@ -1554,6 +1467,7 @@ private:
   std::unique_ptr<internal::ContentIdentityRegistry> identities_;
   uint64_t next_eviction_subscriber_id_ { 1 };
   std::shared_ptr<int> eviction_alive_token_;
+  std::shared_ptr<int> lifetime_token_ { std::make_shared<int>(0) };
 
   //=== In-flight Deduplication ===------------------------------------------//
   std::unique_ptr<internal::InFlightOperationTable> in_flight_ops_;
@@ -1566,8 +1480,6 @@ private:
   auto MintSyntheticResourceKey(TypeId resource_type) -> ResourceKey;
   uint64_t next_synthetic_serial_ = 1;
   std::atomic<uint64_t> next_load_request_sequence_ { 1 };
-  std::unordered_map<uint64_t, uint32_t> pinned_resource_counts_ {};
-  std::unordered_map<uint64_t, uint32_t> pinned_asset_counts_ {};
   observer_ptr<console::Console> console_ { nullptr };
   struct TrimTelemetry final {
     uint64_t attempts { 0 };
@@ -1621,7 +1533,7 @@ public:
   using DebugAssetDependencyMap
     = std::unordered_map<uint64_t, std::unordered_set<uint64_t>>;
   OXGN_CNTT_NDAPI auto GetDebugAssetDependencyMap() const
-    -> const DebugAssetDependencyMap&;
+    -> DebugAssetDependencyMap;
   OXGN_CNTT_NDAPI auto GetDebugAssetKey(uint64_t cache_key) const
     -> std::optional<data::AssetKey>;
 
@@ -1644,6 +1556,10 @@ public:
 #endif
 
 private:
+#ifndef NDEBUG
+  auto PeekCachedAsset(uint64_t key) const
+    -> std::shared_ptr<const data::Asset>;
+#endif
   void UnsubscribeResourceEvictions(
     TypeId resource_type, uint64_t id) noexcept override;
 };
@@ -1688,21 +1604,20 @@ static_assert(
 //-- Known Asset Types --
 
 template OXGN_CNTT_API auto AssetLoader::LoadAssetAsync<data::MaterialAsset>(
-  const data::AssetKey& key) -> co::Co<std::shared_ptr<data::MaterialAsset>>;
+  data::AssetKey key) -> co::Co<std::shared_ptr<data::MaterialAsset>>;
 
 template OXGN_CNTT_API auto AssetLoader::LoadAssetAsync<data::GeometryAsset>(
-  const data::AssetKey& key) -> co::Co<std::shared_ptr<data::GeometryAsset>>;
+  data::AssetKey key) -> co::Co<std::shared_ptr<data::GeometryAsset>>;
 
 template OXGN_CNTT_API auto AssetLoader::LoadAssetAsync<data::SceneAsset>(
-  const data::AssetKey& key) -> co::Co<std::shared_ptr<data::SceneAsset>>;
+  data::AssetKey key) -> co::Co<std::shared_ptr<data::SceneAsset>>;
 
 template OXGN_CNTT_API auto AssetLoader::LoadAssetAsync<data::ScriptAsset>(
-  const data::AssetKey& key) -> co::Co<std::shared_ptr<data::ScriptAsset>>;
+  data::AssetKey key) -> co::Co<std::shared_ptr<data::ScriptAsset>>;
 template OXGN_CNTT_API auto AssetLoader::LoadAssetAsync<data::InputActionAsset>(
-  const data::AssetKey& key) -> co::Co<std::shared_ptr<data::InputActionAsset>>;
+  data::AssetKey key) -> co::Co<std::shared_ptr<data::InputActionAsset>>;
 template OXGN_CNTT_API auto
-AssetLoader::LoadAssetAsync<data::InputMappingContextAsset>(
-  const data::AssetKey& key)
+AssetLoader::LoadAssetAsync<data::InputMappingContextAsset>(data::AssetKey key)
   -> co::Co<std::shared_ptr<data::InputMappingContextAsset>>;
 
 //-- Known Resource Types --

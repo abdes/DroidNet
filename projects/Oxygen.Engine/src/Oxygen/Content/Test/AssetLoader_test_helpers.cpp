@@ -12,24 +12,12 @@
 #include <filesystem>
 #include <functional>
 #include <initializer_list>
-#include <span>
 #include <stdexcept>
 #include <string>
 
 #include "./AssetLoader_test.h"
-#include "Fixtures/LooseCookedTestWriter.h"
-#include <gtest/gtest.h>
 
-#include <Oxygen/Content/AssetLoader.h>
-#include <Oxygen/Content/Loaders/MaterialLoader.h>
 #include <Oxygen/Data/AssetKey.h>
-#include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/MaterialAsset.h>
-#include <Oxygen/Data/PakFormat_render.h>
-#include <Oxygen/OxCo/Co.h>
-#include <Oxygen/OxCo/Nursery.h>
-#include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
-#include <Oxygen/OxCo/ThreadPool.h>
 
 using oxygen::content::testing::AssetLoaderLoadingTest;
 
@@ -549,51 +537,3 @@ auto AssetLoaderLoadingTest::CreateTestAssetKey(const std::string& name)
     key_bytes.begin());
   return AssetKey::FromBytes(key_bytes);
 }
-
-namespace oxygen::content::testing {
-
-auto CheckLoadedMaterialGraph(co::testing::TestEventLoop* loop,
-  std::filesystem::path root, MaterialGraphCheck check) -> co::Co<>
-{
-  LooseCookedTestWriter writer(root);
-  std::array<data::AssetKey, 4> keys {};
-  for (std::size_t index = 0; index < keys.size(); ++index) {
-    const auto name = "material" + std::to_string(index);
-    const auto virtual_path = "/Test/Graph/" + name + ".omat";
-    keys.at(index) = data::AssetKey::FromVirtualPath(virtual_path);
-    data::pak::render::MaterialAssetDesc descriptor {};
-    descriptor.header.asset_type
-      = static_cast<std::uint8_t>(data::AssetType::kMaterial);
-    descriptor.header.version = data::pak::render::kMaterialAssetVersion;
-    writer.WriteAssetDescriptor(keys.at(index), data::AssetType::kMaterial,
-      virtual_path, name + ".omat",
-      std::as_bytes(std::span { &descriptor, 1U }));
-  }
-  static_cast<void>(writer.Finish());
-  co::ThreadPool pool(*loop, 2);
-  AssetLoaderConfig config {};
-  config.thread_pool = observer_ptr { &pool };
-  AssetLoader loader(engine::internal::EngineTagFactory::Get(), config);
-  loader.RegisterLoader(loaders::LoadMaterialAsset);
-  OXCO_WITH_NURSERY(nursery)
-  {
-    co_await nursery.Start(&AssetLoader::ActivateAsync, &loader);
-    loader.Run();
-    loader.AddLooseCookedRoot(root);
-    LoadedMaterialGraph assets {};
-    for (std::size_t index = 0; index < keys.size(); ++index) {
-      assets.at(index)
-        = co_await loader.LoadAssetAsync<data::MaterialAsset>(keys.at(index));
-      if (!assets.at(index)) {
-        ADD_FAILURE() << "Material graph fixture failed to decode";
-        loader.Stop();
-        co_return co::kJoin;
-      }
-    }
-    check(loader, assets);
-    loader.Stop();
-    co_return co::kJoin;
-  };
-}
-
-} // namespace oxygen::content::testing

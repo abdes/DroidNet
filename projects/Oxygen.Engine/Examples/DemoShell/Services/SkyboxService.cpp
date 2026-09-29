@@ -6,19 +6,34 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdint>
+#include <cstring>
 #include <filesystem>
+#include <memory>
+#include <optional>
+#include <span>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "DemoShell/Services/SkyboxService.h"
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/IAssetLoader.h>
+#include <Oxygen/Cooker/Import/TextureImportError.h>
+#include <Oxygen/Cooker/Import/TextureImportTypes.h>
 #include <Oxygen/Cooker/Import/TextureImporter.h>
 #include <Oxygen/Cooker/Import/TexturePackingPolicy.h>
+#include <Oxygen/Cooker/Import/TextureSourceAssembly.h>
+#include <Oxygen/Core/Types/ColorSpace.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyLight.h>
 #include <Oxygen/Scene/Environment/SkySphere.h>
+#include <Oxygen/Scene/Scene.h>
 
 namespace oxygen::examples {
 namespace {
@@ -389,23 +404,18 @@ auto SkyboxService::PinCurrentResource(content::ResourceKey key) -> bool
   if (!asset_loader_ || key == content::ResourceKey { 0U }) {
     return false;
   }
-  if (key == pinned_resource_key_) {
-    return true;
-  }
-  if (!asset_loader_->PinResource(key)) {
+  auto pin = asset_loader_->PinResource(key);
+  if (!pin) {
     return false;
   }
-  ReleasePinnedResource();
+  resource_pin_ = std::move(pin);
   pinned_resource_key_ = key;
   return true;
 }
 
 auto SkyboxService::ReleasePinnedResource() noexcept -> void
 {
-  if (!asset_loader_ || pinned_resource_key_ == content::ResourceKey { 0U }) {
-    return;
-  }
-  static_cast<void>(asset_loader_->UnpinResource(pinned_resource_key_));
+  resource_pin_.Reset();
   pinned_resource_key_ = content::ResourceKey { 0U };
 }
 

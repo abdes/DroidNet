@@ -119,7 +119,7 @@ existing-ID lookup and cached inspection do not allocate. Decoded-cache eviction
 preserves locators for readable sources. Mutable refresh revokes old reads;
 retained immutable generations keep their exact readers and leases.
 
-The [identity and ownership contract](deps_and_cache.md#planned-identity-and-ownership-simplification)
+The [identity and ownership contract](deps_and_cache.md#identities)
 owns identity fields, metadata retention and the next ownership migration.
 
 ---
@@ -154,21 +154,20 @@ This is the conceptual role of the core types (names match the code).
   - Implemented by at least PAK-backed and loose-cooked-backed source adapters.
 - `AssetLoader`
   - Orchestrates async loading from mounted sources + caching.
-  - Applies dependency edges during an owning-thread publish step.
+  - Freezes Data-owned dependency bindings before owner-thread publication.
   - Provides deterministic release/unload cascades.
 - `LoaderContext`
   - Passed by value into every loader.
   - Provides `desc_reader` (descriptor stream) and `data_readers` (data region
-    readers) plus `source_token`, `work_offline` policy, optional
+    readers) plus `source_instance`, `work_offline` policy, optional
     `DependencyCollector` for identity-only dependency recording, and optional
     `source_pak` / `source_content` source views.
 - `ResourceTable<T>`
   - Lightweight offset resolver: maps a PAK resource index to the descriptor
     offset.
 - `ResourceKey`
-  - Engine-wide cache key for a resource. Constructed from
-    (sourceId, resourceTypeIndex, resourceIndex), so resources remain unique
-    even though their indices are source-scoped.
+  - Opaque ContentId interned from the complete source/type/index identity;
+    it contains no packed source bits or hash-derived identity.
 
 ---
 
@@ -179,11 +178,11 @@ This is the conceptual role of the core types (names match the code).
 ```mermaid
 flowchart TD
   A["Caller: LoadAssetAsync&lt;T&gt;(AssetKey) or StartLoadAsset&lt;T&gt;(AssetKey)"] --> B{"Cache hit?"}
-  B -- Yes --> C["Return cached shared instance"]
+  B -- Yes --> C["Acquire one request control for the cached instance"]
   B -- No --> D["Resolve AssetKey to (source, locator)<br/>(owning thread)"]
   D --> E["Read cooked bytes (descriptor + tables/payloads)<br/>(thread pool)"]
   E --> F["Decode via registered loader<br/>Collect identity deps (DependencyCollector)<br/>(thread pool)"]
-  F --> G["Publish to cache + apply deps<br/>(owning thread)"]
+  F --> G["Bind dependencies, freeze the bundle, then publish<br/>(owning thread)"]
   G --> H["Fulfill awaiters / invoke StartLoad callback<br/>(owning thread)"]
 ```
 
@@ -192,7 +191,7 @@ flowchart TD
 ```mermaid
 flowchart TD
   A["Caller: LoadResourceAsync&lt;T&gt;(ResourceKey) or StartLoadResource&lt;T&gt;(ResourceKey)"] --> B{"Cache hit?"}
-  B -- Yes --> C["Return cached shared instance"]
+  B -- Yes --> C["Acquire one request control for the cached instance"]
   B -- No --> D["Resolve ResourceKey to source + offsets<br/>(owning thread)"]
   D --> E["Read cooked bytes (table + payload)<br/>(thread pool)"]
   E --> F["Decode via registered loader<br/>(thread pool)"]
@@ -202,17 +201,11 @@ flowchart TD
 
 ### Releasing and unloading
 
-```mermaid
-flowchart TD
-  A["Caller: ReleaseAsset(AssetKey)"] --> B["ReleaseAssetTree(AssetKey)"]
-  B --> C["Check-in all resource dependencies first<br/>(cache CheckIn for each ResourceKey)"]
-  C --> D["Recursively ReleaseAssetTree on each asset dependency"]
-  D --> E["Check-in the asset itself<br/>(cache CheckIn(ContentId))"]
-  E --> F{"Refcount reaches zero?"}
-  F -- No --> G["Asset/resource remains cached<br/>(still used elsewhere)"]
-  F -- Yes --> H["Cache evicts entry"]
-  H --> I["Invoke registered unloader for the type<br/>(unload-on-eviction callback)"]
-```
+Owning pointers and residency pins return their usages automatically. Each request
+has an exact entry ticket; copied pointers share that request. Frame-start processing
+returns a bounded batch on the loader thread. Explicit trim drains returns and evicts
+idle entries. Retained parents keep their immutable child bindings after invalidation.
+See [ownership and release processing](deps_and_cache.md#release-processing).
 
 ---
 

@@ -39,7 +39,6 @@ private:
   observer_ptr<content::IAssetLoader> loader_;
   std::shared_ptr<LoadState> load_state_;
   content::ResourceKey key_ {};
-  bool pinned_ { false };
 };
 
 } // namespace oxygen::examples::vortex_basic

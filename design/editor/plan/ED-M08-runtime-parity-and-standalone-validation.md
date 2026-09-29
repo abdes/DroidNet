@@ -1,8 +1,8 @@
 # ED-M08 — Runtime parity and standalone qualification
 
-Status: **in progress — M08.1.1–M08.1.5 validated; M08.1.6 next**
+Status: **in progress — M08.1.1–M08.1.6 validated; M08.1.7 next**
 
-Next: **M08.1.6 automatic load ownership**. Commit each remaining sub-slice after its exit checks.
+Current: **M08.1.7 integrity inventory**. Commit each remaining sub-slice after its exit checks.
 See [owners](#2-implementation-document-map), [remaining increments](#m081-remaining-increments)
 and [exit checklist](#7-exit-checklist). Captured-sky IBL is delivered by
 [VX-IBL-01](../../../projects/Oxygen.Engine/design/vortex/milestones/VX-IBL-01/README.md);
@@ -142,7 +142,7 @@ the owning later slices.
 | M08.1.3 Emission                 | validated | Float32 cooked RGB and canonical colour/intensity sources; native version rejection, editor templates/adapters and fixture producers. Retire the affected managed binary writer route. Test finite HDR, 9.7 precision and source colour preservation at zero intensity.                                                                                         |
 | M08.1.4 Cutover                  | validated | Publish standalone retained imports as immutable generations through Cooker/Content; upgrade maintained editor projects and retained settings, recook demo/source imports and PAKs, refresh SDK/Interop, and verify normal editor loading. Reject retired formats; retain no compatibility reader or dual source representation.                                |
 | M08.1.5 Runtime identities       | validated | Intern full typed identities with mounted-source instance identity; reuse opaque IDs in cache, dependencies and in-flight work. Remove hash-as-identity, duplicate reverse registries and packed runtime source IDs. Prove forced-collision separation, same-SourceKey refresh isolation, lazy reload after eviction and bounded locator metadata.              |
-| M08.1.6 Automatic load ownership | planned   | Content-owned automatic checkout controls, explicit borrowing and residency pins; remove manual release balancing. Prove per-request ownership across coalesced loads, dependency transfers, cancellation, off-thread destruction and shutdown; preserve allocation-free IBL inspection.                                                                        |
+| M08.1.6 Automatic load ownership | validated | Content-owned automatic checkout controls, explicit borrowing and residency pins; remove manual release balancing. Prove per-request ownership across coalesced loads, dependency transfers, cancellation, off-thread destruction and shutdown; preserve allocation-free IBL inspection.                                                                        |
 | M08.1.7 Integrity inventory      | planned   | Native loose index owns complete file sizes/digests and membership; protected readers reuse verification. Remove duplicate managed output proofs. Reject tampering, missing/extra members and stale verification; bump the index format and recook.                                                                                                             |
 | M08.1.8 Project publication      | planned   | Select one immutable ordered root set through an atomic project head; retain authored-source CAS and preview rollback. Remove cooked-directory swap/recovery phases. Keep existing incremental staging seed copies initially. Qualify multi-root crash recovery, conflicts and old readers.                                                                     |
 | M08.1.9 Native analysis          | planned   | Batch native source dependency/output analysis against captured input proofs. Managed orchestration keeps project resolution, dirty state and snapshot ownership. Remove parallel descriptor dependency parsers; prove analyzed/cooked closure equality and bounded process launches.                                                                           |
@@ -229,6 +229,48 @@ Reproduce from the engine root:
   --gtest_filter=ContentIdentityBenchmark.DISABLED_LocatorCost --gtest_repeat=3
 ```
 
+#### M08.1.6 qualification and ownership baseline
+
+Automatic request controls and immutable parent bindings replace manual release
+balancing and the duplicate dependency graph. Exact cache-incarnation tickets
+isolate replacements; frame-start processing handles 128 returned controls,
+including frames without views. Explicit trim, pressure recovery and shutdown
+drain fully. The [Content contract](../../../projects/Oxygen.Engine/src/Oxygen/Content/Docs/deps_and_cache.md)
+owns lifetime and failure semantics.
+
+Full Debug/Release engine and example builds pass without MSVC warnings;
+**422 Debug / 419 Release** focused tests pass. Both SDK installs, Interop and
+normal editor builds pass; existing managed analyzer warnings remain in unchanged
+editor code. The selected four tidy checks are clean. Source review and regressions
+cover callback-driven destruction/restart, allocation failure, off-thread returns,
+coalesced delivery, retained children and generation-isolated script reload.
+RenderScene passes `ibl_persist_and_replace` and `ibl_reopen` with isolated
+Sponza/Lantern settings, 1920×1080 at 60 FPS and the D3D12 debug layer.
+
+Release CPU baseline (2026-09-29, Ryzen 9 9950X, MSVC 14.51 x64):
+
+| Measurement                                              | Result   |
+| -------------------------------------------------------- | -------- |
+| Warm acquisition and enqueue, median across three runs   | 85.9 ns  |
+| Drain 128 records, median                                | 2.8 µs   |
+| Drain 128 records, P95                                   | 2.9 µs   |
+| Destroy a 64 MiB BufferResource, median across runs      | 1.589 ms |
+| Destroy a 64 MiB BufferResource, largest observed sample | 3.254 ms |
+
+Each run measures 512 batches of 128 acquisitions and 32 large-payload releases.
+The batch limit bounds bookkeeping; individual CPU payload destruction remains
+synchronous. Existing entry-unit budget accounting is unchanged; byte weighting
+is tracked as [CNTT-BUDGET-01](../../../projects/Oxygen.Engine/src/Oxygen/Content/Docs/implementation_plan.md#cpu-budget-accounting).
+
+Reproduce from the engine root:
+
+```powershell
+./out/build-ninja/bin/Release/Oxygen.Content.ContentOwnership.Tests.exe `
+  --gtest_also_run_disabled_tests `
+  --gtest_filter=ContentOwnershipBenchmark.DISABLED_AcquisitionAndReleaseCost `
+  --gtest_repeat=3
+```
+
 Qualify the engine and all maintained examples before editor validation: finish
 native content migration, retained reimport, loose/PAK loading and bounded runtime
 checks first. Keep the existing IBL rendering and performance contracts intact.
@@ -242,7 +284,7 @@ and authored identity without placeholder nodes or omitted outputs. Qualify
 descriptor generation, native cooking/loading and both formerly blocked
 `NewScene2` project scenes; keep invalid component references rejected.
 
-Owner contracts: [Content identities/ownership](../../../projects/Oxygen.Engine/src/Oxygen/Content/Docs/deps_and_cache.md#planned-identity-and-ownership-simplification),
+Owner contracts: [Content identities/ownership](../../../projects/Oxygen.Engine/src/Oxygen/Content/Docs/deps_and_cache.md#identities),
 [native integrity inventory](../../../projects/Oxygen.Engine/src/Oxygen/Content/Docs/loose_cooked_content.md#planned-complete-integrity-inventory),
 and [project publication/analysis](../lld/content-pipeline.md#22-planned-content-pipeline-simplification).
 Fix the wrong-type cache-checkout retain and qualify physics-sidecar hashes after

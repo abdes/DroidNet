@@ -7,24 +7,33 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <span>
 #include <stdexcept>
 #include <string>
 #include <tuple>
+#include <utility>
 #include <vector>
-
-#include <Oxygen/Testing/GTest.h>
-
-#include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Content/Loaders/BufferLoader.h>
-#include <Oxygen/Content/Loaders/MaterialLoader.h>
-#include <Oxygen/Content/Loaders/TextureLoader.h>
-#include <Oxygen/OxCo/Co.h>
-#include <Oxygen/OxCo/Run.h>
-#include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
 
 #include "./AssetLoader_test.h"
 #include "Utils/PakUtils.h"
+
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/Content/IAssetLoader.h>
+#include <Oxygen/Content/Loaders/BufferLoader.h>
+#include <Oxygen/Content/Loaders/MaterialLoader.h>
+#include <Oxygen/Content/Loaders/TextureLoader.h>
+#include <Oxygen/Content/ResidencyPolicy.h>
+#include <Oxygen/Content/ResourceKey.h>
+#include <Oxygen/Data/BufferResource.h>
+#include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
+#include <Oxygen/OxCo/Run.h>
+#include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
+#include <Oxygen/OxCo/ThreadPool.h>
+#include <Oxygen/Testing/GTest.h>
 
 using ::testing::NotNull;
 
@@ -64,7 +73,7 @@ auto MakeBytesFromHexdump(const std::string& hexdump, const std::size_t size,
   std::vector<uint8_t> bytes(size, fill);
   const auto copy_count = std::min(bytes.size(), header.size());
   for (std::size_t i = 0; i < copy_count; ++i) {
-    bytes[i] = static_cast<uint8_t>(header[i]);
+    bytes.at(i) = static_cast<uint8_t>(header.at(i));
   }
   return bytes;
 }
@@ -170,11 +179,10 @@ NOLINT_TEST_F(AssetLoaderAutoTrimAsyncTest,
         CookedResourceData<BufferResource> { .key = key_a, .bytes = span_a });
       EXPECT_THAT(res_a, NotNull());
 
-      auto checkout_a = loader.CheckOutResource<BufferResource>(key_a);
+      auto checkout_a = loader.GetResource<BufferResource>(key_a);
       EXPECT_THAT(checkout_a, NotNull());
       checkout_a.reset();
-      loader.ReleaseResource(key_a);
-      loader.ReleaseResource(key_a);
+      res_a.reset();
       EXPECT_TRUE(loader.HasBuffer(key_a));
 
       std::span<const uint8_t> span_b(bytes_b.data(), bytes_b.size());
@@ -190,13 +198,13 @@ NOLINT_TEST_F(AssetLoaderAutoTrimAsyncTest,
       EXPECT_GE(state.reclaimed_bytes, 1U);
       const auto telemetry = loader.GetTelemetryStats();
       EXPECT_GE(
-        telemetry.buffer_resources[AssetLoader::TypedLoadMetric::kRequests],
+        telemetry.buffer_resources.at(AssetLoader::TypedLoadMetric::kRequests),
         2U);
-      EXPECT_GE(
-        telemetry.buffer_resources[AssetLoader::TypedLoadMetric::kCacheMisses],
+      EXPECT_GE(telemetry.buffer_resources.at(
+                  AssetLoader::TypedLoadMetric::kCacheMisses),
         2U);
-      EXPECT_GE(
-        telemetry.buffer_resources[AssetLoader::TypedLoadMetric::kTasksSpawned],
+      EXPECT_GE(telemetry.buffer_resources.at(
+                  AssetLoader::TypedLoadMetric::kTasksSpawned),
         2U);
       EXPECT_EQ(telemetry.trim.manual_attempts + telemetry.trim.auto_attempts,
         state.trim_attempts);
@@ -253,13 +261,13 @@ NOLINT_TEST_F(AssetLoaderAutoTrimAsyncTest,
       const auto telemetry = loader.GetTelemetryStats();
       EXPECT_FALSE(telemetry.telemetry_enabled);
       EXPECT_EQ(
-        telemetry.buffer_resources[AssetLoader::TypedLoadMetric::kRequests],
+        telemetry.buffer_resources.at(AssetLoader::TypedLoadMetric::kRequests),
         0U);
       EXPECT_EQ(
-        telemetry.buffer_resources[AssetLoader::TypedLoadMetric::kCacheHits],
+        telemetry.buffer_resources.at(AssetLoader::TypedLoadMetric::kCacheHits),
         0U);
-      EXPECT_EQ(
-        telemetry.buffer_resources[AssetLoader::TypedLoadMetric::kCacheMisses],
+      EXPECT_EQ(telemetry.buffer_resources.at(
+                  AssetLoader::TypedLoadMetric::kCacheMisses),
         0U);
       EXPECT_EQ(telemetry.trim.manual_attempts, 0U);
       EXPECT_EQ(telemetry.trim.auto_attempts, 0U);
@@ -314,7 +322,7 @@ NOLINT_TEST_F(AssetLoaderAutoTrimAsyncTest,
       auto res_a = co_await loader.LoadResourceAsync<BufferResource>(
         CookedResourceData<BufferResource> { .key = key_a, .bytes = span_a });
       EXPECT_THAT(res_a, NotNull());
-      loader.ReleaseResource(key_a);
+      res_a.reset();
       EXPECT_TRUE(loader.HasBuffer(key_a));
 
       std::span<const uint8_t> span_b(bytes_b.data(), bytes_b.size());
@@ -376,7 +384,7 @@ NOLINT_TEST_F(AssetLoaderAutoTrimAsyncTest,
       auto res_a = co_await loader.LoadResourceAsync<BufferResource>(
         CookedResourceData<BufferResource> { .key = key_a, .bytes = bytes_a });
       EXPECT_THAT(res_a, NotNull());
-      loader.ReleaseResource(key_a);
+      res_a.reset();
       EXPECT_TRUE(loader.HasBuffer(key_a));
 
       auto res_b = co_await loader.LoadResourceAsync<BufferResource>(
@@ -445,8 +453,7 @@ NOLINT_TEST_F(AssetLoaderAutoTrimAsyncTest,
             .bytes = std::span<const uint8_t>(bytes.data(), bytes.size()),
           });
         EXPECT_THAT(res, NotNull());
-        loader.ReleaseResource(key);
-        loader.ReleaseResource(key);
+        res.reset();
 
         const auto cur = loader.QueryResidencyPolicyState();
         EXPECT_GE(cur.trim_attempts, prev.trim_attempts);
@@ -506,7 +513,7 @@ NOLINT_TEST_F(AssetLoaderAutoTrimAsyncTest,
             .bytes = std::span<const uint8_t>(bytes_a.data(), bytes_a.size()),
           });
         EXPECT_THAT(a, NotNull());
-        loader.ReleaseResource(key_a);
+        a.reset();
 
         auto b = co_await loader.LoadResourceAsync<BufferResource>(
           CookedResourceData<BufferResource> {
@@ -569,7 +576,7 @@ NOLINT_TEST_F(AssetLoaderAutoTrimAsyncTest,
       auto first = co_await loader.LoadResourceAsync<BufferResource>(
         CookedResourceData<BufferResource> { .key = key_a, .bytes = bytes_a });
       EXPECT_THAT(first, NotNull());
-      loader.ReleaseResource(key_a);
+      first.reset();
       EXPECT_TRUE(loader.HasBuffer(key_a));
 
       auto second = co_await loader.LoadResourceAsync<BufferResource>(
@@ -622,7 +629,7 @@ NOLINT_TEST_F(AssetLoaderAutoTrimAsyncTest,
       auto res = co_await loader.LoadResourceAsync<BufferResource>(
         CookedResourceData<BufferResource> { .key = key, .bytes = bytes });
       EXPECT_THAT(res, NotNull());
-      loader.ReleaseResource(key);
+      res.reset();
       EXPECT_TRUE(loader.HasBuffer(key));
 
       const auto before = loader.QueryResidencyPolicyState();
@@ -679,9 +686,10 @@ NOLINT_TEST_F(
       auto res_a = co_await loader.LoadResourceAsync<BufferResource>(
         CookedResourceData<BufferResource> { .key = key_a, .bytes = bytes_a });
       EXPECT_THAT(res_a, NotNull());
-      EXPECT_TRUE(loader.PinResource(key_a));
+      auto residency_pin = loader.PinResource(key_a);
+      EXPECT_TRUE(residency_pin);
 
-      loader.ReleaseResource(key_a);
+      res_a.reset();
       EXPECT_TRUE(loader.HasBuffer(key_a));
 
       auto res_b = co_await loader.LoadResourceAsync<BufferResource>(
@@ -690,7 +698,7 @@ NOLINT_TEST_F(
 
       EXPECT_TRUE(loader.HasBuffer(key_a));
       EXPECT_FALSE(loader.HasBuffer(key_b));
-      EXPECT_TRUE(loader.UnpinResource(key_a));
+      residency_pin.Reset();
 
       loader.Stop();
       co_return oxygen::co::kJoin;
@@ -706,7 +714,7 @@ NOLINT_TEST_F(AssetLoaderAutoTrimAsyncTest,
 
   AssetLoaderConfig config {};
   config.residency_policy = oxygen::content::ResidencyPolicy {
-    .cache_budget_bytes = 1,
+    .cache_budget_bytes = (std::numeric_limits<uint64_t>::max)(),
     .trim_mode = oxygen::content::ResidencyTrimMode::kAutoOnOverBudget,
     .default_priority_class = oxygen::content::LoadPriorityClass::kDefault,
   };
@@ -737,9 +745,14 @@ NOLINT_TEST_F(AssetLoaderAutoTrimAsyncTest,
       EXPECT_THAT(material, NotNull());
       const auto tex_key
         = material ? material->GetBaseColorTextureKey() : ResourceKey {};
-      EXPECT_TRUE(loader.PinAsset(material_key));
+      auto policy = loader.GetResidencyPolicy();
+      policy.cache_budget_bytes
+        = loader.QueryResidencyPolicyState().consumed_bytes;
+      loader.SetResidencyPolicy(policy);
+      auto residency_pin = loader.PinAsset(material_key);
+      EXPECT_TRUE(residency_pin);
       material.reset();
-      (void)loader.ReleaseAsset(material_key);
+
       EXPECT_TRUE(loader.HasMaterialAsset(material_key));
 
       const auto pressure_key = loader.MintSyntheticBufferKey();
@@ -753,7 +766,7 @@ NOLINT_TEST_F(AssetLoaderAutoTrimAsyncTest,
       EXPECT_TRUE(loader.HasMaterialAsset(material_key));
       EXPECT_FALSE(loader.HasBuffer(pressure_key));
 
-      EXPECT_TRUE(loader.UnpinAsset(material_key));
+      residency_pin.Reset();
       loader.TrimCache();
       EXPECT_FALSE(loader.HasMaterialAsset(material_key));
       if (tex_key.get() != 0U) {
@@ -798,7 +811,6 @@ NOLINT_TEST_F(AssetLoaderAutoTrimAsyncTest,
           = co_await loader.LoadAssetAsync<MaterialAsset>(material_key);
         EXPECT_THAT(material, NotNull());
         material.reset();
-        (void)loader.ReleaseAsset(material_key);
       }
 
       const auto state = loader.QueryResidencyPolicyState();
@@ -807,7 +819,6 @@ NOLINT_TEST_F(AssetLoaderAutoTrimAsyncTest,
       auto replay = co_await loader.LoadAssetAsync<MaterialAsset>(material_key);
       EXPECT_THAT(replay, NotNull());
       replay.reset();
-      (void)loader.ReleaseAsset(material_key);
 
       loader.TrimCache();
       EXPECT_FALSE(loader.HasMaterialAsset(material_key));
@@ -935,7 +946,7 @@ NOLINT_TEST_F(AssetLoaderAutoTrimAsyncTest,
           CookedResourceData<BufferResource> {
             .key = key_a, .bytes = bytes_a });
         EXPECT_THAT(a, NotNull());
-        loader.ReleaseResource(key_a);
+        a.reset();
 
         auto b = co_await loader.LoadResourceAsync<BufferResource>(
           CookedResourceData<BufferResource> {

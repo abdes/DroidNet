@@ -18,6 +18,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/EvictionEvents.h>
+#include <Oxygen/Content/ResidencyPin.h>
 #include <Oxygen/Content/ResidencyPolicy.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Content/ResourceTypeList.h>
@@ -369,6 +370,9 @@ public:
 
   //! Clear cached assets/resources without unmounting sources.
   virtual auto TrimCache() -> void = 0;
+  //! Process the routine bounded batch at engine frame start, including
+  //! viewless frames.
+  virtual auto ProcessPendingReleases() -> void = 0;
 
   //! Set runtime residency policy (budget/trim/priority defaults).
   virtual auto SetResidencyPolicy(const ResidencyPolicy& policy) -> void = 0;
@@ -401,44 +405,42 @@ public:
   virtual auto ApplyConsoleCVars(const console::Console& console) -> void = 0;
 
   //! Get cached resource without triggering a load.
-  [[nodiscard]] virtual auto GetTexture(ResourceKey key) const noexcept
+  //! Allocation-free inspection until the next loader mutation or suspension.
+  [[nodiscard]] virtual auto PeekTexture(ResourceKey key) const
+    -> observer_ptr<const data::TextureResource> = 0;
+
+  [[nodiscard]] virtual auto GetTexture(ResourceKey key)
     -> std::shared_ptr<data::TextureResource> = 0;
 
   //! Get cached resource without triggering a load.
-  [[nodiscard]] virtual auto GetBuffer(ResourceKey key) const noexcept
+  [[nodiscard]] virtual auto GetBuffer(ResourceKey key)
     -> std::shared_ptr<data::BufferResource> = 0;
 
   //! Get cached asset without triggering a load.
   //! Resolve cached dependency in the retained origin, then active external
   //! roots.
-  [[nodiscard]] virtual auto GetMaterialAsset(
-    const data::AssetKey& key, const data::Asset& context) const noexcept
-    -> std::shared_ptr<data::MaterialAsset> = 0;
-  [[nodiscard]] virtual auto GetMaterialAsset(
-    const data::AssetKey& key) const noexcept
+  [[nodiscard]] virtual auto GetMaterialAsset(const data::AssetKey& key,
+    const data::Asset& context) -> std::shared_ptr<data::MaterialAsset> = 0;
+  [[nodiscard]] virtual auto GetMaterialAsset(const data::AssetKey& key)
     -> std::shared_ptr<data::MaterialAsset> = 0;
 
   //! Get cached asset without triggering a load.
   //! Resolve cached dependency in the retained origin, then active external
   //! roots.
-  [[nodiscard]] virtual auto GetGeometryAsset(
-    const data::AssetKey& key, const data::Asset& context) const noexcept
-    -> std::shared_ptr<data::GeometryAsset> = 0;
-  [[nodiscard]] virtual auto GetGeometryAsset(
-    const data::AssetKey& key) const noexcept
+  [[nodiscard]] virtual auto GetGeometryAsset(const data::AssetKey& key,
+    const data::Asset& context) -> std::shared_ptr<data::GeometryAsset> = 0;
+  [[nodiscard]] virtual auto GetGeometryAsset(const data::AssetKey& key)
     -> std::shared_ptr<data::GeometryAsset> = 0;
 
   //! Get cached asset without triggering a load.
   //! Resolve cached dependency in the retained origin, then active external
   //! roots.
-  [[nodiscard]] virtual auto GetScriptAsset(
-    const data::AssetKey& key, const data::Asset& context) const noexcept
-    -> std::shared_ptr<data::ScriptAsset> = 0;
-  [[nodiscard]] virtual auto GetScriptAsset(
-    const data::AssetKey& key) const noexcept
+  [[nodiscard]] virtual auto GetScriptAsset(const data::AssetKey& key,
+    const data::Asset& context) -> std::shared_ptr<data::ScriptAsset> = 0;
+  [[nodiscard]] virtual auto GetScriptAsset(const data::AssetKey& key)
     -> std::shared_ptr<data::ScriptAsset> = 0;
   //! Get cached script resource without triggering a load.
-  [[nodiscard]] virtual auto GetScriptResource(ResourceKey key) const noexcept
+  [[nodiscard]] virtual auto GetScriptResource(ResourceKey key)
     -> std::shared_ptr<data::ScriptResource> = 0;
   //! Async script resource load.
   virtual auto LoadScriptResourceAsync(ResourceKey key)
@@ -455,11 +457,10 @@ public:
     -> std::shared_ptr<const data::ScriptResource> = 0;
 
   //! Get cached physics scene sidecar asset without triggering a load.
-  [[nodiscard]] virtual auto GetPhysicsSceneAsset(
-    const data::AssetKey& key) const noexcept
+  [[nodiscard]] virtual auto GetPhysicsSceneAsset(const data::AssetKey& key)
     -> std::shared_ptr<data::PhysicsSceneAsset> = 0;
   //! Get cached physics resource without triggering a load.
-  [[nodiscard]] virtual auto GetPhysicsResource(ResourceKey key) const noexcept
+  [[nodiscard]] virtual auto GetPhysicsResource(ResourceKey key)
     -> std::shared_ptr<data::PhysicsResource> = 0;
   //! Async physics resource load.
   virtual auto LoadPhysicsResourceAsync(ResourceKey key)
@@ -495,16 +496,14 @@ public:
     const data::Asset& scene_asset) const -> std::optional<data::AssetKey> = 0;
 
   //! Get cached input action asset without triggering a load.
-  [[nodiscard]] virtual auto GetInputActionAsset(
-    const data::AssetKey& key, const data::Asset& context) const noexcept
-    -> std::shared_ptr<data::InputActionAsset> = 0;
-  [[nodiscard]] virtual auto GetInputActionAsset(
-    const data::AssetKey& key) const noexcept
+  [[nodiscard]] virtual auto GetInputActionAsset(const data::AssetKey& key,
+    const data::Asset& context) -> std::shared_ptr<data::InputActionAsset> = 0;
+  [[nodiscard]] virtual auto GetInputActionAsset(const data::AssetKey& key)
     -> std::shared_ptr<data::InputActionAsset> = 0;
 
   //! Get cached input mapping context asset without triggering a load.
   [[nodiscard]] virtual auto GetInputMappingContextAsset(
-    const data::AssetKey& key) const noexcept
+    const data::AssetKey& key)
     -> std::shared_ptr<data::InputMappingContextAsset> = 0;
 
   //! Hydrate script slots for one scripting component from the scene source.
@@ -545,25 +544,10 @@ public:
   [[nodiscard]] virtual auto HasInputMappingContextAsset(
     const data::AssetKey& key) const noexcept -> bool = 0;
 
-  //! Release (check in) a resource usage.
-  virtual auto ReleaseResource(ResourceKey key) -> bool = 0;
-
-  //! Release (check in) an asset usage.
-  virtual auto ReleaseAsset(const data::AssetKey& key) -> bool = 0;
-  //! Release the exact checkout represented by this retained asset.
-  virtual auto ReleaseAsset(const data::Asset& asset) -> bool = 0;
-
-  //! Explicitly pin a resource in residency cache.
-  virtual auto PinResource(ResourceKey key) -> bool = 0;
-
-  //! Release one explicit resource pin.
-  virtual auto UnpinResource(ResourceKey key) -> bool = 0;
-
-  //! Explicitly pin an asset in residency cache.
-  virtual auto PinAsset(const data::AssetKey& key) -> bool = 0;
-
-  //! Release one explicit asset pin.
-  virtual auto UnpinAsset(const data::AssetKey& key) -> bool = 0;
+  //! Retain residency independently of CPU-data ownership.
+  [[nodiscard]] virtual auto PinResource(ResourceKey key) -> ResidencyPin = 0;
+  [[nodiscard]] virtual auto PinAsset(const data::AssetKey& key) -> ResidencyPin
+    = 0;
 
   //! Subscribe to eviction notifications for a resource or asset type.
   virtual auto SubscribeResourceEvictions(

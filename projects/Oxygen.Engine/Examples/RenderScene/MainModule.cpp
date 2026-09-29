@@ -214,7 +214,6 @@ namespace {
         LOG_F(WARNING,
           "RenderScene: Failed to hydrate mounted input context asset {}",
           data::to_string(entry.asset_key));
-        (void)asset_loader.ReleaseAsset(*context_asset);
         continue;
       }
 
@@ -224,8 +223,6 @@ namespace {
       if ((flags & kAutoActivateMask) != 0U) {
         input_system->ActivateMappingContext(hydrated);
       }
-
-      (void)asset_loader.ReleaseAsset(*context_asset);
     }
 
     co_return;
@@ -1108,25 +1105,13 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
 
 auto MainModule::ReleaseCurrentSceneAsset(const char* reason) -> void
 {
-  const auto retained_asset = std::move(active_scene_asset_pin_);
-
-  if (!current_scene_key_.has_value()) {
+  active_scene_asset_pin_.reset();
+  if (!current_scene_key_) {
     return;
   }
-
-  auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
-  if (!asset_loader) {
-    last_released_scene_key_ = current_scene_key_;
-    current_scene_key_.reset();
-    return;
-  }
-
   LOG_F(INFO, "RenderScene: Releasing scene asset (reason={} key={})", reason,
     data::to_string(*current_scene_key_));
   last_released_scene_key_ = current_scene_key_;
-  if (retained_asset) {
-    (void)asset_loader->ReleaseAsset(*retained_asset);
-  }
   current_scene_key_.reset();
 }
 

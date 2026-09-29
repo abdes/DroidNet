@@ -4,9 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <cstddef>
-#include <stdexcept>
-#include <vector>
+#ifndef NDEBUG
+#  include <filesystem>
+#  include <vector>
+#endif
 
 #include "AssetLoader_test.h"
 
@@ -181,58 +182,84 @@ NOLINT_TEST_F(
   });
 }
 
-NOLINT_TEST_F(AssetLoaderDependencyTest, CycleDetectionPreventsInsertion)
+auto ExerciseBoundGeometryOwnership(TestEventLoop* loop,
+  std::filesystem::path pak_path, const AssetKey geometry_key) -> Co<>
 {
-  TestEventLoop loop;
-  oxco::Run(loop,
-    oxygen::content::testing::CheckLoadedMaterialGraph(
-      &loop, temp_dir_ / "cycle", [](auto& loader, const auto& assets) -> auto {
-        const auto first = assets.at(0)->GetAssetKey();
-        const auto second = assets.at(1)->GetAssetKey();
-        loader.AddAssetDependency(first, second);
+  oxco::ThreadPool pool(*loop, 2);
+  oxygen::content::AssetLoaderConfig config {};
+  config.thread_pool = observer_ptr { &pool };
+  oxygen::content::AssetLoader loader(
+    oxygen::engine::internal::EngineTagFactory::Get(), config);
+  OXCO_WITH_NURSERY(nursery)
+  {
+    co_await nursery.Start(
+      &oxygen::content::AssetLoader::ActivateAsync, &loader);
+    loader.Run();
+    loader.AddPakFile(pak_path);
+    auto first = co_await loader.LoadAssetAsync<GeometryAsset>(geometry_key);
+    auto second = co_await loader.LoadAssetAsync<GeometryAsset>(geometry_key);
+    if (!first || !second || first->Meshes().empty()
+      || !CheckedAt(first->Meshes(), 0)
+      || CheckedAt(first->Meshes(), 0)->SubMeshes().empty()) {
+      ADD_FAILURE() << "Expected bound geometry fixture";
+      loader.Stop();
+      co_return oxco::kJoin;
+    }
+    auto material
+      = CheckedAt(CheckedAt(first->Meshes(), 0)->SubMeshes(), 0).Material();
+    if (!material) {
+      ADD_FAILURE() << "Expected a bound material";
+      loader.Stop();
+      co_return oxco::kJoin;
+    }
+    const auto material_key = material->GetAssetKey();
+    EXPECT_EQ(first.get(), second.get());
 #ifndef NDEBUG
-        EXPECT_THROW(
-          loader.AddAssetDependency(second, first), std::logic_error);
-        std::size_t dependents = 0;
-        loader.ForEachDependent(second, [&](const AssetKey& key) -> void {
-          EXPECT_EQ(key, first);
-          ++dependents;
-        });
-        EXPECT_EQ(dependents, 1U);
-#else
-      EXPECT_NO_THROW(loader.AddAssetDependency(first, second));
+    std::vector<AssetKey> dependents;
+    loader.ForEachDependent(
+      material_key, [&](const AssetKey& key) { dependents.push_back(key); });
+    EXPECT_THAT(dependents, ::testing::ElementsAre(geometry_key));
 #endif
-      }));
+    first.reset();
+    loader.TrimCache();
+    EXPECT_TRUE(loader.HasGeometryAsset(geometry_key));
+    second.reset();
+    loader.TrimCache();
+    EXPECT_FALSE(loader.HasGeometryAsset(geometry_key));
+    EXPECT_TRUE(loader.HasMaterialAsset(material_key));
+    material.reset();
+    loader.TrimCache();
+    EXPECT_FALSE(loader.HasMaterialAsset(material_key));
+
+    auto retained = co_await loader.LoadAssetAsync<GeometryAsset>(geometry_key);
+    if (!retained) {
+      ADD_FAILURE() << "Expected geometry reload after eviction";
+      loader.Stop();
+      co_return oxco::kJoin;
+    }
+    loader.ClearMounts();
+    auto extracted = loader.GetMaterialAsset(material_key, *retained);
+    EXPECT_THAT(extracted, NotNull());
+    EXPECT_FALSE(loader.HasMaterialAsset(material_key));
+#ifndef NDEBUG
+    EXPECT_TRUE(loader.GetDebugAssetDependencyMap().empty());
+#endif
+    retained.reset();
+    loader.TrimCache();
+    EXPECT_THAT(extracted, NotNull());
+    loader.Stop();
+    co_return oxco::kJoin;
+  };
 }
 
-#ifndef NDEBUG
-NOLINT_TEST_F(AssetLoaderDependencyTest, DebugDependentEnumerationWorks)
+NOLINT_TEST_F(AssetLoaderDependencyTest,
+  IndependentParentsAndExtractedChildrenOwnTheirLifetimes)
 {
   TestEventLoop loop;
   oxco::Run(loop,
-    oxygen::content::testing::CheckLoadedMaterialGraph(&loop,
-      temp_dir_ / "enumeration", [](auto& loader, const auto& assets) -> auto {
-        const auto first = assets.at(0)->GetAssetKey();
-        const auto shared = assets.at(1)->GetAssetKey();
-        const auto second = assets.at(2)->GetAssetKey();
-        const auto leaf = assets.at(3)->GetAssetKey();
-        loader.AddAssetDependency(first, shared);
-        loader.AddAssetDependency(second, shared);
-        loader.AddAssetDependency(second, leaf);
-        std::vector<AssetKey> dependents;
-        loader.ForEachDependent(shared,
-          [&](const AssetKey& key) -> void { dependents.push_back(key); });
-        EXPECT_THAT(dependents, ::testing::UnorderedElementsAre(first, second));
-        dependents.clear();
-        loader.ForEachDependent(leaf,
-          [&](const AssetKey& key) -> void { dependents.push_back(key); });
-        EXPECT_THAT(dependents, ::testing::ElementsAre(second));
-        dependents.clear();
-        loader.ForEachDependent(first,
-          [&](const AssetKey& key) -> void { dependents.push_back(key); });
-        EXPECT_TRUE(dependents.empty());
-      }));
+    ExerciseBoundGeometryOwnership(&loop,
+      GeneratePakFile("geometry_with_buffers"),
+      CreateTestAssetKey("buffered_geometry")));
 }
-#endif
 
 } // namespace

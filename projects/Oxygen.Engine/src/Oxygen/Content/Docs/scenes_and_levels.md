@@ -173,19 +173,19 @@ flowchart TD
   B -- Yes --> C["Return cached scene"]
   B -- No --> D["Decode scene descriptor"]
   D --> E["For each referenced geometry AssetKey"]
-  E --> F["Register AddAssetDependency(sceneKey, geometryKey)"]
-  F --> G["Eager-load geometry assets"]
-  G --> H["Store scene in cache"]
+  E --> F["Acquire child controls on the owner thread"]
+  F --> G["Freeze the scene binding bundle"]
+  G --> H["Publish the complete scene in cache"]
   H --> I["Return scene"]
 ```
 
 ### Release flow
 
-Scene release uses existing `ReleaseAssetTree` behavior:
-
-- Scene checked in.
-- Its dependencies are checked in recursively.
-- Eviction invokes unloaders.
+Owning scene pointers return their request usages automatically. The scene's
+immutable binding bundle keeps geometry, materials and other children alive, even
+after cache invalidation. Runtime nodes can retain extracted children independently.
+Frame-start release processing is bounded; explicit trim fully drains idle entries.
+See [Content ownership](deps_and_cache.md#owning-and-borrowed-access).
 
 ---
 

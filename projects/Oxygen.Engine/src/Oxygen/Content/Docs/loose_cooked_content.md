@@ -104,7 +104,7 @@ lock primitive is owned by [Serio](../../Serio/README.md#file-locks).
    ResourceKey is an opaque loader-owned ID. Full identity equality includes the
    source instance, resource kind and table index. PAK, loose and synthetic
    resources share one ID namespace without encoding source ranges in the key.
-   [Identity ownership](deps_and_cache.md#planned-identity-and-ownership-simplification)
+   [Identity ownership](deps_and_cache.md#identities)
    defines lazy registration and metadata reclamation.
 
 3. **Async loader contract applies equally to loose cooked**

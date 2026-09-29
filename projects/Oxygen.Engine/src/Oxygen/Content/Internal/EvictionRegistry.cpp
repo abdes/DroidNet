@@ -66,7 +66,7 @@ auto EvictionRegistry::ExitEviction(const uint64_t cache_key) -> void
 
 auto EvictionRegistry::Clear() -> void
 {
-  subscribers_.clear();
+  [[maybe_unused]] auto retired = std::exchange(subscribers_, {});
   eviction_in_progress_.clear();
   tracked_resources_.clear();
 }

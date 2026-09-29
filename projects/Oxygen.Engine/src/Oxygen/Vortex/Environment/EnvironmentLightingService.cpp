@@ -781,7 +781,7 @@ auto EnvironmentLightingService::BuildEnvironmentStaticData(
         data.sky_sphere.enabled = data.sky_sphere.intensity > 0.0F ? 1U : 0U;
         if (const auto asset_loader = renderer_.GetAssetLoader();
           asset_loader != nullptr) {
-          const auto texture = asset_loader->GetTexture(cubemap);
+          const auto texture = asset_loader->PeekTexture(cubemap);
           const auto source_is_valid_cubemap = texture != nullptr
             && texture->GetTextureType() == oxygen::TextureType::kTextureCube
             && texture->GetArrayLayers() == 6U;

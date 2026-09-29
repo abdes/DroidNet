@@ -95,6 +95,16 @@ template <typename K> struct RefCountedEviction {
 
   auto CheckOut(IteratorType& it) -> void { ++std::get<3>(*it); }
 
+  //! Retire a publication irrespective of outstanding usages.
+  auto Erase(IteratorType& it) -> EntryType
+  {
+    auto retired = *it;
+    const auto cost = Cost(std::get<2>(retired), std::get<1>(retired));
+    consumed_ -= cost;
+    it = eviction_list_.erase(it);
+    return retired;
+  }
+
   auto CheckIn(IteratorType& it) -> std::optional<EntryType>
   {
     auto& refcount = std::get<3>(*it);

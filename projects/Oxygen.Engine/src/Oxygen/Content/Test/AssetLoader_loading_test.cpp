@@ -1196,7 +1196,7 @@ NOLINT_TEST_F(AssetLoaderLoadingTest,
       EXPECT_FLOAT_EQ(oxygen::base::CheckedAt(newest_base, 3), 1.0F);
 
       newest_wins_material.reset();
-      (void)loader.ReleaseAsset(material_key);
+
       loader.TrimCache();
       loader.ClearMounts();
 

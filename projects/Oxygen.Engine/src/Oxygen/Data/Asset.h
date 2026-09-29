@@ -6,11 +6,15 @@
 
 #pragma once
 
+#include <memory>
+#include <stdexcept>
 #include <string_view>
+#include <utility>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/Object.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetRuntimeBindings.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SourceKey.h>
@@ -59,6 +63,25 @@ public:
   [[nodiscard]] auto GetSourceOrigin() const noexcept -> SourceOrigin
   {
     return source_origin_;
+  }
+
+  //! Bind once during loading, before the asset becomes visible to consumers.
+  auto SetRuntimeBindings(std::shared_ptr<const AssetRuntimeBindings> bindings)
+    -> void
+  {
+    if (!bindings) {
+      throw std::invalid_argument("Asset runtime bindings cannot be null");
+    }
+    if (runtime_bindings_) {
+      throw std::logic_error("Asset runtime bindings are already frozen");
+    }
+    runtime_bindings_ = std::move(bindings);
+  }
+
+  [[nodiscard]] auto GetRuntimeBindings() const noexcept
+    -> const std::shared_ptr<const AssetRuntimeBindings>&
+  {
+    return runtime_bindings_;
   }
 
   //! Returns the asset type field from the header (for debugging).
@@ -112,6 +135,7 @@ protected:
 private:
   AssetKey asset_key_;
   SourceOrigin source_origin_ {};
+  std::shared_ptr<const AssetRuntimeBindings> runtime_bindings_ {};
 };
 
 } // namespace oxygen::data

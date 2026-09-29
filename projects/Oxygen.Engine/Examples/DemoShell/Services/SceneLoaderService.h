@@ -204,7 +204,7 @@ private:
   //! Legacy hook for geometry dependency readiness (currently no-op).
   void QueueGeometryDependencies(const data::SceneAsset& asset);
   //! Clear local pin bookkeeping (non-destructive).
-  void ReleasePinnedGeometryAssets();
+  void ClearGeometryReadiness();
 
   //! Build environment systems from the scene asset.
   auto BuildEnvironment(const data::SceneAsset& asset)
@@ -254,7 +254,7 @@ private:
   int linger_frames_ { 0 };
 
   std::unordered_set<data::AssetKey> pending_geometry_keys_;
-  std::vector<data::AssetKey> pinned_geometry_keys_;
+  std::vector<data::AssetKey> ready_geometry_keys_;
 
   observer_ptr<const data::PhysicsSceneAsset> current_physics_context_;
   observer_ptr<scene::Scene> runtime_scene_;

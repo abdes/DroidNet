@@ -5,21 +5,31 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
+#include <atomic>
 #include <chrono>
+#include <cstdint>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <ios>
 #include <memory>
+#include <string>
+#include <system_error>
 #include <utility>
 #include <vector>
 
 #include "DemoShell/Services/SkyboxService.h"
 
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/Content/IAssetLoader.h>
+#include <Oxygen/Content/ResidencyPin.h>
+#include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Core/EngineTag.h>
+#include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyLight.h>
-#include <Oxygen/Scene/Environment/SkySphere.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -70,29 +80,39 @@ namespace {
       return content::ResourceKey { next_key_++ };
     }
 
-    auto PinResource(const content::ResourceKey key) -> bool override
+    auto PinResource(const content::ResourceKey key)
+      -> content::ResidencyPin override
     {
       pins.push_back(key);
-      return true;
+      auto state = std::make_shared<PinState>();
+      state->key = key;
+      pin_states_.push_back(state);
+      std::shared_ptr<void> control(
+        state.get(), [state](void*) noexcept { state->released.store(true); });
+      return content::ResidencyPin(std::move(control));
     }
 
-    auto UnpinResource(const content::ResourceKey key) -> bool override
+    auto UnpinnedKeys() const -> std::vector<content::ResourceKey>
     {
-      unpins.push_back(key);
-      return true;
+      std::vector<content::ResourceKey> result;
+      for (const auto& state : pin_states_) {
+        if (state->released.load()) {
+          result.push_back(state->key);
+        }
+      }
+      return result;
     }
 
     auto Complete(const std::size_t index, const bool success = true) -> void
     {
       ASSERT_LT(index, requests.size());
-      auto callback = std::exchange(requests[index].callback, {});
+      auto callback = std::exchange(requests.at(index).callback, {});
       ASSERT_TRUE(callback);
-      callback(success ? requests[index].texture : nullptr);
+      callback(success ? requests.at(index).texture : nullptr);
     }
 
     std::vector<Request> requests;
     std::vector<content::ResourceKey> pins;
-    std::vector<content::ResourceKey> unpins;
 
   private:
     auto UnsubscribeResourceEvictions(
@@ -101,6 +121,11 @@ namespace {
       ADD_FAILURE() << "Skybox tests do not create eviction subscriptions";
     }
 
+    struct PinState final {
+      content::ResourceKey key {};
+      std::atomic<bool> released { false };
+    };
+    std::vector<std::shared_ptr<PinState>> pin_states_;
     std::uint64_t next_key_ { 100 };
   };
 
@@ -119,11 +144,11 @@ namespace {
       owns_image_ = true;
       // Uncompressed 12x2 RGB TGA: six square faces in a horizontal strip.
       std::array<std::uint8_t, 18> header {};
-      header[2] = 2;
-      header[12] = 12;
-      header[14] = 2;
-      header[16] = 24;
-      header[17] = 0x20;
+      header.at(2) = 2;
+      header.at(12) = 12;
+      header.at(14) = 2;
+      header.at(16) = 24;
+      header.at(17) = 0x20;
       image.write(reinterpret_cast<const char*>(header.data()), header.size());
       const std::array<std::uint8_t, 72> pixels {};
       image.write(reinterpret_cast<const char*>(pixels.data()), pixels.size());
@@ -171,7 +196,7 @@ NOLINT_TEST_F(SkyboxServiceTest, NewestCompletionWinsWhenLoadsFinishOutOfOrder)
   Load(1.0F);
   Load(2.5F);
   ASSERT_EQ(loader_.requests.size(), 2U);
-  const auto newest_key = loader_.requests[1].key;
+  const auto newest_key = loader_.requests.at(1).key;
   EXPECT_EQ(scene_->GetEnvironmentAuthoringRevision(), 0U);
 
   loader_.Complete(1);
@@ -179,8 +204,8 @@ NOLINT_TEST_F(SkyboxServiceTest, NewestCompletionWinsWhenLoadsFinishOutOfOrder)
 
   EXPECT_EQ(scene_->GetEnvironmentAuthoringRevision(), 1U);
   ASSERT_EQ(completed_.size(), 1U);
-  EXPECT_TRUE(completed_[0].success);
-  EXPECT_EQ(completed_[0].resource_key, newest_key);
+  EXPECT_TRUE(completed_.at(0).success);
+  EXPECT_EQ(completed_.at(0).resource_key, newest_key);
   EXPECT_EQ(service_->GetCurrentResourceKey(), newest_key);
   EXPECT_EQ(loader_.pins, std::vector { newest_key });
   const auto sky_light
@@ -189,7 +214,7 @@ NOLINT_TEST_F(SkyboxServiceTest, NewestCompletionWinsWhenLoadsFinishOutOfOrder)
   EXPECT_EQ(sky_light->GetCubemapResource(), newest_key);
   EXPECT_FLOAT_EQ(sky_light->GetIntensityMul(), 2.5F);
   service_.reset();
-  EXPECT_EQ(loader_.unpins, std::vector { newest_key });
+  EXPECT_EQ(loader_.UnpinnedKeys(), std::vector { newest_key });
 }
 
 NOLINT_TEST_F(SkyboxServiceTest, CancelPreventsPinEquipAndStatusPublication)
@@ -241,7 +266,7 @@ NOLINT_TEST_F(
   Load();
   ASSERT_EQ(loader_.requests.size(), 1U);
   loader_.Complete(0);
-  const auto equipped_key = loader_.requests[0].key;
+  const auto equipped_key = loader_.requests.at(0).key;
   Load(3.0F);
   ASSERT_EQ(loader_.requests.size(), 2U);
   service_->CancelPendingLoads();
@@ -251,7 +276,7 @@ NOLINT_TEST_F(
   EXPECT_EQ(completed_.size(), 1U);
   EXPECT_EQ(service_->GetCurrentResourceKey(), equipped_key);
   EXPECT_EQ(loader_.pins, std::vector { equipped_key });
-  EXPECT_TRUE(loader_.unpins.empty());
+  EXPECT_TRUE(loader_.UnpinnedKeys().empty());
 }
 
 NOLINT_TEST_F(SkyboxServiceTest, RejectedNewRequestStillInvalidatesPreviousLoad)
@@ -263,7 +288,7 @@ NOLINT_TEST_F(SkyboxServiceTest, RejectedNewRequestStillInvalidatesPreviousLoad)
       completed_.push_back(std::move(result));
     });
   ASSERT_EQ(completed_.size(), 1U);
-  EXPECT_FALSE(completed_[0].success);
+  EXPECT_FALSE(completed_.at(0).success);
 
   loader_.Complete(0);
 

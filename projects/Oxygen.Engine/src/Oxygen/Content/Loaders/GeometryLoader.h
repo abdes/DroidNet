@@ -23,6 +23,7 @@
 #include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Content/Loaders/Helpers.h>
 #include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Serio/Reader.h>

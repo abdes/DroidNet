@@ -13,19 +13,26 @@
 #include <unordered_set>
 #include <vector>
 
-#include <Oxygen/Testing/GTest.h>
+#include "./AssetLoader_test.h"
+#include "Utils/PakUtils.h"
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/EvictionEvents.h>
+#include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/Loaders/BufferLoader.h>
 #include <Oxygen/Content/Loaders/MaterialLoader.h>
 #include <Oxygen/Content/Loaders/TextureLoader.h>
+#include <Oxygen/Content/ResourceKey.h>
+#include <Oxygen/Data/BufferResource.h>
+#include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
-
-#include "./AssetLoader_test.h"
-#include "Utils/PakUtils.h"
+#include <Oxygen/OxCo/ThreadPool.h>
+#include <Oxygen/Testing/GTest.h>
 
 using ::testing::NotNull;
 
@@ -55,7 +62,7 @@ auto MakeBytesFromHexdump(const std::string& hexdump, const std::size_t size,
   std::vector<uint8_t> bytes(size, fill);
   const auto copy_count = std::min(bytes.size(), header.size());
   for (std::size_t i = 0; i < copy_count; ++i) {
-    bytes[i] = static_cast<uint8_t>(header[i]);
+    bytes.at(i) = static_cast<uint8_t>(header.at(i));
   }
 
   return bytes;
@@ -127,7 +134,6 @@ NOLINT_TEST_F(
       EXPECT_THAT(resource, NotNull());
       resource.reset();
 
-      (void)loader.ReleaseResource(key);
       loader.TrimCache();
 
       EXPECT_EQ(events.size(), 1u);
@@ -197,8 +203,6 @@ NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, ResourceEvictionFiltersByType)
         });
       EXPECT_THAT(resource, NotNull());
       resource.reset();
-
-      loader.ReleaseResource(key);
 
       EXPECT_TRUE(events.empty());
 
@@ -388,8 +392,6 @@ NOLINT_TEST_F(
       EXPECT_THAT(material, NotNull());
       material.reset();
 
-      loader.ReleaseAsset(material_key);
-
       // Eviction is no longer guaranteed to happen immediately on release.
       // Force a trim so any entries that are only held by the cache are
       // evicted now, producing eviction notifications synchronously.
@@ -468,7 +470,6 @@ NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, TrimCacheRepeatedCyclesStable)
         material.reset();
 
         EXPECT_TRUE(loader.HasAsset<MaterialAsset>(material_key));
-        (void)loader.ReleaseAsset(material_key);
 
         const auto before_trim = events.size();
         loader.TrimCache();
@@ -479,7 +480,7 @@ NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, TrimCacheRepeatedCyclesStable)
 
         std::unordered_set<std::size_t> unique_cycle_keys;
         for (std::size_t i = before_trim; i < after_trim; ++i) {
-          const auto& event = events[i];
+          const auto& event = events.at(i);
           EXPECT_EQ(event.type_id, TextureResource::ClassTypeId());
           EXPECT_EQ(event.reason, EvictionReason::kTrim);
           unique_cycle_keys.insert(std::hash<ResourceKey> {}(event.key));
@@ -558,7 +559,7 @@ NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, RefreshPakNoDuplicateTrimEvictions)
 
         std::unordered_set<std::size_t> unique_refresh_keys;
         for (std::size_t i = before_refresh; i < after_refresh; ++i) {
-          const auto& event = events[i];
+          const auto& event = events.at(i);
           EXPECT_EQ(event.type_id, TextureResource::ClassTypeId());
           EXPECT_EQ(event.reason, EvictionReason::kClear);
           unique_refresh_keys.insert(std::hash<ResourceKey> {}(event.key));

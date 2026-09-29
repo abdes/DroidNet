@@ -12,24 +12,37 @@
 #include <filesystem>
 #include <latch>
 #include <memory>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <thread>
 #include <utility>
 
-#include <Oxygen/Testing/GTest.h>
+#include "./AssetLoader_test.h"
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/Content/IAssetLoader.h>
+#include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/BufferLoader.h>
 #include <Oxygen/Content/Loaders/MaterialLoader.h>
 #include <Oxygen/Content/Loaders/TextureLoader.h>
+#include <Oxygen/Content/OperationCancelledException.h>
+#include <Oxygen/Content/PakFile.h>
+#include <Oxygen/Content/ResourceKey.h>
+#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/BufferResource.h>
+#include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Event.h>
+#include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
-
-#include "./AssetLoader_test.h"
+#include <Oxygen/OxCo/ThreadPool.h>
+#include <Oxygen/Testing/GTest.h>
 
 using ::testing::NotNull;
 
@@ -127,20 +140,26 @@ auto ExpectStopDrainsDirectLoad(TestEventLoop* loop,
         oxygen::content::ResourceKey resource_key,
         std::span<const uint8_t> bytes, SuspendedLoadKind kind,
         oxygen::co::Event* completed) -> Co<> {
-        if (kind == SuspendedLoadKind::kAsset) {
-          const auto material
-            = co_await loader->LoadAssetAsync<MaterialAsset>(material_key);
-          EXPECT_THAT(material, NotNull());
-          EXPECT_TRUE(loader->HasMaterialAsset(material_key));
-        } else {
-          const auto resource = kind == SuspendedLoadKind::kResource
-            ? co_await loader->LoadResourceAsync<BufferResource>(resource_key)
-            : co_await loader->LoadResourceAsync<BufferResource>(
+        bool cancelled = false;
+        try {
+          if (kind == SuspendedLoadKind::kAsset) {
+            static_cast<void>(
+              co_await loader->LoadAssetAsync<MaterialAsset>(material_key));
+          } else if (kind == SuspendedLoadKind::kResource) {
+            static_cast<void>(
+              co_await loader->LoadResourceAsync<BufferResource>(resource_key));
+          } else {
+            static_cast<void>(
+              co_await loader->LoadResourceAsync<BufferResource>(
                 oxygen::content::CookedResourceData<BufferResource> {
-                  .key = resource_key, .bytes = bytes });
-          EXPECT_THAT(resource, NotNull());
-          EXPECT_TRUE(loader->HasBuffer(resource_key));
+                  .key = resource_key, .bytes = bytes }));
+          }
+        } catch (const oxygen::content::OperationCancelledException&) {
+          cancelled = true;
         }
+        EXPECT_TRUE(cancelled);
+        EXPECT_FALSE(loader->HasMaterialAsset(material_key));
+        EXPECT_FALSE(loader->HasBuffer(resource_key));
         completed->Trigger();
       },
       &loader, material_key, resource_key,
@@ -148,6 +167,7 @@ auto ExpectStopDrainsDirectLoad(TestEventLoop* loop,
 
     co_await decode.entered;
     loader.Stop();
+    loader.Run();
     n.Start(
       [](AssetLoader* loader, SuspendedDecode* decode,
         oxygen::co::Event* completed) -> Co<> {
@@ -297,8 +317,7 @@ NOLINT_TEST_F(AssetLoaderAsyncTest, StartLoadAssetMaterialInvokesCallback)
 
       co_await loader.WaitForPendingLoadsAsync();
       EXPECT_TRUE(loader.HasMaterialAsset(material_key));
-      const auto settled_material
-        = loader.GetAsset<MaterialAsset>(material_key);
+      auto settled_material = loader.GetAsset<MaterialAsset>(material_key);
       EXPECT_THAT(settled_material, NotNull());
       if (settled_material) {
         EXPECT_NE(settled_material->GetBaseColorTextureKey().get(), 0U);
@@ -328,8 +347,11 @@ NOLINT_TEST_F(AssetLoaderAsyncTest, StartLoadAssetMaterialInvokesCallback)
       EXPECT_THAT(loaded_material, NotNull());
 
       loaded_material.reset();
-      (void)loader.ReleaseAsset(material_key);
+
       EXPECT_TRUE(loader.HasMaterialAsset(material_key));
+      loader.TrimCache();
+      EXPECT_TRUE(loader.HasMaterialAsset(material_key));
+      settled_material.reset();
       loader.TrimCache();
       EXPECT_FALSE(loader.HasMaterialAsset(material_key));
 

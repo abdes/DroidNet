@@ -619,21 +619,7 @@ NOLINT_TEST_F(AssetLoaderScriptingTest,
 }
 
 #ifndef NDEBUG
-NOLINT_TEST_F(
-  AssetLoaderScriptingTest, MutableLooseRefreshClearsLoadedDependencyGraph)
-{
-  const auto root = temp_dir_ / "loose_refresh_graph";
-  TestEventLoop loop;
-  oxygen::co::Run(loop,
-    oxygen::content::testing::CheckLoadedMaterialGraph(
-      &loop, root, [root](auto& loader, const auto& assets) -> auto {
-        loader.AddAssetDependency(
-          assets.at(0)->GetAssetKey(), assets.at(1)->GetAssetKey());
-        EXPECT_FALSE(loader.GetDebugAssetDependencyMap().empty());
-        loader.AddLooseCookedRoot(root);
-        EXPECT_TRUE(loader.GetDebugAssetDependencyMap().empty());
-      }));
-}
+
 #endif
 
 NOLINT_TEST_F(AssetLoaderScriptingTest,

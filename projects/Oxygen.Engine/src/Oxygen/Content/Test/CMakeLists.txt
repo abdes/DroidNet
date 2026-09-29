@@ -33,24 +33,20 @@ add_test(NAME ${link_test_target} COMMAND ${link_test_target})
 
 include(GTestHelpers)
 
+m_gtest_program(ContentOwnership SOURCES "ContentReleaseQueue_test.cpp")
+target_sources(
+  "${META_MODULE_NAME}.ContentOwnership.Tests"
+  PRIVATE
+    "../Internal/ContentReleaseQueue.cpp"
+    "../Internal/ContentBindingBundle.cpp"
+)
+
 m_gtest_program(ContentIdentity SOURCES "ContentIdentityRegistry_test.cpp")
 target_sources(
   "${META_MODULE_NAME}.ContentIdentity.Tests"
   PRIVATE
     "../Internal/ContentIdentity.cpp"
     "../Internal/ContentIdentityRegistry.cpp"
-)
-
-m_gtest_program(
-  DependencyReleaseEngine
-  SOURCES
-    "DependencyReleaseEngine_test.cpp"
-)
-target_sources(
-  "${META_MODULE_NAME}.DependencyReleaseEngine.Tests"
-  PRIVATE
-    "../Internal/DependencyGraphStore.cpp"
-    "../Internal/DependencyReleaseEngine.cpp"
 )
 
 m_gtest_program(

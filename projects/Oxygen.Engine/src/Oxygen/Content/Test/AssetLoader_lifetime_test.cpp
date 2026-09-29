@@ -98,14 +98,8 @@ auto MakeBytesFromHexdump(const std::string& hexdump, const std::size_t size,
   return bytes;
 }
 
-//! Test: Resource remains cached until explicit release and trim.
-/*!
- Scenario: Load a BufferResource from cooked bytes, drop the returned
- shared_ptr, and verify the resource is still cached. Only after calling
- ReleaseResource and TrimCache should the cache entry be evicted.
-*/
-NOLINT_TEST_F(
-  AssetLoaderLifetimeAsyncTest, ResourceUnloadRequiresExplicitRelease)
+//! Owner destruction returns usage; explicit trim removes idle cache entries.
+NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest, ResourceOwnerDropAllowsTrim)
 {
   using namespace std::chrono_literals;
 
@@ -154,7 +148,7 @@ NOLINT_TEST_F(
       EXPECT_THAT(cached, NotNull());
       cached.reset();
 
-      loader.ReleaseResource(key);
+      resource.reset();
       EXPECT_TRUE(loader.HasBuffer(key));
       loader.TrimCache();
       EXPECT_FALSE(loader.HasBuffer(key));
@@ -218,9 +212,6 @@ NOLINT_TEST_F(
       }
 
       for (const auto key : loaded_keys) {
-        (void)loader.ReleaseResource(key);
-      }
-      for (const auto key : loaded_keys) {
         EXPECT_TRUE(loader.HasBuffer(key));
       }
 
@@ -235,12 +226,8 @@ NOLINT_TEST_F(
   });
 }
 
-//! Test: Refcounted checkouts require matching releases and trim.
-/*!
- Scenario: Load a BufferResource, check it out once more using GetBuffer,
- and verify that a single ReleaseResource does not evict the entry. A second
- ReleaseResource still leaves the cache baseline; TrimCache evicts it.
-*/
+//! Independent acquisitions keep an entry resident until their last owners
+//! drop.
 NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest, ResourceUnloadRefcountedCheckouts)
 {
   using namespace std::chrono_literals;
@@ -283,14 +270,14 @@ NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest, ResourceUnloadRefcountedCheckouts)
         });
       EXPECT_THAT(resource, NotNull());
 
-      auto extra_checkout = loader.CheckOutResource<BufferResource>(key);
+      auto extra_checkout = loader.GetResource<BufferResource>(key);
       EXPECT_THAT(extra_checkout, NotNull());
       extra_checkout.reset();
 
-      loader.ReleaseResource(key);
+      resource.reset();
       EXPECT_TRUE(loader.HasBuffer(key));
 
-      loader.ReleaseResource(key);
+      resource.reset();
       EXPECT_TRUE(loader.HasBuffer(key));
       loader.TrimCache();
       EXPECT_FALSE(loader.HasBuffer(key));
@@ -336,12 +323,15 @@ NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest, ResourcePinUnpinSymmetryExpected)
       EXPECT_THAT(resource, NotNull());
       resource.reset();
 
-      EXPECT_TRUE(loader.PinResource(key));
-      (void)loader.ReleaseResource(key);
+      auto residency_pin = loader.PinResource(key);
+      EXPECT_TRUE(residency_pin);
+      resource.reset();
       EXPECT_TRUE(loader.HasBuffer(key));
 
-      EXPECT_TRUE(loader.UnpinResource(key));
-      EXPECT_FALSE(loader.UnpinResource(key));
+      residency_pin.Reset();
+      EXPECT_FALSE(residency_pin);
+      residency_pin.Reset();
+      EXPECT_FALSE(residency_pin);
 
       loader.TrimCache();
       EXPECT_FALSE(loader.HasBuffer(key));
@@ -356,9 +346,10 @@ NOLINT_TEST(InFlightOperationTableLifetimeTest, CleanupCanReenterRetirement)
 {
   using Table = oxygen::content::internal::InFlightOperationTable;
   enum class Retirement : uint8_t { kErase, kClear, kDestruction };
-  const auto hold = [](auto cleanup) -> Co<std::shared_ptr<void>> {
+  const auto hold
+    = [](auto cleanup) -> Co<oxygen::content::internal::SharedContentResult> {
     static_cast<void>(cleanup);
-    co_return nullptr;
+    co_return oxygen::content::internal::SharedContentResult {};
   };
   for (const auto mode :
     { Retirement::kErase, Retirement::kClear, Retirement::kDestruction }) {
@@ -397,9 +388,10 @@ NOLINT_TEST(
   const auto cleanup = [&table, type, old_id]() noexcept -> void {
     table.Erase(type, kHash, old_id);
   };
-  const auto hold = [](auto guard) -> Co<std::shared_ptr<void>> {
+  const auto hold
+    = [](auto guard) -> Co<oxygen::content::internal::SharedContentResult> {
     static_cast<void>(guard);
-    co_return nullptr;
+    co_return oxygen::content::internal::SharedContentResult {};
   };
   auto old = oxygen::co::Shared(
     hold(std::make_unique<oxygen::ScopeGuard<decltype(cleanup)>>(cleanup)));
@@ -407,7 +399,9 @@ NOLINT_TEST(
   table.Clear();
   const auto replacement_id = table.NewOperationId();
   auto replacement = oxygen::co::Shared(
-    []() -> Co<std::shared_ptr<void>> { co_return nullptr; }());
+    []() -> Co<oxygen::content::internal::SharedContentResult> {
+      co_return oxygen::content::internal::SharedContentResult {};
+    }());
   table.Insert(type, kHash, replacement_id, replacement, {});
   old = {};
   EXPECT_TRUE(table.GetRequestMeta(type, kHash).has_value());
@@ -423,7 +417,9 @@ NOLINT_TEST(
   const auto kTypeId = oxygen::data::BufferResource::ClassTypeId();
   constexpr uint64_t kHash = 0xABU;
   auto op = oxygen::co::Shared(
-    [] -> Co<std::shared_ptr<void>> { co_return nullptr; }());
+    [] -> Co<oxygen::content::internal::SharedContentResult> {
+      co_return oxygen::content::internal::SharedContentResult {};
+    }());
 
   table.Insert(kTypeId, kHash, table.NewOperationId(), op,
     {
@@ -455,7 +451,9 @@ NOLINT_TEST(InFlightOperationTablePriorityContractTest, TieUsesEarliestSequence)
   const auto kTypeId = oxygen::data::BufferResource::ClassTypeId();
   constexpr uint64_t kHash = 0xCDU;
   auto op = oxygen::co::Shared(
-    [] -> Co<std::shared_ptr<void>> { co_return nullptr; }());
+    [] -> Co<oxygen::content::internal::SharedContentResult> {
+      co_return oxygen::content::internal::SharedContentResult {};
+    }());
 
   table.Insert(kTypeId, kHash, table.NewOperationId(), op,
     {
@@ -546,13 +544,8 @@ NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest,
   });
 }
 
-//! Test: Asset remains cached and is reused until explicit release and trim.
-/*!
- Scenario: Load a MaterialAsset, drop the returned shared_ptr without calling
- ReleaseAsset, then load again and expect the same cached instance. After
- ReleaseAsset, the entry remains as cache baseline; TrimCache removes it.
-*/
-NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest, AssetUnloadRequiresExplicitRelease)
+//! Idle assets remain reusable until the caller explicitly trims the cache.
+NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest, AssetOwnerDropAllowsTrim)
 {
   using namespace std::chrono_literals;
 
@@ -592,7 +585,6 @@ NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest, AssetUnloadRequiresExplicitRelease)
       EXPECT_EQ(cached.get(), first_ptr);
       cached.reset();
 
-      (void)loader.ReleaseAsset(material_key);
       EXPECT_TRUE(loader.HasMaterialAsset(material_key));
       loader.TrimCache();
       EXPECT_FALSE(loader.HasMaterialAsset(material_key));
@@ -634,15 +626,18 @@ NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest,
       EXPECT_TRUE(texture_key.get() != 0U);
       EXPECT_TRUE(loader.HasTexture(texture_key));
 
-      EXPECT_TRUE(loader.PinAsset(material_key));
+      auto residency_pin = loader.PinAsset(material_key);
+      EXPECT_TRUE(residency_pin);
 
       material.reset();
-      (void)loader.ReleaseAsset(material_key);
+
       EXPECT_TRUE(loader.HasMaterialAsset(material_key));
       EXPECT_TRUE(loader.HasTexture(texture_key));
 
-      EXPECT_TRUE(loader.UnpinAsset(material_key));
-      EXPECT_FALSE(loader.UnpinAsset(material_key));
+      residency_pin.Reset();
+      EXPECT_FALSE(residency_pin);
+      residency_pin.Reset();
+      EXPECT_FALSE(residency_pin);
 
       loader.TrimCache();
       EXPECT_FALSE(loader.HasMaterialAsset(material_key));
@@ -654,49 +649,8 @@ NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest,
   });
 }
 
-NOLINT_TEST_F(AssetLoaderLifetimeTest, ReleaseOrderDependencyBeforeDependent)
-{
-  TestEventLoop loop;
-  oxygen::co::Run(loop,
-    oxygen::content::testing::CheckLoadedMaterialGraph(&loop,
-      temp_dir_ / "release", [](auto& loader, const auto& assets) -> auto {
-        loader.AddAssetDependency(
-          assets.at(0)->GetAssetKey(), assets.at(1)->GetAssetKey());
-        static_cast<void>(loader.ReleaseAsset(*assets.at(0)));
-        static_cast<void>(loader.ReleaseAsset(*assets.at(1)));
-        loader.TrimCache();
-        EXPECT_FALSE(loader.HasMaterialAsset(assets.at(0)->GetAssetKey()));
-        EXPECT_FALSE(loader.HasMaterialAsset(assets.at(1)->GetAssetKey()));
-        EXPECT_TRUE(loader.ReleaseAsset(*assets.at(0)));
-        EXPECT_TRUE(loader.ReleaseAsset(*assets.at(1)));
-      }));
-}
-
 #ifndef NDEBUG
-NOLINT_TEST_F(
-  AssetLoaderLifetimeTest, CascadeReleaseSiblingSharedDependencyNotEvicted)
-{
-  TestEventLoop loop;
-  oxygen::co::Run(loop,
-    oxygen::content::testing::CheckLoadedMaterialGraph(&loop,
-      temp_dir_ / "siblings", [](auto& loader, const auto& assets) -> auto {
-        const auto shared = assets.at(2)->GetAssetKey();
-        loader.AddAssetDependency(assets.at(0)->GetAssetKey(), shared);
-        loader.AddAssetDependency(assets.at(1)->GetAssetKey(), shared);
-        static_cast<void>(loader.ReleaseAsset(*assets.at(0)));
-        std::vector<oxygen::data::AssetKey> remaining;
-        loader.ForEachDependent(
-          shared, [&](const auto& key) -> auto { remaining.push_back(key); });
-        EXPECT_THAT(
-          remaining, ::testing::ElementsAre(assets.at(1)->GetAssetKey()));
-        EXPECT_TRUE(loader.HasMaterialAsset(shared));
-        static_cast<void>(loader.ReleaseAsset(*assets.at(1)));
-        remaining.clear();
-        loader.ForEachDependent(
-          shared, [&](const auto& key) -> auto { remaining.push_back(key); });
-        EXPECT_TRUE(remaining.empty());
-      }));
-}
+
 #endif
 
 //! Test: async geometry load binds dependencies and unloads after trim.
@@ -756,7 +710,7 @@ NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest,
       }
 
       geometry.reset();
-      (void)loader.ReleaseAsset(geometry_key);
+
       EXPECT_TRUE(loader.HasGeometryAsset(geometry_key));
       loader.TrimCache();
       EXPECT_FALSE(loader.HasGeometryAsset(geometry_key));

@@ -4,20 +4,40 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
+#include <array>
 #include <atomic>
+#include <bit>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
 #include <memory>
+#include <span>
 #include <string>
-
-#include <Oxygen/Testing/GTest.h>
-
-#include <Oxygen/Content/EvictionEvents.h>
-#include <Oxygen/Content/Loaders/BufferLoader.h>
-#include <Oxygen/OxCo/Co.h>
-#include <Oxygen/OxCo/Run.h>
-#include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
+#include <vector>
 
 #include "./AssetLoader_test.h"
 #include "Utils/PakUtils.h"
+
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/Content/EvictionEvents.h>
+#include <Oxygen/Content/IAssetLoader.h>
+#include <Oxygen/Content/LoaderContext.h>
+#include <Oxygen/Content/Loaders/BufferLoader.h>
+#include <Oxygen/Content/ResourceKey.h>
+#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/BufferResource.h>
+#include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/ScriptAsset.h>
+#include <Oxygen/Data/ScriptResource.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
+#include <Oxygen/OxCo/Run.h>
+#include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
+#include <Oxygen/OxCo/ThreadPool.h>
+#include <Oxygen/Testing/GTest.h>
 
 using oxygen::observer_ptr;
 using oxygen::co::Co;
@@ -33,6 +53,85 @@ using oxygen::data::BufferResource;
 
 namespace {
 
+auto PopulateIdleLoader(AssetLoader* loader, const ResourceKey key) -> Co<>
+{
+  const auto bytes = std::bit_cast<
+    std::array<uint8_t, sizeof(oxygen::data::pak::core::BufferResourceDesc)>>(
+    oxygen::data::pak::core::BufferResourceDesc {});
+  OXCO_WITH_NURSERY(nursery)
+  {
+    co_await nursery.Start(&AssetLoader::ActivateAsync, loader);
+    loader->Run();
+    auto buffer = co_await loader->LoadResourceAsync<BufferResource>(
+      CookedResourceData<BufferResource> { .key = key, .bytes = bytes });
+    EXPECT_NE(buffer, nullptr);
+    buffer.reset();
+    co_await loader->WaitForPendingLoadsAsync();
+    // Closing the parent nursery is a supported LiveObject deactivation path.
+    co_return oxygen::co::kCancel;
+  };
+}
+
+NOLINT_TEST_F(AssetLoaderLoadingTest, EvictionCallbackCanDestroyAnIdleLoader)
+{
+  enum class Action : uint8_t { kTrim, kClear, kStop };
+  for (const auto action : { Action::kTrim, Action::kClear, Action::kStop }) {
+    TestEventLoop loop;
+    oxygen::co::ThreadPool pool(loop, 2);
+    AssetLoaderConfig config {};
+    config.thread_pool = observer_ptr { &pool };
+    auto loader = std::make_unique<AssetLoader>(Tag::Get(), config);
+    const auto key = loader->MintSyntheticBufferKey();
+    oxygen::co::Run(loop, PopulateIdleLoader(loader.get(), key));
+    EXPECT_FALSE(loader->IsRunning());
+    unsigned int calls = 0;
+    auto subscription = loader->SubscribeResourceEvictions(
+      BufferResource::ClassTypeId(), [&](const EvictionEvent&) {
+        ++calls;
+        loader.reset();
+      });
+    switch (action) {
+    case Action::kTrim:
+      loader->TrimCache();
+      break;
+    case Action::kClear:
+      loader->ClearMounts();
+      break;
+    case Action::kStop:
+      loader->Stop();
+      break;
+    }
+    EXPECT_FALSE(loader);
+    EXPECT_EQ(calls, 1U);
+  }
+}
+
+NOLINT_TEST_F(
+  AssetLoaderLoadingTest, ShutdownCallbackCanStopAgainAndStartAFreshEpoch)
+{
+  TestEventLoop loop;
+  oxygen::co::ThreadPool pool(loop, 2);
+  AssetLoaderConfig config {};
+  config.thread_pool = observer_ptr { &pool };
+  AssetLoader loader(Tag::Get(), config);
+  const auto key = loader.MintSyntheticBufferKey();
+  oxygen::co::Run(loop, PopulateIdleLoader(&loader, key));
+  unsigned int calls = 0;
+  auto subscription = loader.SubscribeResourceEvictions(
+    BufferResource::ClassTypeId(), [&](const EvictionEvent&) {
+      ++calls;
+      loader.Stop();
+      loader.Run();
+    });
+  loader.Stop();
+  EXPECT_EQ(calls, 1U);
+  oxygen::co::Run(loop, PopulateIdleLoader(&loader, key));
+  EXPECT_TRUE(loader.HasBuffer(key));
+  loader.TrimCache();
+  EXPECT_FALSE(loader.HasBuffer(key));
+  EXPECT_EQ(calls, 1U);
+}
+
 auto MakeBytesFromHexdump(const std::string& hexdump, const std::size_t size,
   const uint8_t fill) -> std::vector<uint8_t>
 {
@@ -43,7 +142,7 @@ auto MakeBytesFromHexdump(const std::string& hexdump, const std::size_t size,
   std::vector<uint8_t> bytes(size, fill);
   const auto copy_count = std::min(bytes.size(), header.size());
   for (std::size_t i = 0; i < copy_count; ++i) {
-    bytes[i] = static_cast<uint8_t>(header[i]);
+    bytes.at(i) = static_cast<uint8_t>(header.at(i));
   }
 
   return bytes;
@@ -98,8 +197,8 @@ NOLINT_TEST_F(AssetLoaderLoadingTest, ResourceEvictionReentrantHandler)
         = loader.SubscribeResourceEvictions(BufferResource::ClassTypeId(),
           [&](const EvictionEvent& /*ev*/) -> void {
             call_count.fetch_add(1, std::memory_order_relaxed);
-            el.Schedule(0ms, [&loader, key, &nested_release_calls] {
-              (void)loader.ReleaseResource(key);
+            el.Schedule(0ms, [&loader, &nested_release_calls] {
+              loader.TrimCache();
               nested_release_calls.fetch_add(1, std::memory_order_relaxed);
             });
           });
@@ -110,7 +209,6 @@ NOLINT_TEST_F(AssetLoaderLoadingTest, ResourceEvictionReentrantHandler)
 
       // Drop local ref and release
       resource.reset();
-      (void)loader.ReleaseResource(key);
       loader.TrimCache();
       co_await el.Sleep(0ms);
 
@@ -184,7 +282,6 @@ NOLINT_TEST_F(
           });
         EXPECT_NE(resource, nullptr);
         resource.reset();
-        (void)loader.ReleaseResource(key);
         loader.TrimCache();
         co_return;
       };
@@ -262,7 +359,6 @@ NOLINT_TEST_F(AssetLoaderLoadingTest,
           });
         EXPECT_NE(resource, nullptr);
         resource.reset();
-        (void)loader.ReleaseResource(key);
         loader.TrimCache();
         co_return;
       };
@@ -278,6 +374,48 @@ NOLINT_TEST_F(AssetLoaderLoadingTest,
       co_return oxygen::co::kJoin;
     };
   });
+}
+
+auto PopulateFailedReload(AssetLoader* loader, std::filesystem::path pak_path,
+  oxygen::data::AssetKey key) -> Co<>
+{
+  OXCO_WITH_NURSERY(nursery)
+  {
+    co_await nursery.Start(&AssetLoader::ActivateAsync, loader);
+    loader->Run();
+    loader->AddPakFile(pak_path);
+    auto script
+      = co_await loader->LoadAssetAsync<oxygen::data::ScriptAsset>(key);
+    EXPECT_NE(script, nullptr);
+    loader->RegisterLoader(
+      [](const oxygen::content::LoaderContext&)
+        -> std::unique_ptr<oxygen::data::ScriptAsset> { return {}; });
+    loader->ReloadAllScripts();
+    co_await loader->WaitForPendingLoadsAsync();
+    EXPECT_FALSE(loader->HasScriptAsset(key));
+    co_return oxygen::co::kCancel;
+  };
+}
+
+NOLINT_TEST_F(AssetLoaderLoadingTest, UncachedEvictionFlushCanDestroyLoader)
+{
+  TestEventLoop loop;
+  oxygen::co::ThreadPool pool(loop, 2);
+  AssetLoaderConfig config {};
+  config.thread_pool = observer_ptr { &pool };
+  auto loader = std::make_unique<AssetLoader>(Tag::Get(), config);
+  oxygen::co::Run(loop,
+    PopulateFailedReload(loader.get(), GeneratePakFile("scene_with_scripting"),
+      CreateTestAssetKey("test_script")));
+  unsigned int calls = 0;
+  auto subscription = loader->SubscribeResourceEvictions(
+    oxygen::data::ScriptResource::ClassTypeId(), [&](const EvictionEvent&) {
+      ++calls;
+      loader.reset();
+    });
+  loader->TrimCache();
+  EXPECT_FALSE(loader);
+  EXPECT_EQ(calls, 1U);
 }
 
 } // namespace

@@ -6,16 +6,20 @@
 
 #include <atomic>
 #include <chrono>
+#include <exception>
+#include <memory>
 #include <mutex>
 #include <random>
+#include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
-#include <Oxygen/Testing/GTest.h>
-
+#include <Oxygen/Composition/Object.h>
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Core/AnyCache.h>
 #include <Oxygen/Core/RefCountedEviction.h>
+#include <Oxygen/Testing/GTest.h>
 
 using oxygen::AnyCache;
 
@@ -262,16 +266,16 @@ NOLINT_TEST_F(
         for (int i = 0; i < kOperationsPerThread; ++i) {
           for (int key = start_key; key < end_key; ++key) {
             // Checkout
-            auto obj = cache_.CheckOut<TestObject>(
+            auto obj = cache_.Acquire<TestObject>(
               key, oxygen::CheckoutOwner::kExternal);
-            if (obj && obj->value == key) {
+            if (obj && obj->value->value == key) {
               successful_checkouts.fetch_add(1, std::memory_order_relaxed);
 
               // Do some work
               std::this_thread::sleep_for(std::chrono::microseconds(1));
 
               // Checkin
-              cache_.CheckIn(key);
+              static_cast<void>(cache_.Release(std::move(obj->ticket)));
               successful_checkins.fetch_add(1, std::memory_order_relaxed);
             }
           }
@@ -330,12 +334,12 @@ NOLINT_TEST_F(
       for (int i = 0; i < kOperationsPerThread; ++i) {
         int key = dist(rng);
         auto obj
-          = cache_.CheckOut<TestObject>(key, oxygen::CheckoutOwner::kExternal);
+          = cache_.Acquire<TestObject>(key, oxygen::CheckoutOwner::kExternal);
         if (obj) {
           // Brief work simulation
           std::this_thread::sleep_for(
             std::chrono::microseconds(kContentionWorkMicros));
-          cache_.CheckIn(key);
+          static_cast<void>(cache_.Release(std::move(obj->ticket)));
           successful_operations.fetch_add(1, std::memory_order_relaxed);
         }
       }
@@ -357,7 +361,6 @@ NOLINT_TEST_F(
 //! Test concurrent Touch operations
 NOLINT_TEST_F(AnyCacheConcurrentCheckoutTest, ConcurrentTouch_ThreadSafe)
 {
-  constexpr int kTouchCheckInModulo = 3;
 
   // Arrange
   for (int i = 0; i < kNumItems; ++i) {
@@ -381,12 +384,10 @@ NOLINT_TEST_F(AnyCacheConcurrentCheckoutTest, ConcurrentTouch_ThreadSafe)
 
       for (int i = 0; i < kOperationsPerThread; ++i) {
         int key = dist(rng);
-        cache_.Touch(key, oxygen::CheckoutOwner::kExternal);
-        touch_operations.fetch_add(1, std::memory_order_relaxed);
-
-        // Balance with checkins to prevent accumulation
-        if (i % kTouchCheckInModulo == 0) {
-          cache_.CheckIn(key);
+        if (auto pin
+          = cache_.AcquirePin(key, oxygen::CheckoutOwner::kExternal)) {
+          touch_operations.fetch_add(1, std::memory_order_relaxed);
+          static_cast<void>(cache_.Release(std::move(*pin)));
         }
       }
     });
@@ -522,12 +523,12 @@ NOLINT_TEST_F(
               key, std::make_shared<TestObject>(key + kWriteValueOffset));
           } else if (i % kWriterOperationModulo == kWriterCheckout) {
             // Checkout and checkin
-            auto obj = cache_.CheckOut<TestObject>(
+            auto obj = cache_.Acquire<TestObject>(
               key, oxygen::CheckoutOwner::kExternal);
             if (obj) {
               std::this_thread::sleep_for(
                 std::chrono::microseconds(kCheckoutWorkMicros));
-              cache_.CheckIn(key);
+              static_cast<void>(cache_.Release(std::move(obj->ticket)));
             }
           } else {
             // Remove (if possible)
@@ -604,7 +605,6 @@ NOLINT_TEST_F(
   constexpr int kStressOpRemove = 9;
   constexpr int kReplaceValueOffset = 1000;
   constexpr int kCheckoutWorkMicros = 1;
-  constexpr int kTouchCheckInModulo = 5;
 
   std::atomic<int> total_operations { 0 };
   std::atomic<bool> start_flag { false };
@@ -641,19 +641,20 @@ NOLINT_TEST_F(
             break;
           case kStressOpCheckoutFirst:
           case kStressOpCheckoutSecond: // CheckOut/CheckIn (20%)
-            if (auto obj = cache_.CheckOut<TestObject>(
+            if (auto obj = cache_.Acquire<TestObject>(
                   key, oxygen::CheckoutOwner::kExternal)) {
               std::this_thread::sleep_for(
                 std::chrono::microseconds(kCheckoutWorkMicros));
-              cache_.CheckIn(key);
+              static_cast<void>(cache_.Release(std::move(obj->ticket)));
             }
             break;
-          case kStressOpTouch: // Touch (10%)
-            cache_.Touch(key, oxygen::CheckoutOwner::kExternal);
-            if (i % kTouchCheckInModulo == 0) {
-              cache_.CheckIn(key); // Occasional checkin
+          case kStressOpTouch: {
+            auto pin = cache_.AcquirePin(key, oxygen::CheckoutOwner::kExternal);
+            if (pin) {
+              static_cast<void>(cache_.Release(std::move(*pin)));
             }
             break;
+          }
           case kStressOpPeekFirst:
           case kStressOpPeekSecond: // Peek (20%)
             cache_.Peek<TestObject>(key);
@@ -714,11 +715,9 @@ NOLINT_TEST_F(AnyCacheConcurrentStressTest, ConcurrentEviction_ThreadSafe)
   std::vector<std::thread> threads;
 
   // Setup eviction callback
-  auto eviction_scope = small_cache.OnEviction(
-    [&eviction_count](const int /*key*/, const std::shared_ptr<void>& /*value*/,
-      oxygen::TypeId /*type_id*/) {
-      eviction_count.fetch_add(1, std::memory_order_relaxed);
-    });
+  auto eviction_scope = small_cache.OnEviction([&eviction_count](const auto&) {
+    eviction_count.fetch_add(1, std::memory_order_relaxed);
+  });
 
   // Act - threads that cause evictions through checkins
   threads.reserve(kEvictionThreadCount);
@@ -739,7 +738,7 @@ NOLINT_TEST_F(AnyCacheConcurrentStressTest, ConcurrentEviction_ThreadSafe)
 
         // Occasionally check in to trigger evictions
         if (i % kEvictionCheckInModulo == 0) {
-          small_cache.CheckIn(key);
+          static_cast<void>(small_cache.Remove(key));
         }
       }
     });
