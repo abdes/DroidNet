@@ -5,19 +5,32 @@
 //===----------------------------------------------------------------------===//
 
 #include <atomic>
+#include <cstdint>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
-#include <process.h>
+#include <ios>
 #include <span>
+#include <string>
 #include <string_view>
+#include <system_error>
 #include <vector>
 
+#include <process.h>
+
+#include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Content/LooseCookedIndex.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
+#include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/Tools/PakTool/ScriptSealing.h>
+#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/CookedSource.h>
+#include <Oxygen/Data/LooseCookedIndexFormat.h>
+#include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
+#include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
@@ -41,7 +54,7 @@ using oxygen::data::pak::scripting::ScriptResourceDesc;
 
 constexpr auto kSourceKey = "01234567-89ab-7def-8123-456789abcdef";
 
-class PakToolScriptSealingTest : public testing::Test {
+class PakToolScriptSealingTest : public testing::TestWithParam<bool> {
 protected:
   void SetUp() override
   {
@@ -50,14 +63,20 @@ protected:
     const auto id = counter.fetch_add(1, std::memory_order_relaxed);
     root_ = std::filesystem::temp_directory_path() / "oxygen_paktool_seal"
       / ("pid-" + std::to_string(pid) + "-case-" + std::to_string(id));
-    std::filesystem::remove_all(root_);
-    std::filesystem::create_directories(root_);
+    cleanup_root_ = root_;
+    if (GetParam()) {
+      for (auto index = 0U; index < 5U; ++index) {
+        root_ /= "long-authoring-and-sealing-directory-component";
+      }
+    }
+    std::filesystem::remove_all(oxygen::base::ToNativePath(root_));
+    std::filesystem::create_directories(oxygen::base::ToNativePath(root_));
   }
 
   void TearDown() override
   {
     std::error_code ec {};
-    std::filesystem::remove_all(root_, ec);
+    std::filesystem::remove_all(oxygen::base::ToNativePath(cleanup_root_), ec);
   }
 
   [[nodiscard]] auto Root() const -> const std::filesystem::path&
@@ -68,8 +87,10 @@ protected:
   static auto WriteTextFile(
     const std::filesystem::path& path, const std::string_view content) -> void
   {
-    std::filesystem::create_directories(path.parent_path());
-    auto out = std::ofstream(path, std::ios::binary | std::ios::trunc);
+    std::filesystem::create_directories(
+      oxygen::base::ToNativePath(path.parent_path()));
+    auto out = std::ofstream(
+      oxygen::base::ToNativePath(path), std::ios::binary | std::ios::trunc);
     ASSERT_TRUE(out.is_open()) << path.string();
     out << content;
   }
@@ -77,7 +98,7 @@ protected:
   static auto ReadScriptAssetDescriptor(const std::filesystem::path& path)
     -> ScriptAssetDesc
   {
-    auto in = std::ifstream(path, std::ios::binary);
+    auto in = std::ifstream(oxygen::base::ToNativePath(path), std::ios::binary);
     EXPECT_TRUE(in.is_open()) << path.string();
 
     auto descriptor = ScriptAssetDesc {};
@@ -88,9 +109,10 @@ protected:
 
 private:
   std::filesystem::path root_;
+  std::filesystem::path cleanup_root_;
 };
 
-NOLINT_TEST_F(PakToolScriptSealingTest,
+NOLINT_TEST_P(PakToolScriptSealingTest,
   ExternalScriptAssetIsSealedIntoEmbeddedSourceInStagedRoot)
 {
   const auto content_root = Root() / "Examples" / "Content";
@@ -140,10 +162,11 @@ NOLINT_TEST_F(PakToolScriptSealingTest,
   ASSERT_EQ(sealed->staged_loose_roots.size(), 1U);
   ASSERT_EQ(sealed->build_request.sources.size(), 1U);
 
-  const auto& staged_root = sealed->build_request.sources[0].path;
+  const auto& staged_root = sealed->build_request.sources.at(0).path;
   const auto staged_parent = staged_root.parent_path();
   EXPECT_NE(staged_root, cooked_root);
-  EXPECT_TRUE(std::filesystem::exists(staged_root / "container.index.bin"));
+  EXPECT_TRUE(std::filesystem::exists(
+    oxygen::base::ToNativePath(staged_root / "container.index.bin")));
 
   const auto staged_descriptor = ReadScriptAssetDescriptor(
     staged_root / std::filesystem::path(script_relpath));
@@ -155,11 +178,14 @@ NOLINT_TEST_F(PakToolScriptSealingTest,
     = staged_root / std::filesystem::path(layout.ScriptsTableRelPath());
   const auto scripts_data_path
     = staged_root / std::filesystem::path(layout.ScriptsDataRelPath());
-  EXPECT_TRUE(std::filesystem::exists(scripts_table_path));
-  EXPECT_TRUE(std::filesystem::exists(scripts_data_path));
+  EXPECT_TRUE(
+    std::filesystem::exists(oxygen::base::ToNativePath(scripts_table_path)));
+  EXPECT_TRUE(
+    std::filesystem::exists(oxygen::base::ToNativePath(scripts_data_path)));
 
   {
-    auto table_in = std::ifstream(scripts_table_path, std::ios::binary);
+    auto table_in = std::ifstream(
+      oxygen::base::ToNativePath(scripts_table_path), std::ios::binary);
     ASSERT_TRUE(table_in.is_open());
     table_in.seekg(0, std::ios::end);
     const auto table_size = static_cast<size_t>(table_in.tellg());
@@ -172,8 +198,8 @@ NOLINT_TEST_F(PakToolScriptSealingTest,
     const auto source_index
       = static_cast<uint32_t>(staged_descriptor.source_resource_index);
     ASSERT_EQ(source_index, 1U);
-    EXPECT_EQ(table_entries[source_index].encoding, ScriptEncoding::kSource);
-    EXPECT_GT(table_entries[source_index].size_bytes, 0U);
+    EXPECT_EQ(table_entries.at(source_index).encoding, ScriptEncoding::kSource);
+    EXPECT_GT(table_entries.at(source_index).size_bytes, 0U);
   }
 
   {
@@ -181,16 +207,21 @@ NOLINT_TEST_F(PakToolScriptSealingTest,
       = oxygen::content::lc::LooseCookedIndex::LoadFromRoot(staged_root);
     const auto descriptor_size = staged_index.FindDescriptorSize(script_key);
     ASSERT_TRUE(descriptor_size.has_value());
-    EXPECT_EQ(*descriptor_size, sizeof(ScriptAssetDesc));
+    EXPECT_EQ(descriptor_size.value_or(0U), sizeof(ScriptAssetDesc));
     const auto file_relpath = staged_index.FindFileRelPath(
       oxygen::data::loose_cooked::FileKind::kScriptsTable);
     ASSERT_TRUE(file_relpath.has_value());
-    EXPECT_EQ(*file_relpath, layout.ScriptsTableRelPath());
+    EXPECT_EQ(file_relpath.value_or(""), layout.ScriptsTableRelPath());
   }
 
   CleanupStagedLooseRoots(sealed->staged_loose_roots);
-  EXPECT_FALSE(std::filesystem::exists(staged_root));
-  EXPECT_FALSE(std::filesystem::exists(staged_parent));
+  EXPECT_FALSE(
+    std::filesystem::exists(oxygen::base::ToNativePath(staged_root)));
+  EXPECT_FALSE(
+    std::filesystem::exists(oxygen::base::ToNativePath(staged_parent)));
 }
+
+INSTANTIATE_TEST_SUITE_P(
+  PathLengths, PakToolScriptSealingTest, testing::Bool());
 
 } // namespace

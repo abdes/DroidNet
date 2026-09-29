@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <filesystem>
 #include <span>
 #include <string>
@@ -17,18 +18,18 @@
 namespace oxygen::content::pak::tool {
 
 struct ScriptSealingError {
-  std::string error_code;
-  std::string error_message;
-  std::filesystem::path source_path;
-  std::filesystem::path descriptor_path;
-  std::filesystem::path resolved_path;
-  std::string external_source_path;
+  std::string error_code {};
+  std::string error_message {};
+  std::filesystem::path source_path {};
+  std::filesystem::path descriptor_path {};
+  std::filesystem::path resolved_path {};
+  std::string external_source_path {};
 };
 
 struct ScriptSealingResult {
   pak::PakBuildRequest build_request {};
   std::vector<std::filesystem::path> staged_loose_roots {};
-  uint32_t sealed_script_assets = 0;
+  std::uint32_t sealed_script_assets { 0U };
 };
 
 [[nodiscard]] auto SealLooseCookedSourcesForPakBuild(
