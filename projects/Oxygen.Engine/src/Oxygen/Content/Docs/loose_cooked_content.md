@@ -29,7 +29,7 @@ mount operation.
 
 Active sources have registry ownership. Retired sources have weak registry
 entries; decode operations and loaded asset/resource owners retain their actual
-source and shared marker lock. Old asset objects expose their original SourceKey.
+source and shared marker lock. Old asset objects expose their exact SourceOrigin.
 Source-qualified operations select that source exactly; they do not silently
 release or load the newer winning generation. Contextual reads and repeated dependency publication preserve a recorded direct
 dependency binding. An unbound dependency resolves within its retained origin
@@ -39,9 +39,9 @@ does not silently rebind an already loaded asset.
 
 Dependency graph nodes are the existing source-qualified asset cache identities,
 not bare AssetKeys. Old and new generations can therefore coexist, release and
-trim independently. Runtime source IDs are not recycled while naked ResourceKey
-values could survive; exhaustion of the existing 16-bit namespace is an explicit
-capacity error, never wraparound.
+trim independently. Source instances and opaque content IDs are not recycled.
+A reopened generation uses an independent opening, allowing retired metadata to
+expire while the new instance remains mounted.
 
 Content does not delete generation directories. A publisher can reclaim only an
 unselected generation after acquiring its existing marker exclusively. Loaded
@@ -99,15 +99,13 @@ lock primitive is owned by [Serio](../../Serio/README.md#file-locks).
    active source precedence. The dependency graph records the actual resolved
    source, so release and trim never substitute a newer generation.
 
-2. **Source id segregation is explicit**
+2. **Runtime identity includes the source opening**
 
-   `ResourceKey` encodes a 16-bit **source id**. Source ids are assigned by the runtime as follows:
-
-   - PAK source IDs start at `0`, increasing without reuse during loader lifetime.
-   - Loose cooked source IDs start at `0x8000`, also increasing without reuse.
-   - `0xFFFF` is reserved for synthetic/buffer-backed sources.
-
-   These ranges are part of the contract and are centralized in `Oxygen/Content/Constants.h`.
+   ResourceKey is an opaque loader-owned ID. Full identity equality includes the
+   source instance, resource kind and table index. PAK, loose and synthetic
+   resources share one ID namespace without encoding source ranges in the key.
+   [Identity ownership](deps_and_cache.md#planned-identity-and-ownership-simplification)
+   defines lazy registration and metadata reclamation.
 
 3. **Async loader contract applies equally to loose cooked**
 

@@ -22,12 +22,12 @@
 #include <Oxygen/Content/Internal/DependencyCollector.h>
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/SceneLoader.h>
-#include <Oxygen/Content/SourceToken.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/PakFormatSerioWriters.h> // IWYU pragma: keep
+#include <Oxygen/Data/SourceOrigin.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Serio/Writer.h>
@@ -283,7 +283,7 @@ protected:
 
     return { oxygen::content::LoaderContext {
                .current_asset_key = oxygen::data::AssetKey {},
-               .source_token = oxygen::content::internal::SourceToken(1U),
+               .source_instance = oxygen::data::SourceInstanceId(1U),
                .desc_reader = &reader_,
                .work_offline = true,
                .dependency_collector = collector,

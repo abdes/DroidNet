@@ -71,7 +71,7 @@ inline auto LoadScriptAsset(const LoaderContext& context)
         continue;
       }
       internal::ResourceRef ref {
-        .source = context.source_token,
+        .source = context.source_instance,
         .resource_type_id = data::ScriptResource::ClassTypeId(),
         .resource_index = resource_index,
       };
@@ -83,7 +83,7 @@ inline auto LoadScriptAsset(const LoaderContext& context)
   // arrays in scene data. Asset-level defaults remain empty in this phase.
   return std::make_unique<data::ScriptAsset>(context.current_asset_key, desc,
     std::vector<data::pak::scripting::ScriptParamRecord> {},
-    context.source_key);
+    data::SourceOrigin { context.source_key, context.source_instance });
 }
 
 //! Loader for script resources (bytecode or source blobs).

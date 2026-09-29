@@ -10,9 +10,9 @@
 
 #include <Oxygen/Content/ResidencyPolicy.h>
 #include <Oxygen/Content/ResourceTypeList.h>
-#include <Oxygen/Content/SourceToken.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/Data/SourceOrigin.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Serio/Stream.h>
 
@@ -34,7 +34,7 @@ struct LoaderContext {
    This token is safe to copy across threads and MUST be used by async decode
    pipelines when recording `internal::ResourceRef` dependencies.
   */
-  internal::SourceToken source_token {};
+  data::SourceInstanceId source_instance {};
 
   //! Reader, already positioned at the start of the asset/resource descriptor
   //! to load.

@@ -23,7 +23,7 @@ namespace oxygen::content::internal {
 auto PhysicsQueryService::MakePhysicsResourceKey(
   const data::SourceKey source_key,
   const data::pak::core::ResourceIndexT resource_index,
-  const Callbacks& callbacks) const noexcept -> std::optional<ResourceKey>
+  const Callbacks& callbacks) -> std::optional<ResourceKey>
 {
   const auto source_id = callbacks.resolve_source_id_for_source_key(source_key);
   if (!source_id.has_value()) {
@@ -35,7 +35,7 @@ auto PhysicsQueryService::MakePhysicsResourceKey(
 auto PhysicsQueryService::MakePhysicsResourceKeyForAsset(
   const data::AssetKey& context_asset_key,
   const data::pak::core::ResourceIndexT resource_index,
-  const Callbacks& callbacks) const noexcept -> std::optional<ResourceKey>
+  const Callbacks& callbacks) -> std::optional<ResourceKey>
 {
   const auto source_id
     = callbacks.resolve_source_id_for_asset(context_asset_key);
@@ -47,8 +47,8 @@ auto PhysicsQueryService::MakePhysicsResourceKeyForAsset(
 
 auto PhysicsQueryService::MakePhysicsResourceKeyForAsset(
   const data::AssetKey& context_asset_key,
-  const data::AssetKey& resource_asset_key,
-  const Callbacks& callbacks) const noexcept -> std::optional<ResourceKey>
+  const data::AssetKey& resource_asset_key, const Callbacks& callbacks)
+  -> std::optional<ResourceKey>
 {
   if (resource_asset_key.IsNil()) {
     return std::nullopt;

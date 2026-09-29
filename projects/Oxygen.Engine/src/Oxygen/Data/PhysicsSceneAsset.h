@@ -68,13 +68,13 @@ class PhysicsSceneAsset final : public Asset {
   OXYGEN_TYPED(PhysicsSceneAsset)
 public:
   //! Constructs a PhysicsSceneAsset from a borrowed span (non-owning).
-  OXGN_DATA_API PhysicsSceneAsset(
-    AssetKey key, std::span<const std::byte> data, SourceKey source_key = {});
+  OXGN_DATA_API PhysicsSceneAsset(AssetKey key, std::span<const std::byte> data,
+    SourceOrigin source_origin = {});
 
   //! Constructs a PhysicsSceneAsset that owns the raw data blob.
   //! This is the preferred path for loaders.
   OXGN_DATA_API PhysicsSceneAsset(
-    AssetKey key, std::vector<std::byte> data, SourceKey source_key = {});
+    AssetKey key, std::vector<std::byte> data, SourceOrigin source_origin = {});
 
   ~PhysicsSceneAsset() override = default;
 

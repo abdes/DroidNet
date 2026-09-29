@@ -25,13 +25,13 @@ This section is normative. "MUST" and "MUST NOT" are strict requirements.
    References: `DependencyCollector.h:18-25`, `AssetLoader.h:935-939`.
 
 5. Source-aware identity:
-   Asset and resource cache identity MUST be source-aware through `SourceKey` semantics, not mount order.
-   References: `AssetLoader.cpp:4203-4215`, `AssetLoader.cpp:4217-4247`.
+   Cache identity includes the exact runtime source instance. Full typed equality
+   selects opaque IDs; hashes only select interning buckets.
+   Owner: [identity contract](Docs/deps_and_cache.md#planned-identity-and-ownership-simplification).
 
 6. Resource key construction boundary:
-   `ResourceKey` packing MUST remain an `AssetLoader`-internal concern.
-   Decode code MUST use `ResourceRef` + `SourceToken` and bind on owning thread.
-   References: `AssetLoader.h:1049-1056`, `ResourceRef.h:34-39`, `AssetLoader.cpp:743-757`.
+   `AssetLoader` interns keys on its owning thread. Workers hand off `ResourceRef`
+   with a `SourceInstanceId`; existing-ID lookup remains allocation-free.
 
 7. Deterministic mount resolution:
    Source lookup for assets MUST preserve deterministic precedence (newest mount wins unless explicitly overridden).
@@ -46,7 +46,7 @@ This section is normative. "MUST" and "MUST NOT" are strict requirements.
    References: `AssetLoader.cpp:1591-1637`.
 
 10. Mount invalidation correctness:
-    Refreshing or clearing mounts MUST leave no stale dependency graph edges or stale hash mappings.
+    Refreshing or clearing mounts MUST leave no stale dependency graph edges. Old opaque IDs must never address replacement bytes.
     References: `AssetLoader.cpp:323-364`, `AssetLoader.cpp:408-433`, `AssetLoader.cpp:492-528`.
 
 11. Source capability parity:
@@ -101,20 +101,20 @@ This section is normative. "MUST" and "MUST NOT" are strict requirements.
 
 ### Responsibility Map
 
-| Component                           | Owned state                                           | Primary responsibility                                                 |
-| ----------------------------------- | ----------------------------------------------------- | ---------------------------------------------------------------------- |
-| `AssetLoader`                       | lifecycle glue, API wiring, facade-level coordination | public API, activation/deactivation, cross-service orchestration       |
-| `internal::ContentSourceRegistry`   | mounted source vectors/maps/tokens                    | mount/unmount/clear and source-id/token resolution                     |
-| `internal::AssetIdentityIndex`      | asset hash/key/source reverse indexes                 | deterministic asset identity resolution and preferred-source overrides |
-| `internal::DependencyGraphStore`    | asset/resource dependency edges                       | dependency edge insert/remove/enumeration and symmetry assertions      |
-| `internal::DependencyReleaseEngine` | release traversal working state                       | resources-first dependency release and trim traversal                  |
-| `internal::InFlightOperationTable`  | unified typed/erased in-flight operations             | dedup of concurrent loads and lifecycle cleanup                        |
-| `internal::ResourceLoadPipeline`    | resource decode/publish pipeline state                | cache-hit/in-flight/decode/store/publish for resources                 |
-| `internal::ScriptHotReloadService`  | script path index + reload subscribers                | script reload orchestration and notifications                          |
-| `internal::ScriptQueryService`      | script query helpers                                  | script sidecar/resource query operations                               |
-| `internal::PhysicsQueryService`     | physics query helpers                                 | physics scene/material/collision query operations                      |
-| `internal::EvictionRegistry`        | eviction subscriber registry + reentrancy guard       | eviction callback subscription and safe dispatch                       |
-| `internal::ResourceKeyRegistry`     | resource-hash to key mapping                          | canonical resource-key registration/lookup/invariant checks            |
+| Component                           | Owned state                                           | Primary responsibility                                            |
+| ----------------------------------- | ----------------------------------------------------- | ----------------------------------------------------------------- |
+| `AssetLoader`                       | lifecycle glue, API wiring, facade-level coordination | public API, activation/deactivation, cross-service orchestration  |
+| `internal::ContentSourceRegistry`   | mounted/retained source instances                     | mount precedence, exact read capability and source lifetime       |
+| `internal::ContentIdentityRegistry` | full identities and nonowning ID index                | collision-safe interning, lookup and locator reclamation          |
+| `internal::DependencyGraphStore`    | asset/resource dependency edges                       | dependency edge insert/remove/enumeration and symmetry assertions |
+| `internal::DependencyReleaseEngine` | release traversal working state                       | resources-first dependency release and trim traversal             |
+| `internal::InFlightOperationTable`  | unified typed/erased in-flight operations             | dedup of concurrent loads and lifecycle cleanup                   |
+| `internal::ResourceLoadPipeline`    | resource decode/publish pipeline state                | cache-hit/in-flight/decode/store/publish for resources            |
+| `internal::ScriptHotReloadService`  | script path index + reload subscribers                | script reload orchestration and notifications                     |
+| `internal::ScriptQueryService`      | script query helpers                                  | script sidecar/resource query operations                          |
+| `internal::PhysicsQueryService`     | physics query helpers                                 | physics scene/material/collision query operations                 |
+| `internal::EvictionRegistry`        | eviction subscriber registry + reentrancy guard       | eviction callback subscription and safe dispatch                  |
+| `internal::ResourceKeyRegistry`     | resource-hash to key mapping                          | canonical resource-key registration/lookup/invariant checks       |
 
 ### Boundary Rules
 

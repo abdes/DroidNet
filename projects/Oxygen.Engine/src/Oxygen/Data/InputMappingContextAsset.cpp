@@ -18,7 +18,7 @@
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/InputMappingContextAsset.h>
 #include <Oxygen/Data/PakFormat_input.h>
-#include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/Data/SourceOrigin.h>
 
 namespace oxygen::data {
 
@@ -38,8 +38,8 @@ InputMappingContextAsset::InputMappingContextAsset(AssetKey asset_key,
   std::vector<pak::input::InputActionMappingRecord> mappings,
   std::vector<pak::input::InputTriggerRecord> triggers,
   std::vector<pak::input::InputTriggerAuxRecord> trigger_aux,
-  std::vector<char> strings, SourceKey source_key)
-  : Asset(asset_key, source_key)
+  std::vector<char> strings, SourceOrigin source_origin)
+  : Asset(asset_key, source_origin)
   , desc_(desc)
   , mappings_(std::move(mappings))
   , triggers_(std::move(triggers))

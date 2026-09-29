@@ -499,8 +499,9 @@ inline auto LoadSceneAsset(const LoaderContext& context)
     }
   }
 
-  auto asset = std::make_unique<data::SceneAsset>(
-    context.current_asset_key, std::move(bytes), context.source_key);
+  auto asset = std::make_unique<data::SceneAsset>(context.current_asset_key,
+    std::move(bytes),
+    data::SourceOrigin { context.source_key, context.source_instance });
   if (const auto post = asset->TryGetPostProcessVolumeEnvironment(); post
     && post->auto_exposure_metering_mask != data::pak::core::kNoResourceIndex
     && !context.parse_only) {

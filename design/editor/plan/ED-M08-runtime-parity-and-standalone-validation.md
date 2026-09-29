@@ -1,8 +1,8 @@
 # ED-M08 — Runtime parity and standalone qualification
 
-Status: **in progress — M08.1.1–M08.1.4 validated; paused before M08.1.5**
+Status: **in progress — M08.1.1–M08.1.5 validated; M08.1.6 next**
 
-Next: **M08.1.5 runtime identities**, after the requested pause.
+Next: **M08.1.6 automatic load ownership**. Commit each remaining sub-slice after its exit checks.
 See [owners](#2-implementation-document-map), [remaining increments](#m081-remaining-increments)
 and [exit checklist](#7-exit-checklist). Captured-sky IBL is delivered by
 [VX-IBL-01](../../../projects/Oxygen.Engine/design/vortex/milestones/VX-IBL-01/README.md);
@@ -141,7 +141,7 @@ the owning later slices.
 | M08.1.2 Cameras                  | validated | Auto/Fixed source, native/managed records and command transport; hydrate every camera. Resolve projection per target without rewriting authored ratio. Test imports, round trips, invalid inputs and target resize. Fixed bars/metering remain M08.2.                                                                                                           |
 | M08.1.3 Emission                 | validated | Float32 cooked RGB and canonical colour/intensity sources; native version rejection, editor templates/adapters and fixture producers. Retire the affected managed binary writer route. Test finite HDR, 9.7 precision and source colour preservation at zero intensity.                                                                                         |
 | M08.1.4 Cutover                  | validated | Publish standalone retained imports as immutable generations through Cooker/Content; upgrade maintained editor projects and retained settings, recook demo/source imports and PAKs, refresh SDK/Interop, and verify normal editor loading. Reject retired formats; retain no compatibility reader or dual source representation.                                |
-| M08.1.5 Runtime identities       | planned   | Intern full typed identities with mounted-source instance identity; reuse opaque IDs in cache, dependencies and in-flight work. Remove hash-as-identity, duplicate reverse registries and packed runtime source IDs. Prove forced-collision separation, same-SourceKey refresh isolation, lazy reload after eviction and bounded locator metadata.              |
+| M08.1.5 Runtime identities       | validated | Intern full typed identities with mounted-source instance identity; reuse opaque IDs in cache, dependencies and in-flight work. Remove hash-as-identity, duplicate reverse registries and packed runtime source IDs. Prove forced-collision separation, same-SourceKey refresh isolation, lazy reload after eviction and bounded locator metadata.              |
 | M08.1.6 Automatic load ownership | planned   | Content-owned automatic checkout controls, explicit borrowing and residency pins; remove manual release balancing. Prove per-request ownership across coalesced loads, dependency transfers, cancellation, off-thread destruction and shutdown; preserve allocation-free IBL inspection.                                                                        |
 | M08.1.7 Integrity inventory      | planned   | Native loose index owns complete file sizes/digests and membership; protected readers reuse verification. Remove duplicate managed output proofs. Reject tampering, missing/extra members and stale verification; bump the index format and recook.                                                                                                             |
 | M08.1.8 Project publication      | planned   | Select one immutable ordered root set through an atomic project head; retain authored-source CAS and preview rollback. Remove cooked-directory swap/recovery phases. Keep existing incremental staging seed copies initially. Qualify multi-root crash recovery, conflicts and old readers.                                                                     |
@@ -191,6 +191,43 @@ This replacement retains cached assets; the native timings measure publication,
 not large-unload driver cost. Large-unload bounds and viewless cleanup are covered
 by the CPU baseline and lifecycle regression. The separate debug-layer run passed
 in 11.69 s with no D3D12 errors. Traces, screenshots and logs stay outside Git.
+
+#### M08.1.5 qualification and locator baseline
+
+Full Debug/Release engine and example builds pass without MSVC warnings.
+Content plus renderer resource suites pass **310 Debug / 304 Release** cases.
+The selected four tidy checks pass across modified files. Source review is clear.
+Both SDK configurations, Interop and normal editor builds pass; existing managed
+analyzer warnings remain in unchanged editor code. RenderScene passes
+`ibl_persist_and_replace` and `ibl_reopen` with isolated settings, Sponza/Lantern,
+1920×1080 at 60 FPS, and the D3D12 debug layer, with no debug-layer errors.
+
+Regressions cover exact hash collisions, same-key refresh with changed payloads,
+revocation during dependencies, independent generation reopen, lazy reload after
+eviction, supplied-byte provenance, synthetic script reload, allocation failure
+rollback and bounded locator retirement. Existing-ID inspection allocates nothing.
+
+Release baseline (2026-09-29, MSVC x64; 65,536 locators; median of three runs):
+
+| Measurement                                             | Result   |
+| ------------------------------------------------------- | -------- |
+| Intern a new cooked locator                             | 115.9 ns |
+| Find an existing full identity                          | 15.4 ns  |
+| Cooked locator allocator bytes                          | 7.50 MiB |
+| Synthetic allocator bytes after retiring the cooked set | 9.50 MiB |
+| Empty registry bucket capacity after the mixed-set peak | 4.00 MiB |
+
+The memory figures measure interner allocator requests. The second phase briefly
+holds both sets; buckets retain that peak capacity for reuse. Synthetic identities
+remain valid for the loader's producer lifetime, independently of payload eviction.
+
+Reproduce from the engine root:
+
+```powershell
+./out/build-ninja/bin/Release/Oxygen.Content.ContentIdentity.Tests.exe `
+  --gtest_also_run_disabled_tests `
+  --gtest_filter=ContentIdentityBenchmark.DISABLED_LocatorCost --gtest_repeat=3
+```
 
 Qualify the engine and all maintained examples before editor validation: finish
 native content migration, retained reimport, loose/PAK loading and bounded runtime

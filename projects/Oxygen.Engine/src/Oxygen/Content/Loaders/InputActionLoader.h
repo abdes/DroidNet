@@ -55,8 +55,8 @@ inline auto LoadInputActionAsset(const LoaderContext& context)
     throw std::runtime_error("invalid input action value_type");
   }
 
-  return std::make_unique<data::InputActionAsset>(
-    context.current_asset_key, desc, context.source_key);
+  return std::make_unique<data::InputActionAsset>(context.current_asset_key,
+    desc, data::SourceOrigin { context.source_key, context.source_instance });
 }
 
 static_assert(oxygen::content::LoadFunction<decltype(LoadInputActionAsset)>);

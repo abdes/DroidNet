@@ -24,7 +24,7 @@ namespace oxygen::content::internal {
 auto ScriptQueryService::MakeScriptResourceKeyForAsset(
   const data::AssetKey& context_asset_key,
   const data::pak::core::ResourceIndexT resource_index,
-  const Callbacks& callbacks) const noexcept -> std::optional<ResourceKey>
+  const Callbacks& callbacks) -> std::optional<ResourceKey>
 {
   const auto source_id
     = callbacks.resolve_source_id_for_asset(context_asset_key);

@@ -82,7 +82,7 @@ public:
   struct MountedSceneEntry final {
     data::AssetKey scene_key;
     data::SourceKey source_key {};
-    uint16_t source_id { 0 };
+    data::SourceInstanceId source_id { 0 };
     ContentSourceKind source_kind { ContentSourceKind::kPak };
     std::filesystem::path source_path;
     std::string display_name;
@@ -101,7 +101,7 @@ public:
 
   struct MountedSourceEntry final {
     data::SourceKey source_key {};
-    uint16_t source_id { 0 };
+    data::SourceInstanceId source_id { 0 };
     ContentSourceKind source_kind { ContentSourceKind::kPak };
     std::filesystem::path source_path;
   };
@@ -206,20 +206,21 @@ public:
   //! descriptors throw. Call on the loader's owning thread before
   //! StartLoadTexture.
   [[nodiscard]] virtual auto ResolveTextureResourceKey(
-    const TextureResourceLocator& locator) const
-    -> std::optional<ResourceKey> = 0;
+    const TextureResourceLocator& locator) -> std::optional<ResourceKey> = 0;
 
   //! Resolve a nonzero texture index in a uniquely mounted source. Missing,
   //! ambiguous sources and out-of-range indices return nullopt. The resulting
-  //! identity remains reloadable after that source is refreshed.
-  [[nodiscard]] virtual auto MakeTextureResourceKey(data::SourceKey source_key,
-    data::pak::core::ResourceIndexT resource_index) const
+  //! identity remains reloadable while its source opening is readable. A
+  //! mutable refresh revokes old reads; retained immutable generations remain
+  //! readable.
+  [[nodiscard]] virtual auto MakeTextureResourceKey(
+    data::SourceKey source_key, data::pak::core::ResourceIndexT resource_index)
     -> std::optional<ResourceKey> = 0;
 
   //! Resolve a nonzero texture index in a loaded asset's owning source.
   [[nodiscard]] virtual auto MakeTextureResourceKeyForAsset(
     const data::Asset& context_asset,
-    data::pak::core::ResourceIndexT resource_index) const noexcept
+    data::pak::core::ResourceIndexT resource_index)
     -> std::optional<ResourceKey> = 0;
 
   //! Begin loading a texture resource and invoke `on_complete` on completion.
@@ -445,7 +446,7 @@ public:
   //! Build script resource key from a loaded asset's source and table index.
   [[nodiscard]] virtual auto MakeScriptResourceKeyForAsset(
     const data::Asset& context_asset,
-    data::pak::core::ResourceIndexT resource_index) const noexcept
+    data::pak::core::ResourceIndexT resource_index)
     -> std::optional<ResourceKey> = 0;
   //! Read a script resource by table index from the context asset's source.
   [[nodiscard]] virtual auto ReadScriptResourceForAsset(
@@ -464,19 +465,18 @@ public:
   virtual auto LoadPhysicsResourceAsync(ResourceKey key)
     -> co::Co<std::shared_ptr<data::PhysicsResource>> = 0;
   //! Build physics resource key from source identity and table index.
-  [[nodiscard]] virtual auto MakePhysicsResourceKey(data::SourceKey source_key,
-    data::pak::core::ResourceIndexT resource_index) const noexcept
+  [[nodiscard]] virtual auto MakePhysicsResourceKey(
+    data::SourceKey source_key, data::pak::core::ResourceIndexT resource_index)
     -> std::optional<ResourceKey> = 0;
   //! Build physics resource key from a loaded asset's source and table index.
   [[nodiscard]] virtual auto MakePhysicsResourceKeyForAsset(
     const data::Asset& context_asset,
-    data::pak::core::ResourceIndexT resource_index) const noexcept
+    data::pak::core::ResourceIndexT resource_index)
     -> std::optional<ResourceKey> = 0;
   //! Build physics resource key from a loaded asset's source and resource
   //! asset key.
   [[nodiscard]] virtual auto MakePhysicsResourceKeyForAsset(
-    const data::Asset& context_asset,
-    const data::AssetKey& resource_asset_key) const noexcept
+    const data::Asset& context_asset, const data::AssetKey& resource_asset_key)
     -> std::optional<ResourceKey> = 0;
   //! Read a collision shape descriptor by asset key in the context asset's
   //! source.
@@ -589,6 +589,9 @@ public:
 
   //! Mint a synthetic buffer key suitable for buffer-driven workflows.
   [[nodiscard]] virtual auto MintSyntheticBufferKey() -> ResourceKey = 0;
+
+  //! Mint a loader-owned key for caller-provided cooked script bytes.
+  [[nodiscard]] virtual auto MintSyntheticScriptKey() -> ResourceKey = 0;
 
 protected:
   virtual void UnsubscribeResourceEvictions(

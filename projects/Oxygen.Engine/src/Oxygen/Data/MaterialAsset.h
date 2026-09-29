@@ -47,8 +47,8 @@ public:
     pak::render::MaterialAssetDesc desc,
     std::vector<ShaderReference> shader_refs = {},
     std::vector<oxygen::content::ResourceKey> texture_resource_keys = {},
-    SourceKey source_key = {})
-    : Asset(asset_key, source_key)
+    SourceOrigin source_origin = {})
+    : Asset(asset_key, source_origin)
     , desc_(std::move(desc))
     , shader_refs_(std::move(shader_refs))
     , texture_resource_keys_(std::move(texture_resource_keys))

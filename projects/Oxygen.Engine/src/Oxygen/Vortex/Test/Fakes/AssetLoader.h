@@ -300,14 +300,14 @@ public:
   }
 
   [[nodiscard]] auto ResolveTextureResourceKey(
-    const content::TextureResourceLocator&) const
+    const content::TextureResourceLocator&)
     -> std::optional<content::ResourceKey> override
   {
     return std::nullopt;
   }
 
   auto MakeTextureResourceKey(
-    oxygen::data::SourceKey, oxygen::data::pak::core::ResourceIndexT) const
+    oxygen::data::SourceKey, oxygen::data::pak::core::ResourceIndexT)
     -> std::optional<oxygen::content::ResourceKey> override
   {
     return std::nullopt;
@@ -315,7 +315,7 @@ public:
 
   [[nodiscard]] auto MakeTextureResourceKeyForAsset(
     const data::Asset& /*context_asset*/,
-    data::pak::core::ResourceIndexT /*resource_index*/) const noexcept
+    data::pak::core::ResourceIndexT /*resource_index*/)
     -> std::optional<content::ResourceKey> override
   {
     return std::nullopt;
@@ -323,7 +323,7 @@ public:
 
   [[nodiscard]] auto MakeScriptResourceKeyForAsset(
     const data::Asset& /*context_asset*/,
-    data::pak::core::ResourceIndexT /*resource_index*/) const noexcept
+    data::pak::core::ResourceIndexT /*resource_index*/)
     -> std::optional<content::ResourceKey> override
   {
     return std::nullopt;
@@ -358,7 +358,7 @@ public:
   }
 
   [[nodiscard]] auto MakePhysicsResourceKey(data::SourceKey /*source_key*/,
-    data::pak::core::ResourceIndexT /*resource_index*/) const noexcept
+    data::pak::core::ResourceIndexT /*resource_index*/)
     -> std::optional<content::ResourceKey> override
   {
     return std::nullopt;
@@ -366,7 +366,7 @@ public:
 
   [[nodiscard]] auto MakePhysicsResourceKeyForAsset(
     const data::Asset& /*context_asset*/,
-    data::pak::core::ResourceIndexT /*resource_index*/) const noexcept
+    data::pak::core::ResourceIndexT /*resource_index*/)
     -> std::optional<content::ResourceKey> override
   {
     return std::nullopt;
@@ -374,7 +374,7 @@ public:
 
   [[nodiscard]] auto MakePhysicsResourceKeyForAsset(
     const data::Asset& /*context_asset*/,
-    const data::AssetKey& /*resource_asset_key*/) const noexcept
+    const data::AssetKey& /*resource_asset_key*/)
     -> std::optional<content::ResourceKey> override
   {
     return std::nullopt;
@@ -532,6 +532,13 @@ public:
   }
 
   [[nodiscard]] auto MintSyntheticBufferKey() -> content::ResourceKey override
+  {
+    return content::ResourceKey {
+      next_key_++,
+    };
+  }
+
+  [[nodiscard]] auto MintSyntheticScriptKey() -> content::ResourceKey override
   {
     return content::ResourceKey {
       next_key_++,

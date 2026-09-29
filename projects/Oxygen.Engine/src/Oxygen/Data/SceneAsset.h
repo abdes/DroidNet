@@ -122,8 +122,8 @@ public:
     SceneAssetDesc).
     @throws std::runtime_error if the data is invalid or too small.
   */
-  OXGN_DATA_API SceneAsset(
-    AssetKey key, std::span<const std::byte> data, SourceKey source_key = {});
+  OXGN_DATA_API SceneAsset(AssetKey key, std::span<const std::byte> data,
+    SourceOrigin source_origin = {});
 
   //! Constructs a SceneAsset that owns its raw data.
   /*!
@@ -135,7 +135,7 @@ public:
     @throws std::runtime_error if the data is invalid or too small.
   */
   OXGN_DATA_API SceneAsset(
-    AssetKey key, std::vector<std::byte> data, SourceKey source_key = {});
+    AssetKey key, std::vector<std::byte> data, SourceOrigin source_origin = {});
 
   ~SceneAsset() override = default;
 

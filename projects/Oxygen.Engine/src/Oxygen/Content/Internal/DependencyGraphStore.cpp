@@ -11,7 +11,9 @@
 #include <unordered_set>
 #include <utility>
 
-#include <Oxygen/Base/Logging.h>
+#ifndef NDEBUG
+#  include <Oxygen/Base/Logging.h>
+#endif
 #include <Oxygen/Content/Internal/DependencyGraphStore.h>
 #include <Oxygen/Content/ResourceKey.h>
 
@@ -91,7 +93,6 @@ auto DependencyGraphStore::ResourceDependencies() const
 }
 
 auto DependencyGraphStore::AssertEdgeRefcountSymmetry(std::string_view context,
-  const std::function<uint64_t(const ResourceKey)>& hash_resource,
   const std::function<uint32_t(uint64_t)>& get_checkout_count) const -> void
 {
 #ifndef NDEBUG
@@ -108,7 +109,7 @@ auto DependencyGraphStore::AssertEdgeRefcountSymmetry(std::string_view context,
 
   for (const auto& [dependent, deps] : resource_dependencies_) {
     for (const auto& res_key : deps) {
-      const auto res_hash = hash_resource(res_key);
+      const auto res_hash = res_key.get();
       if (get_checkout_count(res_hash) == 0U) {
         LOG_F(ERROR,
           "[invariant:{}] resource dependency edge has zero cache retains: "
@@ -119,7 +120,6 @@ auto DependencyGraphStore::AssertEdgeRefcountSymmetry(std::string_view context,
   }
 #else
   static_cast<void>(context);
-  static_cast<void>(hash_resource);
   static_cast<void>(get_checkout_count);
 #endif
 }

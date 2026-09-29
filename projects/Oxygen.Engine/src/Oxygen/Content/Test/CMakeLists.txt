@@ -33,6 +33,14 @@ add_test(NAME ${link_test_target} COMMAND ${link_test_target})
 
 include(GTestHelpers)
 
+m_gtest_program(ContentIdentity SOURCES "ContentIdentityRegistry_test.cpp")
+target_sources(
+  "${META_MODULE_NAME}.ContentIdentity.Tests"
+  PRIVATE
+    "../Internal/ContentIdentity.cpp"
+    "../Internal/ContentIdentityRegistry.cpp"
+)
+
 m_gtest_program(
   DependencyReleaseEngine
   SOURCES

@@ -7,21 +7,21 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <unordered_map>
+#include <span>
 #include <unordered_set>
 #include <vector>
 
-#include <Oxygen/Base/Logging.h>
+#ifndef NDEBUG
+#  include <Oxygen/Base/Logging.h>
+#endif
 #include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Content/Internal/DependencyGraphStore.h>
 #include <Oxygen/Content/Internal/DependencyReleaseEngine.h>
-#include <Oxygen/Data/AssetKey.h>
 
 namespace oxygen::content::internal {
 
 auto DependencyReleaseEngine::ReleaseAssetTree(const uint64_t key,
-  DependencyGraphStore& graph, CacheT& content_cache,
-  const ReleaseCallbacks& callbacks) -> void
+  DependencyGraphStore& graph, CacheT& content_cache) -> void
 {
 #ifndef NDEBUG
   // Cycles are rejected upstream; the recursion guard is debug diagnostics.
@@ -37,7 +37,7 @@ auto DependencyReleaseEngine::ReleaseAssetTree(const uint64_t key,
   auto asset_deps = graph.RemoveAssetDependencies(key);
   if (resource_deps) {
     for (const auto resource : *resource_deps) {
-      content_cache.CheckIn(callbacks.hash_resource(resource));
+      content_cache.CheckIn(resource.get());
     }
   }
   if (asset_deps) {
@@ -45,25 +45,21 @@ auto DependencyReleaseEngine::ReleaseAssetTree(const uint64_t key,
       if (content_cache.GetCheckoutCount(dependency) > 1U) {
         content_cache.CheckIn(dependency);
       } else {
-        ReleaseAssetTree(dependency, graph, content_cache, callbacks);
+        ReleaseAssetTree(dependency, graph, content_cache);
       }
     }
   }
   content_cache.CheckIn(key);
-  callbacks.assert_refcount_symmetry("ReleaseAssetTree");
 }
 
-auto DependencyReleaseEngine::TrimCache(
-  const std::unordered_map<uint64_t, data::AssetKey>& asset_keys,
-  const std::unordered_map<uint64_t, ResourceKey>& resource_keys,
-  DependencyGraphStore& graph, CacheT& content_cache,
-  const ReleaseCallbacks& callbacks) -> TrimResult
+auto DependencyReleaseEngine::TrimCache(std::span<const uint64_t> asset_keys,
+  std::span<const uint64_t> resource_keys, DependencyGraphStore& graph,
+  CacheT& content_cache) -> TrimResult
 {
   std::vector<uint64_t> trim_roots;
   trim_roots.reserve(asset_keys.size());
   size_t blocked_roots = 0U;
-  for (const auto& [cache_key, asset_key] : asset_keys) {
-    static_cast<void>(asset_key);
+  for (const auto cache_key : asset_keys) {
     const auto checkout_count = content_cache.GetCheckoutCount(cache_key);
     if (checkout_count == 1U) {
       trim_roots.push_back(cache_key);
@@ -102,7 +98,7 @@ auto DependencyReleaseEngine::TrimCache(
     auto asset_deps = graph.RemoveAssetDependencies(asset_hash);
     if (resource_deps) {
       for (const auto resource : *resource_deps) {
-        const auto resource_hash = callbacks.hash_resource(resource);
+        const auto resource_hash = resource.get();
         content_cache.CheckIn(resource_hash);
         if (content_cache.Contains(resource_hash)
           && content_cache.GetCheckoutCount(resource_hash) == 1U) {
@@ -127,8 +123,7 @@ auto DependencyReleaseEngine::TrimCache(
 
   std::vector<uint64_t> resource_hashes;
   resource_hashes.reserve(resource_keys.size());
-  for (const auto& [cache_key, resource_key] : resource_keys) {
-    static_cast<void>(resource_key);
+  for (const auto cache_key : resource_keys) {
     resource_hashes.push_back(cache_key);
   }
   std::ranges::sort(resource_hashes);

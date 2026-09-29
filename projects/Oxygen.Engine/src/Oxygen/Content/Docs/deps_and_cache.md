@@ -88,19 +88,16 @@ This is why unloading is deterministic: it happens **only** on eviction.
 - Asset→asset: `asset_dependencies_[dependent] = { dependency, ... }`
 - Asset→resource: `resource_dependencies_[dependent] = { resource_key, ... }`
 
-Asset nodes use the existing source-qualified `uint64_t` cache identity. A stable
-AssetKey may have old and new generation nodes simultaneously. Resource nodes use
-ResourceKey; hashing keeps the original source metadata after lookup retirement.
-`Data::Asset::GetSourceKey()` identifies the decoded origin, and Content-owned
-shared-pointer deleters retain its source through the last loaded owner.
-
-There is no reverse map in production builds.
+Asset and resource nodes use loader-allocated IDs from the same identity registry.
+`ResourceKey` wraps a resource ID; its value is the cache key. A stable AssetKey
+may have several source-instance nodes simultaneously. Full identity equality,
+not hash equality, selects an ID. `Data::Asset::GetSourceOrigin()` identifies the
+exact decoded opening; Content-owned shared-pointer deleters retain its source.
 
 Debug `GetDebugAssetDependencyMap()` exposes actual cache identities;
 `GetDebugAssetKey()` labels them. `ForEachDependent(AssetKey, ...)` resolves the
-current winner and scans its direct incoming edges. Runtime contextual lookup
-uses the per-AssetKey identity index and direct-edge membership, without a graph
-traversal.
+current winner and scans its direct incoming edges. Contextual dependency lookup
+reads the parent's direct edges and resolves their IDs through the registry.
 
 ### Dependency types
 
@@ -152,8 +149,8 @@ Release is explicit: `ReleaseAsset(asset)` checks in that exact decoded origin.
 `ReleaseAsset(AssetKey)` addresses the current winner and is unsuitable for an
 object retained across source replacement. An object from an immutable generation
 retains its source lease after cache eviction and continues reading those bytes.
-Mutable roots require reader quiescence before replacement; the planned source
-instance contract below explicitly revokes their old read capability.
+Mutable refresh revokes the old opening. A worker finishing after revocation
+cannot publish its decoded result into the cache.
 
 The release algorithm is depth-first and ordered:
 
@@ -266,8 +263,9 @@ Deferred / out of scope:
 
 ## Planned identity and ownership simplification
 
-Status: planned for M08.1.5–M08.1.6. This replaces the current cache identity and
-manual checkout protocol; it is not a claim about the implementation above.
+Status: M08.1.5 identities validated; M08.1.6 automatic
+checkout ownership remains planned. The current release protocol above stays in
+place until that ownership migration.
 
 | Identity           | Fields                                                             |
 | ------------------ | ------------------------------------------------------------------ |
@@ -277,17 +275,31 @@ manual checkout protocol; it is not a claim about the implementation above.
 | Synthetic resource | ResourceKind and producer-owned serial/lifetime.                   |
 | ContentId          | Nonzero monotonic uint64, never reused within its loader lifetime. |
 
-Use Base Uuid/NamedType for source instances and handles. Mint a new source
-instance on every open/refresh, including unchanged SourceKey/index bytes. Intern
+Use Base NamedType for process-unique source instances and loader-local IDs.
+An already-active immutable generation mount is idempotent; reopening a retired
+generation or refreshing mutable content mints a new instance, including unchanged
+SourceKey/index bytes. Intern
 full identities using equality; hashes select buckets only. Interning/publication
 belongs to the loader thread; decode workers report identities without modifying
 registries. One owning identity map and nonowning ID index replace the asset and
 resource reverse registries, packed source IDs and hash-as-identity conversions.
 Nexus recycled-slot machinery is unnecessary for nonrecycled IDs.
 
+Register identities lazily on the loader thread. Key-creation APIs are non-const
+and may propagate allocation failure through the caller's load error boundary;
+missing source/resource results retain their existing optional result. Existing-ID
+lookup and cached inspection stay allocation-free. Do not pre-register complete
+resource tables at mount. Decoded assets carry their exact runtime source origin,
+so identical persistent keys cannot redirect old dependencies after a refresh.
+Refresh, trim and clear reclaim expired-source locators after eviction notifications;
+mounted/readable source locators survive decoded-payload eviction.
+
 Source instances retain touched locator records while mounted/readable, even when
 decoded entries are evicted. This preserves lazy reload through a ResourceKey.
-Metadata costs O(distinct locators touched in live sources); measure that cost.
+Cooked locator entries cost O(distinct locators touched in readable or retained
+source instances). The loader is the synthetic producer: synthetic locators remain
+for its lifetime, including after payload eviction, and are measured separately.
+Hash tables retain bucket capacity for reuse; memory baselines include that capacity.
 Retirement removes current-winner eligibility. Immutable sources remain exactly
 readable through retained ownership; mutable roots revoke old read capability
 before path reuse. Distinct identity alone cannot preserve overwritten bytes.

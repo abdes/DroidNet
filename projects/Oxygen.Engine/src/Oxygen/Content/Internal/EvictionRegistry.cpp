@@ -5,9 +5,15 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cstdint>
+#include <unordered_set>
 #include <utility>
+#include <vector>
 
+#include <Oxygen/Composition/Typed.h>
+#include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/Internal/EvictionRegistry.h>
+#include <Oxygen/Content/ResourceKey.h>
 
 namespace oxygen::content::internal {
 
@@ -62,6 +68,23 @@ auto EvictionRegistry::Clear() -> void
 {
   subscribers_.clear();
   eviction_in_progress_.clear();
+  tracked_resources_.clear();
+}
+
+auto EvictionRegistry::TrackResource(const ResourceKey key) -> void
+{
+  tracked_resources_.insert(key);
+}
+
+auto EvictionRegistry::ForgetResource(const ResourceKey key) -> void
+{
+  tracked_resources_.erase(key);
+}
+
+auto EvictionRegistry::TrackedResources() const
+  -> const std::unordered_set<ResourceKey>&
+{
+  return tracked_resources_;
 }
 
 } // namespace oxygen::content::internal

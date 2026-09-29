@@ -16,35 +16,37 @@
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/Data/SourceOrigin.h>
 
 namespace oxygen::content::internal {
 
 class PhysicsQueryService final {
 public:
   struct Callbacks final {
-    std::function<std::optional<uint16_t>(const data::AssetKey&)>
+    std::function<std::optional<data::SourceInstanceId>(const data::AssetKey&)>
       resolve_source_id_for_asset;
-    std::function<std::shared_ptr<const IContentSource>(uint16_t)>
+    std::function<std::shared_ptr<const IContentSource>(data::SourceInstanceId)>
       resolve_source_for_id;
-    std::function<std::optional<uint16_t>(data::SourceKey)>
+    std::function<std::optional<data::SourceInstanceId>(data::SourceKey)>
       resolve_source_id_for_source_key;
-    std::function<ResourceKey(uint16_t, data::pak::core::ResourceIndexT)>
+    std::function<ResourceKey(
+      data::SourceInstanceId, data::pak::core::ResourceIndexT)>
       make_physics_resource_key;
   };
 
   [[nodiscard]] auto MakePhysicsResourceKey(data::SourceKey source_key,
-    data::pak::core::ResourceIndexT resource_index,
-    const Callbacks& callbacks) const noexcept -> std::optional<ResourceKey>;
+    data::pak::core::ResourceIndexT resource_index, const Callbacks& callbacks)
+    -> std::optional<ResourceKey>;
 
   [[nodiscard]] auto MakePhysicsResourceKeyForAsset(
     const data::AssetKey& context_asset_key,
-    data::pak::core::ResourceIndexT resource_index,
-    const Callbacks& callbacks) const noexcept -> std::optional<ResourceKey>;
+    data::pak::core::ResourceIndexT resource_index, const Callbacks& callbacks)
+    -> std::optional<ResourceKey>;
 
   [[nodiscard]] auto MakePhysicsResourceKeyForAsset(
     const data::AssetKey& context_asset_key,
-    const data::AssetKey& resource_asset_key,
-    const Callbacks& callbacks) const noexcept -> std::optional<ResourceKey>;
+    const data::AssetKey& resource_asset_key, const Callbacks& callbacks)
+    -> std::optional<ResourceKey>;
 
   [[nodiscard]] auto ReadCollisionShapeAssetDescForAsset(
     const data::AssetKey& context_asset_key,

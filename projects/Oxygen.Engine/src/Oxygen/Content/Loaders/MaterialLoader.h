@@ -362,7 +362,7 @@ inline auto LoadMaterialAsset(LoaderContext context)
       }
 
       internal::ResourceRef ref {
-        .source = context.source_token,
+        .source = context.source_instance,
         .resource_type_id = TextureResource::ClassTypeId(),
         .resource_index = texture_index,
       };
@@ -387,7 +387,8 @@ inline auto LoadMaterialAsset(LoaderContext context)
   // per-slot texture resource keys produced during loading.
   auto material_asset
     = std::make_unique<data::MaterialAsset>(context.current_asset_key, desc,
-      std::move(shader_refs), std::vector<ResourceKey> {}, context.source_key);
+      std::move(shader_refs), std::vector<ResourceKey> {},
+      data::SourceOrigin { context.source_key, context.source_instance });
 
   return material_asset;
 }

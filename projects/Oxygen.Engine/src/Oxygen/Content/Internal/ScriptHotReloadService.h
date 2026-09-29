@@ -21,6 +21,7 @@
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Data/ScriptResource.h>
+#include <Oxygen/Data/SourceOrigin.h>
 
 namespace oxygen::content::internal {
 
@@ -36,9 +37,10 @@ public:
     std::function<void(const data::AssetKey&,
       std::function<void(std::shared_ptr<data::ScriptAsset>)>)>
       start_load_script_asset;
-    std::function<std::optional<uint16_t>(const data::AssetKey&)>
+    std::function<std::optional<data::SourceInstanceId>(const data::AssetKey&)>
       resolve_source_id_for_asset;
-    std::function<ResourceKey(uint16_t, data::pak::core::ResourceIndexT)>
+    std::function<ResourceKey(
+      data::SourceInstanceId, data::pak::core::ResourceIndexT)>
       make_script_resource_key;
     std::function<std::shared_ptr<data::ScriptResource>(ResourceKey)>
       get_script_resource;

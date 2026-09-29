@@ -32,11 +32,17 @@ public:
   auto TryEnterEviction(uint64_t cache_key) -> bool;
   auto ExitEviction(uint64_t cache_key) -> void;
 
+  auto TrackResource(ResourceKey key) -> void;
+  auto ForgetResource(ResourceKey key) -> void;
+  [[nodiscard]] auto TrackedResources() const
+    -> const std::unordered_set<ResourceKey>&;
+
   auto Clear() -> void;
 
 private:
   std::unordered_map<TypeId, std::vector<Subscriber>> subscribers_ {};
   std::unordered_set<uint64_t> eviction_in_progress_ {};
+  std::unordered_set<ResourceKey> tracked_resources_ {};
 };
 
 } // namespace oxygen::content::internal

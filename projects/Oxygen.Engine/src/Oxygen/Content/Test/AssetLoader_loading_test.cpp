@@ -5,50 +5,59 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cstddef>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
-#include <ranges>
+#include <ios>
+#include <optional>
 #include <span>
+#include <stdexcept>
+#include <string>
+#include <system_error>
 #include <vector>
 
-#include <Oxygen/Testing/GTest.h>
+#include "./AssetLoader_test.h"
+#include "Fixtures/LooseCookedTestLayout.h"
+#include "Utils/PakUtils.h"
 
-#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Span.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/InputContextHydration.h>
 #include <Oxygen/Content/Internal/IContentSource.h>
-#include <Oxygen/Content/Internal/InternalResourceKey.h>
 #include <Oxygen/Content/Internal/LooseCookedSource.h>
 #include <Oxygen/Content/Internal/PakFileSource.h>
 #include <Oxygen/Content/Loaders/BufferLoader.h>
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
 #include <Oxygen/Content/Loaders/MaterialLoader.h>
 #include <Oxygen/Content/Loaders/TextureLoader.h>
+#include <Oxygen/Content/PakFile.h>
+#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/PatchManifest.h>
+#include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Input/InputMappingContext.h>
 #include <Oxygen/Input/InputSystem.h>
 #include <Oxygen/OxCo/BroadcastChannel.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
+#include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/Platform/InputEvent.h>
-
-#include "./AssetLoader_test.h"
-#include "Fixtures/LooseCookedTestLayout.h"
-#include "Utils/PakUtils.h"
+#include <Oxygen/Testing/GTest.h>
 
 using testing::IsNull;
 using testing::NotNull;
-
-using oxygen::content::internal::InternalResourceKey;
 
 using oxygen::observer_ptr;
 using oxygen::co::Co;
@@ -68,12 +77,17 @@ using oxygen::content::testing::LooseCookedLayout;
 auto FillTestGuid(oxygen::data::loose_cooked::IndexHeader& header) -> void
 {
   for (uint8_t i = 0; i < 16; ++i) {
-    header.source_identity[i] = static_cast<uint8_t>(i + 1);
+    oxygen::base::CheckedAt(std::span { header.source_identity }, i)
+      = static_cast<uint8_t>(i + 1);
   }
-  header.source_identity[6]
-    = static_cast<uint8_t>((header.source_identity[6] & 0x0FU) | 0x70U);
-  header.source_identity[8]
-    = static_cast<uint8_t>((header.source_identity[8] & 0x3FU) | 0x80U);
+  oxygen::base::CheckedAt(std::span { header.source_identity }, 6)
+    = static_cast<uint8_t>(
+      (oxygen::base::CheckedAt(std::span { header.source_identity }, 6) & 0x0FU)
+      | 0x70U);
+  oxygen::base::CheckedAt(std::span { header.source_identity }, 8)
+    = static_cast<uint8_t>(
+      (oxygen::base::CheckedAt(std::span { header.source_identity }, 8) & 0x3FU)
+      | 0x80U);
 }
 
 auto NormalizePath(const std::filesystem::path& path) -> std::filesystem::path
@@ -853,7 +867,7 @@ NOLINT_TEST_F(AssetLoaderLoadingTest, LoadAssetComplexGeometryLoadsSuccessfully)
         EXPECT_FALSE(meshes.empty());
 
         for (size_t i = 0; i < meshes.size(); ++i) {
-          const auto& mesh = meshes[i];
+          const auto& mesh = oxygen::base::CheckedAt(meshes, i);
           EXPECT_THAT(mesh, NotNull())
             << "Mesh at index " << i << " should not be null";
 
@@ -1012,7 +1026,8 @@ NOLINT_TEST_F(
  a ResourceKey from that PAK. Verifies that the encoded PAK index remains 0 for
  the first added PAK, preserving deterministic ResourceKey encoding.
 */
-NOLINT_TEST_F(AssetLoaderLoadingTest, MakeResourceKeyPakIndexIgnoresLooseRoots)
+NOLINT_TEST_F(
+  AssetLoaderLoadingTest, MakeResourceKeyReusesTheExactMountedSource)
 {
   // Arrange
   const auto cooked_root = temp_dir_ / "loose_cooked_root";
@@ -1027,10 +1042,12 @@ NOLINT_TEST_F(AssetLoaderLoadingTest, MakeResourceKeyPakIndexIgnoresLooseRoots)
   // Act
   const auto resource_key = asset_loader_->MakeResourceKey<BufferResource>(
     pak_file, oxygen::data::pak::core::ResourceIndexT { 0u });
-  const auto decoded = InternalResourceKey(resource_key);
+  const auto repeated = asset_loader_->MakeResourceKey<BufferResource>(
+    pak_file, oxygen::data::pak::core::ResourceIndexT { 0u });
 
   // Assert
-  EXPECT_EQ(decoded.GetPakIndex(), 0u);
+  EXPECT_NE(resource_key, oxygen::content::ResourceKey {});
+  EXPECT_EQ(resource_key, repeated);
 }
 
 //! Duplicate AssetKey conflict policy: newest mount wins by default.
@@ -1067,10 +1084,10 @@ NOLINT_TEST_F(
       EXPECT_THAT(material, NotNull());
       if (material) {
         const auto base = material->GetBaseColor();
-        EXPECT_FLOAT_EQ(base[0], 0.0F);
-        EXPECT_FLOAT_EQ(base[1], 0.0F);
-        EXPECT_FLOAT_EQ(base[2], 1.0F);
-        EXPECT_FLOAT_EQ(base[3], 1.0F);
+        EXPECT_FLOAT_EQ(oxygen::base::CheckedAt(base, 0), 0.0F);
+        EXPECT_FLOAT_EQ(oxygen::base::CheckedAt(base, 1), 0.0F);
+        EXPECT_FLOAT_EQ(oxygen::base::CheckedAt(base, 2), 1.0F);
+        EXPECT_FLOAT_EQ(oxygen::base::CheckedAt(base, 3), 1.0F);
       }
 
       loader.Stop();
@@ -1173,10 +1190,10 @@ NOLINT_TEST_F(AssetLoaderLoadingTest,
         co_return oxygen::co::kJoin;
       }
       const auto newest_base = newest_wins_material->GetBaseColor();
-      EXPECT_FLOAT_EQ(newest_base[0], 0.0F);
-      EXPECT_FLOAT_EQ(newest_base[1], 0.0F);
-      EXPECT_FLOAT_EQ(newest_base[2], 1.0F);
-      EXPECT_FLOAT_EQ(newest_base[3], 1.0F);
+      EXPECT_FLOAT_EQ(oxygen::base::CheckedAt(newest_base, 0), 0.0F);
+      EXPECT_FLOAT_EQ(oxygen::base::CheckedAt(newest_base, 1), 0.0F);
+      EXPECT_FLOAT_EQ(oxygen::base::CheckedAt(newest_base, 2), 1.0F);
+      EXPECT_FLOAT_EQ(oxygen::base::CheckedAt(newest_base, 3), 1.0F);
 
       newest_wins_material.reset();
       (void)loader.ReleaseAsset(material_key);
@@ -1193,10 +1210,10 @@ NOLINT_TEST_F(AssetLoaderLoadingTest,
         co_return oxygen::co::kJoin;
       }
       const auto reversed_base = reversed_order_material->GetBaseColor();
-      EXPECT_FLOAT_EQ(reversed_base[0], 0.0F);
-      EXPECT_FLOAT_EQ(reversed_base[1], 1.0F);
-      EXPECT_FLOAT_EQ(reversed_base[2], 0.0F);
-      EXPECT_FLOAT_EQ(reversed_base[3], 1.0F);
+      EXPECT_FLOAT_EQ(oxygen::base::CheckedAt(reversed_base, 0), 0.0F);
+      EXPECT_FLOAT_EQ(oxygen::base::CheckedAt(reversed_base, 1), 1.0F);
+      EXPECT_FLOAT_EQ(oxygen::base::CheckedAt(reversed_base, 2), 0.0F);
+      EXPECT_FLOAT_EQ(oxygen::base::CheckedAt(reversed_base, 3), 1.0F);
 
       loader.Stop();
       co_return oxygen::co::kJoin;
@@ -1241,18 +1258,20 @@ NOLINT_TEST_F(AssetLoaderLoadingTest,
       if (geometry) {
         const auto meshes = geometry->Meshes();
         EXPECT_FALSE(meshes.empty());
-        if (!meshes.empty() && meshes[0]) {
-          const auto submeshes = meshes[0]->SubMeshes();
+        if (!meshes.empty() && oxygen::base::CheckedAt(meshes, 0)) {
+          const auto submeshes
+            = oxygen::base::CheckedAt(meshes, 0)->SubMeshes();
           EXPECT_FALSE(submeshes.empty());
           if (!submeshes.empty()) {
-            const auto material = submeshes[0].Material();
+            const auto material
+              = oxygen::base::CheckedAt(submeshes, 0).Material();
             EXPECT_THAT(material, NotNull());
             if (material) {
               const auto base = material->GetBaseColor();
-              EXPECT_FLOAT_EQ(base[0], 0.0F);
-              EXPECT_FLOAT_EQ(base[1], 1.0F);
-              EXPECT_FLOAT_EQ(base[2], 0.0F);
-              EXPECT_FLOAT_EQ(base[3], 1.0F);
+              EXPECT_FLOAT_EQ(oxygen::base::CheckedAt(base, 0), 0.0F);
+              EXPECT_FLOAT_EQ(oxygen::base::CheckedAt(base, 1), 1.0F);
+              EXPECT_FLOAT_EQ(oxygen::base::CheckedAt(base, 2), 0.0F);
+              EXPECT_FLOAT_EQ(oxygen::base::CheckedAt(base, 3), 1.0F);
             }
           }
         }

@@ -32,7 +32,7 @@ Internal decode/publish bridge types:
 - `oxygen::content::LoaderContext` (value-type decode context).
 - `oxygen::content::internal::DependencyCollector` (identity-only dependency
   handoff).
-- `oxygen::content::internal::SourceToken` (opaque handle for a mounted source).
+- `oxygen::data::SourceInstanceId` (opaque identity of one source opening).
 - `oxygen::content::internal::ResourceRef` (container-relative resource
   reference bound to `ResourceKey` during publish).
 
@@ -77,38 +77,19 @@ portable.
 
 ## Identity Model
 
-### `ResourceKey` source-id segregation
+### Runtime identities and decode handoff
 
-`ResourceKey` embeds a 16-bit source id. The runtime uses a codified segregation
-contract to keep namespaces disjoint:
+The [identity contract](deps_and_cache.md#planned-identity-and-ownership-simplification)
+defines exact asset, cooked-resource and synthetic identities. The loader interns
+those values using equality and issues opaque IDs shared by the cache, dependency
+graph and in-flight operations. IDs are not hashes or packed source indices.
 
-- PAK source IDs increase from `0` and are never recycled during loader lifetime.
-- Mounted loose cooked roots use a reserved high range starting at `0x8000`.
-- Synthetic/buffer-provided resources use the reserved sentinel `0xFFFF`.
-
-Retired sources keep their runtime IDs and tokens; namespace exhaustion is a
-capacity error. Loaded owners retain their source independently of active lookup.
-
-These constants live in `Oxygen/Content/Constants.h` and must remain consistent
-with `ResourceKey` packing.
-
-Rationale: synthetic keys cannot collide with mounted sources, and loose cooked
-ids remain disjoint from PAK ids without requiring filesystem-derived identity.
-
-### `SourceToken` and `ResourceRef`
-
-Decode code uses `SourceToken` (minted at mount time) as an identity-safe handle
-for “the source being decoded from”. Resource dependencies are recorded as
-either:
-
-- `ResourceKey` (already bound identity), or
-- `internal::ResourceRef { SourceToken, TypeId, resource_index }`.
-
-Binding rule (owning thread): resolve `SourceToken` to the loader-owned source
-id, map `TypeId` to a `ResourceTypeList` index, then pack into `ResourceKey`.
-
-Rationale: decode stays free of loader internals while publish remains the only
-place aware of key encoding.
+Workers record `ResourceRef { SourceInstanceId, TypeId, resource_index }` or an
+already-bound ResourceKey. The owning thread validates the opening and interns
+the reference. A mutable refresh revokes old read capability; publication and
+completion recheck it after suspension. An immutable retired opening remains
+readable while loaded owners retain its lease. Reopening creates an independent
+source lifetime; mounting an already-active immutable generation is idempotent.
 
 ---
 
@@ -206,7 +187,10 @@ The caller provides cooked bytes and an explicit cache identity. The loader:
 - Decodes on the thread pool.
 - Publishes to the cache under the provided key.
 
-Synthetic keys for this path must use the synthetic source id (`0xFFFF`).
+Use `MintSyntheticBufferKey`, `MintSyntheticTextureKey` or
+`MintSyntheticScriptKey` for this path. Provided bytes cannot populate a cooked
+source locator. The loader retains synthetic identities for its producer lifetime,
+so the same product can be reloaded after decoded-payload eviction.
 
 ---
 

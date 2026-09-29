@@ -229,7 +229,8 @@ inline auto LoadInputMappingContextAsset(const LoaderContext& context)
 
   return std::make_unique<data::InputMappingContextAsset>(
     context.current_asset_key, desc, std::move(mappings), std::move(triggers),
-    std::move(trigger_aux), std::move(strings), context.source_key);
+    std::move(trigger_aux), std::move(strings),
+    data::SourceOrigin { context.source_key, context.source_instance });
 }
 
 static_assert(

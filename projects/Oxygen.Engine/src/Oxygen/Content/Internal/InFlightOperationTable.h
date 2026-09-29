@@ -75,7 +75,7 @@ public:
     }
     idle_.UnParkAll();
   }
-  auto Find(TypeId type_id, uint64_t hash_key, const RequestMeta& request)
+  auto Find(TypeId type_id, uint64_t cache_key, const RequestMeta& request)
     -> std::optional<SharedVoidOp>
   {
     ++stats_.find_calls;
@@ -83,7 +83,7 @@ public:
     if (type_it == table_.end()) {
       return std::nullopt;
     }
-    auto it = type_it->second.find(hash_key);
+    auto it = type_it->second.find(cache_key);
     if (it == type_it->second.end()) {
       return std::nullopt;
     }
@@ -91,20 +91,20 @@ public:
     it->second.request = MergeRequestMeta(it->second.request, request);
     return it->second.op;
   }
-  auto GetRequestMeta(TypeId type_id, uint64_t hash_key) const
+  auto GetRequestMeta(TypeId type_id, uint64_t cache_key) const
     -> std::optional<RequestMeta>
   {
     const auto type_it = table_.find(type_id);
     if (type_it == table_.end()) {
       return std::nullopt;
     }
-    const auto it = type_it->second.find(hash_key);
+    const auto it = type_it->second.find(cache_key);
     if (it == type_it->second.end()) {
       return std::nullopt;
     }
     return it->second.request;
   }
-  auto Insert(TypeId type_id, uint64_t hash_key, OperationId id,
+  auto Insert(TypeId type_id, uint64_t cache_key, OperationId id,
     SharedVoidOp op, const RequestMeta& request) -> void
   {
     if (!accepting_) {
@@ -114,7 +114,7 @@ public:
     try {
       const auto inserted
         = bucket->second
-            .try_emplace(hash_key,
+            .try_emplace(cache_key,
               Entry { .op = std::move(op), .request = request, .id = id })
             .second;
       if (!inserted) {
@@ -128,14 +128,14 @@ public:
     }
     ++stats_.insert_calls;
   }
-  auto Erase(TypeId type_id, uint64_t hash_key, OperationId id) -> void
+  auto Erase(TypeId type_id, uint64_t cache_key, OperationId id) -> void
   {
     ++stats_.erase_calls;
     const auto type_it = table_.find(type_id);
     if (type_it == table_.end()) {
       return;
     }
-    const auto entry = type_it->second.find(hash_key);
+    const auto entry = type_it->second.find(cache_key);
     if (entry == type_it->second.end() || entry->second.id != id) {
       return;
     }

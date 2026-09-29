@@ -13,7 +13,7 @@
 
 #include <Oxygen/Content/Internal/DependencyCollector.h>
 #include <Oxygen/Content/LoaderContext.h>
-#include <Oxygen/Content/SourceToken.h>
+#include <Oxygen/Data/SourceOrigin.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Serio/Writer.h>
 #include <Oxygen/Testing/GTest.h>
@@ -60,7 +60,7 @@ protected:
     auto context = MakeLoaderContext(true, false);
     auto collector
       = std::make_shared<oxygen::content::internal::DependencyCollector>();
-    context.source_token = oxygen::content::internal::SourceToken(7U);
+    context.source_instance = oxygen::data::SourceInstanceId(7U);
     context.dependency_collector = collector;
     return { std::move(context), std::move(collector) };
   }

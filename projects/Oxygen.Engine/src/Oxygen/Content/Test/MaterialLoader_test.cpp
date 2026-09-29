@@ -22,13 +22,13 @@
 #include <Oxygen/Content/Internal/ResourceRef.h>
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/MaterialLoader.h>
-#include <Oxygen/Content/SourceToken.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ShaderReference.h>
+#include <Oxygen/Data/SourceOrigin.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -489,7 +489,7 @@ NOLINT_TEST_F(
   (void)LoadMaterialAsset(std::move(context));
 
   const ResourceRef expected {
-    .source = oxygen::content::internal::SourceToken { 7 },
+    .source = oxygen::data::SourceInstanceId { 7 },
     .resource_type_id = TextureResource::ClassTypeId(),
     .resource_index = oxygen::data::pak::core::ResourceIndexT { 42U },
   };

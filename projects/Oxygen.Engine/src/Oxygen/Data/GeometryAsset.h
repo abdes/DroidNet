@@ -734,7 +734,8 @@ class GeometryAsset : public Asset {
 public:
   OXGN_DATA_API GeometryAsset(AssetKey asset_key,
     pak::geometry::GeometryAssetDesc desc,
-    std::vector<std::shared_ptr<Mesh>> lod_meshes, SourceKey source_key = {});
+    std::vector<std::shared_ptr<Mesh>> lod_meshes,
+    SourceOrigin source_origin = {});
 
   //! Immutable declaration inventory, resolved once when geometry is created.
   [[nodiscard]] auto MaterialSlots() const noexcept

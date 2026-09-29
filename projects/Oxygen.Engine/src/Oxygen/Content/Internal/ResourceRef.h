@@ -10,8 +10,8 @@
 
 #include <Oxygen/Base/Hash.h>
 #include <Oxygen/Composition/Typed.h>
-#include <Oxygen/Content/SourceToken.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/SourceOrigin.h>
 
 namespace oxygen::content::internal {
 
@@ -42,7 +42,7 @@ namespace oxygen::content::internal {
        key encoding.
  */
 struct ResourceRef final {
-  SourceToken source {};
+  data::SourceInstanceId source {};
   TypeId resource_type_id {};
   data::pak::core::ResourceIndexT resource_index {};
 
@@ -58,7 +58,7 @@ static_assert(std::is_trivially_copyable_v<ResourceRef>);
 //! Convert a ResourceRef to string for logging.
 inline auto to_string(const ResourceRef& ref) -> std::string
 {
-  return "ResourceRef{source=" + to_string(ref.source)
+  return "ResourceRef{source=" + std::to_string(ref.source.get())
     + ", type=" + std::to_string(ref.resource_type_id)
     + ", index=" + std::to_string(ref.resource_index) + "}";
 }

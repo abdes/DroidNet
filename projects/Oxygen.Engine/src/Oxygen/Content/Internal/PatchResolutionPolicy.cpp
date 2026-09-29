@@ -6,8 +6,15 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
+#include <optional>
+#include <ranges>
+#include <span>
+#include <string>
+#include <string_view>
 #include <unordered_set>
 #include <utility>
+#include <vector>
 
 #include <fmt/format.h>
 
@@ -16,6 +23,7 @@
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PatchManifest.h>
 #include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/Data/SourceOrigin.h>
 
 namespace oxygen::content::internal {
 
@@ -63,7 +71,8 @@ auto to_string(const KeyResolutionStatus status) noexcept -> std::string_view
   return "unknown";
 }
 
-auto ResolveAssetKeyByPrecedence(const std::span<const uint16_t> source_ids,
+auto ResolveAssetKeyByPrecedence(
+  const std::span<const data::SourceInstanceId> source_ids,
   const data::AssetKey& key, const KeyResolutionCallbacks& callbacks)
   -> KeyResolutionResult
 {
@@ -71,8 +80,7 @@ auto ResolveAssetKeyByPrecedence(const std::span<const uint16_t> source_ids,
     return {};
   }
 
-  for (size_t source_index = source_ids.size(); source_index-- > 0;) {
-    const auto source_id = source_ids[source_index];
+  for (const auto source_id : std::views::reverse(source_ids)) {
     if (callbacks.source_tombstones_asset(source_id, key)) {
       return {
         .status = KeyResolutionStatus::kTombstoned,
@@ -90,7 +98,8 @@ auto ResolveAssetKeyByPrecedence(const std::span<const uint16_t> source_ids,
   return {};
 }
 
-auto ResolveVirtualPathByPrecedence(const std::span<const uint16_t> source_ids,
+auto ResolveVirtualPathByPrecedence(
+  const std::span<const data::SourceInstanceId> source_ids,
   const std::string_view virtual_path,
   const VirtualPathResolutionCallbacks& callbacks)
   -> VirtualPathResolutionResult
@@ -99,38 +108,39 @@ auto ResolveVirtualPathByPrecedence(const std::span<const uint16_t> source_ids,
     return {};
   }
 
-  std::optional<data::AssetKey> winner_key {};
-  std::optional<uint16_t> winner_source_id {};
+  struct Winner {
+    data::AssetKey key {};
+    data::SourceInstanceId source {};
+  };
+  std::optional<Winner> winner;
   std::vector<VirtualPathCollision> collisions {};
 
-  for (size_t source_index = source_ids.size(); source_index-- > 0;) {
-    const auto source_id = source_ids[source_index];
+  for (const auto source_id : std::views::reverse(source_ids)) {
     const auto candidate
       = callbacks.resolve_virtual_path(source_id, virtual_path);
     if (!candidate.has_value()) {
       continue;
     }
-    if (!winner_key.has_value()) {
-      winner_key = *candidate;
-      winner_source_id = source_id;
+    if (!winner.has_value()) {
+      winner = Winner { .key = *candidate, .source = source_id };
       continue;
     }
-    if (*candidate != *winner_key) {
+    if (*candidate != winner->key) {
       collisions.push_back({
-        .winner_source_id = *winner_source_id,
+        .winner_source_id = winner->source,
         .masked_source_id = source_id,
-        .winner_key = *winner_key,
+        .winner_key = winner->key,
         .masked_key = *candidate,
       });
     }
   }
 
-  if (!winner_key.has_value()) {
+  if (!winner.has_value()) {
     return {};
   }
 
   auto key_result = ResolveAssetKeyByPrecedence(
-    source_ids, *winner_key, callbacks.key_resolution);
+    source_ids, winner->key, callbacks.key_resolution);
   if (key_result.status != KeyResolutionStatus::kFound) {
     return {
       .asset_key = std::nullopt,
@@ -140,7 +150,7 @@ auto ResolveVirtualPathByPrecedence(const std::span<const uint16_t> source_ids,
   }
 
   return {
-    .asset_key = winner_key,
+    .asset_key = winner->key,
     .key_result = key_result,
     .collisions = std::move(collisions),
   };

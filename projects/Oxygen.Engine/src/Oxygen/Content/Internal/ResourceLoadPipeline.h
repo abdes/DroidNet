@@ -15,6 +15,7 @@
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Composition/TypeSystem.h>
+#include <Oxygen/Content/Internal/ContentIdentityRegistry.h>
 #include <Oxygen/Content/Internal/ContentSourceRegistry.h>
 #include <Oxygen/Content/Internal/InFlightOperationTable.h>
 #include <Oxygen/Content/LoaderContext.h>
@@ -36,8 +37,7 @@ public:
 
   struct Callbacks final {
     std::function<void()> assert_owning_thread;
-    std::function<uint64_t(const ResourceKey&)> hash_resource_key;
-    std::function<void(uint64_t, ResourceKey)> map_resource_key;
+    std::function<void(ResourceKey)> on_resource_published;
     std::function<LoadPriorityClass()> default_priority_class;
     std::function<uint64_t()> next_request_sequence;
     std::function<void(TypeId)> on_resource_request;
@@ -53,6 +53,7 @@ public:
   };
 
   ResourceLoadPipeline(const ContentSourceRegistry& source_registry,
+    const ContentIdentityRegistry& identities,
     const ResourceLoaderMap& resource_loaders, ContentCache& content_cache,
     InFlightOperationTable& in_flight_ops,
     observer_ptr<co::ThreadPool> thread_pool, bool work_offline,
@@ -71,6 +72,7 @@ public:
 
 private:
   const ContentSourceRegistry& source_registry_;
+  const ContentIdentityRegistry& identities_;
   const ResourceLoaderMap& resource_loaders_;
   ContentCache& content_cache_;
   InFlightOperationTable& in_flight_ops_;

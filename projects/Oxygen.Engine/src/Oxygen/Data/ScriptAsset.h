@@ -52,7 +52,7 @@ public:
   OXGN_DATA_API ScriptAsset(AssetKey asset_key,
     pak::scripting::ScriptAssetDesc desc,
     const std::vector<pak::scripting::ScriptParamRecord>& default_params = {},
-    SourceKey source_key = {});
+    SourceOrigin source_origin = {});
 
   ~ScriptAsset() override = default;
 

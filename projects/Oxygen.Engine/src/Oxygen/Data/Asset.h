@@ -14,6 +14,7 @@
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/Data/SourceOrigin.h>
 
 namespace oxygen::data {
 
@@ -30,9 +31,9 @@ namespace oxygen::data {
 class Asset : public Object {
 public:
   //! Constructs an asset with a stable asset key.
-  explicit Asset(AssetKey asset_key, SourceKey source_key = {}) noexcept
+  explicit Asset(AssetKey asset_key, SourceOrigin source_origin = {}) noexcept
     : asset_key_(asset_key)
-    , source_key_(source_key)
+    , source_origin_(source_origin)
   {
   }
 
@@ -51,7 +52,13 @@ public:
   //! data.
   [[nodiscard]] auto GetSourceKey() const noexcept -> SourceKey
   {
-    return source_key_;
+    return source_origin_.key;
+  }
+
+  //! Exact runtime opening that supplied this asset.
+  [[nodiscard]] auto GetSourceOrigin() const noexcept -> SourceOrigin
+  {
+    return source_origin_;
   }
 
   //! Returns the asset type field from the header (for debugging).
@@ -104,7 +111,7 @@ protected:
 
 private:
   AssetKey asset_key_;
-  SourceKey source_key_ {};
+  SourceOrigin source_origin_ {};
 };
 
 } // namespace oxygen::data

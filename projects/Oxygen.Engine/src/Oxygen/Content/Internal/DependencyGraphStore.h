@@ -45,7 +45,6 @@ public:
   [[nodiscard]] auto ResourceDependencies() const -> const ResourceDepsMap&;
 
   auto AssertEdgeRefcountSymmetry(std::string_view context,
-    const std::function<uint64_t(ResourceKey)>& hash_resource,
     const std::function<uint32_t(uint64_t)>& get_checkout_count) const -> void;
 
 private:

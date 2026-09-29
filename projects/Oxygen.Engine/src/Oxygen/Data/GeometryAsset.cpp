@@ -31,7 +31,7 @@
 #include <Oxygen/Data/MaterialSlotInventory.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
-#include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/Data/SourceOrigin.h>
 #include <Oxygen/Data/Vertex.h>
 
 using oxygen::data::Mesh;
@@ -280,8 +280,8 @@ using oxygen::data::MeshBuilder;
 
 oxygen::data::GeometryAsset::GeometryAsset(AssetKey asset_key,
   pak::geometry::GeometryAssetDesc desc,
-  std::vector<std::shared_ptr<Mesh>> lod_meshes, SourceKey source_key)
-  : Asset(asset_key, source_key)
+  std::vector<std::shared_ptr<Mesh>> lod_meshes, SourceOrigin source_origin)
+  : Asset(asset_key, source_origin)
   , desc_(std::move(desc))
   , lod_meshes_(std::move(lod_meshes))
 {

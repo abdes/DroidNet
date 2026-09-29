@@ -54,7 +54,7 @@ in the owning source first; absent external AssetKeys may resolve through active
 source precedence. Once published, the direct dependency edge retains the actual
 resolved source. Contextual reads and repeated publication reuse that binding.
 
-Loaded assets expose `SourceKey`. Use the retained asset for dependency queries
+Loaded assets expose `SourceOrigin` (persistent key and runtime instance). Use the retained asset for dependency queries
 and release; an AssetKey-only query deliberately selects the current winner.
 Immutable loose generations can coexist without replacing bytes used by old
 assets. [Generation ownership](loose_cooked_content.md#published-generations)
@@ -100,60 +100,27 @@ directory).
 - The editor is responsible for registering sources in a deterministic order
   for Play-in-Editor workflows.
 
-### Stable source identity: `data::SourceKey`
+### Persistent identity and runtime openings
 
-Every mounted cooked source has a **stable, globally-unique identity** that is
-derived from its container/header GUID and represented in code as
-`data::SourceKey`.
+`data::SourceKey` is the persistent UUIDv7 in the PAK header or loose index.
+`data::SourceInstanceId` identifies one runtime opening. Refreshing the same root
+with unchanged `SourceKey` bytes creates a new instance, so old and new decoded
+content cannot alias. Duplicate persistent keys make key-only source selection
+ambiguous; they do not merge cache entries.
 
-- **PAK sources**: `data::pak::core::PakHeader.source_identity` (16 bytes) is
-  the source GUID. Runtime derives `data::SourceKey` from these bytes.
-- **Loose cooked roots**: `data::IndexHeader.source_identity` (16 bytes, in
-  `container.index.bin`) is the source GUID. Runtime derives `data::SourceKey`
-  from these bytes.
+`AssetKey` identifies an authored asset; the same key can occur in different
+sources, with explicit source selection or normal mount precedence choosing the
+winner. Loaded assets expose `GetSourceOrigin()` for exact contextual lookup.
 
-Contract:
+`ResourceKey` is an opaque, nonzero runtime ID, allocated by the loader from a
+full typed identity. It encodes neither source bits nor a hash and is never
+serialized. New key creation is lazy, owning-thread work and can allocate;
+existing-ID lookup and cached inspection do not allocate. Decoded-cache eviction
+preserves locators for readable sources. Mutable refresh revokes old reads;
+retained immutable generations keep their exact readers and leases.
 
-- Source GUIDs MUST encode a valid **RFC 9562 UUIDv7** value.
-- Source GUIDs MUST be **non-zero**.
-- Source GUIDs MUST be **globally unique** across all mounted sources.
-- Text forms of `SourceKey` MUST use canonical lowercase UUID text.
-- Binary ingress paths MUST reject header/index source GUID bytes that are not
-  valid UUIDv7 values.
-
-Rationale: the loader and caches must treat two different cooked sources as
-different even if their internal indices overlap. If two mounts share the same
-source GUID (including the all-zero GUID), cache aliasing and wrong-scene/wrong-
-asset behavior is expected.
-
-### `AssetKey` vs `ResourceKey`
-
-- `data::AssetKey` is a stable, engine-wide identifier for assets (a GUID).
-- `ResourceKey` is the runtime-facing cache key for resources. It is stable for
-  the lifetime of a particular mount configuration, but it is **not a durable
-  persisted identifier** because it encodes a runtime-assigned 16-bit source id.
-
-Canonical identity rules:
-
-- **Asset identity**: `data::AssetKey` MUST be globally unique across all mounts.
-- **Resource identity**: a resource is uniquely identified by
-  `(SourceKey, resource_type, resource_index)`.
-  - `resource_index` is source-scoped.
-  - `resource_type` is the loader’s resource type list index used in
-    `ResourceKey` packing.
-
-#### Source id policy (contract)
-
-`ResourceKey` includes a 16-bit **source id**. This is a **runtime-assigned mount
-namespace id**, not the stable source GUID.
-
-Source ids are segregated by source type:
-
-- PAK ids: dense `0..N-1` in PAK registration order.
-- Loose cooked ids: start at `0x8000` in loose-cooked registration order.
-- `0xFFFF` is reserved for synthetic/buffer-backed sources.
-
-These constants are centralized in `Oxygen/Content/Constants.h`.
+The [identity and ownership contract](deps_and_cache.md#planned-identity-and-ownership-simplification)
+owns identity fields, metadata retention and the next ownership migration.
 
 ---
 
@@ -240,7 +207,7 @@ flowchart TD
   A["Caller: ReleaseAsset(AssetKey)"] --> B["ReleaseAssetTree(AssetKey)"]
   B --> C["Check-in all resource dependencies first<br/>(cache CheckIn for each ResourceKey)"]
   C --> D["Recursively ReleaseAssetTree on each asset dependency"]
-  D --> E["Check-in the asset itself<br/>(cache CheckIn(HashAssetKey))"]
+  D --> E["Check-in the asset itself<br/>(cache CheckIn(ContentId))"]
   E --> F{"Refcount reaches zero?"}
   F -- No --> G["Asset/resource remains cached<br/>(still used elsewhere)"]
   F -- Yes --> H["Cache evicts entry"]

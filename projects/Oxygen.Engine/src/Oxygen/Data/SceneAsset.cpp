@@ -30,7 +30,7 @@
 #include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
-#include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/Data/SourceOrigin.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
 
@@ -60,16 +60,16 @@ namespace {
 } // namespace
 
 SceneAsset::SceneAsset(
-  AssetKey key, std::span<const std::byte> data, SourceKey source_key)
-  : Asset(key, source_key)
+  AssetKey key, std::span<const std::byte> data, SourceOrigin source_origin)
+  : Asset(key, source_origin)
   , data_(data)
 {
   ParseAndValidate();
 }
 
 SceneAsset::SceneAsset(
-  AssetKey key, std::vector<std::byte> data, SourceKey source_key)
-  : Asset(key, source_key)
+  AssetKey key, std::vector<std::byte> data, SourceOrigin source_origin)
+  : Asset(key, source_origin)
   , owned_data_(std::make_shared<std::vector<std::byte>>(std::move(data)))
   , data_(owned_data_->data(), owned_data_->size())
 {

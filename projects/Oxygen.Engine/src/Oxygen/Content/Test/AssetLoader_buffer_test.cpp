@@ -4,29 +4,40 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <memory>
 #include <mutex>
+#include <span>
 #include <string>
 #include <thread>
 #include <utility>
 #include <vector>
 
-#include <Oxygen/Testing/GTest.h>
-
-#include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Content/Loaders/BufferLoader.h>
-#include <Oxygen/Content/Loaders/TextureLoader.h>
-#include <Oxygen/OxCo/Co.h>
-#include <Oxygen/OxCo/Run.h>
-#include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
-
 #include "./AssetLoader_test.h"
 #include "Utils/PakUtils.h"
+
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/Content/IAssetLoader.h>
+#include <Oxygen/Content/LoaderContext.h>
+#include <Oxygen/Content/Loaders/BufferLoader.h>
+#include <Oxygen/Content/Loaders/TextureLoader.h>
+#include <Oxygen/Content/ResourceKey.h>
+#include <Oxygen/Data/BufferResource.h>
+#include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/TextureResource.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
+#include <Oxygen/OxCo/Run.h>
+#include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
+#include <Oxygen/OxCo/ThreadPool.h>
+#include <Oxygen/Testing/GTest.h>
 
 using ::testing::NotNull;
 
@@ -53,7 +64,7 @@ auto MakeBytesFromHexdump(const std::string& hexdump, const std::size_t size,
   std::vector<uint8_t> bytes(size, fill);
   const auto copy_count = std::min(bytes.size(), header.size());
   for (std::size_t i = 0; i < copy_count; ++i) {
-    bytes[i] = static_cast<uint8_t>(header[i]);
+    bytes.at(i) = static_cast<uint8_t>(header.at(i));
   }
 
   return bytes;
@@ -61,6 +72,40 @@ auto MakeBytesFromHexdump(const std::string& hexdump, const std::size_t size,
 
 //! Fixture for buffer-provided async load tests.
 class AssetLoaderBufferFromBufferAsyncTest : public AssetLoaderLoadingTest { };
+
+NOLINT_TEST_F(AssetLoaderBufferFromBufferAsyncTest,
+  CookedResourceRejectsUnknownAndWrongKindBeforeDecode)
+{
+  TestEventLoop loop;
+  oxygen::co::Run(loop, [&] -> Co<> {
+    oxygen::co::ThreadPool pool(loop, 2);
+    AssetLoaderConfig config {};
+    config.thread_pool = observer_ptr { &pool };
+    AssetLoader loader(Tag::Get(), config);
+    auto decode_calls = 0;
+    loader.RegisterLoader([&decode_calls](const oxygen::content::LoaderContext&)
+                            -> std::unique_ptr<BufferResource> {
+      ++decode_calls;
+      return nullptr;
+    });
+    OXCO_WITH_NURSERY(nursery)
+    {
+      co_await nursery.Start(&AssetLoader::ActivateAsync, &loader);
+      loader.Run();
+      const auto wrong_kind = loader.MintSyntheticTextureKey();
+      const auto unknown = ResourceKey { std::numeric_limits<uint64_t>::max() };
+      for (const auto key : { wrong_kind, unknown }) {
+        const auto result = co_await loader.LoadResourceAsync<BufferResource>(
+          CookedResourceData<BufferResource> { .key = key, .bytes = {} });
+        EXPECT_EQ(result, nullptr);
+        EXPECT_FALSE(loader.HasBuffer(key));
+      }
+      EXPECT_EQ(decode_calls, 0);
+      loader.Stop();
+      co_return oxygen::co::kJoin;
+    };
+  });
+}
 
 //! Test: LoadResourceAsync(cooked) decodes and caches BufferResource.
 /*!
@@ -83,7 +128,6 @@ NOLINT_TEST_F(AssetLoaderBufferFromBufferAsyncTest,
   constexpr std::size_t kSizeBytes = 192;
   constexpr uint8_t kFill = 0xAB;
 
-  const auto key = ResourceKey { 0xABCDEFU };
   auto bytes = MakeBytesFromHexdump(hexdump, kDataOffset + kSizeBytes, kFill);
 
   TestEventLoop el;
@@ -96,6 +140,7 @@ NOLINT_TEST_F(AssetLoaderBufferFromBufferAsyncTest,
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
 
     AssetLoader loader(Tag::Get(), config);
+    const auto key = loader.MintSyntheticBufferKey();
 
     loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
 
@@ -149,7 +194,6 @@ NOLINT_TEST_F(AssetLoaderBufferFromBufferAsyncTest,
   constexpr std::size_t kSizeBytes = 192;
   constexpr uint8_t kFill = 0x5A;
 
-  const auto key = ResourceKey { 0x12345678U };
   auto bytes = MakeBytesFromHexdump(hexdump, kDataOffset + kSizeBytes, kFill);
 
   TestEventLoop el;
@@ -162,6 +206,7 @@ NOLINT_TEST_F(AssetLoaderBufferFromBufferAsyncTest,
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
 
     AssetLoader loader(Tag::Get(), config);
+    const auto key = loader.MintSyntheticBufferKey();
 
     loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
 

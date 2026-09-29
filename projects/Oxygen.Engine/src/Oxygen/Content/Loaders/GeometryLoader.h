@@ -119,7 +119,7 @@ namespace detail {
         return; // sentinel / absent – nothing to collect
       }
       internal::ResourceRef ref {
-        .source = context.source_token,
+        .source = context.source_instance,
         .resource_type_id = BufferResource::ClassTypeId(),
         .resource_index = resource_index,
       };
@@ -258,7 +258,7 @@ namespace detail {
         return; // sentinel / absent – nothing to collect
       }
       internal::ResourceRef ref {
-        .source = context.source_token,
+        .source = context.source_instance,
         .resource_type_id = BufferResource::ClassTypeId(),
         .resource_index = resource_index,
       };
@@ -537,7 +537,8 @@ inline auto LoadGeometryAsset(LoaderContext context)
 
   // Construct and return GeometryAsset with LOD meshes
   return std::make_unique<data::GeometryAsset>(context.current_asset_key,
-    std::move(desc), std::move(lod_meshes), context.source_key);
+    std::move(desc), std::move(lod_meshes),
+    data::SourceOrigin { context.source_key, context.source_instance });
 }
 
 static_assert(oxygen::content::LoadFunction<decltype(LoadGeometryAsset)>);

@@ -19,7 +19,7 @@
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ScriptAsset.h>
-#include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/Data/SourceOrigin.h>
 
 namespace oxygen::data {
 
@@ -65,8 +65,8 @@ static_assert(std::is_trivially_copyable_v<pak::scripting::ScriptAssetDesc>,
 ScriptAsset::ScriptAsset(AssetKey asset_key,
   pak::scripting::ScriptAssetDesc desc,
   const std::vector<pak::scripting::ScriptParamRecord>& params,
-  SourceKey source_key)
-  : Asset(asset_key, source_key)
+  SourceOrigin source_origin)
+  : Asset(asset_key, source_origin)
   , desc_(desc)
 {
   params_.reserve(params.size());

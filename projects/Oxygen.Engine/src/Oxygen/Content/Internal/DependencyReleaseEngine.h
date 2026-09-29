@@ -9,8 +9,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <span>
 #include <string_view>
-#include <unordered_map>
 
 #include <Oxygen/Content/Internal/DependencyGraphStore.h>
 #include <Oxygen/Content/ResourceKey.h>
@@ -24,11 +24,6 @@ class DependencyReleaseEngine final {
 public:
   using CacheT = AnyCache<uint64_t, RefCountedEviction<uint64_t>>;
 
-  struct ReleaseCallbacks final {
-    std::function<uint64_t(ResourceKey)> hash_resource;
-    std::function<void(std::string_view)> assert_refcount_symmetry;
-  };
-
   struct TrimResult final {
     size_t trim_roots = 0;
     size_t pruned_live_branches = 0;
@@ -36,13 +31,12 @@ public:
     size_t orphan_resources = 0;
   };
 
-  auto ReleaseAssetTree(uint64_t key, DependencyGraphStore& graph,
-    CacheT& content_cache, const ReleaseCallbacks& callbacks) -> void;
+  auto ReleaseAssetTree(
+    uint64_t key, DependencyGraphStore& graph, CacheT& content_cache) -> void;
 
-  auto TrimCache(const std::unordered_map<uint64_t, data::AssetKey>& asset_keys,
-    const std::unordered_map<uint64_t, ResourceKey>& resource_keys,
-    DependencyGraphStore& graph, CacheT& content_cache,
-    const ReleaseCallbacks& callbacks) -> TrimResult;
+  auto TrimCache(std::span<const uint64_t> asset_keys,
+    std::span<const uint64_t> resource_keys, DependencyGraphStore& graph,
+    CacheT& content_cache) -> TrimResult;
 };
 
 } // namespace oxygen::content::internal

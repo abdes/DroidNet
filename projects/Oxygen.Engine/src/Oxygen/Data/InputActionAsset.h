@@ -20,7 +20,7 @@ class InputActionAsset final : public Asset {
 
 public:
   OXGN_DATA_API InputActionAsset(AssetKey asset_key,
-    pak::input::InputActionAssetDesc desc, SourceKey source_key = {});
+    pak::input::InputActionAssetDesc desc, SourceOrigin source_origin = {});
 
   ~InputActionAsset() override = default;
 

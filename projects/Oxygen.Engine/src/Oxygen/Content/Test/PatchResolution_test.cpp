@@ -7,9 +7,11 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <ios>
 #include <optional>
 #include <span>
 #include <stdexcept>
@@ -19,15 +21,18 @@
 #include <unordered_set>
 #include <vector>
 
-#include <Oxygen/Testing/GTest.h>
-
+#include <Oxygen/Base/Span.h>
 #include <Oxygen/Content/Internal/PatchResolutionPolicy.h>
 #include <Oxygen/Content/VirtualPathResolver.h>
+#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/PatchManifest.h>
 #include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/Data/SourceOrigin.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 namespace data = oxygen::data;
@@ -42,7 +47,7 @@ constexpr auto kAssetSeedC = uint8_t { 0x33U };
 auto MakeAssetKey(const uint8_t seed) -> data::AssetKey
 {
   auto bytes = std::array<std::uint8_t, data::AssetKey::kSizeBytes> {};
-  bytes[0] = seed;
+  bytes.at(0) = seed;
   return data::AssetKey::FromBytes(bytes);
 }
 
@@ -50,17 +55,17 @@ auto MakeSourceKey(const uint8_t seed) -> data::SourceKey
 {
   auto bytes = std::array<std::uint8_t, data::SourceKey::kSizeBytes> {};
   for (auto i = size_t { 0U }; i < bytes.size(); ++i) {
-    bytes[i] = static_cast<uint8_t>(seed + static_cast<uint8_t>(i));
+    bytes.at(i) = static_cast<uint8_t>(seed + static_cast<uint8_t>(i));
   }
-  bytes[6] = static_cast<uint8_t>((bytes[6] & 0x0FU) | 0x70U);
-  bytes[8] = static_cast<uint8_t>((bytes[8] & 0x3FU) | 0x80U);
+  bytes.at(6) = static_cast<uint8_t>((bytes.at(6) & 0x0FU) | 0x70U);
+  bytes.at(8) = static_cast<uint8_t>((bytes.at(8) & 0x3FU) | 0x80U);
   return data::SourceKey::FromBytes(bytes).value();
 }
 
 auto MakeCatalogDigest(const uint8_t seed) -> std::array<uint8_t, 32>
 {
   auto digest = std::array<uint8_t, 32> {};
-  digest[0] = seed;
+  digest.at(0) = seed;
   return digest;
 }
 
@@ -71,8 +76,9 @@ struct SourceResolutionState final {
 };
 
 auto FindState(
-  const std::unordered_map<uint16_t, SourceResolutionState>& states,
-  const uint16_t source_id) -> const SourceResolutionState*
+  const std::unordered_map<data::SourceInstanceId, SourceResolutionState>&
+    states,
+  const data::SourceInstanceId source_id) -> const SourceResolutionState*
 {
   if (const auto it = states.find(source_id); it != states.end()) {
     return &it->second;
@@ -81,15 +87,15 @@ auto FindState(
 }
 
 auto MakeResolutionCallbacks(
-  const std::unordered_map<uint16_t, SourceResolutionState>& states)
-  -> oxygen::content::internal::VirtualPathResolutionCallbacks
+  const std::unordered_map<data::SourceInstanceId, SourceResolutionState>&
+    states) -> oxygen::content::internal::VirtualPathResolutionCallbacks
 {
   namespace policy = oxygen::content::internal;
 
   return policy::VirtualPathResolutionCallbacks {
     .key_resolution = policy::KeyResolutionCallbacks {
-      .source_has_asset
-      = [&states](const uint16_t source_id, const data::AssetKey& key) -> bool {
+      .source_has_asset = [&states](const data::SourceInstanceId source_id,
+                            const data::AssetKey& key) -> bool {
         if (const auto* state = FindState(states, source_id);
           state != nullptr) {
           return state->assets.contains(key);
@@ -97,7 +103,8 @@ auto MakeResolutionCallbacks(
         return false;
       },
       .source_tombstones_asset
-      = [&states](const uint16_t source_id, const data::AssetKey& key) -> bool {
+      = [&states](const data::SourceInstanceId source_id,
+          const data::AssetKey& key) -> bool {
         if (const auto* state = FindState(states, source_id);
           state != nullptr) {
           return state->tombstones.contains(key);
@@ -106,7 +113,7 @@ auto MakeResolutionCallbacks(
       },
     },
     .resolve_virtual_path
-    = [&states](const uint16_t source_id,
+    = [&states](const data::SourceInstanceId source_id,
         const std::string_view virtual_path) -> std::optional<data::AssetKey> {
       if (const auto* state = FindState(states, source_id); state != nullptr) {
         if (const auto it
@@ -139,23 +146,24 @@ NOLINT_TEST(PatchResolutionPolicyTest,
   namespace policy = oxygen::content::internal;
 
   constexpr auto kVirtualPath = "/.cooked/collision.bin";
-  constexpr auto kSourceA = uint16_t { 10U };
-  constexpr auto kSourceB = uint16_t { 20U };
-  constexpr auto kSourceC = uint16_t { 30U };
-  constexpr auto kSourceD = uint16_t { 40U };
+  constexpr auto kSourceA = data::SourceInstanceId { 10U };
+  constexpr auto kSourceB = data::SourceInstanceId { 20U };
+  constexpr auto kSourceC = data::SourceInstanceId { 30U };
+  constexpr auto kSourceD = data::SourceInstanceId { 40U };
 
   const auto key_a = MakeAssetKey(kAssetSeedA);
   const auto key_b = MakeAssetKey(kAssetSeedB);
   const auto key_c = MakeAssetKey(kAssetSeedC);
 
-  const auto source_ids = std::array<uint16_t, 4> {
+  const auto source_ids = std::array<data::SourceInstanceId, 4> {
     kSourceA,
     kSourceB,
     kSourceC,
     kSourceD,
   };
 
-  auto states = std::unordered_map<uint16_t, SourceResolutionState> {};
+  auto states
+    = std::unordered_map<data::SourceInstanceId, SourceResolutionState> {};
   states[kSourceA].assets.insert(key_a);
   states[kSourceA].virtual_path_to_asset.emplace(kVirtualPath, key_a);
 
@@ -173,21 +181,21 @@ NOLINT_TEST(PatchResolutionPolicyTest,
     source_ids, kVirtualPath, callbacks);
 
   ASSERT_TRUE(result.asset_key.has_value());
-  EXPECT_EQ(*result.asset_key, key_a);
+  EXPECT_EQ(result.asset_key, std::optional { key_a });
   EXPECT_EQ(result.key_result.status, policy::KeyResolutionStatus::kFound);
   ASSERT_TRUE(result.key_result.source_id.has_value());
-  EXPECT_EQ(*result.key_result.source_id, kSourceD);
+  EXPECT_EQ(result.key_result.source_id, std::optional { kSourceD });
 
   ASSERT_EQ(result.collisions.size(), 2U);
-  EXPECT_EQ(result.collisions[0].winner_source_id, kSourceD);
-  EXPECT_EQ(result.collisions[0].masked_source_id, kSourceC);
-  EXPECT_EQ(result.collisions[0].winner_key, key_a);
-  EXPECT_EQ(result.collisions[0].masked_key, key_b);
+  EXPECT_EQ(result.collisions.at(0).winner_source_id, kSourceD);
+  EXPECT_EQ(result.collisions.at(0).masked_source_id, kSourceC);
+  EXPECT_EQ(result.collisions.at(0).winner_key, key_a);
+  EXPECT_EQ(result.collisions.at(0).masked_key, key_b);
 
-  EXPECT_EQ(result.collisions[1].winner_source_id, kSourceD);
-  EXPECT_EQ(result.collisions[1].masked_source_id, kSourceB);
-  EXPECT_EQ(result.collisions[1].winner_key, key_a);
-  EXPECT_EQ(result.collisions[1].masked_key, key_c);
+  EXPECT_EQ(result.collisions.at(1).winner_source_id, kSourceD);
+  EXPECT_EQ(result.collisions.at(1).masked_source_id, kSourceB);
+  EXPECT_EQ(result.collisions.at(1).winner_key, key_a);
+  EXPECT_EQ(result.collisions.at(1).masked_key, key_c);
 }
 
 NOLINT_TEST(PatchResolutionPolicyTest,
@@ -196,22 +204,23 @@ NOLINT_TEST(PatchResolutionPolicyTest,
   namespace policy = oxygen::content::internal;
 
   constexpr auto kVirtualPath = "/.cooked/masked.bin";
-  constexpr auto kSourceBase = uint16_t { 11U };
-  constexpr auto kSourceMid = uint16_t { 21U };
-  constexpr auto kSourceWinner = uint16_t { 31U };
-  constexpr auto kSourceTombstone = uint16_t { 41U };
+  constexpr auto kSourceBase = data::SourceInstanceId { 11U };
+  constexpr auto kSourceMid = data::SourceInstanceId { 21U };
+  constexpr auto kSourceWinner = data::SourceInstanceId { 31U };
+  constexpr auto kSourceTombstone = data::SourceInstanceId { 41U };
 
   const auto winner_key = MakeAssetKey(kAssetSeedA);
   const auto masked_key = MakeAssetKey(kAssetSeedB);
 
-  const auto source_ids = std::array<uint16_t, 4> {
+  const auto source_ids = std::array<data::SourceInstanceId, 4> {
     kSourceBase,
     kSourceMid,
     kSourceWinner,
     kSourceTombstone,
   };
 
-  auto states = std::unordered_map<uint16_t, SourceResolutionState> {};
+  auto states
+    = std::unordered_map<data::SourceInstanceId, SourceResolutionState> {};
   states[kSourceWinner].assets.insert(winner_key);
   states[kSourceWinner].virtual_path_to_asset.emplace(kVirtualPath, winner_key);
 
@@ -230,13 +239,13 @@ NOLINT_TEST(PatchResolutionPolicyTest,
   EXPECT_FALSE(result.asset_key.has_value());
   EXPECT_EQ(result.key_result.status, policy::KeyResolutionStatus::kTombstoned);
   ASSERT_TRUE(result.key_result.source_id.has_value());
-  EXPECT_EQ(*result.key_result.source_id, kSourceTombstone);
+  EXPECT_EQ(result.key_result.source_id, std::optional { kSourceTombstone });
 
   ASSERT_EQ(result.collisions.size(), 1U);
-  EXPECT_EQ(result.collisions[0].winner_source_id, kSourceWinner);
-  EXPECT_EQ(result.collisions[0].masked_source_id, kSourceMid);
-  EXPECT_EQ(result.collisions[0].winner_key, winner_key);
-  EXPECT_EQ(result.collisions[0].masked_key, masked_key);
+  EXPECT_EQ(result.collisions.at(0).winner_source_id, kSourceWinner);
+  EXPECT_EQ(result.collisions.at(0).masked_source_id, kSourceMid);
+  EXPECT_EQ(result.collisions.at(0).winner_key, winner_key);
+  EXPECT_EQ(result.collisions.at(0).masked_key, masked_key);
 }
 
 NOLINT_TEST(PatchResolutionPolicyTest,
@@ -347,12 +356,17 @@ auto WriteSingleAssetIndex(const std::filesystem::path& cooked_root,
     | oxygen::data::loose_cooked::kHasFileRecords;
 
   for (size_t i = 0; i < sizeof(header.source_identity); ++i) {
-    header.source_identity[i] = static_cast<uint8_t>(guid_seed + i);
+    oxygen::base::CheckedAt(std::span { header.source_identity }, i)
+      = static_cast<uint8_t>(guid_seed + i);
   }
-  header.source_identity[6]
-    = static_cast<uint8_t>((header.source_identity[6] & 0x0FU) | 0x70U);
-  header.source_identity[8]
-    = static_cast<uint8_t>((header.source_identity[8] & 0x3FU) | 0x80U);
+  oxygen::base::CheckedAt(std::span { header.source_identity }, 6)
+    = static_cast<uint8_t>(
+      (oxygen::base::CheckedAt(std::span { header.source_identity }, 6) & 0x0FU)
+      | 0x70U);
+  oxygen::base::CheckedAt(std::span { header.source_identity }, 8)
+    = static_cast<uint8_t>(
+      (oxygen::base::CheckedAt(std::span { header.source_identity }, 8) & 0x3FU)
+      | 0x80U);
 
   header.string_table_offset = sizeof(IndexHeader);
   header.string_table_size = static_cast<uint64_t>(strings.size());
@@ -390,12 +404,17 @@ auto WriteSingleAssetPakWithBrowseIndex(const std::filesystem::path& pak_path,
 
   PakHeader header {};
   for (size_t i = 0; i < sizeof(header.source_identity); ++i) {
-    header.source_identity[i] = static_cast<uint8_t>(kBaseGuidSeed + i);
+    oxygen::base::CheckedAt(std::span { header.source_identity }, i)
+      = static_cast<uint8_t>(kBaseGuidSeed + i);
   }
-  header.source_identity[6]
-    = static_cast<uint8_t>((header.source_identity[6] & 0x0FU) | 0x70U);
-  header.source_identity[8]
-    = static_cast<uint8_t>((header.source_identity[8] & 0x3FU) | 0x80U);
+  oxygen::base::CheckedAt(std::span { header.source_identity }, 6)
+    = static_cast<uint8_t>(
+      (oxygen::base::CheckedAt(std::span { header.source_identity }, 6) & 0x0FU)
+      | 0x70U);
+  oxygen::base::CheckedAt(std::span { header.source_identity }, 8)
+    = static_cast<uint8_t>(
+      (oxygen::base::CheckedAt(std::span { header.source_identity }, 8) & 0x3FU)
+      | 0x80U);
 
   std::string strings;
   const auto off_vpath = static_cast<uint32_t>(strings.size());
@@ -481,7 +500,7 @@ NOLINT_TEST_F(PatchResolutionRuntimeTest, LastMountedWinsForVirtualPathLookup)
   const auto resolved = resolver.ResolveAssetKey(kVirtualPath);
 
   ASSERT_TRUE(resolved.has_value());
-  EXPECT_EQ(*resolved, key1);
+  EXPECT_EQ(resolved, std::optional { key1 });
 }
 
 NOLINT_TEST_F(

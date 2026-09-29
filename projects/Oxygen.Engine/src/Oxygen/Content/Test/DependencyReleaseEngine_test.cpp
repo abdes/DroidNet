@@ -4,18 +4,17 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <string_view>
-#include <unordered_map>
+#include <vector>
 
 #include <Oxygen/Composition/Object.h>
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Content/Internal/DependencyGraphStore.h>
 #include <Oxygen/Content/Internal/DependencyReleaseEngine.h>
-#include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Core/AnyCache.h>
-#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
@@ -26,17 +25,6 @@ using oxygen::content::internal::DependencyReleaseEngine;
 class CachedAsset final : public oxygen::Object {
   OXYGEN_TYPED(CachedAsset)
 };
-
-auto Callbacks() -> DependencyReleaseEngine::ReleaseCallbacks
-{
-  return {
-    .hash_resource = [](oxygen::content::ResourceKey) -> uint64_t {
-      ADD_FAILURE() << "These asset-only graphs have no resource edges";
-      return 0;
-    },
-    .assert_refcount_symmetry = [](std::string_view) -> void { },
-  };
-}
 
 TEST(DependencyReleaseEngineTest, ReleaseCannotConsumeAnotherGenerationEdges)
 {
@@ -55,7 +43,7 @@ TEST(DependencyReleaseEngineTest, ReleaseCannotConsumeAnotherGenerationEdges)
   ASSERT_TRUE(graph.AddAssetDependency(kNewRoot, kNewMaterial));
 
   DependencyReleaseEngine engine;
-  engine.ReleaseAssetTree(kOldRoot, graph, cache, Callbacks());
+  engine.ReleaseAssetTree(kOldRoot, graph, cache);
 
   EXPECT_FALSE(cache.Contains(kOldRoot));
   EXPECT_EQ(cache.GetCheckoutCount(kOldMaterial), 1U);
@@ -83,19 +71,11 @@ TEST(DependencyReleaseEngineTest, TrimKeepsSeparateRootsForTheSameAssetKey)
   ASSERT_TRUE(cache.Pin(kNewMaterial, oxygen::CheckoutOwner::kInternal));
   ASSERT_TRUE(graph.AddAssetDependency(kOldRoot, kOldMaterial));
   ASSERT_TRUE(graph.AddAssetDependency(kNewRoot, kNewMaterial));
-  const auto geometry = oxygen::data::AssetKey::FromVirtualPath("/Mesh.ogeo");
-  const auto material
-    = oxygen::data::AssetKey::FromVirtualPath("/Surface.omat");
-  const auto identities = std::unordered_map<uint64_t, oxygen::data::AssetKey> {
-    { kOldRoot, geometry },
-    { kNewRoot, geometry },
-    { kOldMaterial, material },
-    { kNewMaterial, material },
-  };
+  const std::array identities { kOldRoot, kNewRoot, kOldMaterial,
+    kNewMaterial };
 
   DependencyReleaseEngine engine;
-  const auto result
-    = engine.TrimCache(identities, {}, graph, cache, Callbacks());
+  const auto result = engine.TrimCache(identities, {}, graph, cache);
 
   EXPECT_EQ(result.trim_roots, 1U);
   EXPECT_FALSE(cache.Contains(kOldRoot));
@@ -113,10 +93,10 @@ TEST(DependencyReleaseEngineTest, SharedDependencyTrimsAfterItsLastParent)
   constexpr uint64_t kLeaf = 4U;
   DependencyReleaseEngine::CacheT cache(8U);
   DependencyGraphStore graph;
-  auto identities = std::unordered_map<uint64_t, oxygen::data::AssetKey> {};
+  auto identities = std::vector<uint64_t> {};
   for (const auto key : { kFirstRoot, kSecondRoot, kShared, kLeaf }) {
     ASSERT_TRUE(cache.Store(key, std::make_shared<CachedAsset>()));
-    identities.emplace(key, oxygen::data::AssetKey {});
+    identities.push_back(key);
   }
   ASSERT_TRUE(cache.Pin(kShared, oxygen::CheckoutOwner::kInternal));
   ASSERT_TRUE(cache.Pin(kShared, oxygen::CheckoutOwner::kInternal));
@@ -126,8 +106,7 @@ TEST(DependencyReleaseEngineTest, SharedDependencyTrimsAfterItsLastParent)
   ASSERT_TRUE(graph.AddAssetDependency(kShared, kLeaf));
 
   DependencyReleaseEngine engine;
-  const auto result
-    = engine.TrimCache(identities, {}, graph, cache, Callbacks());
+  const auto result = engine.TrimCache(identities, {}, graph, cache);
 
   EXPECT_EQ(result.trim_roots, 2U);
   EXPECT_FALSE(cache.Contains(kFirstRoot));

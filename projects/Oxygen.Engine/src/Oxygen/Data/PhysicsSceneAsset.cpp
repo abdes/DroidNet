@@ -19,21 +19,21 @@
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/Data/PhysicsSceneAsset.h>
-#include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/Data/SourceOrigin.h>
 
 namespace oxygen::data {
 
 PhysicsSceneAsset::PhysicsSceneAsset(
-  AssetKey key, std::span<const std::byte> data, SourceKey source_key)
-  : Asset(key, source_key)
+  AssetKey key, std::span<const std::byte> data, SourceOrigin source_origin)
+  : Asset(key, source_origin)
   , data_(data)
 {
   ParseAndValidate();
 }
 
 PhysicsSceneAsset::PhysicsSceneAsset(
-  AssetKey key, std::vector<std::byte> data, SourceKey source_key)
-  : Asset(key, source_key)
+  AssetKey key, std::vector<std::byte> data, SourceOrigin source_origin)
+  : Asset(key, source_origin)
   , owned_data_(std::make_shared<std::vector<std::byte>>(std::move(data)))
   , data_(owned_data_->data(), owned_data_->size())
 {

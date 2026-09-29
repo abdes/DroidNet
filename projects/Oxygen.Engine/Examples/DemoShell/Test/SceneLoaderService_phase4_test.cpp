@@ -53,6 +53,7 @@
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Data/ScriptResource.h>
 #include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/Data/SourceOrigin.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/OxCo/Co.h>
@@ -735,14 +736,14 @@ namespace {
       co_return nullptr;
     }
     [[nodiscard]] auto ResolveTextureResourceKey(
-      const content::TextureResourceLocator&) const
+      const content::TextureResourceLocator&)
       -> std::optional<content::ResourceKey> override
     {
       return std::nullopt;
     }
 
     auto MakeTextureResourceKey(
-      oxygen::data::SourceKey, oxygen::data::pak::core::ResourceIndexT) const
+      oxygen::data::SourceKey, oxygen::data::pak::core::ResourceIndexT)
       -> std::optional<oxygen::content::ResourceKey> override
     {
       return std::nullopt;
@@ -750,7 +751,7 @@ namespace {
 
     [[nodiscard]] auto MakeTextureResourceKeyForAsset(
       const data::Asset& /*context_asset*/,
-      data::pak::core::ResourceIndexT /*resource_index*/) const noexcept
+      data::pak::core::ResourceIndexT /*resource_index*/)
       -> std::optional<content::ResourceKey> override
     {
       return std::nullopt;
@@ -758,7 +759,7 @@ namespace {
 
     [[nodiscard]] auto MakeScriptResourceKeyForAsset(
       const data::Asset& /*context_asset*/,
-      data::pak::core::ResourceIndexT /*resource_index*/) const noexcept
+      data::pak::core::ResourceIndexT /*resource_index*/)
       -> std::optional<content::ResourceKey> override
     {
       return std::nullopt;
@@ -790,21 +791,21 @@ namespace {
       co_return nullptr;
     }
     [[nodiscard]] auto MakePhysicsResourceKey(data::SourceKey /*source_key*/,
-      data::pak::core::ResourceIndexT /*resource_index*/) const noexcept
+      data::pak::core::ResourceIndexT /*resource_index*/)
       -> std::optional<content::ResourceKey> override
     {
       return std::nullopt;
     }
     [[nodiscard]] auto MakePhysicsResourceKeyForAsset(
       const data::Asset& /*context_asset*/,
-      data::pak::core::ResourceIndexT /*resource_index*/) const noexcept
+      data::pak::core::ResourceIndexT /*resource_index*/)
       -> std::optional<content::ResourceKey> override
     {
       return std::nullopt;
     }
     [[nodiscard]] auto MakePhysicsResourceKeyForAsset(
       const data::Asset& /*context_asset*/,
-      const data::AssetKey& /*resource_asset_key*/) const noexcept
+      const data::AssetKey& /*resource_asset_key*/)
       -> std::optional<content::ResourceKey> override
     {
       return std::nullopt;
@@ -942,6 +943,11 @@ namespace {
       return content::ResourceKey { next_resource_key_++ };
     }
     [[nodiscard]] auto MintSyntheticBufferKey() -> content::ResourceKey override
+    {
+      return content::ResourceKey { next_resource_key_++ };
+    }
+
+    [[nodiscard]] auto MintSyntheticScriptKey() -> content::ResourceKey override
     {
       return content::ResourceKey { next_resource_key_++ };
     }
@@ -1089,13 +1095,13 @@ NOLINT_TEST(SceneLoaderServicePhase4Test,
     = data::AssetKey::FromVirtualPath("/Game/Tests/Phase4/valid.opscene");
 
   const auto scene_bytes = BuildMinimalSceneDescriptorBytes(1U);
-  auto scene_asset
-    = std::make_shared<data::SceneAsset>(scene_key, scene_bytes, source);
+  auto scene_asset = std::make_shared<data::SceneAsset>(
+    scene_key, scene_bytes, data::SourceOrigin { .key = source });
   const auto scene_hash = base::ComputeSha256(scene_asset->GetRawData());
 
   auto sidecar_asset = std::make_shared<data::PhysicsSceneAsset>(sidecar_key,
     BuildMinimalPhysicsSidecarDescriptorBytes(scene_key, 1U, scene_hash),
-    source);
+    data::SourceOrigin { .key = source });
 
   loader.PutScene(scene_key, scene_asset);
   loader.PutPhysicsSidecar(scene_key, sidecar_key, sidecar_asset);

@@ -16,7 +16,6 @@
 #include <ios>
 #include <limits>
 #include <memory>
-#include <mutex>
 #include <optional>
 #include <span>
 #include <stdexcept>
@@ -28,6 +27,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include <fmt/format.h>
@@ -35,7 +35,6 @@
 #include <Oxygen/Base/EnumIndexedArray.h>
 #include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Finally.h>
-#include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/ObserverPtr.h>
@@ -47,10 +46,10 @@
 #include <Oxygen/Console/Command.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Content/AssetLoader.h>
-#include <Oxygen/Content/Constants.h>
 #include <Oxygen/Content/EvictionEvents.h>
 #include <Oxygen/Content/IAssetLoader.h>
-#include <Oxygen/Content/Internal/AssetIdentityIndex.h>
+#include <Oxygen/Content/Internal/ContentIdentity.h>
+#include <Oxygen/Content/Internal/ContentIdentityRegistry.h>
 #include <Oxygen/Content/Internal/ContentSourceRegistry.h>
 #include <Oxygen/Content/Internal/DependencyCollector.h>
 #include <Oxygen/Content/Internal/DependencyGraphStore.h>
@@ -58,12 +57,10 @@
 #include <Oxygen/Content/Internal/EvictionRegistry.h>
 #include <Oxygen/Content/Internal/IContentSource.h>
 #include <Oxygen/Content/Internal/InFlightOperationTable.h>
-#include <Oxygen/Content/Internal/InternalResourceKey.h>
 #include <Oxygen/Content/Internal/LooseCookedSource.h>
 #include <Oxygen/Content/Internal/PakFileSource.h>
 #include <Oxygen/Content/Internal/PatchResolutionPolicy.h>
 #include <Oxygen/Content/Internal/PhysicsQueryService.h>
-#include <Oxygen/Content/Internal/ResourceKeyRegistry.h>
 #include <Oxygen/Content/Internal/ResourceLoadPipeline.h>
 #include <Oxygen/Content/Internal/ResourceRef.h>
 #include <Oxygen/Content/Internal/SceneCatalogQueryService.h>
@@ -86,7 +83,6 @@
 #include <Oxygen/Content/ResidencyPolicy.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Content/ResourceTypeList.h>
-#include <Oxygen/Content/SourceToken.h>
 #include <Oxygen/Content/TextureResourceLocator.h>
 #include <Oxygen/Content/api_export.h>
 #include <Oxygen/Core/AnyCache.h>
@@ -117,6 +113,7 @@
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Data/ScriptResource.h>
 #include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/Data/SourceOrigin.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Data/TextureResourceDescriptor.h>
 #include <Oxygen/OxCo/Co.h>
@@ -145,30 +142,23 @@ constexpr std::string_view kCommandTrimCache = "cntt.trim_cache";
 constexpr std::string_view kCommandDumpStats = "cntt.dump_stats";
 constexpr std::string_view kCommandResetStats = "cntt.reset_stats";
 
-struct ResourceCompositeKey final {
-  oxygen::data::SourceKey source_key;
-  uint16_t resource_type_index = 0;
-  pak::core::ResourceIndexT resource_index = pak::core::kNoResourceIndex;
-
-  auto operator==(const ResourceCompositeKey&) const -> bool = default;
-};
-
 } // namespace
 
 namespace oxygen::content {
 
-using oxygen::content::constants::kLooseCookedSourceIdBase;
-using oxygen::content::constants::kSyntheticSourceId;
-
 // Implement the private helper declared in the header to avoid exposing the
 // internal header in the public API.
-auto AssetLoader::PackResourceKey(uint16_t pak_index,
-  uint16_t resource_type_index, pak::core::ResourceIndexT resource_index)
+auto AssetLoader::InternResourceKey(const data::SourceInstanceId source,
+  const uint16_t resource_type_index, pak::core::ResourceIndexT resource_index)
   -> ResourceKey
 {
-  internal::InternalResourceKey key(
-    pak_index, resource_type_index, resource_index);
-  return key.GetRawKey();
+  AssertOwningThread();
+  const auto id = identities_->Intern(internal::CookedResourceIdentity {
+    .source = source,
+    .kind = static_cast<internal::ResourceKind>(resource_type_index),
+    .index = resource_index.get(),
+  });
+  return ResourceKey { id.get() };
 }
 
 struct AssetLoader::Impl final {
@@ -178,11 +168,6 @@ struct AssetLoader::Impl final {
   // independently of the shared I/O table that Stop clears for cancellation.
   size_t accepted_loads = 0;
   co::ParkingLot accepted_loads_idle;
-
-#ifndef NDEBUG
-  std::mutex hash_collision_mutex;
-  std::unordered_map<uint64_t, ResourceCompositeKey> resource_hash_to_key;
-#endif
 };
 } // namespace oxygen::content
 
@@ -224,15 +209,15 @@ inline auto IsResourceTypeId(const oxygen::TypeId type_id) -> bool
 
 namespace {
 // Helper validates eviction callback arguments. Parameter ordering chosen to
-// minimize misuse. expected_key_hash: hash originally computed for resource
-// actual_key_hash: hash received from eviction callback
+// minimize misuse. expected_cache_key: hash originally computed for resource
+// actual_cache_key: hash received from eviction callback
 // type_id: type id reference for validation
 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
-auto SanityCheckResourceEviction(const uint64_t expected_key_hash,
-  const uint64_t actual_key_hash, const oxygen::TypeId expected_type_id,
+auto SanityCheckResourceEviction(const uint64_t expected_cache_key,
+  const uint64_t actual_cache_key, const oxygen::TypeId expected_type_id,
   const oxygen::TypeId actual_type_id) -> bool
 {
-  CHECK_EQ_F(expected_key_hash, actual_key_hash);
+  CHECK_EQ_F(expected_cache_key, actual_cache_key);
   CHECK_EQ_F(expected_type_id, actual_type_id);
   return true;
 }
@@ -276,15 +261,15 @@ struct AssetLoadTelemetryCallbacks final {
 
 template <typename CacheHitFn, typename DecodeAndPublishFn>
 auto DecodeAndPublishAsset(const oxygen::TypeId type_id,
-  const uint64_t hash_key,
+  const uint64_t cache_key,
   oxygen::observer_ptr<internal::InFlightOperationTable> in_flight_ops,
   internal::InFlightOperationTable::OperationId operation_id,
   CacheHitFn cache_hit_fn, DecodeAndPublishFn decode_and_publish_fn)
   -> oxygen::co::Co<std::shared_ptr<void>>
 {
   oxygen::ScopeGuard erase_guard(
-    [in_flight_ops, type_id, hash_key, operation_id] noexcept -> auto {
-      in_flight_ops->Erase(type_id, hash_key, operation_id);
+    [in_flight_ops, type_id, cache_key, operation_id] noexcept -> auto {
+      in_flight_ops->Erase(type_id, cache_key, operation_id);
     });
 
   if (auto cached = co_await cache_hit_fn()) {
@@ -295,8 +280,8 @@ auto DecodeAndPublishAsset(const oxygen::TypeId type_id,
 }
 
 template <typename AssetT, typename CacheHitFn, typename DecodeAndPublishFn>
-auto RunAssetLoadPipeline(const oxygen::TypeId type_id, const uint64_t hash_key,
-  internal::InFlightOperationTable& in_flight_ops,
+auto RunAssetLoadPipeline(const oxygen::TypeId type_id,
+  const uint64_t cache_key, internal::InFlightOperationTable& in_flight_ops,
   oxygen::content::LoadRequest request, const uint64_t request_sequence,
   CacheHitFn cache_hit_fn, DecodeAndPublishFn decode_and_publish_fn,
   AssetLoadTelemetryCallbacks telemetry_callbacks = {})
@@ -315,7 +300,7 @@ auto RunAssetLoadPipeline(const oxygen::TypeId type_id, const uint64_t hash_key,
     telemetry_callbacks.on_cache_miss();
   }
 
-  if (auto shared_join = in_flight_ops.Find(type_id, hash_key,
+  if (auto shared_join = in_flight_ops.Find(type_id, cache_key,
         internal::InFlightOperationTable::RequestMeta {
           .priority = request.priority,
           .intent = request.intent,
@@ -333,12 +318,12 @@ auto RunAssetLoadPipeline(const oxygen::TypeId type_id, const uint64_t hash_key,
   }
 
   const auto operation_id = in_flight_ops.NewOperationId();
-  auto op = DecodeAndPublishAsset(type_id, hash_key,
+  auto op = DecodeAndPublishAsset(type_id, cache_key,
     oxygen::observer_ptr { &in_flight_ops }, operation_id,
     std::move(cache_hit_fn), std::move(decode_and_publish_fn));
 
   oxygen::co::Shared shared(std::move(op));
-  in_flight_ops.Insert(type_id, hash_key, operation_id, shared,
+  in_flight_ops.Insert(type_id, cache_key, operation_id, shared,
     internal::InFlightOperationTable::RequestMeta {
       .priority = request.priority,
       .intent = request.intent,
@@ -362,8 +347,7 @@ AssetLoader::AssetLoader(
   , verify_content_hashes_(config.verify_content_hashes)
   , residency_policy_(config.residency_policy)
   , eviction_registry_(std::make_unique<internal::EvictionRegistry>())
-  , resource_key_registry_(std::make_unique<internal::ResourceKeyRegistry>())
-  , asset_identity_index_(std::make_unique<internal::AssetIdentityIndex>())
+  , identities_(std::make_unique<internal::ContentIdentityRegistry>())
   , in_flight_ops_(std::make_unique<internal::InFlightOperationTable>())
 {
   using serio::FileStream;
@@ -380,15 +364,13 @@ AssetLoader::AssetLoader(
   physics_query_service_ = std::make_unique<internal::PhysicsQueryService>();
 
   resource_load_pipeline_ = std::make_unique<internal::ResourceLoadPipeline>(
-    impl_->source_registry, resource_loaders_, content_cache_, *in_flight_ops_,
-    thread_pool_, work_offline_,
+    impl_->source_registry, *identities_, resource_loaders_, content_cache_,
+    *in_flight_ops_, thread_pool_, work_offline_,
     internal::ResourceLoadPipeline::Callbacks {
       .assert_owning_thread = [this] -> void { AssertOwningThread(); },
-      .hash_resource_key = [this](const ResourceKey& key) -> uint64_t {
-        return HashResourceKey(key);
+      .on_resource_published = [this](const ResourceKey key) -> void {
+        eviction_registry_->TrackResource(key);
       },
-      .map_resource_key = [this](const uint64_t hash, const ResourceKey key)
-        -> void { IndexResourceKeyMapping(hash, key); },
       .default_priority_class = [this] -> LoadPriorityClass {
         return residency_policy_.default_priority_class;
       },
@@ -841,8 +823,6 @@ void AssetLoader::Stop()
   }
   FlushResourceEvictionsForUncachedMappings(EvictionReason::kShutdown, true);
 
-  resource_key_registry_->Clear();
-  asset_identity_index_->Clear();
   eviction_registry_->Clear();
   pinned_resource_counts_.clear();
   pinned_asset_counts_.clear();
@@ -886,7 +866,8 @@ auto AssetLoader::AddPatchPakFile(const std::filesystem::path& path,
   impl_->source_registry.SetSourceTombstones(patch_source_id, manifest.deleted);
 }
 
-auto AssetLoader::MountPakFile(const std::filesystem::path& path) -> uint16_t
+auto AssetLoader::MountPakFile(const std::filesystem::path& path)
+  -> data::SourceInstanceId
 {
   AssertOwningThread();
   std::error_code ec {};
@@ -944,9 +925,8 @@ auto AssetLoader::MountPakFile(const std::filesystem::path& path) -> uint16_t
       content_cache_.Clear();
     }
     FlushResourceEvictionsForUncachedMappings(EvictionReason::kClear, true);
+    identities_->EraseSources(impl_->source_registry.PruneExpiredSources());
 
-    resource_key_registry_->Clear();
-    asset_identity_index_->Clear();
     pinned_resource_counts_.clear();
     pinned_asset_counts_.clear();
     dependency_graph_->Clear();
@@ -991,8 +971,7 @@ auto AssetLoader::AddLooseCookedRoot(const std::filesystem::path& path) -> void
       });
     content_cache_.Clear();
     FlushResourceEvictionsForUncachedMappings(EvictionReason::kClear, true);
-    resource_key_registry_->Clear();
-    asset_identity_index_->Clear();
+    identities_->EraseSources(impl_->source_registry.PruneExpiredSources());
     pinned_resource_counts_.clear();
     pinned_asset_counts_.clear();
     dependency_graph_->Clear();
@@ -1010,7 +989,7 @@ auto AssetLoader::AddLooseCookedRoot(const std::filesystem::path& path) -> void
       LOG_F(WARNING,
         "Mounted loose cooked root has zero SourceKey "
         "(IndexHeader.source_identity); "
-        "cache aliasing risk: root={}",
+        "source-key lookup is ambiguous: root={}",
         normalized.string());
     }
   }
@@ -1023,7 +1002,7 @@ auto AssetLoader::AddLooseCookedRoot(const std::filesystem::path& path) -> void
     const auto& conflict = *mount_result.source_key_conflict;
     LOG_F(WARNING,
       "Mounted loose cooked root shares SourceKey with a different mounted "
-      "source; cache aliasing risk: source_key={} new_root={} "
+      "source; source-key lookup is ambiguous: source_key={} new_root={} "
       "existing_source_id={} existing_mount={}",
       conflict.source_key, normalized.string(), conflict.existing_source_id,
       conflict.existing_mount_identity);
@@ -1039,7 +1018,6 @@ auto AssetLoader::AddLooseCookedRoot(const std::filesystem::path& path) -> void
     return;
   }
 
-  DCHECK_F(mount_result.source_id >= kLooseCookedSourceIdBase);
   LOG_F(INFO, "Mounted loose cooked content source: id={} root={}",
     mount_result.source_id, normalized.string());
   AssertSourceKeyConsistency("AddLooseCookedRoot.mount");
@@ -1128,8 +1106,7 @@ auto AssetLoader::ClearMounts() -> void
   }
   FlushResourceEvictionsForUncachedMappings(EvictionReason::kClear, true);
 
-  resource_key_registry_->Clear();
-  asset_identity_index_->Clear();
+  identities_->EraseSources(impl_->source_registry.PruneExpiredSources());
   pinned_resource_counts_.clear();
   pinned_asset_counts_.clear();
   // Dependency graphs are keyed by AssetKey/ResourceKey from mounted sources.
@@ -1159,18 +1136,20 @@ auto AssetLoader::ExecuteTrimPass(
       UnloadObject(cache_key, type_id, EvictionReason::kTrim);
     });
 
-  const internal::DependencyReleaseEngine::ReleaseCallbacks callbacks {
-    .hash_resource = [this](const ResourceKey key) -> uint64_t {
-      return HashResourceKey(key);
-    },
-    .assert_refcount_symmetry = [this](std::string_view context) -> void {
-      AssertDependencyEdgeRefcountSymmetry(context);
-    },
-  };
-
+  std::vector<uint64_t> asset_ids;
+  std::vector<uint64_t> resource_ids;
+  for (const auto& [id, identity] : identities_->Entries()) {
+    if (!content_cache_.Contains(id.get())) {
+      continue;
+    }
+    if (std::holds_alternative<internal::AssetIdentity>(*identity)) {
+      asset_ids.push_back(id.get());
+    } else {
+      resource_ids.push_back(id.get());
+    }
+  }
   const auto trim_result = dependency_release_engine_->TrimCache(
-    asset_identity_index_->AssetKeyByHash(), resource_key_registry_->Entries(),
-    *dependency_graph_, content_cache_, callbacks);
+    asset_ids, resource_ids, *dependency_graph_, content_cache_);
 
   const auto after = content_cache_.SnapshotStats();
   const auto reclaimed_items = before.size > after.size
@@ -1207,6 +1186,7 @@ auto AssetLoader::ExecuteTrimPass(
   }
 
   FlushResourceEvictionsForUncachedMappings(EvictionReason::kTrim, false);
+  identities_->EraseSources(impl_->source_registry.PruneExpiredSources());
 }
 
 auto AssetLoader::MaybeAutoTrimOnBudgetPressure(
@@ -1516,18 +1496,12 @@ auto AssetLoader::BindResourceRefToKey(const internal::ResourceRef& ref)
   -> ResourceKey
 {
   AssertOwningThread();
-
-  const auto source_id_opt
-    = impl_->source_registry.FindSourceIdByToken(ref.source);
-  if (!source_id_opt.has_value()) {
-    throw std::runtime_error("Unknown SourceToken for ResourceRef binding");
+  if (!impl_->source_registry.AcquireSource(ref.source)) {
+    throw std::runtime_error(
+      "Resource dependency source is no longer readable");
   }
-
-  const uint16_t source_id = *source_id_opt;
-  const uint16_t resource_type_index
-    = GetResourceTypeIndexByTypeId(ref.resource_type_id);
-
-  return PackResourceKey(source_id, resource_type_index, ref.resource_index);
+  return InternResourceKey(ref.source,
+    GetResourceTypeIndexByTypeId(ref.resource_type_id), ref.resource_index);
 }
 
 auto AssetLoader::GetHydratedScriptSlots(const data::SceneAsset& scene_asset,
@@ -1537,8 +1511,7 @@ auto AssetLoader::GetHydratedScriptSlots(const data::SceneAsset& scene_asset,
   AssertOwningThread();
 
   std::vector<IAssetLoader::HydratedScriptSlot> hydrated_slots;
-  const auto source_id = ResolveExactSourceId(
-    scene_asset.GetAssetKey(), scene_asset.GetSourceKey());
+  const auto source_id = ResolveAssetSourceId(scene_asset);
   const auto source_owner
     = source_id ? ResolveSourceForId(*source_id) : nullptr;
   if (!source_owner) {
@@ -1673,12 +1646,12 @@ auto AssetLoader::AddAssetDependency(
 {
   const auto owner = ResolveAssetIdentityForKey(dependent);
   const auto target = ResolveAssetIdentityForKey(dependency);
-  if (!owner || !target || !content_cache_.Contains(owner->hash_key)
-    || !content_cache_.Contains(target->hash_key)) {
+  if (!owner || !target || !content_cache_.Contains(owner->cache_key)
+    || !content_cache_.Contains(target->cache_key)) {
     throw std::invalid_argument(
       "Asset dependency endpoints must be loaded from a mounted source");
   }
-  AddAssetDependency(owner->hash_key, target->hash_key);
+  AddAssetDependency(owner->cache_key, target->cache_key);
 }
 
 auto AssetLoader::AddAssetDependency(
@@ -1698,11 +1671,11 @@ auto AssetLoader::AddResourceDependency(
   const data::AssetKey& dependent, const ResourceKey resource_key) -> void
 {
   const auto owner = ResolveAssetIdentityForKey(dependent);
-  if (!owner || !content_cache_.Contains(owner->hash_key)) {
+  if (!owner || !content_cache_.Contains(owner->cache_key)) {
     throw std::invalid_argument(
       "Resource dependency owner must be a loaded asset");
   }
-  AddResourceDependency(owner->hash_key, resource_key);
+  AddResourceDependency(owner->cache_key, resource_key);
 }
 
 auto AssetLoader::AddResourceDependency(
@@ -1710,20 +1683,19 @@ auto AssetLoader::AddResourceDependency(
 {
   AssertOwningThread();
   if (dependency_graph_->AddResourceDependency(dependent, resource_key)) {
-    content_cache_.Touch(
-      HashResourceKey(resource_key), oxygen::CheckoutOwner::kInternal);
+    content_cache_.Touch(resource_key.get(), oxygen::CheckoutOwner::kInternal);
     AssertDependencyEdgeRefcountSymmetry("AddResourceDependency");
   }
 }
 
 auto AssetLoader::AssetCacheKey(const data::Asset& asset) const -> uint64_t
 {
-  const auto source_id
-    = ResolveExactSourceId(asset.GetAssetKey(), asset.GetSourceKey());
-  if (!source_id) {
-    throw std::invalid_argument("Asset has no retained cooked origin");
+  const auto id
+    = FindAssetId(asset.GetAssetKey(), asset.GetSourceOrigin().instance);
+  if (id == 0) {
+    throw std::invalid_argument("Asset has no identity in this loader");
   }
-  return HashAssetKey(asset.GetAssetKey(), *source_id);
+  return id;
 }
 
 //=== Asset Loading Implementations ==========================================//
@@ -1731,7 +1703,7 @@ auto AssetLoader::AssetCacheKey(const data::Asset& asset) const -> uint64_t
 auto AssetLoader::ReleaseAsset(const data::AssetKey& key) -> bool
 {
   const auto identity = ResolveAssetIdentityForKey(key);
-  return identity ? ReleaseAssetCacheEntry(identity->hash_key) : true;
+  return identity ? ReleaseAssetCacheEntry(identity->cache_key) : true;
 }
 
 auto AssetLoader::ReleaseAsset(const data::Asset& asset) -> bool
@@ -1739,16 +1711,16 @@ auto AssetLoader::ReleaseAsset(const data::Asset& asset) -> bool
   return ReleaseAssetCacheEntry(AssetCacheKey(asset));
 }
 
-auto AssetLoader::ReleaseAssetCacheEntry(const uint64_t key_hash) -> bool
+auto AssetLoader::ReleaseAssetCacheEntry(const uint64_t cache_key) -> bool
 {
   AssertOwningThread();
-  if (const auto pin_it = pinned_asset_counts_.find(key_hash);
+  if (const auto pin_it = pinned_asset_counts_.find(cache_key);
     pin_it != pinned_asset_counts_.end() && pin_it->second > 0U) {
-    content_cache_.CheckIn(key_hash);
-    const bool still_present = content_cache_.Contains(key_hash);
+    content_cache_.CheckIn(cache_key);
+    const bool still_present = content_cache_.Contains(cache_key);
     LOG_F(INFO,
       "release asset with active pins: key={} pins={} still_present={}",
-      key_hash, pin_it->second, still_present ? "true" : "false");
+      cache_key, pin_it->second, still_present ? "true" : "false");
     return !still_present;
   }
 
@@ -1758,16 +1730,16 @@ auto AssetLoader::ReleaseAssetCacheEntry(const uint64_t key_hash) -> bool
     [&]([[maybe_unused]] uint64_t cache_key,
       [[maybe_unused]] std::shared_ptr<void> value, TypeId type_id) -> void {
       static_cast<void>(value);
-      LOG_F(2, "Evict entry: key_hash={} type_id={} reason={}", cache_key,
+      LOG_F(2, "Evict entry: cache_key={} type_id={} reason={}", cache_key,
         type_id, EvictionReason::kRefCountZero);
       UnloadObject(cache_key, type_id, EvictionReason::kRefCountZero);
     });
 
   // Recursively release (check in) the asset and all its dependencies.
-  ReleaseAssetTree(key_hash);
+  ReleaseAssetTree(cache_key);
   // Return true if the asset is no longer present in the cache
-  const bool still_present = content_cache_.Contains(key_hash);
-  LOG_F(2, "ReleaseAsset key={} evicted={}", key_hash,
+  const bool still_present = content_cache_.Contains(cache_key);
+  LOG_F(2, "ReleaseAsset key={} evicted={}", cache_key,
     still_present ? "false" : "true");
   return !still_present;
 }
@@ -1780,12 +1752,12 @@ auto AssetLoader::PinAsset(const data::AssetKey& key) -> bool
     LOG_F(WARNING, "pin asset failed: key={} not loaded", key);
     return false;
   }
-  const auto key_hash = identity->hash_key;
-  if (!content_cache_.Pin(key_hash, oxygen::CheckoutOwner::kExternal)) {
+  const auto cache_key = identity->cache_key;
+  if (!content_cache_.Pin(cache_key, oxygen::CheckoutOwner::kExternal)) {
     LOG_F(WARNING, "pin asset failed: key={} missing in cache", key);
     return false;
   }
-  ++pinned_asset_counts_[key_hash];
+  ++pinned_asset_counts_[cache_key];
   return true;
 }
 
@@ -1797,25 +1769,25 @@ auto AssetLoader::UnpinAsset(const data::AssetKey& key) -> bool
     LOG_F(WARNING, "unpin asset failed: key={} not loaded", key);
     return false;
   }
-  const auto key_hash = identity->hash_key;
-  auto pin_it = pinned_asset_counts_.find(key_hash);
+  const auto cache_key = identity->cache_key;
+  auto pin_it = pinned_asset_counts_.find(cache_key);
   if (pin_it == pinned_asset_counts_.end() || pin_it->second == 0U) {
     LOG_F(ERROR, "unpin asset failed: key={} has no matching pin", key);
     return false;
   }
-  if (!content_cache_.Unpin(key_hash)) {
+  if (!content_cache_.Unpin(cache_key)) {
     LOG_F(ERROR, "unpin asset failed: key={} cache refcount underflow", key);
     return false;
   }
   --pin_it->second;
   if (pin_it->second == 0U) {
     pinned_asset_counts_.erase(pin_it);
-    if (content_cache_.Contains(key_hash)
-      && content_cache_.GetCheckoutCount(key_hash) <= 1U) {
+    if (content_cache_.Contains(cache_key)
+      && content_cache_.GetCheckoutCount(cache_key) <= 1U) {
       // Final explicit pin was released and no transient checkouts remain:
       // collapse dependency edges now so release traversal semantics stay
       // consistent with explicit residency controls.
-      ReleaseAssetTree(key_hash);
+      ReleaseAssetTree(cache_key);
     }
   }
   return true;
@@ -1850,7 +1822,7 @@ auto AssetLoader::InvalidateAssetTree(const data::AssetKey& key) -> void
   if (!identity.has_value()) {
     return;
   }
-  const auto hash = identity->hash_key;
+  const auto hash = identity->cache_key;
   const auto source_id = identity->source_id;
   auto asset = content_cache_.Peek<data::ScriptAsset>(hash);
 
@@ -1863,8 +1835,8 @@ auto AssetLoader::InvalidateAssetTree(const data::AssetKey& key) -> void
       = [&](const pak::core::ResourceIndexT index) -> void {
       if (index != data::pak::core::kNoResourceIndex) {
         const auto rkey
-          = PackResourceKey(source_id, resource_type_index, index);
-        content_cache_.Remove(HashResourceKey(rkey));
+          = InternResourceKey(source_id, resource_type_index, index);
+        content_cache_.Remove(rkey.get());
       }
     };
 
@@ -1886,10 +1858,11 @@ auto AssetLoader::ReloadScript(const std::filesystem::path& path) -> void
   const internal::ScriptHotReloadService::ReloadCallbacks callbacks {
     .enumerate_loaded_script_keys = [this] -> std::vector<data::AssetKey> {
       std::vector<data::AssetKey> script_keys;
-      for (const auto& [hash, key] : asset_identity_index_->AssetKeyByHash()) {
-        static_cast<void>(hash);
-        if (HasScriptAsset(key)) {
-          script_keys.push_back(key);
+      for (const auto& [id, locator] : identities_->Entries()) {
+        if (const auto* asset = std::get_if<internal::AssetIdentity>(locator);
+          asset != nullptr
+          && content_cache_.Peek<data::ScriptAsset>(id.get())) {
+          script_keys.push_back(asset->asset);
         }
       }
       return script_keys;
@@ -1906,15 +1879,16 @@ auto AssetLoader::ReloadScript(const std::filesystem::path& path) -> void
       StartLoadAsset<data::ScriptAsset>(key, std::move(done));
     },
     .resolve_source_id_for_asset
-    = [this](const data::AssetKey& key) -> std::optional<uint16_t> {
+    = [this](
+        const data::AssetKey& key) -> std::optional<data::SourceInstanceId> {
       return ResolveSourceIdForAsset(key);
     },
     .make_script_resource_key
-    = [this](const uint16_t source_id,
+    = [this](const data::SourceInstanceId source_id,
         const data::pak::core::ResourceIndexT index) -> ResourceKey {
       const auto resource_type_index = static_cast<uint16_t>(
         IndexOf<data::ScriptResource, ResourceTypeList>::value);
-      return PackResourceKey(source_id, resource_type_index, index);
+      return InternResourceKey(source_id, resource_type_index, index);
     },
     .get_script_resource = [this](const ResourceKey key)
       -> std::shared_ptr<oxygen::data::ScriptResource> {
@@ -1930,10 +1904,11 @@ auto AssetLoader::ReloadAllScripts() -> void
   const internal::ScriptHotReloadService::ReloadCallbacks callbacks {
     .enumerate_loaded_script_keys = [this] -> std::vector<data::AssetKey> {
       std::vector<data::AssetKey> script_keys;
-      for (const auto& [hash, key] : asset_identity_index_->AssetKeyByHash()) {
-        static_cast<void>(hash);
-        if (HasScriptAsset(key)) {
-          script_keys.push_back(key);
+      for (const auto& [id, locator] : identities_->Entries()) {
+        if (const auto* asset = std::get_if<internal::AssetIdentity>(locator);
+          asset != nullptr
+          && content_cache_.Peek<data::ScriptAsset>(id.get())) {
+          script_keys.push_back(asset->asset);
         }
       }
       return script_keys;
@@ -1950,15 +1925,16 @@ auto AssetLoader::ReloadAllScripts() -> void
       StartLoadAsset<data::ScriptAsset>(key, std::move(done));
     },
     .resolve_source_id_for_asset
-    = [this](const data::AssetKey& key) -> std::optional<uint16_t> {
+    = [this](
+        const data::AssetKey& key) -> std::optional<data::SourceInstanceId> {
       return ResolveSourceIdForAsset(key);
     },
     .make_script_resource_key
-    = [this](const uint16_t source_id,
+    = [this](const data::SourceInstanceId source_id,
         const data::pak::core::ResourceIndexT index) -> ResourceKey {
       const auto resource_type_index = static_cast<uint16_t>(
         IndexOf<data::ScriptResource, ResourceTypeList>::value);
-      return PackResourceKey(source_id, resource_type_index, index);
+      return InternResourceKey(source_id, resource_type_index, index);
     },
     .get_script_resource = [this](const ResourceKey key)
       -> std::shared_ptr<oxygen::data::ScriptResource> {
@@ -1979,20 +1955,29 @@ auto AssetLoader::SubscribeScriptReload(ScriptReloadCallback callback)
     observer_ptr<IAssetLoader> { this }, eviction_alive_token_);
 }
 
+auto AssetLoader::DiscardRevokedAsset(
+  const data::SourceInstanceId source, const uint64_t cache_key) -> bool
+{
+  if (impl_->source_registry.AcquireSource(source)) {
+    return false;
+  }
+  const auto eviction_guard = content_cache_.OnEviction(
+    [this](const uint64_t id, std::shared_ptr<void>, const TypeId type) {
+      UnloadObject(id, type, EvictionReason::kClear);
+    });
+  dependency_release_engine_->ReleaseAssetTree(
+    cache_key, *dependency_graph_, content_cache_);
+  static_cast<void>(content_cache_.Remove(cache_key));
+  return true;
+}
+
 auto AssetLoader::ReleaseAssetTree(const uint64_t key) -> void
 {
   AssertOwningThread();
 
-  const internal::DependencyReleaseEngine::ReleaseCallbacks callbacks {
-    .hash_resource = [this](const ResourceKey res_key) -> uint64_t {
-      return HashResourceKey(res_key);
-    },
-    .assert_refcount_symmetry = [this](std::string_view context) -> void {
-      AssertDependencyEdgeRefcountSymmetry(context);
-    },
-  };
   dependency_release_engine_->ReleaseAssetTree(
-    key, *dependency_graph_, content_cache_, callbacks);
+    key, *dependency_graph_, content_cache_);
+  AssertDependencyEdgeRefcountSymmetry("ReleaseAssetTree");
 }
 
 /*!
@@ -2028,8 +2013,8 @@ auto AssetLoader::PublishResourceDependenciesAsync(
 
   const auto expected_type_id = ResourceT::ClassTypeId();
 
-  std::unordered_set<uint64_t> seen_key_hashes;
-  seen_key_hashes.reserve(collector.ResourceRefDependencies().size()
+  std::unordered_set<uint64_t> seen_ids;
+  seen_ids.reserve(collector.ResourceRefDependencies().size()
     + collector.ResourceKeyDependencies().size());
 
   for (const auto& ref : collector.ResourceRefDependencies()) {
@@ -2037,8 +2022,8 @@ auto AssetLoader::PublishResourceDependenciesAsync(
       continue;
     }
     const auto dep_key = BindResourceRefToKey(ref);
-    const auto dep_key_hash = HashResourceKey(dep_key);
-    if (!seen_key_hashes.insert(dep_key_hash).second) {
+    const auto dep_cache_key = dep_key.get();
+    if (!seen_ids.insert(dep_cache_key).second) {
       continue;
     }
 
@@ -2053,16 +2038,17 @@ auto AssetLoader::PublishResourceDependenciesAsync(
 
   for (const auto& dep_key : collector.ResourceKeyDependencies()) {
     {
-      const internal::InternalResourceKey internal_key(dep_key);
+      const auto kind
+        = identities_->FindResourceKind(internal::ContentId { dep_key.get() });
       const auto expected_type_index
         = static_cast<uint16_t>(IndexOf<ResourceT, ResourceTypeList>::value);
-      if (internal_key.GetResourceTypeIndex() != expected_type_index) {
+      if (!kind || static_cast<uint16_t>(*kind) != expected_type_index) {
         continue;
       }
     }
 
-    const auto dep_key_hash = HashResourceKey(dep_key);
-    if (!seen_key_hashes.insert(dep_key_hash).second) {
+    const auto dep_cache_key = dep_key.get();
+    if (!seen_ids.insert(dep_cache_key).second) {
       continue;
     }
 
@@ -2079,7 +2065,8 @@ auto AssetLoader::PublishResourceDependenciesAsync(
 }
 
 auto AssetLoader::DecodeAssetAsyncErasedImpl(const TypeId type_id,
-  const data::AssetKey& key, std::optional<uint16_t> preferred_source_id)
+  const data::AssetKey& key,
+  std::optional<data::SourceInstanceId> preferred_source_id)
   -> co::Co<DecodedAssetAsyncResult>
 {
   AssertOwningThread();
@@ -2102,17 +2089,13 @@ auto AssetLoader::DecodeAssetAsyncErasedImpl(const TypeId type_id,
     : nullptr;
   if (!resolved_id || !source_content || !source_content->HasAsset(key)) {
     co_return {
-      .source_id = 0,
+      .source_id = {},
       .asset = nullptr,
       .dependency_collector = nullptr,
     };
   }
   const auto source_id = *resolved_id;
-  const auto token = impl_->source_registry.GetSourceToken(source_id);
-  if (!token) {
-    throw std::logic_error("Selected asset source has no source token");
-  }
-  const auto source_token = *token;
+  const auto source_instance = source_id;
   auto desc_reader = source_content->CreateAssetDescriptorReader(key);
   if (!desc_reader) {
     throw std::runtime_error(
@@ -2131,10 +2114,10 @@ auto AssetLoader::DecodeAssetAsyncErasedImpl(const TypeId type_id,
       tex_reader = std::move(tex_reader),
       script_reader = std::move(script_reader),
       phys_reader = std::move(phys_reader),
-      source_token] mutable -> std::shared_ptr<void> {
+      source_instance] mutable -> std::shared_ptr<void> {
       LoaderContext context {
         .current_asset_key = key,
-        .source_token = source_token,
+        .source_instance = source_instance,
         .desc_reader = desc_reader.get(),
         .data_readers = std::make_tuple(buf_reader.get(), tex_reader.get(),
           script_reader.get(), phys_reader.get()),
@@ -2155,6 +2138,9 @@ auto AssetLoader::DecodeAssetAsyncErasedImpl(const TypeId type_id,
     });
 
   AssertOwningThread();
+  if (!impl_->source_registry.AcquireSource(source_id)) {
+    decoded.reset();
+  }
   co_return {
     .source_id = source_id,
     .asset = std::move(decoded),
@@ -2162,42 +2148,41 @@ auto AssetLoader::DecodeAssetAsyncErasedImpl(const TypeId type_id,
   };
 }
 
-auto AssetLoader::SourceKeyForId(const uint16_t source_id) const
-  -> data::SourceKey
+auto AssetLoader::ResolveDependencySourceId(
+  const data::Asset& owner, const data::AssetKey& dependency) const
+  -> std::optional<data::SourceInstanceId>
 {
-  const auto source_key = impl_->source_registry.GetSourceKey(source_id);
-  if (!source_key) {
-    throw std::logic_error("Unknown asset source ID");
-  }
-  return *source_key;
-}
-
-auto AssetLoader::ResolveDependencySourceId(const data::Asset& owner,
-  const data::AssetKey& dependency) const -> std::optional<uint16_t>
-{
-  const auto origin
-    = ResolveExactSourceId(owner.GetAssetKey(), owner.GetSourceKey());
+  const auto origin = ResolveAssetSourceId(owner);
   if (!origin) {
     return std::nullopt;
   }
   const auto* dependencies = dependency_graph_->FindAssetDependencies(
-    HashAssetKey(owner.GetAssetKey(), *origin));
-  const auto& identities = asset_identity_index_->AssetHashByKeyAndSource();
-  const auto candidates = identities.find(dependency);
-  if (dependencies && candidates != identities.end()) {
-    for (const auto& [source, cache_key] : candidates->second) {
-      if (dependencies->contains(cache_key)) {
-        return ResolveAssetIdentityForKey(dependency, source)
-          ? std::optional { source }
-          : std::nullopt;
+    FindAssetId(owner.GetAssetKey(), *origin));
+  if (dependencies) {
+    for (const auto id : *dependencies) {
+      const auto* identity = identities_->FindAsset(internal::ContentId { id });
+      if (identity != nullptr && identity->asset == dependency) {
+        return identity->source;
       }
     }
   }
   return ResolveLoadSourceId(dependency, origin);
 }
 
-auto AssetLoader::ResolveExactSourceId(const data::AssetKey& key,
-  const data::SourceKey source_key) const -> std::optional<uint16_t>
+auto AssetLoader::ResolveAssetSourceId(const data::Asset& asset) const
+  -> std::optional<data::SourceInstanceId>
+{
+  const auto origin = asset.GetSourceOrigin();
+  const auto source = impl_->source_registry.AcquireSource(origin.instance);
+  if (!source || source->GetSourceKey() != origin.key) {
+    return std::nullopt;
+  }
+  return origin.instance;
+}
+
+auto AssetLoader::ResolveExactSourceId(
+  const data::AssetKey& key, const data::SourceKey source_key) const
+  -> std::optional<data::SourceInstanceId>
 {
   if (source_key.IsNil()) {
     return std::nullopt;
@@ -2209,8 +2194,8 @@ auto AssetLoader::ResolveExactSourceId(const data::AssetKey& key,
   return id;
 }
 
-auto AssetLoader::PrepareAssetLoadRequest(
-  const data::AssetKey& key, std::optional<uint16_t> preferred_source_id) const
+auto AssetLoader::PrepareAssetLoadRequest(const data::AssetKey& key,
+  std::optional<data::SourceInstanceId> preferred_source_id)
   -> std::optional<AssetLoadRequest>
 {
   const auto source_id_opt = ResolveLoadSourceId(key, preferred_source_id);
@@ -2220,14 +2205,45 @@ auto AssetLoader::PrepareAssetLoadRequest(
 
   return AssetLoadRequest {
     .source_id = *source_id_opt,
-    .hash_key = HashAssetKey(key, *source_id_opt),
+    .cache_key
+    = identities_->Intern(internal::AssetIdentity { *source_id_opt, key })
+      .get(),
     .source = impl_->source_registry.AcquireSource(*source_id_opt),
   };
 }
 
+auto AssetLoader::BindMaterialTextureKeys(
+  data::MaterialAsset& material, const data::SourceInstanceId source) -> void
+{
+  const std::array indices {
+    material.GetBaseColorTexture(),
+    material.GetNormalTexture(),
+    material.GetMetallicTexture(),
+    material.GetRoughnessTexture(),
+    material.GetAmbientOcclusionTexture(),
+    material.GetEmissiveTexture(),
+    material.GetSpecularTexture(),
+    material.GetSheenColorTexture(),
+    material.GetClearcoatTexture(),
+    material.GetClearcoatNormalTexture(),
+    material.GetTransmissionTexture(),
+    material.GetThicknessTexture(),
+  };
+  std::vector<ResourceKey> keys;
+  keys.reserve(indices.size());
+  constexpr auto kTextureTypeIndex = static_cast<uint16_t>(
+    IndexOf<data::TextureResource, ResourceTypeList>::value);
+  for (const auto index : indices) {
+    keys.push_back(index == data::pak::core::kNoResourceIndex
+        ? ResourceKey {}
+        : InternResourceKey(source, kTextureTypeIndex, index));
+  }
+  material.SetTextureResourceKeys(std::move(keys));
+}
+
 auto AssetLoader::LoadMaterialAssetAsyncImpl(const data::AssetKey& key,
-  std::optional<uint16_t> preferred_source_id, LoadRequest request)
-  -> co::Co<std::shared_ptr<data::MaterialAsset>>
+  std::optional<data::SourceInstanceId> preferred_source_id,
+  LoadRequest request) -> co::Co<std::shared_ptr<data::MaterialAsset>>
 {
   DLOG_SCOPE_F(2, "AssetLoader LoadMaterialAssetAsync");
   DLOG_F(2, "key     : {}", nostd::to_string(key).c_str());
@@ -2242,7 +2258,7 @@ auto AssetLoader::LoadMaterialAssetAsyncImpl(const data::AssetKey& key,
     co_return nullptr;
   }
   const auto source_id = load_target->source_id;
-  const auto hash_key = load_target->hash_key;
+  const auto cache_key = load_target->cache_key;
   const AssetLoadTelemetryCallbacks telemetry_callbacks {
     .on_request = [this] -> void {
       RecordAssetTelemetry(
@@ -2286,9 +2302,9 @@ auto AssetLoader::LoadMaterialAssetAsyncImpl(const data::AssetKey& key,
       }
 
       const auto texture_key
-        = PackResourceKey(source_id, texture_type_index, texture_index);
-      const auto dep_hash = HashResourceKey(texture_key);
-      if (!seen_texture_hashes.insert(dep_hash).second) {
+        = InternResourceKey(source_id, texture_type_index, texture_index);
+      const auto dependency_id = texture_key.get();
+      if (!seen_texture_hashes.insert(dependency_id).second) {
         co_return;
       }
 
@@ -2298,7 +2314,7 @@ auto AssetLoader::LoadMaterialAssetAsyncImpl(const data::AssetKey& key,
         co_return;
       }
 
-      AddResourceDependency(HashAssetKey(key, source_id), texture_key);
+      AddResourceDependency(FindAssetId(key, source_id), texture_key);
       (void)ReleaseResource(texture_key);
     };
 
@@ -2316,10 +2332,11 @@ auto AssetLoader::LoadMaterialAssetAsyncImpl(const data::AssetKey& key,
     co_await try_publish_texture_index(material->GetThicknessTexture());
   };
 
-  const auto cache_hit = [this, hash_key, publish_material_texture_dependencies]
+  const auto cache_hit
+    = [this, cache_key, publish_material_texture_dependencies]
     -> co::Co<std::shared_ptr<data::MaterialAsset>> {
     if (auto cached = content_cache_.CheckOut<data::MaterialAsset>(
-          hash_key, oxygen::CheckoutOwner::kInternal)) {
+          cache_key, oxygen::CheckoutOwner::kInternal)) {
       // Cache-hit material loads must still rebuild dependency edges if they
       // were trimmed previously. Without this, live textures can become
       // standalone trim candidates and get evicted while still in use.
@@ -2330,7 +2347,7 @@ auto AssetLoader::LoadMaterialAssetAsyncImpl(const data::AssetKey& key,
   };
 
   const auto decode_and_publish
-    = [this, key, source_id, hash_key, request,
+    = [this, key, source_id, cache_key, request,
         publish_material_texture_dependencies,
         source_owner
         = load_target->source] -> co::Co<std::shared_ptr<data::MaterialAsset>> {
@@ -2360,62 +2377,27 @@ auto AssetLoader::LoadMaterialAssetAsyncImpl(const data::AssetKey& key,
         co_return nullptr;
       }
 
-      // Publish (owning thread): store asset, then ensure resource dependencies
-      // are loaded and held via dependency edges.
-      {
-        using data::pak::core::kNoResourceIndex;
-        using data::pak::core::ResourceIndexT;
+      BindMaterialTextureKeys(*decoded, decoded_result.source_id);
 
-        const auto texture_type_index = static_cast<uint16_t>(
-          IndexOf<data::TextureResource, ResourceTypeList>::value);
-
-        auto make_texture_key
-          = [&](const ResourceIndexT texture_index) -> ResourceKey {
-          if (texture_index == kNoResourceIndex) {
-            return ResourceKey { 0 };
-          }
-          return PackResourceKey(
-            decoded_result.source_id, texture_type_index, texture_index);
-        };
-
-        std::vector<ResourceKey> texture_keys;
-        texture_keys.reserve(12);
-        texture_keys.push_back(
-          make_texture_key(decoded->GetBaseColorTexture()));
-        texture_keys.push_back(make_texture_key(decoded->GetNormalTexture()));
-        texture_keys.push_back(make_texture_key(decoded->GetMetallicTexture()));
-        texture_keys.push_back(
-          make_texture_key(decoded->GetRoughnessTexture()));
-        texture_keys.push_back(
-          make_texture_key(decoded->GetAmbientOcclusionTexture()));
-        texture_keys.push_back(make_texture_key(decoded->GetEmissiveTexture()));
-        texture_keys.push_back(make_texture_key(decoded->GetSpecularTexture()));
-        texture_keys.push_back(
-          make_texture_key(decoded->GetSheenColorTexture()));
-        texture_keys.push_back(
-          make_texture_key(decoded->GetClearcoatTexture()));
-        texture_keys.push_back(
-          make_texture_key(decoded->GetClearcoatNormalTexture()));
-        texture_keys.push_back(
-          make_texture_key(decoded->GetTransmissionTexture()));
-        texture_keys.push_back(
-          make_texture_key(decoded->GetThicknessTexture()));
-        decoded->SetTextureResourceKeys(std::move(texture_keys));
+      if (DiscardRevokedAsset(source_id, cache_key)) {
+        co_return nullptr;
       }
-
-      auto stored = content_cache_.Store(hash_key, decoded);
+      auto stored = content_cache_.Store(cache_key, decoded);
       if (!stored) {
         MaybeAutoTrimOnBudgetPressure("material_store_failed", true);
-        stored = content_cache_.Store(hash_key, decoded);
+        if (DiscardRevokedAsset(source_id, cache_key)) {
+          co_return nullptr;
+        }
+        stored = content_cache_.Store(cache_key, decoded);
         if (!stored) {
           RecordAssetTelemetry(
             data::AssetType::kMaterial, LoadTelemetryEvent::kStoreRetryFailure);
         }
       }
       if (stored) {
-        IndexAssetHashMapping(hash_key, key, source_id);
+
         // Keep one loader-owned cache retain; load caller gets its own retain.
-        content_cache_.Touch(hash_key, oxygen::CheckoutOwner::kInternal);
+        content_cache_.Touch(cache_key, oxygen::CheckoutOwner::kInternal);
         MaybeAutoTrimOnBudgetPressure("material_store_succeeded");
       }
 
@@ -2425,7 +2407,7 @@ auto AssetLoader::LoadMaterialAssetAsyncImpl(const data::AssetKey& key,
       // Also publish collector-driven refs for loaders that provide additional
       // texture dependencies not represented in the resolved key list.
       co_await PublishResourceDependenciesAsync<data::TextureResource>(
-        hash_key, *decoded_result.dependency_collector, request);
+        cache_key, *decoded_result.dependency_collector, request);
 
       co_return decoded;
     } catch (const co::TaskCancelledException& e) {
@@ -2435,9 +2417,13 @@ auto AssetLoader::LoadMaterialAssetAsyncImpl(const data::AssetKey& key,
     }
   };
 
-  co_return co_await RunAssetLoadPipeline<data::MaterialAsset>(
-    data::MaterialAsset::ClassTypeId(), hash_key, *in_flight_ops_, request,
+  auto result = co_await RunAssetLoadPipeline<data::MaterialAsset>(
+    data::MaterialAsset::ClassTypeId(), cache_key, *in_flight_ops_, request,
     request_sequence, cache_hit, decode_and_publish, telemetry_callbacks);
+  if (DiscardRevokedAsset(source_id, cache_key)) {
+    co_return nullptr;
+  }
+  co_return result;
 }
 
 auto AssetLoader::LoadGeometryBufferDependenciesAsync(
@@ -2449,8 +2435,8 @@ auto AssetLoader::LoadGeometryBufferDependenciesAsync(
   using data::BufferResource;
 
   LoadedGeometryBuffersByIndex loaded_buffers_by_index;
-  std::unordered_set<uint64_t> seen_resource_hashes;
-  seen_resource_hashes.reserve(collector.ResourceRefDependencies().size()
+  std::unordered_set<uint64_t> seen_resource_ids;
+  seen_resource_ids.reserve(collector.ResourceRefDependencies().size()
     + collector.ResourceKeyDependencies().size());
 
   for (const auto& ref : collector.ResourceRefDependencies()) {
@@ -2459,8 +2445,8 @@ auto AssetLoader::LoadGeometryBufferDependenciesAsync(
     }
 
     const auto dep_key = BindResourceRefToKey(ref);
-    const auto dep_hash = HashResourceKey(dep_key);
-    if (!seen_resource_hashes.insert(dep_hash).second) {
+    const auto dependency_id = dep_key.get();
+    if (!seen_resource_ids.insert(dependency_id).second) {
       continue;
     }
 
@@ -2475,15 +2461,16 @@ auto AssetLoader::LoadGeometryBufferDependenciesAsync(
   }
 
   for (const auto& dep_key : collector.ResourceKeyDependencies()) {
-    const internal::InternalResourceKey internal_key(dep_key);
+    const auto kind
+      = identities_->FindResourceKind(internal::ContentId { dep_key.get() });
     const auto expected_type_index
       = static_cast<uint16_t>(IndexOf<BufferResource, ResourceTypeList>::value);
-    if (internal_key.GetResourceTypeIndex() != expected_type_index) {
+    if (!kind || static_cast<uint16_t>(*kind) != expected_type_index) {
       continue;
     }
 
-    const auto dep_hash = HashResourceKey(dep_key);
-    if (!seen_resource_hashes.insert(dep_hash).second) {
+    const auto dependency_id = dep_key.get();
+    if (!seen_resource_ids.insert(dependency_id).second) {
       continue;
     }
 
@@ -2492,8 +2479,12 @@ auto AssetLoader::LoadGeometryBufferDependenciesAsync(
       continue;
     }
 
-    loaded_buffers_by_index.insert_or_assign(
-      static_cast<uint32_t>(internal_key.GetResourceIndex()),
+    const auto* locator
+      = identities_->FindCookedResource(internal::ContentId { dep_key.get() });
+    if (locator == nullptr) {
+      continue;
+    }
+    loaded_buffers_by_index.insert_or_assign(locator->index,
       LoadedGeometryBuffer { .key = dep_key, .resource = std::move(res) });
   }
 
@@ -2642,31 +2633,7 @@ auto AssetLoader::BindGeometryRuntimePointers(data::GeometryAsset& asset,
   }
 }
 
-/*!
- Publish geometry dependency edges and release temporary checkouts.
-
- Registers resource and asset dependencies for a geometry asset that has
- already been decoded and bound. This updates cache refcounts via
- `AddResourceDependency` and `AddAssetDependency`, then releases any
- temporary asset checkouts acquired during loading.
-
- @param dependent_cache_key Source-qualified geometry cache identity.
- @param buffers_by_index Loaded buffer resources indexed by buffer slot.
- @param materials_by_key Loaded material assets indexed by asset key.
-
- ### Ref-count Contract
-
- - Resource dependencies are retained through cache Touch semantics.
- - Material dependencies are touched, then the temporary checkout held
-   by the loader is released via `CheckIn`.
- - Callers that keep additional references must release them separately.
-
- ### Performance Characteristics
-
- - Time Complexity: $O(n)$ over buffers and materials.
- - Memory: No additional allocations.
- - Optimization: Skips null dependencies.
-*/
+// The caller retains temporary checkouts until all edges are published.
 auto AssetLoader::PublishGeometryDependencyEdges(
   const uint64_t dependent_cache_key,
   const LoadedGeometryBuffersByIndex& buffers_by_index,
@@ -2680,7 +2647,6 @@ auto AssetLoader::PublishGeometryDependencyEdges(
       continue;
     }
     AddResourceDependency(dependent_cache_key, loaded.key);
-    (void)ReleaseResource(loaded.key);
   }
 
   for (const auto& [dep_key, dep_asset] : materials_by_key) {
@@ -2690,13 +2656,12 @@ auto AssetLoader::PublishGeometryDependencyEdges(
     static_cast<void>(dep_key);
     const auto dependency_hash = AssetCacheKey(*dep_asset);
     AddAssetDependency(dependent_cache_key, dependency_hash);
-    content_cache_.CheckIn(dependency_hash);
   }
 }
 
 auto AssetLoader::LoadGeometryAssetAsyncImpl(const data::AssetKey& key,
-  std::optional<uint16_t> preferred_source_id, LoadRequest request)
-  -> co::Co<std::shared_ptr<data::GeometryAsset>>
+  std::optional<data::SourceInstanceId> preferred_source_id,
+  LoadRequest request) -> co::Co<std::shared_ptr<data::GeometryAsset>>
 {
   DLOG_SCOPE_F(2, "AssetLoader LoadGeometryAssetAsync");
   DLOG_F(2, "key     : {}", nostd::to_string(key).c_str());
@@ -2711,7 +2676,7 @@ auto AssetLoader::LoadGeometryAssetAsyncImpl(const data::AssetKey& key,
     co_return nullptr;
   }
   const auto source_id = load_target->source_id;
-  const auto hash_key = load_target->hash_key;
+  const auto cache_key = load_target->cache_key;
   const AssetLoadTelemetryCallbacks telemetry_callbacks {
     .on_request = [this] -> void {
       RecordAssetTelemetry(
@@ -2772,17 +2737,17 @@ auto AssetLoader::LoadGeometryAssetAsyncImpl(const data::AssetKey& key,
         }
 
         const auto dependency_hash = AssetCacheKey(*material);
-        AddAssetDependency(HashAssetKey(key, source_id), dependency_hash);
+        AddAssetDependency(FindAssetId(key, source_id), dependency_hash);
         content_cache_.CheckIn(dependency_hash);
       }
     }
   };
 
   const auto cache_hit
-    = [this, hash_key, publish_geometry_material_dependencies]
+    = [this, cache_key, publish_geometry_material_dependencies]
     -> co::Co<std::shared_ptr<data::GeometryAsset>> {
     if (auto cached = content_cache_.CheckOut<data::GeometryAsset>(
-          hash_key, oxygen::CheckoutOwner::kInternal)) {
+          cache_key, oxygen::CheckoutOwner::kInternal)) {
       // Cache-hit geometry loads must restore geometry->material edges after
       // trim.
       co_await publish_geometry_material_dependencies(cached);
@@ -2792,7 +2757,7 @@ auto AssetLoader::LoadGeometryAssetAsyncImpl(const data::AssetKey& key,
   };
 
   const auto decode_and_publish
-    = [this, key, source_id, hash_key, request,
+    = [this, key, source_id, cache_key, request,
         publish_geometry_material_dependencies,
         source_owner
         = load_target->source] -> co::Co<std::shared_ptr<data::GeometryAsset>> {
@@ -2831,32 +2796,52 @@ auto AssetLoader::LoadGeometryAssetAsyncImpl(const data::AssetKey& key,
 
       const auto loaded_buffers_by_index
         = co_await LoadGeometryBufferDependenciesAsync(collector, request);
+      const auto release_buffers
+        = ScopeGuard([this, &loaded_buffers_by_index]() noexcept {
+            for (const auto& [index, loaded] : loaded_buffers_by_index) {
+              static_cast<void>(index);
+              content_cache_.CheckIn(loaded.key.get());
+            }
+          });
       const auto loaded_materials
         = co_await LoadGeometryMaterialDependenciesAsync(
           collector, *decoded, request);
+      const auto release_materials
+        = ScopeGuard([this, &loaded_materials]() noexcept {
+            for (const auto& [key, material] : loaded_materials) {
+              static_cast<void>(key);
+              content_cache_.CheckIn(AssetCacheKey(*material));
+            }
+          });
 
       BindGeometryRuntimePointers(
         *decoded, loaded_buffers_by_index, loaded_materials);
 
       // Store the fully published asset.
-      auto stored = content_cache_.Store(hash_key, decoded);
+      if (DiscardRevokedAsset(source_id, cache_key)) {
+        co_return nullptr;
+      }
+      auto stored = content_cache_.Store(cache_key, decoded);
       if (!stored) {
         MaybeAutoTrimOnBudgetPressure("geometry_store_failed", true);
-        stored = content_cache_.Store(hash_key, decoded);
+        if (DiscardRevokedAsset(source_id, cache_key)) {
+          co_return nullptr;
+        }
+        stored = content_cache_.Store(cache_key, decoded);
         if (!stored) {
           RecordAssetTelemetry(
             data::AssetType::kGeometry, LoadTelemetryEvent::kStoreRetryFailure);
         }
       }
       if (stored) {
-        IndexAssetHashMapping(hash_key, key, source_id);
+
         // Keep one loader-owned cache retain; load caller gets its own retain.
-        content_cache_.Touch(hash_key, oxygen::CheckoutOwner::kInternal);
+        content_cache_.Touch(cache_key, oxygen::CheckoutOwner::kInternal);
         MaybeAutoTrimOnBudgetPressure("geometry_store_succeeded");
       }
 
       PublishGeometryDependencyEdges(
-        hash_key, loaded_buffers_by_index, loaded_materials);
+        cache_key, loaded_buffers_by_index, loaded_materials);
 
       co_return decoded;
     } catch (const co::TaskCancelledException& e) {
@@ -2866,14 +2851,18 @@ auto AssetLoader::LoadGeometryAssetAsyncImpl(const data::AssetKey& key,
     }
   };
 
-  co_return co_await RunAssetLoadPipeline<data::GeometryAsset>(
-    data::GeometryAsset::ClassTypeId(), hash_key, *in_flight_ops_, request,
+  auto result = co_await RunAssetLoadPipeline<data::GeometryAsset>(
+    data::GeometryAsset::ClassTypeId(), cache_key, *in_flight_ops_, request,
     request_sequence, cache_hit, decode_and_publish, telemetry_callbacks);
+  if (DiscardRevokedAsset(source_id, cache_key)) {
+    co_return nullptr;
+  }
+  co_return result;
 }
 
 auto AssetLoader::LoadSceneAssetAsyncImpl(const data::AssetKey& key,
-  std::optional<uint16_t> preferred_source_id, LoadRequest request)
-  -> co::Co<std::shared_ptr<data::SceneAsset>>
+  std::optional<data::SourceInstanceId> preferred_source_id,
+  LoadRequest request) -> co::Co<std::shared_ptr<data::SceneAsset>>
 {
   DLOG_SCOPE_F(2, "AssetLoader LoadSceneAssetAsync");
   DLOG_F(2, "key     : {}", nostd::to_string(key).c_str());
@@ -2888,7 +2877,7 @@ auto AssetLoader::LoadSceneAssetAsyncImpl(const data::AssetKey& key,
     co_return nullptr;
   }
   const auto source_id = load_target->source_id;
-  const auto hash_key = load_target->hash_key;
+  const auto cache_key = load_target->cache_key;
   const AssetLoadTelemetryCallbacks telemetry_callbacks {
     .on_request = [this] -> void {
       RecordAssetTelemetry(
@@ -2932,7 +2921,7 @@ auto AssetLoader::LoadSceneAssetAsyncImpl(const data::AssetKey& key,
           renderable.geometry_key, dependency_source, request);
         if (geom) {
           const auto dependency_hash = AssetCacheKey(*geom);
-          AddAssetDependency(HashAssetKey(key, source_id), dependency_hash);
+          AddAssetDependency(FindAssetId(key, source_id), dependency_hash);
           content_cache_.CheckIn(dependency_hash);
         }
       }
@@ -2955,7 +2944,7 @@ auto AssetLoader::LoadSceneAssetAsyncImpl(const data::AssetKey& key,
       }
 
       const auto dependency_hash = AssetCacheKey(*material);
-      AddAssetDependency(HashAssetKey(key, source_id), dependency_hash);
+      AddAssetDependency(FindAssetId(key, source_id), dependency_hash);
       content_cache_.CheckIn(dependency_hash);
     }
   };
@@ -2992,17 +2981,18 @@ auto AssetLoader::LoadSceneAssetAsyncImpl(const data::AssetKey& key,
         }
 
         const auto dependency_hash = AssetCacheKey(*script);
-        AddAssetDependency(HashAssetKey(key, source_id), dependency_hash);
+        AddAssetDependency(FindAssetId(key, source_id), dependency_hash);
         content_cache_.CheckIn(dependency_hash);
       }
     }
   };
 
-  const auto cache_hit = [this, hash_key, publish_scene_renderable_dependencies,
-                           publish_scene_script_dependencies]
+  const auto cache_hit
+    = [this, cache_key, publish_scene_renderable_dependencies,
+        publish_scene_script_dependencies]
     -> co::Co<std::shared_ptr<data::SceneAsset>> {
     if (auto cached = content_cache_.CheckOut<data::SceneAsset>(
-          hash_key, oxygen::CheckoutOwner::kInternal)) {
+          cache_key, oxygen::CheckoutOwner::kInternal)) {
       // Cache-hit scene loads must republish scene->geometry edges so live
       // scene content is protected from trim and can be rebuilt
       // deterministically. Scene-authored renderable material overrides are
@@ -3015,7 +3005,7 @@ auto AssetLoader::LoadSceneAssetAsyncImpl(const data::AssetKey& key,
   };
 
   const auto decode_and_publish =
-    [this, key, source_id, hash_key, request,
+    [this, key, source_id, cache_key, request,
       publish_scene_renderable_dependencies, publish_scene_script_dependencies,
       source_owner
       = load_target->source] -> co::Co<std::shared_ptr<data::SceneAsset>> {
@@ -3046,19 +3036,25 @@ auto AssetLoader::LoadSceneAssetAsyncImpl(const data::AssetKey& key,
 
       // Publish: store the scene asset, then load asset dependencies and
       // register dependency edges.
-      auto stored = content_cache_.Store(hash_key, decoded);
+      if (DiscardRevokedAsset(source_id, cache_key)) {
+        co_return nullptr;
+      }
+      auto stored = content_cache_.Store(cache_key, decoded);
       if (!stored) {
         MaybeAutoTrimOnBudgetPressure("scene_store_failed", true);
-        stored = content_cache_.Store(hash_key, decoded);
+        if (DiscardRevokedAsset(source_id, cache_key)) {
+          co_return nullptr;
+        }
+        stored = content_cache_.Store(cache_key, decoded);
         if (!stored) {
           RecordAssetTelemetry(
             data::AssetType::kScene, LoadTelemetryEvent::kStoreRetryFailure);
         }
       }
       if (stored) {
-        IndexAssetHashMapping(hash_key, key, source_id);
+
         // Keep one loader-owned cache retain; load caller gets its own retain.
-        content_cache_.Touch(hash_key, oxygen::CheckoutOwner::kInternal);
+        content_cache_.Touch(cache_key, oxygen::CheckoutOwner::kInternal);
         MaybeAutoTrimOnBudgetPressure("scene_store_succeeded");
       }
 
@@ -3073,9 +3069,9 @@ auto AssetLoader::LoadSceneAssetAsyncImpl(const data::AssetKey& key,
       // edges so trim does not treat currently used scene resources as
       // standalone and evict them.
       co_await PublishResourceDependenciesAsync<data::TextureResource>(
-        hash_key, *decoded_result.dependency_collector, request);
+        cache_key, *decoded_result.dependency_collector, request);
       co_await PublishResourceDependenciesAsync<data::BufferResource>(
-        hash_key, *decoded_result.dependency_collector, request);
+        cache_key, *decoded_result.dependency_collector, request);
 
       co_await publish_scene_renderable_dependencies(decoded);
       co_await publish_scene_script_dependencies(decoded);
@@ -3088,14 +3084,18 @@ auto AssetLoader::LoadSceneAssetAsyncImpl(const data::AssetKey& key,
     }
   };
 
-  co_return co_await RunAssetLoadPipeline<data::SceneAsset>(
-    data::SceneAsset::ClassTypeId(), hash_key, *in_flight_ops_, request,
+  auto result = co_await RunAssetLoadPipeline<data::SceneAsset>(
+    data::SceneAsset::ClassTypeId(), cache_key, *in_flight_ops_, request,
     request_sequence, cache_hit, decode_and_publish, telemetry_callbacks);
+  if (DiscardRevokedAsset(source_id, cache_key)) {
+    co_return nullptr;
+  }
+  co_return result;
 }
 
 auto AssetLoader::LoadPhysicsSceneAssetAsyncImpl(const data::AssetKey& key,
-  std::optional<uint16_t> preferred_source_id, LoadRequest request)
-  -> co::Co<std::shared_ptr<data::PhysicsSceneAsset>>
+  std::optional<data::SourceInstanceId> preferred_source_id,
+  LoadRequest request) -> co::Co<std::shared_ptr<data::PhysicsSceneAsset>>
 {
   DLOG_SCOPE_F(2, "AssetLoader LoadPhysicsSceneAssetAsync");
   DLOG_F(2, "key     : {}", nostd::to_string(key).c_str());
@@ -3110,7 +3110,7 @@ auto AssetLoader::LoadPhysicsSceneAssetAsyncImpl(const data::AssetKey& key,
     co_return nullptr;
   }
   const auto source_id = load_target->source_id;
-  const auto hash_key = load_target->hash_key;
+  const auto cache_key = load_target->cache_key;
   const AssetLoadTelemetryCallbacks telemetry_callbacks {
     .on_request = [this] -> void {
       RecordAssetTelemetry(
@@ -3135,9 +3135,9 @@ auto AssetLoader::LoadPhysicsSceneAssetAsyncImpl(const data::AssetKey& key,
   };
 
   const auto cache_hit
-    = [this, hash_key] -> co::Co<std::shared_ptr<data::PhysicsSceneAsset>> {
+    = [this, cache_key] -> co::Co<std::shared_ptr<data::PhysicsSceneAsset>> {
     if (auto cached = content_cache_.CheckOut<data::PhysicsSceneAsset>(
-          hash_key, oxygen::CheckoutOwner::kInternal)) {
+          cache_key, oxygen::CheckoutOwner::kInternal)) {
       // Physics sidecar has no sub-asset dependencies to republish.
       co_return cached;
     }
@@ -3145,7 +3145,7 @@ auto AssetLoader::LoadPhysicsSceneAssetAsyncImpl(const data::AssetKey& key,
   };
 
   const auto decode_and_publish
-    = [this, key, source_id, hash_key, source_owner = load_target->source]
+    = [this, key, source_id, cache_key, source_owner = load_target->source]
     -> co::Co<std::shared_ptr<data::PhysicsSceneAsset>> {
     static_cast<void>(source_owner);
     try {
@@ -3168,18 +3168,24 @@ auto AssetLoader::LoadPhysicsSceneAssetAsyncImpl(const data::AssetKey& key,
       }
 
       // Publish: store the asset in cache and keep one loader-owned retain.
-      auto stored = content_cache_.Store(hash_key, typed);
+      if (DiscardRevokedAsset(source_id, cache_key)) {
+        co_return nullptr;
+      }
+      auto stored = content_cache_.Store(cache_key, typed);
       if (!stored) {
         MaybeAutoTrimOnBudgetPressure("physics_scene_store_failed", true);
-        stored = content_cache_.Store(hash_key, typed);
+        if (DiscardRevokedAsset(source_id, cache_key)) {
+          co_return nullptr;
+        }
+        stored = content_cache_.Store(cache_key, typed);
         if (!stored) {
           RecordAssetTelemetry(data::AssetType::kPhysicsScene,
             LoadTelemetryEvent::kStoreRetryFailure);
         }
       }
       if (stored) {
-        IndexAssetHashMapping(hash_key, key, source_id);
-        content_cache_.Touch(hash_key, oxygen::CheckoutOwner::kInternal);
+
+        content_cache_.Touch(cache_key, oxygen::CheckoutOwner::kInternal);
         MaybeAutoTrimOnBudgetPressure("physics_scene_store_succeeded");
       }
       co_return typed;
@@ -3190,14 +3196,18 @@ auto AssetLoader::LoadPhysicsSceneAssetAsyncImpl(const data::AssetKey& key,
     }
   };
 
-  co_return co_await RunAssetLoadPipeline<data::PhysicsSceneAsset>(
-    data::PhysicsSceneAsset::ClassTypeId(), hash_key, *in_flight_ops_, request,
+  auto result = co_await RunAssetLoadPipeline<data::PhysicsSceneAsset>(
+    data::PhysicsSceneAsset::ClassTypeId(), cache_key, *in_flight_ops_, request,
     request_sequence, cache_hit, decode_and_publish, telemetry_callbacks);
+  if (DiscardRevokedAsset(source_id, cache_key)) {
+    co_return nullptr;
+  }
+  co_return result;
 }
 
 auto AssetLoader::LoadScriptAssetAsyncImpl(const data::AssetKey& key,
-  std::optional<uint16_t> preferred_source_id, LoadRequest request)
-  -> co::Co<std::shared_ptr<data::ScriptAsset>>
+  std::optional<data::SourceInstanceId> preferred_source_id,
+  LoadRequest request) -> co::Co<std::shared_ptr<data::ScriptAsset>>
 {
   DLOG_SCOPE_F(2, "AssetLoader LoadScriptAssetAsync");
   DLOG_F(2, "key     : {}", nostd::to_string(key).c_str());
@@ -3212,7 +3222,7 @@ auto AssetLoader::LoadScriptAssetAsyncImpl(const data::AssetKey& key,
     co_return nullptr;
   }
   const auto source_id = load_target->source_id;
-  const auto hash_key = load_target->hash_key;
+  const auto cache_key = load_target->cache_key;
   const AssetLoadTelemetryCallbacks telemetry_callbacks {
     .on_request = [this] -> void {
       RecordAssetTelemetry(
@@ -3257,22 +3267,22 @@ auto AssetLoader::LoadScriptAssetAsyncImpl(const data::AssetKey& key,
         continue;
       }
       const auto script_resource_key
-        = PackResourceKey(source_id, script_type_index, resource_index);
+        = InternResourceKey(source_id, script_type_index, resource_index);
       auto script_resource = co_await LoadResourceAsync<data::ScriptResource>(
         script_resource_key, request);
       if (!script_resource) {
         continue;
       }
 
-      AddResourceDependency(HashAssetKey(key, source_id), script_resource_key);
+      AddResourceDependency(FindAssetId(key, source_id), script_resource_key);
       (void)ReleaseResource(script_resource_key);
     }
   };
 
-  const auto cache_hit = [this, hash_key, publish_script_resource_dependency]
+  const auto cache_hit = [this, cache_key, publish_script_resource_dependency]
     -> co::Co<std::shared_ptr<data::ScriptAsset>> {
     if (auto cached = content_cache_.CheckOut<data::ScriptAsset>(
-          hash_key, oxygen::CheckoutOwner::kInternal)) {
+          cache_key, oxygen::CheckoutOwner::kInternal)) {
       co_await publish_script_resource_dependency(cached);
       co_return cached;
     }
@@ -3280,7 +3290,7 @@ auto AssetLoader::LoadScriptAssetAsyncImpl(const data::AssetKey& key,
   };
 
   const auto decode_and_publish
-    = [this, key, source_id, hash_key, request,
+    = [this, key, source_id, cache_key, request,
         publish_script_resource_dependency,
         source_owner
         = load_target->source] -> co::Co<std::shared_ptr<data::ScriptAsset>> {
@@ -3310,24 +3320,30 @@ auto AssetLoader::LoadScriptAssetAsyncImpl(const data::AssetKey& key,
         co_return nullptr;
       }
 
-      auto stored = content_cache_.Store(hash_key, decoded);
+      if (DiscardRevokedAsset(source_id, cache_key)) {
+        co_return nullptr;
+      }
+      auto stored = content_cache_.Store(cache_key, decoded);
       if (!stored) {
         MaybeAutoTrimOnBudgetPressure("script_asset_store_failed", true);
-        stored = content_cache_.Store(hash_key, decoded);
+        if (DiscardRevokedAsset(source_id, cache_key)) {
+          co_return nullptr;
+        }
+        stored = content_cache_.Store(cache_key, decoded);
         if (!stored) {
           RecordAssetTelemetry(
             data::AssetType::kScript, LoadTelemetryEvent::kStoreRetryFailure);
         }
       }
       if (stored) {
-        IndexAssetHashMapping(hash_key, key, source_id);
+
         // Baseline pinning: retain one loader-owned checkout.
-        content_cache_.Touch(hash_key, oxygen::CheckoutOwner::kInternal);
+        content_cache_.Touch(cache_key, oxygen::CheckoutOwner::kInternal);
         MaybeAutoTrimOnBudgetPressure("script_asset_store_succeeded");
       }
 
       co_await PublishResourceDependenciesAsync<data::ScriptResource>(
-        hash_key, *decoded_result.dependency_collector, request);
+        cache_key, *decoded_result.dependency_collector, request);
       co_return decoded;
     } catch (const co::TaskCancelledException& e) {
       RecordAssetTelemetry(
@@ -3336,14 +3352,18 @@ auto AssetLoader::LoadScriptAssetAsyncImpl(const data::AssetKey& key,
     }
   };
 
-  co_return co_await RunAssetLoadPipeline<data::ScriptAsset>(
-    data::ScriptAsset::ClassTypeId(), hash_key, *in_flight_ops_, request,
+  auto result = co_await RunAssetLoadPipeline<data::ScriptAsset>(
+    data::ScriptAsset::ClassTypeId(), cache_key, *in_flight_ops_, request,
     request_sequence, cache_hit, decode_and_publish, telemetry_callbacks);
+  if (DiscardRevokedAsset(source_id, cache_key)) {
+    co_return nullptr;
+  }
+  co_return result;
 }
 
 auto AssetLoader::LoadInputActionAssetAsyncImpl(const data::AssetKey& key,
-  std::optional<uint16_t> preferred_source_id, LoadRequest request)
-  -> co::Co<std::shared_ptr<data::InputActionAsset>>
+  std::optional<data::SourceInstanceId> preferred_source_id,
+  LoadRequest request) -> co::Co<std::shared_ptr<data::InputActionAsset>>
 {
   DLOG_SCOPE_F(2, "AssetLoader LoadInputActionAssetAsync");
   DLOG_F(2, "key     : {}", nostd::to_string(key).c_str());
@@ -3358,7 +3378,7 @@ auto AssetLoader::LoadInputActionAssetAsyncImpl(const data::AssetKey& key,
     co_return nullptr;
   }
   const auto source_id = load_target->source_id;
-  const auto hash_key = load_target->hash_key;
+  const auto cache_key = load_target->cache_key;
   const AssetLoadTelemetryCallbacks telemetry_callbacks {
     .on_request = [this] -> void {
       RecordAssetTelemetry(
@@ -3383,13 +3403,13 @@ auto AssetLoader::LoadInputActionAssetAsyncImpl(const data::AssetKey& key,
   };
 
   const auto cache_hit
-    = [this, hash_key] -> co::Co<std::shared_ptr<data::InputActionAsset>> {
+    = [this, cache_key] -> co::Co<std::shared_ptr<data::InputActionAsset>> {
     co_return content_cache_.CheckOut<data::InputActionAsset>(
-      hash_key, oxygen::CheckoutOwner::kInternal);
+      cache_key, oxygen::CheckoutOwner::kInternal);
   };
 
   const auto decode_and_publish
-    = [this, key, source_id, hash_key, source_owner = load_target->source]
+    = [this, key, source_id, cache_key, source_owner = load_target->source]
     -> co::Co<std::shared_ptr<data::InputActionAsset>> {
     static_cast<void>(source_owner);
     try {
@@ -3411,19 +3431,25 @@ auto AssetLoader::LoadInputActionAssetAsyncImpl(const data::AssetKey& key,
         co_return nullptr;
       }
 
-      auto stored = content_cache_.Store(hash_key, decoded);
+      if (DiscardRevokedAsset(source_id, cache_key)) {
+        co_return nullptr;
+      }
+      auto stored = content_cache_.Store(cache_key, decoded);
       if (!stored) {
         MaybeAutoTrimOnBudgetPressure("input_action_store_failed", true);
-        stored = content_cache_.Store(hash_key, decoded);
+        if (DiscardRevokedAsset(source_id, cache_key)) {
+          co_return nullptr;
+        }
+        stored = content_cache_.Store(cache_key, decoded);
         if (!stored) {
           RecordAssetTelemetry(data::AssetType::kInputAction,
             LoadTelemetryEvent::kStoreRetryFailure);
         }
       }
       if (stored) {
-        IndexAssetHashMapping(hash_key, key, source_id);
+
         // Baseline pinning: retain one loader-owned checkout.
-        content_cache_.Touch(hash_key, oxygen::CheckoutOwner::kInternal);
+        content_cache_.Touch(cache_key, oxygen::CheckoutOwner::kInternal);
         MaybeAutoTrimOnBudgetPressure("input_action_store_succeeded");
       }
 
@@ -3435,13 +3461,18 @@ auto AssetLoader::LoadInputActionAssetAsyncImpl(const data::AssetKey& key,
     }
   };
 
-  co_return co_await RunAssetLoadPipeline<data::InputActionAsset>(
-    data::InputActionAsset::ClassTypeId(), hash_key, *in_flight_ops_, request,
+  auto result = co_await RunAssetLoadPipeline<data::InputActionAsset>(
+    data::InputActionAsset::ClassTypeId(), cache_key, *in_flight_ops_, request,
     request_sequence, cache_hit, decode_and_publish, telemetry_callbacks);
+  if (DiscardRevokedAsset(source_id, cache_key)) {
+    co_return nullptr;
+  }
+  co_return result;
 }
 
 auto AssetLoader::LoadInputMappingContextAssetAsyncImpl(
-  const data::AssetKey& key, std::optional<uint16_t> preferred_source_id,
+  const data::AssetKey& key,
+  std::optional<data::SourceInstanceId> preferred_source_id,
   LoadRequest request)
   -> co::Co<std::shared_ptr<data::InputMappingContextAsset>>
 {
@@ -3458,7 +3489,7 @@ auto AssetLoader::LoadInputMappingContextAssetAsyncImpl(
     co_return nullptr;
   }
   const auto source_id = load_target->source_id;
-  const auto hash_key = load_target->hash_key;
+  const auto cache_key = load_target->cache_key;
   const AssetLoadTelemetryCallbacks telemetry_callbacks {
     .on_request = [this] -> void {
       RecordAssetTelemetry(
@@ -3510,7 +3541,7 @@ auto AssetLoader::LoadInputMappingContextAssetAsyncImpl(
       }
 
       const auto dependency_hash = AssetCacheKey(*action);
-      AddAssetDependency(HashAssetKey(key, source_id), dependency_hash);
+      AddAssetDependency(FindAssetId(key, source_id), dependency_hash);
       content_cache_.CheckIn(dependency_hash);
     }
 
@@ -3534,7 +3565,7 @@ auto AssetLoader::LoadInputMappingContextAssetAsyncImpl(
       }
 
       const auto dependency_hash = AssetCacheKey(*action);
-      AddAssetDependency(HashAssetKey(key, source_id), dependency_hash);
+      AddAssetDependency(FindAssetId(key, source_id), dependency_hash);
       content_cache_.CheckIn(dependency_hash);
     }
 
@@ -3558,15 +3589,15 @@ auto AssetLoader::LoadInputMappingContextAssetAsyncImpl(
       }
 
       const auto dependency_hash = AssetCacheKey(*action);
-      AddAssetDependency(HashAssetKey(key, source_id), dependency_hash);
+      AddAssetDependency(FindAssetId(key, source_id), dependency_hash);
       content_cache_.CheckIn(dependency_hash);
     }
   };
 
-  const auto cache_hit = [this, hash_key, publish_input_action_dependencies]
+  const auto cache_hit = [this, cache_key, publish_input_action_dependencies]
     -> co::Co<std::shared_ptr<data::InputMappingContextAsset>> {
     if (auto cached = content_cache_.CheckOut<data::InputMappingContextAsset>(
-          hash_key, oxygen::CheckoutOwner::kInternal)) {
+          cache_key, oxygen::CheckoutOwner::kInternal)) {
       co_await publish_input_action_dependencies(cached);
       co_return cached;
     }
@@ -3574,7 +3605,7 @@ auto AssetLoader::LoadInputMappingContextAssetAsyncImpl(
   };
 
   const auto decode_and_publish
-    = [this, key, source_id, hash_key, request,
+    = [this, key, source_id, cache_key, request,
         publish_input_action_dependencies, source_owner = load_target->source]
     -> co::Co<std::shared_ptr<data::InputMappingContextAsset>> {
     static_cast<void>(source_owner);
@@ -3598,20 +3629,26 @@ auto AssetLoader::LoadInputMappingContextAssetAsyncImpl(
         co_return nullptr;
       }
 
-      auto stored = content_cache_.Store(hash_key, decoded);
+      if (DiscardRevokedAsset(source_id, cache_key)) {
+        co_return nullptr;
+      }
+      auto stored = content_cache_.Store(cache_key, decoded);
       if (!stored) {
         MaybeAutoTrimOnBudgetPressure(
           "input_mapping_context_store_failed", true);
-        stored = content_cache_.Store(hash_key, decoded);
+        if (DiscardRevokedAsset(source_id, cache_key)) {
+          co_return nullptr;
+        }
+        stored = content_cache_.Store(cache_key, decoded);
         if (!stored) {
           RecordAssetTelemetry(data::AssetType::kInputMappingContext,
             LoadTelemetryEvent::kStoreRetryFailure);
         }
       }
       if (stored) {
-        IndexAssetHashMapping(hash_key, key, source_id);
+
         // Baseline pinning: retain one loader-owned checkout.
-        content_cache_.Touch(hash_key, oxygen::CheckoutOwner::kInternal);
+        content_cache_.Touch(cache_key, oxygen::CheckoutOwner::kInternal);
         MaybeAutoTrimOnBudgetPressure("input_mapping_context_store_succeeded");
       }
 
@@ -3624,10 +3661,14 @@ auto AssetLoader::LoadInputMappingContextAssetAsyncImpl(
     }
   };
 
-  co_return co_await RunAssetLoadPipeline<data::InputMappingContextAsset>(
-    data::InputMappingContextAsset::ClassTypeId(), hash_key, *in_flight_ops_,
+  auto result = co_await RunAssetLoadPipeline<data::InputMappingContextAsset>(
+    data::InputMappingContextAsset::ClassTypeId(), cache_key, *in_flight_ops_,
     request, request_sequence, cache_hit, decode_and_publish,
     telemetry_callbacks);
+  if (DiscardRevokedAsset(source_id, cache_key)) {
+    co_return nullptr;
+  }
+  co_return result;
 }
 
 template <PakResource T>
@@ -3667,10 +3708,11 @@ auto AssetLoader::LoadResourceAsync(const oxygen::content::ResourceKey key,
       "AssetLoader requires a thread pool for async loads (LoadResourceAsync)");
   }
 
-  const internal::InternalResourceKey internal_key(key);
+  const auto kind
+    = identities_->FindResourceKind(internal::ContentId { key.get() });
   const auto expected_type_index
     = static_cast<uint16_t>(IndexOf<T, ResourceTypeList>::value);
-  if (internal_key.GetResourceTypeIndex() != expected_type_index) {
+  if (!kind || static_cast<uint16_t>(*kind) != expected_type_index) {
     if constexpr (std::same_as<T, data::TextureResource>) {
       RecordResourceTelemetry(data::TextureResource::ClassTypeId(),
         LoadTelemetryEvent::kTypeMismatch);
@@ -3686,7 +3728,9 @@ auto AssetLoader::LoadResourceAsync(const oxygen::content::ResourceKey key,
     }
     LOG_F(ERROR,
       "ResourceKey type mismatch for {}: key_type={} expected_type={}",
-      T::ClassTypeNamePretty(), internal_key.GetResourceTypeIndex(),
+      T::ClassTypeNamePretty(),
+      kind ? static_cast<uint16_t>(*kind)
+           : std::numeric_limits<uint16_t>::max(),
       expected_type_index);
     co_return nullptr;
   }
@@ -3748,37 +3792,30 @@ void oxygen::content::AssetLoader::UnloadObject(const uint64_t cache_key,
     .type_id = type_id,
     .reason = reason,
 #ifndef NDEBUG
-    .cache_key_hash = cache_key,
+    .cache_key = cache_key,
 #endif
   };
 
   if (IsResourceTypeId(type_id)) {
-    const auto key_opt = resource_key_registry_->Find(cache_key);
-    if (!key_opt.has_value()) {
-      LOG_F(WARNING,
-        "Eviction without ResourceKey mapping: key_hash={} type_id={}",
-        cache_key, type_id);
-      return;
-    }
-
-    event.key = *key_opt;
+    event.key = ResourceKey { cache_key };
     if (reason != EvictionReason::kRefCountZero) {
-      resource_key_registry_->Erase(cache_key);
+      eviction_registry_->ForgetResource(event.key);
     }
     pinned_resource_counts_.erase(cache_key);
     LOG_F(2, "Evicted resource {} type_id={} reason={}", to_string(event.key),
       type_id, reason);
   } else {
-    const auto* asset_key = asset_identity_index_->FindAssetKey(cache_key);
+    const auto* asset_identity
+      = identities_->FindAsset(internal::ContentId { cache_key });
+    const auto* asset_key = asset_identity ? &asset_identity->asset : nullptr;
     if (asset_key == nullptr) {
       LOG_F(WARNING,
-        "Eviction without AssetKey mapping: key_hash={} type_id={}", cache_key,
+        "Eviction without AssetKey mapping: cache_key={} type_id={}", cache_key,
         type_id);
       return;
     }
 
     event.asset_key = *asset_key;
-    UnindexAssetHashMapping(cache_key);
     pinned_asset_counts_.erase(cache_key);
     LOG_F(2, "Evicted asset {} type_id={} reason={}", *event.asset_key, type_id,
       reason);
@@ -3818,77 +3855,33 @@ auto AssetLoader::FlushResourceEvictionsForUncachedMappings(
   const EvictionReason reason, const bool force_emit_all) -> void
 {
   AssertOwningThread();
-
+  static_cast<void>(force_emit_all);
   std::vector<std::pair<uint64_t, TypeId>> pending;
-  pending.reserve(resource_key_registry_->Size());
-  std::vector<uint64_t> stale_hashes;
-  stale_hashes.reserve(resource_key_registry_->Size());
-  std::vector<std::pair<uint64_t, ResourceKey>> remap_entries;
-  remap_entries.reserve(resource_key_registry_->Size());
-  std::size_t uncached_candidates = 0U;
-
-  for (const auto& [cache_key, resource_key] :
-    resource_key_registry_->Entries()) {
-    if (content_cache_.Contains(cache_key)) {
-      continue;
-    }
-    ++uncached_candidates;
-
-    if (!force_emit_all) {
-      const auto canonical_hash = HashResourceKey(resource_key);
-      if (canonical_hash != cache_key) {
-        // This mapping is stale (typically from source remap/reload).
-        // Do not emit an eviction from a stale hash entry.
-        stale_hashes.push_back(cache_key);
-        if (content_cache_.Contains(canonical_hash)) {
-          remap_entries.emplace_back(canonical_hash, resource_key);
-        }
-        continue;
+  pending.reserve(eviction_registry_->TrackedResources().size());
+  for (const auto key : eviction_registry_->TrackedResources()) {
+    if (!content_cache_.Contains(key.get())) {
+      const auto kind
+        = identities_->FindResourceKind(internal::ContentId { key.get() });
+      if (kind) {
+        pending.emplace_back(
+          key.get(), GetResourceTypeIdByIndex(static_cast<size_t>(*kind)));
       }
     }
-
-    const internal::InternalResourceKey internal_key(resource_key);
-    pending.emplace_back(
-      cache_key, GetResourceTypeIdByIndex(internal_key.GetResourceTypeIndex()));
   }
-
-  for (const auto stale_hash : stale_hashes) {
-    resource_key_registry_->Erase(stale_hash);
+  for (const auto& [id, type] : pending) {
+    UnloadObject(id, type, reason);
   }
-  for (const auto& [canonical_hash, resource_key] : remap_entries) {
-    IndexResourceKeyMapping(canonical_hash, resource_key);
-  }
-
-  if (uncached_candidates > 0U || !stale_hashes.empty()
-    || !remap_entries.empty() || !pending.empty()) {
-    LOG_F(INFO,
-      "AssetLoader: resource mapping flush inspected={} stale_removed={} "
-      "remapped={} emitted={}",
-      uncached_candidates, stale_hashes.size(), remap_entries.size(),
-      pending.size());
-  }
-
-  if (!pending.empty()) {
-    LOG_F(INFO,
-      "AssetLoader: flushing {} uncached resource mappings as evictions "
-      "(reason={})",
-      pending.size(), reason);
-  }
-
-  for (const auto& [cache_key, type_id] : pending) {
-    UnloadObject(cache_key, type_id, reason);
-  }
-
-  AssertResourceMappingConsistency("FlushResourceEvictionsForUncachedMappings");
 }
 
 auto AssetLoader::ReleaseResource(const ResourceKey key) -> bool
 {
   AssertOwningThread();
-  const auto key_hash = HashResourceKey(key);
-  const internal::InternalResourceKey internal_key(key);
-  [[maybe_unused]] const auto expected_type_id
-    = GetResourceTypeIdByIndex(internal_key.GetResourceTypeIndex());
+  const auto cache_key = key.get();
+  const auto kind
+    = identities_->FindResourceKind(internal::ContentId { key.get() });
+  [[maybe_unused]] const auto expected_type_id = kind
+    ? GetResourceTypeIdByIndex(static_cast<size_t>(*kind))
+    : kInvalidTypeId;
 
   // The resource should always be checked in on release. Whether it remains in
   // the cache or gets evicted is dependent on the eviction policy.
@@ -3897,13 +3890,13 @@ auto AssetLoader::ReleaseResource(const ResourceKey key) -> bool
       const TypeId type_id) -> void {
       static_cast<void>(value);
       DCHECK_F(SanityCheckResourceEviction(
-        key_hash, cache_key, expected_type_id, type_id));
-      LOG_F(2, "Evict resource: key_hash={} type_id={}", cache_key, type_id);
+        cache_key, cache_key, expected_type_id, type_id));
+      LOG_F(2, "Evict resource: cache_key={} type_id={}", cache_key, type_id);
 
       UnloadObject(cache_key, type_id, EvictionReason::kRefCountZero);
     });
-  content_cache_.CheckIn(key_hash);
-  const bool still_present = content_cache_.Contains(key_hash);
+  content_cache_.CheckIn(cache_key);
+  const bool still_present = content_cache_.Contains(cache_key);
   LOG_F(2, "AssetLoader: ReleaseResource key={} evicted={}", to_string(key),
     still_present ? "false" : "true");
   return !still_present;
@@ -3912,26 +3905,26 @@ auto AssetLoader::ReleaseResource(const ResourceKey key) -> bool
 auto AssetLoader::PinResource(const ResourceKey key) -> bool
 {
   AssertOwningThread();
-  const auto key_hash = HashResourceKey(key);
-  if (!content_cache_.Pin(key_hash, oxygen::CheckoutOwner::kExternal)) {
+  const auto cache_key = key.get();
+  if (!content_cache_.Pin(cache_key, oxygen::CheckoutOwner::kExternal)) {
     LOG_F(WARNING, "pin resource failed: key={} not loaded", to_string(key));
     return false;
   }
-  ++pinned_resource_counts_[key_hash];
+  ++pinned_resource_counts_[cache_key];
   return true;
 }
 
 auto AssetLoader::UnpinResource(const ResourceKey key) -> bool
 {
   AssertOwningThread();
-  const auto key_hash = HashResourceKey(key);
-  auto pin_it = pinned_resource_counts_.find(key_hash);
+  const auto cache_key = key.get();
+  auto pin_it = pinned_resource_counts_.find(cache_key);
   if (pin_it == pinned_resource_counts_.end() || pin_it->second == 0U) {
     LOG_F(ERROR, "unpin resource failed: key={} has no matching pin",
       to_string(key));
     return false;
   }
-  if (!content_cache_.Unpin(key_hash)) {
+  if (!content_cache_.Unpin(cache_key)) {
     LOG_F(ERROR, "unpin resource failed: key={} cache refcount underflow",
       to_string(key));
     return false;
@@ -3943,7 +3936,8 @@ auto AssetLoader::UnpinResource(const ResourceKey key) -> bool
   return true;
 }
 
-auto AssetLoader::GetPakIndex(const PakFile& pak) const -> uint16_t
+auto AssetLoader::GetPakIndex(const PakFile& pak) const
+  -> data::SourceInstanceId
 {
   // Normalize the path of the input pak
   const auto& pak_path = base::ToLogicalPath(
@@ -3959,28 +3953,31 @@ auto AssetLoader::GetPakIndex(const PakFile& pak) const -> uint16_t
 }
 
 auto AssetLoader::MakePhysicsResourceKey(const data::SourceKey source_key,
-  const data::pak::core::ResourceIndexT resource_index) const noexcept
+  const data::pak::core::ResourceIndexT resource_index)
   -> std::optional<ResourceKey>
 {
+  AssertOwningThread();
   const internal::PhysicsQueryService::Callbacks callbacks {
     .resolve_source_id_for_asset
-    = [this](const data::AssetKey& key) -> std::optional<uint16_t> {
+    = [this](
+        const data::AssetKey& key) -> std::optional<data::SourceInstanceId> {
       return ResolveSourceIdForAsset(key);
     },
-    .resolve_source_for_id = [this](const uint16_t source_id)
+    .resolve_source_for_id = [this](const data::SourceInstanceId source_id)
       -> std::shared_ptr<const internal::IContentSource> {
       return ResolveSourceForId(source_id);
     },
     .resolve_source_id_for_source_key
-    = [this](const data::SourceKey key) -> std::optional<uint16_t> {
+    = [this](
+        const data::SourceKey key) -> std::optional<data::SourceInstanceId> {
       return impl_->source_registry.FindSourceIdByKey(key);
     },
     .make_physics_resource_key
-    = [this](const uint16_t source_id,
+    = [this](const data::SourceInstanceId source_id,
         const data::pak::core::ResourceIndexT index) -> ResourceKey {
       const auto resource_type_index = static_cast<uint16_t>(
         IndexOf<data::PhysicsResource, ResourceTypeList>::value);
-      return PackResourceKey(source_id, resource_type_index, index);
+      return InternResourceKey(source_id, resource_type_index, index);
     },
   };
   return physics_query_service_->MakePhysicsResourceKey(
@@ -3988,7 +3985,7 @@ auto AssetLoader::MakePhysicsResourceKey(const data::SourceKey source_key,
 }
 
 auto AssetLoader::MakeTextureResourceKey(const data::SourceKey source_key,
-  const data::pak::core::ResourceIndexT resource_index) const
+  const data::pak::core::ResourceIndexT resource_index)
   -> std::optional<ResourceKey>
 {
   AssertOwningThread();
@@ -4007,11 +4004,11 @@ auto AssetLoader::MakeTextureResourceKey(const data::SourceKey source_key,
   }
   constexpr auto kTextureTypeIndex = static_cast<uint16_t>(
     IndexOf<data::TextureResource, ResourceTypeList>::value);
-  return PackResourceKey(*source_id, kTextureTypeIndex, resource_index);
+  return InternResourceKey(*source_id, kTextureTypeIndex, resource_index);
 }
 
 auto AssetLoader::ResolveTextureResourceKey(
-  const TextureResourceLocator& locator) const -> std::optional<ResourceKey>
+  const TextureResourceLocator& locator) -> std::optional<ResourceKey>
 {
   AssertOwningThread();
   if (!locator.cooked_root.is_absolute()
@@ -4081,7 +4078,7 @@ auto AssetLoader::ResolveTextureResourceKey(
     }
     constexpr auto kTextureTypeIndex = static_cast<uint16_t>(
       IndexOf<data::TextureResource, ResourceTypeList>::value);
-    return PackResourceKey(impl_->source_registry.SourceIds().at(i),
+    return InternResourceKey(impl_->source_registry.SourceIds().at(i),
       kTextureTypeIndex, decoded->index);
   }
   return std::nullopt;
@@ -4089,14 +4086,14 @@ auto AssetLoader::ResolveTextureResourceKey(
 
 auto AssetLoader::MakeTextureResourceKeyForAsset(
   const data::Asset& context_asset,
-  const data::pak::core::ResourceIndexT resource_index) const noexcept
+  const data::pak::core::ResourceIndexT resource_index)
   -> std::optional<ResourceKey>
 {
+  AssertOwningThread();
   if (resource_index == data::pak::core::kNoResourceIndex) {
     return std::nullopt;
   }
-  const auto source_id = ResolveExactSourceId(
-    context_asset.GetAssetKey(), context_asset.GetSourceKey());
+  const auto source_id = ResolveAssetSourceId(context_asset);
   if (!source_id) {
     return std::nullopt;
   }
@@ -4107,30 +4104,31 @@ auto AssetLoader::MakeTextureResourceKeyForAsset(
   }
   constexpr auto kTextureTypeIndex = static_cast<uint16_t>(
     IndexOf<data::TextureResource, ResourceTypeList>::value);
-  return PackResourceKey(*source_id, kTextureTypeIndex, resource_index);
+  return InternResourceKey(*source_id, kTextureTypeIndex, resource_index);
 }
 
 auto AssetLoader::MakeScriptResourceKeyForAsset(
   const data::Asset& context_asset,
-  const data::pak::core::ResourceIndexT resource_index) const noexcept
+  const data::pak::core::ResourceIndexT resource_index)
   -> std::optional<ResourceKey>
 {
+  AssertOwningThread();
   const internal::ScriptQueryService::Callbacks callbacks {
     .resolve_source_id_for_asset
-    = [this, &context_asset](const data::AssetKey&) -> std::optional<uint16_t> {
-      return ResolveExactSourceId(
-        context_asset.GetAssetKey(), context_asset.GetSourceKey());
+    = [this, &context_asset](
+        const data::AssetKey&) -> std::optional<data::SourceInstanceId> {
+      return ResolveAssetSourceId(context_asset);
     },
-    .resolve_source_for_id = [this](const uint16_t source_id)
+    .resolve_source_for_id = [this](const data::SourceInstanceId source_id)
       -> std::shared_ptr<const internal::IContentSource> {
       return ResolveSourceForId(source_id);
     },
     .make_script_resource_key
-    = [this](const uint16_t source_id,
+    = [this](const data::SourceInstanceId source_id,
         const data::pak::core::ResourceIndexT index) -> ResourceKey {
       const auto resource_type_index = static_cast<uint16_t>(
         IndexOf<data::ScriptResource, ResourceTypeList>::value);
-      return PackResourceKey(source_id, resource_type_index, index);
+      return InternResourceKey(source_id, resource_type_index, index);
     },
   };
   return script_query_service_->MakeScriptResourceKeyForAsset(
@@ -4143,21 +4141,15 @@ auto AssetLoader::ReadScriptResourceForAsset(const data::Asset& context_asset,
 {
   const internal::ScriptQueryService::Callbacks callbacks {
     .resolve_source_id_for_asset
-    = [this, &context_asset](const data::AssetKey&) -> std::optional<uint16_t> {
-      return ResolveExactSourceId(
-        context_asset.GetAssetKey(), context_asset.GetSourceKey());
+    = [this, &context_asset](
+        const data::AssetKey&) -> std::optional<data::SourceInstanceId> {
+      return ResolveAssetSourceId(context_asset);
     },
-    .resolve_source_for_id = [this](const uint16_t source_id)
+    .resolve_source_for_id = [this](const data::SourceInstanceId source_id)
       -> std::shared_ptr<const internal::IContentSource> {
       return ResolveSourceForId(source_id);
     },
-    .make_script_resource_key
-    = [this](const uint16_t source_id,
-        const data::pak::core::ResourceIndexT index) -> ResourceKey {
-      const auto resource_type_index = static_cast<uint16_t>(
-        IndexOf<data::ScriptResource, ResourceTypeList>::value);
-      return PackResourceKey(source_id, resource_type_index, index);
-    },
+    .make_script_resource_key = {},
   };
   return script_query_service_->ReadScriptResourceForAsset(
     context_asset.GetAssetKey(), resource_index, callbacks);
@@ -4165,29 +4157,31 @@ auto AssetLoader::ReadScriptResourceForAsset(const data::Asset& context_asset,
 
 auto AssetLoader::MakePhysicsResourceKeyForAsset(
   const data::Asset& context_asset,
-  const data::pak::core::ResourceIndexT resource_index) const noexcept
+  const data::pak::core::ResourceIndexT resource_index)
   -> std::optional<ResourceKey>
 {
+  AssertOwningThread();
   const internal::PhysicsQueryService::Callbacks callbacks {
     .resolve_source_id_for_asset
-    = [this, &context_asset](const data::AssetKey&) -> std::optional<uint16_t> {
-      return ResolveExactSourceId(
-        context_asset.GetAssetKey(), context_asset.GetSourceKey());
+    = [this, &context_asset](
+        const data::AssetKey&) -> std::optional<data::SourceInstanceId> {
+      return ResolveAssetSourceId(context_asset);
     },
-    .resolve_source_for_id = [this](const uint16_t source_id)
+    .resolve_source_for_id = [this](const data::SourceInstanceId source_id)
       -> std::shared_ptr<const internal::IContentSource> {
       return ResolveSourceForId(source_id);
     },
     .resolve_source_id_for_source_key
-    = [this](const data::SourceKey key) -> std::optional<uint16_t> {
+    = [this](
+        const data::SourceKey key) -> std::optional<data::SourceInstanceId> {
       return impl_->source_registry.FindSourceIdByKey(key);
     },
     .make_physics_resource_key
-    = [this](const uint16_t source_id,
+    = [this](const data::SourceInstanceId source_id,
         const data::pak::core::ResourceIndexT index) -> ResourceKey {
       const auto resource_type_index = static_cast<uint16_t>(
         IndexOf<data::PhysicsResource, ResourceTypeList>::value);
-      return PackResourceKey(source_id, resource_type_index, index);
+      return InternResourceKey(source_id, resource_type_index, index);
     },
   };
   return physics_query_service_->MakePhysicsResourceKeyForAsset(
@@ -4195,30 +4189,31 @@ auto AssetLoader::MakePhysicsResourceKeyForAsset(
 }
 
 auto AssetLoader::MakePhysicsResourceKeyForAsset(
-  const data::Asset& context_asset,
-  const data::AssetKey& resource_asset_key) const noexcept
+  const data::Asset& context_asset, const data::AssetKey& resource_asset_key)
   -> std::optional<ResourceKey>
 {
+  AssertOwningThread();
   const internal::PhysicsQueryService::Callbacks callbacks {
     .resolve_source_id_for_asset
-    = [this, &context_asset](const data::AssetKey&) -> std::optional<uint16_t> {
-      return ResolveExactSourceId(
-        context_asset.GetAssetKey(), context_asset.GetSourceKey());
+    = [this, &context_asset](
+        const data::AssetKey&) -> std::optional<data::SourceInstanceId> {
+      return ResolveAssetSourceId(context_asset);
     },
-    .resolve_source_for_id = [this](const uint16_t source_id)
+    .resolve_source_for_id = [this](const data::SourceInstanceId source_id)
       -> std::shared_ptr<const internal::IContentSource> {
       return ResolveSourceForId(source_id);
     },
     .resolve_source_id_for_source_key
-    = [this](const data::SourceKey key) -> std::optional<uint16_t> {
+    = [this](
+        const data::SourceKey key) -> std::optional<data::SourceInstanceId> {
       return impl_->source_registry.FindSourceIdByKey(key);
     },
     .make_physics_resource_key
-    = [this](const uint16_t source_id,
+    = [this](const data::SourceInstanceId source_id,
         const data::pak::core::ResourceIndexT index) -> ResourceKey {
       const auto resource_type_index = static_cast<uint16_t>(
         IndexOf<data::PhysicsResource, ResourceTypeList>::value);
-      return PackResourceKey(source_id, resource_type_index, index);
+      return InternResourceKey(source_id, resource_type_index, index);
     },
   };
   return physics_query_service_->MakePhysicsResourceKeyForAsset(
@@ -4231,25 +4226,20 @@ auto AssetLoader::ReadCollisionShapeAssetDescForAsset(
 {
   const internal::PhysicsQueryService::Callbacks callbacks {
     .resolve_source_id_for_asset
-    = [this, &context_asset](const data::AssetKey&) -> std::optional<uint16_t> {
-      return ResolveExactSourceId(
-        context_asset.GetAssetKey(), context_asset.GetSourceKey());
+    = [this, &context_asset](
+        const data::AssetKey&) -> std::optional<data::SourceInstanceId> {
+      return ResolveAssetSourceId(context_asset);
     },
-    .resolve_source_for_id = [this](const uint16_t source_id)
+    .resolve_source_for_id = [this](const data::SourceInstanceId source_id)
       -> std::shared_ptr<const internal::IContentSource> {
       return ResolveSourceForId(source_id);
     },
     .resolve_source_id_for_source_key
-    = [this](const data::SourceKey key) -> std::optional<uint16_t> {
+    = [this](
+        const data::SourceKey key) -> std::optional<data::SourceInstanceId> {
       return impl_->source_registry.FindSourceIdByKey(key);
     },
-    .make_physics_resource_key
-    = [this](const uint16_t source_id,
-        const data::pak::core::ResourceIndexT index) -> ResourceKey {
-      const auto resource_type_index = static_cast<uint16_t>(
-        IndexOf<data::PhysicsResource, ResourceTypeList>::value);
-      return PackResourceKey(source_id, resource_type_index, index);
-    },
+    .make_physics_resource_key = {},
   };
   return physics_query_service_->ReadCollisionShapeAssetDescForAsset(
     context_asset.GetAssetKey(), shape_asset_key, callbacks);
@@ -4262,25 +4252,20 @@ auto AssetLoader::ReadPhysicsMaterialAssetDescForAsset(
 {
   const internal::PhysicsQueryService::Callbacks callbacks {
     .resolve_source_id_for_asset
-    = [this, &context_asset](const data::AssetKey&) -> std::optional<uint16_t> {
-      return ResolveExactSourceId(
-        context_asset.GetAssetKey(), context_asset.GetSourceKey());
+    = [this, &context_asset](
+        const data::AssetKey&) -> std::optional<data::SourceInstanceId> {
+      return ResolveAssetSourceId(context_asset);
     },
-    .resolve_source_for_id = [this](const uint16_t source_id)
+    .resolve_source_for_id = [this](const data::SourceInstanceId source_id)
       -> std::shared_ptr<const internal::IContentSource> {
       return ResolveSourceForId(source_id);
     },
     .resolve_source_id_for_source_key
-    = [this](const data::SourceKey key) -> std::optional<uint16_t> {
+    = [this](
+        const data::SourceKey key) -> std::optional<data::SourceInstanceId> {
       return impl_->source_registry.FindSourceIdByKey(key);
     },
-    .make_physics_resource_key
-    = [this](const uint16_t source_id,
-        const data::pak::core::ResourceIndexT index) -> ResourceKey {
-      const auto resource_type_index = static_cast<uint16_t>(
-        IndexOf<data::PhysicsResource, ResourceTypeList>::value);
-      return PackResourceKey(source_id, resource_type_index, index);
-    },
+    .make_physics_resource_key = {},
   };
   return physics_query_service_->ReadPhysicsMaterialAssetDescForAsset(
     context_asset.GetAssetKey(), material_asset_key, callbacks);
@@ -4291,32 +4276,27 @@ auto AssetLoader::FindPhysicsSidecarAssetKeyForScene(
 {
   const internal::PhysicsQueryService::Callbacks callbacks {
     .resolve_source_id_for_asset
-    = [this, &scene_asset](const data::AssetKey&) -> std::optional<uint16_t> {
-      return ResolveExactSourceId(
-        scene_asset.GetAssetKey(), scene_asset.GetSourceKey());
+    = [this, &scene_asset](
+        const data::AssetKey&) -> std::optional<data::SourceInstanceId> {
+      return ResolveAssetSourceId(scene_asset);
     },
-    .resolve_source_for_id = [this](const uint16_t source_id)
+    .resolve_source_for_id = [this](const data::SourceInstanceId source_id)
       -> std::shared_ptr<const internal::IContentSource> {
       return ResolveSourceForId(source_id);
     },
     .resolve_source_id_for_source_key
-    = [this](const data::SourceKey key) -> std::optional<uint16_t> {
+    = [this](
+        const data::SourceKey key) -> std::optional<data::SourceInstanceId> {
       return impl_->source_registry.FindSourceIdByKey(key);
     },
-    .make_physics_resource_key
-    = [this](const uint16_t source_id,
-        const data::pak::core::ResourceIndexT index) -> ResourceKey {
-      const auto resource_type_index = static_cast<uint16_t>(
-        IndexOf<data::PhysicsResource, ResourceTypeList>::value);
-      return PackResourceKey(source_id, resource_type_index, index);
-    },
+    .make_physics_resource_key = {},
   };
   return physics_query_service_->FindPhysicsSidecarAssetKeyForScene(
     scene_asset.GetAssetKey(), callbacks);
 }
 
-auto AssetLoader::ResolveAssetIdentityForKey(
-  const data::AssetKey& key, std::optional<uint16_t> preferred_source_id) const
+auto AssetLoader::ResolveAssetIdentityForKey(const data::AssetKey& key,
+  std::optional<data::SourceInstanceId> preferred_source_id) const
   -> std::optional<ResolvedAssetIdentity>
 {
   if (preferred_source_id.has_value()) {
@@ -4326,7 +4306,7 @@ auto AssetLoader::ResolveAssetIdentityForKey(
       && !impl_->source_registry.IsSourceTombstoningAsset(
         *preferred_source_id, key)) {
       return ResolvedAssetIdentity {
-        .hash_key = HashAssetKey(key, *preferred_source_id),
+        .cache_key = FindAssetId(key, *preferred_source_id),
         .source_id = *preferred_source_id,
       };
     }
@@ -4334,7 +4314,7 @@ auto AssetLoader::ResolveAssetIdentityForKey(
   }
 
   const internal::KeyResolutionCallbacks callbacks {
-    .source_has_asset = [this](const uint16_t source_id,
+    .source_has_asset = [this](const data::SourceInstanceId source_id,
                           const data::AssetKey& candidate_key) -> bool {
       const auto source_index_opt
         = impl_->source_registry.FindSourceIndexById(source_id);
@@ -4345,7 +4325,7 @@ auto AssetLoader::ResolveAssetIdentityForKey(
         = impl_->source_registry.Sources().at(*source_index_opt);
       return source && source->HasAsset(candidate_key);
     },
-    .source_tombstones_asset = [this](const uint16_t source_id,
+    .source_tombstones_asset = [this](const data::SourceInstanceId source_id,
                                  const data::AssetKey& candidate_key) -> bool {
       return impl_->source_registry.IsSourceTombstoningAsset(
         source_id, candidate_key);
@@ -4357,7 +4337,7 @@ auto AssetLoader::ResolveAssetIdentityForKey(
   if (resolution.status == internal::KeyResolutionStatus::kFound
     && resolution.source_id.has_value()) {
     return ResolvedAssetIdentity {
-      .hash_key = HashAssetKey(key, *resolution.source_id),
+      .cache_key = FindAssetId(key, *resolution.source_id),
       .source_id = *resolution.source_id,
     };
   }
@@ -4365,19 +4345,9 @@ auto AssetLoader::ResolveAssetIdentityForKey(
   return std::nullopt;
 }
 
-auto AssetLoader::IndexAssetHashMapping(const uint64_t hash_key,
-  const data::AssetKey& key, const uint16_t source_id) -> void
-{
-  asset_identity_index_->Index(hash_key, key, source_id);
-}
-
-auto AssetLoader::UnindexAssetHashMapping(const uint64_t hash_key) -> void
-{
-  asset_identity_index_->Unindex(hash_key);
-}
-
 auto AssetLoader::ResolveSourceIdForAsset(
-  const data::AssetKey& context_asset_key) const -> std::optional<uint16_t>
+  const data::AssetKey& context_asset_key) const
+  -> std::optional<data::SourceInstanceId>
 {
   if (const auto identity = ResolveAssetIdentityForKey(context_asset_key);
     identity.has_value()) {
@@ -4387,7 +4357,8 @@ auto AssetLoader::ResolveSourceIdForAsset(
 }
 
 auto AssetLoader::ResolveLoadSourceId(const data::AssetKey& key,
-  std::optional<uint16_t> preferred_source_id) const -> std::optional<uint16_t>
+  std::optional<data::SourceInstanceId> preferred_source_id) const
+  -> std::optional<data::SourceInstanceId>
 {
   if (preferred_source_id.has_value()) {
     const auto source
@@ -4403,7 +4374,7 @@ auto AssetLoader::ResolveLoadSourceId(const data::AssetKey& key,
   }
 
   const internal::KeyResolutionCallbacks callbacks {
-    .source_has_asset = [this](const uint16_t source_id,
+    .source_has_asset = [this](const data::SourceInstanceId source_id,
                           const data::AssetKey& candidate_key) -> bool {
       const auto source_index_opt
         = impl_->source_registry.FindSourceIndexById(source_id);
@@ -4414,7 +4385,7 @@ auto AssetLoader::ResolveLoadSourceId(const data::AssetKey& key,
         = impl_->source_registry.Sources().at(*source_index_opt);
       return source && source->HasAsset(candidate_key);
     },
-    .source_tombstones_asset = [this](const uint16_t source_id,
+    .source_tombstones_asset = [this](const data::SourceInstanceId source_id,
                                  const data::AssetKey& candidate_key) -> bool {
       return impl_->source_registry.IsSourceTombstoningAsset(
         source_id, candidate_key);
@@ -4433,33 +4404,48 @@ auto AssetLoader::ResolveLoadSourceId(const data::AssetKey& key,
 auto AssetLoader::ResolveResourceSource(const ResourceKey key) const
   -> std::shared_ptr<const internal::IContentSource>
 {
-  return ResolveSourceForId(internal::InternalResourceKey(key).GetPakIndex());
+  const auto* identity
+    = identities_->FindCookedResource(internal::ContentId { key.get() });
+  return identity ? ResolveSourceForId(identity->source) : nullptr;
 }
 
-auto AssetLoader::ResolveSourceForId(const uint16_t source_id) const
+auto AssetLoader::ResolveSourceForId(
+  const data::SourceInstanceId source_id) const
   -> std::shared_ptr<const internal::IContentSource>
 {
   return impl_->source_registry.AcquireSource(source_id);
 }
 
+auto AssetLoader::MintSyntheticResourceKey(const TypeId resource_type)
+  -> ResourceKey
+{
+  AssertOwningThread();
+  if (next_synthetic_serial_ == std::numeric_limits<uint64_t>::max()) {
+    throw std::length_error(
+      "Synthetic resource identity namespace is exhausted");
+  }
+  const auto kind = static_cast<internal::ResourceKind>(
+    GetResourceTypeIndexByTypeId(resource_type));
+  const auto id = identities_->Intern(internal::SyntheticResourceIdentity {
+    .kind = kind,
+    .serial = next_synthetic_serial_++,
+  });
+  return ResourceKey { id.get() };
+}
+
 auto AssetLoader::MintSyntheticTextureKey() -> ResourceKey
 {
-  const uint32_t synthetic_index
-    = next_synthetic_texture_index_.fetch_add(1, std::memory_order_relaxed);
-  const auto resource_type_index = static_cast<uint16_t>(
-    IndexOf<data::TextureResource, ResourceTypeList>::value);
-  return PackResourceKey(kSyntheticSourceId, resource_type_index,
-    pak::core::ResourceIndexT { synthetic_index });
+  return MintSyntheticResourceKey(data::TextureResource::ClassTypeId());
 }
 
 auto AssetLoader::MintSyntheticBufferKey() -> ResourceKey
 {
-  const uint32_t synthetic_index
-    = next_synthetic_buffer_index_.fetch_add(1, std::memory_order_relaxed);
-  const auto resource_type_index = static_cast<uint16_t>(
-    IndexOf<data::BufferResource, ResourceTypeList>::value);
-  return PackResourceKey(kSyntheticSourceId, resource_type_index,
-    pak::core::ResourceIndexT { synthetic_index });
+  return MintSyntheticResourceKey(data::BufferResource::ClassTypeId());
+}
+
+auto AssetLoader::MintSyntheticScriptKey() -> ResourceKey
+{
+  return MintSyntheticResourceKey(data::ScriptResource::ClassTypeId());
 }
 
 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
@@ -4505,8 +4491,9 @@ auto AssetLoader::GetDebugAssetDependencyMap() const
 auto AssetLoader::GetDebugAssetKey(const uint64_t cache_key) const
   -> std::optional<data::AssetKey>
 {
-  const auto* key = asset_identity_index_->FindAssetKey(cache_key);
-  return key ? std::optional { *key } : std::nullopt;
+  const auto* identity
+    = identities_->FindAsset(internal::ContentId { cache_key });
+  return identity ? std::optional { identity->asset } : std::nullopt;
 }
 #endif
 
@@ -4550,38 +4537,23 @@ template OXGN_CNTT_API auto
 
 //=== Hash Key Generation ====================================================//
 
-auto AssetLoader::HashAssetKey(
-  const data::AssetKey& key, uint16_t source_id) const -> uint64_t
+auto AssetLoader::FindAssetId(const data::AssetKey& key,
+  const data::SourceInstanceId source_id) const noexcept -> uint64_t
 {
-  size_t seed = 0;
-  oxygen::HashCombine(seed, source_id);
-  oxygen::HashCombine(seed, key);
-  return static_cast<uint64_t>(seed);
+  return identities_->Find(internal::AssetIdentity { source_id, key }).get();
 }
 
 auto AssetLoader::AssertSourceKeyConsistency(std::string_view context) const
   -> void
 {
   impl_->source_registry.AssertStructuralConsistency(context);
-  asset_identity_index_->AssertConsistency(
-    context,
-    [this](const uint16_t source_id) -> bool {
-      return impl_->source_registry.IsKnownSource(source_id);
-    },
-    [this](const data::AssetKey& key, const uint16_t source_id) -> uint64_t {
-      return HashAssetKey(key, source_id);
-    });
 }
 
 auto AssetLoader::AssertDependencyEdgeRefcountSymmetry(
   std::string_view context) const -> void
 {
   dependency_graph_->AssertEdgeRefcountSymmetry(
-    context,
-    [this](const ResourceKey res_key) -> uint64_t {
-      return HashResourceKey(res_key);
-    },
-    [this](const uint64_t hash) -> uint32_t {
+    context, [this](const uint64_t hash) -> uint32_t {
       const auto count = content_cache_.GetCheckoutCount(hash);
       if (count > static_cast<uint64_t>(std::numeric_limits<uint32_t>::max())) {
         return std::numeric_limits<uint32_t>::max();
@@ -4594,30 +4566,6 @@ auto AssetLoader::AssertMountStateResetCompleteness(std::string_view context,
   const bool expect_dependency_graphs_empty) const -> void
 {
 #ifndef NDEBUG
-  const auto& asset_key_by_hash = asset_identity_index_->AssetKeyByHash();
-  const auto& asset_source_id_by_hash
-    = asset_identity_index_->AssetSourceIdByHash();
-  const auto& asset_hash_by_key_and_source
-    = asset_identity_index_->AssetHashByKeyAndSource();
-
-  if (resource_key_registry_->Empty() != asset_key_by_hash.empty()) {
-    LOG_F(ERROR,
-      "[invariant:{}] cache key maps not reset symmetrically: "
-      "resource_key_by_hash={} asset_key_by_hash={}",
-      context, resource_key_registry_->Size(), asset_key_by_hash.size());
-  }
-  if (asset_key_by_hash.empty() != asset_source_id_by_hash.empty()) {
-    LOG_F(ERROR,
-      "[invariant:{}] asset key/source maps not reset symmetrically: "
-      "asset_key_by_hash={} asset_source_id_by_hash={}",
-      context, asset_key_by_hash.size(), asset_source_id_by_hash.size());
-  }
-  if (asset_key_by_hash.empty() != asset_hash_by_key_and_source.empty()) {
-    LOG_F(ERROR,
-      "[invariant:{}] reverse asset hash index not reset symmetrically: "
-      "asset_key_by_hash={} asset_hash_by_key_and_source={}",
-      context, asset_key_by_hash.size(), asset_hash_by_key_and_source.size());
-  }
   if ((expect_dependency_graphs_empty)
     && (!dependency_graph_->AssetDependencies().empty()
       || !dependency_graph_->ResourceDependencies().empty())) {
@@ -4638,73 +4586,13 @@ auto AssetLoader::AssertMountStateResetCompleteness(std::string_view context,
 auto AssetLoader::AssertResourceMappingConsistency(
   std::string_view context) const -> void
 {
-  resource_key_registry_->AssertConsistency(
-    context,
-    [this](const ResourceKey key) -> uint64_t { return HashResourceKey(key); },
-    [this](
-      const uint64_t hash) -> bool { return content_cache_.Contains(hash); });
-}
-
-auto AssetLoader::IndexResourceKeyMapping(
-  const uint64_t hash, const ResourceKey key) -> void
-{
 #ifndef NDEBUG
-  const internal::InternalResourceKey internal_key(key);
-  const auto source_id = internal_key.GetPakIndex();
-  const auto source_key_opt = impl_->source_registry.GetSourceKey(source_id);
-  if (source_id != constants::kSyntheticSourceId && source_key_opt) {
-    const auto source_key = *source_key_opt;
-    {
-      const std::scoped_lock lock(impl_->hash_collision_mutex);
-      const ResourceCompositeKey composite {
-        .source_key = source_key,
-        .resource_type_index = internal_key.GetResourceTypeIndex(),
-        .resource_index = internal_key.GetResourceIndex(),
-      };
-      auto [it, inserted]
-        = impl_->resource_hash_to_key.emplace(hash, composite);
-      if (!inserted && it->second != composite) {
-        LOG_F(WARNING,
-          "ResourceKey hash collision detected: hash=0x{:016x} "
-          "existing=(source={} type={} index={}) new=(source={} type={} "
-          "index={}) "
-          "(cache aliasing risk)",
-          hash, it->second.source_key, it->second.resource_type_index,
-          it->second.resource_index, composite.source_key,
-          composite.resource_type_index, composite.resource_index);
-      }
-    }
+  for (const auto key : eviction_registry_->TrackedResources()) {
+    DCHECK_F(identities_->FindResourceKind(internal::ContentId { key.get() })
+               .has_value(),
+      "[invariant:{}] tracked resource has no identity: {}", context, key);
   }
+#else
+  static_cast<void>(context);
 #endif
-  resource_key_registry_->InsertOrAssign(hash, key);
-}
-
-auto AssetLoader::HashResourceKey(const ResourceKey& key) const -> uint64_t
-{
-  internal::InternalResourceKey internal_key(key);
-  const auto source_id = internal_key.GetPakIndex();
-
-  // Special case for synthetic keys (SourceID == kSyntheticSourceId)
-  if (source_id == constants::kSyntheticSourceId) {
-    return std::hash<ResourceKey> {}(key);
-  }
-
-  const auto source_key_opt = impl_->source_registry.GetSourceKey(source_id);
-  if (!source_key_opt.has_value()) {
-    return std::hash<ResourceKey> {}(key);
-  }
-  const auto source_key = *source_key_opt;
-
-  // Hash(SourceGUID, Type, Index)
-  size_t seed = 0;
-  oxygen::HashCombine(seed, source_key);
-  // We manually only include the resource type and the index in the hashing to
-  // guarantee a stable hash. The source id is not stable, as it depends on the
-  // load order.
-  oxygen::HashCombine(seed, internal_key.GetResourceTypeIndex());
-  oxygen::HashCombine(seed, internal_key.GetResourceIndex());
-
-  const auto hash = static_cast<uint64_t>(seed);
-
-  return hash;
 }

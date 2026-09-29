@@ -9,6 +9,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <filesystem>
 #include <latch>
 #include <memory>
@@ -23,20 +24,25 @@
 #include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/Content/IAssetLoader.h>
+#include <Oxygen/Content/Internal/DependencyCollector.h>
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/MaterialLoader.h>
 #include <Oxygen/Content/Loaders/SceneLoader.h>
 #include <Oxygen/Content/Loaders/ScriptLoader.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/Data/SourceOrigin.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Event.h>
 #include <Oxygen/OxCo/Nursery.h>
@@ -52,7 +58,7 @@ namespace {
   using co::testing::TestEventLoop;
 
   struct GenerationRecipe {
-    data::AssetKey material;
+    data::AssetKey material {};
     float emission = 0.0F;
     std::uint8_t payload = 0;
   };
@@ -101,7 +107,8 @@ namespace {
   }
 
   auto WriteGeneration(const std::filesystem::path& root,
-    const GenerationRecipe recipe) -> data::SourceKey
+    const GenerationRecipe recipe, data::SourceKey source = {})
+    -> data::SourceKey
   {
     std::filesystem::create_directories(root);
     auto exclusive = serio::FileLock::TryAcquire(
@@ -110,7 +117,9 @@ namespace {
     if (!exclusive) {
       throw std::system_error(exclusive.error());
     }
-    const data::SourceKey source { Uuid::Generate() };
+    if (source.IsNil()) {
+      source = data::SourceKey { Uuid::Generate() };
+    }
     LooseCookedTestWriter writer(root);
     writer.SetSourceKey(source);
     const auto scene = SceneBytes();
@@ -137,6 +146,17 @@ namespace {
       std::as_bytes(std::span { payload }));
     static_cast<void>(writer.Finish());
     return source;
+  }
+
+  auto CookedScriptBytes(const uint8_t payload) -> std::vector<uint8_t>
+  {
+    data::pak::scripting::ScriptResourceDesc descriptor {};
+    descriptor.data_offset = sizeof(descriptor);
+    descriptor.size_bytes = 1;
+    std::vector<uint8_t> bytes(sizeof(descriptor) + 1);
+    std::memcpy(bytes.data(), &descriptor, sizeof(descriptor));
+    bytes.back() = payload;
+    return bytes;
   }
 
   auto ExpectLeased(const std::filesystem::path& root) -> void
@@ -229,6 +249,17 @@ namespace {
       static_cast<void>(loader.ReleaseAsset(*old_material));
       static_cast<void>(loader.ReleaseResource(*old_key));
       loader.TrimCache();
+      EXPECT_EQ(loader.GetScriptResource(*old_key), nullptr);
+      auto reloaded = co_await loader.LoadScriptResourceAsync(*old_key);
+      if (!reloaded) {
+        ADD_FAILURE() << "A retained source locator must reload after eviction";
+        loader.Stop();
+        co_return co::kJoin;
+      }
+      EXPECT_THAT(reloaded->GetData(), ::testing::ElementsAre(1U));
+      static_cast<void>(loader.ReleaseResource(*old_key));
+      loader.TrimCache();
+      reloaded.reset();
       EXPECT_EQ(loader.GetMaterialAsset(material_key), new_material);
       EXPECT_EQ(loader.GetMaterialAsset(unrelated_key), unrelated);
       ExpectLeased(old_root);
@@ -248,6 +279,111 @@ namespace {
           SceneKey(), new_source);
       EXPECT_EQ(retained_new_scene, new_scene);
       ExpectLeased(new_root);
+      loader.Stop();
+      co_return co::kJoin;
+    };
+  }
+
+  auto ExerciseMutableRefresh(TestEventLoop* loop, std::filesystem::path root)
+    -> co::Co<>
+  {
+    const auto source = WriteGeneration(root, { .payload = 1U });
+    std::filesystem::remove(
+      root / data::loose_cooked::kGenerationLeaseFileName);
+    co::ThreadPool pool(*loop, 2);
+    AssetLoaderConfig config {};
+    config.thread_pool = observer_ptr { &pool };
+    AssetLoader loader(engine::internal::EngineTagFactory::Get(), config);
+    loader.RegisterLoader(loaders::LoadSceneAsset);
+    loader.RegisterLoader(loaders::LoadScriptResource);
+    OXCO_WITH_NURSERY(nursery)
+    {
+      co_await nursery.Start(&AssetLoader::ActivateAsync, &loader);
+      loader.Run();
+      loader.AddLooseCookedRoot(root);
+      const auto old_scene
+        = co_await loader.LoadAssetAsync<data::SceneAsset>(SceneKey());
+      if (!old_scene) {
+        ADD_FAILURE() << "Initial scene must load";
+        loader.Stop();
+        co_return co::kJoin;
+      }
+      const auto old_key = loader.MakeScriptResourceKeyForAsset(
+        *old_scene, data::pak::core::ResourceIndexT { 1U });
+      if (!old_key) {
+        ADD_FAILURE() << "Initial payload must resolve";
+        loader.Stop();
+        co_return co::kJoin;
+      }
+      const auto old_resource
+        = co_await loader.LoadScriptResourceAsync(*old_key);
+      if (!old_resource) {
+        ADD_FAILURE() << "Initial payload must load";
+        loader.Stop();
+        co_return co::kJoin;
+      }
+      EXPECT_THAT(old_resource->GetData(), ::testing::ElementsAre(1U));
+      const auto injected = CookedScriptBytes(9U);
+      EXPECT_EQ(co_await loader.LoadResourceAsync<data::ScriptResource>(
+                  CookedResourceData<data::ScriptResource> {
+                    .key = *old_key, .bytes = injected }),
+        nullptr);
+
+      EXPECT_EQ(WriteGeneration(root, { .payload = 2U }, source), source);
+      std::filesystem::remove(
+        root / data::loose_cooked::kGenerationLeaseFileName);
+      loader.AddLooseCookedRoot(root);
+      const auto new_scene
+        = co_await loader.LoadAssetAsync<data::SceneAsset>(SceneKey());
+      if (!new_scene) {
+        ADD_FAILURE() << "Refreshed scene must load";
+        loader.Stop();
+        co_return co::kJoin;
+      }
+      EXPECT_EQ(old_scene->GetSourceKey(), new_scene->GetSourceKey());
+      EXPECT_NE(old_scene->GetSourceOrigin().instance,
+        new_scene->GetSourceOrigin().instance);
+      EXPECT_FALSE(loader.MakeScriptResourceKeyForAsset(
+        *old_scene, data::pak::core::ResourceIndexT { 1U }));
+      EXPECT_EQ(co_await loader.LoadScriptResourceAsync(*old_key), nullptr);
+      EXPECT_EQ(co_await loader.LoadResourceAsync<data::ScriptResource>(
+                  CookedResourceData<data::ScriptResource> {
+                    .key = *old_key, .bytes = injected }),
+        nullptr);
+      const auto synthetic_key = loader.MintSyntheticScriptKey();
+      auto synthetic = co_await loader.LoadResourceAsync<data::ScriptResource>(
+        CookedResourceData<data::ScriptResource> {
+          .key = synthetic_key, .bytes = injected });
+      if (!synthetic) {
+        ADD_FAILURE() << "Synthetic script bytes must load";
+        loader.Stop();
+        co_return co::kJoin;
+      }
+      EXPECT_THAT(synthetic->GetData(), ::testing::ElementsAre(9U));
+      static_cast<void>(loader.ReleaseResource(synthetic_key));
+      loader.TrimCache();
+      synthetic = co_await loader.LoadResourceAsync<data::ScriptResource>(
+        CookedResourceData<data::ScriptResource> {
+          .key = synthetic_key, .bytes = injected });
+      EXPECT_TRUE(synthetic);
+
+      const auto new_key = loader.MakeScriptResourceKeyForAsset(
+        *new_scene, data::pak::core::ResourceIndexT { 1U });
+      if (!new_key) {
+        ADD_FAILURE() << "Refreshed payload must resolve";
+        loader.Stop();
+        co_return co::kJoin;
+      }
+      EXPECT_NE(old_key, new_key);
+      const auto new_resource
+        = co_await loader.LoadScriptResourceAsync(*new_key);
+      if (!new_resource) {
+        ADD_FAILURE() << "Refreshed payload must load";
+        loader.Stop();
+        co_return co::kJoin;
+      }
+      EXPECT_THAT(new_resource->GetData(), ::testing::ElementsAre(2U));
+      EXPECT_THAT(old_resource->GetData(), ::testing::ElementsAre(1U));
       loader.Stop();
       co_return co::kJoin;
     };
@@ -323,6 +459,71 @@ namespace {
     }
   };
 
+  auto ExerciseRevokedGeometryDependencies(
+    TestEventLoop* loop, std::filesystem::path root) -> co::Co<>
+  {
+    const auto geometry_root = root / "geometry";
+    const auto material_root = root / "materials";
+    const auto geometry_key
+      = data::AssetKey::FromVirtualPath("/Test/geometry.ogeo");
+    data::pak::geometry::GeometryAssetDesc geometry_desc {};
+    geometry_desc.header.asset_type
+      = static_cast<uint8_t>(data::AssetType::kGeometry);
+    geometry_desc.header.version = data::pak::geometry::kGeometryAssetVersion;
+    LooseCookedTestWriter writer(geometry_root);
+    writer.WriteAssetDescriptor(geometry_key, data::AssetType::kGeometry,
+      "/Test/geometry.ogeo", "geometry.ogeo",
+      std::as_bytes(std::span { &geometry_desc, 1U }));
+    static_cast<void>(writer.Finish());
+    static_cast<void>(WriteGeneration(
+      material_root, { .material = MaterialKey(), .emission = 2.0F }));
+    co::ThreadPool pool(*loop, 2);
+    AssetLoaderConfig config {};
+    config.thread_pool = observer_ptr { &pool };
+    AssetLoader loader(engine::internal::EngineTagFactory::Get(), config);
+    const auto pause = std::make_shared<DecodePause>();
+    loader.RegisterLoader([geometry_desc](LoaderContext context) {
+      context.dependency_collector->AddAssetDependency(MaterialKey());
+      return std::make_unique<data::GeometryAsset>(context.current_asset_key,
+        geometry_desc, std::vector<std::shared_ptr<data::Mesh>> {},
+        data::SourceOrigin { context.source_key, context.source_instance });
+    });
+    loader.RegisterLoader([loop, pause](LoaderContext context) {
+      loop->Schedule(std::chrono::milliseconds::zero(),
+        [pause] { pause->entered.Trigger(); });
+      pause->resumed.wait();
+      return loaders::LoadMaterialAsset(std::move(context));
+    });
+    OXCO_WITH_NURSERY(nursery)
+    {
+      const auto release_guard
+        = ScopeGuard([pause]() noexcept { pause->Release(); });
+      co_await nursery.Start(&AssetLoader::ActivateAsync, &loader);
+      loader.Run();
+      static_cast<void>(loader.MountLooseCookedGeneration(material_root));
+      loader.AddLooseCookedRoot(geometry_root);
+      std::shared_ptr<data::GeometryAsset> result;
+      loader.StartLoadGeometryAsset(
+        geometry_key, [&result, pause](auto geometry) {
+          result = std::move(geometry);
+          pause->completed.Trigger();
+        });
+      co_await pause->entered;
+      loader.AddLooseCookedRoot(geometry_root);
+      pause->Release();
+      co_await pause->completed;
+      co_await loader.WaitForPendingLoadsAsync();
+      EXPECT_EQ(result, nullptr);
+      EXPECT_FALSE(loader.HasGeometryAsset(geometry_key));
+      EXPECT_TRUE(loader.HasMaterialAsset(MaterialKey()));
+      loader.TrimCache();
+      EXPECT_FALSE(loader.HasMaterialAsset(MaterialKey()));
+      EXPECT_EQ(loader.GetTelemetryStats().cache.entries, 0U);
+      loader.Stop();
+      co_return co::kJoin;
+    };
+  }
+
   auto ExerciseInFlightGeneration(
     TestEventLoop* loop, std::filesystem::path root) -> co::Co<>
   {
@@ -381,6 +582,20 @@ namespace {
       loader.Stop();
       co_return co::kJoin;
     };
+  }
+
+  NOLINT_TEST_F(AssetLoaderBasicTest,
+    RevocationDuringDependenciesReleasesTemporaryCheckouts)
+  {
+    TestEventLoop loop;
+    co::Run(loop, ExerciseRevokedGeometryDependencies(&loop, temp_dir_));
+  }
+
+  NOLINT_TEST_F(
+    AssetLoaderBasicTest, SameSourceKeyRefreshDoesNotAliasCachedPayloads)
+  {
+    TestEventLoop loop;
+    co::Run(loop, ExerciseMutableRefresh(&loop, temp_dir_ / "mutable"));
   }
 
   NOLINT_TEST_F(

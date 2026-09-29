@@ -91,6 +91,7 @@ set(
   "ScriptResource.h"
   "ShaderReference.h"
   "SourceKey.h"
+  "SourceOrigin.h"
   "TextureResource.h"
   "TextureResourceDescriptor.h"
   "Unorm16.h"

@@ -4,51 +4,61 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
+#include <filesystem>
 #include <memory>
+#include <optional>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <variant>
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Content/Internal/ContentSourceRegistry.h>
 #include <Oxygen/Content/Internal/LooseCookedIndexImpl.h>
 #include <Oxygen/Content/Internal/PatchResolutionPolicy.h>
 #include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Content/VirtualPathResolver.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/PakCatalog.h>
+#include <Oxygen/Data/PatchManifest.h>
+#include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/Data/SourceOrigin.h>
 
 namespace oxygen::content {
 
 struct VirtualPathResolver::Impl final {
   struct LooseCookedMount {
-    uint16_t source_id { 0 };
+    data::SourceInstanceId source_id { 0 };
     data::SourceKey source_key {};
     std::filesystem::path root;
     internal::LooseCookedIndexImpl index;
   };
 
   struct PakMount {
-    uint16_t source_id { 0 };
+    data::SourceInstanceId source_id { 0 };
     data::SourceKey source_key {};
     std::filesystem::path pak_path;
     std::shared_ptr<PakFile> pak;
   };
 
   std::vector<std::variant<LooseCookedMount, PakMount>> mounts {};
-  std::vector<uint16_t> source_ids {};
-  std::unordered_map<uint16_t, size_t> source_id_to_mount_index {};
-  std::unordered_map<uint16_t, std::unordered_set<data::AssetKey>>
+  std::vector<data::SourceInstanceId> source_ids {};
+  std::unordered_map<data::SourceInstanceId, size_t>
+    source_id_to_mount_index {};
+  std::unordered_map<data::SourceInstanceId, std::unordered_set<data::AssetKey>>
     tombstones_by_source_id {};
-  uint16_t next_source_id { 0 };
 
   auto AddLooseCookedMount(
     std::filesystem::path root, internal::LooseCookedIndexImpl index) -> void
   {
-    const auto source_id = next_source_id++;
+    const auto source_id = internal::ContentSourceRegistry::AllocateSourceId();
     source_ids.push_back(source_id);
     source_id_to_mount_index.insert_or_assign(source_id, mounts.size());
     mounts.emplace_back(LooseCookedMount {
@@ -60,9 +70,9 @@ struct VirtualPathResolver::Impl final {
   }
 
   auto AddPakMount(std::filesystem::path pak_path, std::shared_ptr<PakFile> pak)
-    -> uint16_t
+    -> data::SourceInstanceId
   {
-    const auto source_id = next_source_id++;
+    const auto source_id = internal::ContentSourceRegistry::AllocateSourceId();
     source_ids.push_back(source_id);
     source_id_to_mount_index.insert_or_assign(source_id, mounts.size());
     mounts.emplace_back(PakMount {
@@ -74,7 +84,7 @@ struct VirtualPathResolver::Impl final {
     return source_id;
   }
 
-  auto SetTombstones(const uint16_t source_id,
+  auto SetTombstones(const data::SourceInstanceId source_id,
     const std::span<const data::AssetKey> tombstones) -> void
   {
     auto& source_tombstones = tombstones_by_source_id[source_id];
@@ -82,8 +92,8 @@ struct VirtualPathResolver::Impl final {
     source_tombstones.insert(tombstones.begin(), tombstones.end());
   }
 
-  [[nodiscard]] auto IsTombstoned(
-    const uint16_t source_id, const data::AssetKey& key) const -> bool
+  [[nodiscard]] auto IsTombstoned(const data::SourceInstanceId source_id,
+    const data::AssetKey& key) const -> bool
   {
     if (const auto it = tombstones_by_source_id.find(source_id);
       it != tombstones_by_source_id.end()) {
@@ -92,8 +102,8 @@ struct VirtualPathResolver::Impl final {
     return false;
   }
 
-  [[nodiscard]] auto SourceHasAsset(
-    const uint16_t source_id, const data::AssetKey& key) const -> bool
+  [[nodiscard]] auto SourceHasAsset(const data::SourceInstanceId source_id,
+    const data::AssetKey& key) const -> bool
   {
     const auto mount_it = source_id_to_mount_index.find(source_id);
     if (mount_it == source_id_to_mount_index.end()) {
@@ -108,7 +118,8 @@ struct VirtualPathResolver::Impl final {
     return pak_mount.pak->FindEntry(key).has_value();
   }
 
-  [[nodiscard]] auto ResolveVirtualPathInSource(const uint16_t source_id,
+  [[nodiscard]] auto ResolveVirtualPathInSource(
+    const data::SourceInstanceId source_id,
     const std::string_view virtual_path) const -> std::optional<data::AssetKey>
   {
     const auto mount_it = source_id_to_mount_index.find(source_id);
@@ -144,7 +155,6 @@ struct VirtualPathResolver::Impl final {
     source_ids.clear();
     source_id_to_mount_index.clear();
     tombstones_by_source_id.clear();
-    next_source_id = 0;
   }
 };
 
@@ -219,17 +229,19 @@ auto VirtualPathResolver::ResolveAssetKey(
 
   const internal::VirtualPathResolutionCallbacks callbacks {
     .key_resolution = {
-      .source_has_asset = [impl = impl_.get()](const uint16_t source_id,
-                            const data::AssetKey& key) -> bool {
+      .source_has_asset
+      = [impl = impl_.get()](const data::SourceInstanceId source_id,
+          const data::AssetKey& key) -> bool {
         return impl->SourceHasAsset(source_id, key);
       },
-      .source_tombstones_asset = [impl = impl_.get()](const uint16_t source_id,
-                                   const data::AssetKey& key) -> bool {
+      .source_tombstones_asset
+      = [impl = impl_.get()](const data::SourceInstanceId source_id,
+          const data::AssetKey& key) -> bool {
         return impl->IsTombstoned(source_id, key);
       },
     },
     .resolve_virtual_path
-    = [impl = impl_.get()](const uint16_t source_id,
+    = [impl = impl_.get()](const data::SourceInstanceId source_id,
         const std::string_view path) -> std::optional<data::AssetKey> {
       return impl->ResolveVirtualPathInSource(source_id, path);
     },

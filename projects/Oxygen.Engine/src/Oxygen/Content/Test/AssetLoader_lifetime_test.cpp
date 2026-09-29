@@ -30,7 +30,9 @@
 #include <Oxygen/Content/OperationCancelledException.h>
 #include <Oxygen/Content/ResidencyPolicy.h>
 #include <Oxygen/Content/ResourceKey.h>
-#include <Oxygen/Data/AssetKey.h>
+#ifndef NDEBUG
+#  include <Oxygen/Data/AssetKey.h>
+#endif
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/InputMappingContextAsset.h>
@@ -116,7 +118,6 @@ NOLINT_TEST_F(
   constexpr std::size_t kSizeBytes = 192;
   constexpr uint8_t kFill = 0xAB;
 
-  const auto key = ResourceKey { 0xABCDEFU };
   auto bytes = MakeBytesFromHexdump(hexdump, kDataOffset + kSizeBytes, kFill);
 
   TestEventLoop el;
@@ -129,6 +130,7 @@ NOLINT_TEST_F(
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
 
     AssetLoader loader(Tag::Get(), config);
+    const auto key = loader.MintSyntheticBufferKey();
 
     loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
 
@@ -174,7 +176,6 @@ NOLINT_TEST_F(
   AssetLoaderLifetimeAsyncTest, Characterization_DefaultResidencyIsManualTrim)
 {
   constexpr int kResourceCount = 96;
-  constexpr uint32_t kResourceKeyBase = 0xA0B00000U;
   constexpr std::size_t kDataOffset = 256;
   constexpr std::size_t kSizeBytes = 192;
   constexpr uint8_t kFill = 0x7DU;
@@ -204,9 +205,7 @@ NOLINT_TEST_F(
       loader.Run();
 
       for (int i = 0; i < kResourceCount; ++i) {
-        const auto key = ResourceKey {
-          static_cast<uint64_t>(kResourceKeyBase + static_cast<uint32_t>(i)),
-        };
+        const auto key = loader.MintSyntheticBufferKey();
         auto resource = co_await loader.LoadResourceAsync<BufferResource>(
           CookedResourceData<BufferResource> {
             .key = key,
@@ -255,7 +254,6 @@ NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest, ResourceUnloadRefcountedCheckouts)
   constexpr std::size_t kSizeBytes = 192;
   constexpr uint8_t kFill = 0x5A;
 
-  const auto key = ResourceKey { 0x12345678U };
   auto bytes = MakeBytesFromHexdump(hexdump, kDataOffset + kSizeBytes, kFill);
 
   TestEventLoop el;
@@ -268,6 +266,7 @@ NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest, ResourceUnloadRefcountedCheckouts)
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
 
     AssetLoader loader(Tag::Get(), config);
+    const auto key = loader.MintSyntheticBufferKey();
 
     loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
 
@@ -312,7 +311,6 @@ NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest, ResourcePinUnpinSymmetryExpected)
   constexpr std::size_t kDataOffset = 256;
   constexpr std::size_t kSizeBytes = 192;
   constexpr uint8_t kFill = 0x31;
-  const auto key = ResourceKey { 0x00ABCD12U };
   auto bytes = MakeBytesFromHexdump(hexdump, kDataOffset + kSizeBytes, kFill);
 
   TestEventLoop el;
@@ -321,6 +319,7 @@ NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest, ResourcePinUnpinSymmetryExpected)
     oxygen::co::ThreadPool pool(el, 2);
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
     AssetLoader loader(Tag::Get(), config);
+    const auto key = loader.MintSyntheticBufferKey();
     loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
 
     OXCO_WITH_NURSERY(n)
@@ -502,7 +501,6 @@ NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest,
   constexpr std::size_t kDataOffset = 256;
   constexpr std::size_t kSizeBytes = 192;
   constexpr uint8_t kFill = 0x19;
-  const auto key = ResourceKey { 0x00FEED12U };
   auto bytes = MakeBytesFromHexdump(hexdump, kDataOffset + kSizeBytes, kFill);
   std::span<const uint8_t> span(bytes.data(), bytes.size());
 
@@ -512,6 +510,7 @@ NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest,
     oxygen::co::ThreadPool pool(el, 2);
     config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
     AssetLoader loader(Tag::Get(), config);
+    const auto key = loader.MintSyntheticBufferKey();
 
     auto seen_priority = oxygen::content::LoadPriority::kDefault;
     auto seen_intent = oxygen::content::LoadIntent::kRuntime;
