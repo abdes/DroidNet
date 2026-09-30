@@ -60,6 +60,31 @@ auto MakeBaseSettings(const std::filesystem::path& descriptor_path)
 }
 
 NOLINT_TEST(TextureDescriptorImportRequestBuilderTest,
+  PreservesJobIdentityWithoutRewritingSourceDescriptor)
+{
+  auto settings = TextureDescriptorImportSettings {};
+  settings.descriptor_path = "texture.json";
+  settings.texture.virtual_path = "/Content/Textures/Retained.otex";
+  auto diagnostics = std::vector<oxygen::content::import::ImportDiagnostic> {};
+  const auto prepared
+    = settings.Prepare(R"({"source":"image.png"})", diagnostics);
+  if (!prepared.has_value()) {
+    ADD_FAILURE() << "Descriptor preparation unexpectedly failed";
+    return;
+  }
+  EXPECT_EQ(prepared->virtual_path, settings.texture.virtual_path);
+  EXPECT_TRUE(diagnostics.empty());
+  EXPECT_TRUE(settings.Prepare(
+    R"({"source":"image.png","virtual_path":"/Content/Textures/Retained.otex"})",
+    diagnostics));
+  EXPECT_FALSE(settings.Prepare(
+    R"({"source":"image.png","virtual_path":"/Content/Textures/Different.otex"})",
+    diagnostics));
+  ASSERT_EQ(diagnostics.size(), 1U);
+  EXPECT_EQ(diagnostics.front().code, "texture.descriptor.identity_conflict");
+}
+
+NOLINT_TEST(TextureDescriptorImportRequestBuilderTest,
   BuildsRequestFromValidDescriptorAndReusesTexturePath)
 {
   const auto dir = MakeTempDir("valid_request");

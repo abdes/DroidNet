@@ -25,7 +25,8 @@ struct TextureDescriptorImportSettings final {
   //! Base texture settings supplied by tooling defaults/job overrides.
   /*!
    Descriptor fields are applied on top of this base and then normalized into
-   the canonical texture request path.
+   the canonical texture request path. An explicit base virtual_path supplies
+   the asset identity; a conflicting descriptor identity is rejected.
   */
   TextureImportSettings texture = {};
 

@@ -108,6 +108,7 @@
                 "output",
                 "layout",
                 "name",
+                "virtual_path",
                 "verbose",
                 "intent",
                 "color_space",
@@ -508,6 +509,11 @@
         "output": {
           "type": "string"
         },
+        "virtual_path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Explicit texture asset identity. A descriptor declaring a different identity is rejected."
+        },
         "name": {
           "type": "string"
         },
@@ -902,6 +908,11 @@
         },
         "output": {
           "type": "string"
+        },
+        "virtual_path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Explicit texture asset identity. A descriptor declaring a different identity is rejected."
         },
         "name": {
           "type": "string"

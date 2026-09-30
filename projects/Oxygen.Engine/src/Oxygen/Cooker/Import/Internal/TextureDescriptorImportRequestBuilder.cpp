@@ -236,6 +236,18 @@ auto TextureDescriptorImportSettings::Prepare(const std::string_view bytes,
   if (!ValidateDescriptorSchema(document, path, diagnostics)) {
     return std::nullopt;
   }
+  if (!texture.virtual_path.empty() && document.contains("virtual_path")
+    && document.at("virtual_path").get<std::string>() != texture.virtual_path) {
+    diagnostics.push_back(ImportDiagnostic {
+      .severity = ImportSeverity::kError,
+      .code = "texture.descriptor.identity_conflict",
+      .message = "Texture descriptor virtual_path conflicts with the import "
+                 "job identity",
+      .source_path = path.string(),
+      .object_path = "virtual_path",
+    });
+    return std::nullopt;
+  }
   auto effective = texture;
   ApplyDescriptorSettings(document, path, effective);
   // The same destination-free option interpretation used by request

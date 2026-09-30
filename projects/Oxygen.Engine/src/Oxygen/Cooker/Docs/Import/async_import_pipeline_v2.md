@@ -57,6 +57,11 @@ error-index and placeholder recovery. Cubemap discovery records selected faces
 and the rejected suffix probes. Cooking performs payload validation and resolves
 cooked references.
 
+Texture jobs may supply `virtual_path` as their explicit output identity. A
+descriptor may omit that field or repeat it; a conflicting descriptor identity
+is rejected by both analysis and cooking. Tools need not rewrite descriptors to
+assign project asset paths.
+
 The caller binds the report to its toolchain artifact fingerprint;
 `producer_version` is a display version. The CLI protects declared and accessed
 inputs from report-path aliases, including after failed verification. With a

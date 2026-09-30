@@ -510,6 +510,9 @@ namespace {
   auto ApplyTextureOverrides(const json& obj, TextureImportSettings& settings,
     std::ostream& errors) -> bool
   {
+    if (!ReadStringField(obj, "virtual_path", settings.virtual_path, errors)) {
+      return false;
+    }
     if (obj.contains("sources")) {
       if (!obj.at("sources").is_array()) {
         errors << "ERROR: 'sources' must be an array\n";

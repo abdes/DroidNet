@@ -214,17 +214,33 @@ class CapturedInputBatchCliTests(unittest.TestCase):
         self.capture("image.png", png)
         texture_path = "/.cooked/Textures/Red.otex"
         self.capture("texture.json", json.dumps({"name": "Red", "source": "image.png",
-                     "virtual_path": texture_path, "mips": {"policy": "none"}}))
+                     "mips": {"policy": "none"}}))
         self.capture("material.json", json.dumps({"name": "RedMaterial", "textures": {
             "base_color": {"virtual_path": texture_path},
         }}))
-        result = self.batch([
-            {"id": "texture", "type": "texture-descriptor", "source": "texture.json"},
+        jobs = [
+            {"id": "texture", "type": "texture-descriptor", "source": "texture.json", "virtual_path": texture_path},
             {"type": "material-descriptor", "source": "material.json", "depends_on": ["texture"]},
-        ])
+        ]
+        result = self.analyze(jobs)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        report = json.loads((self.root / "analysis.json").read_text(encoding="utf-8"))
+        self.assertEqual(report["jobs"][0]["outputs"][0]["virtual_path"], texture_path)
+        result = self.batch(jobs)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertTrue(list((self.root / "cooked").rglob("*.otex")))
         self.assertTrue(list((self.root / "cooked").rglob("*.omat")))
+
+    def test_texture_job_identity_conflict_is_rejected_by_analysis_and_cooking(self):
+        self.capture("texture.json", json.dumps({"source": "image.png", "virtual_path": "/.cooked/Textures/Other.otex"}))
+        jobs = [{"type": "texture-descriptor", "source": "texture.json", "virtual_path": "/.cooked/Textures/Intended.otex"}]
+        result = self.analyze(jobs)
+        self.assertNotEqual(result.returncode, 0)
+        report = json.loads((self.root / "analysis.json").read_text(encoding="utf-8"))
+        self.assertTrue(any(issue["code"] == "texture.descriptor.identity_conflict" for issue in report["jobs"][0]["diagnostics"]))
+        result = self.batch(jobs)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("texture.descriptor.identity_conflict", result.stdout + result.stderr)
 
     def test_model_imports_keep_logical_paths(self):
         for extension in ("gltf", "fbx"):
