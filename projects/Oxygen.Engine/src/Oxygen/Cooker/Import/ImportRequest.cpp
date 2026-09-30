@@ -4,20 +4,18 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#pragma once
-
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
-#include <ranges>
 #include <string>
 #include <string_view>
+#include <system_error>
 
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 
 namespace oxygen::content::import {
 
-//! Upper-case style ToString for compatibility with project naming.
+//! Stable command-line spelling of the import format.
 [[nodiscard]] inline auto to_string(ImportFormat format) -> std::string_view
 {
   switch (format) {
@@ -37,6 +35,31 @@ auto ImportRequest::GetSceneName() const -> std::string
 {
   const auto stem = source_path.stem().string();
   return stem.empty() ? "Scene" : stem;
+}
+
+auto ImportRequest::ResolveCookedRoot() const -> std::filesystem::path
+{
+  if (cooked_root.has_value()) {
+    return cooked_root->lexically_normal();
+  }
+  auto leaf = std::filesystem::path(loose_cooked_layout.virtual_mount_root)
+                .lexically_normal()
+                .filename();
+  if (leaf.empty()) {
+    leaf = ".cooked";
+  }
+  std::filesystem::path base;
+  if (!source_path.empty()) {
+    std::error_code error;
+    const auto absolute = std::filesystem::absolute(source_path, error);
+    if (!error) {
+      base = absolute.parent_path();
+    }
+  }
+  if (base.empty()) {
+    base = std::filesystem::temp_directory_path();
+  }
+  return base.filename() == leaf ? base : base / leaf;
 }
 
 namespace {

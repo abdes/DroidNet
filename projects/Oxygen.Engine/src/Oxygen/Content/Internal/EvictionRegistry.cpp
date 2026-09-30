@@ -54,20 +54,40 @@ auto EvictionRegistry::SnapshotSubscribers(const TypeId type_id) const
   return it->second;
 }
 
-auto EvictionRegistry::TryEnterEviction(const uint64_t cache_key) -> bool
+auto EvictionRegistry::IsSubscribed(
+  const TypeId type_id, const uint64_t id) const noexcept -> bool
 {
-  return eviction_in_progress_.insert(cache_key).second;
+  const auto found = subscribers_.find(type_id);
+  return found != subscribers_.end()
+    && std::ranges::any_of(found->second,
+      [id](const Subscriber& subscriber) { return subscriber.id == id; });
 }
 
-auto EvictionRegistry::ExitEviction(const uint64_t cache_key) -> void
+auto EvictionRegistry::TryEnterEviction(ActiveEviction& scope) noexcept -> bool
 {
-  eviction_in_progress_.erase(cache_key);
+  for (const auto* active = active_eviction_; active != nullptr;
+    active = active->previous) {
+    if (active->key == scope.key) {
+      return false;
+    }
+  }
+  scope.previous = active_eviction_;
+  active_eviction_ = &scope;
+  return true;
+}
+
+auto EvictionRegistry::ExitEviction(const ActiveEviction& scope) noexcept
+  -> void
+{
+  if (active_eviction_ == &scope) {
+    active_eviction_ = scope.previous;
+  }
 }
 
 auto EvictionRegistry::Clear() -> void
 {
   [[maybe_unused]] auto retired = std::exchange(subscribers_, {});
-  eviction_in_progress_.clear();
+  active_eviction_ = nullptr;
   tracked_resources_.clear();
 }
 

@@ -19,6 +19,7 @@
 #include <vector>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Clap/CommandLineContext.h> // IWYU pragma: keep
 #include <Oxygen/Clap/Fluent/CliBuilder.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
@@ -201,6 +202,44 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   EXPECT_TRUE(std::filesystem::exists(root / ".cooked/Materials/Valid.omat"));
   EXPECT_NE(Messages().find("validation_errors=1"), std::string::npos);
 }
+
+NOLINT_TEST_F(BatchCommandPhysicsDagTest,
+  OutputOverrideRejectsConflictingRootIdentitiesBeforeImport)
+{
+  ContinueAfterValidationErrors();
+  const auto root = MakeScenarioDir("conflicting_output_identities");
+  const auto manifest_path = root / "import-manifest.json";
+  std::ostringstream manifest;
+  manifest << R"({"version":1,"jobs":[
+    {"id":"first","type":"texture","source":"first.png","output":"first","source_key":")"
+           << oxygen::Uuid::Generate().ToString() << R"("},
+    {"id":"second","type":"texture","source":"second.png","output":"second","depends_on":["first"],"source_key":")"
+           << oxygen::Uuid::Generate().ToString() << R"("}]})";
+  WriteTextFile(manifest_path, manifest.str());
+  const auto shared_root = root / "shared";
+  EXPECT_FALSE(RunBatch(manifest_path, shared_root).has_value());
+  EXPECT_NE(Messages().find("import.source_key_conflict"), std::string::npos);
+  EXPECT_FALSE(std::filesystem::exists(shared_root));
+}
+
+#ifdef _WIN32
+NOLINT_TEST_F(BatchCommandPhysicsDagTest,
+  CaseAliasedOutputsRejectConflictingRootIdentitiesBeforeImport)
+{
+  const auto root = MakeScenarioDir("case_alias_output_identities");
+  const auto manifest_path = root / "import-manifest.json";
+  std::ostringstream manifest;
+  manifest << R"({"version":1,"jobs":[
+    {"type":"texture","source":"first.png","output":"Cooked","source_key":")"
+           << oxygen::Uuid::Generate().ToString() << R"("},
+    {"type":"texture","source":"second.png","output":"cooked","source_key":")"
+           << oxygen::Uuid::Generate().ToString() << R"("}]})";
+  WriteTextFile(manifest_path, manifest.str());
+  EXPECT_FALSE(RunBatch(manifest_path).has_value());
+  EXPECT_NE(Messages().find("import.source_key_conflict"), std::string::npos);
+  EXPECT_FALSE(std::filesystem::exists(root / "Cooked"));
+}
+#endif
 
 //! Large manifests defer saturated submissions and emit every independent
 //! asset.

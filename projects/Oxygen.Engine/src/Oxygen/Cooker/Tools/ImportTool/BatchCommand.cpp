@@ -35,6 +35,7 @@
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/ObserverPtr.h>
@@ -58,6 +59,7 @@
 #include <Oxygen/Cooker/Tools/ImportTool/ReportJson.h>
 #include <Oxygen/Cooker/Tools/ImportTool/UI/BatchViewModel.h>
 #include <Oxygen/Cooker/Tools/ImportTool/UI/Screens/BatchImportScreen.h>
+#include <Oxygen/Data/SourceKey.h>
 
 #ifndef OXYGEN_IMPORT_TOOL_VERSION
 #  error OXYGEN_IMPORT_TOOL_VERSION must be defined for ImportTool reports.
@@ -112,7 +114,7 @@ namespace {
     if (!job.request.cooked_root.has_value()) {
       return std::nullopt;
     }
-    return job.request.cooked_root->lexically_normal().generic_string();
+    return base::PathIdentityKey(job.request.cooked_root.value());
   }
 
   auto JobLabel(const PreparedJob& job, const size_t job_index) -> std::string
@@ -1064,6 +1066,7 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
   bool unsupported_seen = false;
   std::vector<PreparedJob> jobs;
   jobs.reserve(manifest->jobs.size());
+  std::unordered_map<std::string, data::SourceKey> source_keys;
 
   for (const auto& job : manifest->jobs) {
     if (job.job_type != "texture" && job.job_type != "texture-descriptor"
@@ -1105,6 +1108,21 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
     if (global_options_ != nullptr && !global_options_->cooked_root.empty()) {
       request->cooked_root
         = std::filesystem::path(global_options_->cooked_root);
+    }
+    request->cooked_root
+      = base::ToLogicalPath(std::filesystem::weakly_canonical(
+        base::ToNativePath(request->ResolveCookedRoot())));
+    if (request->source_key.has_value()) {
+      const auto root = base::PathIdentityKey(request->cooked_root.value());
+      const auto [found, inserted]
+        = source_keys.try_emplace(root, request->source_key.value());
+      if (!inserted && found->second != request->source_key.value()) {
+        writer->Error(fmt::format("ERROR [import.source_key_conflict]: jobs "
+                                  "writing '{}' must use the same source_key",
+          root));
+        return std::unexpected(
+          std::make_error_code(std::errc::invalid_argument));
+      }
     }
     if (options_.dry_run) {
       writer->Info(fmt::format(

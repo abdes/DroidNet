@@ -27,11 +27,13 @@
 #include <Oxygen/Cooker/Import/ScriptImportSettings.h>
 #include <Oxygen/Cooker/Import/TextureImportSettings.h>
 #include <Oxygen/Cooker/api_export.h>
+#include <Oxygen/Data/SourceKey.h>
 
 namespace oxygen::content::import {
 
 struct ImportManifestJob {
   std::string job_type;
+  std::optional<data::SourceKey> source_key {};
   LooseCookedLayout loose_cooked_layout;
   TextureImportSettings texture;
   SceneImportSettings fbx;
@@ -54,6 +56,7 @@ struct ImportManifestJob {
 };
 
 struct ImportManifestDefaults {
+  std::optional<data::SourceKey> source_key {};
   LooseCookedLayout loose_cooked_layout;
   TextureImportSettings texture;
   SceneImportSettings fbx;

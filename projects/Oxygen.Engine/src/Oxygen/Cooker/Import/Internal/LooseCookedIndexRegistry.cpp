@@ -15,6 +15,7 @@
 #include <string_view>
 #include <utility>
 
+#include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSessionToken.h>
@@ -31,7 +32,7 @@ namespace oxygen::content::import {
 auto LooseCookedIndexRegistry::NormalizeKey(
   const std::filesystem::path& cooked_root) const -> std::string
 {
-  return cooked_root.lexically_normal().string();
+  return base::PathIdentityKey(cooked_root);
 }
 
 auto LooseCookedIndexRegistry::GetEntry(
@@ -67,7 +68,8 @@ auto LooseCookedIndexRegistry::BeginSession(
       entry.writer->SetSourceKey(source_key);
       entry.source_key = source_key;
     } else if (*entry.source_key != *source_key) {
-      LOG_F(WARNING, "Ignoring mismatched source key for '{}'", key);
+      throw std::invalid_argument(
+        "Concurrent imports disagree on the cooked root SourceKey");
     }
   }
 

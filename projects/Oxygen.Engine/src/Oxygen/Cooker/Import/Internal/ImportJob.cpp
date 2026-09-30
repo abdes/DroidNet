@@ -72,53 +72,6 @@ namespace {
     };
   }
 
-  [[nodiscard]] auto VirtualMountRootLeaf(const ImportRequest& request)
-    -> std::filesystem::path
-  {
-    auto mount_root
-      = std::filesystem::path(request.loose_cooked_layout.virtual_mount_root)
-          .lexically_normal();
-    auto leaf = mount_root.filename();
-    if (!leaf.empty()) {
-      return leaf;
-    }
-
-    // Defensive fallback: virtual mount roots are expected to end with a
-    // directory name (e.g. "/.cooked").
-    return { ".cooked" };
-  }
-
-  [[nodiscard]] auto ResolveCookedRootForRequest(const ImportRequest& request)
-    -> std::filesystem::path
-  {
-    if (request.cooked_root.has_value()) {
-      return request.cooked_root->lexically_normal();
-    }
-
-    const auto mount_leaf = VirtualMountRootLeaf(request);
-
-    std::filesystem::path base_root;
-    if (!request.source_path.empty()) {
-      std::error_code ec;
-      auto absolute_source = std::filesystem::absolute(request.source_path, ec);
-      if (!ec) {
-        base_root = absolute_source.parent_path();
-      }
-    }
-
-    if (base_root.empty()) {
-      base_root = std::filesystem::temp_directory_path();
-    }
-
-    // Ensure the cooked root ends with the virtual mount root leaf directory
-    // (e.g. ".cooked"). This keeps incremental imports and updates stable.
-    if (base_root.filename() == mount_leaf) {
-      return base_root;
-    }
-
-    return base_root / mount_leaf;
-  }
-
 } // namespace
 
 ImportJob::ImportJob(ImportJobParams params)
@@ -207,7 +160,7 @@ auto ImportJob::Request() const -> const ImportRequest& { return request_; }
 */
 auto ImportJob::WritableCookedRoot() const -> std::filesystem::path
 {
-  const auto root = ResolveCookedRootForRequest(request_);
+  const auto root = request_.ResolveCookedRoot();
   if (HasGenerationMarker(root)
     && (!retained_import_ || !retained_import_->AllowsWriting(root))) {
     throw std::invalid_argument(

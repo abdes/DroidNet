@@ -373,6 +373,40 @@ namespace {
     EXPECT_EQ(inspection.Guid(), source_key);
   }
 
+  NOLINT_TEST(
+    LooseCookedWriterTest, ExplicitSourceKeyReidentifiesASeededGeneration)
+  {
+    const auto root = MakeTempCookedRoot("generation_source_identity");
+    const auto old_root = root / "old";
+    const auto new_root = root / "new";
+    const auto old_key = MakeTestSourceKey(31);
+    const auto new_key = MakeTestSourceKey(32);
+    const auto asset_key = MakeTestAssetKey(7);
+    const std::array bytes { std::byte { 1 }, std::byte { 2 } };
+    {
+      LooseCookedWriter writer(old_root);
+      writer.SetSourceKey(old_key);
+      writer.WriteAssetDescriptor(asset_key, AssetType::kMaterial,
+        "/Content/Materials/kept.omat", "Materials/kept.omat", bytes);
+      static_cast<void>(writer.Finish());
+    }
+    std::filesystem::copy(
+      old_root, new_root, std::filesystem::copy_options::recursive);
+    LooseCookedWriter candidate(new_root);
+    candidate.SetSourceKey(new_key);
+    EXPECT_EQ(candidate.Finish().source_key, new_key);
+    Inspection previous;
+    Inspection next;
+    previous.LoadFromRoot(old_root);
+    next.LoadFromRoot(new_root);
+    EXPECT_EQ(previous.Guid(), old_key);
+    EXPECT_EQ(next.Guid(), new_key);
+    ASSERT_EQ(next.Assets().size(), 1U);
+    EXPECT_EQ(next.Assets().front().key, asset_key);
+    EXPECT_EQ(next.Assets().front().descriptor_sha256,
+      previous.Assets().front().descriptor_sha256);
+  }
+
   //! Test: Existing content version is preserved when not overridden
   /*!
    Scenario: Writes an index with an explicit content version.

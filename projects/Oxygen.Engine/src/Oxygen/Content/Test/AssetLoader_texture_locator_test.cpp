@@ -11,6 +11,7 @@
 #include <ios>
 #include <span>
 #include <stdexcept>
+#include <vector>
 
 #include "AssetLoader_test.h"
 #include "Fixtures/LooseCookedTestWriter.h"
@@ -19,6 +20,7 @@
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Serio/FileStream.h>
+#include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Writer.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -27,19 +29,31 @@ namespace {
 
   using Descriptor = data::pak::core::TextureResourceDesc;
 
+  auto SidecarBytes(const Descriptor& descriptor,
+    const std::uint32_t index = 1U) -> std::vector<std::byte>
+  {
+    constexpr auto kMagic = std::array { 'O', 'T', 'E', 'X' };
+    auto stream = serio::MemoryStream();
+    auto writer = serio::Writer(stream);
+    const auto packed = writer.ScopedAlignment(1);
+    if (!writer.WriteBlob(std::as_bytes(std::span { kMagic }))
+      || !writer.Write(std::uint16_t { 1U })
+      || !writer.Write(std::uint16_t { 0U }) || !writer.Write(index)
+      || !writer.WriteBlob(std::as_bytes(std::span { &descriptor, 1U }))) {
+      throw std::runtime_error(
+        "Could not serialize fixture texture descriptor");
+    }
+    const auto bytes = stream.Data();
+    return { bytes.begin(), bytes.end() };
+  }
+
   auto WriteSidecar(const std::filesystem::path& path,
     const Descriptor& descriptor, const std::uint32_t index = 1U) -> void
   {
-    constexpr auto kMagic = std::array { 'O', 'T', 'E', 'X' };
     std::filesystem::create_directories(path.parent_path());
     auto stream = serio::FileStream<>(path, std::ios::out);
     auto writer = serio::Writer(stream);
-    const auto packed = writer.ScopedAlignment(1);
-    ASSERT_TRUE(writer.WriteBlob(std::as_bytes(std::span { kMagic })));
-    ASSERT_TRUE(writer.Write(std::uint16_t { 1U }));
-    ASSERT_TRUE(writer.Write(std::uint16_t { 0U }));
-    ASSERT_TRUE(writer.Write(index));
-    ASSERT_TRUE(writer.WriteBlob(std::as_bytes(std::span { &descriptor, 1U })));
+    ASSERT_TRUE(writer.WriteBlob(SidecarBytes(descriptor, index)));
   }
 
   struct SourceRecipe {
@@ -64,6 +78,8 @@ namespace {
       "textures.table", std::as_bytes(std::span { records }));
     writer.WriteFile(
       data::loose_cooked::FileKind::kTexturesData, "textures.data", payload);
+    writer.WriteFile(data::loose_cooked::FileKind::kAuxiliary,
+      "Textures/Meter.otex", SidecarBytes(descriptor));
     const auto written = writer.Finish();
     auto stream = serio::FileStream<>(written.index_path);
     auto index = serio::Writer(stream);
@@ -71,7 +87,6 @@ namespace {
       || !index.Write(recipe.identity) || !stream.Flush()) {
       throw std::runtime_error("Test source identity could not be written");
     }
-    WriteSidecar(root / "Textures/Meter.otex", descriptor);
     return descriptor;
   }
 

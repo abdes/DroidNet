@@ -164,6 +164,40 @@ auto ContentSourceRegistry::MountPak(std::filesystem::path normalized_path,
   return result;
 }
 
+auto ContentSourceRegistry::PrepareReplacement(
+  const std::span<const PreparedSource> sources) const -> ContentSourceRegistry
+{
+  auto candidate = *this;
+  candidate.Clear();
+  std::unordered_set<std::string> identities;
+  identities.reserve(sources.size());
+  for (const auto& item : sources) {
+    if (!item.source || !identities.emplace(item.source->DebugName()).second) {
+      throw std::invalid_argument(
+        "A replacement mount set requires unique sources");
+    }
+    if (item.generation) {
+      static_cast<void>(candidate.MountGeneration(item.source, std::nullopt));
+    } else {
+      static_cast<void>(
+        candidate.MountLoose(item.source->DebugName(), item.source));
+    }
+  }
+  return candidate;
+}
+
+auto ContentSourceRegistry::Swap(ContentSourceRegistry& other) noexcept -> void
+{
+  sources_.swap(other.sources_);
+  source_ids_.swap(other.source_ids_);
+  source_id_to_index_.swap(other.source_id_to_index_);
+  tombstones_by_source_id_.swap(other.tombstones_by_source_id_);
+  records_.swap(other.records_);
+  source_key_to_ids_.swap(other.source_key_to_ids_);
+  pak_paths_.swap(other.pak_paths_);
+  pak_source_ids_.swap(other.pak_source_ids_);
+}
+
 auto ContentSourceRegistry::MountLoose(
   const std::string_view normalized_debug_name,
   std::shared_ptr<IContentSource> source) -> MountResult

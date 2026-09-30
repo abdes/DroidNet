@@ -23,14 +23,21 @@ public:
     IAssetLoader::EvictionHandler handler;
   };
 
+  struct ActiveEviction final {
+    uint64_t key = 0;
+    ActiveEviction* previous = nullptr;
+  };
+
   auto AddSubscriber(
     TypeId type_id, uint64_t id, IAssetLoader::EvictionHandler handler) -> void;
   auto RemoveSubscriber(TypeId type_id, uint64_t id) -> void;
   [[nodiscard]] auto SnapshotSubscribers(TypeId type_id) const
     -> std::vector<Subscriber>;
+  [[nodiscard]] auto IsSubscribed(TypeId type_id, uint64_t id) const noexcept
+    -> bool;
 
-  auto TryEnterEviction(uint64_t cache_key) -> bool;
-  auto ExitEviction(uint64_t cache_key) -> void;
+  auto TryEnterEviction(ActiveEviction& scope) noexcept -> bool;
+  auto ExitEviction(const ActiveEviction& scope) noexcept -> void;
 
   auto TrackResource(ResourceKey key) -> void;
   auto ForgetResource(ResourceKey key) -> void;
@@ -41,7 +48,7 @@ public:
 
 private:
   std::unordered_map<TypeId, std::vector<Subscriber>> subscribers_ {};
-  std::unordered_set<uint64_t> eviction_in_progress_ {};
+  ActiveEviction* active_eviction_ = nullptr;
   std::unordered_set<ResourceKey> tracked_resources_ {};
 };
 

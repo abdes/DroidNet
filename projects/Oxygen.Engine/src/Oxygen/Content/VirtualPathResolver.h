@@ -46,7 +46,12 @@ public:
   OXGN_CNTT_API ~VirtualPathResolver();
 
   OXYGEN_MAKE_NON_COPYABLE(VirtualPathResolver)
-  OXYGEN_DEFAULT_MOVABLE(VirtualPathResolver)
+  OXGN_CNTT_API VirtualPathResolver(VirtualPathResolver&&) noexcept;
+  OXGN_CNTT_API auto operator=(VirtualPathResolver&&) noexcept
+    -> VirtualPathResolver&;
+
+  //! Switch prepared state while preserving the resolver's public address.
+  OXGN_CNTT_API auto Swap(VirtualPathResolver& other) noexcept -> void;
 
   //! Add a loose cooked root in priority order.
   /*!

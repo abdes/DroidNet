@@ -285,6 +285,9 @@ struct ImportRequest final {
   */
   OXGN_COOK_NDAPI auto GetSceneName() const -> std::string;
 
+  //! Resolve the explicit or source-derived output root without creating it.
+  OXGN_COOK_NDAPI auto ResolveCookedRoot() const -> std::filesystem::path;
+
   //! Auto-detects the import format from the source path extension.
   OXGN_COOK_NDAPI auto GetFormat() const -> ImportFormat;
 };

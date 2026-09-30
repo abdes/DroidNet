@@ -90,6 +90,12 @@ Common options:
 Texture options include intent/format/mips/cubemap/decode controls.
 Run `texture --help` for the full list.
 
+An import manifest can set `source_key` to a canonical UUIDv7 at the top level,
+in `defaults`, or on a job; the closest setting wins. Jobs writing the same
+physical root must agree. A caller creating a new root generation supplies a
+fresh key, including when staging was seeded from an older index. The native
+writer reidentifies the root while retaining unchanged indexed content.
+
 For a named texture consumed by material or scene references, use a
 `texture-descriptor` job with `virtual_path` in its descriptor, for example
 `"virtual_path": "/Content/Textures/Meter.otex"` under a `/Content` virtual

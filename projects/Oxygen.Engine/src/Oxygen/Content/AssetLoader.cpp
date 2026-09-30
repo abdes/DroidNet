@@ -46,6 +46,7 @@
 #include <Oxygen/Console/Command.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/Content/ContentMounts.h>
 #include <Oxygen/Content/EvictionEvents.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/Internal/ContentBindingBundle.h>
@@ -117,6 +118,7 @@
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/ParkingLot.h>
 #include <Oxygen/OxCo/TaskCancelledException.h>
+#include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/Serio/FileLock.h>
 #include <Oxygen/Serio/FileStream.h>
 #include <Oxygen/Serio/Reader.h>
@@ -159,6 +161,7 @@ auto AssetLoader::InternResourceKey(const data::SourceInstanceId source,
 
 struct AssetLoader::Impl final {
   internal::ContentSourceRegistry source_registry {};
+  uint64_t mount_revision = 0;
   std::optional<internal::ContentReleaseQueue::Cache::EvictionNotificationScope>
     cache_notifications;
 
@@ -167,6 +170,62 @@ struct AssetLoader::Impl final {
   size_t accepted_loads = 0;
   co::ParkingLot accepted_loads_idle;
 };
+
+namespace internal {
+
+  struct MountReplacementState final {
+    struct Notification final {
+      uint64_t cache_key = 0;
+      EvictionEvent event {};
+    };
+
+    observer_ptr<AssetLoader> owner {};
+    std::weak_ptr<int> lifetime {};
+    std::shared_ptr<ContentReleaseQueue> epoch {};
+    uint64_t revision = 0;
+    ContentSourceRegistry registry {};
+    std::vector<ContentReleaseQueue::Cache::RetiredEntry> retired {};
+    std::vector<Notification> notifications {};
+    std::unordered_map<TypeId, std::vector<EvictionRegistry::Subscriber>>
+      subscribers {};
+  };
+
+} // namespace internal
+
+PreparedMountSet::PreparedMountSet(
+  std::unique_ptr<internal::MountReplacementState> state)
+  : state_(std::move(state))
+{
+}
+PreparedMountSet::~PreparedMountSet() = default;
+PreparedMountSet::PreparedMountSet(PreparedMountSet&&) noexcept = default;
+auto PreparedMountSet::operator=(PreparedMountSet&&) noexcept
+  -> PreparedMountSet& = default;
+
+MountRetirement::MountRetirement(
+  std::unique_ptr<internal::MountReplacementState> state)
+  : state_(std::move(state))
+{
+}
+MountRetirement::~MountRetirement() { Finish(); }
+MountRetirement::MountRetirement(MountRetirement&&) noexcept = default;
+auto MountRetirement::operator=(MountRetirement&& other) noexcept
+  -> MountRetirement&
+{
+  if (this != &other) {
+    Finish();
+    state_ = std::move(other.state_);
+  }
+  return *this;
+}
+
+auto MountRetirement::Finish() noexcept -> void
+{
+  auto state = std::move(state_);
+  if (state && !state->lifetime.expired() && !state->epoch->IsClosed()) {
+    state->owner->CompleteMountRetirement(*state);
+  }
+}
 // Guards synchronous callback boundaries without extending the loader lifetime.
 struct AssetLoader::OperationLifetime final {
   explicit OperationLifetime(const AssetLoader& owner)
@@ -882,6 +941,7 @@ auto AssetLoader::MountPakFile(const std::filesystem::path& path)
 
   const auto mount_result
     = impl_->source_registry.MountPak(normalized, std::move(new_source));
+  ++impl_->mount_revision;
 #ifndef NDEBUG
   if (mount_result.source_key_conflict.has_value()) {
     const auto& conflict = *mount_result.source_key_conflict;
@@ -983,6 +1043,7 @@ auto AssetLoader::AddLooseCookedRoot(const std::filesystem::path& path) -> void
 
   const auto mount_result
     = impl_->source_registry.MountLoose(normalized_s, std::move(new_source));
+  ++impl_->mount_revision;
 #ifndef NDEBUG
   if (mount_result.source_key_conflict.has_value()) {
     const auto& conflict = *mount_result.source_key_conflict;
@@ -1026,6 +1087,7 @@ auto AssetLoader::MountLooseCookedGeneration(const std::filesystem::path& path,
   const auto key = source->GetSourceKey();
   static_cast<void>(
     impl_->source_registry.MountGeneration(std::move(source), replaces));
+  ++impl_->mount_revision;
   AssertSourceKeyConsistency("MountLooseCookedGeneration");
   return key;
 }
@@ -1034,7 +1096,211 @@ auto AssetLoader::RetireLooseCookedGeneration(const data::SourceKey source_key)
   -> bool
 {
   AssertOwningThread();
-  return impl_->source_registry.RetireGeneration(source_key);
+  if (!impl_->source_registry.RetireGeneration(source_key)) {
+    return false;
+  }
+  ++impl_->mount_revision;
+  return true;
+}
+
+auto AssetLoader::PrepareLooseCookedRootsAsync(
+  std::vector<std::filesystem::path> roots) -> co::Co<PreparedMountSet>
+{
+  AssertOwningThread();
+  if (!thread_pool_ || releases_->IsClosed()) {
+    throw std::logic_error(
+      "Mount preparation requires an active loader and thread pool");
+  }
+  auto state = std::make_unique<internal::MountReplacementState>();
+  state->owner = observer_ptr(this);
+  state->lifetime = lifetime_token_;
+  state->epoch = releases_;
+  state->revision = impl_->mount_revision;
+  return PrepareMountSetAsync(
+    std::move(state), thread_pool_, std::move(roots), verify_content_hashes_);
+}
+
+auto AssetLoader::PrepareMountSetAsync(
+  std::unique_ptr<internal::MountReplacementState> state,
+  const observer_ptr<co::ThreadPool> pool,
+  std::vector<std::filesystem::path> roots, const bool verify_content)
+  -> co::Co<PreparedMountSet>
+{
+  if (state->lifetime.expired() || state->epoch->IsClosed()) {
+    throw OperationCancelledException(
+      "Loader stopped before mount preparation began");
+  }
+  state->owner->AssertOwningThread();
+  if (state->epoch != state->owner->releases_
+    || state->revision != state->owner->impl_->mount_revision) {
+    throw OperationCancelledException(
+      "Content mounts changed before preparation began");
+  }
+  auto sources = co_await pool->Run(
+    [paths = std::move(roots), verify = verify_content] {
+      std::vector<internal::ContentSourceRegistry::PreparedSource> prepared;
+      prepared.reserve(paths.size());
+      for (const auto& path : paths) {
+        const auto normalized = base::ToLogicalPath(
+          std::filesystem::weakly_canonical(base::ToNativePath(path)));
+        const auto marker
+          = normalized / data::loose_cooked::kGenerationLeaseFileName;
+        if (std::filesystem::exists(base::ToNativePath(marker))) {
+          auto lease
+            = serio::FileLock::TryAcquire(marker, serio::FileLockMode::kShared);
+          if (!lease) {
+            throw std::system_error(
+              lease.error(), "Acquire candidate generation lease");
+          }
+          prepared.push_back(
+            { .source = std::make_shared<internal::LooseCookedSource>(
+                normalized, verify, std::move(lease).value()),
+              .generation = true });
+        } else {
+          prepared.push_back({ .source
+            = std::make_shared<internal::LooseCookedSource>(normalized, verify),
+            .generation = false });
+        }
+      }
+      return prepared;
+    });
+  if (state->lifetime.expired() || state->epoch->IsClosed()) {
+    throw OperationCancelledException(
+      "Loader stopped during mount preparation");
+  }
+  auto& owner = *state->owner;
+  owner.AssertOwningThread();
+  if (state->epoch != owner.releases_
+    || state->revision != owner.impl_->mount_revision) {
+    throw OperationCancelledException(
+      "Content mounts changed during preparation");
+  }
+  owner.identities_->EraseSources(
+    owner.impl_->source_registry.PruneExpiredSources());
+  state->registry = owner.impl_->source_registry.PrepareReplacement(sources);
+  co_return PreparedMountSet(std::move(state));
+}
+
+auto AssetLoader::CommitPreparedMounts(PreparedMountSet&& prepared)
+  -> MountRetirement
+{
+  AssertOwningThread();
+  if (!prepared.state_ || prepared.state_->owner.get() != this) {
+    throw std::invalid_argument(
+      "Prepared content mounts belong to another loader or were consumed");
+  }
+  if (prepared.state_->lifetime.expired() || prepared.state_->epoch != releases_
+    || releases_->IsClosed()
+    || prepared.state_->revision != impl_->mount_revision) {
+    throw OperationCancelledException(
+      "Prepared content mounts no longer match this loader");
+  }
+  if (impl_->accepted_loads != 0U) {
+    throw std::logic_error(
+      "Drain accepted loads before committing content mounts");
+  }
+  auto owned = std::move(prepared.state_);
+  auto& state = *owned;
+  const auto keys = content_cache_.KeysSnapshot();
+  state.retired.reserve(keys.size());
+  state.notifications.reserve(
+    keys.size() + eviction_registry_->TrackedResources().size());
+  const auto prepare_event = [&](const uint64_t key, const TypeId type) {
+    EvictionEvent event {
+      .asset_key = {},
+      .key = {},
+      .type_id = type,
+      .reason = EvictionReason::kClear,
+#ifndef NDEBUG
+      .cache_key = key,
+#endif
+    };
+    if (IsResourceTypeId(type)) {
+      event.key = ResourceKey { key };
+    } else {
+      const auto* identity
+        = identities_->FindAsset(internal::ContentId { key });
+      if (identity == nullptr) {
+        throw std::logic_error("Cached asset has no source-qualified identity");
+      }
+      event.asset_key = identity->asset;
+    }
+    if (!state.subscribers.contains(type)) {
+      state.subscribers.emplace(
+        type, eviction_registry_->SnapshotSubscribers(type));
+    }
+    state.notifications.push_back({ .cache_key = key, .event = event });
+  };
+  for (const auto key : keys) {
+    prepare_event(key, content_cache_.GetTypeId(key));
+  }
+  for (const auto key : eviction_registry_->TrackedResources()) {
+    if (!content_cache_.Contains(key.get())) {
+      if (const auto kind
+        = identities_->FindResourceKind(internal::ContentId { key.get() })) {
+        prepare_event(
+          key.get(), GetResourceTypeIdByIndex(static_cast<size_t>(*kind)));
+      }
+    }
+  }
+  {
+    auto collect = content_cache_.OnEviction(
+      [&state](const auto& retired) { state.retired.push_back(retired); });
+    content_cache_.Clear();
+  }
+  // All allocations and validation precede this publication point. Payloads and
+  // callbacks remain owned until the caller has switched its peer resolver.
+  impl_->source_registry.Swap(state.registry);
+  ++impl_->mount_revision;
+  for (const auto& notification : state.notifications) {
+    RecordEviction(notification.event.reason);
+    if (!notification.event.asset_key.has_value()) {
+      eviction_registry_->ForgetResource(notification.event.key);
+    }
+  }
+  return MountRetirement(std::move(owned));
+}
+
+auto AssetLoader::CompleteMountRetirement(
+  internal::MountReplacementState& state) noexcept -> void
+{
+  AssertOwningThread();
+  if (state.epoch != releases_ || releases_->IsClosed()) {
+    return;
+  }
+  const OperationLifetime operation(*this);
+  for (const auto& notification : state.notifications) {
+    internal::EvictionRegistry::ActiveEviction active {
+      .key = notification.cache_key, .previous = nullptr
+    };
+    if (!eviction_registry_->TryEnterEviction(active)) {
+      continue;
+    }
+    const auto leave = Finally([this, &active, operation] noexcept {
+      if (operation) {
+        eviction_registry_->ExitEviction(active);
+      }
+    });
+    const auto& subscribers = state.subscribers.at(notification.event.type_id);
+    for (const auto& subscriber : subscribers) {
+      if (!subscriber.handler
+        || !eviction_registry_->IsSubscribed(
+          notification.event.type_id, subscriber.id)) {
+        continue;
+      }
+      try {
+        subscriber.handler(notification.event);
+      } catch (const std::exception& error) {
+        LOG_F(ERROR, "Eviction observer failed after mount publication: {}",
+          error.what());
+      } catch (...) {
+        LOG_F(ERROR, "Eviction observer failed after mount publication");
+      }
+      if (!operation) {
+        return;
+      }
+    }
+  }
 }
 
 auto AssetLoader::EnsureLoadEpoch(
@@ -1089,6 +1355,7 @@ auto AssetLoader::ClearMounts() -> void
     std::hash<std::thread::id> {}(owning_thread_id_));
   AssertOwningThread(); // Ensure this method is called on the owning thread
   impl_->source_registry.Clear();
+  ++impl_->mount_revision;
 
   // Clear the content cache to prevent stale assets from being returned
   // when switching content sources (e.g. scene swap).
@@ -2335,18 +2602,19 @@ void oxygen::content::AssetLoader::UnloadObject(const uint64_t cache_key,
   }
 
   // Prevent re-entrant eviction notifications for the same cache key.
-  if (!eviction_registry_->TryEnterEviction(cache_key)) {
+  internal::EvictionRegistry::ActiveEviction active { .key = cache_key,
+    .previous = nullptr };
+  if (!eviction_registry_->TryEnterEviction(active)) {
     LOG_F(
       2, "AssetLoader: nested eviction ignored for cache_key={}", cache_key);
     return;
   }
   // Ensure the guard is cleared on all exit paths.
-  ScopeGuard clear_eviction_guard(
-    [this, operation, cache_key] noexcept -> void {
-      if (operation) {
-        eviction_registry_->ExitEviction(cache_key);
-      }
-    });
+  ScopeGuard clear_eviction_guard([this, operation, &active] noexcept -> void {
+    if (operation) {
+      eviction_registry_->ExitEviction(active);
+    }
+  });
 
   for (const auto& subscriber : subscribers) {
     if (!subscriber.handler) {

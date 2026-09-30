@@ -17,6 +17,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Content/ContentMounts.h>
 #include <Oxygen/Content/EvictionEvents.h>
 #include <Oxygen/Content/ResidencyPin.h>
 #include <Oxygen/Content/ResidencyPolicy.h>
@@ -355,6 +356,19 @@ public:
   //! Exclude a generation from lookup; existing assets retain its storage.
   virtual auto RetireLooseCookedGeneration(data::SourceKey source_key) -> bool
     = 0;
+
+  //! Prepare complete loose roots off-thread without changing active
+  //! precedence. The caller prevents new loads through commit; preparation owns
+  //! its paths.
+  [[nodiscard]] virtual auto PrepareLooseCookedRootsAsync(
+    std::vector<std::filesystem::path> roots) -> co::Co<PreparedMountSet> = 0;
+
+  //! Validate the candidate and detach old cache entries before swapping
+  //! sources. Failure before the swap preserves active roots. No subscriber
+  //! runs here. Retain the returned owner until peer resolvers have also
+  //! switched.
+  [[nodiscard]] virtual auto CommitPreparedMounts(PreparedMountSet&& prepared)
+    -> MountRetirement = 0;
 
   //! Clear all mounted roots and pak files.
   virtual auto ClearMounts() -> void = 0;

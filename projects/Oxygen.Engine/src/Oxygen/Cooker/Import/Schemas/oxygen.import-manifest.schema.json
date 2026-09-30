@@ -58,6 +58,9 @@
       "items": {
         "$ref": "#/definitions/job_item"
       }
+    },
+    "source_key": {
+      "$ref": "#/definitions/source_key"
     }
   },
   "required": ["jobs"],
@@ -127,7 +130,8 @@
                 "force_rgba",
                 "cubemap",
                 "equirect_to_cube",
-                "content_hashing"
+                "content_hashing",
+                "source_key"
               ]
             }
           }
@@ -150,7 +154,8 @@
                 "output",
                 "layout",
                 "name",
-                "content_hashing"
+                "content_hashing",
+                "source_key"
               ]
             }
           }
@@ -173,7 +178,8 @@
                 "output",
                 "layout",
                 "name",
-                "content_hashing"
+                "content_hashing",
+                "source_key"
               ]
             }
           }
@@ -196,7 +202,8 @@
                 "output",
                 "layout",
                 "name",
-                "content_hashing"
+                "content_hashing",
+                "source_key"
               ]
             }
           }
@@ -219,7 +226,8 @@
                 "output",
                 "layout",
                 "name",
-                "content_hashing"
+                "content_hashing",
+                "source_key"
               ]
             }
           }
@@ -243,7 +251,8 @@
                 "layout",
                 "name",
                 "content_hashing",
-                "cooked_context_roots"
+                "cooked_context_roots",
+                "source_key"
               ]
             }
           }
@@ -267,7 +276,8 @@
                 "layout",
                 "name",
                 "content_hashing",
-                "cooked_context_roots"
+                "cooked_context_roots",
+                "source_key"
               ]
             }
           }
@@ -343,7 +353,8 @@
                 "layout",
                 "name",
                 "verbose",
-                "content_hashing"
+                "content_hashing",
+                "source_key"
               ]
             }
           }
@@ -359,7 +370,15 @@
           "then": {
             "required": ["id", "source"],
             "propertyNames": {
-              "enum": ["id", "type", "source", "depends_on", "output", "layout"]
+              "enum": [
+                "id",
+                "type",
+                "source",
+                "depends_on",
+                "output",
+                "layout",
+                "source_key"
+              ]
             }
           }
         }
@@ -406,6 +425,9 @@
         },
         "layout": {
           "$ref": "#/definitions/layout_settings"
+        },
+        "source_key": {
+          "$ref": "#/definitions/source_key"
         }
       },
       "additionalProperties": false
@@ -1052,6 +1074,9 @@
           "type": "string",
           "minLength": 1,
           "description": "Authoring root for external script source paths, relative to this manifest."
+        },
+        "source_key": {
+          "$ref": "#/definitions/source_key"
         }
       },
       "additionalProperties": false
@@ -1147,6 +1172,11 @@
         "minLength": 1
       },
       "uniqueItems": true
+    },
+    "source_key": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "description": "Explicit cooked root identity. All jobs writing one root must agree; new physical generations require fresh identities."
     }
   }
 }

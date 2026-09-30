@@ -18,6 +18,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Result.h>
+#include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Composition/Object.h>
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Content/LooseCookedIndex.h>
@@ -405,6 +406,27 @@ NOLINT_TEST(
   EXPECT_EQ(first_key, last_key);
   EXPECT_FALSE(first.IsActive());
   EXPECT_FALSE(last.IsActive());
+  std::filesystem::remove_all(root);
+}
+
+NOLINT_TEST(
+  ImportJobLifetimeTest, ConflictingSourceIdentityCannotJoinAnIndexCohort)
+{
+  imp::ImportEventLoop loop;
+  imp::LooseCookedIndexRegistry indexes;
+  const auto root
+    = std::filesystem::temp_directory_path() / "oxygen_source_identity_cohort";
+  std::filesystem::remove_all(root);
+  std::filesystem::create_directories(root);
+  const auto expected = oxygen::data::SourceKey { oxygen::Uuid::Generate() };
+  const auto conflict = oxygen::data::SourceKey { oxygen::Uuid::Generate() };
+  auto participation = indexes.BeginSession(root, expected);
+  EXPECT_THROW(static_cast<void>(indexes.BeginSession(root, conflict)),
+    std::invalid_argument);
+  const auto published = co::Run(loop, indexes.EndSession(participation));
+  EXPECT_EQ(published.source_key, expected);
+  const auto index = oxygen::content::lc::LooseCookedIndex::LoadFromRoot(root);
+  EXPECT_EQ(index.Guid(), expected);
   std::filesystem::remove_all(root);
 }
 

@@ -18,6 +18,7 @@
 #include <variant>
 #include <vector>
 
+#include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/Internal/ContentSourceRegistry.h>
 #include <Oxygen/Content/Internal/LooseCookedIndexImpl.h>
@@ -165,11 +166,21 @@ VirtualPathResolver::VirtualPathResolver()
 
 VirtualPathResolver::~VirtualPathResolver() = default;
 
+VirtualPathResolver::VirtualPathResolver(VirtualPathResolver&&) noexcept
+  = default;
+auto VirtualPathResolver::operator=(VirtualPathResolver&&) noexcept
+  -> VirtualPathResolver& = default;
+
+auto VirtualPathResolver::Swap(VirtualPathResolver& other) noexcept -> void
+{
+  impl_.swap(other.impl_);
+}
+
 auto VirtualPathResolver::AddLooseCookedRoot(
   const std::filesystem::path& cooked_root) -> void
 {
-  std::filesystem::path normalized
-    = std::filesystem::weakly_canonical(cooked_root);
+  std::filesystem::path normalized = base::ToLogicalPath(
+    std::filesystem::weakly_canonical(base::ToNativePath(cooked_root)));
   const auto index_path = normalized / "container.index.bin";
 
   DLOG_F(

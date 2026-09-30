@@ -13,6 +13,7 @@
 #include <unordered_map>
 #include <utility>
 
+#include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
@@ -46,7 +47,7 @@ ResourceTableRegistry::ResourceTableRegistry(IAsyncFileWriter& file_writer)
 auto ResourceTableRegistry::NormalizeKey(
   const std::filesystem::path& cooked_root) const -> std::string
 {
-  return cooked_root.lexically_normal().string();
+  return base::PathIdentityKey(cooked_root);
 }
 
 auto ResourceTableRegistry::TextureAggregator(

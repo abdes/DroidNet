@@ -44,6 +44,21 @@ trim independently. Source instances and opaque content IDs are not recycled.
 A reopened generation uses an independent opening, allowing retired metadata to
 expire while the new instance remains mounted.
 
+For complete context changes, `IAssetLoader::PrepareLooseCookedRootsAsync` owns
+the candidate paths and reads source metadata on the worker pool. Its move-only
+`PreparedMountSet` binds the originating loader lifetime, restart epoch and mount
+revision. A stopped loader or changed mount set invalidates the candidate.
+
+`CommitPreparedMounts` requires drained loads and prepares cache retirements
+before changing active precedence. Validation/allocation failure leaves the old
+roots selected. The source registry switches without invoking observers and
+returns a `MountRetirement` owner. A caller with a `VirtualPathResolver` swaps its
+prepared resolver before finishing that retirement. Observer reloads therefore
+see one complete new context; late checkouts cannot debit replacement entries.
+Canceled subscriptions are skipped, and loader destruction ends delivery safely.
+Expired source/locator metadata is pruned during later preparation, outside the
+swap. Source-qualified objects retain their original generation leases.
+
 Content does not delete generation directories. A publisher can reclaim only an
 unselected generation after acquiring its existing marker exclusively. Loaded
 objects, cached objects and in-flight operations are all holders. The operating

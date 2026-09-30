@@ -11,6 +11,7 @@
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
+using oxygen::base::PathIdentityKey;
 using oxygen::base::ToLogicalPath;
 using oxygen::base::ToNativePath;
 
@@ -18,9 +19,24 @@ NOLINT_TEST(FilesystemPathTest, EmptyPathDoesNotBecomeCurrentDirectory)
 {
   EXPECT_TRUE(ToNativePath({}).empty());
   EXPECT_TRUE(ToLogicalPath({}).empty());
+  EXPECT_TRUE(PathIdentityKey({}).empty());
+}
+
+NOLINT_TEST(FilesystemPathTest, IdentityKeysNormalizeRelativeComponents)
+{
+  EXPECT_EQ(PathIdentityKey("assets/../Cooked"),
+    PathIdentityKey(std::filesystem::absolute("Cooked")));
+  EXPECT_EQ(PathIdentityKey("Cooked/"), PathIdentityKey("Cooked"));
+  const auto root = std::filesystem::absolute("Cooked").root_path();
+  EXPECT_EQ(PathIdentityKey(root / "."), PathIdentityKey(root));
 }
 
 #ifdef OXYGEN_WINDOWS
+NOLINT_TEST(FilesystemPathTest, IdentityKeysFoldAbsentUnicodePathsAndNamespaces)
+{
+  EXPECT_EQ(PathIdentityKey(L"C:/OxygenAbsent/\u00c4ssets/Cooked"),
+    PathIdentityKey(LR"(\\?\C:\oxygenabsent\ässets\cooked)"));
+}
 NOLINT_TEST(FilesystemPathTest, DrivePathsAreAbsoluteAndNormalized)
 {
   EXPECT_EQ(ToNativePath(L"C:/assets/old/../model.bin"),
@@ -49,6 +65,10 @@ NOLINT_TEST(FilesystemPathTest, ExtendedAndDeviceNamespacesArePreserved)
   EXPECT_EQ(ToNativePath(ToLogicalPath(extended)), extended);
 }
 #else
+NOLINT_TEST(FilesystemPathTest, IdentityKeysPreservePosixCase)
+{
+  EXPECT_NE(PathIdentityKey("Cooked"), PathIdentityKey("cooked"));
+}
 NOLINT_TEST(FilesystemPathTest, PosixPathsRetainTheirFilesystemSemantics)
 {
   const auto path = std::filesystem::path("assets/link/../model.bin");

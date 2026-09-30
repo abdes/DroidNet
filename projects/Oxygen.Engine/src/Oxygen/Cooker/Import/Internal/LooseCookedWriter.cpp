@@ -289,7 +289,7 @@ namespace {
     static std::mutex map_mutex;
     static std::unordered_map<std::string, std::shared_ptr<std::mutex>> locks;
 
-    const auto key = cooked_root.lexically_normal().string();
+    const auto key = base::PathIdentityKey(cooked_root);
     std::scoped_lock lock(map_mutex);
     auto it = locks.find(key);
     if (it != locks.end()) {

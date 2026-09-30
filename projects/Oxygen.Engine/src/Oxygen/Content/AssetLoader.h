@@ -25,6 +25,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/PathFinder.h>
+#include <Oxygen/Content/ContentMounts.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Content/OperationCancelledException.h>
@@ -289,6 +290,12 @@ public:
     -> data::SourceKey override;
   OXGN_CNTT_API auto RetireLooseCookedGeneration(data::SourceKey source_key)
     -> bool override;
+
+  OXGN_CNTT_NDAPI auto PrepareLooseCookedRootsAsync(
+    std::vector<std::filesystem::path> roots)
+    -> co::Co<PreparedMountSet> override;
+  OXGN_CNTT_NDAPI auto CommitPreparedMounts(PreparedMountSet&& prepared)
+    -> MountRetirement override;
 
   //! Enable/disable hash verification for future mounts.
   /*!
@@ -1149,6 +1156,13 @@ protected:
     -> data::SourceInstanceId;
 
 private:
+  friend class MountRetirement;
+  static auto PrepareMountSetAsync(
+    std::unique_ptr<internal::MountReplacementState> state,
+    observer_ptr<co::ThreadPool> pool, std::vector<std::filesystem::path> roots,
+    bool verify_content) -> co::Co<PreparedMountSet>;
+  auto CompleteMountRetirement(internal::MountReplacementState& state) noexcept
+    -> void;
   struct DecodedAssetAsyncResult final {
     data::SourceInstanceId source_id {};
     std::shared_ptr<void> asset;

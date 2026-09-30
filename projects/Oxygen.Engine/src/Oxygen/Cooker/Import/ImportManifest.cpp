@@ -23,6 +23,7 @@
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/Filesystem.h>
+#include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Cooker/Import/BufferContainerImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/BufferContainerImportSettings.h>
 #include <Oxygen/Cooker/Import/CollisionShapeDescriptorImportRequestBuilder.h>
@@ -51,6 +52,7 @@
 #include <Oxygen/Cooker/Import/TextureImportSettings.h>
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Core/Meta/Physics/Backend.h>
+#include <Oxygen/Data/SourceKey.h>
 
 namespace oxygen::content::import {
 
@@ -59,6 +61,22 @@ namespace {
   using nlohmann::json;
   using nlohmann::json_schema::error_handler;
   using nlohmann::json_schema::json_validator;
+
+  auto ReadSourceKey(const json& value, std::optional<data::SourceKey>& key,
+    std::ostream& errors) -> bool
+  {
+    if (!value.contains("source_key")) {
+      return true;
+    }
+    const auto parsed
+      = Uuid::FromString(value.at("source_key").get<std::string>());
+    if (!parsed) {
+      errors << "ERROR: source_key must be a canonical UUIDv7\n";
+      return false;
+    }
+    key = data::SourceKey { parsed.value() };
+    return true;
+  }
 
   class CollectingErrorHandler final : public error_handler {
   public:
@@ -336,7 +354,7 @@ namespace {
   auto IsAllowedInputJobKey(const std::string_view key) -> bool
   {
     return key == "id" || key == "type" || key == "source"
-      || key == "depends_on" || key == "output";
+      || key == "depends_on" || key == "output" || key == "source_key";
   }
 
   auto IsAllowedPhysicsSidecarJobKey(const std::string_view key) -> bool
@@ -345,7 +363,7 @@ namespace {
       || key == "source" || key == "bindings"
       || key == "target_scene_virtual_path" || key == "output" || key == "name"
       || key == "verbose" || key == "content_hashing"
-      || key == "physics_backend";
+      || key == "physics_backend" || key == "source_key";
   }
 
   auto ReportEarlyJobKeyWhitelistViolations(
@@ -370,7 +388,8 @@ namespace {
             errors << "ERROR [input.manifest.key_not_allowed]: key '"
                    << it.key()
                    << "' is not allowed for input jobs; allowed keys are "
-                      "'id', 'type', 'source', 'depends_on', 'output'\n";
+                      "'id', 'type', 'source', 'depends_on', 'output', "
+                      "'source_key'\n";
             return true;
           }
         }
@@ -1096,6 +1115,9 @@ auto ImportManifest::Parse(const std::string_view text,
 
   ImportManifest manifest {};
   manifest.version = json_data->value("version", 1U);
+  if (!ReadSourceKey(*json_data, manifest.defaults.source_key, error_stream)) {
+    return std::nullopt;
+  }
 
   if (!ReadOptionalUIntField(*json_data, "thread_pool_size",
         manifest.thread_pool_size, error_stream)) {
@@ -1166,6 +1188,9 @@ auto ImportManifest::Parse(const std::string_view text,
 
   if (json_data->contains("defaults")) {
     const auto& defaults = (*json_data).at("defaults");
+    if (!ReadSourceKey(defaults, manifest.defaults.source_key, error_stream)) {
+      return std::nullopt;
+    }
     if (!defaults.is_object()) {
       error_stream << "ERROR: defaults must be an object\n";
       return std::nullopt;
@@ -1421,6 +1446,10 @@ auto ImportManifest::Parse(const std::string_view text,
     }
 
     ImportManifestJob manifest_job {};
+    manifest_job.source_key = manifest.defaults.source_key;
+    if (!ReadSourceKey(job, manifest_job.source_key, error_stream)) {
+      return std::nullopt;
+    }
     manifest_job.loose_cooked_layout = manifest.defaults.loose_cooked_layout;
     if (job.contains("layout")) {
       const auto& layout = job.at("layout");
@@ -1471,10 +1500,10 @@ auto ImportManifest::Parse(const std::string_view text,
     if (manifest_job.job_type == "input") {
       for (auto it = job.begin(); it != job.end(); ++it) {
         if (!IsAllowedInputJobKey(it.key())) {
-          error_stream << "ERROR [input.manifest.key_not_allowed]: key '"
-                       << it.key()
-                       << "' is not allowed for input jobs; allowed keys are "
-                          "'id', 'type', 'source', 'depends_on', 'output'\n";
+          error_stream
+            << "ERROR [input.manifest.key_not_allowed]: key '" << it.key()
+            << "' is not allowed for input jobs; allowed keys are "
+               "'id', 'type', 'source', 'depends_on', 'output', 'source_key'\n";
           return std::nullopt;
         }
       }
@@ -1750,6 +1779,7 @@ auto ImportManifestJob::BuildRequest(std::ostream& error_stream) const
       return std::nullopt;
     }
     request->loose_cooked_layout = loose_cooked_layout;
+    request->source_key = source_key;
     if (!id.empty()) {
       request->orchestration = ImportRequest::OrchestrationMetadata {
         .job_id = id,

@@ -9,8 +9,6 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
-#include <fstream>
-#include <ios>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -18,6 +16,7 @@
 
 #include "./AssetLoader_test.h"
 #include "Fixtures/LooseCookedTestLayout.h"
+#include "Fixtures/LooseCookedTestWriter.h"
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Span.h>
@@ -32,7 +31,6 @@
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/InputMappingContextAsset.h>
-#include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/PhysicsSceneAsset.h>
 #include <Oxygen/Data/SceneAsset.h>
@@ -64,31 +62,16 @@ using oxygen::base::CheckedAt;
 
 namespace {
 
-auto FillTestGuid(oxygen::data::loose_cooked::IndexHeader& header) -> void
-{
-  for (uint8_t i = 0; i < 16; ++i) {
-    header.source_identity.at(i) = static_cast<uint8_t>(i + 1);
-  }
-  header.source_identity.at(6)
-    = static_cast<uint8_t>((header.source_identity.at(6) & 0x0FU) | 0x70U);
-  header.source_identity.at(8)
-    = static_cast<uint8_t>((header.source_identity.at(8) & 0x3FU) | 0x80U);
-}
-
 auto WriteLooseCookedSceneWithSingleRootNode(
   const std::filesystem::path& cooked_root,
   const oxygen::data::AssetKey& scene_key) -> void
 {
   using oxygen::data::AssetType;
-  using oxygen::data::loose_cooked::AssetEntry;
-  using oxygen::data::loose_cooked::IndexHeader;
   using oxygen::data::pak::world::NodeRecord;
   using oxygen::data::pak::world::SceneAssetDesc;
   using oxygen::data::pak::world::SceneEnvironmentBlockHeader;
 
   const LooseCookedLayout layout {};
-
-  std::filesystem::create_directories(cooked_root / layout.scenes_subdir);
 
   // Arrange: write cooked scene descriptor bytes.
   SceneAssetDesc desc {};
@@ -128,52 +111,12 @@ auto WriteLooseCookedSceneWithSingleRootNode(
 
   const auto descriptor_relpath
     = std::string(layout.scenes_subdir) + "/TestScene.scene";
-  {
-    std::ofstream out(cooked_root / descriptor_relpath, std::ios::binary);
-    out.write(reinterpret_cast<const char*>(bytes.data()),
-      static_cast<std::streamsize>(bytes.size()));
-  }
 
-  // Arrange: build index string table.
-  std::string strings;
-  strings.push_back('\0');
-  const auto off_desc = static_cast<uint32_t>(strings.size());
-  strings += descriptor_relpath;
-  strings.push_back('\0');
-  const auto off_vpath = static_cast<uint32_t>(strings.size());
-  strings += std::string(layout.virtual_mount_root) + "/" + descriptor_relpath;
-  strings.push_back('\0');
-
-  IndexHeader header {};
-  FillTestGuid(header);
-  header.version = oxygen::data::loose_cooked::kIndexVersion;
-  header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths;
-  header.string_table_offset = sizeof(IndexHeader);
-  header.string_table_size = static_cast<uint64_t>(strings.size());
-  header.asset_entries_offset
-    = header.string_table_offset + header.string_table_size;
-  header.asset_count = 1;
-  header.asset_entry_size = sizeof(AssetEntry);
-  header.file_records_offset
-    = header.asset_entries_offset + (sizeof(AssetEntry) * header.asset_count);
-  header.file_record_count = 0;
-  header.file_record_size = sizeof(oxygen::data::loose_cooked::FileRecord);
-
-  AssetEntry asset_entry {};
-  asset_entry.asset_key = scene_key;
-  asset_entry.descriptor_relpath_offset = off_desc;
-  asset_entry.virtual_path_offset = off_vpath;
-  asset_entry.asset_type = static_cast<uint8_t>(AssetType::kScene);
-  asset_entry.descriptor_size = static_cast<uint64_t>(bytes.size());
-
-  const auto index_path = cooked_root / "container.index.bin";
-  std::ofstream index_out(index_path, std::ios::binary);
-  index_out.write(reinterpret_cast<const char*>(&header),
-    static_cast<std::streamsize>(sizeof(header)));
-  index_out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
-  index_out.write(reinterpret_cast<const char*>(&asset_entry),
-    static_cast<std::streamsize>(sizeof(asset_entry)));
+  oxygen::content::testing::LooseCookedTestWriter writer(cooked_root);
+  writer.WriteAssetDescriptor(scene_key, AssetType::kScene,
+    std::string(layout.virtual_mount_root) + "/" + descriptor_relpath,
+    descriptor_relpath, bytes);
+  static_cast<void>(writer.Finish());
 }
 
 //! Fixture for AssetLoader dependency tests

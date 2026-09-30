@@ -10,9 +10,11 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <exception>
 #include <filesystem>
 #include <latch>
 #include <memory>
+#include <optional>
 #include <span>
 #include <stdexcept>
 #include <system_error>
@@ -25,12 +27,16 @@
 #include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/Content/ContentMounts.h>
+#include <Oxygen/Content/EvictionEvents.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/Internal/DependencyCollector.h>
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/MaterialLoader.h>
 #include <Oxygen/Content/Loaders/SceneLoader.h>
 #include <Oxygen/Content/Loaders/ScriptLoader.h>
+#include <Oxygen/Content/OperationCancelledException.h>
+#include <Oxygen/Content/VirtualPathResolver.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/ComponentType.h>
@@ -711,6 +717,194 @@ namespace {
   {
     TestEventLoop loop;
     co::Run(loop, ExerciseReloadGenerationIsolation(&loop, temp_dir_));
+  }
+
+  auto ExerciseAtomicMountSet(TestEventLoop* loop, std::filesystem::path root)
+    -> co::Co<>
+  {
+    const auto old_root = root / "old";
+    const auto new_root = root / "new";
+    const auto old_key = MaterialKey();
+    const auto new_key
+      = data::AssetKey::FromVirtualPath("/Test/replacement.omat");
+    const auto old_source
+      = WriteGeneration(old_root, { .material = old_key, .emission = 1.0F });
+    static_cast<void>(
+      WriteGeneration(new_root, { .material = new_key, .emission = 2.0F }));
+    co::ThreadPool pool(*loop, 2);
+    AssetLoaderConfig config {};
+    config.thread_pool = observer_ptr { &pool };
+    AssetLoader loader(engine::internal::EngineTagFactory::Get(), config);
+    loader.RegisterLoader(loaders::LoadMaterialAsset);
+    VirtualPathResolver resolver;
+    OXCO_WITH_NURSERY(nursery)
+    {
+      co_await nursery.Start(&AssetLoader::ActivateAsync, &loader);
+      loader.Run();
+      loader.AddLooseCookedRoot(old_root);
+      resolver.AddLooseCookedRoot(old_root);
+      const auto original
+        = co_await loader.LoadAssetAsync<data::MaterialAsset>(old_key);
+      EXPECT_NE(original, nullptr);
+
+      std::vector failed_roots { new_root, root / "missing" };
+      auto rejected = false;
+      try {
+        auto failed = co_await loader.PrepareLooseCookedRootsAsync(
+          std::move(failed_roots));
+      } catch (const std::exception&) {
+        rejected = true;
+      }
+      EXPECT_TRUE(rejected);
+      EXPECT_EQ(resolver.ResolveAssetKey("/Test/material.omat"), old_key);
+      EXPECT_EQ(loader.GetMaterialAsset(old_key), original);
+
+      std::vector stale_roots { new_root };
+      auto stale
+        = co_await loader.PrepareLooseCookedRootsAsync(std::move(stale_roots));
+      loader.AddLooseCookedRoot(old_root);
+      EXPECT_THROW(
+        static_cast<void>(loader.CommitPreparedMounts(std::move(stale))),
+        OperationCancelledException);
+      EXPECT_EQ(loader.GetMaterialAsset(old_key), original);
+
+      std::shared_ptr<data::MaterialAsset> reloaded;
+      auto notified = false;
+      auto canceled_notifications = 0;
+      IAssetLoader::EvictionSubscription canceled;
+      auto observer = loader.SubscribeResourceEvictions(
+        data::MaterialAsset::ClassTypeId(), [&](const EvictionEvent& event) {
+          if (event.reason != EvictionReason::kClear) {
+            return;
+          }
+          notified = true;
+          EXPECT_EQ(resolver.ResolveAssetKey("/Test/material.omat"), new_key);
+          canceled.Cancel();
+          loader.StartLoadMaterialAsset(new_key,
+            [&reloaded](auto loaded) { reloaded = std::move(loaded); });
+        });
+      canceled
+        = loader.SubscribeResourceEvictions(data::MaterialAsset::ClassTypeId(),
+          [&](const EvictionEvent&) { ++canceled_notifications; });
+      std::vector roots { new_root };
+      auto prepared
+        = co_await loader.PrepareLooseCookedRootsAsync(std::move(roots));
+      VirtualPathResolver next;
+      next.AddLooseCookedRoot(new_root);
+      {
+        auto retirement = loader.CommitPreparedMounts(std::move(prepared));
+        EXPECT_FALSE(notified);
+        resolver.Swap(next);
+      }
+      EXPECT_TRUE(notified);
+      EXPECT_EQ(canceled_notifications, 0);
+      co_await loader.WaitForPendingLoadsAsync();
+      EXPECT_NE(reloaded, nullptr);
+      EXPECT_EQ(loader.GetMaterialAsset(new_key), reloaded);
+      const auto old_again
+        = co_await loader.LoadAssetAsync<data::MaterialAsset>(
+          old_key, old_source);
+      EXPECT_NE(old_again, nullptr);
+      ExpectLeased(old_root);
+      loader.Stop();
+      co_return co::kJoin;
+    };
+  }
+
+  NOLINT_TEST_F(
+    AssetLoaderBasicTest, PreparedMountSetCommitsBeforeRetirementCallbacks)
+  {
+    TestEventLoop loop;
+    co::Run(loop, ExerciseAtomicMountSet(&loop, temp_dir_));
+  }
+
+  auto PrepareIdleMountSet(AssetLoader* loader, std::filesystem::path old_root,
+    std::filesystem::path new_root) -> co::Co<PreparedMountSet>
+  {
+    std::optional<PreparedMountSet> prepared;
+    OXCO_WITH_NURSERY(nursery)
+    {
+      co_await nursery.Start(&AssetLoader::ActivateAsync, loader);
+      loader->Run();
+      loader->AddLooseCookedRoot(old_root);
+      EXPECT_NE(
+        co_await loader->LoadAssetAsync<data::MaterialAsset>(MaterialKey()),
+        nullptr);
+      std::vector roots { std::move(new_root) };
+      prepared.emplace(
+        co_await loader->PrepareLooseCookedRootsAsync(std::move(roots)));
+      co_return co::kCancel;
+    };
+    if (!prepared.has_value()) {
+      throw std::logic_error("Fixture did not prepare a mount set");
+    }
+    co_return std::move(prepared).value();
+  }
+
+  NOLINT_TEST_F(AssetLoaderBasicTest, PreparedMountSetRejectsRestartedLoader)
+  {
+    const auto old_root = temp_dir_ / "old";
+    const auto new_root = temp_dir_ / "new";
+    static_cast<void>(WriteGeneration(old_root, { .material = MaterialKey() }));
+    static_cast<void>(WriteGeneration(new_root, { .material = MaterialKey() }));
+    TestEventLoop loop;
+    co::ThreadPool pool(loop, 2);
+    AssetLoaderConfig config {};
+    config.thread_pool = observer_ptr { &pool };
+    AssetLoader loader(engine::internal::EngineTagFactory::Get(), config);
+    loader.RegisterLoader(loaders::LoadMaterialAsset);
+    auto prepared
+      = co::Run(loop, PrepareIdleMountSet(&loader, old_root, new_root));
+    loader.Stop();
+    loader.Run();
+    EXPECT_THROW(
+      static_cast<void>(loader.CommitPreparedMounts(std::move(prepared))),
+      OperationCancelledException);
+    loader.Stop();
+  }
+
+  NOLINT_TEST_F(
+    AssetLoaderBasicTest, UnstartedMountPreparationDoesNotBorrowLoader)
+  {
+    TestEventLoop loop;
+    co::ThreadPool pool(loop, 2);
+    AssetLoaderConfig config {};
+    config.thread_pool = observer_ptr { &pool };
+    auto loader = std::make_unique<AssetLoader>(
+      engine::internal::EngineTagFactory::Get(), config);
+    auto work = loader->PrepareLooseCookedRootsAsync({});
+    loader.reset();
+    EXPECT_THROW(static_cast<void>(co::Run(loop, std::move(work))),
+      OperationCancelledException);
+  }
+
+  NOLINT_TEST_F(AssetLoaderBasicTest, MountRetirementObserverMayDestroyLoader)
+  {
+    const auto old_root = temp_dir_ / "old";
+    const auto new_root = temp_dir_ / "new";
+    static_cast<void>(WriteGeneration(old_root, { .material = MaterialKey() }));
+    static_cast<void>(WriteGeneration(new_root, { .material = MaterialKey() }));
+    TestEventLoop loop;
+    co::ThreadPool pool(loop, 2);
+    AssetLoaderConfig config {};
+    config.thread_pool = observer_ptr { &pool };
+    auto loader = std::make_unique<AssetLoader>(
+      engine::internal::EngineTagFactory::Get(), config);
+    loader->RegisterLoader(loaders::LoadMaterialAsset);
+    auto prepared
+      = co::Run(loop, PrepareIdleMountSet(loader.get(), old_root, new_root));
+    unsigned notifications = 0;
+    auto subscription = loader->SubscribeResourceEvictions(
+      data::MaterialAsset::ClassTypeId(), [&](const EvictionEvent&) {
+        ++notifications;
+        loader.reset();
+      });
+    auto retirement = loader->CommitPreparedMounts(std::move(prepared));
+    EXPECT_NE(loader, nullptr);
+    retirement.Finish();
+    EXPECT_EQ(notifications, 1U);
+    EXPECT_EQ(loader, nullptr);
+    retirement.Finish();
   }
 
   NOLINT_TEST_F(AssetLoaderBasicTest,

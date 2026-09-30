@@ -28,6 +28,7 @@
 #include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Config/PathFinder.h>
 #include <Oxygen/Config/PathFinderConfig.h>
+#include <Oxygen/Content/ContentMounts.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/ResidencyPin.h>
 #include <Oxygen/Content/ResidencyPolicy.h>
@@ -641,6 +642,18 @@ namespace {
     }
     auto ClearMounts() -> void override { }
     auto WaitForPendingLoadsAsync() -> co::Co<> override { co_return; }
+    auto PrepareLooseCookedRootsAsync(std::vector<std::filesystem::path>)
+      -> co::Co<content::PreparedMountSet> override
+    {
+      throw std::logic_error(
+        "Scene hydration test loader does not prepare disk mounts");
+    }
+    auto CommitPreparedMounts(content::PreparedMountSet&&)
+      -> content::MountRetirement override
+    {
+      throw std::logic_error(
+        "Scene hydration test loader does not commit disk mounts");
+    }
     auto ReloadScript(const std::filesystem::path& /*path*/) -> void override {
     }
     auto ReloadAllScripts() -> void override { }

@@ -7,6 +7,7 @@
 #pragma once
 
 #include <filesystem>
+#include <string>
 
 #include <Oxygen/Base/api_export.h>
 
@@ -24,5 +25,13 @@ OXGN_BASE_NDAPI auto ToNativePath(const std::filesystem::path& path)
 //! Device paths without a normal drive/UNC spelling remain unchanged.
 OXGN_BASE_NDAPI auto ToLogicalPath(const std::filesystem::path& path)
   -> std::filesystem::path;
+
+//! Return an absolute, lexically normalized UTF-8 key for application path
+//! maps. Windows keys use invariant uppercase; POSIX keys preserve case. This
+//! is for ordinary case-insensitive Windows paths, not opted-in case-sensitive
+//! trees. Does not resolve symlinks or query filesystem metadata. The key is
+//! not a path to persist or pass to filesystem operations.
+OXGN_BASE_NDAPI auto PathIdentityKey(const std::filesystem::path& path)
+  -> std::string;
 
 } // namespace oxygen::base

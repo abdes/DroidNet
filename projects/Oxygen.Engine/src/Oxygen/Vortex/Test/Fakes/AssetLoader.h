@@ -15,6 +15,7 @@
 #include <vector>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Content/ContentMounts.h>
 #include <Oxygen/Content/EvictionEvents.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/ResourceKey.h>
@@ -172,6 +173,16 @@ public:
 
   auto ClearMounts() -> void override { }
   auto WaitForPendingLoadsAsync() -> co::Co<> override { co_return; }
+  auto PrepareLooseCookedRootsAsync(std::vector<std::filesystem::path>)
+    -> co::Co<content::PreparedMountSet> override
+  {
+    throw std::logic_error("Renderer test loader does not prepare disk mounts");
+  }
+  auto CommitPreparedMounts(content::PreparedMountSet&&)
+    -> content::MountRetirement override
+  {
+    throw std::logic_error("Renderer test loader does not commit disk mounts");
+  }
 
   auto ReloadScript(const std::filesystem::path& /*path*/) -> void override { }
   auto ReloadAllScripts() -> void override { }

@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -22,6 +23,7 @@
 
 #include "./AssetLoader_test.h"
 #include "Fixtures/LooseCookedTestLayout.h"
+#include "Fixtures/LooseCookedTestWriter.h"
 #include "Utils/PakUtils.h"
 
 #include <Oxygen/Base/ObserverPtr.h>
@@ -135,28 +137,15 @@ auto WriteLooseCookedMaterialWithTexture(
   const oxygen::data::AssetKey& asset_key) -> void
 {
   using oxygen::data::AssetType;
-  using oxygen::data::loose_cooked::AssetEntry;
   using oxygen::data::loose_cooked::FileKind;
-  using oxygen::data::loose_cooked::FileRecord;
-  using oxygen::data::loose_cooked::IndexHeader;
   using oxygen::data::pak::core::TextureResourceDesc;
   using oxygen::data::pak::render::MaterialAssetDesc;
 
   const LooseCookedLayout layout {};
 
-  std::filesystem::create_directories(cooked_root / layout.materials_subdir);
-  std::filesystem::create_directories(cooked_root / layout.resources_dir);
-
   // Arrange: write texture data
   const auto tex_payload
     = oxygen::content::testing::MakeV4TexturePayload(4U, std::byte { 0x11 });
-  {
-    std::ofstream out(
-      cooked_root / layout.resources_dir / layout.textures_data_file_name,
-      std::ios::binary);
-    out.write(reinterpret_cast<const char*>(tex_payload.data()),
-      static_cast<std::streamsize>(tex_payload.size()));
-  }
 
   // Arrange: write texture table (2 entries: fallback + test texture)
   TextureResourceDesc fallback_desc {};
@@ -185,16 +174,6 @@ auto WriteLooseCookedMaterialWithTexture(
   test_desc.format = 0;
   test_desc.alignment = 256;
 
-  {
-    std::ofstream out(
-      cooked_root / layout.resources_dir / layout.textures_table_file_name,
-      std::ios::binary);
-    out.write(reinterpret_cast<const char*>(&fallback_desc),
-      static_cast<std::streamsize>(sizeof(fallback_desc)));
-    out.write(reinterpret_cast<const char*>(&test_desc),
-      static_cast<std::streamsize>(sizeof(test_desc)));
-  }
-
   // Arrange: write material descriptor referencing texture index 1
   MaterialAssetDesc material_desc {};
   material_desc.header.asset_type = static_cast<uint8_t>(AssetType::kMaterial);
@@ -212,149 +191,31 @@ auto WriteLooseCookedMaterialWithTexture(
   material_desc.base_color_texture
     = oxygen::data::pak::core::ResourceIndexT { 1u };
 
-  {
-    const auto material_file
-      = LooseCookedLayout::MaterialDescriptorFileName("TestMaterial");
-
-    const auto descriptor_relpath
-      = std::filesystem::path(layout.materials_subdir) / material_file;
-    std::ofstream out(cooked_root / descriptor_relpath, std::ios::binary);
-    out.write(reinterpret_cast<const char*>(&material_desc),
-      static_cast<std::streamsize>(sizeof(material_desc)));
-  }
-
-  // Arrange: build index string table
-  std::string strings;
-  strings.push_back('\0');
-  const auto off_desc = static_cast<uint32_t>(strings.size());
-  strings += std::string(layout.materials_subdir) + "/"
-    + LooseCookedLayout::MaterialDescriptorFileName("TestMaterial");
-  strings.push_back('\0');
-  const auto off_vpath = static_cast<uint32_t>(strings.size());
-  strings += layout.MaterialVirtualPath("TestMaterial");
-  strings.push_back('\0');
-  const auto off_tex_table = static_cast<uint32_t>(strings.size());
-  strings += layout.TexturesTableRelPath();
-  strings.push_back('\0');
-  const auto off_tex_data = static_cast<uint32_t>(strings.size());
-  strings += layout.TexturesDataRelPath();
-  strings.push_back('\0');
-
-  IndexHeader header {};
-  FillTestGuid(header);
-  header.version = oxygen::data::loose_cooked::kIndexVersion;
-  header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
-    | oxygen::data::loose_cooked::kHasFileRecords;
-  header.string_table_offset = sizeof(IndexHeader);
-  header.string_table_size = static_cast<uint64_t>(strings.size());
-  header.asset_entries_offset
-    = header.string_table_offset + header.string_table_size;
-  header.asset_count = 1;
-  header.asset_entry_size = sizeof(AssetEntry);
-  header.file_records_offset
-    = header.asset_entries_offset + sizeof(AssetEntry) * header.asset_count;
-  header.file_record_count = 2;
-  header.file_record_size = sizeof(FileRecord);
-
-  AssetEntry asset_entry {};
-  asset_entry.asset_key = asset_key;
-  asset_entry.descriptor_relpath_offset = off_desc;
-  asset_entry.virtual_path_offset = off_vpath;
-  asset_entry.asset_type = static_cast<uint8_t>(AssetType::kMaterial);
-  asset_entry.descriptor_size = sizeof(MaterialAssetDesc);
-
-  FileRecord tex_table_record {};
-  tex_table_record.kind = FileKind::kTexturesTable;
-  tex_table_record.relpath_offset = off_tex_table;
-  tex_table_record.size = sizeof(TextureResourceDesc) * 2;
-
-  FileRecord tex_data_record {};
-  tex_data_record.kind = FileKind::kTexturesData;
-  tex_data_record.relpath_offset = off_tex_data;
-  tex_data_record.size = static_cast<uint64_t>(tex_payload.size());
-
-  const auto index_path = cooked_root / "container.index.bin";
-  std::ofstream index_out(index_path, std::ios::binary);
-  index_out.write(reinterpret_cast<const char*>(&header),
-    static_cast<std::streamsize>(sizeof(header)));
-  index_out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
-  index_out.write(reinterpret_cast<const char*>(&asset_entry),
-    static_cast<std::streamsize>(sizeof(asset_entry)));
-  index_out.write(reinterpret_cast<const char*>(&tex_table_record),
-    static_cast<std::streamsize>(sizeof(tex_table_record)));
-  index_out.write(reinterpret_cast<const char*>(&tex_data_record),
-    static_cast<std::streamsize>(sizeof(tex_data_record)));
+  const auto texture_table = std::array { fallback_desc, test_desc };
+  oxygen::content::testing::LooseCookedTestWriter writer(cooked_root);
+  writer.WriteFile(FileKind::kTexturesTable, layout.TexturesTableRelPath(),
+    std::as_bytes(std::span { texture_table }));
+  writer.WriteFile(FileKind::kTexturesData, layout.TexturesDataRelPath(),
+    std::as_bytes(std::span { tex_payload }));
+  writer.WriteAssetDescriptor(asset_key, AssetType::kMaterial,
+    layout.MaterialVirtualPath("TestMaterial"),
+    std::string(layout.materials_subdir) + "/"
+      + LooseCookedLayout::MaterialDescriptorFileName("TestMaterial"),
+    std::as_bytes(std::span { &material_desc, 1U }));
+  static_cast<void>(writer.Finish());
 }
 
 auto WriteLooseCookedIndexWithInvalidTexturesTable(
   const std::filesystem::path& cooked_root) -> void
 {
   using oxygen::data::loose_cooked::FileKind;
-  using oxygen::data::loose_cooked::FileRecord;
-  using oxygen::data::loose_cooked::IndexHeader;
-
   const LooseCookedLayout layout {};
-
-  std::filesystem::create_directories(cooked_root / layout.resources_dir);
-
-  {
-    std::ofstream out(
-      cooked_root / layout.resources_dir / layout.textures_table_file_name,
-      std::ios::binary);
-    const char byte = 0x7f;
-    out.write(&byte, 1);
-  }
-  {
-    std::ofstream out(
-      cooked_root / layout.resources_dir / layout.textures_data_file_name,
-      std::ios::binary);
-  }
-
-  std::string strings;
-  strings.push_back('\0');
-  const auto off_tex_table = static_cast<uint32_t>(strings.size());
-  strings += layout.TexturesTableRelPath();
-  strings.push_back('\0');
-  const auto off_tex_data = static_cast<uint32_t>(strings.size());
-  strings += layout.TexturesDataRelPath();
-  strings.push_back('\0');
-
-  IndexHeader header {};
-  FillTestGuid(header);
-  header.version = oxygen::data::loose_cooked::kIndexVersion;
-  header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
-    | oxygen::data::loose_cooked::kHasFileRecords;
-  header.string_table_offset = sizeof(IndexHeader);
-  header.string_table_size = static_cast<uint64_t>(strings.size());
-  header.asset_entries_offset
-    = header.string_table_offset + header.string_table_size;
-  header.asset_count = 0;
-  header.asset_entry_size = sizeof(oxygen::data::loose_cooked::AssetEntry);
-  header.file_records_offset = header.asset_entries_offset;
-  header.file_record_count = 2;
-  header.file_record_size = sizeof(FileRecord);
-
-  FileRecord tex_table_record {};
-  tex_table_record.kind = FileKind::kTexturesTable;
-  tex_table_record.relpath_offset = off_tex_table;
-  tex_table_record.size = 1;
-
-  FileRecord tex_data_record {};
-  tex_data_record.kind = FileKind::kTexturesData;
-  tex_data_record.relpath_offset = off_tex_data;
-  tex_data_record.size = 0;
-
-  const auto index_path = cooked_root / "container.index.bin";
-  std::ofstream out(index_path, std::ios::binary);
-  out.write(reinterpret_cast<const char*>(&header),
-    static_cast<std::streamsize>(sizeof(header)));
-  out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
-  out.write(reinterpret_cast<const char*>(&tex_table_record),
-    static_cast<std::streamsize>(sizeof(tex_table_record)));
-  out.write(reinterpret_cast<const char*>(&tex_data_record),
-    static_cast<std::streamsize>(sizeof(tex_data_record)));
+  oxygen::content::testing::LooseCookedTestWriter writer(cooked_root);
+  const auto malformed_table = std::array { std::byte { 0x7f } };
+  writer.WriteFile(
+    FileKind::kTexturesTable, layout.TexturesTableRelPath(), malformed_table);
+  writer.WriteFile(FileKind::kTexturesData, layout.TexturesDataRelPath(), {});
+  static_cast<void>(writer.Finish());
 }
 
 auto ReadAssetHeader(oxygen::content::internal::IContentSource& source,
@@ -382,13 +243,9 @@ auto WriteLooseCookedSceneForCatalog(const std::filesystem::path& cooked_root,
   const oxygen::data::AssetKey& key) -> void
 {
   using oxygen::data::AssetType;
-  using oxygen::data::loose_cooked::AssetEntry;
-  using oxygen::data::loose_cooked::FileRecord;
-  using oxygen::data::loose_cooked::IndexHeader;
   using oxygen::data::pak::world::SceneAssetDesc;
 
   const LooseCookedLayout layout {};
-  std::filesystem::create_directories(cooked_root / layout.scenes_subdir);
 
   SceneAssetDesc desc {};
   desc.header.asset_type = static_cast<uint8_t>(AssetType::kScene);
@@ -397,50 +254,12 @@ auto WriteLooseCookedSceneForCatalog(const std::filesystem::path& cooked_root,
 
   const auto rel_desc
     = std::filesystem::path(layout.scenes_subdir) / "LooseScene.scene";
-  {
-    std::ofstream out(cooked_root / rel_desc, std::ios::binary);
-    out.write(reinterpret_cast<const char*>(&desc), sizeof(desc));
-  }
 
-  std::string strings;
-  strings.push_back('\0');
-  const auto off_desc = static_cast<uint32_t>(strings.size());
-  strings += rel_desc.generic_string();
-  strings.push_back('\0');
-  const auto off_vpath = static_cast<uint32_t>(strings.size());
-  strings
-    += std::string(layout.virtual_mount_root) + "/" + rel_desc.generic_string();
-  strings.push_back('\0');
-
-  IndexHeader header {};
-  FillTestGuid(header);
-  header.version = oxygen::data::loose_cooked::kIndexVersion;
-  header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
-    | oxygen::data::loose_cooked::kHasFileRecords;
-  header.string_table_offset = sizeof(IndexHeader);
-  header.string_table_size = static_cast<uint64_t>(strings.size());
-  header.asset_entries_offset
-    = header.string_table_offset + header.string_table_size;
-  header.asset_count = 1;
-  header.asset_entry_size = sizeof(AssetEntry);
-  header.file_records_offset = header.asset_entries_offset + sizeof(AssetEntry);
-  header.file_record_count = 0;
-  header.file_record_size = sizeof(FileRecord);
-
-  AssetEntry asset_entry {};
-  asset_entry.asset_key = key;
-  asset_entry.descriptor_relpath_offset = off_desc;
-  asset_entry.virtual_path_offset = off_vpath;
-  asset_entry.asset_type = static_cast<uint8_t>(AssetType::kScene);
-  asset_entry.descriptor_size = sizeof(SceneAssetDesc);
-
-  std::ofstream out(cooked_root / "container.index.bin", std::ios::binary);
-  out.write(reinterpret_cast<const char*>(&header),
-    static_cast<std::streamsize>(sizeof(header)));
-  out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
-  out.write(reinterpret_cast<const char*>(&asset_entry),
-    static_cast<std::streamsize>(sizeof(asset_entry)));
+  oxygen::content::testing::LooseCookedTestWriter writer(cooked_root);
+  writer.WriteAssetDescriptor(key, AssetType::kScene,
+    std::string(layout.virtual_mount_root) + "/" + rel_desc.generic_string(),
+    rel_desc.generic_string(), std::as_bytes(std::span { &desc, 1U }));
+  static_cast<void>(writer.Finish());
 }
 
 auto WriteLooseCookedInputAssets(const std::filesystem::path& cooked_root,
@@ -448,9 +267,6 @@ auto WriteLooseCookedInputAssets(const std::filesystem::path& cooked_root,
   const oxygen::data::AssetKey& context_key) -> void
 {
   using oxygen::data::AssetType;
-  using oxygen::data::loose_cooked::AssetEntry;
-  using oxygen::data::loose_cooked::FileRecord;
-  using oxygen::data::loose_cooked::IndexHeader;
   using oxygen::data::pak::input::InputActionAssetDesc;
   using oxygen::data::pak::input::InputActionAssetFlags;
   using oxygen::data::pak::input::InputActionMappingRecord;
@@ -458,9 +274,6 @@ auto WriteLooseCookedInputAssets(const std::filesystem::path& cooked_root,
   using oxygen::data::pak::input::InputMappingContextFlags;
   using oxygen::data::pak::input::InputTriggerRecord;
   using oxygen::data::pak::input::InputTriggerType;
-
-  const auto input_dir = cooked_root / "Input";
-  std::filesystem::create_directories(input_dir);
 
   const auto action_rel_desc = std::filesystem::path("Input") / "Move.oiact";
   InputActionAssetDesc action_desc {};
@@ -471,10 +284,6 @@ auto WriteLooseCookedInputAssets(const std::filesystem::path& cooked_root,
     = oxygen::data::pak::input::kInputActionAssetVersion;
   action_desc.value_type = 0;
   action_desc.flags = InputActionAssetFlags::kConsumesInput;
-  {
-    std::ofstream out(cooked_root / action_rel_desc, std::ios::binary);
-    out.write(reinterpret_cast<const char*>(&action_desc), sizeof(action_desc));
-  }
 
   const auto context_rel_desc
     = std::filesystem::path("Input") / "Hydrated.oimap";
@@ -532,67 +341,16 @@ auto WriteLooseCookedInputAssets(const std::filesystem::path& cooked_root,
     sizeof(trigger));
   std::memcpy(context_blob.data() + context_desc.strings.offset, kSlotName,
     sizeof(kSlotName));
-  {
-    std::ofstream out(cooked_root / context_rel_desc, std::ios::binary);
-    out.write(reinterpret_cast<const char*>(context_blob.data()),
-      static_cast<std::streamsize>(context_blob.size()));
-  }
 
-  std::string strings;
-  strings.push_back('\0');
-  const auto action_off_desc = static_cast<uint32_t>(strings.size());
-  strings += action_rel_desc.generic_string();
-  strings.push_back('\0');
-  const auto action_off_vpath = static_cast<uint32_t>(strings.size());
-  strings += std::string("/Game/") + action_rel_desc.generic_string();
-  strings.push_back('\0');
-  const auto context_off_desc = static_cast<uint32_t>(strings.size());
-  strings += context_rel_desc.generic_string();
-  strings.push_back('\0');
-  const auto context_off_vpath = static_cast<uint32_t>(strings.size());
-  strings += std::string("/Game/") + context_rel_desc.generic_string();
-  strings.push_back('\0');
-
-  IndexHeader header {};
-  FillTestGuid(header);
-  header.version = oxygen::data::loose_cooked::kIndexVersion;
-  header.content_version = 0;
-  header.flags = oxygen::data::loose_cooked::kHasVirtualPaths
-    | oxygen::data::loose_cooked::kHasFileRecords;
-  header.string_table_offset = sizeof(IndexHeader);
-  header.string_table_size = static_cast<uint64_t>(strings.size());
-  header.asset_entries_offset
-    = header.string_table_offset + header.string_table_size;
-  header.asset_count = 2;
-  header.asset_entry_size = sizeof(AssetEntry);
-  header.file_records_offset = header.asset_entries_offset
-    + static_cast<uint64_t>(sizeof(AssetEntry)) * 2U;
-  header.file_record_count = 0;
-  header.file_record_size = sizeof(FileRecord);
-
-  AssetEntry action_entry {};
-  action_entry.asset_key = action_key;
-  action_entry.descriptor_relpath_offset = action_off_desc;
-  action_entry.virtual_path_offset = action_off_vpath;
-  action_entry.asset_type = static_cast<uint8_t>(AssetType::kInputAction);
-  action_entry.descriptor_size = sizeof(InputActionAssetDesc);
-
-  AssetEntry context_entry {};
-  context_entry.asset_key = context_key;
-  context_entry.descriptor_relpath_offset = context_off_desc;
-  context_entry.virtual_path_offset = context_off_vpath;
-  context_entry.asset_type
-    = static_cast<uint8_t>(AssetType::kInputMappingContext);
-  context_entry.descriptor_size = static_cast<uint64_t>(context_blob.size());
-
-  std::ofstream out(cooked_root / "container.index.bin", std::ios::binary);
-  out.write(reinterpret_cast<const char*>(&header),
-    static_cast<std::streamsize>(sizeof(header)));
-  out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
-  out.write(reinterpret_cast<const char*>(&action_entry),
-    static_cast<std::streamsize>(sizeof(action_entry)));
-  out.write(reinterpret_cast<const char*>(&context_entry),
-    static_cast<std::streamsize>(sizeof(context_entry)));
+  oxygen::content::testing::LooseCookedTestWriter writer(cooked_root);
+  writer.WriteAssetDescriptor(action_key, AssetType::kInputAction,
+    "/Game/" + action_rel_desc.generic_string(),
+    action_rel_desc.generic_string(),
+    std::as_bytes(std::span { &action_desc, 1U }));
+  writer.WriteAssetDescriptor(context_key, AssetType::kInputMappingContext,
+    "/Game/" + context_rel_desc.generic_string(),
+    context_rel_desc.generic_string(), context_blob);
+  static_cast<void>(writer.Finish());
 }
 
 //=== AssetLoader Basic Functionality Tests ===-----------------------------//

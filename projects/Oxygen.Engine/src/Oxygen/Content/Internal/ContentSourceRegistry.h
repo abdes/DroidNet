@@ -46,6 +46,16 @@ public:
     std::optional<SourceKeyConflict> source_key_conflict;
   };
 
+  struct PreparedSource final {
+    std::shared_ptr<IContentSource> source;
+    bool generation = false;
+  };
+
+  //! Build a complete replacement without changing active or retired sources.
+  [[nodiscard]] auto PrepareReplacement(
+    std::span<const PreparedSource> sources) const -> ContentSourceRegistry;
+  auto Swap(ContentSourceRegistry& other) noexcept -> void;
+
   auto MountPak(std::filesystem::path normalized_path,
     std::shared_ptr<IContentSource> source) -> MountResult;
 

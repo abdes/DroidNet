@@ -50,6 +50,7 @@ set(
   "api_export.h"
   "PakFile.h"
   "AssetLoader.h"
+  "ContentMounts.h"
   "DescriptorDependencies.h"
   "EvictionEvents.h"
   "VirtualPath.h"
