@@ -395,7 +395,7 @@ m_gtest_program(
     "Import/AsyncImporterFullTestBase.h"
     "Import/AsyncGltfImporter_test.cpp"
     "Import/StaticImport_test.cpp"
-    "Import/StaticScalarLoadedValues_test.cpp"
+    "Import/StaticLoadedValues_test.cpp"
     "Import/MeshTransformBake_test.cpp"
     "Import/SourceLayoutWitness_test.cpp"
     "Import/SceneSourceInspection_test.cpp"

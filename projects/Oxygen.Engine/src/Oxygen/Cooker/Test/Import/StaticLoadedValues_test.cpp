@@ -49,6 +49,7 @@
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/OxCo/Co.h>
@@ -233,7 +234,7 @@ auto WriteGltfSource(const std::filesystem::path& path, nlohmann::json document)
   }
 }
 
-class StaticScalarLoadedValuesTest
+class StaticLoadedValuesTest
   : public oxygen::content::import::test::AsyncImporterFullTestBase {
 protected:
   auto ImportAndVerifyCleanCopy(oxygen::content::import::ImportRequest request,
@@ -324,7 +325,50 @@ protected:
   }
 };
 
-NOLINT_TEST_F(StaticScalarLoadedValuesTest,
+NOLINT_TEST_F(StaticLoadedValuesTest, FbxGeneratesMissingNormalMapTangents)
+{
+  const auto root = MakeTempDir("normal_map_tangents");
+  for (const auto* name :
+    { "static_normal_triangle.fbx", "static_tangent_normal.png" }) {
+    std::filesystem::copy_file(TestModelsDirFromFile() / name, root / name);
+  }
+  oxygen::content::import::ImportRequest request {};
+  request.source_path = root / "static_normal_triangle.fbx";
+  request.cooked_root = root / "cooked";
+  request.options.scene_content_policy
+    = oxygen::content::import::SceneContentPolicy::kStatic;
+  request.options.coordinate.bake_transforms_into_meshes = false;
+  request.options.tangent_policy
+    = oxygen::content::import::GeometryAttributePolicy::kGenerateMissing;
+  ImportAndVerifyCleanCopy(std::move(request),
+    [](const SceneAsset& scene, const GeometryAsset& geometry,
+      const MaterialAsset& material) {
+      ASSERT_NE(
+        material.GetNormalTexture(), oxygen::data::pak::core::kNoResourceIndex);
+      ASSERT_EQ(geometry.Meshes().size(), 1U);
+      const auto vertices = geometry.Meshes().front()->Vertices();
+      ASSERT_EQ(vertices.size(), 3U);
+      const auto renderables = scene.GetComponents<RenderableRecord>();
+      ASSERT_EQ(renderables.size(), 1U);
+      const auto world
+        = glm::mat3(WorldTransform(scene, renderables.front().node_index));
+      const auto normal_matrix = glm::transpose(glm::inverse(world));
+      for (const auto& vertex : vertices) {
+        ExpectVector(vertex.normal, { 0, 0, 1 });
+        ExpectVector(vertex.tangent, { 0, 1, 0 });
+        ExpectVector(vertex.bitangent, { 1, 0, 0 });
+        ExpectVector(
+          glm::normalize(normal_matrix * vertex.normal), { 0, -1, 0 });
+        ExpectVector(glm::normalize(world * vertex.tangent), { 0, 0, 1 });
+        ExpectVector(glm::normalize(world * vertex.bitangent), { 1, 0, 0 });
+        EXPECT_NEAR(
+          glm::dot(glm::cross(vertex.normal, vertex.tangent), vertex.bitangent),
+          -1.0F, 0.0001F);
+      }
+    });
+}
+
+NOLINT_TEST_F(StaticLoadedValuesTest,
   GltfNativeLoadPreservesConvertedGeometryCameraLightAndMaterial)
 {
   for (const auto extension : { "gltf", "glb" }) {
@@ -367,7 +411,7 @@ NOLINT_TEST_F(StaticScalarLoadedValuesTest,
 }
 
 NOLINT_TEST_F(
-  StaticScalarLoadedValuesTest, FbxNativeLoadPreservesUnitsHandednessAndValues)
+  StaticLoadedValuesTest, FbxNativeLoadPreservesUnitsHandednessAndValues)
 {
   for (const auto centimeters : { false, true }) {
     for (const auto reflected : { false, true }) {

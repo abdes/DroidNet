@@ -113,3 +113,10 @@ The shared texture has red 0; the separate texture has red 0.6. Expected AO is
 exposure; use the G-buffer raster tests for numerical AO rather than inferring
 linear values from tone-mapped screenshots. The adjacent
 `static_textured_triangle.gltf` and `.fbx` fixtures check color-texture import.
+
+`static_normal_triangle.fbx` omits tangents and swaps the UV axes. Import with
+native `generate` tangent policy to preserve authored tangents and generate
+missing ones. `StaticLoadedValuesTest.FbxGeneratesMissingNormalMapTangents`
+checks the cooked texture binding, tangent directions and negative handedness
+before and after scene-axis conversion. The native `preserve` policy deliberately
+does not supply missing tangents and is unsuitable for that source's normal map.
