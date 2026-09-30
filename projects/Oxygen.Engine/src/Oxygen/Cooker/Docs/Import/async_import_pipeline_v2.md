@@ -16,6 +16,44 @@ the main application thread.
 
 Retained model imports use [immutable publication](#retained-model-publication);
 the editor continues to own its broader project publication transaction.
+[Source analysis](#source-analysis-and-input-observations) shares preparation and
+input observation with native cooking.
+
+## Source analysis and input observations
+
+Status: input observations validated in ED-M08.1.9.1; shared preparation, batch
+analysis and captured-input enforcement remain ED-M08.1.9.2.
+
+Native preparation owns descriptor validation,
+logical references and recipe-dependent output naming. Batch analysis invokes
+that preparation without cooking or emitting files. Import jobs consume the same
+interpretation; analysis must not add a second descriptor parser or a no-op cook.
+
+`ImportSourceSnapshot`, the existing reader and parser-buffer observer, records
+byte ranges and presence/absence/metadata observations. A missing file
+is a fact; denied access and I/O failures remain errors. Contradictory observations
+invalidate an attempt. Collection seals before verification, including probes
+that suspend; cancellation releases active-operation ownership.
+
+M08.1.9.2 moves descriptor preparation to observed bytes and their source location.
+Source adapters use the same observation boundary for parser-owned reads.
+Logical asset references and physical input files remain distinct. Reports carry
+per-job declared outputs, typed logical references, attributed input proofs,
+producer/schema identity, completeness and diagnostics. They do not predict
+internal byte offsets or replace post-cook output validation.
+
+The editor resolves project/library references and batches each newly discovered
+frontier. It captures the reported source closure and compares those bytes with
+the observations before cooking. Native cooking rejects reads outside the
+captured contract. Analysis may read whole files while cooking reads ranges;
+qualification compares source membership and consumed content, not identical
+I/O schedules. Passive editor status uses existing dependency facts.
+
+UE5.7 references informing these boundaries are `InterchangeTranslatorBase`
+(native translation before asset production), `FCookDependency` (separate file
+and package/build dependencies), and `UAssetImportData` (reuse precomputed source
+hashes). Oxygen's coherent read and negative-probe checks remain explicit;
+filename-based cached hashes do not establish them.
 
 ## Retained model publication
 

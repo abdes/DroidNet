@@ -223,33 +223,34 @@ auto WindowsFileReader::GetFileInfo(const std::filesystem::path& path)
 
   // Use std::filesystem for metadata (synchronous but fast)
   std::error_code ec;
-  auto status = std::filesystem::status(base::ToNativePath(path), ec);
+  const auto native_path = base::ToNativePath(path);
+  const auto link_status = std::filesystem::symlink_status(native_path, ec);
+  if (ec) {
+    co_return Err(MakeFileError(path, ec));
+  }
+  const auto is_symlink = std::filesystem::is_symlink(link_status);
+  const auto status
+    = is_symlink ? std::filesystem::status(native_path, ec) : link_status;
   if (ec) {
     co_return Err(MakeFileError(path, ec));
   }
 
-  FileInfo info {};
-  info.is_directory = std::filesystem::is_directory(status);
-  info.is_symlink = std::filesystem::is_symlink(status);
-
+  FileInfo info {
+    .size = 0U,
+    .last_modified = {},
+    .is_directory = std::filesystem::is_directory(status),
+    .is_symlink = is_symlink,
+  };
   if (!info.is_directory) {
-    info.size = std::filesystem::file_size(base::ToNativePath(path), ec);
+    info.size = std::filesystem::file_size(native_path, ec);
     if (ec) {
-      co_return Err(FileErrorInfo {
-        .code = FileError::kIOError,
-        .path = path,
-        .system_error = ec,
-        .message = ec.message(),
-      });
+      co_return Err(MakeFileError(path, ec));
     }
   }
 
-  info.last_modified
-    = std::filesystem::last_write_time(base::ToNativePath(path), ec);
+  info.last_modified = std::filesystem::last_write_time(native_path, ec);
   if (ec) {
-    // Non-fatal, just log warning
-    DLOG_F(WARNING, "Failed to get last_write_time for %s: %s",
-      path.string().c_str(), ec.message().c_str());
+    co_return Err(MakeFileError(path, ec));
   }
 
   co_return Ok(std::move(info));

@@ -11,6 +11,7 @@
 #include <filesystem>
 #include <map>
 #include <mutex>
+#include <optional>
 #include <span>
 #include <tuple>
 
@@ -22,8 +23,8 @@
 
 namespace oxygen::content::import::detail {
 
-//! Records the bytes actually read by the importer and verifies they still
-//! match before publication. Inputs are neither copied to disk nor rewritten.
+//! Records consumed bytes and input probes, then verifies those same facts
+//! before publication. Inputs are neither copied to disk nor rewritten.
 class ImportSourceSnapshot final : public IAsyncFileReader {
 public:
   ImportSourceSnapshot(IAsyncFileReader& reader, co::ThreadPool& pool)
@@ -49,6 +50,19 @@ public:
   auto Verify() -> co::Co<>;
 
 private:
+  struct Observation {
+    bool exists = false;
+    std::optional<FileInfo> metadata {};
+    bool content_read = false;
+  };
+
+  auto RecordObservation(
+    const std::filesystem::path& path, const Observation& observation) -> bool;
+  auto RecordObservationNoLock(
+    const std::filesystem::path& path, const Observation& observation) -> bool;
+  [[nodiscard]] static auto NormalizePath(const std::filesystem::path& path)
+    -> std::filesystem::path;
+
   using ReadKey = std::tuple<std::filesystem::path, uint64_t, uint64_t>;
   auto BeginRead(const std::filesystem::path& path) -> void;
   auto EndRead() noexcept -> void;
@@ -60,6 +74,7 @@ private:
   observer_ptr<co::ThreadPool> pool_;
   std::mutex mutex_;
   std::map<ReadKey, base::Sha256Digest> reads_;
+  std::map<std::filesystem::path, Observation> observations_;
   std::size_t active_reads_ = 0;
   bool sealed_ = false;
   bool inconsistent_ = false;

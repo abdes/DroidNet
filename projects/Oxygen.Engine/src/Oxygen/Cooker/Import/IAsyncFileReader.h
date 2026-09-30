@@ -58,6 +58,9 @@ struct FileInfo {
 
   //! True if path is a symbolic link.
   bool is_symlink = false;
+
+  //! Metadata observations compare their returned values exactly.
+  auto operator==(const FileInfo&) const -> bool = default;
 };
 
 //! Async file reader interface.

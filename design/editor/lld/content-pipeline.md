@@ -1298,6 +1298,7 @@ M08.1.9 builds on the immutable publication contract in [section 16](#16-saved-i
 [The milestone plan](../plan/ED-M08-runtime-parity-and-standalone-validation.md#m081-remaining-increments)
 owns execution order and gates.
 
+Native preparation and input observation are specified by the [Cooker owner](../../../projects/Oxygen.Engine/src/Oxygen/Cooker/Docs/Import/async_import_pipeline_v2.md#source-analysis-and-input-observations).
 Native source analysis extends the existing tool/API with a batch request/result:
 producer/schema identity, declared outputs, logical references, actual file/absence
 observations and diagnostics. Use the same native schemas/import interpretation as

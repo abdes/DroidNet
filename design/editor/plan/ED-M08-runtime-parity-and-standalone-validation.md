@@ -2,7 +2,7 @@
 
 Status: **in progress — M08.1.1–M08.1.8 validated**
 
-Next: **M08.1.9 native source analysis**. Commit each remaining sub-slice after its exit checks.
+Current: **M08.1.9 native source analysis — input observations validated; shared preparation next**. Commit each remaining sub-slice after its exit checks.
 See [owners](#2-implementation-document-map), [remaining increments](#m081-remaining-increments)
 and [exit checklist](#7-exit-checklist). Captured-sky IBL is delivered by
 [VX-IBL-01](../../../projects/Oxygen.Engine/design/vortex/milestones/VX-IBL-01/README.md);
@@ -135,17 +135,17 @@ the owning later slices.
 
 #### M08.1 remaining increments
 
-| Increment                        | State     | Deliverable and acceptance                                                                                                                                                                                                                                                                                                                                      |
-| -------------------------------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| M08.1.1 Slots                    | validated | Preserve source declarations through mesh optimization; native provenance, cooked inventories/assignments, Inspector metadata and identity-based instance APIs. Reimport/cache deletion preserve proven IDs; replacement never transfers overrides by ordinal. Test nonzero slots, distinct equal-material declarations, all LOD bindings and clear-to-default. |
-| M08.1.2 Cameras                  | validated | Auto/Fixed source, native/managed records and command transport; hydrate every camera. Resolve projection per target without rewriting authored ratio. Test imports, round trips, invalid inputs and target resize. Fixed bars/metering remain M08.2.                                                                                                           |
-| M08.1.3 Emission                 | validated | Float32 cooked RGB and canonical colour/intensity sources; native version rejection, editor templates/adapters and fixture producers. Retire the affected managed binary writer route. Test finite HDR, 9.7 precision and source colour preservation at zero intensity.                                                                                         |
-| M08.1.4 Cutover                  | validated | Publish standalone retained imports as immutable generations through Cooker/Content; upgrade maintained editor projects and retained settings, recook demo/source imports and PAKs, refresh SDK/Interop, and verify normal editor loading. Reject retired formats; retain no compatibility reader or dual source representation.                                |
-| M08.1.5 Runtime identities       | validated | Intern full typed identities with mounted-source instance identity; reuse opaque IDs in cache, dependencies and in-flight work. Remove hash-as-identity, duplicate reverse registries and packed runtime source IDs. Prove forced-collision separation, same-SourceKey refresh isolation, lazy reload after eviction and bounded locator metadata.              |
-| M08.1.6 Automatic load ownership | validated | Content-owned automatic checkout controls, explicit borrowing and residency pins; remove manual release balancing. Prove per-request ownership across coalesced loads, dependency transfers, cancellation, off-thread destruction and shutdown; preserve allocation-free IBL inspection.                                                                        |
-| M08.1.7 Integrity inventory      | validated | Native loose index owns complete file sizes/digests and membership; protected readers reuse verification. Remove duplicate managed output proofs. Reject tampering, missing/extra members and stale verification; bump the index format and recook.                                                                                                             |
-| M08.1.8 Project publication      | validated | Select one immutable ordered root set through an atomic project head; retain authored-source CAS and preview rollback. Remove cooked-directory swap/recovery phases. Keep existing incremental staging seed copies initially. Qualify multi-root crash recovery, conflicts and old readers.                                                                     |
-| M08.1.9 Native analysis          | planned   | Batch native source dependency/output analysis against captured input proofs. Managed orchestration keeps project resolution, dirty state and snapshot ownership. Remove parallel descriptor dependency parsers; prove analyzed/cooked closure equality and bounded process launches.                                                                           |
+| Increment                        | State       | Deliverable and acceptance                                                                                                                                                                                                                                                                                                                                      |
+| -------------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M08.1.1 Slots                    | validated   | Preserve source declarations through mesh optimization; native provenance, cooked inventories/assignments, Inspector metadata and identity-based instance APIs. Reimport/cache deletion preserve proven IDs; replacement never transfers overrides by ordinal. Test nonzero slots, distinct equal-material declarations, all LOD bindings and clear-to-default. |
+| M08.1.2 Cameras                  | validated   | Auto/Fixed source, native/managed records and command transport; hydrate every camera. Resolve projection per target without rewriting authored ratio. Test imports, round trips, invalid inputs and target resize. Fixed bars/metering remain M08.2.                                                                                                           |
+| M08.1.3 Emission                 | validated   | Float32 cooked RGB and canonical colour/intensity sources; native version rejection, editor templates/adapters and fixture producers. Retire the affected managed binary writer route. Test finite HDR, 9.7 precision and source colour preservation at zero intensity.                                                                                         |
+| M08.1.4 Cutover                  | validated   | Publish standalone retained imports as immutable generations through Cooker/Content; upgrade maintained editor projects and retained settings, recook demo/source imports and PAKs, refresh SDK/Interop, and verify normal editor loading. Reject retired formats; retain no compatibility reader or dual source representation.                                |
+| M08.1.5 Runtime identities       | validated   | Intern full typed identities with mounted-source instance identity; reuse opaque IDs in cache, dependencies and in-flight work. Remove hash-as-identity, duplicate reverse registries and packed runtime source IDs. Prove forced-collision separation, same-SourceKey refresh isolation, lazy reload after eviction and bounded locator metadata.              |
+| M08.1.6 Automatic load ownership | validated   | Content-owned automatic checkout controls, explicit borrowing and residency pins; remove manual release balancing. Prove per-request ownership across coalesced loads, dependency transfers, cancellation, off-thread destruction and shutdown; preserve allocation-free IBL inspection.                                                                        |
+| M08.1.7 Integrity inventory      | validated   | Native loose index owns complete file sizes/digests and membership; protected readers reuse verification. Remove duplicate managed output proofs. Reject tampering, missing/extra members and stale verification; bump the index format and recook.                                                                                                             |
+| M08.1.8 Project publication      | validated   | Select one immutable ordered root set through an atomic project head; retain authored-source CAS and preview rollback. Remove cooked-directory swap/recovery phases. Keep existing incremental staging seed copies initially. Qualify multi-root crash recovery, conflicts and old readers.                                                                     |
+| M08.1.9 Native analysis          | in_progress | Batch native source dependency/output analysis against captured input proofs. Managed orchestration keeps project resolution, dirty state and snapshot ownership. Remove parallel descriptor dependency parsers; prove analyzed/cooked closure equality and bounded process launches.                                                                           |
 
 M08.1.7 also separates event-driven cooking freshness from integrity validation.
 Badge refreshes reuse status snapshots; they neither launch tools nor hash cooked
@@ -180,6 +180,27 @@ The gates are failed/stale multi-root preparation, reentrant eviction reloads,
 old-reader retention, source/head crash boundaries, source CAS conflicts, catalog
 head refresh, texture references after consecutive publications and safe automatic
 reclamation. Native source analysis remains M08.1.9.
+
+M08.1.9 uses three commit boundaries; all remain required for closure:
+
+1. **M08.1.9.1 native input observations — validated:** extend the existing source snapshot
+   to retain successful reads and presence/absence/metadata probes. Preserve
+   original I/O errors, reject contradictory observations and verify the same
+   facts before publication. Test missing-file appearance, metadata changes,
+   cancellation and ranged reads. Keep this mechanism in Cooker.
+2. **M08.1.9.2 shared preparation and batch analysis:** extract preparation from
+   native descriptor builders/jobs and model adapters. Analysis and cooking use
+   the same validation, references, naming and recipe interpretation for
+   materials, textures, geometry, projected scenes and glTF/FBX. Expose declared
+   outputs and attributed input observations through one batch tool contract;
+   analysis writes no cooked output. Enforce captured input membership during
+   cooking and test analysis/cook dependency equality.
+3. **M08.1.9.3 editor cutover:** batch each unresolved dependency frontier,
+   capture and compare the reported input proofs, then cook through the native
+   contract. Remove duplicate managed cook-dependency parsers. Retain project
+   resolution, source editing, dirty-document policy and progress/diagnostics;
+   badge refresh uses accepted dependency facts without launching native tools.
+   Qualify bounded process launches and real import/cook/reimport workflows.
 
 M08.1.7 final gate: after the entire native/managed implementation, review the
 whole slice for unnecessary complexity, duplicate state, owner/API integration
@@ -325,7 +346,7 @@ descriptor generation, native cooking/loading and both formerly blocked
 
 Owner contracts: [Content identities/ownership](../../../projects/Oxygen.Engine/src/Oxygen/Content/Docs/deps_and_cache.md#identities),
 [native integrity inventory](../../../projects/Oxygen.Engine/src/Oxygen/Content/Docs/loose_cooked_content.md#complete-integrity-inventory),
-and [project publication/analysis](../lld/content-pipeline.md#22-planned-content-pipeline-simplification).
+and [project publication/analysis](../lld/content-pipeline.md#23-native-source-analysis).
 Fix the wrong-type cache-checkout retain and qualify physics-sidecar hashes after
 PAK relocation as focused correctness work, separately from the ownership and
 format redesigns.

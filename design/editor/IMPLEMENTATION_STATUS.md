@@ -929,7 +929,7 @@ references; remote issue closure awaits integration.
 
 ### ED-M08 - Runtime Parity And Standalone Validation
 
-Status: `in_progress; M08.1.1–M08.1.8 validated; M08.1.9 next`
+Status: `in_progress; M08.1.1–M08.1.8 validated; M08.1.9 in progress`
 
 Outcome: one canonical V0.1 authoring contract across engine and editor, with
 semantic/image qualification through development-only native and embedded paths.
@@ -1054,7 +1054,15 @@ readers. Primary/Secondary names remain unchanged.
       Four maintained projects recook. Extra-high review is clear. Reproduce
       managed/native suites with VSTest; native Interop uses its generated
       runsettings and WinUI workflows use the packaged `.build.appxrecipe`.
-      Native source analysis remains M08.1.9.
+      M08.1.9.1 input observations are validated: consumed ranges, negative
+      probes and metadata remain coherent through publication; invalid paths and
+      native I/O failures retain their classifications. Full engine/examples
+      Debug and Release builds pass. Each configuration passes 27 source-snapshot,
+      60 file-I/O and 17 retained-model tests plus the retained-import CLI test.
+      Scoped tidy is clean across 66 contexts; changed-file MSVC checks and
+      extra-high review are clear. Shared preparation/batch analysis (.9.2) and
+      managed cutover (.9.3) remain. The build-target selector also cancels on
+      EOF/Enter instead of looping; its 29 launcher tests pass.
 
 - [ ] [M08.F1 descriptor-local reference format](plan/ED-M08.F1-descriptor-local-references.md),
       after M08.1.9 and before M08.2. Separate format cutover, recook and SDK gate.
