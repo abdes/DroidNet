@@ -18,6 +18,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Cooker/Import/Internal/AdapterTypes.h>
+#include <Oxygen/Cooker/Import/Internal/MaterialSource.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MaterialPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/FbxAdapter.h>
 #include <Oxygen/Cooker/Import/Internal/gltf/GltfAdapter.h>
@@ -26,6 +27,36 @@
 
 namespace oxygen::content::import::test {
 namespace {
+  NOLINT_TEST(ModelMaterialSourceTest, GltfOcclusionRetainsStrengthSemantics)
+  {
+    for (const auto strength : { 0.0F, 0.5F, 1.0F }) {
+      auto naming = NamingService({
+        .strategy = std::make_shared<NoOpNamingStrategy>(),
+        .enable_namespacing = true,
+        .enforce_uniqueness = true,
+      });
+      const auto json
+        = std::string(
+            R"({"asset":{"version":"2.0"},"images":[{"uri":"ao.png"}],"textures":[{"source":0}],"materials":[{"name":"AO","occlusionTexture":{"index":0,"strength":)")
+        + std::to_string(strength) + "}}]}";
+      auto input = adapters::AdapterInput {};
+      input.request.source_path = "ao.gltf";
+      input.source_id_prefix = "ao-model";
+      input.naming_service = observer_ptr { &naming };
+      auto adapter = adapters::GltfAdapter {};
+      ASSERT_TRUE(
+        adapter.Parse(std::as_bytes(std::span(json.data(), json.size())), input)
+          .success);
+      const auto prepared = adapter.PrepareMaterials(input);
+      ASSERT_TRUE(prepared.success);
+      ASSERT_EQ(prepared.sources.size(), 1U);
+      const auto& material = prepared.sources.front().material;
+      EXPECT_TRUE(material.textures.ambient_occlusion.assigned);
+      EXPECT_EQ(material.occlusion_mode, AmbientOcclusionMode::kStrength);
+      EXPECT_FLOAT_EQ(material.inputs.ambient_occlusion, strength);
+    }
+  }
+
   class CancelNamingStrategy final : public NamingStrategy {
   public:
     explicit CancelNamingStrategy(std::stop_source& cancellation)

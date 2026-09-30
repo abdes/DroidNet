@@ -267,54 +267,69 @@ NOLINT_TEST_F(MaterialPipelineBasicTest, RejectsInvalidCompiledEmission)
 //! Verify auto ORM packing sets the packed flag and indices.
 NOLINT_TEST_F(MaterialPipelineOrmTest, CollectAutoOrmPackedSetsFlags)
 {
-  // Arrange
-  auto item = MakeBaseItem();
-  item.material.orm_policy = OrmPolicy::kAuto;
-  item.material.textures.metallic = MaterialTextureBinding {
-    .index = 7,
-    .assigned = true,
-    .source_id = "orm",
-    .uv_set = 0,
-    .uv_transform = {},
-  };
-  item.material.textures.roughness = item.material.textures.metallic;
-  item.material.textures.ambient_occlusion = item.material.textures.metallic;
-
-  MaterialPipeline::WorkResult result;
-  co::ThreadPool pool(loop_, 2);
-
-  // Act
-  co::Run(loop_, [&] -> co::Co<> {
-    MaterialPipeline pipeline(pool,
-      MaterialPipeline::Config {
-        .queue_capacity = 4,
-        .worker_count = 1,
-        .use_thread_pool = true,
-      });
-
-    OXCO_WITH_NURSERY(n)
-    {
-      pipeline.Start(n);
-      co_await pipeline.Submit(std::move(item));
-      result = co_await pipeline.Collect();
-      pipeline.Close();
-      co_return co::kJoin;
+  for (const auto ao_index : std::array<uint32_t, 3> {
+         data::pak::core::kNoResourceIndex.get(), 7U, 9U }) {
+    // Arrange
+    auto item = MakeBaseItem();
+    item.material.orm_policy = OrmPolicy::kAuto;
+    item.material.textures.metallic = MaterialTextureBinding {
+      .index = 7,
+      .assigned = true,
+      .source_id = "orm",
+      .uv_set = 0,
+      .uv_transform = {},
     };
-  });
+    item.material.textures.roughness = item.material.textures.metallic;
+    if (ao_index != data::pak::core::kNoResourceIndex) {
+      item.material.textures.ambient_occlusion
+        = item.material.textures.metallic;
+      item.material.textures.ambient_occlusion.index = ao_index;
+      item.material.textures.ambient_occlusion.source_id
+        = ao_index == 7U ? "orm" : "ao";
+    }
+    item.material.occlusion_mode = AmbientOcclusionMode::kStrength;
+    item.material.inputs.ambient_occlusion = 0.5F;
 
-  // Assert
-  ASSERT_TRUE(result.success);
-  if (!result.cooked.has_value()) {
-    FAIL() << "Expected result.cooked to contain a value";
+    MaterialPipeline::WorkResult result;
+    co::ThreadPool pool(loop_, 2);
+
+    // Act
+    co::Run(loop_, [&] -> co::Co<> {
+      MaterialPipeline pipeline(pool,
+        MaterialPipeline::Config {
+          .queue_capacity = 4,
+          .worker_count = 1,
+          .use_thread_pool = true,
+        });
+
+      OXCO_WITH_NURSERY(n)
+      {
+        pipeline.Start(n);
+        co_await pipeline.Submit(std::move(item));
+        result = co_await pipeline.Collect();
+        pipeline.Close();
+        co_return co::kJoin;
+      };
+    });
+
+    // Assert
+    ASSERT_TRUE(result.success);
+    if (!result.cooked.has_value()) {
+      FAIL() << "Expected result.cooked to contain a value";
+    }
+    const auto desc = ReadMaterialDesc(result.cooked->descriptor_bytes);
+
+    EXPECT_NE(desc.flags & data::pak::render::kMaterialFlag_GltfOrmPacked, 0U);
+    EXPECT_EQ(
+      desc.flags & data::pak::render::kMaterialFlag_NoTextureSampling, 0U);
+    EXPECT_EQ(desc.metallic_texture, 7U);
+    EXPECT_EQ(desc.roughness_texture, 7U);
+    EXPECT_EQ(desc.ambient_occlusion_texture, ao_index);
+    EXPECT_NE(
+      desc.flags & data::pak::render::kMaterialFlag_AmbientOcclusionStrength,
+      0U);
+    EXPECT_EQ(desc.ambient_occlusion.get(), data::Unorm16 { 0.5F }.get());
   }
-  const auto desc = ReadMaterialDesc(result.cooked->descriptor_bytes);
-
-  EXPECT_NE(desc.flags & data::pak::render::kMaterialFlag_GltfOrmPacked, 0U);
-  EXPECT_EQ(
-    desc.flags & data::pak::render::kMaterialFlag_NoTextureSampling, 0U);
-  EXPECT_EQ(desc.metallic_texture, 7U);
-  EXPECT_EQ(desc.roughness_texture, 7U);
-  EXPECT_EQ(desc.ambient_occlusion_texture, 7U);
 }
 
 //! Verify force-packed ORM emits an error when inputs are incompatible.

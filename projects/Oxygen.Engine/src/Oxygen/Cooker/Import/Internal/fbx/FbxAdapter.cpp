@@ -55,9 +55,10 @@
 #include <Oxygen/Cooker/Import/Internal/SceneBuild.h>
 #include <Oxygen/Cooker/Import/Internal/SceneNodeImportDefaults.h>
 #include <Oxygen/Cooker/Import/Internal/SourceLayoutHash.h>
-#include <Oxygen/Cooker/Import/Internal/StaticScalarSourceValidation.h>
+#include <Oxygen/Cooker/Import/Internal/StaticSourceValidation.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/CoordTransform.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/FbxAdapter.h>
+#include <Oxygen/Cooker/Import/Internal/fbx/FbxMaterialTextures.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/ufbx.h>
 #include <Oxygen/Cooker/Import/Naming.h>
 #include <Oxygen/Cooker/Import/SceneSourceInspection.h>
@@ -189,78 +190,6 @@ namespace {
 #endif
 
     return out;
-  }
-
-  [[nodiscard]] auto SelectBaseColorTexture(const ufbx_material& material)
-    -> const ufbx_texture*
-  {
-    const auto& pbr = material.pbr.base_color;
-    if (!pbr.feature_disabled && pbr.texture != nullptr) {
-      return pbr.texture;
-    }
-    const auto& fbx = material.fbx.diffuse_color;
-    if (!fbx.feature_disabled && fbx.texture != nullptr) {
-      return fbx.texture;
-    }
-    return nullptr;
-  }
-
-  [[nodiscard]] auto SelectNormalTexture(const ufbx_material& material)
-    -> const ufbx_texture*
-  {
-    const auto& pbr = material.pbr.normal_map;
-    if (!pbr.feature_disabled && pbr.texture != nullptr) {
-      return pbr.texture;
-    }
-    const auto& fbx = material.fbx.normal_map;
-    if (!fbx.feature_disabled && fbx.texture != nullptr) {
-      return fbx.texture;
-    }
-    return nullptr;
-  }
-
-  [[nodiscard]] auto SelectMetallicTexture(const ufbx_material& material)
-    -> const ufbx_texture*
-  {
-    const auto& pbr = material.pbr.metalness;
-    if (!pbr.feature_disabled && pbr.texture != nullptr) {
-      return pbr.texture;
-    }
-    return nullptr;
-  }
-
-  [[nodiscard]] auto SelectRoughnessTexture(const ufbx_material& material)
-    -> const ufbx_texture*
-  {
-    const auto& pbr = material.pbr.roughness;
-    if (!pbr.feature_disabled && pbr.texture != nullptr) {
-      return pbr.texture;
-    }
-    return nullptr;
-  }
-
-  [[nodiscard]] auto SelectAmbientOcclusionTexture(
-    const ufbx_material& material) -> const ufbx_texture*
-  {
-    const auto& pbr = material.pbr.ambient_occlusion;
-    if (!pbr.feature_disabled && pbr.texture != nullptr) {
-      return pbr.texture;
-    }
-    return nullptr;
-  }
-
-  [[nodiscard]] auto SelectEmissiveTexture(const ufbx_material& material)
-    -> const ufbx_texture*
-  {
-    const auto& pbr = material.pbr.emission_color;
-    if (!pbr.feature_disabled && pbr.texture != nullptr) {
-      return pbr.texture;
-    }
-    const auto& fbx = material.fbx.emission_color;
-    if (!fbx.feature_disabled && fbx.texture != nullptr) {
-      return fbx.texture;
-    }
-    return nullptr;
   }
 
   [[nodiscard]] auto TryReadWholeFileBytes(const std::filesystem::path& path)
@@ -1247,12 +1176,7 @@ namespace {
       return false;
     }
 
-    return SelectBaseColorTexture(*material) != nullptr
-      || SelectNormalTexture(*material) != nullptr
-      || SelectMetallicTexture(*material) != nullptr
-      || SelectRoughnessTexture(*material) != nullptr
-      || SelectAmbientOcclusionTexture(*material) != nullptr
-      || SelectEmissiveTexture(*material) != nullptr;
+    return FbxMaterialTextures::From(*material).Any();
   }
 
   [[nodiscard]] auto BuildSceneSourceId(
@@ -1883,15 +1807,17 @@ auto FbxAdapter::InspectSource(const std::filesystem::path& source_path,
   const AdapterInput& input) -> SceneSourceInspection
 {
   SceneSourceInspection result;
+  auto adapter = FbxAdapter {};
   result.format = "fbx";
-  const auto loaded = LoadSceneFromFile(
+  adapter.impl_->source = {};
+  auto loaded = LoadSceneFromFile(
     source_path, input, result.diagnostics, ModelParseMode::kMetadata);
   const auto& scene = loaded.scene;
   if (!scene) {
     return result;
   }
   result.parsed = true;
-  result.supported = internal::ValidateStaticScalarSource(
+  result.supported = internal::ValidateStaticSource(
     *scene, input.source_id_prefix, result.diagnostics);
   const auto axis_name = [](const ufbx_coordinate_axis axis) -> std::string {
     switch (axis) {
@@ -1931,8 +1857,22 @@ auto FbxAdapter::InspectSource(const std::filesystem::path& source_path,
   result.mesh_count = scene->meshes.count;
   result.material_count = scene->materials.count;
   result.node_count = scene->nodes.count;
-  // Supported scalar FBX contains its geometry and materials in the primary
-  // file. External textures/caches are rejected by the policy above.
+  adapter.impl_->source = std::move(loaded);
+  if (result.supported) {
+    for (const auto& texture :
+      adapter.CollectExternalTextureSources(input, result.diagnostics)) {
+      result.external_files.push_back(
+        texture.resolved_path.lexically_relative(source_path.parent_path())
+          .generic_string());
+    }
+    result.supported
+      = std::ranges::none_of(result.diagnostics, [](const auto& diagnostic) {
+          return diagnostic.severity == ImportSeverity::kError;
+        });
+  }
+  std::ranges::sort(result.external_files);
+  const auto duplicates = std::ranges::unique(result.external_files);
+  result.external_files.erase(duplicates.begin(), duplicates.end());
   return result;
 }
 
@@ -1954,9 +1894,8 @@ auto FbxAdapter::Parse(const std::filesystem::path& source_path,
     return result;
   }
 
-  if (input.request.options.scene_content_policy
-      == SceneContentPolicy::kStaticScalar
-    && !internal::ValidateStaticScalarSource(
+  if (input.request.options.scene_content_policy == SceneContentPolicy::kStatic
+    && !internal::ValidateStaticSource(
       *scene, input.source_id_prefix, result.diagnostics)) {
     impl_->source = {};
     result.success = false;
@@ -1986,9 +1925,8 @@ auto FbxAdapter::Parse(const std::span<const std::byte> source_bytes,
     return result;
   }
 
-  if (input.request.options.scene_content_policy
-      == SceneContentPolicy::kStaticScalar
-    && !internal::ValidateStaticScalarSource(
+  if (input.request.options.scene_content_policy == SceneContentPolicy::kStatic
+    && !internal::ValidateStaticSource(
       *scene, input.source_id_prefix, result.diagnostics)) {
     impl_->source = {};
     result.success = false;
@@ -2261,12 +2199,13 @@ auto FbxAdapter::PrepareMaterials(const AdapterInput& input)
         = material->features.double_sided.enabled;
       item.material.inputs.unlit = material->features.unlit.enabled;
 
-      const auto* base_color_tex = SelectBaseColorTexture(*material);
-      const auto* normal_tex = SelectNormalTexture(*material);
-      const auto* metallic_tex = SelectMetallicTexture(*material);
-      const auto* roughness_tex = SelectRoughnessTexture(*material);
-      const auto* ao_tex = SelectAmbientOcclusionTexture(*material);
-      const auto* emissive_tex = SelectEmissiveTexture(*material);
+      const auto textures = FbxMaterialTextures::From(*material);
+      const auto* base_color_tex = textures.base_color.Texture();
+      const auto* normal_tex = textures.normal.Texture();
+      const auto* metallic_tex = textures.metallic.Texture();
+      const auto* roughness_tex = textures.roughness.Texture();
+      const auto* ao_tex = textures.occlusion.Texture();
+      const auto* emissive_tex = textures.emissive.Texture();
 
       const auto* metallic_file = ResolveFileTexture(metallic_tex);
       const auto* roughness_file = ResolveFileTexture(roughness_tex);
@@ -2340,15 +2279,6 @@ auto FbxAdapter::PrepareMaterials(const AdapterInput& input)
           item.material.inputs.sheen_color_factor[0] = static_cast<float>(sc.x);
           item.material.inputs.sheen_color_factor[1] = static_cast<float>(sc.y);
           item.material.inputs.sheen_color_factor[2] = static_cast<float>(sc.z);
-        }
-        if (material->pbr.sheen_roughness.has_value) {
-          // We don't have sheen roughness in MaterialInputs yet?
-          // Wait, MaterialInputs has sheen_color_factor, but maybe not
-          // roughness? Checking MaterialPipeline.h Step 102 lines 95: float
-          // sheen_color_factor[3]. It does NOT have sheen_roughness. But
-          // GltfAdapter set it... NO, GltfAdapter set sheen_color_factor.
-          // cgltf_sheen has sheen_roughness_factor.
-          // I missed `sheen_roughness` in MaterialInputs check.
         }
         if (material->pbr.sheen_color.texture_enabled) {
           apply_binding(item.material.textures.sheen_color,
@@ -2581,12 +2511,13 @@ auto FbxAdapter::PrepareTextures(const AdapterInput& input) const
     const auto material_source_id
       = BuildSourceId(input.source_id_prefix, material_name, i);
 
-    const auto* base_color_tex = SelectBaseColorTexture(*material);
-    const auto* normal_tex = SelectNormalTexture(*material);
-    const auto* metallic_tex = SelectMetallicTexture(*material);
-    const auto* roughness_tex = SelectRoughnessTexture(*material);
-    const auto* ao_tex = SelectAmbientOcclusionTexture(*material);
-    const auto* emissive_tex = SelectEmissiveTexture(*material);
+    const auto textures = FbxMaterialTextures::From(*material);
+    const auto* base_color_tex = textures.base_color.Texture();
+    const auto* normal_tex = textures.normal.Texture();
+    const auto* metallic_tex = textures.metallic.Texture();
+    const auto* roughness_tex = textures.roughness.Texture();
+    const auto* ao_tex = textures.occlusion.Texture();
+    const auto* emissive_tex = textures.emissive.Texture();
 
     const auto* metallic_file = ResolveFileTexture(metallic_tex);
     const auto* roughness_file = ResolveFileTexture(roughness_tex);

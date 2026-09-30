@@ -109,7 +109,8 @@ auto EvaluateMaterial(const MaterialEvaluationInput& input)
       .roughness = factors.roughness, },
     .emissive = factors.emissive,
     .alpha = factors.base_color.alpha,
-    .ambient_occlusion = factors.ambient_occlusion,
+    .ambient_occlusion = input.occlusion_mode == OcclusionMode::kStrength
+      ? 1.0 : factors.ambient_occlusion,
   };
   auto normal = Normalize(geometric);
   if (Length(normal) == 0.0) {
@@ -130,8 +131,7 @@ auto EvaluateMaterial(const MaterialEvaluationInput& input)
       = samples.orm ? samples.orm->metallic : samples.metallic.value_or(1.0);
     const auto roughness
       = samples.orm ? samples.orm->roughness : samples.roughness.value_or(1.0);
-    const auto occlusion
-      = samples.occlusion.value_or(samples.orm ? samples.orm->occlusion : 1.0);
+    const auto occlusion = samples.occlusion.value_or(1.0);
     if (!std::isfinite(metallic) || !std::isfinite(roughness)
       || !std::isfinite(occlusion)) {
       return std::unexpected(BrdfReferenceError::kInvalidInput);
@@ -139,7 +139,10 @@ auto EvaluateMaterial(const MaterialEvaluationInput& input)
     output.material.metallic *= std::clamp(metallic, 0.0, 1.0);
     output.material.roughness = PerceptualRoughness { factors.roughness.get()
       * std::clamp(roughness, 0.0, 1.0) };
-    output.ambient_occlusion *= std::clamp(occlusion, 0.0, 1.0);
+    const auto clamped_occlusion = std::clamp(occlusion, 0.0, 1.0);
+    output.ambient_occlusion = input.occlusion_mode == OcclusionMode::kStrength
+      ? 1.0 - factors.ambient_occlusion * (1.0 - clamped_occlusion)
+      : factors.ambient_occlusion * clamped_occlusion;
     if (samples.emissive) {
       if (!Nonnegative(*samples.emissive)) {
         return std::unexpected(BrdfReferenceError::kInvalidInput);

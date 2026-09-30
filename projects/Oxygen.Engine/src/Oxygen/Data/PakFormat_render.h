@@ -60,6 +60,10 @@ namespace oxygen::data::pak::render {
 //! Material flag indicating procedural grid shading.
 [[maybe_unused]] constexpr uint32_t kMaterialFlag_ProceduralGrid = (1U << 5);
 
+//! Interpret ambient_occlusion as texture strength: lerp(1, sample, strength).
+//! Without a sampled AO binding, this mode is unoccluded.
+inline constexpr uint32_t kMaterialFlag_AmbientOcclusionStrength = (1U << 6);
+
 //! Material asset descriptor version for current PAK schema.
 [[maybe_unused]] constexpr uint8_t kMaterialAssetVersion = 3;
 

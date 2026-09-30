@@ -194,8 +194,8 @@ auto SceneImportSettings::Prepare(const ImportFormat expected_format,
   auto options = request.options;
   options.gltf_omitted_light_range_m = settings.gltf_omitted_light_range_m;
   options.import_content = BuildContentFlags(settings);
-  if (settings.content_policy == "static-scalar") {
-    options.scene_content_policy = SceneContentPolicy::kStaticScalar;
+  if (settings.content_policy == "static") {
+    options.scene_content_policy = SceneContentPolicy::kStatic;
   } else if (!settings.content_policy.empty()
     && settings.content_policy != "default") {
     error_stream << "ERROR: invalid content_policy value\n";

@@ -7,6 +7,7 @@
 #pragma once
 
 #include <array>
+#include <cstdint>
 #include <expected>
 #include <optional>
 
@@ -30,13 +31,12 @@ struct MaterialFactors {
 };
 
 struct OrmSample {
-  double occlusion { 1.0 };
   double roughness { 1.0 };
   double metallic { 1.0 };
 };
 
 //! Samples are already transfer-decoded. ORM owns metallic/roughness when set;
-//! a separate occlusion sample overrides its R channel.
+//! occlusion participates only when explicitly supplied, including shared ORM.
 //! Normal samples contain encoded XYZ channels. Format expansion and texture
 //! filtering occur before this interface.
 struct MaterialSamples {
@@ -55,6 +55,11 @@ struct SurfaceBasis {
   std::array<double, 3> bitangent { 0.0, 1.0, 0.0 };
 };
 
+enum class OcclusionMode : std::uint8_t {
+  kFactor,
+  kStrength,
+};
+
 struct MaterialEvaluationInput {
   MaterialFactors factors {};
   MaterialSamples samples {};
@@ -64,6 +69,7 @@ struct MaterialEvaluationInput {
   bool front_face { true };
   bool alpha_test { false };
   double alpha_cutoff { 0.5 };
+  OcclusionMode occlusion_mode { OcclusionMode::kFactor };
 };
 
 struct EvaluatedMaterial {

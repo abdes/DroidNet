@@ -237,6 +237,24 @@ namespace {
       }));
   }
 
+  NOLINT_TEST_F(ImportSourceAnalysisTest, RequiredDirectoryIsNotAFile)
+  {
+    const auto directory = Path("image.png");
+    ASSERT_TRUE(std::filesystem::create_directory(directory));
+    auto manifest = ImportManifest {};
+    auto job = ImportManifestJob {};
+    job.job_type = "texture";
+    job.texture.source_path = directory.string();
+    manifest.jobs.push_back(job);
+    const auto report = manifest.AnalyzeSources();
+    EXPECT_FALSE(report.complete);
+    ASSERT_EQ(report.jobs.size(), 1U);
+    EXPECT_TRUE(std::ranges::any_of(
+      report.jobs.front().diagnostics, [](const auto& diagnostic) {
+        return diagnostic.code == "analysis.source_not_file";
+      }));
+  }
+
   NOLINT_TEST_F(
     ImportSourceAnalysisTest, CancellationNeverProducesCompleteAnalysis)
   {

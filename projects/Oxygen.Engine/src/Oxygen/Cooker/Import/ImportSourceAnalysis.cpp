@@ -507,6 +507,10 @@ namespace {
           AddError(report, "analysis.source_missing",
             "Required source is missing: " + file.path.string());
         }
+        if (info && file.required && info->is_directory) {
+          AddError(report, "analysis.source_not_file",
+            "Required source is a directory: " + file.path.string());
+        }
       }
     } catch (const std::exception& error) {
       AddError(report,

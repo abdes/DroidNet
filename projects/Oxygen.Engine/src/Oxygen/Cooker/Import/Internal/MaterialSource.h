@@ -98,6 +98,12 @@ enum class OrmPolicy : uint8_t {
   kForceSeparate,
 };
 
+//! Interpretation of the ambient-occlusion scalar when a texture is assigned.
+enum class AmbientOcclusionMode : uint8_t {
+  kFactor,
+  kStrength,
+};
+
 //! Material semantics shared by descriptors, model adapters and analysis.
 struct MaterialSource final {
   std::string name;
@@ -107,6 +113,7 @@ struct MaterialSource final {
   MaterialInputs inputs;
   MaterialTextureBindings textures;
   OrmPolicy orm_policy = OrmPolicy::kAuto;
+  AmbientOcclusionMode occlusion_mode = AmbientOcclusionMode::kFactor;
   std::vector<ShaderRequest> shader_requests;
   std::optional<bool> content_hashing {};
 

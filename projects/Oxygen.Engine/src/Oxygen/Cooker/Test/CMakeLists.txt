@@ -394,7 +394,7 @@ m_gtest_program(
     "Import/AsyncImporterFullTestBase.cpp"
     "Import/AsyncImporterFullTestBase.h"
     "Import/AsyncGltfImporter_test.cpp"
-    "Import/StaticScalarImport_test.cpp"
+    "Import/StaticImport_test.cpp"
     "Import/StaticScalarLoadedValues_test.cpp"
     "Import/MeshTransformBake_test.cpp"
     "Import/SourceLayoutWitness_test.cpp"
@@ -410,6 +410,14 @@ target_link_libraries(
     oxygen::content
     nlohmann_json::nlohmann_json
     nlohmann_json_schema_validator
+)
+
+# The source-validation fixtures construct ufbx values passed into Cooker.
+# Match Cooker's private vendor ABI without exposing it to engine consumers.
+target_compile_definitions(
+  Oxygen.Cooker.AsyncImportGltf.Tests
+  PRIVATE
+    UFBX_REAL_IS_FLOAT
 )
 
 m_gtest_program(AsyncImportPlan SOURCES "Plan/ImportPlanner_test.cpp")

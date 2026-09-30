@@ -155,7 +155,9 @@ MaterialSurface EvaluateMaterialSurface(
         s.flags     = mat.flags;
         s.metalness = saturate(mat.metalness);
         s.roughness = saturate(mat.roughness);
-        s.ao        = saturate(mat.ambient_occlusion);
+        const bool ao_is_strength = (mat.flags & MATERIAL_FLAG_AMBIENT_OCCLUSION_STRENGTH) != 0u;
+        const float ao_factor = saturate(mat.ambient_occlusion);
+        s.ao        = ao_is_strength ? 1.0 : ao_factor;
 
         // UV convention (see ApplyMaterialUv in Vortex/Contracts/Draw/MaterialShadingConstants.hlsli):
         // scale -> rotation (radians, CCW around origin) -> offset.
@@ -244,9 +246,7 @@ MaterialSurface EvaluateMaterialSurface(
         } else {
             orm_tex_index = (mat.roughness_texture_index != K_INVALID_BINDLESS_INDEX)
                 ? mat.roughness_texture_index
-                : ((mat.metallic_texture_index != K_INVALID_BINDLESS_INDEX)
-                    ? mat.metallic_texture_index
-                    : mat.ambient_occlusion_texture_index);
+                : mat.metallic_texture_index;
         }
 
         if (!no_texture_sampling && use_orm_packed
@@ -262,13 +262,14 @@ MaterialSurface EvaluateMaterialSurface(
             s.roughness *= orm.g;
             s.metalness *= orm.b;
 
-            // Prefer dedicated AO map if provided separately.
-            if (mat.ambient_occlusion_texture_index != K_INVALID_BINDLESS_INDEX
-                && mat.ambient_occlusion_texture_index != orm_tex_index) {
-                Texture2D<float4> ao_tex = ResourceDescriptorHeap[mat.ambient_occlusion_texture_index];
-                s.ao *= saturate(ao_tex.Sample(samp, uv).r);
-            } else {
-                s.ao *= orm.r;
+            // Packed MR does not imply an AO binding.
+            if (mat.ambient_occlusion_texture_index != K_INVALID_BINDLESS_INDEX) {
+                float ao_sample = orm.r;
+                if (mat.ambient_occlusion_texture_index != orm_tex_index) {
+                    Texture2D<float4> ao_tex = ResourceDescriptorHeap[mat.ambient_occlusion_texture_index];
+                    ao_sample = saturate(ao_tex.Sample(samp, uv).r);
+                }
+                s.ao = ao_is_strength ? lerp(1.0, ao_sample, ao_factor) : ao_factor * ao_sample;
             }
         } else {
             if (!no_texture_sampling
@@ -287,7 +288,8 @@ MaterialSurface EvaluateMaterialSurface(
                 && mat.ambient_occlusion_texture_index != K_INVALID_BINDLESS_INDEX) {
                 Texture2D<float4> ao_tex = ResourceDescriptorHeap[mat.ambient_occlusion_texture_index];
                 SamplerState samp = SamplerDescriptorHeap[0];
-                s.ao *= saturate(ao_tex.Sample(samp, uv).r);
+                const float ao_sample = saturate(ao_tex.Sample(samp, uv).r);
+                s.ao = ao_is_strength ? lerp(1.0, ao_sample, ao_factor) : ao_factor * ao_sample;
             }
         }
 

@@ -67,7 +67,7 @@
 #include <Oxygen/Cooker/Import/Internal/SceneBuild.h>
 #include <Oxygen/Cooker/Import/Internal/SceneNodeImportDefaults.h>
 #include <Oxygen/Cooker/Import/Internal/SourceLayoutHash.h>
-#include <Oxygen/Cooker/Import/Internal/StaticScalarSourceValidation.h>
+#include <Oxygen/Cooker/Import/Internal/StaticSourceValidation.h>
 #include <Oxygen/Cooker/Import/Internal/gltf/GltfAdapter.h>
 #include <Oxygen/Cooker/Import/Internal/gltf/cgltf.h>
 #include <Oxygen/Cooker/Import/Naming.h>
@@ -2032,9 +2032,11 @@ auto GltfAdapter::InspectSource(const std::filesystem::path& source_path,
   const AdapterInput& input) -> SceneSourceInspection
 {
   SceneSourceInspection result;
+  auto adapter = GltfAdapter {};
   result.format = "gltf";
-  const auto data
-    = LoadDataFromFile(source_path, input, result.diagnostics, false);
+  adapter.impl_->data_owner.reset();
+  adapter.impl_->source_snapshot = input.source_snapshot;
+  auto data = LoadDataFromFile(source_path, input, result.diagnostics, false);
   if (!data) {
     return result;
   }
@@ -2043,7 +2045,7 @@ auto GltfAdapter::InspectSource(const std::filesystem::path& source_path,
     return result;
   }
   result.parsed = true;
-  result.supported = internal::ValidateStaticScalarSource(
+  result.supported = internal::ValidateStaticSource(
     *data, input.source_id_prefix, result.diagnostics);
   result.source_unit_meters = 1.0;
   result.source_right = "+X";
@@ -2072,6 +2074,20 @@ auto GltfAdapter::InspectSource(const std::filesystem::path& source_path,
     std::ranges::replace(uri, '\\', '/');
     result.external_files.push_back(std::move(uri));
   }
+  adapter.impl_->data_owner
+    = std::shared_ptr<const cgltf_data>(data.release(), &cgltf_free);
+  if (result.supported) {
+    for (const auto& texture :
+      adapter.CollectExternalTextureSources(input, result.diagnostics)) {
+      result.external_files.push_back(
+        texture.resolved_path.lexically_relative(source_path.parent_path())
+          .generic_string());
+    }
+    result.supported
+      = std::ranges::none_of(result.diagnostics, [](const auto& diagnostic) {
+          return diagnostic.severity == ImportSeverity::kError;
+        });
+  }
   std::ranges::sort(result.external_files);
   const auto duplicates = std::ranges::unique(result.external_files);
   result.external_files.erase(duplicates.begin(), duplicates.end());
@@ -2098,9 +2114,8 @@ auto GltfAdapter::Parse(const std::filesystem::path& source_path,
     return result;
   }
 
-  if (input.request.options.scene_content_policy
-      == SceneContentPolicy::kStaticScalar
-    && !internal::ValidateStaticScalarSource(
+  if (input.request.options.scene_content_policy == SceneContentPolicy::kStatic
+    && !internal::ValidateStaticSource(
       *data, input.source_id_prefix, result.diagnostics)) {
     impl_->data_owner.reset();
     result.success = false;
@@ -2132,9 +2147,8 @@ auto GltfAdapter::Parse(const std::span<const std::byte> source_bytes,
     return result;
   }
 
-  if (input.request.options.scene_content_policy
-      == SceneContentPolicy::kStaticScalar
-    && !internal::ValidateStaticScalarSource(
+  if (input.request.options.scene_content_policy == SceneContentPolicy::kStatic
+    && !internal::ValidateStaticSource(
       *data, input.source_id_prefix, result.diagnostics)) {
     impl_->data_owner.reset();
     result.success = false;
@@ -2272,6 +2286,7 @@ auto GltfAdapter::PrepareMaterials(const AdapterInput& input)
     }
 
     if (material.occlusion_texture.texture != nullptr) {
+      item.material.occlusion_mode = AmbientOcclusionMode::kStrength;
       item.material.inputs.ambient_occlusion
         = static_cast<float>(material.occlusion_texture.scale);
       ApplyTextureBinding(item.material.textures.ambient_occlusion,

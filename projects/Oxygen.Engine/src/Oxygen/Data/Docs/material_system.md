@@ -1,6 +1,6 @@
 # Material assets
 
-Read: [storage](#storage), [emission](#emission),
+Read: [storage](#storage), [occlusion](#occlusion), [emission](#emission),
 [runtime binding](#runtime-binding), [validation](#validation).
 
 ## Storage
@@ -29,6 +29,24 @@ for a shading model. `MaterialShadingConstants` defines the current GPU consumer
 Material flags are defined by `kMaterialFlag_*` in `PakFormat_render.h`.
 Geometry visibility, casting and receiving policies belong to scene/renderable
 state rather than an invented material flag convention.
+
+## Occlusion
+
+Ambient occlusion has an explicit texture binding. A packed metallic/roughness
+texture does not imply AO in its red channel. When an authored AO binding shares
+that resource, the shader reuses the metallic/roughness sample; a separate binding
+samples its own red channel.
+
+`kMaterialFlag_AmbientOcclusionStrength` tags the stored scalar as strength:
+`AO = 1 + strength * (sample - 1)`. glTF occlusion textures use this mode; strength
+zero is unoccluded and strength one preserves the texture. Without the flag,
+Oxygen's scalar factor multiplies the sampled AO, or stands alone without a
+texture. Missing or disabled texture sampling gives neutral AO in strength mode.
+
+The flag occupies the existing flags field and changes no CPU/GPU layout. Cook
+affected imports and rebuild the shader archive together. The independent
+material oracle and production G-buffer raster tests cover absent, shared and
+separate AO bindings and strength endpoints.
 
 ## Emission
 
@@ -79,3 +97,19 @@ writers with the current format; they are not compatibility readers.
 Preserve the independent GPU material layout. Existing raster tests cover scalar
 and textured emission alongside exposure and alpha modes; expected values use
 the float32 source product without binary16 quantization.
+
+For native visual checks, import `Cooker/Test/Import/Models/static_ao_grid.gltf`
+with the `static` policy and transform baking disabled, then load its cooked
+index or PAK in RenderScene. Use its authored camera and captured sky lighting.
+The two rows read left to right:
+
+| Row    | First                   | Second                    | Third                   | Fourth                |
+| ------ | ----------------------- | ------------------------- | ----------------------- | --------------------- |
+| Top    | No AO                   | Shared AO, strength 0     | Shared AO, strength 0.5 | Shared AO, strength 1 |
+| Bottom | Separate AO, strength 0 | Separate AO, strength 0.5 | Separate AO, strength 1 | No AO reference       |
+
+The shared texture has red 0; the separate texture has red 0.6. Expected AO is
+`1, 1, 0.5, 0` above and `1, 0.8, 0.6, 1` below. Compare equal tiles under fixed
+exposure; use the G-buffer raster tests for numerical AO rather than inferring
+linear values from tone-mapped screenshots. The adjacent
+`static_textured_triangle.gltf` and `.fbx` fixtures check color-texture import.

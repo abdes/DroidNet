@@ -633,7 +633,7 @@
           "description": "Retained native provenance, validated against oxygen.material-slot-provenance.schema.json by the importer."
         },
         "content_policy": {
-          "enum": ["default", "static-scalar"]
+          "enum": ["default", "static"]
         },
         "unit_policy": {
           "enum": ["normalize", "preserve", "custom"]
@@ -1018,7 +1018,7 @@
           "description": "Retained native provenance, validated against oxygen.material-slot-provenance.schema.json by the importer."
         },
         "content_policy": {
-          "enum": ["default", "static-scalar"]
+          "enum": ["default", "static"]
         },
         "unit_policy": {
           "enum": ["normalize", "preserve", "custom"]

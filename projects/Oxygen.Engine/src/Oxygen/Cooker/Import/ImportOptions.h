@@ -248,9 +248,9 @@ OXGN_COOK_API auto to_string(ScriptingImportKind value) -> std::string;
 enum class SceneContentPolicy : uint8_t {
   //! Preserve the normal native importer's supported feature set.
   kDefault = 0,
-  //! Reject features outside static geometry and scalar materials before
-  //! emitting.
-  kStaticScalar,
+  //! Reject unsupported static-scene features before emitting; supported
+  //! material texture bindings are preserved.
+  kStatic,
 };
 
 //! Coordinate conversion policy.

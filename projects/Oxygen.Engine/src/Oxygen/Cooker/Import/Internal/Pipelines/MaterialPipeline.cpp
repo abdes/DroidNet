@@ -366,21 +366,11 @@ namespace {
     if (orm_packed) {
       desc.metallic_texture = orm_index;
       desc.roughness_texture = orm_index;
-      // If ORM is packed (flag set), the shader defaults to reading AO from the
-      // Red channel of the ORM texture. We only override this if the material
-      // explicitly assigns a different texture for AO.
-      if (textures.ambient_occlusion.assigned
-        && textures.ambient_occlusion.source_id
-          != textures.metallic.source_id) {
-        desc.ambient_occlusion_texture = ao_index;
-      } else {
-        desc.ambient_occlusion_texture = orm_index;
-      }
     } else {
       desc.metallic_texture = metallic_index;
       desc.roughness_texture = roughness_index;
-      desc.ambient_occlusion_texture = ao_index;
     }
+    desc.ambient_occlusion_texture = ao_index;
 
     desc.emissive_texture = textures.emissive.assigned
       ? data::pak::core::ResourceIndexT { textures.emissive.index }
@@ -506,6 +496,9 @@ namespace {
     }
     if (material.inputs.unlit) {
       desc.flags |= data::pak::render::kMaterialFlag_Unlit;
+    }
+    if (material.occlusion_mode == AmbientOcclusionMode::kStrength) {
+      desc.flags |= data::pak::render::kMaterialFlag_AmbientOcclusionStrength;
     }
 
     const auto resolved_domain

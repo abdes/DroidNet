@@ -54,7 +54,7 @@ struct SceneImportSettings {
 
   bool with_content_hashing = true;
 
-  //! Optional source validation policy: default or static-scalar.
+  //! Optional source validation policy: default or static.
   std::string content_policy;
 
   std::string unit_policy;

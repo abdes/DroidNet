@@ -104,6 +104,13 @@ namespace {
     kSeparate,
     kOrm,
     kOrmSeparateAo,
+    kOrmNoAo,
+    kOrmStrengthZero,
+    kOrmStrengthHalf,
+    kOrmStrengthOne,
+    kOrmStrengthDisabled,
+    kOrmStrengthNoAo,
+    kOrmSeparateAoStrength,
     kDisabled,
   };
   enum class SurfaceCase : std::uint8_t {
@@ -210,7 +217,7 @@ namespace {
     const auto base_sample = exposure::Pixel { 0.5F, 0.25F, 0.75F, 0.8F };
     const auto normal_sample = exposure::Pixel { 0.75F, 0.25F, 1.0F, 1.0F };
     const auto emission_sample = exposure::Pixel { 3.0F, 0.5F, 0.25F, 1.0F };
-    const auto orm_sample = exposure::Pixel { 0.2F, 0.6F, 0.8F, 1.0F };
+    const auto orm_sample = exposure::Pixel { 0.0F, 0.6F, 0.8F, 1.0F };
     const auto base_key = AddTexture(base_sample);
     const auto normal_key = AddTexture(normal_sample);
     const auto metallic_key = AddTexture({ 0.25F, 0.1F, 0.9F, 1.0F });
@@ -235,6 +242,13 @@ namespace {
            TextureLayout::kSeparate,
            TextureLayout::kOrm,
            TextureLayout::kOrmSeparateAo,
+           TextureLayout::kOrmNoAo,
+           TextureLayout::kOrmStrengthZero,
+           TextureLayout::kOrmStrengthHalf,
+           TextureLayout::kOrmStrengthOne,
+           TextureLayout::kOrmStrengthDisabled,
+           TextureLayout::kOrmStrengthNoAo,
+           TextureLayout::kOrmSeparateAoStrength,
            TextureLayout::kDisabled,
          }) {
       for (const auto surface_case : {
@@ -254,8 +268,21 @@ namespace {
             || surface_case == SurfaceCase::kBackCulled;
           const bool masked = surface_case == SurfaceCase::kMaskedKept
             || surface_case == SurfaceCase::kMaskedDiscarded;
-          const bool packed = layout == TextureLayout::kOrm
-            || layout == TextureLayout::kOrmSeparateAo;
+          const bool packed = layout != TextureLayout::kSeparate
+            && layout != TextureLayout::kDisabled;
+          const bool strength = layout == TextureLayout::kOrmStrengthZero
+            || layout == TextureLayout::kOrmStrengthHalf
+            || layout == TextureLayout::kOrmStrengthOne
+            || layout == TextureLayout::kOrmStrengthDisabled
+            || layout == TextureLayout::kOrmStrengthNoAo
+            || layout == TextureLayout::kOrmSeparateAoStrength;
+          const bool no_ao = layout == TextureLayout::kOrmNoAo
+            || layout == TextureLayout::kOrmStrengthNoAo;
+          const bool shared_ao = packed
+            && layout != TextureLayout::kOrmSeparateAo
+            && layout != TextureLayout::kOrmSeparateAoStrength;
+          const bool disabled = layout == TextureLayout::kDisabled
+            || layout == TextureLayout::kOrmStrengthDisabled;
           auto desc = data::pak::render::MaterialAssetDesc {};
           desc.material_domain
             = static_cast<std::uint8_t>(masked ? data::MaterialDomain::kMasked
@@ -269,7 +296,11 @@ namespace {
           if (packed) {
             desc.flags |= data::pak::render::kMaterialFlag_GltfOrmPacked;
           }
-          if (layout == TextureLayout::kDisabled) {
+          if (strength) {
+            desc.flags
+              |= data::pak::render::kMaterialFlag_AmbientOcclusionStrength;
+          }
+          if (disabled) {
             desc.flags |= data::pak::render::kMaterialFlag_NoTextureSampling;
           }
           desc.base_color[0] = 0.8F;
@@ -279,7 +310,10 @@ namespace {
             = surface_case == SurfaceCase::kMaskedDiscarded ? 0.25F : 0.75F;
           desc.metalness = data::Unorm16 { 0.6F };
           desc.roughness = data::Unorm16 { 0.8F };
-          desc.ambient_occlusion = data::Unorm16 { 0.5F };
+          desc.ambient_occlusion
+            = data::Unorm16 { layout == TextureLayout::kOrmStrengthZero ? 0.0F
+                  : layout == TextureLayout::kOrmStrengthOne            ? 1.0F
+                                                             : 0.5F };
           desc.normal_scale = normal_scale;
           desc.emissive_factor[0] = 2.0F;
           desc.emissive_factor[1] = 4.0F;
@@ -293,8 +327,10 @@ namespace {
             = packed ? orm_key : metallic_key;
           keys.at(static_cast<std::size_t>(MaterialSlot::kRoughness))
             = packed ? orm_key : roughness_key;
-          keys.at(static_cast<std::size_t>(MaterialSlot::kOcclusion))
-            = layout == TextureLayout::kOrm ? orm_key : occlusion_key;
+          if (!no_ao) {
+            keys.at(static_cast<std::size_t>(MaterialSlot::kOcclusion))
+              = shared_ao ? orm_key : occlusion_key;
+          }
           keys.at(static_cast<std::size_t>(MaterialSlot::kEmissive))
             = emission_key;
           mesh_node.GetRenderable().SetMaterialOverride(0U, 0U,
@@ -316,21 +352,22 @@ namespace {
               .metallic = 0.25, .roughness = 0.75,
               .emissive = reference::LinearRgb { .red = emission_sample.at(0), .green = emission_sample.at(1), .blue = emission_sample.at(2) },
             },
-            .textures_enabled = layout != TextureLayout::kDisabled,
+            .textures_enabled = !disabled,
             .double_sided = surface_case != SurfaceCase::kBackCulled,
             .front_face = !back,
             .alpha_test = masked,
             .alpha_cutoff = static_cast<double>(desc.alpha_cutoff.get()) / 65535.0,
+            .occlusion_mode = strength ? reference::OcclusionMode::kStrength : reference::OcclusionMode::kFactor,
           };
           if (packed) {
             input.samples.orm = reference::OrmSample {
-              .occlusion = orm_sample.at(0),
               .roughness = orm_sample.at(1),
               .metallic = orm_sample.at(2),
             };
           }
-          if (layout != TextureLayout::kOrm) {
-            input.samples.occlusion = static_cast<double>(0.4F);
+          if (!no_ao) {
+            input.samples.occlusion
+              = shared_ao ? orm_sample.at(0) : static_cast<double>(0.4F);
           }
           mesh_node.GetTransform().SetLocalRotation(
             back ? glm::quat { 0, 0, 1, 0 } : glm::quat { 1, 0, 0, 0 });
@@ -432,8 +469,8 @@ namespace {
         }
       }
     }
-    EXPECT_EQ(checked, 96U);
-    EXPECT_EQ(rejected, 48U);
+    EXPECT_EQ(checked, 264U);
+    EXPECT_EQ(rejected, 132U);
     RecordProperty("stored_material_cases", checked);
     RecordProperty("rejected_surface_cases", rejected);
     RecordProperty("maximum_stored_code_error", maximum_code_error);

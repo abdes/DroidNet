@@ -17,13 +17,14 @@ struct ufbx_scene;
 
 namespace oxygen::content::import::internal {
 
-//! Reject source features that cannot be preserved by static/scalar import.
-OXGN_COOK_NDAPI auto ValidateStaticScalarSource(const cgltf_data& source,
+//! Reject source features that cannot be preserved by supported static scene
+//! import.
+OXGN_COOK_NDAPI auto ValidateStaticSource(const cgltf_data& source,
   std::string_view source_path, std::vector<ImportDiagnostic>& diagnostics)
   -> bool;
 
 //! Apply the same policy to FBX, including explicit source units and axes.
-OXGN_COOK_NDAPI auto ValidateStaticScalarSource(const ufbx_scene& source,
+OXGN_COOK_NDAPI auto ValidateStaticSource(const ufbx_scene& source,
   std::string_view source_path, std::vector<ImportDiagnostic>& diagnostics)
   -> bool;
 

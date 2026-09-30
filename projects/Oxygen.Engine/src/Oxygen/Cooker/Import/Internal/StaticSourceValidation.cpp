@@ -7,17 +7,45 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <optional>
 #include <ranges>
 #include <set>
 #include <span>
 #include <string>
+#include <string_view>
+#include <vector>
 
-#include <Oxygen/Cooker/Import/Internal/StaticScalarSourceValidation.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/Internal/StaticSourceValidation.h>
+#include <Oxygen/Cooker/Import/Internal/fbx/FbxMaterialTextures.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/ufbx.h>
 #include <Oxygen/Cooker/Import/Internal/gltf/cgltf.h>
 
 namespace oxygen::content::import::internal {
 namespace {
+
+  struct TextureCoordinates {
+    cgltf_int set = 0;
+    std::array<cgltf_float, 2> scale { 1.0F, 1.0F };
+    std::array<cgltf_float, 2> offset {};
+    cgltf_float rotation = 0.0F;
+
+    auto operator==(const TextureCoordinates&) const -> bool = default;
+  };
+
+  auto Coordinates(const cgltf_texture_view& view) -> TextureCoordinates
+  {
+    return {
+      .set = view.has_transform && view.transform.has_texcoord
+        ? view.transform.texcoord
+        : view.texcoord,
+      .scale = view.has_transform ? std::to_array(view.transform.scale)
+                                  : std::array { 1.0F, 1.0F },
+      .offset = view.has_transform ? std::to_array(view.transform.offset)
+                                   : std::array<cgltf_float, 2> {},
+      .rotation = view.has_transform ? view.transform.rotation : 0.0F,
+    };
+  }
 
   auto Reject(const bool present, const std::string_view feature,
     const std::string_view source_path, const std::string_view object_path,
@@ -25,9 +53,9 @@ namespace {
   {
     if (present) {
       diagnostics.push_back({ .severity = ImportSeverity::kError,
-        .code = "import.static_scalar.unsupported",
+        .code = "import.static.unsupported",
         .message
-        = "Static/scalar import does not support " + std::string(feature) + ".",
+        = "Static import does not support " + std::string(feature) + ".",
         .source_path = std::string(source_path),
         .object_path = std::string(object_path) });
     }
@@ -45,7 +73,7 @@ namespace {
 
 } // namespace
 
-auto ValidateStaticScalarSource(const cgltf_data& source,
+auto ValidateStaticSource(const cgltf_data& source,
   const std::string_view source_path,
   std::vector<ImportDiagnostic>& diagnostics) -> bool
 {
@@ -54,8 +82,6 @@ auto ValidateStaticScalarSource(const cgltf_data& source,
     diagnostics);
   Reject(
     source.skins_count != 0U, "skinning", source_path, "/skins", diagnostics);
-  Reject(source.textures_count != 0U || source.images_count != 0U,
-    "texture-bearing materials", source_path, "/textures", diagnostics);
   for (const auto& [index, camera] :
     std::views::enumerate(std::span(source.cameras, source.cameras_count))) {
     Reject(camera.type != cgltf_camera_type_perspective,
@@ -123,6 +149,36 @@ auto ValidateStaticScalarSource(const cgltf_data& source,
   for (const auto& [index, material] : std::views::enumerate(
          std::span(source.materials, source.materials_count))) {
     const auto path = "/materials/" + std::to_string(index);
+    const auto core_textures = std::array {
+      &material.pbr_metallic_roughness.base_color_texture,
+      &material.pbr_metallic_roughness.metallic_roughness_texture,
+      &material.normal_texture,
+      &material.occlusion_texture,
+      &material.emissive_texture,
+    };
+    auto coordinates = std::optional<TextureCoordinates> {};
+    for (const auto* view : core_textures) {
+      if (view->texture == nullptr) {
+        continue;
+      }
+      const auto current = Coordinates(*view);
+      if (!coordinates.has_value()) {
+        coordinates = current;
+      } else {
+        Reject(*coordinates != current,
+          "different UV sets or transforms within one material", source_path,
+          path, diagnostics);
+      }
+      if (const auto* sampler = view->texture->sampler; sampler != nullptr) {
+        Reject(sampler->wrap_s != cgltf_wrap_mode_repeat
+            || sampler->wrap_t != cgltf_wrap_mode_repeat
+            || (sampler->mag_filter != cgltf_filter_type_undefined
+              && sampler->mag_filter != cgltf_filter_type_linear)
+            || (sampler->min_filter != cgltf_filter_type_undefined
+              && sampler->min_filter != cgltf_filter_type_linear_mipmap_linear),
+          "custom texture sampling", source_path, path, diagnostics);
+      }
+    }
     Reject(material.has_specular != 0
         && std::ranges::any_of(material.specular.specular_color_factor,
           [](const auto value) -> bool { return value != 1.0F; }),
@@ -139,11 +195,30 @@ auto ValidateStaticScalarSource(const cgltf_data& source,
         || material.has_emissive_strength != 0,
       "material extensions without a preserved scalar mapping", source_path,
       path, diagnostics);
+    Reject(material.specular.specular_texture.texture != nullptr
+        || material.specular.specular_color_texture.texture != nullptr,
+      "specular texture channels", source_path,
+      path + "/extensions/KHR_materials_specular", diagnostics);
+    Reject(material.sheen.sheen_color_texture.texture != nullptr
+        || material.sheen.sheen_roughness_texture.texture != nullptr,
+      "sheen texture channels", source_path,
+      path + "/extensions/KHR_materials_sheen", diagnostics);
+    Reject(material.clearcoat.clearcoat_texture.texture != nullptr
+        || material.clearcoat.clearcoat_roughness_texture.texture != nullptr
+        || material.clearcoat.clearcoat_normal_texture.texture != nullptr,
+      "clearcoat texture channels", source_path,
+      path + "/extensions/KHR_materials_clearcoat", diagnostics);
+    Reject(material.transmission.transmission_texture.texture != nullptr,
+      "transmission textures", source_path,
+      path + "/extensions/KHR_materials_transmission", diagnostics);
+    Reject(material.volume.thickness_texture.texture != nullptr,
+      "thickness textures", source_path,
+      path + "/extensions/KHR_materials_volume", diagnostics);
   }
   return diagnostics.size() == previous_count;
 }
 
-auto ValidateStaticScalarSource(const ufbx_scene& source,
+auto ValidateStaticSource(const ufbx_scene& source,
   const std::string_view source_path,
   std::vector<ImportDiagnostic>& diagnostics) -> bool
 {
@@ -160,7 +235,7 @@ auto ValidateStaticScalarSource(const ufbx_scene& source,
     && HasAuthoredProperty(settings.props, "UnitScaleFactor");
   if (!has_axes || !has_units) {
     diagnostics.push_back({ .severity = ImportSeverity::kError,
-      .code = "import.static_scalar.coordinate_metadata",
+      .code = "import.static.coordinate_metadata",
       .message
       = "FBX import requires explicit valid source axes and units. Export the "
         "file with its coordinate-system and unit metadata.",
@@ -176,8 +251,6 @@ auto ValidateStaticScalarSource(const ufbx_scene& source,
     "morph targets", source_path, "/Deformers/BlendShape", diagnostics);
   Reject(source.cache_deformers.count != 0U || source.cache_files.count != 0U,
     "vertex caches", source_path, "/Deformers/Cache", diagnostics);
-  Reject(source.textures.count != 0U || source.videos.count != 0U,
-    "texture-bearing materials", source_path, "/Textures", diagnostics);
   Reject(source.stereo_cameras.count != 0U, "stereo camera components",
     source_path, "/Cameras", diagnostics);
   for (const auto* camera :
@@ -200,6 +273,75 @@ auto ValidateStaticScalarSource(const ufbx_scene& source,
       || source.procedural_geometries.count != 0U,
     "curve, NURBS or procedural geometry", source_path, "/Geometry",
     diagnostics);
+  for (const auto& [index, material] : std::views::enumerate(
+         std::span(source.materials.data, source.materials.count))) {
+    const auto path = "/Materials/" + std::to_string(index);
+    const auto& pbr = material->pbr;
+    const auto mapped = adapters::FbxMaterialTextures::From(*material);
+    const auto validate_maps = [&](const auto& maps,
+                                 const std::string_view group) {
+      for (const auto& [slot_index, map] :
+        std::views::enumerate(std::span(maps))) {
+        if (adapters::FbxTextureSlot::Active(map) && !mapped.Supports(map)) {
+          const auto name
+            = std::string(map.texture->name.data, map.texture->name.length);
+          Reject(true,
+            "texture '" + name + "' on an unmapped " + std::string(group)
+              + " material channel",
+            source_path,
+            path + "/" + std::string(group) + "/" + std::to_string(slot_index),
+            diagnostics);
+        }
+      }
+    };
+    validate_maps(material->pbr.maps, "pbr");
+    validate_maps(material->fbx.maps, "fbx");
+    for (const auto slot : mapped.Slots()) {
+      const auto* texture = slot.Texture();
+      if (texture == nullptr) {
+        continue;
+      }
+      Reject(texture->type != UFBX_TEXTURE_FILE,
+        "layered or procedural textures", source_path, path, diagnostics);
+      Reject(texture->has_uv_transform, "FBX texture UV transforms",
+        source_path, path, diagnostics);
+      Reject(texture->wrap_u != UFBX_WRAP_REPEAT
+          || texture->wrap_v != UFBX_WRAP_REPEAT,
+        "custom texture wrapping", source_path, path, diagnostics);
+    }
+    Reject(material->features.sheen.enabled && pbr.sheen_roughness.has_value
+        && pbr.sheen_roughness.value_real != 0.0,
+      "sheen roughness", source_path, path, diagnostics);
+  }
+  for (const auto& [index, node] :
+    std::views::enumerate(std::span(source.nodes.data, source.nodes.count))) {
+    if (node->mesh == nullptr) {
+      continue;
+    }
+    const auto& mesh = *node->mesh;
+    const auto uv_sets = std::span(mesh.uv_sets.data, mesh.uv_sets.count);
+    const auto emitted_uv = uv_sets.empty()
+      ? std::string_view {}
+      : std::string_view(
+          uv_sets.front().name.data, uv_sets.front().name.length);
+    const auto& materials
+      = node->materials.count != 0U ? node->materials : mesh.materials;
+    for (const auto* material : std::span(materials.data, materials.count)) {
+      for (const auto slot :
+        adapters::FbxMaterialTextures::From(*material).Slots()) {
+        const auto* texture = slot.Texture();
+        if (texture == nullptr || texture->uv_set.length == 0U) {
+          continue;
+        }
+        const auto requested
+          = std::string_view(texture->uv_set.data, texture->uv_set.length);
+        Reject(requested != emitted_uv,
+          "texture UV set '" + std::string(requested)
+            + "' when the mesh emits '" + std::string(emitted_uv) + "'",
+          source_path, "/Nodes/" + std::to_string(index), diagnostics);
+      }
+    }
+  }
   return diagnostics.size() == previous_count;
 }
 

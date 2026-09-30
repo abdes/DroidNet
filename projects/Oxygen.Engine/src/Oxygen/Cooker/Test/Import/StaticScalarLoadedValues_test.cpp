@@ -4,34 +4,59 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <array>
 #include <bit>
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
 #include <fstream>
 #include <functional>
+#include <ios>
+#include <iterator>
 #include <limits>
-#include <nlohmann/json.hpp>
 #include <numbers>
+#include <ostream>
+#include <string>
 #include <tuple>
+#include <utility>
 #include <vector>
 
-#include <glm/gtc/matrix_transform.hpp>
+#include "AsyncImporterFullTestBase.h"
+#include <glm/common.hpp>
+#include <glm/ext/matrix_float3x3.hpp>
+#include <glm/ext/matrix_float4x4.hpp>
+#include <glm/ext/matrix_transform.hpp>
+#include <glm/geometric.hpp>
 #include <glm/gtc/quaternion.hpp>
+#include <glm/matrix.hpp>
+#include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Base/Span.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/Loaders/BufferLoader.h>
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
 #include <Oxygen/Content/Loaders/MaterialLoader.h>
 #include <Oxygen/Content/Loaders/SceneLoader.h>
 #include <Oxygen/Content/Loaders/TextureLoader.h>
+#include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/ImportReport.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Core/EngineTag.h>
+#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
+#include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/Testing/GTest.h>
-
-#include "AsyncImporterFullTestBase.h"
 
 namespace oxygen::engine::internal {
 struct EngineTagFactory {
@@ -123,9 +148,9 @@ auto VerifyLoadedTriangle(const SceneAsset& scene,
   for (const auto index : mesh.IndexBuffer().Widened()) {
     indices.push_back(index);
   }
-  const auto face_normal
-    = glm::normalize(glm::cross(points[indices[1]] - points[indices[0]],
-      points[indices[2]] - points[indices[0]]));
+  const auto face_normal = glm::normalize(
+    glm::cross(points.at(indices.at(1)) - points.at(indices.at(0)),
+      points.at(indices.at(2)) - points.at(indices.at(0))));
   ExpectVector(face_normal, { 0, -front_sign, 0 });
 }
 
@@ -136,21 +161,26 @@ auto VerifyLoadedGltfValues(const SceneAsset& scene,
   VerifyLoadedTriangle(scene, geometry, unit_scale, 1.0F, hierarchy);
   const auto cameras = scene.GetComponents<PerspectiveCameraRecord>();
   ASSERT_EQ(cameras.size(), 1U);
-  EXPECT_FLOAT_EQ(cameras[0].fov_y, 1.0F);
-  EXPECT_NEAR(cameras[0].aspect_ratio, 16.0F / 9.0F, 0.0001F);
-  EXPECT_NEAR(cameras[0].near_plane, 0.2F * unit_scale, 0.0001F);
-  EXPECT_NEAR(cameras[0].far_plane, 250.0F * unit_scale, 0.0001F);
-  ExpectVector(glm::vec3(WorldTransform(scene, cameras[0].node_index)[3]),
+  EXPECT_FLOAT_EQ(cameras.front().fov_y, 1.0F);
+  EXPECT_NEAR(cameras.front().aspect_ratio, 16.0F / 9.0F, 0.0001F);
+  EXPECT_NEAR(cameras.front().near_plane, 0.2F * unit_scale, 0.0001F);
+  EXPECT_NEAR(cameras.front().far_plane, 250.0F * unit_scale, 0.0001F);
+  ExpectVector(glm::vec3(WorldTransform(scene, cameras.front().node_index)
+                 * glm::vec4(0, 0, 0, 1)),
     glm::vec3(0, -5, 2) * unit_scale);
   const auto lights = scene.GetComponents<DirectionalLightRecord>();
   ASSERT_EQ(lights.size(), 1U);
-  EXPECT_FLOAT_EQ(lights[0].intensity_lux, 5000.0F);
-  ExpectVector({ lights[0].common.color_rgb[0], lights[0].common.color_rgb[1],
-                 lights[0].common.color_rgb[2] },
+  EXPECT_FLOAT_EQ(lights.front().intensity_lux, 5000.0F);
+  ExpectVector(
+    { lights.front().common.color_rgb[0], lights.front().common.color_rgb[1],
+      lights.front().common.color_rgb[2] },
     { 0.8F, 0.7F, 0.6F });
   const auto color = material.GetBaseColor();
-  ExpectVector({ color[0], color[1], color[2] }, { 0.8F, 0.2F, 0.1F });
-  EXPECT_FLOAT_EQ(color[3], 1.0F);
+  ExpectVector(
+    { oxygen::base::CheckedAt(color, 0), oxygen::base::CheckedAt(color, 1),
+      oxygen::base::CheckedAt(color, 2) },
+    { 0.8F, 0.2F, 0.1F });
+  EXPECT_FLOAT_EQ(oxygen::base::CheckedAt(color, 3), 1.0F);
   EXPECT_NEAR(material.GetMetalness(), 0.25F, 0.001F);
   EXPECT_NEAR(material.GetRoughness(), 0.6F, 0.001F);
 }
@@ -176,9 +206,9 @@ auto WriteGltfSource(const std::filesystem::path& path, nlohmann::json document)
 {
   const auto binary = path.extension() == ".glb";
   if (binary) {
-    document["buffers"][0].erase("uri");
+    document.at("buffers").at(0).erase("uri");
   } else {
-    document["buffers"][0]["uri"] = "positions.bin";
+    document.at("buffers").at(0).at("uri") = "positions.bin";
     std::ofstream positions(
       path.parent_path() / "positions.bin", std::ios::binary);
     WritePositionBuffer(positions);
@@ -210,7 +240,9 @@ protected:
     const std::function<void(const SceneAsset&, const GeometryAsset&,
       const MaterialAsset&)>& verify) -> void
   {
-    ASSERT_TRUE(request.cooked_root.has_value());
+    if (!request.cooked_root.has_value()) {
+      FAIL() << "Import verification requires a cooked root";
+    }
     auto copied = request;
     const auto root = MakeTempDir("clean_"
       + request.cooked_root->parent_path().filename().string() + "_"
@@ -308,18 +340,18 @@ NOLINT_TEST_F(StaticScalarLoadedValuesTest,
           TestModelsDirFromFile() / "static_scalar_camera_sun.gltf");
         auto document = nlohmann::json::parse(input);
         if (hierarchy) {
-          document["nodes"].push_back(
+          document.at("nodes").push_back(
             { { "name", "Parent" }, { "translation", { 5, 0, 0 } },
               { "rotation", { 0, 0, std::sqrt(0.5), std::sqrt(0.5) } },
               { "children", { 0 } } });
-          document["scenes"][0]["nodes"] = { 3, 1, 2 };
+          document.at("scenes").at(0).at("nodes") = { 3, 1, 2 };
         }
         WriteGltfSource(source, document);
         oxygen::content::import::ImportRequest request;
         request.source_path = source;
         request.cooked_root = root / "cooked";
         request.options.scene_content_policy
-          = oxygen::content::import::SceneContentPolicy::kStaticScalar;
+          = oxygen::content::import::SceneContentPolicy::kStatic;
         request.options.coordinate.bake_transforms_into_meshes = false;
         request.options.coordinate.unit_normalization = oxygen::content::
           import::UnitNormalizationPolicy::kApplyCustomFactor;
@@ -412,7 +444,7 @@ NOLINT_TEST_F(
         request.source_path = source;
         request.cooked_root = root / "cooked";
         request.options.scene_content_policy
-          = oxygen::content::import::SceneContentPolicy::kStaticScalar;
+          = oxygen::content::import::SceneContentPolicy::kStatic;
         request.options.coordinate.bake_transforms_into_meshes = false;
         ImportAndVerifyCleanCopy(std::move(request),
           [centimeters, reflected, hierarchy](
@@ -424,22 +456,24 @@ NOLINT_TEST_F(
               = scene.template GetComponents<PerspectiveCameraRecord>();
             ASSERT_EQ(cameras.size(), 1U);
             EXPECT_NEAR(
-              cameras[0].fov_y, std::numbers::pi_v<float> / 3.0F, 0.0001F);
-            EXPECT_NEAR(cameras[0].aspect_ratio, 16.0F / 9.0F, 0.0001F);
-            EXPECT_NEAR(cameras[0].near_plane, 0.2F * units, 0.0001F);
-            EXPECT_NEAR(cameras[0].far_plane, 250.0F * units, 0.0001F);
+              cameras.front().fov_y, std::numbers::pi_v<float> / 3.0F, 0.0001F);
+            EXPECT_NEAR(cameras.front().aspect_ratio, 16.0F / 9.0F, 0.0001F);
+            EXPECT_NEAR(cameras.front().near_plane, 0.2F * units, 0.0001F);
+            EXPECT_NEAR(cameras.front().far_plane, 250.0F * units, 0.0001F);
             const auto lights
               = scene.template GetComponents<DirectionalLightRecord>();
             ASSERT_EQ(lights.size(), 1U);
-            EXPECT_FLOAT_EQ(lights[0].intensity_lux, 1.0F);
-            ExpectVector(
-              { lights[0].common.color_rgb[0], lights[0].common.color_rgb[1],
-                lights[0].common.color_rgb[2] },
+            EXPECT_FLOAT_EQ(lights.front().intensity_lux, 1.0F);
+            ExpectVector({ lights.front().common.color_rgb[0],
+                           lights.front().common.color_rgb[1],
+                           lights.front().common.color_rgb[2] },
               { 0.8F, 0.7F, 0.6F });
             const auto color = material.GetBaseColor();
-            ExpectVector(
-              { color[0], color[1], color[2] }, { 0.8F, 0.2F, 0.1F });
-            EXPECT_FLOAT_EQ(color[3], 1.0F);
+            ExpectVector({ oxygen::base::CheckedAt(color, 0),
+                           oxygen::base::CheckedAt(color, 1),
+                           oxygen::base::CheckedAt(color, 2) },
+              { 0.8F, 0.2F, 0.1F });
+            EXPECT_FLOAT_EQ(oxygen::base::CheckedAt(color, 3), 1.0F);
             EXPECT_NEAR(material.GetMetalness(), 0.0F, 0.001F);
             EXPECT_NEAR(material.GetRoughness(), 1.0F, 0.001F);
           });

@@ -127,8 +127,8 @@ auto SceneImportSettings::FromOptions(const ImportOptions& options,
     throw std::invalid_argument("Invalid node pruning policy");
   }
   switch (options.scene_content_policy) {
-  case SceneContentPolicy::kStaticScalar:
-    settings.content_policy = "static-scalar";
+  case SceneContentPolicy::kStatic:
+    settings.content_policy = "static";
     break;
   case SceneContentPolicy::kDefault:
     settings.content_policy = "default";
