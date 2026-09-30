@@ -192,6 +192,7 @@ public sealed partial class InspectorControlTests
         var revision = fixture.Context.Metadata.ChangeVersion;
         var history = fixture.Context.History.UndoStack.Count;
         var retained = Path.Combine(fixture.ProjectRoot, "Content/SourceMedia/DCC/ReviewedTriangle/Triangle." + format);
+        _ = File.Exists(Path.Combine(Path.GetDirectoryName(retained)!, "static_textured_checker.png")).Should().BeTrue();
         var original = await File.ReadAllBytesAsync(retained, cancellationToken).ConfigureAwait(true);
         var published = ReadPublishedHashes(fixture.ProjectRoot);
         var text = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(true);

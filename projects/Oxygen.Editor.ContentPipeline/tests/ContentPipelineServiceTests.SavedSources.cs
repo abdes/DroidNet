@@ -23,15 +23,16 @@ public sealed partial class ContentPipelineServiceTests
         workspace.Scene.Name = "Unsaved before cook";
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var generator = new CapturingSceneDescriptorGenerator(workspace, [])
+        var generator = new CapturingSceneDescriptorGenerator([]);
+        var api = new CapturingEngineContentPipelineApi(new(workspace.Root, Succeeded: true, []), SucceededInspection(workspace))
         {
-            BeforeGenerate = token =>
+            BeforeImport = (_, token) =>
             {
                 entered.SetResult();
                 return release.Task.WaitAsync(token);
             },
         };
-        var service = CreateService(workspace, generator, CreateSuccessfulApi(workspace));
+        var service = CreateService(workspace, generator, api);
         var cook = service.CookCurrentSceneAsync(new("asset:///Content/Scenes/Main.oscene.json"), this.TestContext.CancellationToken);
         await entered.Task.WaitAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         try
@@ -60,7 +61,7 @@ public sealed partial class ContentPipelineServiceTests
         await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
         var release = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
         var first = workspace.CookCoordinator.RunAsync((_, _) => release.Task, this.TestContext.CancellationToken);
-        var generator = new CapturingSceneDescriptorGenerator(workspace, []);
+        var generator = new CapturingSceneDescriptorGenerator([]);
         var service = CreateService(workspace, generator, CreateSuccessfulApi(workspace));
         var cook = service.CookCurrentSceneAsync(new("asset:///Content/Scenes/Main.oscene.json"), this.TestContext.CancellationToken);
         try
@@ -105,7 +106,7 @@ public sealed partial class ContentPipelineServiceTests
         using var registration = workspace.Documents.Register(path, _ => Task.FromResult<CookDocumentReadLease?>(new(state, static () => { })));
         await File.AppendAllTextAsync(path, " ", this.TestContext.CancellationToken).ConfigureAwait(false);
         var api = CreateSuccessfulApi(workspace);
-        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(workspace, []), api);
+        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api);
         var result = material
             ? await service.CookAssetAsync(new("asset:///" + relative), this.TestContext.CancellationToken).ConfigureAwait(false)
             : await service.CookCurrentSceneAsync(new("asset:///" + relative), this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -144,7 +145,7 @@ public sealed partial class ContentPipelineServiceTests
                 _ = blocked.TrySetResult(args.Run.OperationId);
             }
         };
-        var generator = new CapturingSceneDescriptorGenerator(workspace, []);
+        var generator = new CapturingSceneDescriptorGenerator([]);
         var service = CreateService(workspace, generator, CreateSuccessfulApi(workspace));
         var cook = service.CookCurrentSceneAsync(new("asset:///" + relative), this.TestContext.CancellationToken);
         var runId = await blocked.Task.WaitAsync(this.TestContext.CancellationToken).ConfigureAwait(false);

@@ -43,7 +43,7 @@
       "minLength": 1
     },
     "ContentPolicy": {
-      "const": "static-scalar"
+      "const": "static"
     },
     "UnitPolicy": {
       "const": "normalize"
@@ -55,7 +55,7 @@
       "const": "generate"
     },
     "TangentsPolicy": {
-      "const": "preserve"
+      "const": "generate"
     },
     "MaterialSlotProvenance": {
       "type": "object"

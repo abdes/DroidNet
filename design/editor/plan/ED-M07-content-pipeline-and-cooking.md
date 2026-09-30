@@ -255,8 +255,10 @@ Out of scope:
   - full project.
 - Dependency rules:
   - scene depends on geometry and material references.
-  - material descriptor dependencies remain scalar-only in V0.1; texture
-    material editing is out of scope.
+  - ED-M07 qualifies scalar material descriptors. Native texture dependency
+    capture and static textured imports are owned by
+    [M08.1](ED-M08-runtime-parity-and-standalone-validation.md#m081-remaining-increments);
+    texture material editing remains outside this milestone.
   - raw source media under `Content/SourceMedia` is importable only when a
     supported importer exists for the selected file.
 - Generated manifest must validate against the native

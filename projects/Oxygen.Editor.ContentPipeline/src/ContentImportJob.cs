@@ -19,6 +19,11 @@ public sealed record ContentImportJob(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     [property: JsonPropertyName("name")] string? Name)
 {
+    /// <summary>Gets the explicit texture output identity shared by analysis and cooking.</summary>
+    [JsonPropertyName("virtual_path")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? VirtualPath { get; init; }
+
     /// <summary>Gets the retained source namespace used by native slot allocation.</summary>
     [JsonPropertyName("material_slot_source_identity")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

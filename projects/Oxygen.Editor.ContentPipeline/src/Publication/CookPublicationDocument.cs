@@ -23,7 +23,7 @@ internal sealed record CookPublicationDocument(
     ImmutableArray<CookProvenance.Product> Products,
     CookPublicationInputs? CookInputs)
 {
-    internal const int CurrentVersion = 1;
+    internal const int CurrentVersion = 2;
 
     internal static JsonSerializerOptions JsonOptions { get; } = new()
     {
@@ -33,12 +33,14 @@ internal sealed record CookPublicationDocument(
         RespectRequiredConstructorParameters = true,
     };
 
-    internal CookProvenance ProductState => new(this.ProjectId,
+    internal CookProvenance ProductState => new(
+        this.ProjectId,
         [.. this.Roots.Where(static root => root.Owner == CookPublicationRootOwner.Project)
             .Select(static root => new CookProvenance.Root(root.Name, root.SourceKey, root.IndexSha256))], this.Products);
 
     internal static string ConfigurationIdentity(ProjectContext project)
-        => Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(new
+        => Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(
+            new
         {
             project.AuthoringMounts,
             project.LocalFolderMounts,
@@ -67,7 +69,8 @@ internal sealed record CookPublicationDocument(
         }
 
         if (this.CookInputs is { } inputs && (string.IsNullOrWhiteSpace(inputs.BuildFingerprint) || !IsDigest(inputs.InputIdentity)
-            || inputs.Inputs.IsDefault || inputs.Documents.IsDefault || inputs.CookedDependencies.IsDefault || inputs.ProducedSourceFiles.IsDefault))
+            || inputs.Inputs.IsDefault || inputs.Inputs.Any(static input => input is null || !CookProvenance.ValidInputFacts(input))
+            || inputs.Documents.IsDefault || inputs.CookedDependencies.IsDefault || inputs.ProducedSourceFiles.IsDefault))
         {
             throw new InvalidDataException("The publication contains invalid consumed-input evidence.");
         }

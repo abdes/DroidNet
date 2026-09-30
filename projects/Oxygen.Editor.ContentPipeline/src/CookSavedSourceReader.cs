@@ -9,7 +9,7 @@ using Oxygen.Editor.ContentPipeline.Snapshots;
 namespace Oxygen.Editor.ContentPipeline;
 
 /// <summary>Reads acknowledged saved bytes without retaining live authoring objects.</summary>
-internal static class CookSavedSourceReader
+internal static partial class CookSavedSourceReader
 {
     /// <summary>Reads one source while excluding saves and unacknowledged external changes.</summary>
     /// <param name="documents">Registered source owners.</param>
@@ -77,6 +77,34 @@ internal static class CookSavedSourceReader
     /// <returns>Whether a filesystem entry exists at the path.</returns>
     public static bool Exists(string path)
         => new FileInfo(path).Attributes != (FileAttributes)(-1);
+
+    /// <summary>Reads the same source metadata exposed by the native reader, following a link's target.</summary>
+    /// <param name="path">The logical source path.</param>
+    /// <returns>File or directory metadata with the original link flag.</returns>
+    public static Import.NativeSourceFileMetadata ReadMetadata(string path)
+    {
+        FileSystemInfo source = new FileInfo(path);
+        var isLink = source.LinkTarget is not null;
+        if (isLink)
+        {
+            source = source.ResolveLinkTarget(returnFinalTarget: true) ?? throw new IOException($"Cannot resolve source link '{path}'.");
+        }
+
+        var directory = source.Attributes.HasFlag(FileAttributes.Directory);
+        var modified = new DateTimeOffset(source.LastWriteTimeUtc);
+        var seconds = modified.ToUnixTimeSeconds();
+        var nanos = checked((int)((modified.Ticks - DateTimeOffset.FromUnixTimeSeconds(seconds).Ticks) * 100));
+        return new(directory ? 0 : checked((ulong)new FileInfo(source.FullName).Length), directory, isLink, seconds, nanos);
+    }
+
+    /// <summary>Compares a retained presence/metadata probe without opening its contents.</summary>
+    /// <param name="input">The probe or absence fact.</param>
+    /// <returns>Whether the observed source state is unchanged.</returns>
+    public static bool MatchesProbe(CookSnapshotInput input)
+    {
+        var exists = Exists(input.SourcePath);
+        return input.IsAbsent ? !exists : exists && (input.Metadata is null || ReadMetadata(input.SourcePath).Shape == input.Metadata.Shape);
+    }
 
     private static async Task<T> ReadCoreAsync<T>(
         ICookDocumentRegistry documents,

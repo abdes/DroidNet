@@ -55,7 +55,8 @@ public sealed partial class ContentPipelineService
                 foreach (var asset in candidate.Assets.Where(asset => !changed.Contains(asset.VirtualPath)))
                 {
                     if (oldAssets.TryGetValue(asset.VirtualPath, out var old)
-                        && (asset.Key != old.Key || asset.DescriptorPath != old.DescriptorPath
+                        && (asset.Key != old.Key
+                            || !string.Equals(asset.DescriptorPath, old.DescriptorPath, StringComparison.Ordinal)
                             || candidate.Files[asset.DescriptorPath] != priorInventory.Files[old.DescriptorPath]))
                     {
                         throw new InvalidDataException($"Unrelated cooked descriptor changed during publication: {asset.VirtualPath}.");
@@ -65,7 +66,7 @@ public sealed partial class ContentPipelineService
                 if (plan.ValidSharedRoots.Contains(root.Mount))
                 {
                     foreach (var output in products.Values.SelectMany(static product => product.Outputs)
-                        .Where(output => output.RootMount == root.Mount && !changed.Contains(output.Asset.VirtualPath)))
+                        .Where(output => string.Equals(output.RootMount, root.Mount, StringComparison.Ordinal) && !changed.Contains(output.Asset.VirtualPath)))
                     {
                         if (output.Asset.DescriptorRelativePath is not { } path
                             || !priorInventory.Files.TryGetValue(path, out var expected)
@@ -98,6 +99,11 @@ public sealed partial class ContentPipelineService
                     : ProceduralGeometryDescriptorService.IsGeneratedBasicShape(source.Key) ? [AssetUris.BuildGeneratedUri("Materials/Default")] : ImmutableArray<Uri>.Empty;
                 products[source.Key] = new(source.Key, fingerprint, dependencies, [.. source.Select(asset => new CookProvenance.Output(asset, root.Mount))])
                 {
+                    SourceInput = sourceInputs.GetValueOrDefault(source.Key),
+                    SourceFiles = graph.FileDependencies.TryGetValue(source.Key, out var sourceFiles)
+                        ? [.. sourceFiles.Select(path => expectedFiles[path])] : [],
+                    DeclaredOutputs = graph.SourceFacts.GetValueOrDefault(source.Key)?.Outputs ?? [],
+                    NativeReferences = graph.SourceFacts.GetValueOrDefault(source.Key)?.References ?? [],
                     AuxiliaryFiles = result.AuxiliaryFilesBySource.GetValueOrDefault(source.Key, []),
                     ReuseFingerprint = sourceInputs.TryGetValue(source.Key, out var sourceInput)
                         ? CookIncrementalPlanner.Fingerprint(sourceInput, snapshot.BuildFingerprint, expectedInputs, graph) : fingerprint,
@@ -132,16 +138,19 @@ public sealed partial class ContentPipelineService
         CancellationToken cancellationToken)
     {
         var covered = dirtyInputs.Where(static input => input.Kind == ContentCookAssetKind.Scene)
-            .SelectMany(input => graph.Dependencies[input.AssetUri]).Where(ProceduralGeometryDescriptorService.IsGeneratedBasicShape).ToHashSet();
-        if (covered.Count != 0)
-        {
-            _ = covered.Add(AssetUris.BuildGeneratedUri("Materials/Default"));
-        }
+            .SelectMany(input => graph.SceneDescriptors.GetValueOrDefault(input.AssetUri)?.Dependencies ?? [])
+            .Select(static input => input.AssetUri).ToHashSet();
 
-        var missing = CookIncrementalPlan.Builtins(graph).Where(uri => !plan.Reusable.ContainsKey(uri) && !covered.Contains(uri)).ToArray();
-        if (missing.Length == 0)
+        var missing = CookIncrementalPlan.Builtins(graph).Where(uri => !plan.Reusable.ContainsKey(uri) && !covered.Contains(uri)).ToHashSet();
+        if (missing.Count == 0)
         {
             return [];
+        }
+
+        var retained = graph.GeneratedSources.Where(input => missing.Remove(input.AssetUri)).ToArray();
+        if (missing.Count == 0)
+        {
+            return retained;
         }
 
         if (this.engineContentPipelineApi is not IBuiltinGeometryCatalogProvider catalog)
@@ -149,10 +158,15 @@ public sealed partial class ContentPipelineService
             throw new InvalidOperationException("The native builtin catalog is unavailable.");
         }
 
-        var scope = this.CreateScope(operation.Project, graph.Assets, targetKind) with { Snapshot = snapshot, Artifacts = artifacts };
-        var generated = await new ProceduralGeometryDescriptorService(catalog).EnsureDescriptorsAsync(scope, missing, cancellationToken).ConfigureAwait(false);
+        var scope = this.CreateScope(operation.Project, graph.Assets, targetKind) with
+        {
+            Snapshot = snapshot, Artifacts = artifacts,
+            PreparationRoot = Path.Combine(operation.Project.ProjectRoot, ".build", "cook", operation.OperationId.ToString("N"), "builtins"),
+        };
+        var generated = await new ProceduralGeometryDescriptorService(catalog).EnsureDescriptorsAsync(scope, [.. missing], cancellationToken).ConfigureAwait(false);
         return missing.Any(uri => !generated.Any(input => input.AssetUri == uri))
-            ? throw new InvalidDataException("A required generated asset is absent from the native catalog.") : generated;
+            ? throw new InvalidDataException("A required generated asset is absent from the native catalog.")
+            : [.. retained, .. generated.Select(input => input with { SourceRelativePath = Path.GetRelativePath(operation.Project.ProjectRoot, input.SourceAbsolutePath).Replace('\\', '/') })];
     }
 
     private async Task<ContentCookResult> ExecuteIncrementalCookAsync(ContentCookOperation operation, CookPublicationReadLease baseline, Func<IReadOnlyList<ContentCookScope>> resolveScopes, CookTargetKind targetKind, NativeArtifactLease artifacts, CookProvenance previous, Import.ImportedSourceIndex imports, CancellationToken cancellationToken)
@@ -173,6 +187,7 @@ public sealed partial class ContentPipelineService
             {
                 throw new InvalidDataException("Not all sources required to rebuild the damaged content were captured.");
             }
+
             graph = libraries.Apply(graph);
             if (HasError(graph.Diagnostics))
             {
@@ -241,16 +256,44 @@ public sealed partial class ContentPipelineService
         }
 
         var dirtyInputs = graph.Assets.Where(input => !plan.Reusable.ContainsKey(input.AssetUri)).ToList();
-        dirtyInputs.AddRange(await this.PrepareMissingBuiltinsAsync(operation, snapshot, graph, plan, dirtyInputs, artifacts, targetKind, cancellationToken).ConfigureAwait(false));
-        var staging = await this.publication.CreateStagingAsync(operation, baseline, dirtyInputs.Select(static input => input.MountName).Distinct(StringComparer.OrdinalIgnoreCase), repair.EmptyRoots, cancellationToken).ConfigureAwait(false);
+        var missingScenes = dirtyInputs.Where(input => input.Kind == ContentCookAssetKind.Scene && !graph.SceneDescriptors.ContainsKey(input.AssetUri)).ToArray();
+        if (missingScenes.Length != 0)
+        {
+            var prepared = await new CookSourceAnalyzer(operation, artifacts, this.engineContentPipelineApi, this.manifestBuilder,
+                this.sceneDescriptorGenerator, this.cookScopeProvider, cookDocuments)
+                .PrepareCapturedScenesAsync(missingScenes, snapshot, graph.GeneratedSources, cancellationToken).ConfigureAwait(false);
+            if (HasError(prepared.Diagnostics))
+            {
+                throw new CookInputDiscoveryException(prepared.Diagnostics);
+            }
+
+            graph = graph with
+            {
+                SceneDescriptors = graph.SceneDescriptors.SetItems(prepared.Sources.Select(static source => KeyValuePair.Create(source.Input.AssetUri, source.Scene!))),
+                NativeJobs = graph.NativeJobs.SetItems(prepared.Sources.Select(static source => KeyValuePair.Create(source.Input.AssetUri, source.Job!))),
+                GeneratedSources = [.. graph.GeneratedSources, .. prepared.GeneratedSources],
+                GeneratedInputs = [.. graph.GeneratedInputs, .. prepared.GeneratedInputs],
+            };
+        }
+
+        var generated = await this.PrepareMissingBuiltinsAsync(operation, snapshot, graph, plan, dirtyInputs, artifacts, targetKind, cancellationToken).ConfigureAwait(false);
+        dirtyInputs.AddRange(generated);
+        var admittedGenerated = graph.GeneratedInputs.Select(static input => input.LogicalPath).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        graph = graph with
+        {
+            GeneratedInputs = [.. graph.GeneratedInputs, .. await CookInputSnapshotCapture.CaptureGeneratedAsync(
+                generated.Where(input => !admittedGenerated.Contains(input.SourceAbsolutePath)), cancellationToken).ConfigureAwait(false)],
+        };
+        CookStagingArea? staging = null;
         CookReferenceRoots? references = null;
         try
         {
+            staging = await this.publication.CreateStagingAsync(operation, baseline, dirtyInputs.Select(static input => input.MountName).Distinct(StringComparer.OrdinalIgnoreCase), repair.EmptyRoots, cancellationToken).ConfigureAwait(false);
             staging.VerifyAcceptedInventories(inventories, repair.EmptyRoots);
             references = await CookReferenceRoots.AcquireAsync(staging, previous, plan, this.engineContentPipelineApi, cancellationToken).ConfigureAwait(false);
             return await this.CookAndPublishStagingAsync(operation, targetKind, artifacts, resolveScopes, snapshot, graph, previous, plan, dirtyInputs, staging, references, libraries, cancellationToken).ConfigureAwait(false);
         }
-        catch (ContentPipelineTerminationException failure)
+        catch (ContentPipelineTerminationException failure) when (staging is not null)
         {
             var drain = RetainStagingUntilDrain(failure, staging, references);
             staging = null;
@@ -259,10 +302,16 @@ public sealed partial class ContentPipelineService
         }
         finally
         {
-            references?.Dispose();
-            if (staging is not null)
+            try
             {
-                await staging.DisposeAsync().ConfigureAwait(false);
+                references?.Dispose();
+            }
+            finally
+            {
+                if (staging is not null)
+                {
+                    await staging.DisposeAsync().ConfigureAwait(false);
+                }
             }
         }
     }
@@ -270,7 +319,8 @@ public sealed partial class ContentPipelineService
     private static bool IsGeneratedSource(Uri uri)
         => uri.AbsolutePath.StartsWith("/Engine/Generated/", StringComparison.OrdinalIgnoreCase);
 
-    private Func<IReadOnlyList<ContentCookScope>> ExpandRepairScopes(ContentCookOperation operation,
+    private Func<IReadOnlyList<ContentCookScope>> ExpandRepairScopes(
+        ContentCookOperation operation,
         Func<IReadOnlyList<ContentCookScope>> resolveScopes, CookRootRepair repair, Import.ImportedSourceIndex imports, CookTargetKind targetKind)
     {
         if (repair.Sources.IsEmpty)
@@ -284,7 +334,8 @@ public sealed partial class ContentPipelineService
             var requested = resolveScopes();
             var included = requested.SelectMany(static scope => scope.Inputs).Select(static input => input.AssetUri).ToHashSet();
             var additional = repair.Sources.Where(uri => !IsGeneratedSource(uri) && !included.Contains(uri)).Select(uri =>
-                imports.ResolveScope(this.CreateScope(operation.Project,
+                imports.ResolveScope(this.CreateScope(
+                    operation.Project,
                     [CookInputResolver.Resolve(operation.Project, uri, ContentCookInputRole.Primary)], targetKind) with
                 {
                     ScopeUri = uri,

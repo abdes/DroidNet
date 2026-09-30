@@ -73,7 +73,7 @@ public sealed partial class ContentPipelineServiceTests
     public async Task PreviewDemandRejectsNonAssetScopes(string identity)
     {
         using var workspace = new TempWorkspace();
-        var pipeline = CreateService(workspace, new CapturingSceneDescriptorGenerator(workspace, []), CreateSuccessfulApi(workspace));
+        var pipeline = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), CreateSuccessfulApi(workspace));
         Func<Task> request = () => pipeline.CookPreviewAssetAsync(new(identity), workspace.ProjectContext, this.TestContext.CancellationToken);
         _ = await request.Should().ThrowAsync<ArgumentException>().ConfigureAwait(false);
         _ = workspace.CookCoordinator.Runs.Should().BeEmpty();

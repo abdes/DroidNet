@@ -16,7 +16,9 @@
         <Compile Include="$(ProjectsRoot)\Oxygen.Editor.ContentPipeline\testsupport\NativeContentPipelineFixture.cs" Link="NativeContentPipelineFixture.cs" />
         <None Include="$(ProjectsRoot)\Oxygen.Editor.ContentPipeline\tests\Fixtures\BuiltinGeometryCatalog.json" Link="Fixtures\BuiltinGeometryCatalog.json" CopyToOutputDirectory="PreserveNewest" />
         <None Include="$(ProjectsRoot)\Oxygen.Engine\src\Oxygen\Cooker\Test\Import\Models\static_scalar_triangle.gltf" Link="Fixtures\static_scalar_triangle.gltf" CopyToOutputDirectory="PreserveNewest" />
-        <None Include="$(ProjectsRoot)\Oxygen.Engine\src\Oxygen\Cooker\Test\Import\Models\static_scalar_triangle.fbx" Link="Fixtures\static_scalar_triangle.fbx" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="$(ProjectsRoot)\Oxygen.Engine\src\Oxygen\Cooker\Test\Import\Models\static_textured_triangle.gltf" Link="Fixtures\static_textured_triangle.gltf" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="$(ProjectsRoot)\Oxygen.Engine\src\Oxygen\Cooker\Test\Import\Models\static_textured_triangle.fbx" Link="Fixtures\static_textured_triangle.fbx" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="$(ProjectsRoot)\Oxygen.Engine\src\Oxygen\Cooker\Test\Import\Models\static_textured_checker.png" Link="Fixtures\static_textured_checker.png" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
     <ItemGroup Condition="Exists('$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\bin')">
         <None Include="$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\bin\*.dll">

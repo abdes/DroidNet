@@ -752,45 +752,48 @@ Orthographic cameras, point/spot lights, animation, skinning, morphs, physics
 and scripts do not enter the qualified scene. Detect such required content before
 publication and return a precise unsupported-content result while preserving the
 source. Import must not appear successful by silently dropping those features.
-Existing imported texture references may be preserved/read-only, but texture
-creation/editing and general textured-import qualification are outside V0.1.
-Texture-bearing imports are rejected by the qualified scalar-only entry point
-with an explanation; existing read-only references are not stripped on save.
+Static glTF/FBX imports accept the native importer's supported core texture
+bindings. Imported textures remain read-only in the editor; texture creation and
+editing are outside this slice. Unsupported animation, skinning and material
+channels fail native validation before publication, with source-attributed
+messages. A texture binding must resolve to an emitted resource, not an error
+index advertised as successful support.
 
-The native scene import request carries `SceneContentPolicy::kStaticScalar`;
-manifest scene options select it with `content_policy: "static-scalar"`.
-The editor persists and supplies that policy on initial import and reimport.
-Both native adapters validate the parsed source before creating pipeline work,
-including when loading captured in-memory inputs. Ordinary engine imports keep
-the default policy. This is part of the existing ImportTool/native transaction,
-not a separate qualification build or startup operation.
+The native request uses `SceneContentPolicy::kStatic`, selected by manifest
+`content_policy: "static"`. The same policy applies to initial import, retained
+source cooking, replacement and captured-input execution. The retired
+`"static-scalar"` spelling is rejected; maintained projects are upgraded and
+recooked rather than carried through a compatibility path.
 
-`Oxygen.Cooker`'s `InspectSceneSource` and ImportTool `inspect-source` report parsed
-source counts, native coordinate conversion facts, supported-content diagnostics
-and decoded external buffer paths through the versioned scene-source-inspection
-schema. Inspection emits no cooked content and does not load external glTF
-buffers; supported FBX has no external scalar/geometry dependencies. The managed
-adapter validates the matched schema and retains worker/artifact ownership
-through cancellation and termination failure.
+Initial intake uses the same native `analyze-sources` recipes as cooking. The
+request owns its native material-slot source identity through discovery,
+retention, settings creation and retries. Native declarations and observations
+identify the input closure; capture checks their existence, metadata and read
+proofs against private copies. Relative paths remain relative to the primary
+source, including parent-relative buffers and external images. Embedded data
+needs no extra file. Failed analysis cannot publish a partial source bundle.
 
-Coherent bundle discovery inspects a private copy of the primary file and
-uses that copy's hash when capturing the complete original file set. Relative
-paths stay relative to the primary source; embedded data needs no extra file.
-Missing references are reported by retention, and unsupported source content
-cannot enter publication. Each discovery attempt supplies its primary-relative
-path with the complete file set, so a retry can change the bundle's common root.
+Each attempt supplies the primary-relative path with the complete input set,
+so a retry can change the bundle's common root. Positive directory structure is
+preserved during retention and replacement staging. Full timestamps remain
+in-attempt coherence evidence; durable freshness uses file content and probe
+presence/type/size/link state, so producer-owned metadata writes do not make
+an otherwise unchanged project stale.
+
 Retained model bundles live under `Content/SourceMedia/DCC` through the declared
-Content mount. Operation ownership and the private primary copy survive a failed
-worker termination until native drain and cleanup complete. The report destination cannot overwrite the source,
-its hard-link alias, or a declared buffer.
+Content mount. Operation ownership and native query files survive a failed worker termination
+until native drain and cleanup complete. Query output remains in its operation
+directory and cannot overwrite an authored source.
 
 Native retained settings use the existing `<source>.import.json` naming
-convention with `SchemaVersion: 3` for new imports and
+convention with `SchemaVersion: 4` for new imports and
 `Importer: "Oxygen.Cooker.Scene/v1"`.
 The sidecar records the Content bundle/primary paths, initially discovered files
 and primary hash, output mount and exclusive destination, and explicit native
 content/unit/normal/tangent/transform policies. Retired sidecars require the one-time migration tool and cannot silently replace
-existing identities. Canonical retained settings also carry the engine-owned
+existing identities. Normals and tangents use native generation of missing
+attributes, preserving authored values. This supplies the UV-derived tangent
+basis required by normal maps in FBX files that omit tangents. Canonical retained settings also carry the engine-owned
 slot identity provenance defined in section 20. Creation uses the
 ordinary atomic file store with a missing-file baseline.
 

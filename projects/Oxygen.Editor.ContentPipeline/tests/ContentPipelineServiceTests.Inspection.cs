@@ -74,7 +74,7 @@ public sealed partial class ContentPipelineServiceTests
     {
         using var workspace = new TempWorkspace([new("Cooked", ".cooked"), new("Content", "Content"), new("Extra", "MoreContent")]);
         var api = new Mock<IEngineContentPipelineApi>(MockBehavior.Strict);
-        var pipeline = CreateService(workspace, new CapturingSceneDescriptorGenerator(workspace, []), api.Object);
+        var pipeline = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api.Object);
         var report = await pipeline.InspectCookedOutputAsync(scopeUri: null, this.TestContext.CancellationToken, validate: true).ConfigureAwait(false);
         _ = report.Roots.Select(static root => root.Name).Should().Equal("Content", "Extra");
         _ = report.Roots.Should().OnlyContain(root => !root.IsPresent && root.Validation == null && root.Inspection.Assets.Count == 0);
@@ -103,7 +103,7 @@ public sealed partial class ContentPipelineServiceTests
             await release.Task.ConfigureAwait(false);
             return NativeInventoryFixture.Read(root);
         });
-        var pipeline = CreateService(workspace, new CapturingSceneDescriptorGenerator(workspace, []), api.Object);
+        var pipeline = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api.Object);
         var inspection = pipeline.InspectCookedOutputAsync(scopeUri: null, this.TestContext.CancellationToken, validate: true);
         try
         {
@@ -138,7 +138,7 @@ public sealed partial class ContentPipelineServiceTests
             await Task.Delay(Timeout.Infinite, token).ConfigureAwait(false);
             return NativeInventoryFixture.Read(root);
         });
-        var pipeline = CreateService(workspace, new CapturingSceneDescriptorGenerator(workspace, []), api.Object);
+        var pipeline = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api.Object);
         var inspection = pipeline.InspectCookedOutputAsync(scopeUri: null, this.TestContext.CancellationToken);
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
         workspace.ContextService.Close();
@@ -177,7 +177,7 @@ public sealed partial class ContentPipelineServiceTests
         using var accepted = await workspace.Publication.AcquireForMountAsync(project, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = api.Setup(value => value.ReadInventoryAsync(root, It.IsAny<NativeArtifactLease?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => NativeInventoryFixture.Read(root));
-        var pipeline = CreateService(workspace, new CapturingSceneDescriptorGenerator(workspace, []), api.Object);
+        var pipeline = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api.Object);
         var report = await pipeline.InspectCookedOutputAsync(new("asset:///Library/Geometry"), this.TestContext.CancellationToken, expectedProject: project).ConfigureAwait(false);
         var inspected = report.Roots.Should().ContainSingle().Subject;
         _ = inspected.Inspection.CookedRoot.Should().Be(root);

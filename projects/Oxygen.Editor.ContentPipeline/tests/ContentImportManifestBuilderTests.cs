@@ -3,26 +3,90 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
-using Oxygen.Managed.Core;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Tests;
 
 [TestClass]
 public sealed class ContentImportManifestBuilderTests
 {
+    /// <summary>Distinct punctuation and Unicode paths remain distinct within a frontier.</summary>
+    [TestMethod]
+    public void BuildJobIdsDoNotCollapseSourcePaths()
+    {
+        var builder = new ContentImportManifestBuilder();
+        var paths = new[] { "Content/a-b.omat.json", "Content/a_b.omat.json", "Content/日.omat.json", "Content/本.omat.json" };
+        var ids = paths.Select(path => builder.BuildJob(
+            new ContentCookInput(
+            new Uri("asset:///" + path), ContentCookAssetKind.Material, "Content", path,
+            Path.GetFullPath(path), "/Content/Materials/Value.omat", ContentCookInputRole.Primary), []).Id).ToArray();
+        _ = ids.Distinct(StringComparer.Ordinal).Should().HaveCount(paths.Length);
+    }
+
+    /// <summary>Analysis recipes keep authored output identity without allocating a cooked destination.</summary>
+    [TestMethod]
+    public void BuildJobPreservesMaterialNameAndExplicitTextureIdentity()
+    {
+        using var workspace = new TempWorkspace();
+        var builder = new ContentImportManifestBuilder();
+        var input = new ContentCookInput(
+            new Uri("asset:///Content/Materials/Red.omat.json"),
+            ContentCookAssetKind.Material, "Content", "Content/Materials/Red.omat.json",
+            Path.Combine(workspace.Root, "Content", "Materials", "Red.omat.json"),
+            "/Content/Materials/Red.omat", ContentCookInputRole.Primary);
+        var material = builder.BuildJob(input, []);
+        _ = material.Name.Should().Be("Red");
+        _ = material.Layout!.MaterialsDirectory.Should().Be("Materials");
+        _ = material.Output.Should().BeNull();
+        var texture = builder.BuildJob(
+            input with
+        {
+            Kind = ContentCookAssetKind.Texture, SourceRelativePath = "Content/Textures/Red.otex.json", OutputVirtualPath = "/Content/Textures/Red.otex",
+        }, []);
+        _ = texture.VirtualPath.Should().Be("/Content/Textures/Red.otex");
+        _ = texture.Output.Should().BeNull();
+    }
+
+    /// <summary>Model queries and cooking retain one complete native recipe.</summary>
+    [TestMethod]
+    public void BuildJobPreservesRetainedModelOptionsAndLayout()
+    {
+        var input = new ContentCookInput(
+            new Uri("asset:///Content/SourceMedia/model.gltf"),
+            ContentCookAssetKind.ForeignSource, "Content", "Content/SourceMedia/model.gltf",
+            Path.GetFullPath("model.gltf"), null, ContentCookInputRole.Primary);
+        var settings = new Import.NativeSceneImportSettings(4, Import.NativeSceneImportSettings.ImporterIdentity,
+            "Content", "RetainedName", "Content/SourceMedia", "model.gltf", new string('a', 64), ["model.gltf"], "Models/Retained")
+        {
+            MaterialSlotProvenance = Import.NativeMaterialSlotProvenance.Create(),
+            BakeTransforms = true, NormalsPolicy = "preserve", TangentsPolicy = "generate",
+        };
+        var job = new ContentImportManifestBuilder().BuildJob(input, ["prior"], settings);
+        _ = job.Type.Should().Be("gltf");
+        _ = job.Name.Should().Be(settings.Name);
+        _ = job.Layout.Should().Be(settings.CreateLayout());
+        _ = job.DependsOn.Should().Equal("prior");
+        _ = job.BakeTransforms.Should().BeTrue();
+        _ = job.NormalsPolicy.Should().Be(settings.NormalsPolicy);
+        _ = job.TangentsPolicy.Should().Be(settings.TangentsPolicy);
+        _ = job.MaterialSlotProvenance.Should().BeSameAs(settings.MaterialSlotProvenance);
+    }
+
     /// <summary>Scene exposure masks cook before the scene, in its own texture descriptor namespace.</summary>
     [TestMethod]
     public void BuildSceneManifestIncludesMeteringMaskDependency()
     {
         using var workspace = new TempWorkspace();
         var scope = CreateScope(workspace);
-        var texture = new ContentCookInput(new Uri("asset:///Content/Textures/Meter.otex.json"),
+        var texture = new ContentCookInput(
+            new Uri("asset:///Content/Textures/Meter.otex.json"),
             ContentCookAssetKind.Texture, "Content", "Content/Textures/Meter.otex.json",
             Path.Combine(workspace.Root, "Content", "Textures", "Meter.otex.json"),
             "/Content/Textures/Meter.otex", ContentCookInputRole.Dependency);
-        var scene = new SceneDescriptorGenerationResult(new Uri("asset:///Content/Scenes/Main.oscene.json"),
+        var scene = new SceneDescriptorGenerationResult(
+            new Uri("asset:///Content/Scenes/Main.oscene.json"),
             Path.Combine(workspace.Root, ".pipeline", "Scenes", "Main.oscene.json"),
             "/Content/Scenes/Main.oscene", [texture], Diagnostics: []);
         var manifest = new ContentImportManifestBuilder().BuildSceneManifest(scope, scene);
@@ -81,7 +145,7 @@ public sealed class ContentImportManifestBuilderTests
         var manifest = new ContentImportManifestBuilder().BuildSceneManifest(scope, sceneDescriptor);
 
         _ = manifest.Jobs[0].Source.Should().Be("Content/Materials/Red.omat.json");
-        _ = manifest.Jobs[0].Id.Should().Be("material-Content-Materials-Red-omat-json");
+        _ = manifest.Jobs[0].Id.Should().Be("material:Content/Materials/Red.omat.json");
     }
 
     [TestMethod]
@@ -193,7 +257,7 @@ public sealed class ContentImportManifestBuilderTests
 
         public void Dispose()
         {
-            this.Output.DisposeAsync().GetAwaiter().GetResult();
+            this.Output.DisposeAsync().AsTask().GetAwaiter().GetResult();
             if (Directory.Exists(this.Root))
             {
                 Directory.Delete(this.Root, recursive: true);

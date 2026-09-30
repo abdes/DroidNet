@@ -11,56 +11,69 @@ using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline.Import;
 
-/// <summary>Discovers a portable source bundle from an immutable primary-file copy.</summary>
+/// <summary>Discovers a portable source bundle through native recipe analysis and captured-input proofs.</summary>
 /// <param name="documents">Saved source owners and their read gates.</param>
 /// <param name="coordinator">The project writer and activation lifetime.</param>
-/// <param name="inspector">The existing native source-inspection capability.</param>
-public sealed class SceneImportSourceDiscovery(ICookDocumentRegistry documents, IContentCookCoordinator coordinator, ISceneSourceInspector inspector)
+/// <param name="native">The native analysis and cooking owner.</param>
+public sealed class SceneImportSourceDiscovery(ICookDocumentRegistry documents, IContentCookCoordinator coordinator, IEngineContentPipelineApi native)
 {
-    /// <summary>Inspects captured primary bytes and hashes every original dependency for coherent retention.</summary>
-    /// <remarks>The enclosing retention operation owns the project operation marker through native drain.</remarks>
+    /// <summary>Analyzes the actual recipe and retains every declared file and observed probe for coherent capture.</summary>
     /// <param name="operation">The operation holding the project writer.</param>
     /// <param name="sourcePath">The selected original primary source.</param>
+    /// <param name="recipe">The model's destination, import policy and native source identity.</param>
     /// <param name="cancellationToken">Cancels discovery and its owned native query.</param>
     /// <param name="artifacts">Optional producer artifacts retained by the enclosing import.</param>
-    /// <returns>The complete original input set and matching native metadata.</returns>
-    public async Task<DiscoveredSceneSource> DiscoverAsync(ContentCookOperation operation, string sourcePath, CancellationToken cancellationToken, NativeArtifactLease? artifacts = null)
+    /// <returns>The portable input closure, including proofs checked before retention.</returns>
+    public async Task<ImportSourceBundle> DiscoverAsync(ContentCookOperation operation, string sourcePath, ContentImportJob recipe, CancellationToken cancellationToken, NativeArtifactLease? artifacts = null)
     {
-        ArgumentNullException.ThrowIfNull(operation);
-        ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
         coordinator.VerifyWriter(operation);
         cancellationToken.ThrowIfCancellationRequested();
         var primary = Path.GetFullPath(sourcePath);
-        RequireFile(operation, primary);
+
+        // Check editor-owned saved state before launching native work. Capture later compares every native observation.
+        _ = await CookSavedSourceReader.HashAsync(documents, primary, cancellationToken).ConfigureAwait(false);
+        var directory = Path.GetDirectoryName(primary)!;
         var operationRoot = Path.Combine(operation.Project.ProjectRoot, ".build", "cook", operation.OperationId.ToString("N"));
         var scratch = Path.Combine(operationRoot, "discovery-" + Guid.NewGuid().ToString("N"));
         CookOutputLease.RejectReparsePoint(operationRoot);
         _ = Directory.CreateDirectory(scratch);
-        var copy = Path.Combine(scratch, Path.GetFileName(primary));
         Task? retainedDrain = null;
         try
         {
             CookRunContext.Report(new(Message: "Reading source content and dependencies."));
-            var primaryHash = await CookSavedSourceReader.CopyAsync(documents, primary, copy, cancellationToken).ConfigureAwait(false);
+            var report = await native.AnalyzeSourcesAsync(
+                new(operation.OperationId, directory, scratch, [recipe with { Source = primary }])
+            {
+                Artifacts = artifacts,
+            }, cancellationToken).ConfigureAwait(false);
             coordinator.VerifyWriter(operation);
-            var inspection = await inspector.InspectSceneSourceAsync(operation.OperationId, scratch, copy, cancellationToken, artifacts).ConfigureAwait(false);
-            inspection = inspection with
+            var facts = report.Jobs.Single();
+            if (!report.Complete || !facts.Complete)
             {
-                Diagnostics = inspection.Diagnostics.Select(issue => issue with { OperationId = operation.OperationId, AffectedPath = primary }).ToImmutableArray(),
-            };
-            if (!inspection.Parsed || !inspection.Supported)
-            {
-                var issues = inspection.Diagnostics;
-                if (!issues.Any(static issue => issue.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Fatal))
+                var issues = facts.Diagnostics.Select(issue => issue with
                 {
-                    issues = issues.Add(Failure(operation, primary, "The source cannot be imported with the supported content policy."));
+                    OperationId = operation.OperationId, AffectedPath = issue.AffectedPath ?? primary,
+                }).ToImmutableArray();
+                if (!issues.Any(static issue => issue.Severity >= DiagnosticSeverity.Error))
+                {
+                    issues = issues.Add(new()
+                    {
+                        OperationId = operation.OperationId, Domain = FailureDomain.AssetImport, Severity = DiagnosticSeverity.Error,
+                        Code = AssetImportDiagnosticCodes.ImportFailed, Message = "Native source analysis did not complete.", AffectedPath = primary,
+                    });
                 }
 
                 throw new CookInputDiscoveryException(issues);
             }
 
-            var bundle = await this.DiscoverFilesAsync(operation, primary, primaryHash, inspection, cancellationToken).ConfigureAwait(false);
-            return new(bundle, inspection);
+            var root = FindCommonRoot(directory, facts.Observations.Select(static item => item.Path).Concat(facts.Files.Select(static file => file.Path)));
+            var files = await CookSavedSourceReader.ReadNativeInputsAsync(documents, facts, root, ImmutableHashSet<string>.Empty, cancellationToken).ConfigureAwait(false);
+            if (!files.Any(file => file.Kind == CookSnapshotInputKind.File && string.Equals(file.SourcePath, primary, StringComparison.OrdinalIgnoreCase)))
+            {
+                throw new InvalidDataException("Native analysis omitted its primary source file.");
+            }
+
+            return new(Path.GetRelativePath(root, primary).Replace('\\', '/'), files);
         }
         catch (ContentPipelineTerminationException failure)
         {
@@ -82,8 +95,7 @@ public sealed class SceneImportSourceDiscovery(ICookDocumentRegistry documents, 
         {
             while (Escapes(root, path))
             {
-                root = Path.GetDirectoryName(root)
-                    ?? throw new InvalidDataException("Source dependencies must share a filesystem root.");
+                root = Path.GetDirectoryName(root) ?? throw new InvalidDataException("Source dependencies must share a filesystem root.");
             }
         }
 
@@ -92,22 +104,9 @@ public sealed class SceneImportSourceDiscovery(ICookDocumentRegistry documents, 
         static bool Escapes(string root, string path)
         {
             var relative = Path.GetRelativePath(root, path);
-            return Path.IsPathRooted(relative) || string.Equals(relative, "..", StringComparison.Ordinal)
-                || relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal);
+            return Path.IsPathRooted(relative) || string.Equals(relative, "..", StringComparison.Ordinal) || relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal);
         }
     }
-
-    private static void RequireFile(ContentCookOperation operation, string path)
-    {
-        var attributes = new FileInfo(path).Attributes;
-        if (attributes == (FileAttributes)(-1) || attributes.HasFlag(FileAttributes.Directory))
-        {
-            throw new CookInputDiscoveryException([Failure(operation, path, $"Source dependency is missing: {path}") with { Code = AssetImportDiagnosticCodes.SourceMissing }]);
-        }
-    }
-
-    private static DiagnosticRecord Failure(ContentCookOperation operation, string path, string message)
-        => new() { OperationId = operation.OperationId, Domain = FailureDomain.AssetImport, Severity = DiagnosticSeverity.Error, Code = AssetImportDiagnosticCodes.ImportFailed, Message = message, AffectedPath = path };
 
     private static async Task CleanupAfterDrainAsync(Task drain, string scratch)
     {
@@ -128,39 +127,5 @@ public sealed class SceneImportSourceDiscovery(ICookDocumentRegistry documents, 
         {
             Directory.Delete(scratch, recursive: true);
         }
-    }
-
-    private async Task<ImportSourceBundle> DiscoverFilesAsync(ContentCookOperation operation, string primary, string primaryHash, SceneSourceInspectionReport inspection, CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        coordinator.VerifyWriter(operation);
-        var directory = Path.GetDirectoryName(primary)!;
-        var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { primary };
-        foreach (var relative in inspection.ExternalFiles)
-        {
-            if (string.IsNullOrWhiteSpace(relative) || Path.IsPathRooted(relative)
-                || relative.Split('/', '\\').Any(static part => part is not ("." or "..")
-                    && (part.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || part.EndsWith('.') || part.EndsWith(' '))))
-            {
-                throw new CookInputDiscoveryException([Failure(operation, primary, $"Source dependency '{relative}' is not a valid relative file path.")]);
-            }
-
-            _ = paths.Add(Path.GetFullPath(Path.Combine(directory, relative)));
-        }
-
-        var root = FindCommonRoot(directory, paths);
-        var inputs = ImmutableArray.CreateBuilder<CookSnapshotInput>(paths.Count);
-        foreach (var path in paths.Order(StringComparer.OrdinalIgnoreCase))
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            coordinator.VerifyWriter(operation);
-            RequireFile(operation, path);
-            var hash = string.Equals(path, primary, StringComparison.OrdinalIgnoreCase)
-                ? primaryHash
-                : await CookSavedSourceReader.HashAsync(documents, path, cancellationToken).ConfigureAwait(false);
-            inputs.Add(new(AssetUri: null, path, Path.GetRelativePath(root, path).Replace('\\', '/'), hash));
-        }
-
-        return new(Path.GetRelativePath(root, primary).Replace('\\', '/'), inputs.MoveToImmutable());
     }
 }

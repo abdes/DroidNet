@@ -18,6 +18,37 @@ namespace Oxygen.Editor.ContentPipeline.Tests;
 /// <summary>Exercises native discovery and coherent source retention through the same project writer.</summary>
 public sealed partial class ImportSourceRetentionTests
 {
+    /// <summary>Positive directory probes survive source retention and replacement staging without becoming byte-file records.</summary>
+    /// <returns>The directory-retention verification.</returns>
+    [TestMethod]
+    public async Task DirectoryProbeSurvivesRetentionAndReplacementStaging()
+    {
+        using var workspace = new RetentionWorkspace();
+        var primary = workspace.Write("model.gltf", "source");
+        var directory = Path.Combine(Path.GetDirectoryName(primary.SourcePath)!, "empty-textures");
+        _ = Directory.CreateDirectory(directory);
+        var native = new DelegateSourceAnalyzer(async (execution, token) =>
+        {
+            var report = await SourceFactsAsync(execution, token).ConfigureAwait(false);
+            return report with
+            {
+                Jobs = [report.Jobs.Single() with
+                {
+                    Observations = [.. report.Jobs.Single().Observations, new(directory, true, CookSavedSourceReader.ReadMetadata(directory), [])],
+                }],
+            };
+        });
+        var retained = await RetainDiscoveredAsync(workspace, primary.SourcePath, native, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var root = Path.Combine(workspace.ProjectRoot, retained.Source!.DirectoryRelativePath);
+        _ = retained.Source.Files.Should().ContainSingle();
+        _ = Directory.Exists(Path.Combine(root, "empty-textures")).Should().BeTrue();
+
+        var stage = Path.Combine(workspace.ProjectRoot, ".build", "replacement");
+        _ = await Publication.CookRootImage.CaptureAsync(root, stage, this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = Directory.Exists(Path.Combine(stage, "empty-textures")).Should().BeTrue();
+        _ = Directory.EnumerateFileSystemEntries(Path.Combine(stage, "empty-textures")).Should().BeEmpty();
+    }
+
     /// <summary>Native discovery preserves embedded FBX and parent-relative glTF dependencies after original removal.</summary>
     /// <param name="extension">The retained source format.</param>
     /// <returns>The asynchronous native retention test.</returns>
@@ -81,26 +112,25 @@ public sealed partial class ImportSourceRetentionTests
         var primary = workspace.Write("Models/model.gltf", "old source");
         _ = workspace.Write("Models/data.bin", "old buffer");
         _ = workspace.Write("Shared/data.bin", "new buffer");
-        var inspector = new DelegateSourceInspector(async (copy, token) =>
+        var inspector = new DelegateSourceAnalyzer(async (execution, token) =>
         {
-            var captured = await File.ReadAllTextAsync(copy, token).ConfigureAwait(false);
-            _ = copy.Should().NotBe(primary.SourcePath);
-            if (string.Equals(captured, "old source", StringComparison.Ordinal))
+            var observed = await File.ReadAllTextAsync(execution.Jobs.Single().Source, token).ConfigureAwait(false);
+            if (string.Equals(observed, "old source", StringComparison.Ordinal))
             {
+                var facts = await SourceFactsAsync(execution, token, "data.bin").ConfigureAwait(false);
                 await File.WriteAllTextAsync(primary.SourcePath, "new source", token).ConfigureAwait(false);
-                _ = (await File.ReadAllTextAsync(copy, token).ConfigureAwait(false)).Should().Be("old source");
-                return SourceFacts("data.bin");
+                return facts;
             }
 
-            return SourceFacts("../Shared/data.bin");
+            return await SourceFactsAsync(execution, token, "../Shared/data.bin").ConfigureAwait(false);
         });
 
         var result = await RetainDiscoveredAsync(workspace, primary.SourcePath, inspector, this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = inspector.Copies.Should().HaveCount(2);
+        _ = inspector.Executions.Should().HaveCount(2);
         _ = result.Source!.PrimaryRelativePath.Should().Be("Models/model.gltf");
         _ = result.Source.Files.Select(static file => file.RelativePath).Should().BeEquivalentTo("Models/model.gltf", "Shared/data.bin");
         _ = (await File.ReadAllTextAsync(Path.Combine(workspace.ProjectRoot, "Content/SourceMedia/DCC/Model/Models/model.gltf"), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Be("new source");
-        _ = inspector.Copies.Should().OnlyContain(path => !File.Exists(path));
+        _ = inspector.Executions.Should().OnlyContain(execution => !Directory.Exists(execution.OperationRoot));
     }
 
     /// <summary>Missing dependencies are reported by original path and never expose a partial bundle.</summary>
@@ -110,13 +140,13 @@ public sealed partial class ImportSourceRetentionTests
     {
         using var workspace = new RetentionWorkspace();
         var primary = workspace.Write("model.gltf", "source");
-        var inspector = new DelegateSourceInspector((_, _) => Task.FromResult(SourceFacts("missing.bin")));
+        var inspector = new DelegateSourceAnalyzer((execution, token) => SourceFactsAsync(execution, token, "missing.bin"));
         Func<Task> retain = async () => _ = await RetainDiscoveredAsync(workspace, primary.SourcePath, inspector, this.TestContext.CancellationToken).ConfigureAwait(false);
         var failure = await retain.Should().ThrowAsync<CookInputDiscoveryException>().ConfigureAwait(false);
         _ = failure.Which.Diagnostics.Should().ContainSingle(issue => issue.Code == AssetImportDiagnosticCodes.SourceMissing
             && issue.AffectedPath == Path.Combine(Path.GetDirectoryName(primary.SourcePath)!, "missing.bin"));
         _ = Directory.Exists(Path.Combine(workspace.ProjectRoot, "Content/SourceMedia/DCC/Model")).Should().BeFalse();
-        _ = inspector.Copies.Should().OnlyContain(path => !File.Exists(path));
+        _ = inspector.Executions.Should().OnlyContain(execution => !Directory.Exists(execution.OperationRoot));
     }
 
     /// <summary>Unsupported source diagnostics identify the original file, not its temporary inspection copy.</summary>
@@ -126,11 +156,24 @@ public sealed partial class ImportSourceRetentionTests
     {
         using var workspace = new RetentionWorkspace();
         var primary = workspace.Write("model.gltf", "source");
-        var inspector = new DelegateSourceInspector((copy, _) => Task.FromResult(SourceFacts() with
+        var inspector = new DelegateSourceAnalyzer(async (execution, token) =>
         {
-            Supported = false,
-            Diagnostics = [new() { OperationId = Guid.Empty, Domain = FailureDomain.AssetImport, Severity = DiagnosticSeverity.Error, Code = "import.unsupported", Message = "Unsupported source feature.", AffectedPath = copy }],
-        }));
+            var report = await SourceFactsAsync(execution, token).ConfigureAwait(false);
+            return report with
+            {
+                Complete = false,
+                Jobs = [report.Jobs.Single() with
+                {
+                    Complete = false,
+                    Diagnostics = [new()
+                    {
+                        OperationId = Guid.Empty, Domain = FailureDomain.AssetImport, Severity = DiagnosticSeverity.Error,
+                        Code = "import.unsupported", Message = "Unsupported source feature.", AffectedPath = execution.Jobs.Single().Source,
+                    }
+                    ],
+                }],
+            };
+        });
         Func<Task> retain = async () => _ = await RetainDiscoveredAsync(workspace, primary.SourcePath, inspector, this.TestContext.CancellationToken).ConfigureAwait(false);
         var failure = await retain.Should().ThrowAsync<CookInputDiscoveryException>().ConfigureAwait(false);
         _ = failure.Which.Diagnostics.Should().ContainSingle(issue => issue.AffectedPath == primary.SourcePath && issue.OperationId != Guid.Empty);
@@ -146,10 +189,10 @@ public sealed partial class ImportSourceRetentionTests
         var primary = workspace.Write("model.gltf", "saved");
         var state = new CookDocumentState(Guid.NewGuid(), primary.SourcePath, "Model", 2, 1, IsDirty: true, primary.DiscoveryHash);
         using var registration = workspace.Documents.Register(primary.SourcePath, _ => Task.FromResult<CookDocumentReadLease?>(new(state, () => { })));
-        var inspector = new DelegateSourceInspector((_, _) => Task.FromResult(SourceFacts()));
+        var inspector = new DelegateSourceAnalyzer((execution, token) => SourceFactsAsync(execution, token));
         Func<Task> retain = async () => _ = await RetainDiscoveredAsync(workspace, primary.SourcePath, inspector, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = await retain.Should().ThrowAsync<CookInputsNeedSaveException>().ConfigureAwait(false);
-        _ = inspector.Copies.Should().BeEmpty();
+        _ = inspector.Executions.Should().BeEmpty();
         _ = Directory.Exists(Path.Combine(workspace.ProjectRoot, "Content/SourceMedia/DCC/Model")).Should().BeFalse();
     }
 
@@ -159,12 +202,12 @@ public sealed partial class ImportSourceRetentionTests
     [TestMethod]
     [DataRow(false)]
     [DataRow(true)]
-    public async Task InterruptedDiscoveryCleansItsCopyWithoutRetention(bool closeProject)
+    public async Task InterruptedDiscoveryCleansItsQueryWithoutRetention(bool closeProject)
     {
         using var workspace = new RetentionWorkspace();
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(this.TestContext.CancellationToken);
         var primary = workspace.Write("model.gltf", "source");
-        var inspector = new DelegateSourceInspector(async (_, token) =>
+        var inspector = new DelegateSourceAnalyzer(async (execution, token) =>
         {
             if (closeProject)
             {
@@ -176,12 +219,12 @@ public sealed partial class ImportSourceRetentionTests
             }
 
             token.ThrowIfCancellationRequested();
-            return SourceFacts();
+            return await SourceFactsAsync(execution, token).ConfigureAwait(false);
         });
         Func<Task> retain = async () => _ = await RetainDiscoveredAsync(workspace, primary.SourcePath, inspector, cancellation.Token).ConfigureAwait(false);
         _ = await retain.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
-        _ = inspector.Copies.Should().ContainSingle();
-        _ = inspector.Copies.Should().OnlyContain(path => !File.Exists(path));
+        _ = inspector.Executions.Should().ContainSingle();
+        _ = inspector.Executions.Should().OnlyContain(execution => !Directory.Exists(execution.OperationRoot));
         _ = Directory.Exists(Path.Combine(workspace.ProjectRoot, "Content/SourceMedia/DCC/Model")).Should().BeFalse();
     }
 
@@ -195,26 +238,26 @@ public sealed partial class ImportSourceRetentionTests
         var state = new CookDocumentState(Guid.NewGuid(), primary.SourcePath, "Model", 1, 1, IsDirty: false, primary.DiscoveryHash);
         using var registration = workspace.Documents.Register(primary.SourcePath, _ => Task.FromResult<CookDocumentReadLease?>(new(state, () => { })));
         await File.WriteAllTextAsync(primary.SourcePath, "external edit", this.TestContext.CancellationToken).ConfigureAwait(false);
-        var inspector = new DelegateSourceInspector((_, _) => Task.FromResult(SourceFacts()));
+        var inspector = new DelegateSourceAnalyzer((execution, token) => SourceFactsAsync(execution, token));
         Func<Task> retain = async () => _ = await RetainDiscoveredAsync(workspace, primary.SourcePath, inspector, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = await retain.Should().ThrowAsync<IOException>().WithMessage("*changed outside the editor*").ConfigureAwait(false);
-        _ = inspector.Copies.Should().BeEmpty();
+        _ = inspector.Executions.Should().BeEmpty();
     }
 
-    /// <summary>Failed native termination retains the primary copy and operation marker until cleanup drains.</summary>
+    /// <summary>Failed native termination retains the query directory and operation marker until cleanup drains.</summary>
     /// <returns>The asynchronous retained-ownership test.</returns>
     [TestMethod]
-    public async Task FailedTerminationRetainsPrimaryCopyAndOperationOwnership()
+    public async Task FailedTerminationRetainsNativeQueryAndOperationOwnership()
     {
         using var workspace = new RetentionWorkspace();
         var primary = workspace.Write("model.gltf", "source");
         var drain = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var inspector = new DelegateSourceInspector((_, _) => Task.FromException<SceneSourceInspectionReport>(new ContentPipelineTerminationException(new IOException("Worker termination failed"), drain.Task)));
+        var inspector = new DelegateSourceAnalyzer((_, _) => Task.FromException<NativeSourceAnalysisReport>(new ContentPipelineTerminationException(new IOException("Worker termination failed"), drain.Task)));
         Func<Task> retain = async () => _ = await RetainDiscoveredAsync(workspace, primary.SourcePath, inspector, this.TestContext.CancellationToken).ConfigureAwait(false);
         var failure = await retain.Should().ThrowAsync<ContentPipelineTerminationException>().ConfigureAwait(false);
-        var copy = inspector.Copies.Single();
-        var marker = Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(copy))!, "operation.lock");
-        _ = File.Exists(copy).Should().BeTrue();
+        var scratch = inspector.Executions.Single().OperationRoot;
+        var marker = Path.Combine(Path.GetDirectoryName(scratch)!, "operation.lock");
+        _ = Directory.Exists(scratch).Should().BeTrue();
         Action acquire = () => { using var stream = File.Open(marker, FileMode.Open, FileAccess.ReadWrite, FileShare.None); };
         try
         {
@@ -226,34 +269,64 @@ public sealed partial class ImportSourceRetentionTests
         }
 
         await failure.Which.DrainCompletion.WaitAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = File.Exists(copy).Should().BeFalse();
+        _ = Directory.Exists(scratch).Should().BeFalse();
         _ = File.Exists(marker).Should().BeFalse();
         _ = await workspace.Coordinator.RunAsync((_, _) => Task.FromResult(true), this.TestContext.CancellationToken).ConfigureAwait(false);
     }
 
-    private static SceneSourceInspectionReport SourceFacts(params string[] dependencies)
-        => new(Parsed: true, Supported: true, "gltf", dependencies.ToImmutableArray(), new(1, "+X", "+Y", "+Z", IsLeftHanded: false, ReversesWinding: false), 1, 1, 1, []);
-
-    private static Task<ImportSourceRetentionResult> RetainDiscoveredAsync(RetentionWorkspace workspace, string sourcePath, ISceneSourceInspector inspector, CancellationToken cancellationToken)
+    private static async Task<NativeSourceAnalysisReport> SourceFactsAsync(ContentSourceAnalysisExecution execution, CancellationToken token, params string[] dependencies)
     {
-        var discovery = new SceneImportSourceDiscovery(workspace.Documents, workspace.Coordinator, inspector);
+        var job = execution.Jobs.Single();
+        var paths = dependencies.Select(path => Path.GetFullPath(Path.Combine(execution.InputRoot, path))).Prepend(job.Source).ToArray();
+        var observations = ImmutableArray.CreateBuilder<NativeSourceObservation>();
+        var diagnostics = ImmutableArray.CreateBuilder<DiagnosticRecord>();
+        foreach (var path in paths)
+        {
+            if (!File.Exists(path))
+            {
+                observations.Add(new(path, false, null, []));
+                diagnostics.Add(new()
+                {
+                    OperationId = execution.OperationId, Domain = FailureDomain.AssetImport,
+                    Severity = DiagnosticSeverity.Error, Code = AssetImportDiagnosticCodes.SourceMissing, Message = "Source dependency is missing.", AffectedPath = path,
+                });
+                continue;
+            }
+
+            var bytes = await File.ReadAllBytesAsync(path, token).ConfigureAwait(false);
+            observations.Add(new(path, true, CookSavedSourceReader.ReadMetadata(path), [new(0, 0, Convert.ToHexStringLower(SHA256.HashData(bytes)))]));
+        }
+
+        return new("native-source-test", diagnostics.Count == 0, [new(job.Id, job.Type, job.Source, diagnostics.Count == 0,
+            [], [], [.. paths.Select(static path => new NativeSourceFileDependency(path, true))], observations.ToImmutable(), diagnostics.ToImmutable())]);
+    }
+
+    private static Task<ImportSourceRetentionResult> RetainDiscoveredAsync(RetentionWorkspace workspace, string sourcePath, IEngineContentPipelineApi native, CancellationToken cancellationToken)
+    {
+        var input = new ContentCookInput(new Uri(sourcePath), ContentCookAssetKind.ForeignSource, "Content", Path.GetFileName(sourcePath), sourcePath, null, ContentCookInputRole.Primary);
+        var recipe = new ContentImportManifestBuilder().BuildModelJob(input, [], "Model", new SceneImportTarget("Content", "Model").CreateLayout(sourcePath), NativeMaterialSlotProvenance.Create());
+        var discovery = new SceneImportSourceDiscovery(workspace.Documents, workspace.Coordinator, native);
         return workspace.Coordinator.RunAsync(
-            (operation, token) => workspace.Retention.RetainAsync(
-                operation,
-                "Model",
-                async captureToken => (await discovery.DiscoverAsync(operation, sourcePath, captureToken).ConfigureAwait(false)).Bundle,
-                token),
+            (operation, token) => workspace.Retention.RetainAsync(operation, "Model", captureToken => discovery.DiscoverAsync(operation, sourcePath, recipe, captureToken), token),
             cancellationToken);
     }
 
-    private sealed class DelegateSourceInspector(Func<string, CancellationToken, Task<SceneSourceInspectionReport>> inspect) : ISceneSourceInspector
+    private sealed class DelegateSourceAnalyzer(Func<ContentSourceAnalysisExecution, CancellationToken, Task<NativeSourceAnalysisReport>> analyze) : IEngineContentPipelineApi
     {
-        public List<string> Copies { get; } = [];
+        public List<ContentSourceAnalysisExecution> Executions { get; } = [];
 
-        public Task<SceneSourceInspectionReport> InspectSceneSourceAsync(Guid operationId, string operationRoot, string sourcePath, CancellationToken cancellationToken, NativeArtifactLease? artifacts = null)
+        public Task<NativeSourceAnalysisReport> AnalyzeSourcesAsync(ContentSourceAnalysisExecution execution, CancellationToken cancellationToken)
         {
-            this.Copies.Add(sourcePath);
-            return inspect(sourcePath, cancellationToken);
+            this.Executions.Add(execution);
+            return analyze(execution, cancellationToken);
         }
+
+        public Task<NativeImportResult> ImportAsync(ContentImportExecution execution, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<Inspection.CookedInventoryReport> ReadInventoryAsync(string cookedRoot, NativeArtifactLease? artifacts, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<CookInspectionResult> InspectLooseCookedRootAsync(string cookedRoot, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<CookValidationResult> ValidateLooseCookedRootAsync(string cookedRoot, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 }

@@ -27,7 +27,7 @@ public sealed partial class ContentPipelineServiceTests
         using var workspace = new TempWorkspace();
         await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
         var sceneUri = new Uri("asset:///Content/Scenes/Main.oscene.json");
-        var generator = new CapturingSceneDescriptorGenerator(workspace, diagnostics: []);
+        var generator = new CapturingSceneDescriptorGenerator(diagnostics: []);
         var api = new CapturingEngineContentPipelineApi(
             validation: new CookValidationResult(workspace.Root, Succeeded: true, Diagnostics: []),
             inspection: new CookInspectionResult(
@@ -67,9 +67,7 @@ public sealed partial class ContentPipelineServiceTests
     {
         using var workspace = new TempWorkspace();
         await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
-        var generator = new CapturingSceneDescriptorGenerator(
-            workspace,
-            [
+        var generator = new CapturingSceneDescriptorGenerator([
                 new DiagnosticRecord
                 {
                     OperationId = Guid.NewGuid(),
@@ -112,7 +110,7 @@ public sealed partial class ContentPipelineServiceTests
                 Assets: [new CookedAssetEntry("/Content/Materials/Red.omat", ContentCookAssetKind.Material)],
                 Files: [],
                 Diagnostics: []));
-        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(workspace, diagnostics: []), api);
+        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(diagnostics: []), api);
 
         var result = await service.CookAssetAsync(materialUri, CancellationToken.None)
             .ConfigureAwait(false);
@@ -123,8 +121,8 @@ public sealed partial class ContentPipelineServiceTests
             && asset.CookedAssetUri == new Uri("asset:///Content/Materials/Red.omat"));
         _ = api.ImportedManifest.Should().NotBeNull();
         _ = api.ImportedManifest!.Jobs.Should().ContainSingle(job =>
-            job.Type == "material-descriptor" && job.Source == ".pipeline/Materials/Content/Materials/Red.omat.json");
-        var generatedDescriptor = await File.ReadAllTextAsync(Path.Combine(api.ImportedExecution!.InputRoot, ".pipeline/Materials/Content/Materials/Red.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
+            job.Type == "material-descriptor" && job.Source == "Content/Materials/Red.omat.json");
+        var generatedDescriptor = await File.ReadAllTextAsync(Path.Combine(api.ImportedExecution!.InputRoot, "Content/Materials/Red.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = generatedDescriptor.Should().Contain("\"base_color\"");
         _ = generatedDescriptor.Should().Contain("\"metalness\"");
         _ = generatedDescriptor.Should().Contain("\"alpha_mode\"");
@@ -141,7 +139,7 @@ public sealed partial class ContentPipelineServiceTests
         var api = new CapturingEngineContentPipelineApi(
             validation: new CookValidationResult(workspace.Root, Succeeded: true, Diagnostics: []),
             inspection: SucceededInspection(workspace));
-        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(workspace, diagnostics: []), api);
+        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(diagnostics: []), api);
 
         var result = await service.CookAssetAsync(new Uri("asset:///Content/Materials/Missing.omat.json"), CancellationToken.None)
             .ConfigureAwait(false);
@@ -176,7 +174,7 @@ public sealed partial class ContentPipelineServiceTests
                         Message = "Native import failed.",
                     },
                 ]));
-        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(workspace, diagnostics: []), api);
+        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(diagnostics: []), api);
 
         var result = await service.CookAssetAsync(new Uri("asset:///Content/Materials/Red.omat.json"), CancellationToken.None)
             .ConfigureAwait(false);
@@ -210,7 +208,7 @@ public sealed partial class ContentPipelineServiceTests
                     },
                 ]),
             inspection: SucceededInspection(workspace));
-        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(workspace, diagnostics: []), api);
+        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(diagnostics: []), api);
 
         var result = await service.CookAssetAsync(new Uri("asset:///Content/Materials/Red.omat.json"), CancellationToken.None)
             .ConfigureAwait(false);
@@ -249,7 +247,7 @@ public sealed partial class ContentPipelineServiceTests
                         Message = "Inspection failed.",
                     },
                 ]));
-        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(workspace, diagnostics: []), api);
+        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(diagnostics: []), api);
 
         var result = await service.CookAssetAsync(new Uri("asset:///Content/Materials/Red.omat.json"), CancellationToken.None)
             .ConfigureAwait(false);
@@ -276,7 +274,7 @@ public sealed partial class ContentPipelineServiceTests
             workspace.ContextService,
             workspace.CookCoordinator,
             new FixedCookScopeProvider(workspace.Root),
-            new CapturingSceneDescriptorGenerator(workspace, diagnostics: []),
+            new CapturingSceneDescriptorGenerator(diagnostics: []),
             new InvalidManifestBuilder(),
             new ContentImportManifestValidator(),
             api,
@@ -301,9 +299,7 @@ public sealed partial class ContentPipelineServiceTests
     {
         using var workspace = new TempWorkspace();
         await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
-        var generator = new CapturingSceneDescriptorGenerator(
-            workspace,
-            [
+        var generator = new CapturingSceneDescriptorGenerator([
                 new DiagnosticRecord
                 {
                     OperationId = Guid.NewGuid(),
@@ -340,15 +336,15 @@ public sealed partial class ContentPipelineServiceTests
         var api = new CapturingEngineContentPipelineApi(
             validation: new CookValidationResult(workspace.Root, Succeeded: true, Diagnostics: []),
             inspection: SucceededInspection(workspace));
-        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(workspace, diagnostics: []), api);
+        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(diagnostics: []), api);
 
         _ = await service.CookFolderAsync(new Uri("asset:///Content/Materials"), CancellationToken.None)
             .ConfigureAwait(false);
 
         _ = api.ImportedManifest.Should().NotBeNull();
         _ = api.ImportedManifest!.Jobs.Select(static job => job.Source).Should().Equal(
-            ".pipeline/Materials/Content/Materials/Nested/Blue.omat.json",
-            ".pipeline/Materials/Content/Materials/Red.omat.json");
+            "Content/Materials/Nested/Blue.omat.json",
+            "Content/Materials/Red.omat.json");
     }
 
     /// <summary>Generates native scene descriptors for scene files in a folder.</summary>
@@ -358,7 +354,7 @@ public sealed partial class ContentPipelineServiceTests
     {
         using var workspace = new TempWorkspace();
         await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
-        var generator = new CapturingSceneDescriptorGenerator(workspace, diagnostics: []);
+        var generator = new CapturingSceneDescriptorGenerator(diagnostics: []);
         var api = new CapturingEngineContentPipelineApi(
             validation: new CookValidationResult(workspace.Root, Succeeded: true, Diagnostics: []),
             inspection: SucceededInspection(workspace));
@@ -384,7 +380,7 @@ public sealed partial class ContentPipelineServiceTests
         var api = new CapturingEngineContentPipelineApi(
             validation: new CookValidationResult(workspace.Root, Succeeded: true, Diagnostics: []),
             inspection: SucceededInspection(workspace));
-        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(workspace, diagnostics: []), api);
+        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(diagnostics: []), api);
 
         var result = await service.CookProjectAsync(CancellationToken.None)
             .ConfigureAwait(false);
@@ -392,7 +388,7 @@ public sealed partial class ContentPipelineServiceTests
         _ = result.Status.Should().Be(OperationStatus.Succeeded);
         _ = api.ImportedManifests.Should().ContainSingle();
         _ = api.ImportedManifests[0].Jobs.Should().ContainSingle(job =>
-            job.Source == ".pipeline/Materials/Content/Materials/Red.omat.json");
+            job.Source == "Content/Materials/Red.omat.json");
     }
 
     /// <summary>Resolves the selected cooked mount from a cooked virtual folder.</summary>
@@ -405,7 +401,7 @@ public sealed partial class ContentPipelineServiceTests
         var api = new CapturingEngineContentPipelineApi(
             validation: new CookValidationResult(workspace.Root, Succeeded: true, Diagnostics: []),
             inspection: SucceededInspection(workspace));
-        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(workspace, diagnostics: []), api);
+        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(diagnostics: []), api);
 
         var report = await service.InspectCookedOutputAsync(new Uri("asset:///Cooked/Content"), CancellationToken.None)
             .ConfigureAwait(false);
@@ -427,7 +423,7 @@ public sealed partial class ContentPipelineServiceTests
         var api = new CapturingEngineContentPipelineApi(
             validation: new CookValidationResult(workspace.Root, Succeeded: true, Diagnostics: []),
             inspection: SucceededInspection(workspace));
-        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(workspace, diagnostics: []), api);
+        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(diagnostics: []), api);
 
         var report = await service.InspectCookedOutputAsync(scopeUri: null, CancellationToken.None)
             .ConfigureAwait(false);
@@ -464,7 +460,6 @@ public sealed partial class ContentPipelineServiceTests
             Diagnostics: []);
 
     private sealed class CapturingSceneDescriptorGenerator(
-        TempWorkspace workspace,
         IReadOnlyList<DiagnosticRecord> diagnostics) : ISceneDescriptorGenerator
     {
         public ContentCookScope? Scope { get; private set; }
@@ -485,20 +480,16 @@ public sealed partial class ContentPipelineServiceTests
                 await beforeGenerate(cancellationToken).ConfigureAwait(false);
             }
 
-            var descriptorPath = Path.Combine(scope.Snapshot?.InputRoot ?? workspace.Root, ".pipeline", "Scenes", "Main.oscene.json");
-            return new SceneDescriptorGenerationResult(
-                new Uri("asset:///Content/Scenes/Main.oscene.json"),
-                descriptorPath,
-                "/Content/Scenes/Main.oscene",
-                Dependencies: [],
-                diagnostics);
+            var result = await new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()))
+                .GenerateAsync(scene, scope, cancellationToken).ConfigureAwait(false);
+            return result with { Diagnostics = [.. result.Diagnostics, .. diagnostics] };
         }
     }
 
     private sealed class CapturingEngineContentPipelineApi(
         CookValidationResult validation,
         CookInspectionResult inspection,
-        NativeImportResult? importResult = null) : IEngineContentPipelineApi
+        NativeImportResult? importResult = null) : IEngineContentPipelineApi, IBuiltinGeometryCatalogProvider
     {
         private readonly CookInspectionResult inspected = inspection with
         {
@@ -523,7 +514,11 @@ public sealed partial class ContentPipelineServiceTests
 
         public Task<Import.NativeSourceAnalysisReport> AnalyzeSourcesAsync(ContentSourceAnalysisExecution execution, CancellationToken cancellationToken)
             => this.SourceAnalysis?.Invoke(execution, cancellationToken)
-                ?? throw new InvalidOperationException("This test did not configure native source analysis.");
+                ?? NativeSourceFactsFixture.AnalyzeAsync(execution, cancellationToken);
+
+        public Task<BuiltinGeometryCatalog> GetBuiltinGeometryCatalogAsync(string projectRoot, string mountName, CancellationToken cancellationToken,
+            Oxygen.Managed.Core.Compatibility.NativeArtifactLease? artifacts = null)
+            => new BuiltinCatalogFixture().GetBuiltinGeometryCatalogAsync(projectRoot, mountName, cancellationToken, artifacts);
 
         public async Task<NativeImportResult> ImportAsync(
             ContentImportExecution execution,
@@ -593,6 +588,12 @@ public sealed partial class ContentPipelineServiceTests
 
     private sealed class InvalidManifestBuilder : IContentImportManifestBuilder
     {
+        public ContentImportJob BuildModelJob(ContentCookInput input, IReadOnlyList<string> dependsOn, string name, ContentImportLayout layout, Import.NativeMaterialSlotProvenance provenance)
+            => new ContentImportManifestBuilder().BuildModelJob(input, dependsOn, name, layout, provenance);
+
+        public ContentImportJob BuildJob(ContentCookInput input, IReadOnlyList<string> dependsOn, Import.NativeSceneImportSettings? modelSettings = null)
+            => new ContentImportManifestBuilder().BuildJob(input, dependsOn, modelSettings);
+
         public ContentImportManifest BuildManifest(ContentCookScope scope)
             => CreateInvalid();
 

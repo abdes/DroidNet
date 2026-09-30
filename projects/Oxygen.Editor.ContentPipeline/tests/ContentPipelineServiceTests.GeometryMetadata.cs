@@ -47,7 +47,7 @@ public sealed partial class ContentPipelineServiceTests
         var catalog = await new BuiltinCatalogFixture().GetBuiltinGeometryCatalogAsync(workspace.Root, "Content", this.TestContext.CancellationToken).ConfigureAwait(false);
         var api = new Mock<IEngineContentPipelineApi>(MockBehavior.Strict);
         _ = api.As<IBuiltinGeometryCatalogProvider>().Setup(value => value.GetBuiltinGeometryCatalogAsync(workspace.Root, "Content", It.IsAny<CancellationToken>(), It.IsAny<NativeArtifactLease>())).ReturnsAsync(catalog);
-        var pipeline = CreateService(workspace, new CapturingSceneDescriptorGenerator(workspace, []), api.Object);
+        var pipeline = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api.Object);
         var uri = new Uri("asset:///Engine/Generated/BasicShapes/Cube");
         var result = await pipeline.ReadAsync(workspace.ProjectContext, uri, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.Should().Be(catalog.Find(uri)!.MaterialSlots);
@@ -64,7 +64,7 @@ public sealed partial class ContentPipelineServiceTests
         var original = workspace.ProjectContext;
         workspace.Activate(original with { ProjectId = Guid.NewGuid() });
         var api = new Mock<IEngineContentPipelineApi>(MockBehavior.Strict);
-        var pipeline = CreateService(workspace, new CapturingSceneDescriptorGenerator(workspace, []), api.Object);
+        var pipeline = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api.Object);
         var result = await pipeline.ReadAsync(original, new Uri("asset:///Engine/Generated/BasicShapes/Cube"), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.Should().BeNull();
         api.VerifyNoOtherCalls();
@@ -86,7 +86,7 @@ public sealed partial class ContentPipelineServiceTests
                 await Task.Delay(Timeout.InfiniteTimeSpan, token).ConfigureAwait(false);
                 throw new InvalidOperationException("Canceled query unexpectedly resumed.");
             });
-        var pipeline = CreateService(workspace, new CapturingSceneDescriptorGenerator(workspace, []), api.Object);
+        var pipeline = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api.Object);
         var pending = pipeline.ReadAsync(original, new Uri("asset:///Engine/Generated/BasicShapes/Cube"), this.TestContext.CancellationToken);
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
         workspace.Activate(original with { ProjectId = Guid.NewGuid() });

@@ -30,8 +30,29 @@ public sealed record ContentCookScope(
     /// <summary>Gets the compatible artifacts borrowed from the owning cook operation.</summary>
     public NativeArtifactLease? Artifacts { get; init; }
 
-    /// <summary>Gets the physical input root used by descriptor generation and native jobs.</summary>
-    public string InputRoot => this.Snapshot?.InputRoot ?? this.Project.ProjectRoot;
+    /// <summary>Gets the logical authoring root used by native recipes.</summary>
+    public string InputRoot => this.Project.ProjectRoot;
+
+    /// <summary>Gets the operation-owned directory for source projections before capture.</summary>
+    internal string? PreparationRoot { get; init; }
+
+    /// <summary>Gets the native catalog already queried under this operation's artifact lease.</summary>
+    internal BuiltinGeometryCatalog? BuiltinCatalog { get; init; }
+
+    /// <summary>Gets builtin descriptors already materialized by this operation.</summary>
+    internal IReadOnlyDictionary<Uri, ContentCookInput> PreparedBuiltins { get; init; }
+        = System.Collections.Immutable.ImmutableDictionary<Uri, ContentCookInput>.Empty;
+
+    /// <summary>Gets the native recipes already used for source analysis.</summary>
+    internal IReadOnlyDictionary<Uri, ContentImportJob> NativeJobs { get; init; }
+        = System.Collections.Immutable.ImmutableDictionary<Uri, ContentImportJob>.Empty;
+
+    /// <summary>Gets the exact scene projections accepted during discovery.</summary>
+    internal IReadOnlyDictionary<Uri, SceneDescriptorGenerationResult> SceneDescriptors { get; init; }
+        = System.Collections.Immutable.ImmutableDictionary<Uri, SceneDescriptorGenerationResult>.Empty;
+
+    /// <summary>Gets the admitted authored and generated inputs for native cooking.</summary>
+    internal Import.NativeCapturedInputSet? CapturedInputs { get; init; }
 
     /// <summary>Gets the private native output root when the cook is preparing a publication.</summary>
     internal Publication.CookStagingRoot? Output { get; init; }

@@ -19,6 +19,8 @@
         <PackageReference Include="Moq" />
         <None Update="Fixtures\BuiltinGeometryCatalog.json" CopyToOutputDirectory="PreserveNewest" />
         <None Include="..\..\Oxygen.Engine\src\Oxygen\Cooker\Test\Import\Models\static_scalar_triangle.*" Link="Fixtures\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="..\..\Oxygen.Engine\src\Oxygen\Cooker\Test\Import\Models\static_textured_triangle.*" Link="Fixtures\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="..\..\Oxygen.Engine\src\Oxygen\Cooker\Test\Import\Models\static_textured_checker.png" Link="Fixtures\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
         <Compile Include="..\..\Oxygen.Managed.Core\testsupport\TemporaryNativeArtifacts.cs" Link="TemporaryNativeArtifacts.cs" />
         <Compile Include="..\testsupport\NativeInventoryFixture.cs" Link="NativeInventoryFixture.cs" />
         <Compile Include="..\testsupport\NativeInventoryFixture.Api.cs" Link="NativeInventoryFixture.Api.cs" />

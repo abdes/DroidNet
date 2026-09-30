@@ -39,6 +39,7 @@ public sealed partial class AssetCookStatusReaderTests
     {
         using var project = new StatusProject();
         await project.PublishAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        var operationDirectories = Directory.EnumerateDirectories(Path.Combine(project.Root, ".build", "cook")).ToArray();
         var initial = await project.ReadAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = initial.Freshness.Should().Be(AssetCookFreshness.Current);
         _ = initial.HasAvailableOutput.Should().BeTrue();
@@ -60,7 +61,7 @@ public sealed partial class AssetCookStatusReaderTests
         _ = status.HasAvailableOutput.Should().BeTrue();
         _ = Oxygen.Testing.NativeInventoryFixture.Read(Path.GetDirectoryName(project.OutputPath)!).IsValid.Should().Be(!changeOutput);
         _ = status.Outputs.Should().ContainSingle();
-        _ = Directory.EnumerateDirectories(Path.Combine(project.Root, ".build", "cook")).Count(path => Guid.TryParseExact(Path.GetFileName(path), "N", out _)).Should().Be(1);
+        _ = Directory.EnumerateDirectories(Path.Combine(project.Root, ".build", "cook")).Should().BeEquivalentTo(operationDirectories);
     }
 
     /// <summary>Unsaved edits remain separate from the last acknowledged saved product.</summary>
@@ -79,18 +80,18 @@ public sealed partial class AssetCookStatusReaderTests
         _ = status.HasAvailableOutput.Should().BeTrue();
     }
 
-    /// <summary>Broken source does not erase evidence of the prior usable output.</summary>
+    /// <summary>Changed source remains unvalidated until cooking and retains its prior usable output.</summary>
     /// <returns>The asynchronous invalid-source regression.</returns>
     [TestMethod]
-    public async Task InvalidSourceKeepsPriorOutputFacts()
+    public async Task UnvalidatedSourceChangeKeepsPriorOutputFacts()
     {
         using var project = new StatusProject();
         await project.PublishAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         await File.WriteAllTextAsync(project.SourcePath, "invalid json", this.TestContext.CancellationToken).ConfigureAwait(false);
         var status = await project.ReadAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = status.Freshness.Should().Be(AssetCookFreshness.InvalidSource);
+        _ = status.Freshness.Should().Be(AssetCookFreshness.OutOfDate);
         _ = status.HasAvailableOutput.Should().BeTrue();
-        _ = status.Diagnostics.Should().NotBeEmpty();
+        _ = status.Diagnostics.Should().BeEmpty();
     }
 
     /// <summary>New descriptors do not require native availability merely to report Needs cooking.</summary>
@@ -189,7 +190,7 @@ public sealed partial class AssetCookStatusReaderTests
         {
             var operation = new ContentCookOperation(Guid.NewGuid(), this.Project, 1);
             var input = CookInputResolver.Resolve(this.Project, primary ?? SourceUri, ContentCookInputRole.Primary);
-            var graph = await new CookDependencyDiscovery(this.Documents).DiscoverAsync(this.Project, [input], cancellationToken).ConfigureAwait(false);
+            var graph = await new CookDependencyDiscovery(new NativeSourceFactsFixture(this.Project, this.Documents)).DiscoverAsync(this.Project, [input], cancellationToken).ConfigureAwait(false);
             _ = graph.Diagnostics.Should().BeEmpty();
             var verified = await this.native.VerifyAsync(operation.OperationId, cancellationToken).ConfigureAwait(false);
             var producer = verified.Artifacts!;
@@ -222,7 +223,14 @@ public sealed partial class AssetCookStatusReaderTests
                 [evidence],
                 [
                     .. outputs.Select(output => new CookProvenance.Product(output.SourceAssetUri, plan.Fingerprints[output.SourceAssetUri], graph.Dependencies[output.SourceAssetUri],
-                        [new(output with { DescriptorRelativePath = output.VirtualPath["/Content/".Length..] }, "Content")]) { ReuseFingerprint = plan.Fingerprints[output.SourceAssetUri] }),
+                        [new(output with { DescriptorRelativePath = output.VirtualPath["/Content/".Length..] }, "Content")])
+                        {
+                            ReuseFingerprint = plan.Fingerprints[output.SourceAssetUri],
+                            SourceInput = graph.Assets.Single(input => input.AssetUri == output.SourceAssetUri),
+                            SourceFiles = [.. graph.Files.Where(file => graph.FileDependencies[output.SourceAssetUri].Contains(file.RelativePath, StringComparer.Ordinal))],
+                            DeclaredOutputs = graph.SourceFacts[output.SourceAssetUri].Outputs,
+                            NativeReferences = graph.SourceFacts[output.SourceAssetUri].References,
+                        }),
                 ]);
             var opening = await CookOutputReadLease.AcquireAsync(root, cancellationToken).ConfigureAwait(false);
             candidate.AcceptVerification(opening, inventory);
@@ -240,6 +248,5 @@ public sealed partial class AssetCookStatusReaderTests
             this.native.Dispose();
             this.directory.Delete(recursive: true);
         }
-
     }
 }

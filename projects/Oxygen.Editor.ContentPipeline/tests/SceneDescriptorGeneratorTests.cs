@@ -90,11 +90,14 @@ public sealed partial class SceneDescriptorGeneratorTests
         });
         _ = node.AddComponent(geometry);
         _ = node.AddComponent(new PerspectiveCamera { Name = "Camera" });
-        _ = node.AddComponent(new DirectionalLightComponent { Name = "Sun",
+        _ = node.AddComponent(new DirectionalLightComponent
+        {
+            Name = "Sun",
             AtmosphereSlot = Oxygen.Editor.World.Serialization.AtmosphereLightSlot.Primary,
             UsePerPixelAtmosphereTransmittance = true, AtmosphereDiskLuminanceScaleRgb = new Vector3(1.2f, 0.8f, 0.5f),
             ShadowBias = 0.001f, ShadowNormalBias = 0.04f, ContactShadows = true,
-            CascadeCount = 3, CascadeDistances = new Vector4(5, 15, 40, 90), MaxShadowDistance = 90 });
+            CascadeCount = 3, CascadeDistances = new Vector4(5, 15, 40, 90), MaxShadowDistance = 90,
+        });
         scene.RootNodes.Add(node);
 
         var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
@@ -108,9 +111,7 @@ public sealed partial class SceneDescriptorGeneratorTests
             ".pipeline",
             "Geometry",
             "Engine_Generated_BasicShapes_Cube.ogeo.json")).Should().BeTrue();
-        _ = result.Dependencies.Should().Contain(input =>
-            input.AssetUri == new Uri("asset:///Content/Materials/Red.omat.json")
-            && input.OutputVirtualPath == "/Content/Materials/Red.omat");
+        _ = result.Dependencies.Should().OnlyContain(input => input.Role == ContentCookInputRole.GeneratedDescriptor);
         _ = result.Dependencies.Should().Contain(input =>
             input.AssetUri == AssetUris.BuildGeneratedUri("BasicShapes/Cube")
             && input.OutputVirtualPath == "/Content/Geometry/Engine_Generated_BasicShapes_Cube.ogeo");
@@ -328,10 +329,10 @@ public sealed partial class SceneDescriptorGeneratorTests
         _ = document.RootElement.GetProperty("environment").GetProperty("post_process_volume").GetProperty("manual_exposure_ev").GetSingle().Should().Be(4.0f);
     }
 
-    /// <summary>Includes authored geometry descriptors in the dependency set.</summary>
+    /// <summary>Emits authored geometry references for native analysis without resolving source dependencies.</summary>
     /// <returns>The test task.</returns>
     [TestMethod]
-    public async Task GenerateAsyncShouldAddAuthoredGeometryDescriptorDependency()
+    public async Task GenerateAsyncShouldPreserveAuthoredGeometryReferenceForNativeAnalysis()
     {
         using var workspace = new TempWorkspace();
         var scope = CreateScope(workspace);
@@ -348,11 +349,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         var result = await generator.GenerateAsync(scene, scope, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.Diagnostics.Should().BeEmpty();
-        _ = result.Dependencies.Should().ContainSingle(input =>
-            input.Kind == ContentCookAssetKind.Geometry
-            && input.AssetUri == new Uri("asset:///Content/Geometry/Foo.ogeo.json")
-            && input.SourceRelativePath == "Content/Geometry/Foo.ogeo.json"
-            && input.OutputVirtualPath == "/Content/Geometry/Foo.ogeo");
+        _ = result.Dependencies.Should().BeEmpty();
 
         using var document = JsonDocument.Parse(await File.ReadAllTextAsync(result.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false));
         _ = document.RootElement.GetProperty("renderables")[0].GetProperty("geometry_ref").GetString()

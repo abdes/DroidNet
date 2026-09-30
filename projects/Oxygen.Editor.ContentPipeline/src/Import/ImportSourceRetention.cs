@@ -59,7 +59,8 @@ public sealed class ImportSourceRetention(ICookDocumentRegistry documents, ICont
         var retained = new RetainedImportSource(
             Path.GetRelativePath(operation.Project.ProjectRoot, destination).Replace('\\', '/'),
             snapshot.Inputs.Single(file => string.Equals(file.RelativePath, primary, StringComparison.OrdinalIgnoreCase)).RelativePath,
-            snapshot.Inputs.Select(static file => new RetainedImportSourceFile(file.RelativePath, file.DiscoveryHash)).ToImmutableArray());
+            snapshot.Inputs.Where(static file => file.Kind == CookSnapshotInputKind.File)
+                .Select(static file => new RetainedImportSourceFile(file.RelativePath, file.DiscoveryHash)).ToImmutableArray());
         return new(retained, [], []);
     }
 
@@ -110,13 +111,11 @@ public sealed class ImportSourceRetention(ICookDocumentRegistry documents, ICont
         }
 
         var primary = bundle.PrimaryRelativePath.Replace('\\', '/');
-        return bundle.Files.Any(static file => file.IsAbsent)
-            || !bundle.Files.Any(file => string.Equals(file.RelativePath.Replace('\\', '/'), primary, StringComparison.OrdinalIgnoreCase))
-            ? throw new InvalidDataException("Source retention requires the selected file and every discovered dependency to be present.")
+        return !bundle.Files.Any(file => file.Kind == CookSnapshotInputKind.File
+            && string.Equals(file.RelativePath.Replace('\\', '/'), primary, StringComparison.OrdinalIgnoreCase))
+            ? throw new InvalidDataException("Source retention requires the selected primary file.")
             : primary;
     }
-
-
 
     private static void EnsureAvailable(string destination)
     {

@@ -4,9 +4,9 @@
 
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
-using Oxygen.Editor.ContentPipeline.Publication;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.Import;
+using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -212,11 +212,13 @@ public sealed partial class ContentPipelineServiceTests
         statuses = await service.ReadAsync(workspace.ProjectContext, uris, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = statuses.Should().OnlyContain(static status => status.Freshness == AssetCookFreshness.OutOfDate && status.HasPublishedOutput);
         _ = statuses.SelectMany(static status => status.Diagnostics).Should().NotContain(static issue => issue.Severity == DiagnosticSeverity.Error);
-        var incomplete = await new Snapshots.CookDependencyDiscovery(workspace.Documents).DiscoverAsync(
+        using var selected = await workspace.Publication.AcquireReadAsync(workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var incomplete = await new Snapshots.CookDependencyDiscovery(new AcceptedCookSourceFacts(workspace.ProjectContext, selected.ProductState, workspace.Documents)).DiscoverAsync(
             workspace.ProjectContext,
             [CookInputResolver.Resolve(workspace.ProjectContext, source, ContentCookInputRole.Primary)],
             this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = incomplete.Diagnostics.Should().Contain(static issue => issue.Severity == DiagnosticSeverity.Error);
+        _ = incomplete.SourcesNeedingAnalysis.Should().Contain(source);
+        _ = incomplete.Diagnostics.Should().BeEmpty();
         _ = runner.Count.Should().Be(count);
     }
 

@@ -122,7 +122,7 @@ public sealed partial class ContentPipelineServiceTests
         var request = new SceneImportRequest(workspace.ProjectContext, Path.Combine(workspace.Root, "model.gltf"), "Model", new("asset:///Content/Models"));
         workspace.Activate(workspace.ProjectContext with { Name = "Changed" });
         var api = new CapturingEngineContentPipelineApi(new(workspace.Root, Succeeded: true, []), SucceededInspection(workspace));
-        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(workspace, []), api);
+        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api);
         var result = await service.ImportSourceAsync(request, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.Status.Should().Be(OperationStatus.Failed);
         _ = result.RetainedSourceUri.Should().BeNull();

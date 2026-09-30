@@ -81,8 +81,6 @@ public sealed partial class ContentPipelineService
         }).ToArray();
     }
 
-
-
     private static ContentCookResult ValidateImportedIdentities(Guid operationId, ContentCookScope scope, ContentCookInput source, ContentCookResult result)
     {
         if (result.Status is not (OperationStatus.Succeeded or OperationStatus.SucceededWithWarnings))
@@ -137,13 +135,13 @@ public sealed partial class ContentPipelineService
             ],
         };
 
-    private async Task<DiscoveredSceneSource> DiscoverChangedImportedSourceAsync(ContentCookOperation operation, ContentCookInput input, NativeArtifactLease? artifacts, CancellationToken cancellationToken)
+    private Task<ImportSourceBundle> DiscoverChangedImportedSourceAsync(ContentCookOperation operation, ContentCookInput input,
+        NativeSceneImportSettings settings, NativeArtifactLease? artifacts, CancellationToken cancellationToken)
     {
-        var inspector = this.engineContentPipelineApi as ISceneSourceInspector
-            ?? throw new InvalidOperationException("The native pipeline cannot inspect changed model sources.");
         this.cookCoordinator.VerifyWriter(operation);
-        return await new SceneImportSourceDiscovery(cookDocuments, this.cookCoordinator, inspector)
-            .DiscoverAsync(operation, input.SourceAbsolutePath, cancellationToken, artifacts).ConfigureAwait(false);
+        var recipe = this.manifestBuilder.BuildJob(input, [], settings);
+        return new SceneImportSourceDiscovery(cookDocuments, this.cookCoordinator, this.engineContentPipelineApi)
+            .DiscoverAsync(operation, input.SourceAbsolutePath, recipe, cancellationToken, artifacts);
     }
 
     private async Task<ContentCookResult> CookWithImportedSourcesAsync(Guid operationId, ContentCookScope scope, CancellationToken cancellationToken)
@@ -151,7 +149,8 @@ public sealed partial class ContentPipelineService
         var results = new List<ContentCookResult>();
         foreach (var input in scope.Inputs.Where(static input => input.Kind == ContentCookAssetKind.ForeignSource))
         {
-            var settings = NativeSceneImportSettings.Parse(await File.ReadAllBytesAsync(input.SourceAbsolutePath + NativeSceneImportSettings.SidecarSuffix, cancellationToken).ConfigureAwait(false));
+            var settingsPath = Path.Combine(scope.Snapshot!.InputRoot, input.SourceRelativePath + NativeSceneImportSettings.SidecarSuffix);
+            var settings = NativeSceneImportSettings.Parse(await File.ReadAllBytesAsync(settingsPath, cancellationToken).ConfigureAwait(false));
             var collision = await this.FindImportedOutputCollisionAsync(operationId, scope, input, settings, cancellationToken).ConfigureAwait(false);
             if (collision is not null)
             {
@@ -164,24 +163,7 @@ public sealed partial class ContentPipelineService
                 1,
                 (scope.Output ?? throw new InvalidOperationException("The import has no generation owner.")).Path,
                 settings.CreateLayout(),
-                [
-                    new ContentImportJob(
-                        "model",
-                        Path.GetExtension(input.SourceRelativePath).Equals(".fbx", StringComparison.OrdinalIgnoreCase) ? "fbx" : "gltf",
-                        input.SourceRelativePath,
-                        [],
-                        Output: null,
-                        settings.Name)
-                    {
-                        ContentPolicy = settings.ContentPolicy,
-                        UnitPolicy = settings.UnitPolicy,
-                        BakeTransforms = settings.BakeTransforms,
-                        NormalsPolicy = settings.NormalsPolicy,
-                        TangentsPolicy = settings.TangentsPolicy,
-                        MaterialSlotSourceIdentity = settings.MaterialSlotProvenance.SourceIdentity.ToString("D"),
-                        MaterialSlotProvenance = settings.MaterialSlotProvenance,
-                    },
-                ]);
+                [scope.NativeJobs.GetValueOrDefault(input.AssetUri) ?? this.manifestBuilder.BuildJob(input, [], settings)]);
             var result = await this.ExecuteManifestAsync(operationId, scope.TargetKind, sourceScope, manifest, [], cancellationToken).ConfigureAwait(false);
             results.Add(ValidateImportedIdentities(operationId, scope, input, result));
         }
@@ -208,7 +190,8 @@ public sealed partial class ContentPipelineService
 
         foreach (var other in scope.Inputs.Where(input => input.Kind == ContentCookAssetKind.ForeignSource && input.AssetUri != source.AssetUri))
         {
-            var otherSettings = NativeSceneImportSettings.Parse(await File.ReadAllBytesAsync(other.SourceAbsolutePath + NativeSceneImportSettings.SidecarSuffix, cancellationToken).ConfigureAwait(false));
+            var otherSettingsPath = Path.Combine(scope.Snapshot!.InputRoot, other.SourceRelativePath + NativeSceneImportSettings.SidecarSuffix);
+            var otherSettings = NativeSceneImportSettings.Parse(await File.ReadAllBytesAsync(otherSettingsPath, cancellationToken).ConfigureAwait(false));
             if (prefixes.Any(prefix => otherSettings.OutputPrefixes.Any(otherPrefix => prefix.StartsWith(otherPrefix, StringComparison.OrdinalIgnoreCase)
                 || otherPrefix.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))))
             {

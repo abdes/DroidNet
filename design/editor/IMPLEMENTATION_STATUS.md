@@ -929,7 +929,7 @@ references; remote issue closure awaits integration.
 
 ### ED-M08 - Runtime Parity And Standalone Validation
 
-Status: `in_progress; M08.1.1–M08.1.8 validated; M08.1.9 in progress`
+Status: `in_progress; M08.1 validated; M08.F1 next`
 
 Outcome: one canonical V0.1 authoring contract across engine and editor, with
 semantic/image qualification through development-only native and embedded paths.
@@ -944,7 +944,7 @@ Debug/Release graphs; migration produces canonical formats without legacy runtim
 readers. Primary/Secondary names remain unchanged.
 
 - [x] Final implementation plan and coherent domain contracts are available.
-- [ ] M08.1 native canonical data, producers and primitives.
+- [x] M08.1 native canonical data, producers and primitives.
       Capsule and canonical Physics capsule/cylinder axes have native tests and
       protected fixture migration/recooking evidence in the
       [axial increment record](validation/ED-M08-M08.1-capsule.md).
@@ -1029,7 +1029,7 @@ readers. Primary/Secondary names remain unchanged.
       five Content suites pass in Debug, and managed checks pass 494 pipeline,
       228 Core/browser and 36 rendered workflow cases. Four maintained editor
       projects recook successfully. Whole-slice review is clear; scoped native
-      tidy and MSVC checks pass. Next: immutable publication → native analysis.
+      tidy and MSVC checks pass.
       Rendered flag behavior remains M08.2 work; supplemental captures do not
       close M08.3.
 
@@ -1081,8 +1081,24 @@ readers. Primary/Secondary names remain unchanged.
       analysis. Debug/Release each pass 73 client/compatibility tests, including
       installed-tool analysis/capture/cook; mapped native analysis passes its owning
       suites, 14 CLI tests per configuration, C++20 SDK validation and scoped tidy.
-      Extra-high review is clear. Discovery and passive-status cutover remain .9.3.2;
-      real editor workflow acceptance is still required.
+      Extra-high review is clear. Discovery, passive status and workflow
+      qualification are completed by .9.3.2 below.
+
+      M08.1.9.3.2 is validated: native source facts replace managed dependency
+      parsers, captured proofs protect execution, and accepted facts keep badge
+      reads passive. No-op cooks launch no native workers. Debug/Release pipeline
+      suites pass 514 tests each; tangent-policy and cleanup followups pass.
+      Eighteen rendered UI checks cover textured import/replacement, retained
+      retry without originals, picking/history/reopen, cooking feedback and
+      runtime controls. Four maintained projects recook and render in Release.
+      Invalid publication admission shows an error banner; Retry restores the
+      preview. Native checks and RenderScene captures qualify texture bindings,
+      generated FBX tangents and the
+      [material contract](../../projects/Oxygen.Engine/src/Oxygen/Data/Docs/material_system.md#occlusion).
+      Scoped native tidy, MSVC warning checks and extra-high review pass.
+      All 16 shipped scenes and four retained demo models recook; PAK packaging
+      and the Sponza replacement/IBL debug-layer check pass. M08.1 is complete;
+      rendered field parity and authoring UI qualification retain their later owners.
 
 - [ ] [M08.F1 descriptor-local reference format](plan/ED-M08.F1-descriptor-local-references.md),
       after M08.1.9 and before M08.2. Separate format cutover, recook and SDK gate.
@@ -1175,7 +1191,7 @@ recorded in section 5.
 | [ED-M07-content-pipeline-and-cooking.md](plan/ED-M07-content-pipeline-and-cooking.md)                                           | `ED-M07`      | `validated`   | Recorded validation is retained. Section 11 closes UI scope decisions; new publication/mapping guarantees execute in ED-M07B.                       |
 | [ED-M07A-authoring-integrity-and-runtime-convergence.md](plan/ED-M07A-authoring-integrity-and-runtime-convergence.md)           | `ED-M07A`     | `validated`   | All automated and user-confirmed viewport gates pass.                                                                                               |
 | [ED-M07B-safe-content-publication-and-compatibility.md](plan/ED-M07B-safe-content-publication-and-compatibility.md)             | `ED-M07B`     | `validated`   | Complete workflow audit, native publication/import, browser/picker/status, recovery and compact inspector evidence recorded.                        |
-| [ED-M08-runtime-parity-and-standalone-validation.md](plan/ED-M08-runtime-parity-and-standalone-validation.md)                   | `ED-M08`      | `in_progress` | M08.1.1–M08.1.8 validated. Next: native source analysis. Native rendering and editor/standalone parity retain their later M08 gates.                |
+| [ED-M08-runtime-parity-and-standalone-validation.md](plan/ED-M08-runtime-parity-and-standalone-validation.md)                   | `ED-M08`      | `in_progress` | M08.1 validated. Next: M08.F1 descriptor-local references. Native rendering and editor/standalone parity retain their later M08 gates.              |
 | [ED-M09-viewport-authoring-tools.md](plan/ED-M09-viewport-authoring-tools.md)                                                   | `ED-M09`      | `planned`     | Execute the decided navigation/picking/tool contract after M08.                                                                                     |
 | [ED-M10-v01-release-qualification.md](plan/ED-M10-v01-release-qualification.md)                                                 | `ED-M10`      | `planned`     | Qualify the matched build and selected small-project workload.                                                                                      |
 | DynamicTree rename commit hook                                                                                                  | `post-ED-M03` | `deferred`    | Replace ED-M03's loaded-adapter label-change bridge with a first-class DynamicTree rename commit hook/override; this must not block ED-M03 closure. |
@@ -1200,7 +1216,7 @@ rows. Do not add running notes; update the owning plan instead.
 | `ED-M07`  | `validated`   | 2026-04-28 | User manually validated ED-M07 content pipeline and cooking: cook project, cook folder, cook selected asset, and cook current scene workflows; inspect cooked output shows visible summary feedback; validate cooked output shows visible feedback and drives validated cooked-root refresh; cooked mount root displays cooked files and persists/remounts from `Project.oxy`; material, scene, and cooked catalog refresh paths update without restart; failures produce visible operation results. Focused automated coverage included ContentPipeline tests 40/40 and ContentBrowser tests 62/62; functional ImportTool dry-run and actual temp Vortex import succeeded during implementation validation. |
 | `ED-M07A` | `validated`   | 2026-09-11 | Packaged controls/native 137/137; Runtime 71/71; SceneExplorer 161/161; World 67/67; Managed.Assets 89/89. User confirmed combined XYZ rotations, Cube/Sphere and cooked/None/Default material changes, and coupled sun controls through Undo/Redo and Save/reopen. Background presentation was confirmed earlier. All gates pass; see the [field/workflow results](validation/ED-M07A-field-workflows.md).                                                                                                                                                                                                                                                                                                  |
 | `ED-M07B` | `validated`   | 2026-09-15 | [Workflow audit](validation/ED-M07B-closeout-audit.md): all 19 journeys and original UI findings reconciled. ContentPipeline 449/449; final Cooking/reading/Main/import/recovery group 32/32; imported/native inspector group 34/34; browser UI 36/36 and Content Browser 134/134; scaled groups 33/33 and 18/18; isolated feedback 4/4. Native import profiles and copied sources pass in Debug/Release. Document transitions pass 30 cycles each at 60/10 FPS. Current Debug editor builds; both SDKs installed. Relevant executable changes/tests are analyzer/IDE clean. User-confirmed preview, built-in, browser and shutdown behavior is retained above.                                              |
-| `ED-M08`  | `pending`     | -          | Not validated.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `ED-M08`  | `in_progress` | 2026-10-01 | M08.1 validated: native/managed cutover, maintained-project migration and editor/native workflows pass. M08.F1 and M08.2–M08.8 remain open.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `ED-M09`  | `pending`     | -          | Not validated.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `ED-M10`  | `pending`     | -          | Not validated.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 

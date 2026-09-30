@@ -94,6 +94,7 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
                 lightIssue, descriptorPath, descriptorVirtualPath));
             return new(sceneInput.AssetUri, descriptorPath, descriptorVirtualPath, Dependencies: [], diagnostics);
         }
+
         var exposureIssue = ValidatePostProcess(scene.Environment.PostProcess);
         if (exposureIssue is not null)
         {
@@ -112,6 +113,11 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
             .Select(static geometry => geometry.Geometry?.Uri)
             .Where(static uri => uri is not null && ProceduralGeometryDescriptorService.IsGeneratedBasicShape(uri))
             .Cast<Uri>()
+            .Concat(scene.AllNodes.SelectMany(static node => node.Components.OfType<GeometryComponent>())
+                .SelectMany(static geometry => geometry.OverrideSlots.OfType<MaterialsSlot>())
+                .Select(static slot => slot.Material.Uri)
+                .Where(IsDefaultMaterial)
+                .Select(static _ => AssetUris.BuildGeneratedUri("Materials/Default")))
             .Distinct()
             .ToArray();
         var generatedGeometryInputs = await this.proceduralGeometryDescriptors
@@ -126,11 +132,10 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
         var spotLights = new List<NativeSpotLight>();
         var materialRefs = new SortedSet<string>(StringComparer.Ordinal);
         var dependencyInputs = new List<ContentCookInput>(generatedGeometryInputs);
-        dependencyInputs.AddRange(ResolveGeometryDependencies(scene, scope));
-        dependencyInputs.AddRange(ResolveMaterialDependencies(scene, scope));
         if (scene.Environment.PostProcess.AutoExposureMeteringMask is { } maskUri)
         {
-            var maskInput = TryResolveAuthoringInput(scope, maskUri);
+            var maskInput = CookInputResolver.IsAuthoringUri(scope.Project, maskUri)
+                ? CookInputResolver.Resolve(scope.Project, maskUri, ContentCookInputRole.Dependency) : null;
             if (maskInput is null || maskInput.Kind != ContentCookAssetKind.Texture
                 || !string.Equals(maskInput.MountName, sceneInput.MountName, StringComparison.Ordinal))
             {
@@ -143,8 +148,6 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
                     descriptorVirtualPath));
                 return new(sceneInput.AssetUri, descriptorPath, descriptorVirtualPath, Dependencies: [], diagnostics);
             }
-
-            dependencyInputs.Add(maskInput);
         }
 
         foreach (var root in scene.RootNodes)
@@ -374,7 +377,7 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
                 string? materialRef;
                 try
                 {
-                    materialRef = ResolveMaterialRef(slot.Material.Uri);
+                    materialRef = ResolveMaterialRef(slot.Material.Uri, generatedGeometryInputs);
                 }
                 catch (ArgumentException exception)
                 {
@@ -411,50 +414,7 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
         var name = Path.GetFileName(sceneInput.SourceRelativePath);
         var normalized = ContentPipelinePaths.NormalizeSceneDescriptorName(name);
         var folder = Path.GetDirectoryName(sceneInput.SourceRelativePath) ?? string.Empty;
-        return Path.Combine(scope.InputRoot, ".pipeline", "Scenes", folder, normalized + ".oscene.json");
-    }
-
-    private static IEnumerable<ContentCookInput> ResolveMaterialDependencies(Scene scene, ContentCookScope scope)
-        => scene.AllNodes
-            .SelectMany(static node => node.Components.OfType<GeometryComponent>())
-            .SelectMany(static geometry => geometry.OverrideSlots.OfType<MaterialsSlot>().Select(static slot => slot.Material.Uri))
-            .Where(static uri => uri is not null && !IsEmptyAssetUri(uri))
-            .Cast<Uri>()
-            .Distinct()
-            .Select(uri => TryResolveAuthoringInput(scope, uri))
-            .Where(static input => input is not null)
-            .Cast<ContentCookInput>();
-
-    private static IEnumerable<ContentCookInput> ResolveGeometryDependencies(Scene scene, ContentCookScope scope)
-        => scene.AllNodes
-            .SelectMany(static node => node.Components.OfType<GeometryComponent>())
-            .Select(static geometry => geometry.Geometry?.Uri)
-            .Where(static uri => uri is not null
-                                 && !IsEmptyAssetUri(uri)
-                                 && !ProceduralGeometryDescriptorService.IsGeneratedBasicShape(uri))
-            .Cast<Uri>()
-            .Distinct()
-            .Select(uri => TryResolveAuthoringInput(scope, uri))
-            .Where(static input => input is not null)
-            .Cast<ContentCookInput>();
-
-    private static ContentCookInput? TryResolveAuthoringInput(ContentCookScope scope, Uri assetUri)
-    {
-        if (assetUri.AbsolutePath.StartsWith("/Engine/Generated/", StringComparison.OrdinalIgnoreCase)
-            || !CookInputResolver.IsAuthoringUri(scope.Project, assetUri))
-        {
-            return null;
-        }
-
-        var input = CookInputResolver.Resolve(scope.Project, assetUri, ContentCookInputRole.Dependency);
-        if (scope.ReusableSources.Contains(input.AssetUri))
-        {
-            return null;
-        }
-
-        input = input with { SourceAbsolutePath = Path.Combine(scope.InputRoot, input.SourceRelativePath) };
-        return File.Exists(input.SourceAbsolutePath) || assetUri.AbsolutePath.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
-            ? input : null;
+        return Path.Combine(scope.PreparationRoot ?? scope.InputRoot, ".pipeline", "Scenes", folder, normalized + ".oscene.json");
     }
 
     private static string? ResolveGeometryRef(Uri geometryUri, IReadOnlyList<ContentCookInput> generatedGeometryInputs)
@@ -462,14 +422,16 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
             ? generatedGeometryInputs.FirstOrDefault(input => input.AssetUri == geometryUri)?.OutputVirtualPath
             : ContentPipelinePaths.ToNativeDescriptorPath(geometryUri, ".ogeo");
 
-    private static string? ResolveMaterialRef(Uri? materialUri)
+    private static string? ResolveMaterialRef(Uri? materialUri, IReadOnlyList<ContentCookInput> generatedInputs)
         => materialUri is null || IsEmptyAssetUri(materialUri)
-            ? null : string.Equals(
-                materialUri.ToString(),
-                AssetUris.BuildGeneratedUri("Materials/Default").ToString(),
-                StringComparison.OrdinalIgnoreCase)
-            ? "/Engine/Generated/Materials/Default.omat"
+            ? null : IsDefaultMaterial(materialUri)
+            ? generatedInputs.FirstOrDefault(static input => IsDefaultMaterial(input.AssetUri))?.OutputVirtualPath
             : ContentPipelinePaths.ToNativeDescriptorPath(materialUri, ".omat");
+
+    private static bool IsDefaultMaterial(Uri? uri)
+        => uri is not null && string.Equals(
+            uri.AbsoluteUri,
+            AssetUris.BuildGeneratedUri("Materials/Default").AbsoluteUri, StringComparison.OrdinalIgnoreCase);
 
     private static bool IsEmptyAssetUri(Uri uri)
         => string.Equals(uri.ToString(), $"{AssetUris.Scheme}:///__uninitialized__", StringComparison.OrdinalIgnoreCase);

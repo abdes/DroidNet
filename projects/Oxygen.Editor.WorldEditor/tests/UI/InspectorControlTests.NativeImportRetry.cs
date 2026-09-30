@@ -57,8 +57,11 @@ public sealed partial class InspectorControlTests
                 _ = selected.PublicationId.Should().BeNull();
                 _ = selected.Roots.Should().BeEmpty();
             }
+
             _ = File.Exists(Path.Combine(fixture.ProjectRoot, "Content/SourceMedia/DCC/ReviewedTriangle/Triangle." + format)).Should().BeTrue();
+            _ = File.Exists(Path.Combine(fixture.ProjectRoot, "Content/SourceMedia/DCC/ReviewedTriangle/static_textured_checker.png")).Should().BeTrue();
             File.Delete(path);
+            File.Delete(Path.Combine(Path.GetDirectoryName(path)!, "static_textured_checker.png"));
             await this.CaptureComponentLayoutAsync(root, "native-import-failure-" + format + ".png").ConfigureAwait(true);
             InvokeImportButton(view.FindDescendant<Button>(button => string.Equals(button.Content as string, "Retry", StringComparison.Ordinal))!);
             var retried = await WaitForImportPanelAsync(panel, services, 2, timeout.Token).ConfigureAwait(true);
@@ -84,7 +87,7 @@ public sealed partial class InspectorControlTests
 
         public Task<ContentPipelineProcessResult> RunAsync(ContentPipelineProcessRequest request, CancellationToken cancellationToken)
         {
-            if (!this.failed && request.Arguments.Contains("--manifest", StringComparer.Ordinal))
+            if (!this.failed && request.Arguments.Contains("batch", StringComparer.Ordinal))
             {
                 this.failed = true;
                 request.Output?.Report(new(Failure, IsStandardError: true));

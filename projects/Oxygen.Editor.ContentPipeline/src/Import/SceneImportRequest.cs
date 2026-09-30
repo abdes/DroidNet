@@ -16,6 +16,9 @@ public sealed record SceneImportRequest(ProjectContext Project, string SourcePat
     /// <summary>Gets the existing source explicitly reviewed for replacement, or null for a new import.</summary>
     public SceneImportReplacement? Replacement { get; init; }
 
+    /// <summary>Gets the source identity retained from initial analysis through settings publication and retries.</summary>
+    internal NativeMaterialSlotProvenance Provenance { get; init; } = NativeMaterialSlotProvenance.Create();
+
     /// <summary>Gets private incoming source preserved by a previous failed replacement attempt.</summary>
     internal string? ReplacementCandidatePath { get; init; }
 

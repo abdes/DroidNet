@@ -4,9 +4,8 @@
 
 using System.Collections.Immutable;
 using System.Security.Cryptography;
-using Oxygen.Editor.ContentPipeline.Publication;
-using System.Text.Json.Nodes;
 using Oxygen.Editor.ContentPipeline.Cooking;
+using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
@@ -47,68 +46,6 @@ public sealed partial class ContentPipelineService
             CancellationToken.None,
             TaskContinuationOptions.ExecuteSynchronously,
             TaskScheduler.Default).Unwrap();
-
-    private static async Task<PreparedInput> PrepareCapturedTextureAsync(ContentCookScope scope, ContentCookInput input, CancellationToken cancellationToken)
-    {
-        var snapshot = scope.Snapshot ?? throw new InvalidOperationException("Texture preparation requires captured input.");
-        var bytes = await File.ReadAllTextAsync(input.SourceAbsolutePath, cancellationToken).ConfigureAwait(false);
-        var descriptor = JsonNode.Parse(bytes) ?? throw new InvalidDataException("The captured texture descriptor is empty.");
-        if (descriptor["virtual_path"] is { } authoredPath
-            && !string.Equals(authoredPath.GetValue<string>(), input.OutputVirtualPath, StringComparison.Ordinal))
-        {
-            throw new InvalidDataException($"Texture virtual_path conflicts with its project identity '{input.OutputVirtualPath}'.");
-        }
-
-        descriptor["virtual_path"] = input.OutputVirtualPath;
-        var relative = Path.Combine(".pipeline", "Textures", input.SourceRelativePath).Replace('\\', '/');
-        var output = Path.Combine(scope.InputRoot, relative);
-        var originalDirectory = Path.GetDirectoryName(Path.Combine(scope.Project.ProjectRoot, input.SourceRelativePath))!;
-        descriptor["source"] = CapturedPath(descriptor["source"]!.GetValue<string>());
-        if (descriptor["sources"] is JsonArray sources)
-        {
-            foreach (var source in sources)
-            {
-                source!["file"] = CapturedPath(source["file"]!.GetValue<string>());
-            }
-        }
-
-        Directory.CreateDirectory(Path.GetDirectoryName(output)!);
-        await File.WriteAllTextAsync(output, descriptor.ToJsonString(), cancellationToken).ConfigureAwait(false);
-        return new(input with { SourceRelativePath = relative, SourceAbsolutePath = output }, Diagnostics: []);
-
-        string CapturedPath(string source)
-        {
-            var originalPath = Path.GetFullPath(Path.IsPathRooted(source) ? source : Path.Combine(originalDirectory, source));
-            var captured = snapshot.Inputs.FirstOrDefault(file => !file.IsAbsent && string.Equals(file.SourcePath, originalPath, StringComparison.OrdinalIgnoreCase))
-                ?? throw new InvalidDataException($"Texture image '{source}' was not included in the captured dependency set.");
-            return Path.GetRelativePath(Path.GetDirectoryName(output)!, Path.Combine(snapshot.InputRoot, captured.RelativePath)).Replace('\\', '/');
-        }
-    }
-
-    private static async Task<PreparedInput> PrepareCapturedGeometryAsync(ContentCookScope scope, ContentCookInput input, CancellationToken cancellationToken)
-    {
-        var snapshot = scope.Snapshot ?? throw new InvalidOperationException("Geometry preparation requires captured input.");
-        var bytes = await File.ReadAllTextAsync(input.SourceAbsolutePath, cancellationToken).ConfigureAwait(false);
-        var descriptor = JsonNode.Parse(bytes) ?? throw new InvalidDataException("The captured geometry descriptor is empty.");
-        var relative = Path.Combine(".pipeline", "Geometry", input.SourceRelativePath).Replace('\\', '/');
-        var output = Path.Combine(scope.InputRoot, relative);
-        if (descriptor["buffers"] is JsonArray buffers)
-        {
-            var originalDirectory = Path.GetDirectoryName(Path.Combine(scope.Project.ProjectRoot, input.SourceRelativePath))!;
-            foreach (var buffer in buffers)
-            {
-                var uri = buffer!["uri"]!.GetValue<string>();
-                var originalPath = Path.GetFullPath(Path.IsPathRooted(uri) ? uri : Path.Combine(originalDirectory, uri));
-                var captured = snapshot.Inputs.FirstOrDefault(file => !file.IsAbsent && string.Equals(file.SourcePath, originalPath, StringComparison.OrdinalIgnoreCase))
-                    ?? throw new InvalidDataException($"Geometry buffer '{uri}' was not included in the captured dependency set.");
-                buffer["uri"] = Path.GetRelativePath(Path.GetDirectoryName(output)!, Path.Combine(snapshot.InputRoot, captured.RelativePath)).Replace('\\', '/');
-            }
-        }
-
-        Directory.CreateDirectory(Path.GetDirectoryName(output)!);
-        await File.WriteAllTextAsync(output, descriptor.ToJsonString(), cancellationToken).ConfigureAwait(false);
-        return new(input with { SourceRelativePath = relative, SourceAbsolutePath = output, Role = ContentCookInputRole.GeneratedDescriptor }, []);
-    }
 
     private async Task<ContentCookResult> CookCapturedScopesAsync(
         ContentCookOperation operation,
@@ -165,7 +102,18 @@ public sealed partial class ContentPipelineService
         }
         catch (ContentPipelineTerminationException failure)
         {
-            retainedDrain = ReleaseCookOpeningAfterDrainAsync(failure.DrainCompletion, artifacts, baseline.Retain());
+            CookPublicationReadLease? retainedBaseline = null;
+            try
+            {
+                retainedBaseline = baseline.Retain();
+                retainedDrain = ReleaseCookOpeningAfterDrainAsync(failure.DrainCompletion, artifacts, retainedBaseline);
+                retainedBaseline = null;
+            }
+            finally
+            {
+                retainedBaseline?.Dispose();
+            }
+
             throw new ContentPipelineTerminationException(failure.InnerException ?? failure, retainedDrain);
         }
         catch (NativeCompatibilityException failure)
@@ -259,10 +207,9 @@ public sealed partial class ContentPipelineService
     private CookDependencyDiscovery CreateDependencyDiscovery(ContentCookOperation operation, NativeArtifactLease artifacts,
         Incremental.CookProvenance previous, Import.ImportedSourceIndex imports, CookedLibraryReadSet libraries)
         => new(
-            cookDocuments,
-            importedSources: previous.Products.Where(static product => product.ImportedSource is not null).ToDictionary(static product => product.SourceUri, static product => product.ImportedSource!),
-            discoverImported: (input, token) => this.DiscoverChangedImportedSourceAsync(operation, input, artifacts, token),
+            new CookSourceAnalyzer(operation, artifacts, this.engineContentPipelineApi, this.manifestBuilder, this.sceneDescriptorGenerator, this.cookScopeProvider, cookDocuments, previous),
             resolveImported: uri => imports.ResolveOutput(operation.Project, uri, ContentCookInputRole.Dependency),
+            resolveBufferOwner: path => previous.FindBufferOwner(operation.Project, path),
             preferCookedReference: libraries.IsLibraryPreferred,
             expandCookedReferences: (input, references, token) => libraries.ExpandReferencesAsync(input, references, this.engineContentPipelineApi as Inspection.ICookedDependencyInspector,
                 Path.Combine(operation.Project.ProjectRoot, ".build", "cook", operation.OperationId.ToString("N")), artifacts, token));
@@ -291,7 +238,7 @@ public sealed partial class ContentPipelineService
                 return false;
             }
 
-            foreach (var input in expectedInputs.Where(static input => !input.IsAbsent))
+            foreach (var input in expectedInputs.Where(static input => input.Kind == CookSnapshotInputKind.File))
             {
                 if (!streams.ContainsKey(input.SourcePath))
                 {
@@ -301,9 +248,9 @@ public sealed partial class ContentPipelineService
 
             foreach (var input in expectedInputs)
             {
-                if (input.IsAbsent)
+                if (input.Kind != CookSnapshotInputKind.File)
                 {
-                    if (CookSavedSourceReader.Exists(input.SourcePath))
+                    if (!CookSavedSourceReader.MatchesProbe(input))
                     {
                         return false;
                     }

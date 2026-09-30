@@ -43,8 +43,8 @@ using Oxygen.Editor.Services;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Workspace;
 using Oxygen.Managed.Assets.Authoring.Materials;
-using Oxygen.Managed.Core.Diagnostics;
 using Oxygen.Managed.Core.Compatibility;
+using Oxygen.Managed.Core.Diagnostics;
 using Oxygen.Managed.Core.Services;
 using Serilog;
 
@@ -408,21 +408,23 @@ public static partial class Program
         container.Register<IContentImportManifestValidator, ContentImportManifestValidator>(Reuse.Singleton);
         container.Register<IEngineContentPipelineToolLocator, EngineContentPipelineToolLocator>(Reuse.Singleton);
         container.Register<IContentPipelineProcessRunner, ContentPipelineProcessRunner>(Reuse.Singleton);
-        container.RegisterDelegate<INativeCompatibilityService>(_ => EditorNativeCompatibilityService.ForCooking(),
+        container.RegisterDelegate<INativeCompatibilityService>(
+            _ => EditorNativeCompatibilityService.ForCooking(),
             Reuse.Singleton, serviceKey: EditorNativeCompatibilityService.CookingServiceKey);
-        container.RegisterDelegate<ImportToolContentPipelineApi>(resolver => new(
+        container.RegisterDelegate<ImportToolContentPipelineApi>(
+            resolver => new(
             resolver.Resolve<IEngineContentPipelineToolLocator>(), resolver.Resolve<IContentPipelineProcessRunner>(),
             resolver.Resolve<ILogger<ImportToolContentPipelineApi>>(),
             resolver.Resolve<INativeCompatibilityService>(EditorNativeCompatibilityService.CookingServiceKey)), Reuse.Singleton);
         container.RegisterMapping<IEngineContentPipelineApi, ImportToolContentPipelineApi>();
         container.RegisterMapping<IBuiltinGeometryCatalogProvider, ImportToolContentPipelineApi>();
-        container.RegisterMapping<Oxygen.Editor.ContentPipeline.Import.ISceneSourceInspector, ImportToolContentPipelineApi>();
         container.Register<ContentCookCoordinator>(Reuse.Singleton);
         container.RegisterMapping<IContentCookCoordinator, ContentCookCoordinator>();
         container.RegisterMapping<Oxygen.Editor.ContentPipeline.Cooking.ICookRunService, ContentCookCoordinator>();
         container.Register<Oxygen.Editor.ContentPipeline.Snapshots.ICookDocumentRegistry, Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentRegistry>(Reuse.Singleton);
         container.Register<Oxygen.Editor.World.SceneEditor.SceneCookInputRegistrar>(Reuse.Singleton);
-        container.RegisterDelegate<IContentPipelineService>(resolver => new ContentPipelineService(
+        container.RegisterDelegate<IContentPipelineService>(
+            resolver => new ContentPipelineService(
             resolver.Resolve<IProjectContextService>(), resolver.Resolve<IContentCookCoordinator>(),
             resolver.Resolve<IProjectCookScopeProvider>(), resolver.Resolve<ISceneDescriptorGenerator>(),
             resolver.Resolve<IContentImportManifestBuilder>(), resolver.Resolve<IContentImportManifestValidator>(),
@@ -437,7 +439,5 @@ public static partial class Program
         container.Register<IMaterialCookService, MaterialCookService>(Reuse.Singleton);
         container.Register<IMaterialSourcePathResolver, ProjectMaterialSourcePathResolver>(Reuse.Singleton);
         container.Register<IMaterialDocumentService, MaterialDocumentService>(Reuse.Singleton);
-
-
     }
 }

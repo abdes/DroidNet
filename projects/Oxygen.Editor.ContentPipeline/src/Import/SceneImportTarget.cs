@@ -12,6 +12,22 @@ namespace Oxygen.Editor.ContentPipeline.Import;
 /// <param name="OutputDirectory">The exclusive mount-relative model folder.</param>
 public sealed record SceneImportTarget(string MountName, string OutputDirectory)
 {
+    /// <summary>Builds the native namespace shared by initial analysis and retained-source cooking.</summary>
+    /// <param name="primaryPath">The primary filename whose stem native mesh/material names already contain.</param>
+    /// <returns>The shared model layout.</returns>
+    public ContentImportLayout CreateLayout(string primaryPath)
+    {
+        var parent = string.Equals(Path.GetFileName(this.OutputDirectory), Path.GetFileNameWithoutExtension(primaryPath), StringComparison.Ordinal)
+            ? Path.GetDirectoryName(this.OutputDirectory)?.Replace('\\', '/') : this.OutputDirectory;
+        return new("/" + this.MountName)
+        {
+            DescriptorsDirectory = string.Empty,
+            MaterialsDirectory = string.IsNullOrEmpty(parent) ? "Materials" : "Materials/" + parent,
+            GeometryDirectory = string.IsNullOrEmpty(parent) ? "Geometry" : "Geometry/" + parent,
+            ScenesDirectory = "Scenes/" + this.OutputDirectory,
+        };
+    }
+
     /// <summary>Resolves the reviewed destination without placing output in source or derived folders.</summary>
     /// <param name="project">The reviewed project.</param>
     /// <param name="folder">The destination authoring folder.</param>

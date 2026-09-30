@@ -5,9 +5,9 @@
 using System.Collections.Immutable;
 using System.Security.Cryptography;
 using System.Text.Json;
-using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.Publication;
+using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Managed.Core.Compatibility;
 
 namespace Oxygen.Editor.ContentPipeline.Incremental;
@@ -22,7 +22,7 @@ internal static class CookIncrementalPlanner
         var inventories = ImmutableDictionary.CreateBuilder<string, CookedInventoryReport>(StringComparer.Ordinal);
         foreach (var mount in mounts.Distinct(StringComparer.Ordinal))
         {
-            if (publication.UnavailableRoots.Any(root => root.Name == mount)
+            if (publication.UnavailableRoots.Any(root => string.Equals(root.Name, mount, StringComparison.Ordinal))
                 || publication.FindProjectRoot(mount) is not { } path)
             {
                 continue;
@@ -58,6 +58,7 @@ internal static class CookIncrementalPlanner
             {
                 continue;
             }
+
             var (shared, descriptors) = root.Compare(inventory, previous.Products.SelectMany(static product => product.Outputs));
             if (!shared)
             {
@@ -66,7 +67,7 @@ internal static class CookIncrementalPlanner
 
             _ = sharedRoots.Add(root.Mount);
             foreach (var output in previous.Products.SelectMany(static product => product.Outputs)
-                .Where(output => output.RootMount == root.Mount && output.Asset.DescriptorRelativePath is { } path && descriptors.Contains(path)))
+                .Where(output => string.Equals(output.RootMount, root.Mount, StringComparison.Ordinal) && output.Asset.DescriptorRelativePath is { } path && descriptors.Contains(path)))
             {
                 _ = validOutputs.Add((root.Mount, output.Asset.VirtualPath));
             }
@@ -76,9 +77,24 @@ internal static class CookIncrementalPlanner
             && string.Equals(fingerprint, product.ReuseFingerprint, StringComparison.Ordinal)
             && product.Outputs.Length != 0
             && product.Outputs.All(output => validOutputs.Contains((output.RootMount, output.Asset.VirtualPath))))
-            .ToImmutableDictionary(static product => product.SourceUri);
+            .ToImmutableDictionary(static product => product.SourceUri).ToBuilder();
 
-        return new(fingerprints, reused, sharedRoots.ToImmutable()) { VerifiedOutputs = validOutputs.ToImmutableHashSet(), PriorInventories = inventories };
+        bool changed;
+        do
+        {
+            changed = false;
+            foreach (var (consumer, owners) in graph.ResourceDependencies)
+            {
+                if (reused.ContainsKey(consumer) && owners.Any(owner => !reused.ContainsKey(owner)))
+                {
+                    _ = reused.Remove(consumer);
+                    changed = true;
+                }
+            }
+        }
+        while (changed);
+
+        return new(fingerprints, reused.ToImmutable(), sharedRoots.ToImmutable()) { VerifiedOutputs = validOutputs.ToImmutableHashSet(), PriorInventories = inventories };
     }
 
     /// <summary>Builds an engine-generated product identity from its recipe owner and producer.</summary>
@@ -90,6 +106,13 @@ internal static class CookIncrementalPlanner
     internal static string Fingerprint(ContentCookInput input, string producer, IReadOnlyList<CookSnapshotInput> inputs, CookDependencyGraph graph)
     {
         var files = inputs.ToDictionary(static file => file.RelativePath, StringComparer.Ordinal);
+        return Fingerprint(input, producer, graph.FileDependencies[input.AssetUri].Select(path => files[path]),
+            graph.Dependencies[input.AssetUri], graph.CookedDependencies.GetValueOrDefault(input.AssetUri, []));
+    }
+
+    internal static string Fingerprint(ContentCookInput input, string producer, IEnumerable<CookSnapshotInput> files,
+        IEnumerable<Uri> dependencies, IEnumerable<CookedDependencySnapshot> cookedDependencies)
+    {
         var authored = Hash(new
         {
             Version = 1,
@@ -97,12 +120,16 @@ internal static class CookIncrementalPlanner
             input.Kind,
             input.OutputVirtualPath,
             Producer = producer,
-            Files = graph.FileDependencies[input.AssetUri].Select(path => new { Path = path, files[path].DiscoveryHash, files[path].IsAbsent }),
+            Files = files.Select(file => new
+            {
+                Path = file.RelativePath, file.DiscoveryHash, file.Kind,
+                Metadata = file.ProbeShape,
+            }),
 
             // Native descriptors refer to stable virtual asset identities; scalar material bytes do not alter their consumers.
-            Dependencies = graph.Dependencies[input.AssetUri].Select(static uri => uri.AbsoluteUri),
+            Dependencies = dependencies.Select(static uri => uri.AbsoluteUri),
         });
-        var libraries = graph.CookedDependencies.GetValueOrDefault(input.AssetUri, [])
+        var libraries = cookedDependencies
             .OrderBy(static dependency => dependency.AssetUri.AbsoluteUri, StringComparer.Ordinal).ThenBy(static dependency => dependency.AssetKey, StringComparer.Ordinal).ToArray();
         return libraries.Length == 0 ? authored : Hash(new { Authored = authored, Libraries = libraries });
     }

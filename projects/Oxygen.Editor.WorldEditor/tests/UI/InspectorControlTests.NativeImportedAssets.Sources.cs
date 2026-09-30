@@ -23,27 +23,18 @@ public sealed partial class InspectorControlTests
     {
         var path = Path.Combine(fixture.ProjectRoot, "Incoming", "Triangle." + format);
         _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        var source = await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "Fixtures/static_scalar_triangle." + format), cancellationToken).ConfigureAwait(true);
+        var source = await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "Fixtures/static_textured_triangle." + format), cancellationToken).ConfigureAwait(true);
         if (string.Equals(format, "fbx", StringComparison.Ordinal))
         {
-            const string materialBlock = """
-
-                    Material: 1007, "Material::Scalar", "" {
-                        Version: 102
-                        ShadingModel: "lambert"
-                        Properties70: {
-                            P: "DiffuseColor", "Color", "", "A",0.8,0.2,0.1
-                            P: "DiffuseFactor", "Number", "", "A",1
-                        }
-                    }
-                }
-                Connections:
-                """;
-            source = source.Replace("\r\n", "\n", StringComparison.Ordinal)
-                .Replace("\n}\nConnections:", materialBlock, StringComparison.Ordinal)
-                .Replace("C: \"OO\",1001,1002", "C: \"OO\",1001,1002\n    C: \"OO\",1007,1002", StringComparison.Ordinal);
+            source = source.Replace(
+                "\"DiffuseColor\", \"Color\", \"\", \"A\",1,1,1",
+                "\"DiffuseColor\", \"Color\", \"\", \"A\",0.8,0.2,0.1",
+                StringComparison.Ordinal);
         }
 
+        File.Copy(
+            Path.Combine(AppContext.BaseDirectory, "Fixtures/static_textured_checker.png"),
+            Path.Combine(Path.GetDirectoryName(path)!, "static_textured_checker.png"));
         await File.WriteAllTextAsync(path, source, cancellationToken).ConfigureAwait(true);
         return path;
     }

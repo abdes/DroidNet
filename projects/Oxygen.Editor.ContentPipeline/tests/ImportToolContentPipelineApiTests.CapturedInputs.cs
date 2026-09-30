@@ -20,7 +20,7 @@ public sealed partial class ImportToolContentPipelineApiTests
         using var workspace = new TempWorkspace();
         var execution = CapturedExecution(workspace);
         var runner = new CaptureContractRunner();
-        var result = await AnalysisApi(workspace, runner).ImportAsync(execution, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var result = await CreateQueryApi(workspace, runner).ImportAsync(execution, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.Succeeded.Should().BeTrue();
         _ = runner.Request!.Arguments.Should().ContainInOrder("--root", workspace.Root);
         var schemas = EditorSchemaCatalog.LoadFromDirectory(Path.Combine(AppContext.BaseDirectory, "Schemas"));
@@ -43,7 +43,7 @@ public sealed partial class ImportToolContentPipelineApiTests
         var drain = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var runner = new CaptureContractRunner(new ContentPipelineTerminationException(new IOException("Termination failed"), drain.Task));
         var execution = CapturedExecution(workspace);
-        Func<Task> import = () => AnalysisApi(workspace, runner).ImportAsync(execution, this.TestContext.CancellationToken);
+        Func<Task> import = () => CreateQueryApi(workspace, runner).ImportAsync(execution, this.TestContext.CancellationToken);
         var failure = await import.Should().ThrowAsync<ContentPipelineTerminationException>().ConfigureAwait(false);
         _ = File.Exists(runner.CapturePath).Should().BeTrue();
         drain.SetResult();

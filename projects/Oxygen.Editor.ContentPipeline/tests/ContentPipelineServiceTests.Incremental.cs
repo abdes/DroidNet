@@ -84,7 +84,7 @@ public sealed partial class ContentPipelineServiceTests
         var first = await CreateIncrementalService(workspace, api, compatibility).CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         AssertCookSucceeded(first);
         var files = ReadOutputIdentities(workspace.Root);
-        var workers = api.Imported.Count + api.CatalogRequests;
+        var workers = api.Imported.Count + api.CatalogRequests + api.Analyzed.Count;
 
         var second = await CreateIncrementalService(workspace, api, compatibility).CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -93,7 +93,7 @@ public sealed partial class ContentPipelineServiceTests
         _ = second.CookedAssets.Should().BeEmpty();
         _ = second.ReusedAssets.Should().BeEquivalentTo(first.CookedAssets);
         _ = second.Diagnostics.Select(static diagnostic => diagnostic.Code).Should().BeEquivalentTo(first.Diagnostics.Select(static diagnostic => diagnostic.Code));
-        _ = (api.Imported.Count + api.CatalogRequests).Should().Be(workers);
+        _ = (api.Imported.Count + api.CatalogRequests + api.Analyzed.Count).Should().Be(workers);
         _ = ReadOutputIdentities(workspace.Root).Should().BeEquivalentTo(files);
     }
 
@@ -113,6 +113,7 @@ public sealed partial class ContentPipelineServiceTests
         var descriptors = first.Inspection!.Assets.Where(static asset => asset.Kind is ContentCookAssetKind.Geometry or ContentCookAssetKind.Scene)
             .ToDictionary(static asset => asset.VirtualPath, asset => File.ReadAllBytes(Path.Combine(first.Inspection.CookedRoot, asset.DescriptorRelativePath!)), StringComparer.Ordinal);
         var beforeCatalog = api.CatalogRequests;
+        var beforeAnalysis = api.Analyzed.Count;
         var source = Path.Combine(workspace.Root, "Content", "Materials", "Blue.omat.json");
         var timestamp = File.GetLastWriteTimeUtc(source);
         workspace.WriteText("Content/Materials/Blue.omat.json", workspace.ReadText("Content/Materials/Blue.omat.json").Replace("0.5", "0.7", StringComparison.Ordinal));
@@ -126,6 +127,7 @@ public sealed partial class ContentPipelineServiceTests
         _ = api.Imported.Should().ContainSingle();
         _ = api.Imported[0].Manifest.Jobs.Should().ContainSingle(job => job.Type == "material-descriptor");
         _ = api.CatalogRequests.Should().Be(beforeCatalog);
+        _ = api.Analyzed.Skip(beforeAnalysis).SelectMany(static execution => execution.Jobs).Should().ContainSingle(job => job.Type == "material-descriptor");
         foreach (var (path, bytes) in descriptors)
         {
             var entry = first.Inspection.Assets.Single(asset => string.Equals(asset.VirtualPath, path, StringComparison.Ordinal));

@@ -16,6 +16,19 @@ namespace Oxygen.Editor.ContentPipeline.Tests;
 /// <summary>Qualifies native batch analysis, diagnostic attribution and query ownership.</summary>
 public sealed partial class ImportToolContentPipelineApiTests
 {
+    /// <summary>A changed native artifact rejects analysis before its worker is started.</summary>
+    /// <returns>The compatibility-boundary verification.</returns>
+    [TestMethod]
+    public async Task SourceAnalysis_RejectsChangedArtifactsBeforeWorkerStart()
+    {
+        using var workspace = new TempWorkspace();
+        var runner = new SourceAnalysisRunner();
+        await File.WriteAllTextAsync(workspace.ToolPath, "Changed tool", this.TestContext.CancellationToken).ConfigureAwait(false);
+        Func<Task> analyze = () => CreateQueryApi(workspace, runner).AnalyzeSourcesAsync(AnalysisExecution(workspace), this.TestContext.CancellationToken);
+        _ = await analyze.Should().ThrowAsync<NativeCompatibilityException>().ConfigureAwait(false);
+        _ = runner.Calls.Should().Be(0);
+    }
+
     /// <summary>A frontier uses one destination-free manifest and binds facts to the verified producer.</summary>
     /// <returns>The asynchronous query test.</returns>
     [TestMethod]
@@ -24,7 +37,7 @@ public sealed partial class ImportToolContentPipelineApiTests
         using var workspace = new TempWorkspace();
         var runner = new SourceAnalysisRunner();
         var execution = AnalysisExecution(workspace);
-        var result = await AnalysisApi(workspace, runner).AnalyzeSourcesAsync(execution, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var result = await CreateQueryApi(workspace, runner).AnalyzeSourcesAsync(execution, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.Complete.Should().BeTrue();
         _ = result.ProducerFingerprint.Should().NotBe("display-only-version");
         _ = result.Jobs.Should().HaveCount(2);
@@ -50,7 +63,7 @@ public sealed partial class ImportToolContentPipelineApiTests
         using var workspace = new TempWorkspace();
         var runner = new SourceAnalysisRunner { ExitCode = 1 };
         var execution = AnalysisExecution(workspace);
-        var report = await AnalysisApi(workspace, runner).AnalyzeSourcesAsync(execution, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var report = await CreateQueryApi(workspace, runner).AnalyzeSourcesAsync(execution, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = report.Complete.Should().BeFalse();
         _ = report.Jobs[0].Diagnostics.Should().ContainSingle(issue => issue.OperationId == execution.OperationId
             && issue.Code == "analysis.source_missing" && issue.Severity == DiagnosticSeverity.Error
@@ -64,7 +77,7 @@ public sealed partial class ImportToolContentPipelineApiTests
     {
         using var workspace = new TempWorkspace();
         var runner = new SourceAnalysisRunner { ChangeJobIdentity = true };
-        Func<Task> analyze = () => AnalysisApi(workspace, runner).AnalyzeSourcesAsync(AnalysisExecution(workspace), this.TestContext.CancellationToken);
+        Func<Task> analyze = () => CreateQueryApi(workspace, runner).AnalyzeSourcesAsync(AnalysisExecution(workspace), this.TestContext.CancellationToken);
         _ = await analyze.Should().ThrowAsync<InvalidDataException>().ConfigureAwait(false);
         _ = File.Exists(runner.ReportPath).Should().BeFalse();
     }
@@ -105,7 +118,7 @@ public sealed partial class ImportToolContentPipelineApiTests
                 }
             },
         };
-        Func<Task> analyze = () => AnalysisApi(workspace, runner).AnalyzeSourcesAsync(AnalysisExecution(workspace), this.TestContext.CancellationToken);
+        Func<Task> analyze = () => CreateQueryApi(workspace, runner).AnalyzeSourcesAsync(AnalysisExecution(workspace), this.TestContext.CancellationToken);
         _ = await analyze.Should().ThrowAsync<InvalidDataException>().ConfigureAwait(false);
         _ = File.Exists(runner.ReportPath).Should().BeFalse();
     }
@@ -119,7 +132,7 @@ public sealed partial class ImportToolContentPipelineApiTests
         var drain = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var runner = new SourceAnalysisRunner { Failure = new ContentPipelineTerminationException(new IOException("Termination failed"), drain.Task) };
         var execution = AnalysisExecution(workspace) with { CapturedInputs = new([]) };
-        Func<Task> analyze = () => AnalysisApi(workspace, runner).AnalyzeSourcesAsync(execution, this.TestContext.CancellationToken);
+        Func<Task> analyze = () => CreateQueryApi(workspace, runner).AnalyzeSourcesAsync(execution, this.TestContext.CancellationToken);
         var failure = await analyze.Should().ThrowAsync<ContentPipelineTerminationException>().ConfigureAwait(false);
         _ = File.Exists(runner.ManifestPath).Should().BeTrue();
         _ = File.Exists(runner.ReportPath).Should().BeTrue();
@@ -152,7 +165,7 @@ public sealed partial class ImportToolContentPipelineApiTests
         var compatibility = await workspace.Compatibility.VerifyAsync(Guid.NewGuid(), this.TestContext.CancellationToken).ConfigureAwait(false);
         var artifacts = compatibility.Artifacts!;
         await using var lifetime = artifacts.ConfigureAwait(false);
-        var report = await AnalysisApi(workspace, new SourceAnalysisRunner()).AnalyzeSourcesAsync(
+        var report = await CreateQueryApi(workspace, new SourceAnalysisRunner()).AnalyzeSourcesAsync(
             AnalysisExecution(workspace) with { Artifacts = artifacts }, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = report.ProducerFingerprint.Should().Be(artifacts.Fingerprint);
         Action overwrite = () => File.WriteAllText(workspace.ToolPath, "replacement");
@@ -176,7 +189,7 @@ public sealed partial class ImportToolContentPipelineApiTests
         var second = (await secondProducer.VerifyAsync(Guid.NewGuid(), this.TestContext.CancellationToken).ConfigureAwait(false)).Artifacts!;
         await using var firstLifetime = first.ConfigureAwait(false);
         await using var secondLifetime = second.ConfigureAwait(false);
-        var api = AnalysisApi(workspace, new SourceAnalysisRunner());
+        var api = CreateQueryApi(workspace, new SourceAnalysisRunner());
         _ = first.Fingerprint.Should().NotBe(second.Fingerprint);
         _ = (await api.AnalyzeSourcesAsync(AnalysisExecution(workspace) with { Artifacts = first }, this.TestContext.CancellationToken).ConfigureAwait(false)).Complete.Should().BeTrue();
         Func<Task> analyze = () => api.AnalyzeSourcesAsync(AnalysisExecution(workspace) with { Artifacts = second }, this.TestContext.CancellationToken);
@@ -247,7 +260,7 @@ public sealed partial class ImportToolContentPipelineApiTests
         Path.Combine(workspace.Root, "operation"),
         [new("first", "material-descriptor", "first.json", [], null, null), new("second", "material-descriptor", "second.json", [], null, null)]);
 
-    private static ImportToolContentPipelineApi AnalysisApi(TempWorkspace workspace, IContentPipelineProcessRunner runner)
+    private static ImportToolContentPipelineApi CreateQueryApi(TempWorkspace workspace, IContentPipelineProcessRunner runner)
         => new(new FixedToolLocator(workspace.ToolPath), runner, NullLogger<ImportToolContentPipelineApi>.Instance, workspace.Compatibility);
 
     private static Oxygen.Testing.TemporaryNativeArtifacts AnalysisArtifacts(TempWorkspace workspace, string schemaPath) => new(

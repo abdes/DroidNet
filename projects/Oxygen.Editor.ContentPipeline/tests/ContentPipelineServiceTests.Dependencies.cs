@@ -32,7 +32,7 @@ public sealed partial class ContentPipelineServiceTests
         AddGeometryNode(workspace, geometryUri, "Second");
         await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
         var sceneUri = new Uri("asset:///Content/Scenes/Main.oscene.json");
-        var discovery = new CookDependencyDiscovery(workspace.Documents);
+        var discovery = new CookDependencyDiscovery(new NativeSourceFactsFixture(workspace.ProjectContext, workspace.Documents));
 
         var graph = await discovery.DiscoverAsync(workspace.ProjectContext, [CookInputResolver.Resolve(workspace.ProjectContext, sceneUri, ContentCookInputRole.Primary)], this.TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -69,7 +69,7 @@ public sealed partial class ContentPipelineServiceTests
         using var workspace = new TempWorkspace();
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
         var input = CookInputResolver.Resolve(workspace.ProjectContext, new("asset:///Content/Materials/Red.omat.json"), ContentCookInputRole.Primary);
-        var discovery = new CookDependencyDiscovery(workspace.Documents);
+        var discovery = new CookDependencyDiscovery(new NativeSourceFactsFixture(workspace.ProjectContext, workspace.Documents));
         var capture = new CookInputSnapshotCapture(workspace.Documents, workspace.CookCoordinator);
         var attempts = 0;
         var result = await workspace.CookCoordinator.RunAsync(
@@ -117,7 +117,7 @@ public sealed partial class ContentPipelineServiceTests
         var scene = CookInputResolver.Resolve(workspace.ProjectContext, new("asset:///Content/Scenes/Main.oscene.json"), ContentCookInputRole.Primary);
         var dirtyScene = SavedState(scene.SourceAbsolutePath) with { IsDirty = true, Revision = 2 };
         using var sceneRegistration = workspace.Documents.Register(scene.SourceAbsolutePath, _ => Task.FromResult<CookDocumentReadLease?>(new(dirtyScene, static () => { })));
-        var discovery = new CookDependencyDiscovery(workspace.Documents);
+        var discovery = new CookDependencyDiscovery(new NativeSourceFactsFixture(workspace.ProjectContext, workspace.Documents));
         var graph = await discovery.DiscoverAsync(workspace.ProjectContext, [material], this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = graph.Assets.Should().ContainSingle();
         var dirtyMaterial = SavedState(material.SourceAbsolutePath) with { IsDirty = true, Revision = 2 };
@@ -141,7 +141,7 @@ public sealed partial class ContentPipelineServiceTests
         await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
         var scene = CookInputResolver.Resolve(workspace.ProjectContext, new("asset:///Content/Scenes/Main.oscene.json"), ContentCookInputRole.Primary);
 
-        var graph = await new CookDependencyDiscovery(workspace.Documents).DiscoverAsync(workspace.ProjectContext, [scene], this.TestContext.CancellationToken).ConfigureAwait(false);
+        var graph = await new CookDependencyDiscovery(new NativeSourceFactsFixture(workspace.ProjectContext, workspace.Documents)).DiscoverAsync(workspace.ProjectContext, [scene], this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = graph.Assets.Should().ContainSingle();
         _ = graph.PublishedReferences.Should().Equal(published);
@@ -196,7 +196,7 @@ public sealed partial class ContentPipelineServiceTests
         descriptor["buffers"]![0]!["uri"] = "../../../outside.bin";
         workspace.WriteText(source, descriptor.ToJsonString());
         var geometry = CookInputResolver.Resolve(workspace.ProjectContext, new("asset:///" + source), ContentCookInputRole.Primary);
-        var graph = await new CookDependencyDiscovery(workspace.Documents).DiscoverAsync(workspace.ProjectContext, [geometry], this.TestContext.CancellationToken).ConfigureAwait(false);
+        var graph = await new CookDependencyDiscovery(new NativeSourceFactsFixture(workspace.ProjectContext, workspace.Documents)).DiscoverAsync(workspace.ProjectContext, [geometry], this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = graph.Diagnostics.Should().ContainSingle(diagnostic => diagnostic.Message.Contains("outside the project", StringComparison.Ordinal) && diagnostic.AffectedVirtualPath == geometry.AssetUri.AbsolutePath);
     }
 
@@ -215,7 +215,7 @@ public sealed partial class ContentPipelineServiceTests
         workspace.WriteText(source, descriptor.ToJsonString());
         var geometry = CookInputResolver.Resolve(workspace.ProjectContext, new("asset:///" + source), ContentCookInputRole.Primary);
 
-        var graph = await new CookDependencyDiscovery(workspace.Documents).DiscoverAsync(workspace.ProjectContext, [geometry], this.TestContext.CancellationToken).ConfigureAwait(false);
+        var graph = await new CookDependencyDiscovery(new NativeSourceFactsFixture(workspace.ProjectContext, workspace.Documents)).DiscoverAsync(workspace.ProjectContext, [geometry], this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = graph.Files.Should().ContainSingle(file => file.SourcePath == bufferPath);
         _ = workspace.ReadText(source).Should().Be(descriptor.ToJsonString());
@@ -245,7 +245,7 @@ public sealed partial class ContentPipelineServiceTests
 
         var materialUri = new Uri("asset:///" + source);
         var input = CookInputResolver.Resolve(workspace.ProjectContext, materialUri, ContentCookInputRole.Primary);
-        var graph = await new CookDependencyDiscovery(workspace.Documents).DiscoverAsync(workspace.ProjectContext, [input], this.TestContext.CancellationToken).ConfigureAwait(false);
+        var graph = await new CookDependencyDiscovery(new NativeSourceFactsFixture(workspace.ProjectContext, workspace.Documents)).DiscoverAsync(workspace.ProjectContext, [input], this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = graph.Diagnostics.Should().BeEmpty();
         _ = graph.Assets.Should().HaveCount(4);
         _ = graph.Dependencies[materialUri].Should().BeEquivalentTo(new Uri[]
@@ -279,7 +279,7 @@ public sealed partial class ContentPipelineServiceTests
         material["textures"] = JsonNode.Parse("""{"base_color":{"virtual_path":"/Content/Textures/Red.otex.json"}}""");
         workspace.WriteText(source, material.ToJsonString());
         var api = CreateSuccessfulApi(workspace);
-        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(workspace, []), api);
+        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api);
 
         var result = await service.CookAssetAsync(new("asset:///" + source), this.TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -298,7 +298,7 @@ public sealed partial class ContentPipelineServiceTests
         workspace.WriteText("Content/Materials/First.omat.json", "invalid first");
         workspace.WriteText("Content/Materials/Second.omat.json", "invalid second");
         var api = CreateSuccessfulApi(workspace);
-        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(workspace, []), api);
+        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api);
 
         var result = await service.CookFolderAsync(new("asset:///Content/Materials"), this.TestContext.CancellationToken).ConfigureAwait(false);
 

@@ -1,4 +1,4 @@
-﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
+// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -8,47 +8,25 @@ using System.Text.Json;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.World;
-using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Serialization;
-using Oxygen.Editor.World.Slots;
-using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline.Snapshots;
 
-/// <summary>Discovers saved scene, material, texture and static geometry dependencies without generating output.</summary>
-/// <param name="documents">Document owners coordinating saved-source reads.</param>
-/// <param name="allowUnsavedDocuments">Allows read-only inspection of saved inputs while their documents contain newer edits.</param>
-/// <param name="importedSources">Previously published native dependency layouts for exact source revisions.</param>
-/// <param name="discoverImported">Optional native rediscovery used only by an owned cook operation.</param>
-/// <param name="resolveImported">Resolves native output references to their retained source owner.</param>
-/// <param name="preferCookedReference">Tests whether a library overrides the corresponding project source.</param>
-/// <param name="expandCookedReferences">Expands verified library dependencies before resolving authored owners.</param>
-public sealed class CookDependencyDiscovery(
-    ICookDocumentRegistry documents,
-    bool allowUnsavedDocuments = false,
-    IReadOnlyDictionary<Uri, ImportedSourceDependencyState>? importedSources = null,
-    Func<ContentCookInput, CancellationToken, Task<DiscoveredSceneSource>>? discoverImported = null,
+/// <summary>Resolves project ownership around native dependency frontiers.</summary>
+internal sealed class CookDependencyDiscovery(
+    ICookSourceFactsProvider analyzer,
     Func<Uri, ContentCookInput?>? resolveImported = null,
+    Func<string, ContentCookInput?>? resolveBufferOwner = null,
     Func<Uri, bool>? preferCookedReference = null,
     Func<ContentCookInput, IReadOnlyList<Uri>, CancellationToken, Task<CookReferenceExpansion>>? expandCookedReferences = null)
 {
-    /// <summary>Reads the requested authored closure and hashes the exact bytes used to discover each dependency.</summary>
-    /// <param name="project">The project whose authoring mounts resolve asset identities.</param>
-    /// <param name="roots">Requested primary inputs.</param>
-    /// <param name="cancellationToken">Cancels discovery.</param>
-    /// <returns>The closure for coherent capture, planning and published-reference validation.</returns>
     public Task<CookDependencyGraph> DiscoverAsync(ProjectContext project, IReadOnlyList<ContentCookInput> roots, CancellationToken cancellationToken)
         => this.DiscoverAsync(project, roots, preparedImport: null, cancellationToken);
 
-    /// <summary>Includes a reviewed incoming import in the same dependency closure as ordinary sources.</summary>
     internal async Task<CookDependencyGraph> DiscoverAsync(ProjectContext project, IReadOnlyList<ContentCookInput> roots, CookDependencyGraph? preparedImport, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(project);
-        ArgumentNullException.ThrowIfNull(roots);
-        var discovery = new Discovery(project, documents, allowUnsavedDocuments, importedSources, discoverImported, resolveImported, preferCookedReference, expandCookedReferences);
+        var discovery = new Discovery(project, analyzer, resolveImported, resolveBufferOwner, preferCookedReference, expandCookedReferences);
         if (preparedImport is not null)
         {
             discovery.AddPreparedImport(preparedImport);
@@ -62,23 +40,18 @@ public sealed class CookDependencyDiscovery(
         return await discovery.RunAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    /// <summary>Fingerprints a retained model independently of the native producer version.</summary>
-    /// <param name="inputs">The complete source, dependency and settings inputs.</param>
-    /// <returns>The source content fingerprint used by automatic-cook policy.</returns>
     internal static string FingerprintImportedContent(IEnumerable<CookSnapshotInput> inputs)
         => Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(inputs.OrderBy(static file => file.RelativePath, StringComparer.Ordinal)
-            .Select(static file => new { file.RelativePath, file.DiscoveryHash }))));
+            .Select(static file => new { file.RelativePath, file.DiscoveryHash, file.Kind, Metadata = file.ProbeShape }))));
 
-    private sealed class Discovery(ProjectContext project, ICookDocumentRegistry documents, bool allowUnsavedDocuments,
-        IReadOnlyDictionary<Uri, ImportedSourceDependencyState>? priorImports,
-        Func<ContentCookInput, CancellationToken, Task<DiscoveredSceneSource>>? discoverImported,
+    private sealed class Discovery(ProjectContext project, ICookSourceFactsProvider analyzer,
         Func<Uri, ContentCookInput?>? resolveImported,
+        Func<string, ContentCookInput?>? resolveBufferOwner,
         Func<Uri, bool>? preferCookedReference,
         Func<ContentCookInput, IReadOnlyList<Uri>, CancellationToken, Task<CookReferenceExpansion>>? expandCookedReferences)
     {
         private readonly Dictionary<string, ContentCookInput> assets = [with(StringComparer.OrdinalIgnoreCase)];
         private readonly Dictionary<string, CookSnapshotInput> files = [with(StringComparer.OrdinalIgnoreCase)];
-        private readonly Dictionary<string, byte[]> discoveredBytes = [with(StringComparer.OrdinalIgnoreCase)];
         private readonly Dictionary<Uri, ImmutableArray<Uri>> dependencies = [];
         private readonly Dictionary<Uri, ImmutableArray<Uri>> nativeReferences = [];
         private readonly Dictionary<Uri, ImmutableArray<CookedDependencySnapshot>> cookedDependencies = [];
@@ -86,11 +59,18 @@ public sealed class CookDependencyDiscovery(
         private readonly HashSet<Uri> builtins = [];
         private readonly HashSet<Uri> published = [];
         private readonly HashSet<Uri> importedReferences = [];
-        private readonly HashSet<Uri> importsNeedingDiscovery = [];
         private readonly Queue<ContentCookInput> pending = new();
         private readonly List<DiagnosticRecord> diagnostics = [];
         private readonly Dictionary<Uri, ImportedSourceDependencyState> imported = [];
-        private Uri currentAsset = null!;
+        private readonly Dictionary<Uri, SceneDescriptorGenerationResult> scenes = [];
+        private readonly Dictionary<Uri, ContentImportJob> jobs = [];
+        private readonly Dictionary<Uri, CookSourceFacts> sourceFacts = [];
+        private readonly HashSet<Uri> requiresAnalysis = [];
+        private readonly Dictionary<Uri, ContentCookInput> generatedSources = [];
+        private readonly Dictionary<string, NativeCapturedInput> generatedInputs = [with(StringComparer.OrdinalIgnoreCase)];
+        private readonly Dictionary<string, Uri> builtinOwners = [with(StringComparer.Ordinal)];
+        private readonly Dictionary<string, ContentCookInput> bufferOwners = [with(StringComparer.Ordinal)];
+        private readonly Dictionary<Uri, ImmutableArray<Uri>> resourceDependencies = [];
 
         public void AddPreparedImport(CookDependencyGraph prepared)
         {
@@ -118,31 +98,47 @@ public sealed class CookDependencyDiscovery(
 
         public async Task<CookDependencyGraph> RunAsync(CancellationToken cancellationToken)
         {
-            while (this.pending.TryDequeue(out var input))
+            while (this.pending.Count != 0)
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                try
+                var frontier = this.pending.ToArray();
+                this.pending.Clear();
+                var analyzed = await analyzer.ReadAsync(frontier, cancellationToken).ConfigureAwait(false);
+                this.diagnostics.AddRange(analyzed.Diagnostics);
+                foreach (var (path, owner) in analyzed.BuiltinOwners)
                 {
-                    await this.ReadAssetAsync(input, cancellationToken).ConfigureAwait(false);
+                    this.builtinOwners[path] = owner;
                 }
-                catch (CookInputDiscoveryException failure)
+
+                foreach (var source in analyzed.GeneratedSources)
                 {
-                    this.diagnostics.AddRange(failure.Diagnostics.Select(issue => issue with { AffectedVirtualPath = input.AssetUri.AbsolutePath }));
-                }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or JsonException or KeyNotFoundException or InvalidOperationException or FormatException)
-                {
-                    this.diagnostics.Add(new()
+                    this.generatedSources[source.AssetUri] = source;
+                    if (source.OutputVirtualPath is { } path)
                     {
-                        OperationId = Guid.Empty,
-                        Domain = FailureDomain.ContentPipeline,
-                        Severity = DiagnosticSeverity.Error,
-                        Code = ex is FileNotFoundException ? AssetImportDiagnosticCodes.SourceMissing : ContentPipelineDiagnosticCodes.ManifestGenerationFailed,
-                        Message = ex.Message,
-                        TechnicalMessage = ex.ToString(),
-                        ExceptionType = ex.GetType().FullName,
-                        AffectedPath = input.SourceAbsolutePath,
-                        AffectedVirtualPath = input.AssetUri.AbsolutePath,
-                    });
+                        this.builtinOwners[path] = source.AssetUri;
+                    }
+                }
+
+                foreach (var input in analyzed.GeneratedInputs)
+                {
+                    this.generatedInputs[input.LogicalPath] = input;
+                }
+
+                foreach (var source in analyzed.Sources)
+                {
+                    foreach (var output in source.Outputs.Where(static output => string.Equals(output.Kind, "buffer", StringComparison.Ordinal)))
+                    {
+                        if (this.bufferOwners.TryGetValue(output.VirtualPath, out var owner) && owner.AssetUri != source.Input.AssetUri)
+                        {
+                            throw new InvalidDataException($"Multiple sources claim buffer '{output.VirtualPath}'.");
+                        }
+
+                        this.bufferOwners[output.VirtualPath] = source.Input;
+                    }
+                }
+
+                foreach (var source in analyzed.Sources)
+                {
+                    await this.ApplySourceAsync(source, cancellationToken).ConfigureAwait(false);
                 }
             }
 
@@ -156,49 +152,95 @@ public sealed class CookDependencyDiscovery(
                 [.. this.diagnostics])
             {
                 ImportedSources = this.imported.ToImmutableDictionary(), ImportedReferences = [.. this.importedReferences],
-                ImportsNeedingDiscovery = this.importsNeedingDiscovery.ToImmutableHashSet(),
-                NativeReferences = this.nativeReferences.ToImmutableDictionary(),
-                CookedDependencies = this.cookedDependencies.ToImmutableDictionary(),
+                NativeReferences = this.nativeReferences.ToImmutableDictionary(), CookedDependencies = this.cookedDependencies.ToImmutableDictionary(),
+                SceneDescriptors = this.scenes.ToImmutableDictionary(), NativeJobs = this.jobs.ToImmutableDictionary(),
+                GeneratedSources = [.. this.generatedSources.Values], GeneratedInputs = [.. this.generatedInputs.Values],
+                SourceFacts = this.sourceFacts.ToImmutableDictionary(), SourcesNeedingAnalysis = this.requiresAnalysis.ToImmutableHashSet(),
+                ResourceDependencies = this.resourceDependencies.ToImmutableDictionary(),
             };
         }
 
-        private static Uri[] ReadMaterial(byte[] bytes)
+        private async Task ApplySourceAsync(CookSourceFacts source, CancellationToken cancellationToken)
         {
-            var material = MaterialSourceReader.Read(bytes);
-            return [.. material.EnumerateTextureVirtualPaths().Distinct(StringComparer.Ordinal)
-                .Select(static path => new Uri($"{AssetUris.Scheme}://{string.Join('/', path.Split('/').Select(Uri.EscapeDataString))}"))];
-        }
-
-        private static ContentCookInput WithImportedOutputs(ContentCookInput input, NativeSceneImportSettings settings) => input with
-        {
-            MountName = settings.MountPoint,
-            OutputVirtualPath = null,
-            OutputNamespaces = settings.OutputPrefixes,
-        };
-
-        private async Task ReadAssetAsync(ContentCookInput input, CancellationToken cancellationToken)
-        {
-            this.currentAsset = input.AssetUri;
-            this.fileDependencies[input.AssetUri] = [with(StringComparer.Ordinal)];
-            if (input.Kind == ContentCookAssetKind.ForeignSource)
+            var input = source.Input;
+            this.assets[Path.GetFullPath(input.SourceAbsolutePath)] = input;
+            this.sourceFacts[input.AssetUri] = source;
+            if (source.Job is { } job)
             {
-                await this.ReadImportedSourceAsync(input, cancellationToken).ConfigureAwait(false);
-                this.dependencies[input.AssetUri] = [];
-                return;
+                this.jobs[input.AssetUri] = job;
             }
 
-            var bytes = await this.ReadFileAsync(input.AssetUri, input.SourceAbsolutePath, cancellationToken).ConfigureAwait(false);
-            await this.ReadSettingsAsync(input.SourceAbsolutePath, cancellationToken).ConfigureAwait(false);
-            IReadOnlyList<Uri> references = input.Kind switch
+            if (source.RequiresAnalysis)
             {
-                ContentCookAssetKind.Scene => await this.ReadSceneAsync(bytes, cancellationToken).ConfigureAwait(false),
-                ContentCookAssetKind.Geometry => await this.ReadGeometryAsync(input, bytes, cancellationToken).ConfigureAwait(false),
-                ContentCookAssetKind.Material => ReadMaterial(bytes),
-                ContentCookAssetKind.Texture => await this.ReadTextureAsync(input, bytes, cancellationToken).ConfigureAwait(false),
-                _ => throw new InvalidDataException($"Unsupported cook input '{input.AssetUri}'."),
-            };
-            this.nativeReferences[input.AssetUri] = [.. references.Select(static uri => uri.AbsolutePath.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ? new Uri(uri.AbsoluteUri[..^5]) : uri).Distinct()];
-            var resolvedDependencies = references.Select(this.ResolveReference).ToHashSet();
+                _ = this.requiresAnalysis.Add(input.AssetUri);
+            }
+
+            this.fileDependencies[input.AssetUri] = [with(StringComparer.Ordinal)];
+            foreach (var file in source.Files)
+            {
+                var path = Path.GetFullPath(file.SourcePath);
+                _ = this.fileDependencies[input.AssetUri].Add(file.RelativePath);
+                if (this.files.TryGetValue(path, out var existing))
+                {
+                    var selected = (int)existing.Kind <= (int)file.Kind ? existing : file;
+                    this.files[path] = selected with
+                    {
+                        AssetUri = existing.AssetUri ?? file.AssetUri,
+                        NativeObservations = [.. existing.NativeObservations, .. file.NativeObservations],
+                        Metadata = selected.Metadata ?? existing.Metadata ?? file.Metadata,
+                    };
+                }
+                else
+                {
+                    this.files.Add(path, file);
+                }
+            }
+
+            if (source.Scene is { } scene)
+            {
+                this.scenes[input.AssetUri] = scene;
+            }
+
+            if (input.Kind == ContentCookAssetKind.ForeignSource && !source.RequiresAnalysis)
+            {
+                var primary = source.Files.Single(file => file.AssetUri == input.AssetUri);
+                this.imported[input.AssetUri] = new(
+                    primary.DiscoveryHash,
+                    [.. source.Files.Where(file => !string.Equals(file.RelativePath, input.SourceRelativePath + NativeSceneImportSettings.SidecarSuffix, StringComparison.OrdinalIgnoreCase))
+                        .Select(static file => file.RelativePath).Order(StringComparer.Ordinal)])
+                {
+                    ContentFingerprint = FingerprintImportedContent(source.Files),
+                };
+            }
+
+            var localOutputs = source.Outputs.Select(static output => output.VirtualPath).ToHashSet(StringComparer.Ordinal);
+            var external = source.References.Where(reference => !localOutputs.Contains(reference.VirtualPath)).ToArray();
+            var references = external.Where(static reference => !string.Equals(reference.Kind, "buffer", StringComparison.Ordinal))
+                .Select(static reference => new Uri($"{AssetUris.Scheme}://{string.Join('/', reference.VirtualPath.Split('/').Select(Uri.EscapeDataString))}"))
+                .Distinct().ToArray();
+            this.nativeReferences[input.AssetUri] = [.. references];
+            var resolved = references.Select(this.ResolveReference).ToHashSet();
+            var bufferDependencies = new HashSet<Uri>();
+            foreach (var reference in external.Where(static reference => string.Equals(reference.Kind, "buffer", StringComparison.Ordinal)))
+            {
+                var owner = this.bufferOwners.GetValueOrDefault(reference.VirtualPath) ?? resolveBufferOwner?.Invoke(reference.VirtualPath);
+                if (owner is null)
+                {
+                    // Native linking validates existing local sidecars and rejects foreign-root indices.
+                    continue;
+                }
+
+                if (!string.Equals(owner.MountName, input.MountName, StringComparison.Ordinal))
+                {
+                    throw new InvalidDataException($"Raw buffer '{reference.VirtualPath}' belongs to another cooked root. Reference its geometry asset or import the buffer source into this root.");
+                }
+
+                this.AddAsset(owner);
+                _ = resolved.Add(owner.AssetUri);
+                _ = bufferDependencies.Add(owner.AssetUri);
+            }
+
+            this.resourceDependencies[input.AssetUri] = [.. bufferDependencies];
             if (expandCookedReferences is not null)
             {
                 var expansion = await expandCookedReferences(input, references, cancellationToken).ConfigureAwait(false);
@@ -208,214 +250,11 @@ public sealed class CookDependencyDiscovery(
                 foreach (var dependency in expansion.ProjectInputs)
                 {
                     this.AddAsset(dependency);
-                    _ = resolvedDependencies.Add(dependency.AssetUri);
+                    _ = resolved.Add(dependency.AssetUri);
                 }
             }
 
-            this.dependencies[input.AssetUri] = [.. resolvedDependencies.OrderBy(static uri => uri.AbsoluteUri, StringComparer.Ordinal)];
-        }
-
-        private async Task ReadImportedSourceAsync(ContentCookInput input, CancellationToken cancellationToken)
-        {
-            var settingsBytes = await this.ReadFileAsync(assetUri: null, input.SourceAbsolutePath + NativeSceneImportSettings.SidecarSuffix, cancellationToken).ConfigureAwait(false);
-            var settings = NativeSceneImportSettings.Parse(settingsBytes);
-            if (!string.Equals(settings.ResolveFile(project.ProjectRoot, settings.PrimaryRelativePath), Path.GetFullPath(input.SourceAbsolutePath), StringComparison.OrdinalIgnoreCase)
-                || !project.AuthoringMounts.Any(mount => string.Equals(mount.Name, settings.MountPoint, StringComparison.OrdinalIgnoreCase)))
-            {
-                throw new InvalidDataException("Import settings do not match their retained source or output mount.");
-            }
-
-            var primaryHash = await this.ReadHashAsync(input.AssetUri, input.SourceAbsolutePath, cancellationToken).ConfigureAwait(false);
-            IEnumerable<string> paths;
-            if (priorImports?.TryGetValue(input.AssetUri, out var prior) == true && string.Equals(prior.PrimaryHash, primaryHash, StringComparison.OrdinalIgnoreCase))
-            {
-                paths = prior.Files.Select(relative => Path.GetFullPath(Path.Combine(project.ProjectRoot, relative)));
-            }
-            else if (string.Equals(settings.SourceHash, primaryHash, StringComparison.OrdinalIgnoreCase))
-            {
-                paths = settings.Files.Select(relative => settings.ResolveFile(project.ProjectRoot, relative));
-            }
-            else if (discoverImported is not null)
-            {
-                var discovered = await discoverImported(input, cancellationToken).ConfigureAwait(false);
-                foreach (var file in discovered.Bundle.Files)
-                {
-                    var relative = this.RelativePath(file.SourcePath);
-                    this.files[file.SourcePath] = file with { RelativePath = relative };
-                    _ = this.fileDependencies[input.AssetUri].Add(relative);
-                }
-
-                primaryHash = discovered.Bundle.Files.Single(file => string.Equals(file.SourcePath, input.SourceAbsolutePath, StringComparison.OrdinalIgnoreCase)).DiscoveryHash;
-                paths = discovered.Bundle.Files.Select(static file => file.SourcePath);
-            }
-            else
-            {
-                if (!allowUnsavedDocuments)
-                {
-                    throw new InvalidDataException("The imported source changed. Cook or reimport it to update its saved dependency information.");
-                }
-
-                _ = this.importsNeedingDiscovery.Add(input.AssetUri);
-                return;
-            }
-
-            var knownPaths = paths.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-            foreach (var path in knownPaths)
-            {
-                var relative = this.RelativePath(path);
-                _ = this.fileDependencies[input.AssetUri].Add(relative);
-                if (!this.files.ContainsKey(path))
-                {
-                    _ = await this.ReadHashAsync(assetUri: null, path, cancellationToken).ConfigureAwait(false);
-                }
-            }
-
-            this.assets[Path.GetFullPath(input.SourceAbsolutePath)] = WithImportedOutputs(input, settings);
-            this.imported[input.AssetUri] = new(primaryHash, knownPaths.Select(this.RelativePath).Order(StringComparer.Ordinal).ToImmutableArray())
-            {
-                ContentFingerprint = FingerprintImportedContent(knownPaths.Append(input.SourceAbsolutePath + NativeSceneImportSettings.SidecarSuffix).Select(path => this.files[Path.GetFullPath(path)])),
-            };
-        }
-
-        private async Task<string> ReadHashAsync(Uri? assetUri, string path, CancellationToken cancellationToken)
-        {
-            path = Path.GetFullPath(path);
-            var relative = this.RelativePath(path);
-            _ = this.fileDependencies[this.currentAsset].Add(relative);
-            var physical = this.files.TryGetValue(path, out var prepared) ? prepared.SourcePath : path;
-            var hash = await CookSavedSourceReader.HashAsync(documents, physical, cancellationToken, allowUnsavedDocuments).ConfigureAwait(false);
-            this.files[path] = new(assetUri ?? prepared?.AssetUri, physical, relative, hash);
-            return hash;
-        }
-
-        private async Task<byte[]> ReadFileAsync(Uri? assetUri, string path, CancellationToken cancellationToken)
-        {
-            path = Path.GetFullPath(path);
-            _ = this.fileDependencies[this.currentAsset].Add(this.RelativePath(path));
-            if (this.discoveredBytes.TryGetValue(path, out var captured))
-            {
-                return captured;
-            }
-
-            var relative = this.RelativePath(path);
-            var physical = this.files.TryGetValue(path, out var prepared) ? prepared.SourcePath : path;
-            var bytes = await CookSavedSourceReader.ReadAsync(documents, physical, cancellationToken, allowUnsavedDocuments).ConfigureAwait(false);
-            this.discoveredBytes.Add(path, bytes);
-            _ = this.files.TryAdd(path, new(assetUri, path, relative, Convert.ToHexString(SHA256.HashData(bytes))));
-            return bytes;
-        }
-
-        private async Task ReadSettingsAsync(string sourcePath, CancellationToken cancellationToken)
-        {
-            var settings = sourcePath + ".import.json";
-            _ = this.fileDependencies[this.currentAsset].Add(this.RelativePath(settings));
-            if (CookSavedSourceReader.Exists(settings))
-            {
-                _ = await this.ReadFileAsync(assetUri: null, settings, cancellationToken).ConfigureAwait(false);
-            }
-            else
-            {
-                _ = this.files.TryAdd(Path.GetFullPath(settings), new(AssetUri: null, Path.GetFullPath(settings), this.RelativePath(settings), DiscoveryHash: string.Empty, IsAbsent: true));
-            }
-        }
-
-        private async Task<Uri[]> ReadSceneAsync(byte[] bytes, CancellationToken cancellationToken)
-        {
-            var info = new ProjectInfo(project.ProjectId, project.Name, project.Category, project.ProjectRoot, project.Thumbnail)
-            {
-                AuthoringMounts = [.. project.AuthoringMounts],
-                LocalFolderMounts = [.. project.LocalFolderMounts],
-            };
-            var owner = new Project(info) { Name = project.Name };
-            var stream = new MemoryStream(bytes, writable: false);
-            await using var lifetime = stream.ConfigureAwait(false);
-            var scene = await new SceneSerializer(owner).DeserializeAsync(stream).ConfigureAwait(false);
-            cancellationToken.ThrowIfCancellationRequested();
-            return
-            [
-                .. new[] { scene.Environment.PostProcess.AutoExposureMeteringMask }.OfType<Uri>(),
-                .. scene.AllNodes.SelectMany(static node => node.Components.OfType<GeometryComponent>())
-                .SelectMany(static geometry => geometry.OverrideSlots.OfType<MaterialsSlot>().Select(static slot => slot.Material.Uri).Prepend(geometry.Geometry?.Uri))
-                .OfType<Uri>().Where(static uri => !string.Equals(uri.AbsolutePath, "/__uninitialized__", StringComparison.Ordinal)),
-            ];
-        }
-
-        private async Task<Uri[]> ReadTextureAsync(ContentCookInput input, byte[] bytes, CancellationToken cancellationToken)
-        {
-            using var descriptor = JsonDocument.Parse(bytes);
-            var root = descriptor.RootElement;
-            var sources = new HashSet<string>(StringComparer.Ordinal) { root.GetProperty("source").GetString()! };
-            if (root.TryGetProperty("sources", out var mappings))
-            {
-                foreach (var mapping in mappings.EnumerateArray())
-                {
-                    _ = sources.Add(mapping.GetProperty("file").GetString()!);
-                }
-            }
-
-            foreach (var source in sources)
-            {
-                if (string.IsNullOrWhiteSpace(source)
-                    || (!Path.IsPathRooted(source) && Uri.TryCreate(source, UriKind.Absolute, out _)))
-                {
-                    throw new InvalidDataException($"Texture '{input.AssetUri}' source must reference a local image file.");
-                }
-
-                var path = Path.GetFullPath(Path.IsPathRooted(source) ? source : Path.Combine(Path.GetDirectoryName(input.SourceAbsolutePath)!, source));
-                _ = await this.ReadFileAsync(assetUri: null, path, cancellationToken).ConfigureAwait(false);
-            }
-
-            return [];
-        }
-
-        private async Task<Uri[]> ReadGeometryAsync(ContentCookInput input, byte[] bytes, CancellationToken cancellationToken)
-        {
-            using var descriptor = JsonDocument.Parse(bytes);
-            var root = descriptor.RootElement;
-            var localBuffers = new HashSet<string>(StringComparer.Ordinal);
-            if (root.TryGetProperty("buffers", out var buffers))
-            {
-                foreach (var buffer in buffers.EnumerateArray())
-                {
-                    _ = localBuffers.Add(buffer.GetProperty("virtual_path").GetString()!);
-                    var relative = buffer.GetProperty("uri").GetString() ?? throw new InvalidDataException($"Geometry '{input.AssetUri}' has an empty buffer URI.");
-                    if (!Path.IsPathRooted(relative) && Uri.TryCreate(relative, UriKind.Absolute, out _))
-                    {
-                        throw new InvalidDataException($"Geometry '{input.AssetUri}' buffer '{relative}' is not a local file reference.");
-                    }
-
-                    var path = Path.GetFullPath(Path.IsPathRooted(relative) ? relative : Path.Combine(Path.GetDirectoryName(input.SourceAbsolutePath)!, relative));
-                    _ = await this.ReadFileAsync(assetUri: null, path, cancellationToken).ConfigureAwait(false);
-                }
-            }
-
-            var references = new List<Uri>();
-            foreach (var lod in root.GetProperty("lods").EnumerateArray())
-            {
-                if (string.Equals(lod.GetProperty("mesh_type").GetString(), "skinned", StringComparison.Ordinal))
-                {
-                    throw new InvalidDataException($"Geometry '{input.AssetUri}' is skinned. Geometry cooking supports static meshes only.");
-                }
-
-                if (lod.TryGetProperty("buffers", out var meshBuffers))
-                {
-                    foreach (var buffer in meshBuffers.EnumerateObject())
-                    {
-                        var virtualPath = buffer.Value.GetString()!;
-                        if (!localBuffers.Contains(virtualPath))
-                        {
-                            _ = this.published.Add(new Uri($"{AssetUris.Scheme}://{virtualPath}"));
-                        }
-                    }
-                }
-
-                foreach (var submesh in lod.GetProperty("submeshes").EnumerateArray())
-                {
-                    references.Add(new Uri($"{AssetUris.Scheme}://{submesh.GetProperty("material_ref").GetString()}"));
-                }
-            }
-
-            return [.. references];
+            this.dependencies[input.AssetUri] = [.. resolved.OrderBy(static uri => uri.AbsoluteUri, StringComparer.Ordinal)];
         }
 
         private Uri ResolveReference(Uri uri)
@@ -423,6 +262,12 @@ public sealed class CookDependencyDiscovery(
             if (!string.Equals(uri.Scheme, AssetUris.Scheme, StringComparison.OrdinalIgnoreCase))
             {
                 throw new InvalidDataException($"Cook dependency '{uri}' must be an asset identity.");
+            }
+
+            if (this.builtinOwners.TryGetValue(Uri.UnescapeDataString(uri.AbsolutePath), out var generated))
+            {
+                _ = this.builtins.Add(generated);
+                return generated;
             }
 
             if (uri.AbsolutePath.StartsWith("/Engine/Generated/", StringComparison.OrdinalIgnoreCase))

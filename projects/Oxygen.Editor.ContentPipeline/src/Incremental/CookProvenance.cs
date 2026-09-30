@@ -12,8 +12,14 @@ namespace Oxygen.Editor.ContentPipeline.Incremental;
 /// <param name="ProjectId">The project that owns the output roots.</param>
 /// <param name="Roots">The last verified files in each physical output root.</param>
 /// <param name="Products">The source fingerprints responsible for produced assets.</param>
-internal sealed record CookProvenance(Guid ProjectId, ImmutableArray<CookProvenance.Root> Roots, ImmutableArray<CookProvenance.Product> Products)
+internal sealed partial record CookProvenance(Guid ProjectId, ImmutableArray<CookProvenance.Root> Roots, ImmutableArray<CookProvenance.Product> Products)
 {
+    /// <summary>Gets accepted native builtin output identities for source dependency resolution.</summary>
+    internal ImmutableDictionary<string, Uri> BuiltinOwners => this.Products
+        .Where(static product => product.SourceUri.AbsolutePath.StartsWith("/Engine/Generated/", StringComparison.OrdinalIgnoreCase))
+        .SelectMany(static product => product.Outputs.Select(output => KeyValuePair.Create(output.Asset.VirtualPath, product.SourceUri)))
+        .ToImmutableDictionary(StringComparer.Ordinal);
+
     /// <summary>The exact native inventory selected for a physical publication mount.</summary>
     /// <param name="Mount">The physical mount, independent of virtual asset names.</param>
     /// <param name="SourceKey">The native source identity.</param>
@@ -32,12 +38,20 @@ internal sealed record CookProvenance(Guid ProjectId, ImmutableArray<CookProvena
         /// <returns>Shared-file validity and the usable physical descriptor paths.</returns>
         public (bool SharedFilesValid, ImmutableHashSet<string> ValidDescriptors) Compare(CookedInventoryReport inventory, IEnumerable<Output> outputs)
         {
-            if (!this.Matches(inventory)) { return (false, []); }
+            if (!this.Matches(inventory))
+            {
+                return (false, []);
+            }
+
             var descriptors = inventory.Assets.Select(static asset => asset.DescriptorPath).ToHashSet(StringComparer.Ordinal);
-            descriptors.UnionWith(outputs.Where(output => output.RootMount == this.Mount && output.Asset.DescriptorRelativePath is not null)
+            descriptors.UnionWith(outputs.Where(output => string.Equals(output.RootMount, this.Mount, StringComparison.Ordinal) && output.Asset.DescriptorRelativePath is not null)
                 .Select(static output => output.Asset.DescriptorRelativePath!));
             if (inventory.Issues.Any(issue => !descriptors.Contains(issue.RelativePath)
-                || issue.Reason is not ("missing" or "size_mismatch" or "digest_mismatch"))) { return (false, []); }
+                || issue.Reason is not ("missing" or "size_mismatch" or "digest_mismatch")))
+            {
+                return (false, []);
+            }
+
             var damaged = inventory.Issues.Select(static issue => issue.RelativePath).ToHashSet(StringComparer.Ordinal);
             return (true, descriptors.Where(path => inventory.Files.ContainsKey(path) && !damaged.Contains(path)).ToImmutableHashSet(StringComparer.Ordinal));
         }
@@ -55,6 +69,18 @@ internal sealed record CookProvenance(Guid ProjectId, ImmutableArray<CookProvena
     /// <param name="Outputs">The produced asset identities.</param>
     public sealed record Product(Uri SourceUri, string Fingerprint, ImmutableArray<Uri> Dependencies, ImmutableArray<Output> Outputs)
     {
+        /// <summary>Gets the authored owner and recipe identity accepted by this publication.</summary>
+        public ContentCookInput? SourceInput { get; init; }
+
+        /// <summary>Gets the source closure accepted for this product, independent of the last partial cook.</summary>
+        public ImmutableArray<Snapshots.CookSnapshotInput> SourceFiles { get; init; } = [];
+
+        /// <summary>Gets native-declared outputs used to distinguish internal references.</summary>
+        public ImmutableArray<Import.NativeLogicalDependency> DeclaredOutputs { get; init; } = [];
+
+        /// <summary>Gets native logical references, reused by passive status without parsing source.</summary>
+        public ImmutableArray<Import.NativeLogicalDependency> NativeReferences { get; init; } = [];
+
         /// <summary>Gets the source state accepted for reuse after producer-owned source metadata is committed.</summary>
         public required string ReuseFingerprint { get; init; }
         /// <summary>Gets the external native identities used when the source was cooked.</summary>
@@ -75,7 +101,7 @@ internal sealed record CookProvenance(Guid ProjectId, ImmutableArray<CookProvena
         if (this.ProjectId != project.ProjectId || this.Roots.IsDefault || this.Products.IsDefault
             || this.Roots.Any(static root => root is null || root.SourceKey == Guid.Empty
                 || root.IndexSha256 is not { Length: 64 } || !root.IndexSha256.All(Uri.IsHexDigit))
-            || this.Products.Any(static product => product?.SourceUri is null || !product.SourceUri.IsAbsoluteUri || product.Fingerprint is not { Length: 64 } || !product.Fingerprint.All(Uri.IsHexDigit)
+            || this.Products.Any(static product => product?.SourceUri is null || !product.SourceUri.IsAbsoluteUri || !ValidSourceFacts(product) || product.Fingerprint is not { Length: 64 } || !product.Fingerprint.All(Uri.IsHexDigit)
                 || product.ReuseFingerprint is not { Length: 64 } || !product.ReuseFingerprint.All(Uri.IsHexDigit) || product.Dependencies.IsDefault || product.Outputs.IsDefaultOrEmpty || product.Diagnostics.IsDefault || product.Diagnostics.Any(static diagnostic => diagnostic is null)
                 || product.AuxiliaryFiles.IsDefault || product.AuxiliaryFiles.Any(static path => string.IsNullOrWhiteSpace(path)
                     || path.Contains('\\') || path.Contains(':') || path.Split('/').Any(static segment => segment is "" or "." or ".."))

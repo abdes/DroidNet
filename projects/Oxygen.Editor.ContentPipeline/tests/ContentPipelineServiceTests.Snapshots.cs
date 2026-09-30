@@ -36,12 +36,12 @@ public sealed partial class ContentPipelineServiceTests
 
                 foreach (var job in execution.Manifest.Jobs)
                 {
-                    using var document = JsonDocument.Parse(await File.ReadAllBytesAsync(Path.Combine(execution.InputRoot, job.Source), token).ConfigureAwait(false));
+                    using var document = JsonDocument.Parse(await File.ReadAllBytesAsync(CapturedPath(execution, job.Source), token).ConfigureAwait(false));
                     names.Add(document.RootElement.GetProperty("name").GetString()!);
                 }
             },
         };
-        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(workspace, []), api);
+        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api);
 
         var result = await service.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -50,12 +50,14 @@ public sealed partial class ContentPipelineServiceTests
         _ = api.Executions.Should().HaveCount(2);
         _ = api.Executions.Select(static execution => execution.InputRoot).Distinct(StringComparer.Ordinal).Should().ContainSingle();
         _ = result.InputSnapshot.Should().NotBeNull();
-        _ = api.Executions[0].InputRoot.Should().Be(result.InputSnapshot!.InputRoot);
+        _ = api.Executions[0].InputRoot.Should().Be(workspace.Root);
+        _ = api.Executions.SelectMany(static execution => execution.CapturedInputs!.Inputs).Where(static input => input.File is not null)
+            .Should().OnlyContain(input => input.File!.Path.StartsWith(result.InputSnapshot!.InputRoot, StringComparison.OrdinalIgnoreCase));
         _ = result.InputSnapshot.Inputs.Count(static input => input.AssetUri is not null).Should().Be(2);
         _ = result.InputsAreCurrent.Should().BeFalse();
     }
 
-    /// <summary>Descriptor-relative and absolute retained buffers are rewritten to their private captured copies.</summary>
+    /// <summary>Descriptor-relative and absolute paths select captured buffers without rewriting their descriptor.</summary>
     /// <param name="absolute">Whether the authored descriptor uses an absolute retained path.</param>
     /// <returns>The asynchronous snapshot test.</returns>
     [TestMethod]
@@ -81,15 +83,16 @@ public sealed partial class ContentPipelineServiceTests
             {
                 workspace.WriteText("Content/Geometry/mesh.bin", "changed live buffer");
                 var job = execution.Manifest.Jobs.Single(static job => string.Equals(job.Type, "geometry-descriptor", StringComparison.Ordinal));
-                var descriptorPath = Path.Combine(execution.InputRoot, job.Source);
+                var logicalDescriptor = Path.GetFullPath(job.Source, execution.InputRoot);
+                var descriptorPath = CapturedPath(execution, job.Source);
                 using var descriptor = JsonDocument.Parse(await File.ReadAllBytesAsync(descriptorPath, token).ConfigureAwait(false));
                 var relative = descriptor.RootElement.GetProperty("buffers")[0].GetProperty("uri").GetString()!;
-                var capturedBuffer = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(descriptorPath)!, relative));
-                _ = capturedBuffer.Should().StartWith(execution.InputRoot + Path.DirectorySeparatorChar);
+                var capturedBuffer = CapturedPath(execution, Path.GetFullPath(relative, Path.GetDirectoryName(logicalDescriptor)!));
+                _ = capturedBuffer.Should().NotBe(Path.Combine(execution.InputRoot, "Content", "Geometry", "mesh.bin"));
                 _ = (await File.ReadAllTextAsync(capturedBuffer, token).ConfigureAwait(false)).Should().Be("saved buffer bytes");
             },
         };
-        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(workspace, []), api);
+        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api);
 
         var result = await service.CookAssetAsync(new("asset:///" + source), this.TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -123,14 +126,15 @@ public sealed partial class ContentPipelineServiceTests
             {
                 workspace.WriteText(image, "changed live image");
                 var job = execution.Manifest.Jobs.Single(static job => string.Equals(job.Type, "texture-descriptor", StringComparison.Ordinal));
-                var descriptorPath = Path.Combine(execution.InputRoot, job.Source);
+                var logicalDescriptor = Path.GetFullPath(job.Source, execution.InputRoot);
+                var descriptorPath = CapturedPath(execution, job.Source);
                 using var descriptor = JsonDocument.Parse(await File.ReadAllBytesAsync(descriptorPath, token).ConfigureAwait(false));
-                var capturedImage = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(descriptorPath)!, descriptor.RootElement.GetProperty("source").GetString()!));
-                _ = capturedImage.Should().StartWith(execution.InputRoot + Path.DirectorySeparatorChar);
+                var capturedImage = CapturedPath(execution, Path.GetFullPath(descriptor.RootElement.GetProperty("source").GetString()!, Path.GetDirectoryName(logicalDescriptor)!));
+                _ = capturedImage.Should().NotBe(Path.Combine(execution.InputRoot, image));
                 _ = (await File.ReadAllTextAsync(capturedImage, token).ConfigureAwait(false)).Should().Be("saved mask image bytes");
             },
         };
-        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(workspace, []), api);
+        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api);
         var result = await service.CookAssetAsync(new("asset:///" + source), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.Status.Should().Be(OperationStatus.Succeeded, string.Join("; ", result.Diagnostics.Select(static issue => issue.Message)));
         _ = result.InputsAreCurrent.Should().BeFalse();
@@ -155,7 +159,7 @@ public sealed partial class ContentPipelineServiceTests
                 return Task.CompletedTask;
             },
         };
-        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(workspace, []), api);
+        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api);
 
         var result = await service.CookAssetAsync(new("asset:///" + source), this.TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -185,7 +189,7 @@ public sealed partial class ContentPipelineServiceTests
                 return Task.CompletedTask;
             },
         };
-        var pipeline = CreateService(workspace, new CapturingSceneDescriptorGenerator(workspace, []), api);
+        var pipeline = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api);
         var service = new MaterialCookService(pipeline, workspace.ContextService, NullLogger<MaterialCookService>.Instance);
 
         var result = await service.CookMaterialAsync(new(new("asset:///" + source), workspace.Root, "Content", source), this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -206,7 +210,7 @@ public sealed partial class ContentPipelineServiceTests
         using var workspace = new TempWorkspace();
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
         var api = CreateSuccessfulApi(workspace);
-        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(workspace, []), api);
+        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api);
         var origin = workspace.ProjectContext with { ProjectId = Guid.NewGuid() };
         var result = await service.CookAssetAsync(new("asset:///Content/Materials/Red.omat.json"), this.TestContext.CancellationToken, origin).ConfigureAwait(false);
         _ = result.Status.Should().Be(OperationStatus.Failed);
@@ -226,7 +230,7 @@ public sealed partial class ContentPipelineServiceTests
         {
             BeforeImport = (_, _) => Task.FromException(new System.ComponentModel.Win32Exception(2)),
         };
-        var pipeline = CreateService(workspace, new CapturingSceneDescriptorGenerator(workspace, []), api);
+        var pipeline = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api);
         var service = new MaterialCookService(pipeline, workspace.ContextService, NullLogger<MaterialCookService>.Instance);
 
         var result = await service.CookMaterialAsync(new(new("asset:///" + source), workspace.Root, "Content", source), this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -252,7 +256,7 @@ public sealed partial class ContentPipelineServiceTests
                 return Task.CompletedTask;
             },
         };
-        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(workspace, []), api);
+        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api);
         var result = await service.CookFolderAsync(new("asset:///Content/Materials"), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.InputSnapshot!.Inputs.Count(static input => input.AssetUri is not null).Should().Be(1);
         _ = result.InputsAreCurrent.Should().BeFalse();
@@ -270,7 +274,7 @@ public sealed partial class ContentPipelineServiceTests
         {
             BeforeImport = (_, _) => Task.FromException(new ContentPipelineTerminationException(new IOException("Termination failed"), drain.Task)),
         };
-        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(workspace, []), api);
+        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api);
         Func<Task> cook = () => service.CookAssetAsync(new("asset:///Content/Materials/Red.omat.json"), this.TestContext.CancellationToken);
         var failure = await cook.Should().ThrowAsync<ContentPipelineTerminationException>().ConfigureAwait(false);
         Action replaceProducer = () => File.WriteAllText(Path.Combine(workspace.Root, "producer.bin"), "replacement");
@@ -287,5 +291,11 @@ public sealed partial class ContentPipelineServiceTests
         await failure.Which.DrainCompletion.ConfigureAwait(false);
         _ = await next.ConfigureAwait(false);
         _ = Directory.EnumerateFiles(Path.Combine(workspace.Root, ".build", "cook"), "Red.omat.json", SearchOption.AllDirectories).Should().NotBeEmpty();
+    }
+
+    private static string CapturedPath(ContentImportExecution execution, string source)
+    {
+        var logical = Path.GetFullPath(source, execution.InputRoot);
+        return execution.CapturedInputs!.Inputs.Single(input => string.Equals(input.LogicalPath, logical, StringComparison.OrdinalIgnoreCase)).File!.Path;
     }
 }

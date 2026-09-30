@@ -2,8 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Text;
-
 namespace Oxygen.Editor.ContentPipeline;
 
 /// <summary>
@@ -29,7 +27,7 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
         }
 
         var output = scope.Output ?? throw new InvalidOperationException("A manifest requires an owned candidate generation.");
-        var jobs = CreateDependencyJobs(scope, scope.Inputs);
+        var jobs = this.CreateDependencyJobs(scope, scope.Inputs);
 
         return new ContentImportManifest(
             Version: 1,
@@ -62,13 +60,18 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
         var inputs = sceneDescriptors.SelectMany(static descriptor => descriptor.Dependencies)
             .Concat(scope.Inputs.Where(static input => input.Kind != ContentCookAssetKind.Scene))
             .DistinctBy(static input => input.SourceRelativePath, StringComparer.Ordinal).ToArray();
-        var jobs = CreateDependencyJobs(scope, inputs);
-        var jobIdsBySource = inputs.ToDictionary(static input => input.SourceRelativePath, BuildJobId, StringComparer.Ordinal);
+        var jobs = this.CreateDependencyJobs(scope, inputs);
+        var jobIdsBySource = inputs.ToDictionary(
+            static input => input.AssetUri,
+            input => scope.NativeJobs.TryGetValue(input.AssetUri, out var job) ? job.Id : BuildJobId(input));
 
         foreach (var descriptor in sceneDescriptors.OrderBy(static item => item.DescriptorPath, StringComparer.Ordinal))
         {
             var dependencyIds = descriptor.Dependencies
-                .Select(dependency => jobIdsBySource[dependency.SourceRelativePath])
+                .Select(static dependency => dependency.AssetUri)
+                .Concat(scope.InputDependencies.GetValueOrDefault(descriptor.SceneAssetUri, []))
+                .Where(jobIdsBySource.ContainsKey)
+                .Select(uri => jobIdsBySource[uri])
                 .Distinct(StringComparer.Ordinal)
                 .ToList();
             var sceneDescriptorInput = new ContentCookInput(
@@ -79,7 +82,8 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
                 descriptor.DescriptorPath,
                 descriptor.DescriptorVirtualPath,
                 ContentCookInputRole.GeneratedDescriptor);
-            jobs.Add(CreateJob(sceneDescriptorInput, dependencyIds));
+            var sceneJob = scope.NativeJobs.GetValueOrDefault(descriptor.SceneAssetUri) ?? this.BuildJob(sceneDescriptorInput, dependencyIds);
+            jobs.Add(sceneJob with { DependsOn = dependencyIds });
         }
 
         return new ContentImportManifest(
@@ -89,17 +93,70 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
             Jobs: jobs) { SourceKey = output.SourceKey };
     }
 
-    private static List<ContentImportJob> CreateDependencyJobs(ContentCookScope scope, IReadOnlyList<ContentCookInput> inputs)
+    /// <inheritdoc />
+    public ContentImportJob BuildJob(ContentCookInput input, IReadOnlyList<string> dependsOn, Import.NativeSceneImportSettings? modelSettings = null)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        ArgumentNullException.ThrowIfNull(dependsOn);
+        if (input.Kind == ContentCookAssetKind.ForeignSource)
+        {
+            ArgumentNullException.ThrowIfNull(modelSettings);
+            return this.BuildModelJob(input, dependsOn, modelSettings.Name, modelSettings.CreateLayout(), modelSettings.MaterialSlotProvenance) with
+            {
+                ContentPolicy = modelSettings.ContentPolicy,
+                UnitPolicy = modelSettings.UnitPolicy,
+                BakeTransforms = modelSettings.BakeTransforms,
+                NormalsPolicy = modelSettings.NormalsPolicy,
+                TangentsPolicy = modelSettings.TangentsPolicy,
+            };
+        }
+
+        return new(
+            BuildJobId(input),
+            GetJobType(input.Kind),
+            NormalizeSource(input.SourceRelativePath),
+            dependsOn,
+            Output: null,
+            Name: Path.GetFileNameWithoutExtension(Path.GetFileNameWithoutExtension(input.SourceRelativePath)))
+        {
+            Layout = CreateJobLayout(input),
+            VirtualPath = input.Kind == ContentCookAssetKind.Texture ? input.OutputVirtualPath : null,
+        };
+    }
+
+    /// <inheritdoc />
+    public ContentImportJob BuildModelJob(ContentCookInput input, IReadOnlyList<string> dependsOn, string name, ContentImportLayout layout, Import.NativeMaterialSlotProvenance provenance)
+        => new(
+            BuildJobId(input),
+            Path.GetExtension(input.SourceRelativePath).Equals(".fbx", StringComparison.OrdinalIgnoreCase) ? "fbx" : "gltf",
+            NormalizeSource(input.SourceRelativePath),
+            dependsOn,
+            Output: null,
+            name)
+        {
+            Layout = layout,
+            ContentPolicy = Import.NativeSceneImportSettings.DefaultContentPolicy,
+            UnitPolicy = Import.NativeSceneImportSettings.DefaultUnitPolicy,
+            BakeTransforms = false,
+            NormalsPolicy = Import.NativeSceneImportSettings.DefaultNormalsPolicy,
+            TangentsPolicy = Import.NativeSceneImportSettings.DefaultTangentsPolicy,
+            MaterialSlotSourceIdentity = provenance.SourceIdentity.ToString("D"),
+            MaterialSlotProvenance = provenance,
+        };
+
+    private List<ContentImportJob> CreateDependencyJobs(ContentCookScope scope, IReadOnlyList<ContentCookInput> inputs)
     {
         var jobs = new List<ContentImportJob>();
-        var jobIds = inputs.ToDictionary(static input => input.AssetUri, BuildJobId);
+        var jobIds = inputs.ToDictionary(
+            static input => input.AssetUri,
+            input => scope.NativeJobs.TryGetValue(input.AssetUri, out var job) ? job.Id : BuildJobId(input));
         foreach (var input in inputs
                      .OrderBy(static item => item.Kind)
                      .ThenBy(static item => item.SourceRelativePath, StringComparer.Ordinal))
         {
             var dependencies = scope.InputDependencies.TryGetValue(input.AssetUri, out var declared)
                 ? declared.Where(jobIds.ContainsKey).Select(uri => jobIds[uri]).Distinct(StringComparer.Ordinal).ToArray() : [];
-            var job = CreateJob(input, dependencies);
+            var job = (scope.NativeJobs.GetValueOrDefault(input.AssetUri) ?? this.BuildJob(input, dependencies)) with { DependsOn = dependencies };
             jobs.Add(job);
         }
 
@@ -119,18 +176,6 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
             ? throw new InvalidOperationException("One content import manifest cannot span multiple authoring mounts.")
             : mountName;
     }
-
-    private static ContentImportJob CreateJob(ContentCookInput input, IReadOnlyList<string> dependsOn)
-        => new(
-            Id: BuildJobId(input),
-            Type: GetJobType(input.Kind),
-            Source: NormalizeSource(input.SourceRelativePath),
-            DependsOn: dependsOn,
-            Output: null,
-            Name: Path.GetFileNameWithoutExtension(Path.GetFileNameWithoutExtension(input.SourceRelativePath)))
-        {
-            Layout = CreateJobLayout(input),
-        };
 
     private static ContentImportLayout? CreateJobLayout(ContentCookInput input)
     {
@@ -169,18 +214,7 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
         };
 
     private static string BuildJobId(ContentCookInput input)
-    {
-        var builder = new StringBuilder();
-        _ = builder.Append(GetJobKindPrefix(input.Kind));
-        _ = builder.Append('-');
-        var source = NormalizeSource(input.SourceRelativePath);
-        foreach (var ch in source)
-        {
-            _ = builder.Append(char.IsAsciiLetterOrDigit(ch) ? ch : '-');
-        }
-
-        return builder.ToString().Trim('-');
-    }
+        => GetJobKindPrefix(input.Kind) + ":" + NormalizeSource(input.SourceRelativePath);
 
     private static string GetJobKindPrefix(ContentCookAssetKind kind)
         => kind switch
@@ -189,6 +223,7 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
             ContentCookAssetKind.Geometry => "geometry",
             ContentCookAssetKind.Scene => "scene",
             ContentCookAssetKind.Texture => "texture",
+            ContentCookAssetKind.ForeignSource => "model",
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unsupported manifest job asset kind."),
         };
 

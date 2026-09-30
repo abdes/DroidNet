@@ -11,6 +11,40 @@ namespace Oxygen.Editor.ContentPipeline.Tests;
 /// <summary>Qualifies descriptor forwarding for the complete engine-owned catalog.</summary>
 public sealed partial class SceneDescriptorGeneratorTests
 {
+    /// <summary>An explicit builtin material uses its native identity even without builtin geometry.</summary>
+    /// <param name="materialName">The case variant of the authored builtin reference.</param>
+    /// <returns>The test task.</returns>
+    [TestMethod]
+    [DataRow("Default")]
+    [DataRow("default")]
+    public async Task AuthoredGeometryWithDefaultOverrideUsesCatalogMaterialPath(string materialName)
+    {
+        using var workspace = new TempWorkspace();
+        var scene = CreateScene(workspace.Project);
+        var node = new Oxygen.Editor.World.SceneNode(scene) { Name = "Authored mesh" };
+        var geometryUri = new Uri("asset:///Content/Geometry/Imported.ogeo");
+        var geometry = new Oxygen.Editor.World.GeometryComponent
+        {
+            Name = "Geometry",
+            Geometry = new Oxygen.Managed.Assets.Model.AssetReference<Oxygen.Managed.Assets.Model.GeometryAsset>(geometryUri),
+        };
+        geometry.OverrideSlots.Add(new Oxygen.Editor.World.Slots.MaterialsSlot
+        {
+            Target = new(geometryUri, Guid.NewGuid(), new string('a', 64)),
+            Material = new Oxygen.Managed.Assets.Model.AssetReference<Oxygen.Managed.Assets.Model.MaterialAsset>(AssetUris.BuildGeneratedUri("Materials/" + materialName)),
+        });
+        _ = node.AddComponent(geometry);
+        scene.RootNodes.Add(node);
+        var provider = new BuiltinCatalogFixture();
+        var catalog = await provider.GetBuiltinGeometryCatalogAsync(workspace.Root, "Content", this.TestContext.CancellationToken).ConfigureAwait(false);
+        var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(provider));
+        var result = await generator.GenerateAsync(scene, CreateScope(workspace), this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = result.Diagnostics.Should().BeEmpty();
+        var descriptor = JsonNode.Parse(await File.ReadAllTextAsync(result.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false))!;
+        _ = descriptor["renderables"]![0]!["material_overrides"]![0]!["material_ref"]!.GetValue<string>().Should().Be(catalog.DefaultMaterial.VirtualPath);
+        _ = result.Dependencies.Should().ContainSingle(input => input.AssetUri == AssetUris.BuildGeneratedUri("Materials/Default"));
+    }
+
     /// <summary>Preserves every native descriptor field, including thin bounds and default material parameters.</summary>
     /// <returns>The test task.</returns>
     [TestMethod]

@@ -22,8 +22,8 @@ public sealed partial class ImportToolContentPipelineApiTests
         var tool = Path.Combine(workspace.Root, "Oxygen.Cooker.Inspector.exe");
         await File.WriteAllTextAsync(tool, "Inspector", this.TestContext.CancellationToken).ConfigureAwait(false);
         var drain = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var runner = new SourceInspectionRunner(AssetKeyReport, new ContentPipelineTerminationException(new IOException("Simulated failure"), drain.Task));
-        Func<Task> work = () => CreateSourceInspectionApi(workspace, runner).ResolveAssetKeysAsync(workspace.Root, ["/Game/Physics/Materials/Rubber.opmat"], this.TestContext.CancellationToken);
+        var runner = new AssetKeyRunner(AssetKeyReport, new ContentPipelineTerminationException(new IOException("Simulated failure"), drain.Task));
+        Func<Task> work = () => CreateQueryApi(workspace, runner).ResolveAssetKeysAsync(workspace.Root, ["/Game/Physics/Materials/Rubber.opmat"], this.TestContext.CancellationToken);
         var failure = (await work.Should().ThrowAsync<ContentPipelineTerminationException>().ConfigureAwait(false)).Which;
         var request = runner.Request!;
         var input = request.Arguments[request.Arguments.ToList().IndexOf("--input") + 1];
@@ -52,9 +52,24 @@ public sealed partial class ImportToolContentPipelineApiTests
     {
         using var workspace = new TempWorkspace();
         await File.WriteAllTextAsync(Path.Combine(workspace.Root, "Oxygen.Cooker.Inspector.exe"), "Inspector", this.TestContext.CancellationToken).ConfigureAwait(false);
-        var runner = new SourceInspectionRunner(AssetKeyReport);
-        Func<Task> work = () => CreateSourceInspectionApi(workspace, runner).ResolveAssetKeysAsync(workspace.Root, ["/Content/Materials/Other.omat"], this.TestContext.CancellationToken);
+        var runner = new AssetKeyRunner(AssetKeyReport);
+        Func<Task> work = () => CreateQueryApi(workspace, runner).ResolveAssetKeysAsync(workspace.Root, ["/Content/Materials/Other.omat"], this.TestContext.CancellationToken);
         _ = await work.Should().ThrowAsync<InvalidDataException>().ConfigureAwait(false);
         _ = Directory.EnumerateFiles(Path.Combine(workspace.Root, "dependency-inspection")).Should().BeEmpty();
+    }
+
+    private sealed class AssetKeyRunner(string json, Exception? failure = null) : IContentPipelineProcessRunner
+    {
+        public ContentPipelineProcessRequest? Request { get; private set; }
+
+        public string? ReportPath { get; private set; }
+
+        public async Task<ContentPipelineProcessResult> RunAsync(ContentPipelineProcessRequest request, CancellationToken cancellationToken)
+        {
+            this.Request = request;
+            this.ReportPath = request.Arguments[request.Arguments.ToList().IndexOf("--output") + 1];
+            await File.WriteAllTextAsync(this.ReportPath, json, cancellationToken).ConfigureAwait(false);
+            return failure is null ? new(0, string.Empty, string.Empty) : throw failure;
+        }
     }
 }

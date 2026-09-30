@@ -38,11 +38,11 @@ public sealed class NativeSceneImportSettingsTests
         _ = matchingName.CreateLayout().GeometryDirectory.Should().Be("Geometry");
         _ = matchingName.OutputPrefixes.Should().Contain("/Content/Materials/model/");
         _ = parsed.Files.Should().Equal("model.gltf");
-        _ = parsed.ContentPolicy.Should().Be("static-scalar");
+        _ = parsed.ContentPolicy.Should().Be("static");
         _ = parsed.UnitPolicy.Should().Be("normalize");
         _ = parsed.BakeTransforms.Should().BeFalse();
         _ = parsed.NormalsPolicy.Should().Be("generate");
-        _ = parsed.TangentsPolicy.Should().Be("preserve");
+        _ = parsed.TangentsPolicy.Should().Be("generate");
     }
 
     /// <summary>Legacy identities and unsupported policies are never silently interpreted as native settings.</summary>

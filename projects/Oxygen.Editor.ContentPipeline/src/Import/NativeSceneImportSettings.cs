@@ -33,11 +33,20 @@ public sealed record NativeSceneImportSettings(
     /// <summary>The sidecar suffix already used for source import configuration.</summary>
     public const string SidecarSuffix = ".import.json";
 
-    /// <summary>The native static/scalar importer contract.</summary>
+    /// <summary>The native scene importer contract.</summary>
     public const string ImporterIdentity = "Oxygen.Cooker.Scene/v1";
 
-    /// <summary>Gets the native identities published with this source's geometry.</summary>
-    public required NativeMaterialSlotProvenance MaterialSlotProvenance { get; init; }
+    /// <summary>The supported editor model policy.</summary>
+    public const string DefaultContentPolicy = "static";
+
+    /// <summary>The native unit conversion default.</summary>
+    public const string DefaultUnitPolicy = "normalize";
+
+    /// <summary>The native normal-generation default.</summary>
+    public const string DefaultNormalsPolicy = "generate";
+
+    /// <summary>The native policy that preserves authored tangents and generates missing ones.</summary>
+    public const string DefaultTangentsPolicy = "generate";
 
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
     private static readonly Lazy<JsonSchema> Schema = new(static () =>
@@ -48,20 +57,23 @@ public sealed record NativeSceneImportSettings(
         return JsonSchema.FromText(reader.ReadToEnd());
     });
 
+    /// <summary>Gets the native identities published with this source's geometry.</summary>
+    public required NativeMaterialSlotProvenance MaterialSlotProvenance { get; init; }
+
     /// <summary>Gets the required supported source-content policy.</summary>
-    public string ContentPolicy { get; init; } = "static-scalar";
+    public string ContentPolicy { get; init; } = DefaultContentPolicy;
 
     /// <summary>Gets the canonical meter conversion policy.</summary>
-    public string UnitPolicy { get; init; } = "normalize";
+    public string UnitPolicy { get; init; } = DefaultUnitPolicy;
 
     /// <summary>Gets a value indicating whether node transforms are baked; retained native imports preserve local transforms.</summary>
     public bool BakeTransforms { get; init; }
 
     /// <summary>Gets the normal preservation/generation policy.</summary>
-    public string NormalsPolicy { get; init; } = "generate";
+    public string NormalsPolicy { get; init; } = DefaultNormalsPolicy;
 
-    /// <summary>Gets the tangent policy for the scalar-material subset.</summary>
-    public string TangentsPolicy { get; init; } = "preserve";
+    /// <summary>Gets the native tangent preservation or generation policy.</summary>
+    public string TangentsPolicy { get; init; } = DefaultTangentsPolicy;
 
     /// <summary>Gets the source-owned output directories for the persisted layout version.</summary>
     [JsonIgnore]
@@ -73,13 +85,7 @@ public sealed record NativeSceneImportSettings(
 
     /// <summary>Builds the native layout without rewriting older imported asset identities.</summary>
     /// <returns>The layout used for this source's next cook.</returns>
-    public ContentImportLayout CreateLayout() => new("/" + this.MountPoint)
-        {
-            DescriptorsDirectory = string.Empty,
-            MaterialsDirectory = this.NamedAssetDirectory("Materials"),
-            GeometryDirectory = this.NamedAssetDirectory("Geometry"),
-            ScenesDirectory = "Scenes/" + this.OutputDirectory,
-        };
+    public ContentImportLayout CreateLayout() => new SceneImportTarget(this.MountPoint, this.OutputDirectory).CreateLayout(this.PrimaryRelativePath);
 
     /// <summary>Creates settings from a retained bundle, preserving native naming and source identities.</summary>
     /// <param name="source">The retained source and hashes.</param>
@@ -168,13 +174,5 @@ public sealed record NativeSceneImportSettings(
         {
             throw new InvalidDataException("Native import settings require contained source paths, a unique output directory and valid names.");
         }
-    }
-
-    private string NamedAssetDirectory(string kind)
-    {
-        // Native mesh/material names already contain the primary file's stem.
-        var parent = string.Equals(Path.GetFileName(this.OutputDirectory), Path.GetFileNameWithoutExtension(this.PrimaryRelativePath), StringComparison.Ordinal)
-            ? Path.GetDirectoryName(this.OutputDirectory)?.Replace('\\', '/') : this.OutputDirectory;
-        return string.IsNullOrEmpty(parent) ? kind : kind + "/" + parent;
     }
 }
