@@ -26,6 +26,7 @@ private:
   std::string manifest_path_;
   std::string root_path_;
   std::string report_path_;
+  std::string captured_inputs_path_;
 };
 
 } // namespace oxygen::content::import::tool

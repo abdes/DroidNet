@@ -98,6 +98,7 @@ namespace {
 CapturedInputSet::CapturedInputSet(const std::span<const CapturedInput> inputs)
 {
   inputs_.reserve(inputs.size());
+  indices_.reserve(inputs.size());
   for (const auto& input : inputs) {
     if (input.logical_path.empty() || !input.logical_path.is_absolute()) {
       throw std::invalid_argument("Captured logical paths must be absolute");
@@ -117,19 +118,21 @@ CapturedInputSet::CapturedInputSet(const std::span<const CapturedInput> inputs)
           "Captured bytes require matching source-file metadata");
       }
     }
-    if (!inputs_.emplace(base::PathIdentityKey(input.logical_path), input)
+    if (!indices_
+          .emplace(base::PathIdentityKey(input.logical_path), inputs_.size())
           .second) {
       throw std::invalid_argument(
         "Duplicate captured source identity: " + input.logical_path.string());
     }
+    inputs_.push_back(input);
   }
 }
 
 auto CapturedInputSet::Find(const std::filesystem::path& logical_path) const
   -> const CapturedInput*
 {
-  const auto entry = inputs_.find(base::PathIdentityKey(logical_path));
-  return entry == inputs_.end() ? nullptr : &entry->second;
+  const auto entry = indices_.find(base::PathIdentityKey(logical_path));
+  return entry == indices_.end() ? nullptr : &inputs_.at(entry->second);
 }
 
 auto CapturedInputSet::Parse(const std::string_view text)

@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <memory>
 #include <stop_token>
 
 #include <Oxygen/Cooker/api_export.h>
@@ -15,6 +16,7 @@ class ThreadPool;
 }
 
 namespace oxygen::content::import {
+class CapturedInputSet;
 class IAsyncFileReader;
 class ImportEventLoop;
 struct ImportManifest;
@@ -25,6 +27,8 @@ namespace detail {
   //! readers.
   OXGN_COOK_NDAPI auto RunSourceAnalysis(const ImportManifest& manifest,
     ImportEventLoop& loop, IAsyncFileReader& reader, co::ThreadPool& pool,
-    std::stop_token stop_token) -> ImportSourceAnalysis;
+    std::stop_token stop_token,
+    std::shared_ptr<const CapturedInputSet> captured_inputs = {})
+    -> ImportSourceAnalysis;
 } // namespace detail
 } // namespace oxygen::content::import

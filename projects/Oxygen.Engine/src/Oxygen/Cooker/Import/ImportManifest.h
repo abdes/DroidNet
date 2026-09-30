@@ -91,7 +91,10 @@ struct ImportManifest {
   std::vector<ImportManifestJob> jobs;
 
   //! Discover native dependencies and declared outputs without cooking.
-  OXGN_COOK_NDAPI auto AnalyzeSources(std::stop_token stop_token = {}) const
+  //! Captured inputs preserve logical paths while reading retained private
+  //! bytes.
+  OXGN_COOK_NDAPI auto AnalyzeSources(std::stop_token stop_token = {},
+    std::shared_ptr<const CapturedInputSet> captured_inputs = {}) const
     -> ImportSourceAnalysis;
 
   OXGN_COOK_NDAPI auto BuildRequests(std::ostream& error_stream,

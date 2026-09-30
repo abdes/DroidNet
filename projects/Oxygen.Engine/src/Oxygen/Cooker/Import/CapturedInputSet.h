@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -14,6 +15,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <vector>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/Sha256.h>
@@ -53,8 +55,15 @@ public:
   OXGN_COOK_NDAPI auto Find(const std::filesystem::path& logical_path) const
     -> const CapturedInput*;
 
+  //! All declared facts, including inputs not consumed by a particular job.
+  [[nodiscard]] auto Inputs() const noexcept -> std::span<const CapturedInput>
+  {
+    return inputs_;
+  }
+
 private:
-  std::unordered_map<std::string, CapturedInput> inputs_;
+  std::vector<CapturedInput> inputs_;
+  std::unordered_map<std::string, size_t> indices_;
 };
 
 } // namespace oxygen::content::import

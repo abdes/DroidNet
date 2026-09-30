@@ -120,6 +120,78 @@ class CapturedInputBatchCliTests(unittest.TestCase):
             errors="replace", timeout=30, check=False,
         )
 
+    def analyze(self, jobs, report=None):
+        manifest = self.root / "analysis-manifest.json"
+        manifest.write_text(json.dumps({"version": 1, "jobs": jobs}), encoding="utf-8")
+        captures = self.root / "captures.json"
+        captures.write_text(json.dumps({"schema_version": 1, "inputs": self.inputs}), encoding="utf-8")
+        report = report or self.root / "analysis.json"
+        return subprocess.run(
+            [str(IMPORT_TOOL), "analyze-sources", "--manifest", str(manifest),
+             "--root", str(self.root), "--captured-inputs", str(captures),
+             "--report", str(report)],
+            cwd=self.root, capture_output=True, text=True, encoding="utf-8",
+            errors="replace", timeout=20, check=False,
+        )
+
+    def test_analysis_uses_replacement_bytes_without_changing_live_source(self):
+        source = self.root / "material.json"
+        original = '{"name":"Published"}'
+        source.write_text(original, encoding="utf-8")
+        entry = self.capture(source.name, '{"name":"Replacement"}')
+        jobs = [{"type": "material-descriptor", "source": source.name}]
+        result = self.analyze(jobs)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        first = json.loads((self.root / "analysis.json").read_text(encoding="utf-8"))
+        job = first["jobs"][0]
+        self.assertTrue(first["complete"])
+        self.assertEqual(Path(job["source_path"]), source)
+        self.assertTrue(any(output["virtual_path"].endswith("/Replacement.omat") for output in job["outputs"]))
+        self.assertEqual(source.read_text(encoding="utf-8"), original)
+
+        relocated = self.root / "another-operation" / "bytes.bin"
+        relocated.parent.mkdir()
+        relocated.write_bytes(Path(entry["file"]["path"]).read_bytes())
+        entry["file"]["path"] = str(relocated)
+        result = self.analyze(jobs)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        second = json.loads((self.root / "analysis.json").read_text(encoding="utf-8"))
+        self.assertEqual(first, second)
+
+    def test_analysis_protects_all_capture_inputs_from_report_overwrite(self):
+        used = self.capture("material.json", '{"name":"Replacement"}')
+        unused = self.capture("other.json", '{"name":"Unconsumed"}')
+        jobs = [{"type": "material-descriptor", "source": "material.json"}]
+        for entry in (used, unused):
+            target = Path(entry["file"]["path"])
+            before = target.read_bytes()
+            with self.subTest(target=target):
+                result = self.analyze(jobs, target)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(target.read_bytes(), before)
+            with self.subTest(logical=entry["logical_path"]):
+                result = self.analyze(jobs, Path(entry["logical_path"]))
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse(Path(entry["logical_path"]).exists())
+        captures = self.root / "captures.json"
+        result = self.analyze(jobs, captures)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(json.loads(captures.read_text(encoding="utf-8"))["inputs"], self.inputs)
+
+    def test_analysis_rejects_uncaptured_live_inputs_and_changed_captures(self):
+        source = self.root / "material.json"
+        source.write_text('{"name":"Live"}', encoding="utf-8")
+        jobs = [{"type": "material-descriptor", "source": source.name}]
+        result = self.analyze(jobs)
+        self.assertNotEqual(result.returncode, 0)
+        report = json.loads((self.root / "analysis.json").read_text(encoding="utf-8"))
+        self.assertFalse(report["complete"])
+        entry = self.capture(source.name, '{"name":"Replacement"}')
+        Path(entry["file"]["path"]).write_text('{"name":"Altered"}', encoding="utf-8")
+        result = self.analyze(jobs)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(json.loads((self.root / "analysis.json").read_text(encoding="utf-8"))["complete"])
+
     def test_material_and_empty_scene_use_captures_with_absent_originals(self):
         self.capture("material.json", '{"name":"Stone"}')
         self.capture("scene.json", '{"version":9,"name":"Empty","nodes":[]}')

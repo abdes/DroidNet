@@ -33,6 +33,7 @@
 #include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Cooker/Import/CapturedInputSet.h>
 #include <Oxygen/Cooker/Import/FileError.h>
 #include <Oxygen/Cooker/Import/FileInfo.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
@@ -476,14 +477,16 @@ namespace {
   }
 
   auto AnalyzeJob(const ImportManifestJob& job, IAsyncFileReader& reader,
-    co::ThreadPool& pool, const std::stop_token stop)
+    co::ThreadPool& pool, const std::stop_token stop,
+    std::shared_ptr<const CapturedInputSet> captured_inputs)
     -> co::Co<ImportSourceJobAnalysis>
   {
     auto report = ImportSourceJobAnalysis {};
     report.source_path = job.SourcePath();
     report.id = job.id;
     report.job_type = job.job_type;
-    auto snapshot = detail::ImportSourceSnapshot(reader, pool);
+    auto snapshot
+      = detail::ImportSourceSnapshot(reader, pool, std::move(captured_inputs));
     auto context = AnalysisContext { .reader = snapshot,
       .pool = pool,
       .report = report,
@@ -530,12 +533,14 @@ namespace {
 
   auto AnalyzeBatch(const ImportManifest& manifest, IAsyncFileReader& reader,
     co::ThreadPool& pool, ImportSourceAnalysis& result,
-    const std::stop_token stop) -> co::Co<>
+    const std::stop_token stop,
+    std::shared_ptr<const CapturedInputSet> captured_inputs) -> co::Co<>
   {
     result.complete = true;
     result.jobs.reserve(manifest.jobs.size());
     for (const auto& job : manifest.jobs) {
-      auto analyzed = co_await AnalyzeJob(job, reader, pool, stop);
+      auto analyzed
+        = co_await AnalyzeJob(job, reader, pool, stop, captured_inputs);
       result.complete = result.complete && analyzed.complete;
       result.jobs.push_back(std::move(analyzed));
     }
@@ -555,7 +560,9 @@ namespace {
 namespace detail {
   auto RunSourceAnalysis(const ImportManifest& manifest, ImportEventLoop& loop,
     IAsyncFileReader& reader, co::ThreadPool& pool,
-    const std::stop_token stop_token) -> ImportSourceAnalysis
+    const std::stop_token stop_token,
+    std::shared_ptr<const CapturedInputSet> captured_inputs)
+    -> ImportSourceAnalysis
   {
     auto report = ImportSourceAnalysis {};
     report.producer_version = oxygen::version::VersionFull();
@@ -563,20 +570,23 @@ namespace detail {
     const auto cancel_callback = std::stop_callback(stop_token,
       [&loop, canceled] { loop.Post([canceled] { canceled->Trigger(); }); });
     static_cast<void>(co::Run(loop,
-      co::AnyOf(
-        AnalyzeBatch(manifest, reader, pool, report, stop_token), *canceled)));
+      co::AnyOf(AnalyzeBatch(manifest, reader, pool, report, stop_token,
+                  std::move(captured_inputs)),
+        *canceled)));
     report.complete = report.complete && !stop_token.stop_requested();
     return report;
   }
 } // namespace detail
 
-auto ImportManifest::AnalyzeSources(const std::stop_token stop_token) const
+auto ImportManifest::AnalyzeSources(const std::stop_token stop_token,
+  std::shared_ptr<const CapturedInputSet> captured_inputs) const
   -> ImportSourceAnalysis
 {
   auto loop = ImportEventLoop {};
   auto reader = CreateAsyncFileReader(loop);
   auto pool = co::ThreadPool(loop, 1U);
-  return detail::RunSourceAnalysis(*this, loop, *reader, pool, stop_token);
+  return detail::RunSourceAnalysis(
+    *this, loop, *reader, pool, stop_token, std::move(captured_inputs));
 }
 
 auto ImportSourceAnalysis::ToJson() const -> std::string

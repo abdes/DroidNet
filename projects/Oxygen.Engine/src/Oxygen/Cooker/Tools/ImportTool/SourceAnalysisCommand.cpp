@@ -4,12 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <exception>
 #include <expected>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <memory>
 #include <optional>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -20,8 +22,10 @@
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
+#include <Oxygen/Cooker/Import/CapturedInputSet.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/ImportSourceAnalysis.h>
+#include <Oxygen/Cooker/Import/ImportSourceDocument.h>
 #include <Oxygen/Cooker/Tools/ImportTool/SourceAnalysisCommand.h>
 
 namespace oxygen::content::import::tool {
@@ -53,11 +57,19 @@ auto SourceAnalysisCommand::BuildCommand() -> std::shared_ptr<clap::Command>
                   .WithValue<std::string>()
                   .StoreTo(&report_path_)
                   .Build();
+  auto captures
+    = clap::Option::WithKey("captured-inputs")
+        .About("Captured input map; logical source identities remain unchanged")
+        .Long("captured-inputs")
+        .WithValue<std::string>()
+        .StoreTo(&captured_inputs_path_)
+        .Build();
   return clap::CommandBuilder("analyze-sources")
     .About("Discover native source dependencies and outputs without cooking")
     .WithOption(std::move(manifest))
     .WithOption(std::move(root))
-    .WithOption(std::move(report));
+    .WithOption(std::move(report))
+    .WithOption(std::move(captures));
 }
 
 auto SourceAnalysisCommand::Run() -> std::expected<void, std::error_code>
@@ -70,7 +82,24 @@ auto SourceAnalysisCommand::Run() -> std::expected<void, std::error_code>
   if (!manifest.has_value()) {
     return std::unexpected(std::make_error_code(std::errc::invalid_argument));
   }
-  const auto report = manifest->AnalyzeSources();
+  auto captured_inputs = std::shared_ptr<const CapturedInputSet> {};
+  if (!captured_inputs_path_.empty()) {
+    auto errors = std::ostringstream {};
+    try {
+      const auto document = ImportSourceDocument::Load(
+        captured_inputs_path_, "capture map", errors);
+      if (!document.has_value()) {
+        std::cerr << errors.str();
+        return std::unexpected(
+          std::make_error_code(std::errc::invalid_argument));
+      }
+      captured_inputs = CapturedInputSet::Parse(document->text);
+    } catch (const std::exception& error) {
+      std::cerr << "Invalid captured inputs: " << error.what() << '\n';
+      return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+    }
+  }
+  const auto report = manifest->AnalyzeSources({}, captured_inputs);
   const auto destination = std::filesystem::path(report_path_);
   const auto aliases = [&](const std::filesystem::path& source) {
     if (source.empty()) {
@@ -82,8 +111,17 @@ auto SourceAnalysisCommand::Run() -> std::expected<void, std::error_code>
         && std::filesystem::exists(destination)
         && std::filesystem::equivalent(source, destination));
   };
-  if (aliases(manifest_path)) {
+  if (aliases(manifest_path) || aliases(captured_inputs_path_)) {
     return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+  }
+  if (captured_inputs) {
+    for (const auto& input : captured_inputs->Inputs()) {
+      if (aliases(input.logical_path)
+        || (input.file.has_value() && aliases(input.file->path))) {
+        return std::unexpected(
+          std::make_error_code(std::errc::invalid_argument));
+      }
+    }
   }
   for (const auto& job : manifest->jobs) {
     if (aliases(job.SourcePath())) {

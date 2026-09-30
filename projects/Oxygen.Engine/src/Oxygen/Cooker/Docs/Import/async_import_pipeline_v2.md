@@ -46,7 +46,10 @@ Oxygen.Cooker.ImportTool.exe analyze-sources --manifest imports.json --report an
 ```
 
 `--root` selects the authoring root for relative paths, as it does for `batch`.
-No cooked destination is needed. The
+Both commands accept `--captured-inputs captures.json`. Replacement analysis reads
+incoming captured bytes under the retained logical paths, leaving published
+sources untouched until publication. Output identities do not depend on the
+capture directory. No cooked destination is needed. The
 [report schema](../../Import/Schemas/oxygen.source-analysis.schema.json) separates
 declared outputs, logical references, file dependencies and verified observations.
 Model texture files and outputs are optional because native cooking supports
@@ -56,7 +59,9 @@ cooked references.
 
 The caller binds the report to its toolchain artifact fingerprint;
 `producer_version` is a display version. The CLI protects declared and accessed
-inputs from report-path aliases, including after failed verification.
+inputs from report-path aliases, including after failed verification. With a
+capture map, this also protects the map itself and every declared logical and
+captured file, including entries unused by the current frontier.
 `accessed_paths` serves that protection; `observations` carries verified facts.
 
 `ImportSourceSnapshot`, the existing reader and parser-buffer observer, records
