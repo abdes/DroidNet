@@ -105,6 +105,26 @@ auto ImportSourceSnapshot::NormalizePath(const std::filesystem::path& path)
   return std::filesystem::absolute(path).lexically_normal();
 }
 
+auto ImportSourceSnapshot::RecordPreparation(
+  const std::span<const ImportSourceObservation> inputs) -> void
+{
+  for (const auto& input : inputs) {
+    const auto path = NormalizePath(input.path);
+    BeginRead(path);
+    auto release = ScopeGuard([this]() noexcept { EndRead(); });
+    if (!RecordObservation(path,
+          Observation { .exists = input.exists,
+            .metadata = input.metadata,
+            .content_read = !input.reads.empty() })) {
+      throw std::runtime_error(
+        "Conflicting source preparation observations: " + path.string());
+    }
+    for (const auto& read : input.reads) {
+      RecordDigest(ReadKey { path, read.offset, read.max_bytes }, read.digest);
+    }
+  }
+}
+
 auto ImportSourceSnapshot::MakeReadKey(
   const std::filesystem::path& path, const ReadOptions options) -> ReadKey
 {

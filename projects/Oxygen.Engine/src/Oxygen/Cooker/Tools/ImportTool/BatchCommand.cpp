@@ -45,6 +45,7 @@
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
+#include <Oxygen/Cooker/Import/CapturedInputSet.h>
 #include <Oxygen/Cooker/Import/ImportConcurrency.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportJobId.h>
@@ -53,6 +54,7 @@
 #include <Oxygen/Cooker/Import/ImportProgress.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/ImportSourceDocument.h>
 #include <Oxygen/Cooker/Import/SceneImportSettings.h>
 #include <Oxygen/Cooker/Tools/ImportTool/BatchCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/MessageWriter.h>
@@ -142,30 +144,19 @@ namespace {
     return true;
   }
 
-  auto ReadJsonObjectFile(const std::filesystem::path& path,
+  auto ReadJsonObjectFile(ImportRequest& request,
     const std::string_view context, nlohmann::json& doc, std::string& error)
     -> bool
   {
-    auto in = std::ifstream(path);
-    if (!in.is_open()) {
-      error = fmt::format(
-        "{} source file could not be opened: {}", context, path.string());
+    auto errors = std::ostringstream {};
+    const auto source = ImportSourceDocument::Load(
+      request.source_path, context, errors, request.captured_inputs.get());
+    if (!source.has_value()) {
+      error = errors.str();
       return false;
     }
-
-    try {
-      in >> doc;
-    } catch (const std::exception& ex) {
-      error
-        = fmt::format("{} source JSON parse failed: {}", context, ex.what());
-      return false;
-    }
-
-    if (!doc.is_object()) {
-      error = fmt::format("{} source JSON document must be an object", context);
-      return false;
-    }
-    return true;
+    request.preparation_inputs.push_back(source->Observation());
+    return ParseJsonObject(source->text, context, doc, error);
   }
 
   auto ResolvePhysicsMaterialProducedVirtualPath(const PreparedJob& job,
@@ -326,7 +317,7 @@ namespace {
     }
   }
 
-  auto CollectPhysicsDependencyRefs(const PreparedJob& job,
+  auto CollectPhysicsDependencyRefs(PreparedJob& job,
     std::vector<PhysicsDependencyRef>& refs, std::string& error) -> bool
   {
     try {
@@ -377,8 +368,7 @@ namespace {
           return false;
         }
       } else {
-        if (!ReadJsonObjectFile(
-              job.request.source_path, "physics-sidecar", doc, error)) {
+        if (!ReadJsonObjectFile(job.request, "physics-sidecar", doc, error)) {
           return false;
         }
       }
@@ -471,7 +461,7 @@ namespace {
     }
   }
 
-  auto BuildInferredPhysicsDependencyEdges(const std::vector<PreparedJob>& jobs,
+  auto BuildInferredPhysicsDependencyEdges(std::vector<PreparedJob>& jobs,
     const std::unordered_map<std::string, std::vector<size_t>>&
       producers_by_path,
     std::vector<std::vector<size_t>>& inferred_producers,
@@ -935,6 +925,14 @@ auto BatchCommand::BuildCommand() -> std::shared_ptr<clap::Command>
                    .StoreTo(&options_.dry_run)
                    .Build();
 
+  auto captured_inputs
+    = Option::WithKey("captured-inputs")
+        .About("Read authored inputs through a validated capture map")
+        .Long("captured-inputs")
+        .WithValue<std::string>()
+        .StoreTo(&options_.captured_inputs_path)
+        .Build();
+
   auto report = Option::WithKey("report")
                   .About("Write a JSON report (absolute or relative to cooked "
                          "root)")
@@ -957,6 +955,7 @@ auto BatchCommand::BuildCommand() -> std::shared_ptr<clap::Command>
     .About("Run a batch import manifest")
     .WithOption(std::move(manifest))
     .WithOption(std::move(root))
+    .WithOption(std::move(captured_inputs))
     .WithOption(std::move(dry_run))
     .WithOption(std::move(report))
     .WithOption(std::move(max_in_flight));
@@ -1068,6 +1067,25 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
   jobs.reserve(manifest->jobs.size());
   std::unordered_map<std::string, data::SourceKey> source_keys;
 
+  auto captured_inputs = std::shared_ptr<const CapturedInputSet> {};
+  if (!options_.captured_inputs_path.empty()) {
+    try {
+      auto errors = std::ostringstream {};
+      const auto document = ImportSourceDocument::Load(
+        options_.captured_inputs_path, "capture map", errors);
+      if (!document.has_value()) {
+        writer->Error(errors.str());
+        return std::unexpected(
+          std::make_error_code(std::errc::invalid_argument));
+      }
+      captured_inputs = CapturedInputSet::Parse(document->text);
+    } catch (const std::exception& error) {
+      writer->Error(
+        fmt::format("ERROR: invalid captured inputs: {}", error.what()));
+      return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+    }
+  }
+
   for (const auto& job : manifest->jobs) {
     if (job.job_type != "texture" && job.job_type != "texture-descriptor"
       && job.job_type != "material-descriptor"
@@ -1091,7 +1109,7 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
     std::optional<ImportRequest> request;
     {
       std::ostringstream err;
-      request = job.BuildRequest(err);
+      request = job.BuildRequest(err, captured_inputs);
       if (!request.has_value()) {
         const auto msg = err.str();
         if (!msg.empty()) {

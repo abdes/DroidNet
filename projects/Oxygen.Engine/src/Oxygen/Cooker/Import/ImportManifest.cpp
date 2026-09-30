@@ -10,6 +10,7 @@
 #include <exception>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <optional>
 #include <ostream>
 #include <sstream>
@@ -1817,7 +1818,8 @@ auto ImportManifestJob::SourcePath() const -> std::filesystem::path
   return {};
 }
 
-auto ImportManifestJob::BuildRequest(std::ostream& error_stream) const
+auto ImportManifestJob::BuildRequest(std::ostream& error_stream,
+  std::shared_ptr<const CapturedInputSet> captured_inputs) const
   -> std::optional<ImportRequest>
 {
   const auto AttachOrchestration =
@@ -1826,6 +1828,7 @@ auto ImportManifestJob::BuildRequest(std::ostream& error_stream) const
       return std::nullopt;
     }
     request->loose_cooked_layout = loose_cooked_layout;
+    request->captured_inputs = captured_inputs;
     request->source_key = source_key;
     if (!id.empty()) {
       request->orchestration = ImportRequest::OrchestrationMetadata {
@@ -1846,39 +1849,39 @@ auto ImportManifestJob::BuildRequest(std::ostream& error_stream) const
         .descriptor_path = texture.source_path,
         .texture = texture,
       },
-      error_stream));
+      error_stream, captured_inputs));
   }
   if (job_type == "material-descriptor") {
     return AttachOrchestration(internal::BuildMaterialDescriptorRequest(
-      material_descriptor, error_stream));
+      material_descriptor, error_stream, captured_inputs));
   }
   if (job_type == "physics-material-descriptor") {
     return AttachOrchestration(internal::BuildPhysicsMaterialDescriptorRequest(
-      physics_material_descriptor, error_stream));
+      physics_material_descriptor, error_stream, captured_inputs));
   }
   if (job_type == "collision-shape-descriptor") {
     return AttachOrchestration(internal::BuildCollisionShapeDescriptorRequest(
-      collision_shape_descriptor, error_stream));
+      collision_shape_descriptor, error_stream, captured_inputs));
   }
   if (job_type == "buffer-container") {
-    return AttachOrchestration(
-      internal::BuildBufferContainerRequest(buffer_container, error_stream));
+    return AttachOrchestration(internal::BuildBufferContainerRequest(
+      buffer_container, error_stream, captured_inputs));
   }
   if (job_type == "geometry-descriptor") {
     return AttachOrchestration(internal::BuildGeometryDescriptorRequest(
-      geometry_descriptor, error_stream));
+      geometry_descriptor, error_stream, captured_inputs));
   }
   if (job_type == "scene-descriptor") {
-    return AttachOrchestration(
-      internal::BuildSceneDescriptorRequest(scene_descriptor, error_stream));
+    return AttachOrchestration(internal::BuildSceneDescriptorRequest(
+      scene_descriptor, error_stream, captured_inputs));
   }
   if (job_type == "fbx") {
-    return AttachOrchestration(
-      internal::BuildSceneRequest(fbx, ImportFormat::kFbx, error_stream));
+    return AttachOrchestration(internal::BuildSceneRequest(
+      fbx, ImportFormat::kFbx, error_stream, captured_inputs));
   }
   if (job_type == "gltf") {
-    return AttachOrchestration(
-      internal::BuildSceneRequest(gltf, ImportFormat::kGltf, error_stream));
+    return AttachOrchestration(internal::BuildSceneRequest(
+      gltf, ImportFormat::kGltf, error_stream, captured_inputs));
   }
   if (job_type == "script") {
     return AttachOrchestration(
@@ -1900,13 +1903,14 @@ auto ImportManifestJob::BuildRequest(std::ostream& error_stream) const
   return std::nullopt;
 }
 
-auto ImportManifest::BuildRequests(std::ostream& error_stream) const
+auto ImportManifest::BuildRequests(std::ostream& error_stream,
+  std::shared_ptr<const CapturedInputSet> captured_inputs) const
   -> std::vector<ImportRequest>
 {
   std::vector<ImportRequest> requests;
   requests.reserve(jobs.size());
   for (const auto& job : jobs) {
-    if (auto request = job.BuildRequest(error_stream)) {
+    if (auto request = job.BuildRequest(error_stream, captured_inputs)) {
       requests.push_back(std::move(*request));
     }
   }

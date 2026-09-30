@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <memory>
 #include <optional>
 #include <ostream>
 
@@ -18,6 +19,8 @@ namespace oxygen::content::import::internal {
 //! Build a normalized `ImportRequest` for physics material descriptors.
 OXGN_COOK_API auto BuildPhysicsMaterialDescriptorRequest(
   const PhysicsMaterialDescriptorImportSettings& settings,
-  std::ostream& error_stream) -> std::optional<ImportRequest>;
+  std::ostream& error_stream,
+  std::shared_ptr<const CapturedInputSet> captured_inputs = {})
+  -> std::optional<ImportRequest>;
 
 } // namespace oxygen::content::import::internal

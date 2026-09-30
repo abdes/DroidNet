@@ -1066,8 +1066,17 @@ readers. Primary/Secondary names remain unchanged.
       reads are validated. Debug passes 667 owning-suite tests; Release passes
       106 contract/model tests; both pass four source-analysis CLI tests.
       The full Debug glTF/FBX imports, scoped tidy, MSVC warning checks and
-      extra-high review pass. Captured batch/descriptor ingress (.9.2.2) and
-      managed cutover (.9.3) remain; no editor workflow closure is claimed here.
+      extra-high review pass.
+      M08.1.9.2.2 captured batch execution is validated: descriptors, provenance
+      and dependency preflight retain exact-byte observations through completion;
+      cooked references remain separate. Full Debug/Release engine/example builds,
+      the installed-SDK C++20 consumer, 602 owning tests and 11 CLI tests per
+      configuration pass. All 16 Content scenes recook; their PAK builds without
+      warnings/errors. RenderScene passes CubeScene/Lantern replacement and IBL
+      validation in both formats; controlled appearance captures visually match.
+      This validation also fixed saved-scene restoration to prefer stable keys
+      over display labels. Scoped tidy and extra-high review are clear.
+      Editor discovery, capture transport and passive-status cutover remain .9.3.
 
 - [ ] [M08.F1 descriptor-local reference format](plan/ED-M08.F1-descriptor-local-references.md),
       after M08.1.9 and before M08.2. Separate format cutover, recook and SDK gate.

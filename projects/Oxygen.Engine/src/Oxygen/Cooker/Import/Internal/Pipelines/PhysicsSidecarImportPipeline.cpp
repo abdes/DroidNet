@@ -3788,7 +3788,7 @@ auto PhysicsSidecarImportPipeline::Process(WorkItem& item) -> co::Co<bool>
     co_return false;
   }
 
-  auto* const reader = session->FileReader().get();
+  auto* const reader = session->CookedReader().get();
   if (reader == nullptr) {
     AddDiagnostic(*session, request, ImportSeverity::kError,
       "physics.sidecar.io_unavailable",

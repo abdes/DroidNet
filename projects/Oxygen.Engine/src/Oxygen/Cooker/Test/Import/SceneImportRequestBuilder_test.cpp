@@ -4,8 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <filesystem>
 #include <fstream>
+#include <ios>
+#include <memory>
 #include <optional>
+#include <span>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -13,6 +17,9 @@
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Cooker/Import/CapturedInputSet.h>
+#include <Oxygen/Cooker/Import/FileInfo.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/SceneImportRequestBuilder.h>
@@ -208,7 +215,9 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest,
   std::ostringstream errors;
   const auto request = settings.Prepare(
     ImportFormat::kGltf, RetainedProvenance().dump(), errors);
-  ASSERT_TRUE(request.has_value()) << errors.str();
+  if (!request.has_value()) {
+    FAIL() << errors.str();
+  }
   EXPECT_FALSE(request->cooked_root.has_value());
   EXPECT_EQ(request->source_path, std::filesystem::path(settings.source_path));
   ASSERT_NE(request->material_slot_provenance, nullptr);
@@ -216,4 +225,50 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest,
     kSourceIdentity);
 }
 
+NOLINT_TEST_F(
+  SceneImportRequestBuilderTest, CapturedProvenanceDoesNotRequireTheOriginal)
+{
+  auto settings = Settings();
+  const auto logical = Path("authored-slots.json");
+  const auto physical = Path("captured-slots.json");
+  settings.material_slot_provenance_path = logical.string();
+  const auto text = RetainedProvenance().dump();
+  {
+    std::ofstream output(physical, std::ios::binary);
+    output << text;
+    ASSERT_TRUE(output.good());
+  }
+  const auto digest
+    = oxygen::base::ComputeSha256(std::as_bytes(std::span(text)));
+  const auto input = oxygen::content::import::CapturedInput {
+    .logical_path = logical,
+    .exists = true,
+    .metadata = oxygen::content::import::FileInfo { .size = text.size(),
+      .last_modified = {},
+      .is_directory = false,
+      .is_symlink = false },
+    .file = oxygen::content::import::CapturedInputFile { .path = physical,
+      .size = text.size(),
+      .digest = digest },
+  };
+  const auto captures
+    = std::make_shared<const oxygen::content::import::CapturedInputSet>(
+      std::span(&input, 1));
+  auto errors = std::ostringstream {};
+  const auto request
+    = BuildSceneRequest(settings, ImportFormat::kGltf, errors, captures);
+  if (!request.has_value()) {
+    FAIL() << errors.str();
+  }
+  EXPECT_EQ(request->captured_inputs, captures);
+  ASSERT_EQ(request->preparation_inputs.size(), 1U);
+  const auto& proof = request->preparation_inputs.front();
+  EXPECT_EQ(proof.path, logical);
+  ASSERT_EQ(proof.reads.size(), 1U);
+  EXPECT_EQ(proof.reads.front().digest, digest);
+  ASSERT_NE(request->material_slot_provenance, nullptr);
+  EXPECT_EQ(request->material_slot_provenance->SourceIdentity().ToString(),
+    kSourceIdentity);
+  EXPECT_FALSE(std::filesystem::exists(logical));
+}
 } // namespace

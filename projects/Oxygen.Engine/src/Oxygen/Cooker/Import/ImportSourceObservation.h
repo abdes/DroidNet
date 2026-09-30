@@ -23,7 +23,8 @@ struct ImportSourceReadProof final {
   base::Sha256Digest digest {};
 };
 
-//! Verified source facts owned by one analysis/import operation.
+//! Source facts owned by one analysis/import operation. Preparation supplies
+//! pending facts; ImportSourceSnapshot::Observations exports verified facts.
 struct ImportSourceObservation final {
   std::filesystem::path path;
   bool exists = false;

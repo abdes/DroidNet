@@ -81,6 +81,10 @@ public:
   auto RecordConsumed(const std::filesystem::path& path,
     std::span<const std::byte> bytes, ReadOptions options = {}) -> void;
 
+  //! Inherit preparation facts as pending reads; Verify still rechecks them.
+  auto RecordPreparation(std::span<const ImportSourceObservation> inputs)
+    -> void;
+
   [[nodiscard]] auto BeginParserRead(const std::filesystem::path& path)
     -> ParserRead;
 

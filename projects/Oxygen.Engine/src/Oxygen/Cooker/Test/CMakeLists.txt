@@ -296,6 +296,7 @@ target_link_libraries(
 m_gtest_program(
   ImportSourceSnapshot
   SOURCES
+    "Import/CapturedInputSet_test.cpp"
     "Import/ImportSourceSnapshot_test.cpp"
 )
 target_sources(

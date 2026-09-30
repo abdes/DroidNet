@@ -2,7 +2,7 @@
 
 Status: **in progress — M08.1.1–M08.1.8 validated**
 
-Current: **M08.1.9.2.2 captured batch execution — native preparation, analysis and captured model reads are validated**. Commit each remaining sub-slice after its exit checks.
+Current: **M08.1.9.3 editor cutover — native analysis and captured batch execution are validated**. Commit each remaining sub-slice after its exit checks.
 See [owners](#2-implementation-document-map), [remaining increments](#m081-remaining-increments)
 and [exit checklist](#7-exit-checklist). Captured-sky IBL is delivered by
 [VX-IBL-01](../../../projects/Oxygen.Engine/design/vortex/milestones/VX-IBL-01/README.md);
@@ -201,9 +201,13 @@ M08.1.9 has three delivery stages; all remain required for closure:
      Debug: 667 owning-suite tests; Release: 106 contract/model tests; each
      configuration passes four CLI tests. Scoped tidy, MSVC warning checks and
      extra-high review are clear.
-   - **M08.1.9.2.2 captured batch execution:** capture-map ingestion,
+   - **M08.1.9.2.2 captured batch execution — validated:** capture-map ingestion,
      observed descriptor/provenance ingress and all-family dependency enforcement.
-     Qualify the complete native contract before editor cutover.
+     Full engine/examples Debug/Release builds and the installed-SDK C++20
+     consumer pass; 602 owning tests and 11 CLI tests pass per configuration.
+     All 16 Content scenes recook, and packaging reports no warnings/errors.
+     RenderScene validates loose and PAK scene replacement, IBL and matching
+     appearance. Scoped tidy, compiler warnings and extra-high review are clear.
 3. **M08.1.9.3 editor cutover:** batch each unresolved dependency frontier,
    capture and compare the reported input proofs, then cook through the native
    contract. Remove duplicate managed cook-dependency parsers. Retain project

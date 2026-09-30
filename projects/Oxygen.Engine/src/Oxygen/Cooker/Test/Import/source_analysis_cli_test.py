@@ -1,12 +1,15 @@
 """Source-analysis command integration and input-protection regressions."""
 
 import json
+import hashlib
 import os
 from pathlib import Path
 import subprocess
 import sys
+import struct
 import tempfile
 import unittest
+import zlib
 
 
 IMPORT_TOOL = Path(sys.argv.pop(1)).resolve()
@@ -78,6 +81,149 @@ class SourceAnalysisCliTests(unittest.TestCase):
         result = self.analyze(manifest, self.root / "sky_px.png")
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse((self.root / "sky_px.png").exists())
+
+
+class CapturedInputBatchCliTests(unittest.TestCase):
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory(prefix="oxygen-captured-batch-")
+        self.addCleanup(directory.cleanup)
+        self.root = Path(directory.name)
+        self.inputs = []
+
+    def capture(self, name, content):
+        if isinstance(content, str):
+            content = content.encode("utf-8")
+        path = self.root / f"capture-{len(self.inputs)}.bin"
+        path.write_bytes(content)
+        entry = {
+            "logical_path": str(self.root / name), "exists": True,
+            "metadata": {"size": len(content), "is_directory": False,
+                         "is_symlink": False, "last_modified_seconds": 0,
+                         "last_modified_nanoseconds": 0},
+            "file": {"path": str(path), "size": len(content),
+                     "sha256": hashlib.sha256(content).hexdigest()},
+        }
+        self.inputs.append(entry)
+        return entry
+
+    def batch(self, jobs):
+        manifest = self.root / "manifest.json"
+        manifest.write_text(json.dumps({
+            "version": 1, "output": str(self.root / "cooked"), "jobs": jobs,
+        }), encoding="utf-8")
+        captures = self.root / "captures.json"
+        captures.write_text(json.dumps({"schema_version": 1, "inputs": self.inputs}), encoding="utf-8")
+        return subprocess.run(
+            [str(IMPORT_TOOL), "--no-tui", "batch", "--manifest", str(manifest),
+             "--captured-inputs", str(captures)],
+            cwd=self.root, capture_output=True, text=True, encoding="utf-8",
+            errors="replace", timeout=30, check=False,
+        )
+
+    def test_material_and_empty_scene_use_captures_with_absent_originals(self):
+        self.capture("material.json", '{"name":"Stone"}')
+        self.capture("scene.json", '{"version":9,"name":"Empty","nodes":[]}')
+        result = self.batch([
+            {"type": "material-descriptor", "source": "material.json"},
+            {"type": "scene-descriptor", "source": "scene.json"},
+        ])
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertTrue(list((self.root / "cooked").rglob("*.omat")))
+        self.assertTrue(list((self.root / "cooked").rglob("*.oscene")))
+        self.assertFalse((self.root / "material.json").exists())
+
+    def test_texture_descriptor_and_image_use_captured_bytes(self):
+        def chunk(kind, data):
+            return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+        png = b"\x89PNG\r\n\x1a\n"
+        png += chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 6, 0, 0, 0))
+        png += chunk(b"IDAT", zlib.compress(b"\x00\xff\x00\x00\xff"))
+        png += chunk(b"IEND", b"")
+        self.capture("image.png", png)
+        texture_path = "/.cooked/Textures/Red.otex"
+        self.capture("texture.json", json.dumps({"name": "Red", "source": "image.png",
+                     "virtual_path": texture_path, "mips": {"policy": "none"}}))
+        self.capture("material.json", json.dumps({"name": "RedMaterial", "textures": {
+            "base_color": {"virtual_path": texture_path},
+        }}))
+        result = self.batch([
+            {"id": "texture", "type": "texture-descriptor", "source": "texture.json"},
+            {"type": "material-descriptor", "source": "material.json", "depends_on": ["texture"]},
+        ])
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertTrue(list((self.root / "cooked").rglob("*.otex")))
+        self.assertTrue(list((self.root / "cooked").rglob("*.omat")))
+
+    def test_model_imports_keep_logical_paths(self):
+        for extension in ("gltf", "fbx"):
+            with self.subTest(extension=extension):
+                name = f"static_scalar_triangle.{extension}"
+                self.capture(name, (Path(__file__).parent / "Models" / name).read_bytes())
+                result = self.batch([{
+                    "type": extension, "source": name,
+                    "material_slot_source_identity": "01990000-0000-7000-8000-000000000001",
+                }])
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertFalse((self.root / name).exists())
+
+    def test_geometry_and_scene_resolve_cooked_references_outside_capture_map(self):
+        self.capture("material.json", '{"name":"Stone"}')
+        vertices = b"".join(struct.pack("<8f", *position, 0, 0, 1, 0, 0)
+                            for position in ((0, 0, 0), (1, 0, 0), (0, 1, 0)))
+        self.capture("vertices.bin", vertices)
+        self.capture("indices.bin", struct.pack("<3I", 0, 1, 2))
+        bounds = {"min": [0, 0, 0], "max": [1, 1, 0]}
+        vb = "/.cooked/Resources/Buffers/vertices.obuf"
+        ib = "/.cooked/Resources/Buffers/indices.obuf"
+        buffers = [{"uri": name, "virtual_path": path, "usage_flags": usage,
+                    "element_stride": stride,
+                    "views": [{"name": "surface", "element_offset": 0, "element_count": 3}]}
+                   for name, path, usage, stride in (("vertices.bin", vb, 1, 32), ("indices.bin", ib, 2, 4))]
+        geometry = {"name": "Triangle", "bounds": bounds, "buffers": buffers, "lods": [{
+            "name": "LOD0", "mesh_type": "standard", "bounds": bounds,
+            "buffers": {"vb_ref": vb, "ib_ref": ib}, "submeshes": [{
+                "slot_id": "018f8f8f-1111-7111-8111-111111111111",
+                "material_ref": "/.cooked/Materials/Stone.omat", "views": [{"view_ref": "surface"}],
+            }],
+        }]}
+        self.capture("geometry.json", json.dumps(geometry))
+        self.capture("scene.json", json.dumps({"version": 9, "name": "TriangleScene",
+                     "nodes": [{"name": "Triangle"}], "renderables": [{
+                         "node": 0, "geometry_ref": "/.cooked/Geometry/Triangle.ogeo",
+                     }]}))
+        result = self.batch([
+            {"id": "material", "type": "material-descriptor", "source": "material.json"},
+            {"id": "geometry", "type": "geometry-descriptor", "source": "geometry.json", "depends_on": ["material"]},
+            {"type": "scene-descriptor", "source": "scene.json", "depends_on": ["geometry"]},
+        ])
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertTrue(list((self.root / "cooked").rglob("*.ogeo")))
+        self.assertTrue(list((self.root / "cooked").rglob("*.oscene")))
+
+    def test_undeclared_descriptor_cannot_fall_back_to_live_source(self):
+        (self.root / "material.json").write_text('{"name":"Live"}', encoding="utf-8")
+        result = self.batch([{"type": "material-descriptor", "source": "material.json"}])
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("not captured", result.stdout + result.stderr)
+
+    def test_descriptor_digest_mismatch_fails_before_cooking(self):
+        entry = self.capture("material.json", '{"name":"Stone"}')
+        Path(entry["file"]["path"]).write_text('{"name":"Other"}', encoding="utf-8")
+        result = self.batch([{"type": "material-descriptor", "source": "material.json"}])
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("digest mismatch", result.stdout + result.stderr)
+        self.assertFalse(list((self.root / "cooked").rglob("*.omat")))
+
+    def test_dependency_preflight_cannot_read_an_undeclared_live_sidecar(self):
+        self.capture("scene.json", '{"version":9,"name":"Empty","nodes":[]}')
+        (self.root / "physics.json").write_text('{"bindings":{}}', encoding="utf-8")
+        result = self.batch([
+            {"id": "scene", "type": "scene-descriptor", "source": "scene.json"},
+            {"id": "physics", "type": "physics-sidecar", "source": "physics.json",
+             "target_scene_virtual_path": "/.cooked/Scenes/Empty.oscene"},
+        ])
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("not captured", result.stdout + result.stderr)
 
 
 if __name__ == "__main__":

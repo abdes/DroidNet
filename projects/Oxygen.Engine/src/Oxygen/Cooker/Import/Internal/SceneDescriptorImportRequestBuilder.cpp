@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <filesystem>
+#include <memory>
 #include <optional>
 #include <ostream>
 #include <string>
@@ -15,15 +16,17 @@
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/ImportSourceDocument.h>
 #include <Oxygen/Cooker/Import/Internal/SceneSource.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/DescriptorDocument.h>
 #include <Oxygen/Cooker/Import/SceneDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/SceneDescriptorImportSettings.h>
 
 namespace oxygen::content::import::internal {
 
 auto BuildSceneDescriptorRequest(const SceneDescriptorImportSettings& settings,
-  std::ostream& error_stream) -> std::optional<ImportRequest>
+  std::ostream& error_stream,
+  std::shared_ptr<const CapturedInputSet> captured_inputs)
+  -> std::optional<ImportRequest>
 {
   if (settings.descriptor_path.empty()) {
     error_stream << "ERROR: descriptor_path is required\n";
@@ -32,15 +35,15 @@ auto BuildSceneDescriptorRequest(const SceneDescriptorImportSettings& settings,
 
   const auto descriptor_path
     = std::filesystem::path(settings.descriptor_path).lexically_normal();
-  const auto descriptor_text
-    = LoadDescriptorText(descriptor_path, "scene", error_stream);
-  if (!descriptor_text.has_value()) {
+  auto document = ImportSourceDocument::Load(
+    descriptor_path, "scene", error_stream, captured_inputs.get());
+  if (!document.has_value()) {
     return std::nullopt;
   }
 
   auto diagnostics = std::vector<ImportDiagnostic> {};
-  const auto source = SceneSource::FromDescriptor(
-    *descriptor_text, descriptor_path, diagnostics);
+  const auto source
+    = SceneSource::FromDescriptor(document->text, descriptor_path, diagnostics);
   for (const auto& diagnostic : diagnostics) {
     error_stream << "ERROR [" << diagnostic.code << "]: " << diagnostic.message;
     if (!diagnostic.object_path.empty()) {
@@ -54,6 +57,8 @@ auto BuildSceneDescriptorRequest(const SceneDescriptorImportSettings& settings,
 
   auto request = ImportRequest {};
   request.source_path = descriptor_path;
+  request.captured_inputs = std::move(captured_inputs);
+  request.preparation_inputs.push_back(document->Observation());
 
   if (settings.cooked_root.empty()) {
     error_stream << "ERROR: --output or --cooked-root is required\n";
@@ -82,7 +87,7 @@ auto BuildSceneDescriptorRequest(const SceneDescriptorImportSettings& settings,
     source->content_hashing.value_or(settings.with_content_hashing));
 
   request.scene_descriptor = ImportRequest::SceneDescriptorPayload {
-    .normalized_descriptor_json = *descriptor_text,
+    .normalized_descriptor_json = std::move(document->text),
   };
 
   return request;

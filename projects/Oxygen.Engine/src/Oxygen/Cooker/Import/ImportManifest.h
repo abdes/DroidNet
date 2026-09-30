@@ -7,6 +7,7 @@
 #pragma once
 
 #include <filesystem>
+#include <memory>
 #include <optional>
 #include <ostream>
 #include <stop_token>
@@ -58,7 +59,8 @@ struct ImportManifestJob {
   //! unsupported.
   OXGN_COOK_NDAPI auto SourcePath() const -> std::filesystem::path;
 
-  OXGN_COOK_NDAPI auto BuildRequest(std::ostream& error_stream) const
+  OXGN_COOK_NDAPI auto BuildRequest(std::ostream& error_stream,
+    std::shared_ptr<const CapturedInputSet> captured_inputs = {}) const
     -> std::optional<ImportRequest>;
 };
 
@@ -92,7 +94,8 @@ struct ImportManifest {
   OXGN_COOK_NDAPI auto AnalyzeSources(std::stop_token stop_token = {}) const
     -> ImportSourceAnalysis;
 
-  OXGN_COOK_NDAPI auto BuildRequests(std::ostream& error_stream) const
+  OXGN_COOK_NDAPI auto BuildRequests(std::ostream& error_stream,
+    std::shared_ptr<const CapturedInputSet> captured_inputs = {}) const
     -> std::vector<ImportRequest>;
 
   //! Load a manifest from a JSON file.

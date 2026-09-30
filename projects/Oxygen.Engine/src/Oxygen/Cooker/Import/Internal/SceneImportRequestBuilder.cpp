@@ -7,8 +7,6 @@
 #include <cmath>
 #include <exception>
 #include <filesystem>
-#include <fstream>
-#include <iterator>
 #include <memory>
 #include <optional>
 #include <ostream>
@@ -16,10 +14,10 @@
 #include <string_view>
 #include <utility>
 
-#include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/ImportSourceDocument.h>
 #include <Oxygen/Cooker/Import/Internal/SceneImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ImportSettingsUtils.h>
 #include <Oxygen/Cooker/Import/MaterialSlotProvenance.h>
@@ -284,33 +282,33 @@ auto SceneImportSettings::Prepare(const ImportFormat expected_format,
 
 namespace internal {
   auto BuildSceneRequest(const SceneImportSettings& settings,
-    const ImportFormat expected_format, std::ostream& error_stream)
+    const ImportFormat expected_format, std::ostream& error_stream,
+    std::shared_ptr<const CapturedInputSet> captured_inputs)
     -> std::optional<ImportRequest>
   {
     if (settings.cooked_root.empty()) {
       error_stream << "ERROR: --output or --cooked-root is required\n";
       return std::nullopt;
     }
-    auto provenance = std::string {};
+    auto provenance = std::optional<ImportSourceDocument> {};
     if (!settings.material_slot_provenance_path.empty()) {
       if (!settings.material_slot_provenance_json.empty()) {
         error_stream << "ERROR: supply material-slot provenance inline or by "
                         "file, not both\n";
         return std::nullopt;
       }
-      std::ifstream input(
-        base::ToNativePath(settings.material_slot_provenance_path));
-      if (!input) {
-        error_stream << "ERROR: cannot open material-slot provenance file\n";
-        return std::nullopt;
-      }
-      provenance.assign(std::istreambuf_iterator<char>(input), {});
-      if (input.bad()) {
-        error_stream << "ERROR: cannot read material-slot provenance file\n";
+      provenance
+        = ImportSourceDocument::Load(settings.material_slot_provenance_path,
+          "material-slot provenance", error_stream, captured_inputs.get());
+      if (!provenance.has_value()) {
         return std::nullopt;
       }
     }
-    auto request = settings.Prepare(expected_format, provenance, error_stream);
+    const auto provenance_text = provenance.has_value()
+      ? std::string_view(provenance->text)
+      : std::string_view {};
+    auto request
+      = settings.Prepare(expected_format, provenance_text, error_stream);
     if (!request.has_value()) {
       return std::nullopt;
     }
@@ -320,6 +318,10 @@ namespace internal {
       return std::nullopt;
     }
     request->cooked_root = std::move(root);
+    request->captured_inputs = std::move(captured_inputs);
+    if (provenance.has_value()) {
+      request->preparation_inputs.push_back(provenance->Observation());
+    }
     return request;
   }
 } // namespace internal

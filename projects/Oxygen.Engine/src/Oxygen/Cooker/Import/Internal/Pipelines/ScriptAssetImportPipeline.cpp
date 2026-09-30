@@ -155,7 +155,7 @@ namespace {
     ScriptAssetDesc& desc, const EmbeddedResourceKind resource_kind)
     -> co::Co<bool>
   {
-    auto* const reader = session.FileReader().get();
+    auto* const reader = session.CookedReader().get();
     auto* const writer = session.FileWriter().get();
     auto* const registry = index_registry.get();
     if (reader == nullptr || writer == nullptr || registry == nullptr) {

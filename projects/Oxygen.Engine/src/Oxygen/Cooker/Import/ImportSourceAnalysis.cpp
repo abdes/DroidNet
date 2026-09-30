@@ -33,6 +33,7 @@
 #include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Cooker/Import/FileError.h>
 #include <Oxygen/Cooker/Import/FileInfo.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
@@ -495,11 +496,11 @@ namespace {
         if (stop.stop_requested()) {
           throw std::runtime_error("Source analysis canceled");
         }
-        const auto exists = co_await snapshot.Exists(file.path);
-        if (!exists) {
-          throw std::runtime_error(exists.error().ToString());
+        const auto info = co_await snapshot.GetFileInfo(file.path);
+        if (!info && info.error().code != FileError::kNotFound) {
+          throw std::runtime_error(info.error().ToString());
         }
-        if (!exists.value() && file.required) {
+        if (!info && file.required) {
           AddError(report, "analysis.source_missing",
             "Required source is missing: " + file.path.string());
         }

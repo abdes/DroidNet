@@ -21,9 +21,8 @@ input observation with native cooking.
 
 ## Source analysis and input observations
 
-Status: native analysis and captured model reads pass their Debug/Release checks.
-Captured batch ingress and full qualification remain ED-M08.1.9.2;
-editor integration remains ED-M08.1.9.3.
+Status: native source analysis and captured batch execution are validated.
+Editor integration remains ED-M08.1.9.3.
 
 Native preparation owns descriptor validation,
 logical references and recipe-dependent output naming. Batch analysis invokes
@@ -78,10 +77,30 @@ operation even when a texture importer recovers with a placeholder.
 `ParserRead` scopes synchronous glTF reads through the same observer.
 Cooked asset references use the separate cooked reader and mount resolution.
 Verification checks consumed captures only, reuses full-read hashes and qualifies
-range-only reads with bounded chunks. CLI capture ingestion and descriptor
-builder integration are the remaining native execution work.
+range-only reads with bounded chunks.
 
-M08.1.9.2 moves descriptor preparation to observed bytes and their source location.
+`ImportSourceDocument` is the shared synchronous reader for request preparation
+and batch dependency preflight. It preserves logical paths, validates captured
+size/digest and returns the exact document bytes with a pending observation.
+Builders attach those observations to `ImportRequest::preparation_inputs`;
+job admission transfers them into the snapshot before execution. Final
+verification also covers ordinary, uncaptured descriptor and provenance reads.
+Cooked resource reads in jobs and pipelines use their separate cooked reader.
+
+Captured execution uses the same manifest and source names as ordinary imports:
+
+```text
+Oxygen.Cooker.ImportTool.exe batch --manifest imports.json --captured-inputs captures.json
+```
+
+The [capture schema](../../Import/Schemas/oxygen.captured-inputs.schema.json)
+requires absolute logical and captured paths. File entries carry their expected
+SHA-256, size and original metadata; presence-only and absence entries carry no
+bytes. Duplicate identities, inconsistent facts and unknown fields are rejected
+before preparation. Analysis provides original metadata for declared files;
+negative cubemap search candidates remain presence-only observations.
+
+Descriptor preparation consumes observed bytes and their source location.
 Source adapters use the same observation boundary for parser-owned reads.
 Logical asset references and physical input files remain distinct. Reports carry
 per-job declared outputs, typed logical references, attributed input proofs,

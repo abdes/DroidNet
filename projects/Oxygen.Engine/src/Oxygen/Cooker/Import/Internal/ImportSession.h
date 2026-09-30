@@ -91,7 +91,8 @@ public:
     observer_ptr<IAsyncFileWriter> file_writer,
     observer_ptr<co::ThreadPool> thread_pool,
     observer_ptr<ResourceTableRegistry> table_registry,
-    observer_ptr<LooseCookedIndexRegistry> index_registry);
+    observer_ptr<LooseCookedIndexRegistry> index_registry,
+    observer_ptr<IAsyncFileReader> cooked_reader = {});
 
   OXGN_COOK_API ~ImportSession();
 
@@ -117,6 +118,13 @@ public:
   //! Get the async file reader (non-owning).
   OXGN_COOK_NDAPI auto FileReader() const noexcept
     -> observer_ptr<IAsyncFileReader>;
+
+  //! Read derived resources resolved through the cooked-root/mount contract.
+  [[nodiscard]] auto CookedReader() const noexcept
+    -> observer_ptr<IAsyncFileReader>
+  {
+    return cooked_reader_;
+  }
 
   //! Get the async file writer (non-owning).
   OXGN_COOK_NDAPI auto FileWriter() const noexcept
@@ -259,6 +267,7 @@ public:
 private:
   ImportRequest request_;
   observer_ptr<IAsyncFileReader> file_reader_;
+  observer_ptr<IAsyncFileReader> cooked_reader_;
   observer_ptr<IAsyncFileWriter> file_writer_;
   observer_ptr<co::ThreadPool> thread_pool_;
   observer_ptr<ResourceTableRegistry> table_registry_;

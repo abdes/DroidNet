@@ -6,66 +6,28 @@
 
 #pragma once
 
-#include <exception>
-#include <filesystem>
-#include <fstream>
-#include <iterator>
 #include <optional>
 #include <ostream>
-#include <string>
 #include <string_view>
 
 #include <nlohmann/json.hpp>
 
-#include <Oxygen/Base/Filesystem.h>
-
 namespace oxygen::content::import::internal {
-
-//! Reads descriptor bytes once; interpretation is owned by the descriptor's
-//! preparation API.
-inline auto LoadDescriptorText(const std::filesystem::path& descriptor_path,
-  const std::string_view descriptor_kind, std::ostream& error_stream)
-  -> std::optional<std::string>
-{
-  auto input
-    = std::ifstream(base::ToNativePath(descriptor_path), std::ios::binary);
-  if (!input.is_open()) {
-    error_stream << "ERROR: failed to open " << descriptor_kind
-                 << " descriptor: " << descriptor_path.string() << "\n";
-    return std::nullopt;
-  }
-  auto text = std::string(std::istreambuf_iterator<char>(input), {});
-  if (input.bad()) {
-    error_stream << "ERROR: failed to read " << descriptor_kind
-                 << " descriptor: " << descriptor_path.string() << "\n";
-    return std::nullopt;
-  }
-  return text;
-}
-
-inline auto LoadDescriptorJsonObject(
-  const std::filesystem::path& descriptor_path,
-  const std::string_view descriptor_kind, std::ostream& error_stream)
+inline auto ParseDescriptorJsonObject(const std::string_view text,
+  const std::string_view kind, std::ostream& errors)
   -> std::optional<nlohmann::json>
 {
-  const auto text
-    = LoadDescriptorText(descriptor_path, descriptor_kind, error_stream);
-  if (!text) {
-    return std::nullopt;
-  }
   try {
-    auto doc = nlohmann::json::parse(*text);
-    if (!doc.is_object()) {
-      error_stream << "ERROR: " << descriptor_kind
-                   << " descriptor root must be a JSON object\n";
+    auto document = nlohmann::json::parse(text);
+    if (!document.is_object()) {
+      errors << "ERROR: " << kind << " descriptor root must be a JSON object\n";
       return std::nullopt;
     }
-    return doc;
-  } catch (const nlohmann::json::exception& failure) {
-    error_stream << "ERROR: invalid " << descriptor_kind
-                 << " descriptor JSON: " << failure.what() << "\n";
+    return document;
+  } catch (const nlohmann::json::exception& error) {
+    errors << "ERROR: invalid " << kind << " descriptor JSON: " << error.what()
+           << '\n';
     return std::nullopt;
   }
 }
-
 } // namespace oxygen::content::import::internal

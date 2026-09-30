@@ -92,10 +92,13 @@ ImportJob::ImportJob(ImportJobParams params)
   , retained_import_(std::move(params.retained_import))
 {
   CHECK_NOTNULL_F(thread_pool_, "ImportJob requires a non-null thread pool");
-  if (retained_import_ || request_.captured_inputs) {
+  if (retained_import_ || request_.captured_inputs
+    || !request_.preparation_inputs.empty()) {
     CHECK_NOTNULL_F(file_reader_, "Observed imports require a source reader");
     source_snapshot_ = std::make_shared<ImportSourceSnapshot>(
       *file_reader_, *thread_pool_, request_.captured_inputs);
+    const auto preparation = std::exchange(request_.preparation_inputs, {});
+    source_snapshot_->RecordPreparation(preparation);
     file_reader_ = observer_ptr { source_snapshot_.get() };
   }
   if (retained_import_) {
@@ -252,8 +255,9 @@ auto ImportJob::ProgressCallback() const noexcept
 auto ImportJob::Session() -> ImportSession&
 {
   if (!session_) {
-    session_ = std::make_unique<ImportSession>(request_, file_reader_,
-      file_writer_, thread_pool_, table_registry_, index_registry_);
+    session_
+      = std::make_unique<ImportSession>(request_, file_reader_, file_writer_,
+        thread_pool_, table_registry_, index_registry_, cooked_reader_);
   }
   return *session_;
 }

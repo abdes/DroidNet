@@ -1536,7 +1536,7 @@ namespace {
     -> std::optional<ScriptingSidecarIoHandles>
   {
     auto handles = ScriptingSidecarIoHandles {
-      .reader = session.FileReader().get(),
+      .reader = session.CookedReader().get(),
       .writer = session.FileWriter().get(),
       .index_registry = index_registry.get(),
     };

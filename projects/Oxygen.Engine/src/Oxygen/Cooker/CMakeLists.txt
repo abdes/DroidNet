@@ -61,6 +61,8 @@ oxygen_embed_json_schemas(
   SCHEMAS
     kImportManifestSchema
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.import-manifest.schema.json"
+    kCapturedInputsSchema
+    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.captured-inputs.schema.json"
     kBufferContainerSchema
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.buffer-container.schema.json"
     kTextureDescriptorSchema
@@ -114,6 +116,7 @@ set(
   "Import/GeometryDescriptorImportSettings.h"
   "Import/FileInfo.h"
   "Import/CapturedInputSet.h"
+  "Import/ImportSourceDocument.h"
   "Import/IAsyncFileReader.h"
   "Import/ImportSourceObservation.h"
   "Import/ImportSourceAnalysis.h"
@@ -358,6 +361,7 @@ set(
   "Import/Internal/TextureDescriptorImportRequestBuilder.cpp"
   "Import/Internal/TextureImportRequestBuilder.cpp"
   "Import/Internal/Utils/BufferDescriptorSidecar.cpp"
+  "Import/ImportSourceDocument.cpp"
   "Import/Internal/Utils/ImportSettingsUtils.cpp"
   "Import/Internal/WindowsFileReader.cpp"
   "Import/Internal/WindowsFileWriter.cpp"

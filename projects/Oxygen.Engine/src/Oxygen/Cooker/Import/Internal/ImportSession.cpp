@@ -259,9 +259,11 @@ ImportSession::ImportSession(const ImportRequest& request,
   observer_ptr<IAsyncFileWriter> file_writer,
   observer_ptr<co::ThreadPool> thread_pool,
   observer_ptr<ResourceTableRegistry> table_registry,
-  observer_ptr<LooseCookedIndexRegistry> index_registry)
+  observer_ptr<LooseCookedIndexRegistry> index_registry,
+  observer_ptr<IAsyncFileReader> cooked_reader)
   : request_(request)
   , file_reader_(file_reader)
+  , cooked_reader_(cooked_reader ? cooked_reader : file_reader)
   , file_writer_(file_writer)
   , thread_pool_(thread_pool)
   , table_registry_(table_registry)

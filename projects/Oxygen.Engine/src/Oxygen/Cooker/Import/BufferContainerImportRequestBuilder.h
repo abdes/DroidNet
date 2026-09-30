@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <memory>
 #include <optional>
 #include <ostream>
 
@@ -17,7 +18,8 @@ namespace oxygen::content::import::internal {
 
 //! Build a normalized `ImportRequest` for schema-based buffer containers.
 OXGN_COOK_API auto BuildBufferContainerRequest(
-  const BufferContainerImportSettings& settings, std::ostream& error_stream)
+  const BufferContainerImportSettings& settings, std::ostream& error_stream,
+  std::shared_ptr<const CapturedInputSet> captured_inputs = {})
   -> std::optional<ImportRequest>;
 
 } // namespace oxygen::content::import::internal

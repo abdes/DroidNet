@@ -8,9 +8,11 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <memory>
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 
 #include <Oxygen/Base/Macros.h>
@@ -43,6 +45,10 @@ public:
   ~CapturedInputSet() = default;
   OXYGEN_MAKE_NON_COPYABLE(CapturedInputSet)
   OXYGEN_MAKE_NON_MOVABLE(CapturedInputSet)
+
+  //! Validate the capture contract before native request preparation.
+  OXGN_COOK_NDAPI static auto Parse(std::string_view json)
+    -> std::shared_ptr<const CapturedInputSet>;
 
   OXGN_COOK_NDAPI auto Find(const std::filesystem::path& logical_path) const
     -> const CapturedInput*;

@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <memory>
 #include <optional>
 #include <ostream>
 #include <sstream>
@@ -21,9 +22,9 @@
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/ImportSourceDocument.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/TextureImportRequestBuilder.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/DescriptorDocument.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ImportSettingsUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 #include <Oxygen/Cooker/Import/TextureDescriptorImportRequestBuilder.h>
@@ -257,7 +258,8 @@ auto TextureDescriptorImportSettings::Prepare(const std::string_view bytes,
 namespace internal {
 
   auto BuildTextureDescriptorRequest(
-    const TextureDescriptorImportSettings& settings, std::ostream& error_stream)
+    const TextureDescriptorImportSettings& settings, std::ostream& error_stream,
+    std::shared_ptr<const CapturedInputSet> captured_inputs)
     -> std::optional<ImportRequest>
   {
     if (settings.descriptor_path.empty()) {
@@ -266,12 +268,13 @@ namespace internal {
     }
     const auto path
       = std::filesystem::path(settings.descriptor_path).lexically_normal();
-    const auto text = LoadDescriptorText(path, "texture", error_stream);
-    if (!text) {
+    auto document = ImportSourceDocument::Load(
+      path, "texture", error_stream, captured_inputs.get());
+    if (!document.has_value()) {
       return std::nullopt;
     }
     auto diagnostics = std::vector<ImportDiagnostic> {};
-    const auto effective = settings.Prepare(*text, diagnostics);
+    const auto effective = settings.Prepare(document->text, diagnostics);
     for (const auto& diagnostic : diagnostics) {
       error_stream << "ERROR [" << diagnostic.code
                    << "]: " << diagnostic.message;
@@ -280,8 +283,15 @@ namespace internal {
       }
       error_stream << '\n';
     }
-    return effective ? BuildTextureRequest(*effective, error_stream)
-                     : std::nullopt;
+    if (!effective.has_value()) {
+      return std::nullopt;
+    }
+    auto request = BuildTextureRequest(*effective, error_stream);
+    if (request.has_value()) {
+      request->captured_inputs = std::move(captured_inputs);
+      request->preparation_inputs.push_back(document->Observation());
+    }
+    return request;
   }
 
 } // namespace internal

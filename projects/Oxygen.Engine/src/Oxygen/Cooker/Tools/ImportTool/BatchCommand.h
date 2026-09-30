@@ -49,6 +49,7 @@ private:
   struct Options {
     std::string manifest_path;
     std::string root_path;
+    std::string captured_inputs_path;
     std::string report_path;
     uint32_t max_in_flight_jobs = 0U;
     bool max_in_flight_jobs_set = false;

@@ -14,6 +14,7 @@
 #include <vector>
 
 #include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/ImportSourceObservation.h>
 #include <Oxygen/Cooker/Import/PhysicsImportSettings.h>
 #include <Oxygen/Cooker/Import/TextureSourceAssembly.h>
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
@@ -131,6 +132,9 @@ struct ImportRequest final {
 
   //! Optional frozen source inputs; source_path retains its authored identity.
   std::shared_ptr<const CapturedInputSet> captured_inputs {};
+
+  //! Pending synchronous preparation reads, transferred to the job observer.
+  std::vector<ImportSourceObservation> preparation_inputs {};
 
   //! Explicit standalone texture descriptor identity; empty uses hashed naming.
   std::string texture_virtual_path {};

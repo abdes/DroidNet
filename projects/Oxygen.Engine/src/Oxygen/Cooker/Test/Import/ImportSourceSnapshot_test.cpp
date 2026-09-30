@@ -873,5 +873,64 @@ namespace {
     co::Run(loop_, [&] -> co::Co<> { co_await mapped.Verify(); });
     EXPECT_EQ(mapped.Observations().size(), 1U);
   }
+  NOLINT_TEST_F(
+    ImportSourceSnapshotTest, PreparationFactsRemainPendingUntilVerified)
+  {
+    const auto proof = ImportSourceObservation {
+      .path = source_,
+      .exists = true,
+      .metadata = {},
+      .reads = { ImportSourceReadProof { .offset = 0U,
+        .max_bytes = 0U,
+        .digest
+        = base::ComputeSha256(std::as_bytes(std::span(reader_.content))) } },
+    };
+    snapshot_.RecordPreparation(std::span(&proof, 1));
+    EXPECT_THROW(static_cast<void>(snapshot_.Observations()), std::logic_error);
+    co::Run(loop_, [&] -> co::Co<> { co_await snapshot_.Verify(); });
+    EXPECT_EQ(snapshot_.Observations().size(), 1U);
+    EXPECT_EQ(reader_.content_reads, 1U);
+  }
+
+  NOLINT_TEST_F(
+    ImportSourceSnapshotTest, MutationAfterPreparationRejectsCompletion)
+  {
+    const auto proof = ImportSourceObservation {
+      .path = source_,
+      .exists = true,
+      .metadata = {},
+      .reads = { ImportSourceReadProof { .offset = 0U,
+        .max_bytes = 0U,
+        .digest
+        = base::ComputeSha256(std::as_bytes(std::span(reader_.content))) } },
+    };
+    snapshot_.RecordPreparation(std::span(&proof, 1));
+    reader_.content.at(0) = 'z';
+    co::Run(loop_, [&] -> co::Co<> {
+      EXPECT_THROW(co_await snapshot_.Verify(), std::runtime_error);
+    });
+  }
+
+  NOLINT_TEST_F(ImportSourceSnapshotTest, ConflictingPreparationFactsAreFatal)
+  {
+    auto proof = ImportSourceObservation {
+      .path = source_,
+      .exists = true,
+      .metadata = {},
+      .reads = { ImportSourceReadProof { .offset = 0U,
+        .max_bytes = 0U,
+        .digest
+        = base::ComputeSha256(std::as_bytes(std::span(reader_.content))) } },
+    };
+    snapshot_.RecordPreparation(std::span(&proof, 1));
+    reader_.content.at(0) = 'z';
+    proof.reads.front().digest
+      = base::ComputeSha256(std::as_bytes(std::span(reader_.content)));
+    EXPECT_THROW(
+      snapshot_.RecordPreparation(std::span(&proof, 1)), std::runtime_error);
+    co::Run(loop_, [&] -> co::Co<> {
+      EXPECT_THROW(co_await snapshot_.Verify(), std::runtime_error);
+    });
+  }
 } // namespace
 } // namespace oxygen::content::import::test
