@@ -929,7 +929,7 @@ references; remote issue closure awaits integration.
 
 ### ED-M08 - Runtime Parity And Standalone Validation
 
-Status: `in_progress; M08.1.1–M08.1.7 validated; M08.1.8 next`
+Status: `in_progress; M08.1.1–M08.1.7 and M08.1.8.1 validated; M08.1.8.2 next`
 
 Outcome: one canonical V0.1 authoring contract across engine and editor, with
 semantic/image qualification through development-only native and embedded paths.
@@ -1033,6 +1033,15 @@ readers. Primary/Secondary names remain unchanged.
       Rendered flag behavior remains M08.2 work; supplemental captures do not
       close M08.3.
 
+      M08.1.8.1 native admission is validated: prepared mount sets preserve old
+      readers and switch loader/resolver before retirement callbacks; import
+      manifests accept fresh root identities and reject conflicting writers.
+      Native engine/examples, installed SDK and editor/Interop build in Debug
+      and Release. Owning suites pass 388 Debug and 433 Release tests, including
+      failed/stale preparation, reentrant reload, loader destruction and path
+      aliases. Selected tidy and changed-file MSVC checks pass; extra-high review
+      is clear. Immutable project publication and reclamation remain M08.1.8.2.
+
 - [ ] [M08.F1 descriptor-local reference format](plan/ED-M08.F1-descriptor-local-references.md),
       after M08.1.9 and before M08.2. Separate format cutover, recook and SDK gate.
 - [ ] M08.2 native rendering and view behavior.
@@ -1112,22 +1121,22 @@ the owning plans. Reorganizing those plans does not complete or defer their
 requirements. Existing validation evidence remains scoped to the workflows
 recorded in section 5.
 
-| Plan                                                                                                                            | Milestone     | Status        | Next Action                                                                                                                                                     |
-| ------------------------------------------------------------------------------------------------------------------------------- | ------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [ED-M01-project-browser-workspace-activation.md](plan/ED-M01-project-browser-workspace-activation.md)                           | `ED-M01`      | `validated`   | No further action.                                                                                                                                              |
-| [ED-M02-live-viewport-stabilization.md](plan/ED-M02-live-viewport-stabilization.md)                                             | `ED-M02`      | `landed`      | Validate or record the supported single viewport result only; multi-viewport remains deferred and is not an ED-M02 gate.                                        |
-| [ED-M03-authoring-foundation.md](plan/ED-M03-authoring-foundation.md)                                                           | `ED-M03`      | `validated`   | No further action for ED-M03; DynamicTree rename commit hook remains deferred.                                                                                  |
-| [ED-M04-scene-editing-ux-component-inspectors.md](plan/ED-M04-scene-editing-ux-component-inspectors.md)                         | `ED-M04`      | `landed`      | No new execution under M04. Source-identified omissions and missing evidence execute in ED-M07A/07B.                                                            |
-| [ED-M05-scalar-material-authoring.md](plan/ED-M05-scalar-material-authoring.md)                                                 | `ED-M05`      | `validated`   | No further action for ED-M05.                                                                                                                                   |
-| [ED-M06-asset-identity-content-browser.md](plan/ED-M06-asset-identity-content-browser.md)                                       | `ED-M06`      | `validated`   | No further action for ED-M06.                                                                                                                                   |
-| [ED-M06A-game-project-layout-and-template-standardization.md](plan/ED-M06A-game-project-layout-and-template-standardization.md) | `ED-M06A`     | `validated`   | No further action for ED-M06A.                                                                                                                                  |
-| [ED-M07-content-pipeline-and-cooking.md](plan/ED-M07-content-pipeline-and-cooking.md)                                           | `ED-M07`      | `validated`   | Recorded validation is retained. Section 11 closes UI scope decisions; new publication/mapping guarantees execute in ED-M07B.                                   |
-| [ED-M07A-authoring-integrity-and-runtime-convergence.md](plan/ED-M07A-authoring-integrity-and-runtime-convergence.md)           | `ED-M07A`     | `validated`   | All automated and user-confirmed viewport gates pass.                                                                                                           |
-| [ED-M07B-safe-content-publication-and-compatibility.md](plan/ED-M07B-safe-content-publication-and-compatibility.md)             | `ED-M07B`     | `validated`   | Complete workflow audit, native publication/import, browser/picker/status, recovery and compact inspector evidence recorded.                                    |
-| [ED-M08-runtime-parity-and-standalone-validation.md](plan/ED-M08-runtime-parity-and-standalone-validation.md)                   | `ED-M08`      | `in_progress` | M08.1.1–M08.1.7 validated. Next: immutable project publication and native analysis. Native rendering and editor/standalone parity retain their later M08 gates. |
-| [ED-M09-viewport-authoring-tools.md](plan/ED-M09-viewport-authoring-tools.md)                                                   | `ED-M09`      | `planned`     | Execute the decided navigation/picking/tool contract after M08.                                                                                                 |
-| [ED-M10-v01-release-qualification.md](plan/ED-M10-v01-release-qualification.md)                                                 | `ED-M10`      | `planned`     | Qualify the matched build and selected small-project workload.                                                                                                  |
-| DynamicTree rename commit hook                                                                                                  | `post-ED-M03` | `deferred`    | Replace ED-M03's loaded-adapter label-change bridge with a first-class DynamicTree rename commit hook/override; this must not block ED-M03 closure.             |
+| Plan                                                                                                                            | Milestone     | Status        | Next Action                                                                                                                                                           |
+| ------------------------------------------------------------------------------------------------------------------------------- | ------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [ED-M01-project-browser-workspace-activation.md](plan/ED-M01-project-browser-workspace-activation.md)                           | `ED-M01`      | `validated`   | No further action.                                                                                                                                                    |
+| [ED-M02-live-viewport-stabilization.md](plan/ED-M02-live-viewport-stabilization.md)                                             | `ED-M02`      | `landed`      | Validate or record the supported single viewport result only; multi-viewport remains deferred and is not an ED-M02 gate.                                              |
+| [ED-M03-authoring-foundation.md](plan/ED-M03-authoring-foundation.md)                                                           | `ED-M03`      | `validated`   | No further action for ED-M03; DynamicTree rename commit hook remains deferred.                                                                                        |
+| [ED-M04-scene-editing-ux-component-inspectors.md](plan/ED-M04-scene-editing-ux-component-inspectors.md)                         | `ED-M04`      | `landed`      | No new execution under M04. Source-identified omissions and missing evidence execute in ED-M07A/07B.                                                                  |
+| [ED-M05-scalar-material-authoring.md](plan/ED-M05-scalar-material-authoring.md)                                                 | `ED-M05`      | `validated`   | No further action for ED-M05.                                                                                                                                         |
+| [ED-M06-asset-identity-content-browser.md](plan/ED-M06-asset-identity-content-browser.md)                                       | `ED-M06`      | `validated`   | No further action for ED-M06.                                                                                                                                         |
+| [ED-M06A-game-project-layout-and-template-standardization.md](plan/ED-M06A-game-project-layout-and-template-standardization.md) | `ED-M06A`     | `validated`   | No further action for ED-M06A.                                                                                                                                        |
+| [ED-M07-content-pipeline-and-cooking.md](plan/ED-M07-content-pipeline-and-cooking.md)                                           | `ED-M07`      | `validated`   | Recorded validation is retained. Section 11 closes UI scope decisions; new publication/mapping guarantees execute in ED-M07B.                                         |
+| [ED-M07A-authoring-integrity-and-runtime-convergence.md](plan/ED-M07A-authoring-integrity-and-runtime-convergence.md)           | `ED-M07A`     | `validated`   | All automated and user-confirmed viewport gates pass.                                                                                                                 |
+| [ED-M07B-safe-content-publication-and-compatibility.md](plan/ED-M07B-safe-content-publication-and-compatibility.md)             | `ED-M07B`     | `validated`   | Complete workflow audit, native publication/import, browser/picker/status, recovery and compact inspector evidence recorded.                                          |
+| [ED-M08-runtime-parity-and-standalone-validation.md](plan/ED-M08-runtime-parity-and-standalone-validation.md)                   | `ED-M08`      | `in_progress` | M08.1.1–M08.1.7 and M08.1.8.1 validated. Next: publication cutover, then native analysis. Native rendering and editor/standalone parity retain their later M08 gates. |
+| [ED-M09-viewport-authoring-tools.md](plan/ED-M09-viewport-authoring-tools.md)                                                   | `ED-M09`      | `planned`     | Execute the decided navigation/picking/tool contract after M08.                                                                                                       |
+| [ED-M10-v01-release-qualification.md](plan/ED-M10-v01-release-qualification.md)                                                 | `ED-M10`      | `planned`     | Qualify the matched build and selected small-project workload.                                                                                                        |
+| DynamicTree rename commit hook                                                                                                  | `post-ED-M03` | `deferred`    | Replace ED-M03's loaded-adapter label-change bridge with a first-class DynamicTree rename commit hook/override; this must not block ED-M03 closure.                   |
 
 ## 5. Validation Ledger
 

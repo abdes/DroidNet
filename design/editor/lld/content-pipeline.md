@@ -1294,10 +1294,9 @@ Earlier evidence remains in [ED-M07B closeout](../validation/ED-M07B-closeout-au
 The canonical changes above require their own implementation and evidence in
 ED-M08; this LLD is a contract, not a completion report.
 
-## 22. Planned content pipeline simplification
+## 23. Immutable publication and native analysis
 
-Status: planned for M08.1.8–M08.1.9, following native identities, ownership and
-integrity inventory. [The milestone plan](../plan/ED-M08-runtime-parity-and-standalone-validation.md#m081-remaining-increments)
+M08.1.8–M08.1.9 build on native identities, ownership and integrity inventory. [The milestone plan](../plan/ED-M08-runtime-parity-and-standalone-validation.md#m081-remaining-increments)
 owns execution order and gates.
 
 Immutable project publication stores the ordered root set, native inventory
@@ -1312,8 +1311,24 @@ transitions, applies source CAS, selects the new head, accepts preview and commi
 Failure restores head/source state with preview held. Remove cooked-directory
 swap/recovery phases. Existing incremental staging seed copies remain initially;
 no hardlinks to append-mutated resource files or accumulating overlay chains.
+The selection gate covers head/source changes through durable preview acceptance
+or rollback; existing generation readers remain usable. Validate and seal before
+entering that gate. Preview receives the candidate lease directly; refresh derived
+catalogs and notify other readers after commit and gate release.
 Consumed snapshots remain immutable; reuse fingerprints account only for committed
 produced-source changes. Later source edits affect freshness, not historical validity.
+
+Every new physical root generation has a fresh native SourceKey. Writable staging
+copies exclude `.generation.lock`; seal that marker on each completed root, never
+on their shared parent. Native mount preparation validates the complete source
+context before changing precedence. Loader and resolver switch before retirement
+callbacks run; retained objects continue using their exact old source bindings.
+
+After successful publication, owned maintenance automatically reclaims unselected
+generations that are neither needed for recovery nor held by runtime readers.
+Source files remain authoring data. Reverting source recooks it; publication does
+not add a historical rollback feature. Failure to acquire an old generation's
+exclusive reclamation lease defers cleanup without delaying preview acceptance.
 
 Native source analysis extends the existing tool/API with a batch request/result:
 producer/schema identity, declared outputs, logical references, actual file/absence

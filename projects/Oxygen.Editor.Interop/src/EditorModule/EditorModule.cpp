@@ -28,8 +28,12 @@
 #include <EditorModule/SurfaceRegistry.h>
 
 #include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/Content/ContentMounts.h>
+#include <Oxygen/Content/OperationCancelledException.h>
 #include <Oxygen/Content/VirtualPathResolver.h>
 #include <Oxygen/Engine/IAsyncEngine.h>
+#include <Oxygen/OxCo/TaskCancelledException.h>
+#include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
@@ -1163,14 +1167,20 @@ namespace oxygen::interop::module {
 
   void EditorModule::SetCookedContentPaused(bool paused,
     std::function<void(bool, std::string)> complete) {
-    std::lock_guard lock(roots_mutex_);
-    requested_content_pause_ = paused;
-    content_pause_completion_ = std::move(complete);
+    std::function<void(bool, std::string)> superseded;
+    {
+      std::lock_guard lock(roots_mutex_);
+      requested_content_pause_ = paused;
+      superseded = std::move(content_pause_completion_);
+      content_pause_completion_ = std::move(complete);
+    }
   }
 
   auto EditorModule::ProcessContentPauseAsync(engine::FrameContext& frame_context) -> co::Co<> {
     std::optional<bool> requested;
+    std::uint64_t revision = 0;
     std::function<void(bool, std::string)> complete;
+    std::function<void(bool, std::string)> canceled_roots;
     {
       std::lock_guard lock(roots_mutex_);
       requested = std::exchange(requested_content_pause_, std::nullopt);
@@ -1178,7 +1188,13 @@ namespace oxygen::interop::module {
         co_return;
       }
       complete = std::move(content_pause_completion_);
+      revision = roots_revision_;
+      if (*requested) {
+        canceled_roots = std::move(pending_roots_completion_);
+      }
     }
+    // Releasing a replaced completion cancels its managed waiter outside the lock.
+    canceled_roots = {};
     if (!*requested) {
       if (scene_ && asset_requests_) {
         asset_requests_->ResumeLoads(*scene_);
@@ -1208,7 +1224,9 @@ namespace oxygen::interop::module {
       }
       {
         std::lock_guard lock(roots_mutex_);
-        roots_dirty_ = false;
+        if (revision == roots_revision_) {
+          roots_dirty_ = false;
+        }
       }
       complete(true, {});
     } catch (const std::exception& error) {
@@ -1219,6 +1237,9 @@ namespace oxygen::interop::module {
   auto EditorModule::SynchronizeCookedRootsAsync() -> co::Co<bool> {
     std::vector<std::string> roots;
     std::uint64_t revision = 0;
+    std::function<void(bool, std::string)> complete;
+    std::function<void(bool, std::string)> superseded;
+    std::optional<content::MountRetirement> retirement;
     {
       std::lock_guard lock(roots_mutex_);
       if (!roots_dirty_ || !asset_loader_ || !path_resolver_) {
@@ -1226,41 +1247,66 @@ namespace oxygen::interop::module {
       }
       roots = mounted_roots_;
       revision = roots_revision_;
-      active_roots_completion_ = std::move(pending_roots_completion_);
+      complete = std::move(pending_roots_completion_);
       roots_dirty_ = false;
     }
-    // No new scene requests are admitted while this mutation phase waits.
-    co_await asset_loader_->WaitForPendingLoadsAsync();
-    std::lock_guard lock(roots_mutex_);
-    if (revision != roots_revision_) {
-      active_roots_completion_ = {};
-      co_return false;
-    }
     try {
-      asset_loader_->ClearMounts();
-      path_resolver_->ClearMounts();
-      for (const auto& root : roots) {
-        asset_loader_->AddLooseCookedRoot(root);
-        path_resolver_->AddLooseCookedRoot(root);
+      // New scene requests wait until this mutation phase finishes. Source and
+      // resolver preparation perform their filesystem work on the worker pool.
+      co_await asset_loader_->WaitForPendingLoadsAsync();
+      const auto platform = engine_->GetPlatformShared();
+      if (!platform || !platform->HasThreads()) {
+        throw std::logic_error("Content mount preparation requires platform workers");
       }
+      auto next_resolver = co_await platform->Threads().Run([paths = roots] {
+        auto next = std::make_unique<content::VirtualPathResolver>();
+        for (const auto& path : paths) {
+          next->AddLooseCookedRoot(path);
+        }
+        return next;
+      });
+      std::vector<std::filesystem::path> paths;
+      paths.reserve(roots.size());
+      for (const auto& root : roots) {
+        paths.emplace_back(root);
+      }
+      auto prepared = co_await asset_loader_->PrepareLooseCookedRootsAsync(std::move(paths));
+      co_await asset_loader_->WaitForPendingLoadsAsync();
+      std::lock_guard lock(roots_mutex_);
+      if (revision != roots_revision_) {
+        throw content::OperationCancelledException("Cooked root request was superseded");
+      }
+      retirement.emplace(asset_loader_->CommitPreparedMounts(std::move(prepared)));
+      path_resolver_->Swap(*next_resolver);
+      superseded = std::move(active_roots_completion_);
+      active_roots_completion_ = std::move(complete);
+    } catch (const co::TaskCancelledException&) {
+      throw;
+    } catch (const content::OperationCancelledException&) {
+      co_return false;
     } catch (const std::exception& error) {
-      if (active_roots_completion_) {
-        auto complete = std::move(active_roots_completion_);
+      if (complete) {
         complete(false, error.what());
       }
       LOG_F(ERROR, "Cooked roots could not be refreshed: {}", error.what());
       co_return false;
     }
+    // Both owners are visible before any eviction subscriber can reload.
+    retirement->Finish();
     co_return true;
   }
 
   void EditorModule::ReplaceCookedRoots(std::vector<std::string> roots,
     std::function<void(bool, std::string)> complete) {
-    std::lock_guard lock(roots_mutex_);
-    mounted_roots_ = std::move(roots);
-    pending_roots_completion_ = std::move(complete);
-    ++roots_revision_;
-    roots_dirty_ = true;
+    std::function<void(bool, std::string)> superseded;
+    {
+      std::lock_guard lock(roots_mutex_);
+      mounted_roots_ = std::move(roots);
+      superseded = std::move(pending_roots_completion_);
+      pending_roots_completion_ = std::move(complete);
+      ++roots_revision_;
+      roots_dirty_ = true;
+    }
   }
 
   void EditorModule::AddLooseCookedRoot(std::string_view path) {
@@ -1279,10 +1325,11 @@ namespace oxygen::interop::module {
 
   void EditorModule::ClearCookedRoots() {
     LOG_F(INFO, "EditorModule::ClearCookedRoots: clearing all mounted roots");
+    std::function<void(bool, std::string)> superseded;
     try {
       std::lock_guard lock(roots_mutex_);
       mounted_roots_.clear();
-      pending_roots_completion_ = {};
+      superseded = std::move(pending_roots_completion_);
       ++roots_revision_;
       roots_dirty_ = true;
     } catch (const std::exception& e) {
