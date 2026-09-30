@@ -1,5 +1,20 @@
 # Geometry Pipeline (v2)
 
+Read [material-slot provenance](#material-slot-provenance) and
+[buffer ownership](#buffer-ownership) for source and cooked identity rules.
+
+## Buffer ownership
+
+Vertex, index and skinning buffer indices belong to the geometry's own cooked
+root. Geometry descriptors may reference existing `.obuf` sidecars in that root;
+foreign-root sidecars are rejected with `geometry.buffer.foreign_root`. Copying
+their numeric indices would address unrelated buffers in the destination.
+
+Reuse a library's geometry asset when sharing a complete mesh. To create new
+geometry from external source data, import its raw buffers into the destination
+root. Ordinary glTF/FBX import and library geometry references retain these
+workflows. Cross-root raw-buffer borrowing is not an authoring capability.
+
 ## Material-slot provenance
 
 Adapters preserve source declarations independently of default material keys.

@@ -84,6 +84,8 @@ size/digest and original metadata, or to explicit presence/absence probes.
 Resource naming continues to use authored paths. Reads use captured files;
 verification never substitutes live originals. Undeclared reads invalidate the
 operation even when a texture importer recovers with a placeholder.
+Captured absence and directory facts reproduce the native file error so optional
+texture recovery remains available. Positive probes carry no byte permission.
 `ParserRead` scopes synchronous glTF reads through the same observer.
 Cooked asset references use the separate cooked reader and mount resolution.
 Verification checks consumed captures only, reuses full-read hashes and qualifies

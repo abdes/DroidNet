@@ -22,6 +22,7 @@
 #include <variant>
 #include <vector>
 
+#include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
@@ -221,14 +222,14 @@ namespace {
       co_return std::nullopt;
     }
 
-    auto matches = std::vector<std::filesystem::path> {};
+    auto matches = std::vector<observer_ptr<const MountedInspection>> {};
     for (auto it = context.mounts.rbegin(); it != context.mounts.rend(); ++it) {
       const auto descriptor_path = it->root / std::filesystem::path(relpath);
       auto ec = std::error_code {};
       if (!std::filesystem::exists(descriptor_path, ec)) {
         continue;
       }
-      matches.push_back(descriptor_path);
+      matches.emplace_back(&*it);
     }
 
     if (matches.size() > 1U) {
@@ -242,7 +243,20 @@ namespace {
     }
 
     if (!matches.empty()) {
-      const auto& descriptor_path = matches.front();
+      const auto& matched = *matches.front();
+      if (base::PathIdentityKey(std::filesystem::weakly_canonical(matched.root))
+        != base::PathIdentityKey(
+          std::filesystem::weakly_canonical(context.session.CookedRoot()))) {
+        AddDiagnostic(context.session, context.request, ImportSeverity::kError,
+          "geometry.buffer.foreign_root",
+          "Raw geometry buffers must belong to the geometry's cooked root. "
+          "Reference the library geometry asset, or import the buffer source "
+          "into this root.",
+          std::move(object_path));
+        co_return std::nullopt;
+      }
+      const auto descriptor_path
+        = matched.root / std::filesystem::path(relpath);
       const auto read_start = std::chrono::steady_clock::now();
       const auto read_result
         = co_await context.reader->ReadFile(descriptor_path);

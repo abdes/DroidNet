@@ -779,6 +779,29 @@ namespace {
     EXPECT_EQ(reader_.metadata_reads, 0U);
     EXPECT_EQ(reader_.content_reads, 0U);
   }
+
+  NOLINT_TEST_F(
+    ImportSourceSnapshotTest, CapturedDirectoryReadPreservesFallback)
+  {
+    auto input = CapturedFile();
+    input.file.reset();
+    input.metadata = FileInfo {
+      .size = 0U, .last_modified = {}, .is_directory = true, .is_symlink = false
+    };
+    auto mapped
+      = detail::ImportSourceSnapshot(reader_, pool_, CaptureMap(input));
+    co::Run(loop_, [&] -> co::Co<> {
+      const auto read = co_await mapped.ReadFile(source_);
+      if (read.has_value()) {
+        ADD_FAILURE() << "A captured directory must not provide file bytes";
+        co_return;
+      }
+      EXPECT_EQ(read.error().code, FileError::kIsDirectory);
+      co_await mapped.Verify();
+    });
+    EXPECT_EQ(reader_.metadata_reads, 0U);
+    EXPECT_EQ(reader_.content_reads, 0U);
+  }
   NOLINT_TEST_F(ImportSourceSnapshotTest, CapturedMetadataFailurePreservesCause)
   {
     const auto input = CapturedFile();

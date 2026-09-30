@@ -564,7 +564,7 @@ NOLINT_TEST(
 }
 
 NOLINT_TEST(GeometryDescriptorImportJobTest,
-  ResolvesPreCookedBufferSidecarsFromMountedRoot)
+  ResolvesLocalBuffersAndRejectsForeignRootIndices)
 {
   const auto root = MakeTempCookedRoot("pre_cooked_buffer_sidecars");
   const auto source_dir = root / "Sources";
@@ -764,6 +764,30 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
   }
   ASSERT_TRUE(std::filesystem::exists(
     cooked_root / std::filesystem::path(*geometry_relpath)));
+
+  const auto other_root = root / "other-cooked";
+  auto other_descriptor = buffer_descriptor;
+  other_descriptor.at("buffers").at(0).at("virtual_path")
+    = "/.cooked/Resources/Buffers/other_vertices.obuf";
+  other_descriptor.at("buffers").at(1).at("virtual_path")
+    = "/.cooked/Resources/Buffers/other_indices.obuf";
+  auto other_vertices = vb_bytes;
+  other_vertices.front() = std::byte { 0x7F };
+  WriteBytesFile(vb_source, std::span<const std::byte>(other_vertices));
+  const auto other_buffers = SubmitAndWait(service,
+    MakeBufferContainerRequest(
+      buffer_manifest_path, other_root, other_descriptor));
+  ASSERT_TRUE(other_buffers.success);
+
+  // Both roots have populated buffer tables, but only the foreign root owns
+  // the requested sidecars. Its numeric indices cannot identify local bytes.
+  const auto rejected = SubmitAndWait(service,
+    MakeGeometryRequest(
+      geometry_path, other_root, geometry_descriptor, { cooked_root }));
+  EXPECT_FALSE(rejected.success);
+  EXPECT_EQ(rejected.geometry_written, 0U);
+  EXPECT_TRUE(
+    HasDiagnosticCode(rejected.diagnostics, "geometry.buffer.foreign_root"));
 }
 
 NOLINT_TEST(GeometryDescriptorImportJobTest,
@@ -924,7 +948,7 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
 }
 
 NOLINT_TEST(GeometryDescriptorImportJobTest,
-  ResolvesBufferSidecarsFromAdditionalCookedContextRoot)
+  RejectsBufferSidecarsFromAdditionalCookedContextRoot)
 {
   const auto main_root = MakeTempCookedRoot("resolve_from_context_root_main");
   const auto context_root = MakeTempCookedRoot("resolve_from_context_root_ctx");
@@ -1009,10 +1033,10 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
   const auto geometry_report = SubmitAndWait(service,
     MakeGeometryRequest(geometry_path, cooked_root, geometry_descriptor,
       { context_cooked_root }));
-  EXPECT_TRUE(geometry_report.success);
-  EXPECT_EQ(geometry_report.geometry_written, 1U);
-  EXPECT_FALSE(HasDiagnosticCode(
-    geometry_report.diagnostics, "geometry.buffer.sidecar_missing"));
+  EXPECT_FALSE(geometry_report.success);
+  EXPECT_EQ(geometry_report.geometry_written, 0U);
+  EXPECT_TRUE(HasDiagnosticCode(
+    geometry_report.diagnostics, "geometry.buffer.foreign_root"));
 }
 
 NOLINT_TEST(GeometryDescriptorImportJobTest,

@@ -261,6 +261,10 @@ auto ImportSourceSnapshot::ReadSource(
     co_return Err(MakeFileError(
       path, FileError::kNotFound, "Source was absent when captured"));
   }
+  if (input->metadata.has_value() && input->metadata->is_directory) {
+    co_return Err(MakeFileError(
+      path, FileError::kIsDirectory, "Source was a directory when captured"));
+  }
   if (!input->file.has_value()) {
     Invalidate();
     throw std::runtime_error(
