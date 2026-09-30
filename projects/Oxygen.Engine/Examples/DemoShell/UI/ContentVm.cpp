@@ -1071,8 +1071,9 @@ auto ContentVm::TryResolvePendingSceneSelection() -> void
         && nostd::to_string(scene.key) != selection.scene_key) {
         continue;
       }
-      if (!selection.scene_name.empty() && scene.name != selection.scene_name
-        && !selection.scene_key.empty()) {
+      if (selection.scene_key.empty()
+        && (selection.scene_name.empty()
+          || scene.name != selection.scene_name)) {
         continue;
       }
       match = scene;

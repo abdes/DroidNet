@@ -118,6 +118,10 @@ key, or substring.
 - Without `--scene`, the UI can restore its last scene. If none loads, the app
   runs with a fallback scene/camera. That is not proof of a content-scene load.
 
+Saved selections resolve by asset key within their recorded source. Display-label
+changes do not invalidate that identity; selections without a key require an
+exact name match.
+
 `--scene` also seeds these startup CVars to `true`:
 `vtx.local_fog.enable`, `vtx.local_fog.render_into_volumetric_fog`,
 `vtx.volumetric_fog.directional_shadows`, and

@@ -10,6 +10,7 @@
 #include <future>
 #include <optional>
 #include <stdexcept>
+#include <string>
 #include <system_error>
 #include <vector>
 
@@ -17,14 +18,23 @@
 #include "DemoShell/Services/FileBrowserService.h"
 #include "DemoShell/UI/ContentVm.h"
 
+#include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Base/Uuid.h>
+#include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/RetainedModelImport.h>
 #include <Oxygen/Cooker/Import/SceneImportSettings.h>
+#include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Testing/GTest.h>
+
+namespace oxygen::engine::internal {
+struct EngineTagFactory {
+  static auto Get() noexcept -> EngineTag { return EngineTag {}; }
+};
+} // namespace oxygen::engine::internal
 
 namespace oxygen::examples::testing {
 namespace {
@@ -35,6 +45,7 @@ namespace {
     std::vector<std::filesystem::path> paks {};
     std::vector<std::filesystem::path> indices {};
     std::vector<std::filesystem::path> records {};
+    std::optional<ContentActiveSceneSelection> active_scene {};
 
     auto GetExplorerSettings() const -> ContentExplorerSettings override
     {
@@ -73,7 +84,13 @@ namespace {
     auto GetActiveSceneSelection() const
       -> std::optional<ContentActiveSceneSelection> override
     {
-      return std::nullopt;
+      return active_scene;
+    }
+    auto SetActiveSceneSelection(
+      const std::optional<ContentActiveSceneSelection>& selection)
+      -> void override
+    {
+      active_scene = selection;
     }
   };
 
@@ -221,5 +238,73 @@ namespace {
     EXPECT_EQ(settings_.records, std::vector { record_ });
   }
 
+  NOLINT_TEST_F(ContentVmTest, RestoresMatchingKeyDespiteChangedDisplayName)
+  {
+    content::AssetLoader loader(engine::internal::EngineTagFactory::Get());
+    loader.AddLooseCookedRoot(generation_);
+    const auto scenes = loader.EnumerateMountedScenes();
+    ASSERT_EQ(scenes.size(), 1U);
+    const auto& scene = scenes.front();
+    settings_.active_scene = ContentActiveSceneSelection {
+      .scene_name = "Previous display label",
+      .scene_key = nostd::to_string(scene.scene_key),
+      .source_path = generation_ / "container.index.bin",
+      .source_is_pak = false,
+      .import_record_path = {},
+    };
+    ui::ContentVm vm(observer_ptr { &settings_ }, observer_ptr { &browser_ },
+      observer_ptr { &loader });
+    auto requested = std::vector<ui::SceneEntry> {};
+    vm.SetOnSceneLoadRequested(
+      [&](const auto& entry) { requested.push_back(entry); });
+    vm.RestorePersistedLibraryState();
+    ASSERT_EQ(requested.size(), 1U);
+    EXPECT_EQ(requested.front().key, scene.scene_key);
+    EXPECT_EQ(requested.front().name, scene.virtual_path);
+  }
+
+  NOLINT_TEST_F(ContentVmTest, NameOnlySelectionDoesNotLoadAnotherScene)
+  {
+    content::AssetLoader loader(engine::internal::EngineTagFactory::Get());
+    loader.AddLooseCookedRoot(generation_);
+    settings_.active_scene = ContentActiveSceneSelection {
+      .scene_name = "Missing scene",
+      .scene_key = {},
+      .source_path = generation_ / "container.index.bin",
+      .source_is_pak = false,
+      .import_record_path = {},
+    };
+    ui::ContentVm vm(observer_ptr { &settings_ }, observer_ptr { &browser_ },
+      observer_ptr { &loader });
+    vm.SetOnSceneLoadRequested([](const auto&) {
+      ADD_FAILURE() << "The requested name does not exist";
+    });
+    vm.RestorePersistedLibraryState();
+    EXPECT_FALSE(vm.IsSceneLoading());
+  }
+
+  NOLINT_TEST_F(ContentVmTest, RestoresNameOnlySelectionWhenNameMatches)
+  {
+    content::AssetLoader loader(engine::internal::EngineTagFactory::Get());
+    loader.AddLooseCookedRoot(generation_);
+    const auto scenes = loader.EnumerateMountedScenes();
+    ASSERT_EQ(scenes.size(), 1U);
+    const auto& scene = scenes.front();
+    settings_.active_scene = ContentActiveSceneSelection {
+      .scene_name = scene.virtual_path,
+      .scene_key = {},
+      .source_path = generation_ / "container.index.bin",
+      .source_is_pak = false,
+      .import_record_path = {},
+    };
+    ui::ContentVm vm(observer_ptr { &settings_ }, observer_ptr { &browser_ },
+      observer_ptr { &loader });
+    auto requested = std::vector<ui::SceneEntry> {};
+    vm.SetOnSceneLoadRequested(
+      [&](const auto& entry) { requested.push_back(entry); });
+    vm.RestorePersistedLibraryState();
+    ASSERT_EQ(requested.size(), 1U);
+    EXPECT_EQ(requested.front().key, scene.scene_key);
+  }
 } // namespace
 } // namespace oxygen::examples::testing
