@@ -113,6 +113,32 @@ $null = Invoke-BuildForTarget probe $selection
         calls = [json.loads(line) for line in (self.root / "calls.jsonl").read_text().splitlines()]
         self.assertEqual(calls, [["--build", "--preset", "conan-ninja-release", "--target", "probe"]] * 2)
 
+    def test_ambiguous_target_cancels_on_empty_input_or_eof(self):
+        root = self.tree("ninja")
+        reply = root / ".cmake/api/v1/reply"
+        reply.mkdir(parents=True)
+        targets = []
+        for name in ("Probe.One", "Probe.Two"):
+            filename = f"target-{name}.json"
+            (reply / filename).write_text(json.dumps({"name": name}), encoding="utf-8")
+            targets.append({"name": name, "jsonFile": filename})
+        (reply / "model.json").write_text(json.dumps({"configurations": [{"name": "Debug", "targets": targets}]}), encoding="utf-8")
+        (reply / "index-001.json").write_text(json.dumps({"objects": [{"kind": "codemodel", "version": {"major": 2}, "jsonFile": "model.json"}]}), encoding="utf-8")
+        for response in ("$null", "''"):
+            with self.subTest(response=response):
+                self.command("""
+. (Join-Path $PSScriptRoot 'tools/cli/oxy-targets.ps1')
+$script:prompts = 0
+function global:Read-Host {
+    $script:prompts++
+    if ($script:prompts -gt 1) { throw 'Repeated a target prompt after input ended' }
+    return RESPONSE
+}
+$result = Resolve-TargetName Probe (Join-Path $PSScriptRoot 'out/build-ninja')
+if ($null -ne $result) { throw 'Cancellation selected a build target' }
+if ($script:prompts -ne 1) { throw 'Did not exercise ambiguous selection' }
+""".replace("RESPONSE", response))
+
     def test_unconfigured_tree_requires_explicit_setup(self):
         self.tree("ninja")
         output = self.command("""

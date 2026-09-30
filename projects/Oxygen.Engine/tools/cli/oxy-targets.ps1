@@ -730,8 +730,8 @@ function Resolve-TargetName($targetPattern, $buildRoot, [switch]$NoInteractive) 
 
   do {
     Write-Host "→ " -ForegroundColor Cyan -NoNewline
-    $choice = Read-Host "Select target (1-$([Math]::Min($candidates.Count, 10)), 0 to cancel)"
-    if ($choice -eq "0") {
+    $choice = Read-Host "Select target (1-$([Math]::Min($candidates.Count, 10)), 0 or Enter to cancel)"
+    if ([string]::IsNullOrWhiteSpace($choice) -or $choice -eq "0") {
       Write-LogDim "Target selection cancelled by user"
       return $null
     }
