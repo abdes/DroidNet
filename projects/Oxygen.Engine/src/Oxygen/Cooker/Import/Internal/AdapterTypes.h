@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <span>
 #include <stop_token>
@@ -28,6 +29,12 @@ class ImportSourceSnapshot;
 }
 
 namespace oxygen::content::import::adapters {
+
+//! Metadata analysis omits external geometry payloads and raw-layout witnesses.
+enum class ModelParseMode : uint8_t {
+  kMetadata,
+  kGeometry,
+};
 
 //! Inputs shared by format adapters.
 struct AdapterInput final {

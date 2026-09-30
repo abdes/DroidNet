@@ -198,4 +198,22 @@ NOLINT_TEST_F(
     errors.str(), testing::HasSubstr("model import requires retained"));
 }
 
+NOLINT_TEST_F(SceneImportRequestBuilderTest,
+  PreparesObservedProvenanceWithoutDestinationOrFileIo)
+{
+  auto settings = Settings();
+  settings.cooked_root.clear();
+  settings.material_slot_provenance_path = Path("not-on-disk.json").string();
+  settings.naming_policy = "normalize";
+  std::ostringstream errors;
+  const auto request = settings.Prepare(
+    ImportFormat::kGltf, RetainedProvenance().dump(), errors);
+  ASSERT_TRUE(request.has_value()) << errors.str();
+  EXPECT_FALSE(request->cooked_root.has_value());
+  EXPECT_EQ(request->source_path, std::filesystem::path(settings.source_path));
+  ASSERT_NE(request->material_slot_provenance, nullptr);
+  EXPECT_EQ(request->material_slot_provenance->SourceIdentity().ToString(),
+    kSourceIdentity);
+}
+
 } // namespace

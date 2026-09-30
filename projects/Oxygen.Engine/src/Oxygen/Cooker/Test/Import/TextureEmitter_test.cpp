@@ -221,6 +221,24 @@ protected:
 
 //=== Basic Emission Tests ===------------------------------------------------//
 
+NOLINT_TEST_F(
+  TextureEmitterTest, ExplicitFallbackIsAvailableBeforeAnyUserTexture)
+{
+  TextureEmitter emitter(*writer_, TextureAggregator(), MakeEmitterConfig());
+  EXPECT_FALSE(
+    emitter.TryGetDescriptor(oxygen::data::pak::core::kFallbackResourceIndex)
+      .has_value());
+  emitter.EnsureFallbackTexture();
+  EXPECT_TRUE(
+    emitter.TryGetDescriptor(oxygen::data::pak::core::kFallbackResourceIndex)
+      .has_value());
+  const auto size = emitter.GetStats().data_file_size;
+  EXPECT_GT(size, 0U);
+  emitter.EnsureFallbackTexture();
+  EXPECT_EQ(emitter.GetStats().data_file_size, size);
+  EXPECT_TRUE(co::Run(*loop_, emitter.Finalize()));
+}
+
 //! Verify the first emitted user texture gets index 1.
 NOLINT_TEST_F(TextureEmitterTest, EmitSingleTextureAssignsFirstIndex)
 {

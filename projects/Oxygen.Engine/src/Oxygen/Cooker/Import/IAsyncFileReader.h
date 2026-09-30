@@ -14,6 +14,7 @@
 
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Cooker/Import/FileError.h>
+#include <Oxygen/Cooker/Import/FileInfo.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/OxCo/Co.h>
 
@@ -43,24 +44,6 @@ struct ReadOptions {
    When non-zero, the returned buffer will be aligned to this boundary.
   */
   size_t alignment = 0;
-};
-
-//! File metadata information.
-struct FileInfo {
-  //! File size in bytes.
-  uint64_t size = 0;
-
-  //! Last modification time.
-  std::filesystem::file_time_type last_modified {};
-
-  //! True if path is a directory.
-  bool is_directory = false;
-
-  //! True if path is a symbolic link.
-  bool is_symlink = false;
-
-  //! Metadata observations compare their returned values exactly.
-  auto operator==(const FileInfo&) const -> bool = default;
 };
 
 //! Async file reader interface.

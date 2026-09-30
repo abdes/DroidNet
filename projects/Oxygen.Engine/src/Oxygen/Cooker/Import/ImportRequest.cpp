@@ -7,11 +7,13 @@
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <system_error>
 
 #include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 
 namespace oxygen::content::import {
 
@@ -35,6 +37,36 @@ auto ImportRequest::GetSceneName() const -> std::string
 {
   const auto stem = source_path.stem().string();
   return stem.empty() ? "Scene" : stem;
+}
+
+auto ImportRequest::GetTextureDescriptorRelPath() const -> std::string
+{
+  if (!texture_virtual_path.empty()) {
+    auto relative = std::string {};
+    if (!internal::IsCanonicalVirtualPath(texture_virtual_path)
+      || !internal::TryVirtualPathToRelPath(
+        *this, texture_virtual_path, relative)
+      || std::filesystem::path(relative).extension() != ".otex") {
+      throw std::invalid_argument(
+        "Texture virtual_path must name an .otex descriptor within its mount: "
+        + texture_virtual_path);
+    }
+    return relative;
+  }
+  if (job_name.has_value() && !job_name->empty()) {
+    return loose_cooked_layout.TextureDescriptorRelPath(*job_name, *job_name);
+  }
+  auto normalized = source_path.lexically_normal();
+  normalized.make_preferred();
+  auto identity = normalized.generic_string();
+  auto name = source_path.stem().string();
+  if (name.empty()) {
+    name = identity;
+  }
+  if (identity.empty()) {
+    identity = name;
+  }
+  return loose_cooked_layout.TextureDescriptorRelPath(name, identity);
 }
 
 auto ImportRequest::ResolveCookedRoot() const -> std::filesystem::path

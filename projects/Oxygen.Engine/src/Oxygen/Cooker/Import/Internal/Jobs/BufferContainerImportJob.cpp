@@ -9,6 +9,7 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include <nlohmann/json.hpp>
 
@@ -17,6 +18,7 @@
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportProgress.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
+#include <Oxygen/Cooker/Import/Internal/BufferSource.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/BufferContainerImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/BufferImportSubmitter.h>
@@ -123,8 +125,16 @@ auto BufferContainerImportJob::ExecuteAsync() -> co::Co<ImportReport>
   const auto buffer_chunks = descriptor_doc.contains("buffers")
     ? descriptor_doc.at("buffers")
     : nlohmann::json {};
-  const auto submission = co_await submitter.SubmitBufferChunks(
-    buffer_chunks, Request().source_path.parent_path(), pipeline);
+  auto diagnostics = std::vector<ImportDiagnostic> {};
+  const auto sources = internal::BufferSource::FromDeclarations(
+    buffer_chunks, Request().source_path, diagnostics);
+  for (auto& diagnostic : diagnostics) {
+    session.AddDiagnostic(std::move(diagnostic));
+  }
+  auto submission = BufferImportSubmitter::Submission {};
+  if (sources.has_value()) {
+    submission = co_await submitter.SubmitBuffers(*sources, pipeline);
+  }
   pipeline.Close();
 
   if (submission.submitted_count == 0U) {

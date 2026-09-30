@@ -44,7 +44,7 @@ class IAsyncFileWriter;
 
  - Texture resource index `data::pak::core::kFallbackResourceIndex` is reserved
  for the fallback texture.
- - The fallback entry is ensured on the first call to `Emit()` or
+ - The fallback entry is ensured by `EnsureFallbackTexture()`, `Emit()` or
     `Finalize()`.
 
  ### Design Principles
@@ -177,6 +177,10 @@ public:
   OXGN_COOK_NDAPI auto Emit(
     CookedTexturePayload cooked, std::string_view signature_salt) -> uint32_t;
 
+  //! Ensure the reserved fallback payload and descriptor before publishing its
+  //! index.
+  OXGN_COOK_API auto EnsureFallbackTexture() -> void;
+
   //=== State Query
   //===-------------------------------------------------------//
 
@@ -232,7 +236,6 @@ private:
   auto UpdateDataFileSize(uint64_t new_size) -> void;
   auto RecordEmissionSignature(const std::string& signature) -> void;
 
-  auto EnsureFallbackTexture() -> void;
   auto CreateFallbackPayload() const -> CookedTexturePayload;
   auto ToPakDescriptor(const CookedTexturePayload& cooked,
     uint64_t data_offset) const -> TextureResourceDesc;

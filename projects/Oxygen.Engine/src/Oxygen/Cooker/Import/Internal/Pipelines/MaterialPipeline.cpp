@@ -8,7 +8,6 @@
 #include <array>
 #include <atomic>
 #include <chrono>
-#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -25,6 +24,7 @@
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
+#include <Oxygen/Cooker/Import/Internal/MaterialSource.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MaterialPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/StringUtils.h>
@@ -51,8 +51,6 @@ namespace {
   constexpr size_t kShaderDefinesMax
     = sizeof(data::pak::render::ShaderReferenceDesc::defines);
 
-  constexpr uint32_t kMaxShaderStages = 32;
-
   struct MaterialUvTransformDesc {
     float uv_scale[2] = { 1.0F, 1.0F };
     float uv_offset[2] = { 0.0F, 0.0F };
@@ -72,15 +70,6 @@ namespace {
     bool canceled = false;
     bool has_error = false;
   };
-
-  [[nodiscard]] auto IsShaderTypeValid(const uint8_t shader_type) -> bool
-  {
-    if (shader_type == 0) {
-      return false;
-    }
-    constexpr auto max_type = static_cast<uint32_t>(ShaderType::kMaxShaderType);
-    return static_cast<uint32_t>(shader_type) <= max_type;
-  }
 
   [[nodiscard]] auto ShaderStageBit(const uint8_t shader_type) -> uint32_t
   {
@@ -182,63 +171,8 @@ namespace {
   {
     ShaderBuildResult result;
 
-    if (shader_requests.empty()) {
-      diagnostics.push_back(MakeErrorDiagnostic(
-        "material.shader_stages_missing",
-        "Material requires at least one shader stage", source_id, object_path));
-      result.has_error = true;
-      return result;
-    }
-
-    if (shader_requests.size() > kMaxShaderStages) {
-      diagnostics.push_back(MakeErrorDiagnostic("material.shader_stage_count",
-        "Shader stage count exceeds 32", source_id, object_path));
-      result.has_error = true;
-      return result;
-    }
-
-    std::array<bool, kMaxShaderStages> seen {};
     for (const auto& request : shader_requests) {
-      if (!IsShaderTypeValid(request.shader_type)) {
-        diagnostics.push_back(
-          MakeErrorDiagnostic("material.shader_stage_invalid",
-            "Shader type is invalid", source_id, object_path));
-        result.has_error = true;
-        continue;
-      }
-
-      const auto stage_bit = ShaderStageBit(request.shader_type);
-      const auto stage_index = static_cast<size_t>(request.shader_type - 1U);
-      if (stage_index >= seen.size()) {
-        diagnostics.push_back(
-          MakeErrorDiagnostic("material.shader_stage_invalid",
-            "Shader type is out of range", source_id, object_path));
-        result.has_error = true;
-        continue;
-      }
-
-      if (seen.at(stage_index)) {
-        diagnostics.push_back(MakeErrorDiagnostic(
-          "material.shader_stage_duplicate",
-          "Shader type is duplicated in request list", source_id, object_path));
-        result.has_error = true;
-        continue;
-      }
-
-      if (request.source_path.empty() || request.entry_point.empty()) {
-        diagnostics.push_back(MakeErrorDiagnostic("material.shader_ref_invalid",
-          "Shader source_path and entry_point must be set", source_id,
-          object_path));
-        result.has_error = true;
-        continue;
-      }
-
-      seen.at(stage_index) = true;
-      result.shader_stages |= stage_bit;
-    }
-
-    if (result.has_error) {
-      return result;
+      result.shader_stages |= ShaderStageBit(request.shader_type);
     }
 
     std::ranges::sort(shader_requests,
@@ -266,14 +200,14 @@ namespace {
   }
 
   [[nodiscard]] auto BuildMaterialUvTransformDesc(
-    const std::vector<const MaterialTextureBinding*>& bindings)
-    -> MaterialUvTransformDesc
+    const MaterialTextureBindings& textures) -> MaterialUvTransformDesc
   {
     MaterialUvTransformDesc desc {};
 
     const MaterialTextureBinding* reference = nullptr;
-    for (const auto* binding : bindings) {
-      if (binding == nullptr || !binding->assigned) {
+    for (const auto& slot : MaterialSource::TextureSlots()) {
+      const auto* binding = &(textures.*slot.binding);
+      if (!binding->assigned) {
         continue;
       }
       reference = binding;
@@ -355,17 +289,6 @@ namespace {
     desc.ambient_occlusion
       = data::Unorm16 { Normalize01(inputs.ambient_occlusion) };
 
-    if (std::ranges::any_of(
-          inputs.emissive_factor, [](const float value) -> bool {
-            return !std::isfinite(value) || value < 0.0F
-              || value > data::pak::render::kMaxMaterialEmissiveFactor;
-          })) {
-      diagnostics.push_back(
-        MakeErrorDiagnostic("material.emissive_factor_range",
-          "Emission must contain finite channels in [0,65504]", source_id,
-          object_path));
-      return;
-    }
     desc.emissive_factor[0] = inputs.emissive_factor[0];
     desc.emissive_factor[1] = inputs.emissive_factor[1];
     desc.emissive_factor[2] = inputs.emissive_factor[2];
@@ -415,12 +338,8 @@ namespace {
   [[nodiscard]] auto HasAnyAssignedTextures(
     const MaterialTextureBindings& textures) -> bool
   {
-    return textures.base_color.assigned || textures.normal.assigned
-      || textures.metallic.assigned || textures.roughness.assigned
-      || textures.ambient_occlusion.assigned || textures.emissive.assigned
-      || textures.specular.assigned || textures.sheen_color.assigned
-      || textures.clearcoat.assigned || textures.clearcoat_normal.assigned
-      || textures.transmission.assigned || textures.thickness.assigned;
+    return std::ranges::any_of(MaterialSource::TextureSlots(),
+      [&](const auto& slot) { return (textures.*slot.binding).assigned; });
   }
 
   auto AssignTextureIndices(const MaterialTextureBindings& textures,
@@ -486,48 +405,15 @@ namespace {
       : data::pak::core::kNoResourceIndex;
   }
 
-  [[nodiscard]] auto ResolveOrmPacked(const OrmPolicy policy,
-    const MaterialTextureBindings& textures, std::string_view source_id,
-    std::string_view object_path, std::vector<ImportDiagnostic>& diagnostics)
+  [[nodiscard]] auto ResolveOrmPacked(const MaterialSource& material)
     -> std::optional<data::pak::core::ResourceIndexT>
   {
-    const auto& metallic = textures.metallic;
-    const auto& roughness = textures.roughness;
-
-    // We primarily check if Metallic and Roughness are compatible for packing,
-    // as they are the core of the glTF PBR model (shared texture, usually).
-    // The shader flag kMaterialFlag_GltfOrmPacked implies M is in Blue and R
-    // is in Green. Even if AO is separate or missing, we must enable this flag
-    // to read M/R from the correct channels.
-    const bool mr_assigned = metallic.assigned && roughness.assigned;
-    const bool mr_same_source = metallic.source_id == roughness.source_id
-      && !metallic.source_id.empty();
-    const bool mr_same_uv_set = metallic.uv_set == roughness.uv_set;
-    const auto& mr_uv_a = metallic.uv_transform;
-    const auto& mr_uv_b = roughness.uv_transform;
-    const bool mr_same_uv_transform = mr_uv_a.scale[0] == mr_uv_b.scale[0]
-      && mr_uv_a.scale[1] == mr_uv_b.scale[1]
-      && mr_uv_a.offset[0] == mr_uv_b.offset[0]
-      && mr_uv_a.offset[1] == mr_uv_b.offset[1]
-      && mr_uv_a.rotation_radians == mr_uv_b.rotation_radians;
-    const bool mr_same_uv = mr_same_uv_set && mr_same_uv_transform;
-
-    const bool can_pack = mr_assigned && mr_same_source && mr_same_uv;
-
-    if (policy == OrmPolicy::kForcePacked) {
-      if (!can_pack) {
-        diagnostics.push_back(MakeErrorDiagnostic("material.orm_policy",
-          "ForcePacked requires metallic/roughness to share source and UV",
-          source_id, object_path));
-        return std::nullopt;
-      }
-      return data::pak::core::ResourceIndexT { metallic.index };
+    if (material.orm_policy != OrmPolicy::kForceSeparate
+      && material.CanPackOrm()) {
+      return data::pak::core::ResourceIndexT {
+        material.textures.metallic.index
+      };
     }
-
-    if (policy == OrmPolicy::kAuto && can_pack) {
-      return data::pak::core::ResourceIndexT { metallic.index };
-    }
-
     return std::nullopt;
   }
 
@@ -588,45 +474,48 @@ namespace {
     co_return hash;
   }
 
-  [[nodiscard]] auto BuildMaterialPayload(
-    const MaterialPipeline::WorkItem& item,
+  [[nodiscard]] auto BuildMaterialPayload(const MaterialSource& material,
+    const std::string_view source_id, const std::stop_token stop_token,
     std::vector<ImportDiagnostic> diagnostics) -> BuildOutcome
   {
-    DLOG_F(1, "Building material payload: {}", item.material_name);
+    DLOG_F(1, "Building material payload: {}", material.name);
     BuildOutcome outcome {
       .diagnostics = std::move(diagnostics),
     };
 
-    if (item.stop_token.stop_requested()) {
+    if (stop_token.stop_requested()) {
       outcome.canceled = true;
       return outcome;
     }
 
-    const auto object_path = std::string_view(item.material_name);
+    if (!material.Validate(source_id, outcome.diagnostics)) {
+      outcome.has_error = true;
+      return outcome;
+    }
+    const auto object_path = std::string_view(material.name);
 
     data::pak::render::MaterialAssetDesc desc {};
     desc.header.asset_type = static_cast<uint8_t>(data::AssetType::kMaterial);
     desc.header.version = data::pak::render::kMaterialAssetVersion;
     util::TruncateAndNullTerminate(
-      desc.header.name, std::size(desc.header.name), item.material_name);
+      desc.header.name, std::size(desc.header.name), material.name);
 
     desc.flags = data::pak::render::kMaterialFlag_NoTextureSampling;
-    if (item.inputs.double_sided) {
+    if (material.inputs.double_sided) {
       desc.flags |= data::pak::render::kMaterialFlag_DoubleSided;
     }
-    if (item.inputs.unlit) {
+    if (material.inputs.unlit) {
       desc.flags |= data::pak::render::kMaterialFlag_Unlit;
     }
 
-    const auto resolved_domain = ResolveMaterialDomain(
-      item.material_domain, item.alpha_mode, desc.flags);
+    const auto resolved_domain
+      = ResolveMaterialDomain(material.domain, material.alpha_mode, desc.flags);
     desc.material_domain = static_cast<uint8_t>(resolved_domain);
 
-    ApplyMaterialInputs(item.inputs, item.alpha_mode, item.source_id,
+    ApplyMaterialInputs(material.inputs, material.alpha_mode, source_id,
       object_path, outcome.diagnostics, desc);
 
-    const auto orm_index = ResolveOrmPacked(item.orm_policy, item.textures,
-      item.source_id, object_path, outcome.diagnostics);
+    const auto orm_index = ResolveOrmPacked(material);
     const bool orm_packed = orm_index.has_value();
 
     if (HasErrorDiagnostic(outcome.diagnostics)) {
@@ -639,33 +528,18 @@ namespace {
     }
 
     if ([[maybe_unused]] const auto any_textures
-      = HasAnyAssignedTextures(item.textures)) {
+      = HasAnyAssignedTextures(material.textures)) {
       desc.flags &= ~data::pak::render::kMaterialFlag_NoTextureSampling;
     } else {
       DLOG_F(INFO,
         "Material '{}' has no assigned textures; using scalar fallbacks",
-        item.source_id);
+        source_id);
     }
 
-    AssignTextureIndices(item.textures, orm_packed,
+    AssignTextureIndices(material.textures, orm_packed,
       orm_packed ? *orm_index : data::pak::core::kNoResourceIndex, desc);
 
-    const std::vector bindings {
-      &item.textures.base_color,
-      &item.textures.normal,
-      &item.textures.metallic,
-      &item.textures.roughness,
-      &item.textures.ambient_occlusion,
-      &item.textures.emissive,
-      &item.textures.specular,
-      &item.textures.sheen_color,
-      &item.textures.clearcoat,
-      &item.textures.clearcoat_normal,
-      &item.textures.transmission,
-      &item.textures.thickness,
-    };
-
-    const auto uv_desc = BuildMaterialUvTransformDesc(bindings);
+    const auto uv_desc = BuildMaterialUvTransformDesc(material.textures);
     desc.uv_scale[0] = uv_desc.uv_scale[0];
     desc.uv_scale[1] = uv_desc.uv_scale[1];
     desc.uv_offset[0] = uv_desc.uv_offset[0];
@@ -673,13 +547,13 @@ namespace {
     desc.uv_rotation_radians = uv_desc.uv_rotation_radians;
     desc.uv_set = uv_desc.uv_set;
 
-    auto shader_requests = item.shader_requests;
+    auto shader_requests = material.shader_requests;
     if (shader_requests.empty()) {
       shader_requests = BuildDefaultShaderRequests(resolved_domain, desc.flags);
     }
 
-    auto shader_build = BuildShaderReferences(std::move(shader_requests),
-      item.source_id, object_path, outcome.diagnostics);
+    auto shader_build = BuildShaderReferences(
+      std::move(shader_requests), source_id, object_path, outcome.diagnostics);
     if (shader_build.has_error) {
       outcome.has_error = true;
       return outcome;
@@ -831,28 +705,29 @@ auto MaterialPipeline::Worker() -> co::Co<>
     const auto cook_start = std::chrono::steady_clock::now();
     const auto virtual_path
       = item.request.loose_cooked_layout.MaterialVirtualPath(
-        item.storage_material_name);
+        item.material.storage_name);
     const auto descriptor_relpath
       = item.request.loose_cooked_layout.MaterialDescriptorRelPath(
-        item.storage_material_name);
+        item.material.storage_name);
     const auto material_key = ResolveMaterialKey(item.request, virtual_path);
 
     BuildOutcome build_outcome;
     if (config_.use_thread_pool) {
-      auto item_copy = item;
       build_outcome = co_await thread_pool_.Run(
-        [item = std::move(item_copy)](
+        [material = item.material, source_id = item.source_id,
+          stop_token = item.stop_token](
           co::ThreadPool::CancelToken canceled) noexcept -> BuildOutcome {
           DLOG_F(1, "Build material task begin");
-          if (item.stop_token.stop_requested() || canceled) {
+          if (stop_token.stop_requested() || canceled) {
             return BuildOutcome { .canceled = true };
           }
-          return BuildMaterialPayload(item, {});
+          return BuildMaterialPayload(material, source_id, stop_token, {});
         });
     } else {
       DLOG_F(2, "Build material payload on import thread material={}",
-        item.material_name);
-      build_outcome = BuildMaterialPayload(item, {});
+        item.material.name);
+      build_outcome = BuildMaterialPayload(
+        item.material, item.source_id, item.stop_token, {});
     }
     if (build_outcome.canceled) {
       co_await ReportCancelled(std::move(item));
@@ -878,7 +753,7 @@ auto MaterialPipeline::Worker() -> co::Co<>
     if (build_outcome.bytes.empty()) {
       output.diagnostics.push_back(MakeErrorDiagnostic(
         "material.serialize_failed", "Material descriptor serialization failed",
-        item.source_id, item.material_name));
+        item.source_id, item.material.name));
       output.telemetry.cook_duration
         = MakeDuration(cook_start, std::chrono::steady_clock::now());
       NotifyFinished();

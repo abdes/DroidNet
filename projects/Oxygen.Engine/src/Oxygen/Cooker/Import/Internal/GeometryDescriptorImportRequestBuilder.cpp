@@ -5,60 +5,22 @@
 //===----------------------------------------------------------------------===//
 
 #include <filesystem>
-#include <nlohmann/json-schema.hpp>
-#include <nlohmann/json.hpp>
 #include <optional>
+#include <ostream>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 #include <Oxygen/Cooker/Import/GeometryDescriptorImportRequestBuilder.h>
-#include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
+#include <Oxygen/Cooker/Import/GeometryDescriptorImportSettings.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/Internal/GeometrySource.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/DescriptorDocument.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 
 namespace oxygen::content::import::internal {
-
-namespace {
-
-  using nlohmann::json;
-  using nlohmann::json_schema::json_validator;
-
-  auto GetGeometryDescriptorValidator() -> json_validator&
-  {
-    static auto validator = []() {
-      auto out = json_validator {};
-      out.set_root_schema(json::parse(kGeometryDescriptorSchema));
-      return out;
-    }();
-    return validator;
-  }
-
-  auto ValidateDescriptorSchema(
-    const json& descriptor_doc, std::ostream& error_stream) -> bool
-  {
-    const auto config = JsonSchemaValidationDiagnosticConfig {
-      .validation_failed_code = "geometry.descriptor.schema_validation_failed",
-      .validation_failed_prefix = "Geometry descriptor validation failed: ",
-      .validation_overflow_prefix = "Geometry descriptor validation emitted ",
-      .validator_failure_code = "geometry.descriptor.schema_validator_failure",
-      .validator_failure_prefix
-      = "Geometry descriptor schema validator failed: ",
-      .max_issues = 12,
-    };
-
-    return ValidateJsonSchemaWithDiagnostics(GetGeometryDescriptorValidator(),
-      descriptor_doc, config,
-      [&](const std::string_view code, const std::string& message,
-        const std::string& object_path) {
-        error_stream << "ERROR [" << code << "]: " << message;
-        if (!object_path.empty()) {
-          error_stream << " (" << object_path << ")";
-        }
-        error_stream << "\n";
-      });
-  }
-
-} // namespace
 
 auto BuildGeometryDescriptorRequest(
   const GeometryDescriptorImportSettings& settings, std::ostream& error_stream)
@@ -71,13 +33,23 @@ auto BuildGeometryDescriptorRequest(
 
   const auto descriptor_path
     = std::filesystem::path(settings.descriptor_path).lexically_normal();
-  const auto descriptor_doc
-    = LoadDescriptorJsonObject(descriptor_path, "geometry", error_stream);
-  if (!descriptor_doc.has_value()) {
+  const auto descriptor_text
+    = LoadDescriptorText(descriptor_path, "geometry", error_stream);
+  if (!descriptor_text.has_value()) {
     return std::nullopt;
   }
 
-  if (!ValidateDescriptorSchema(*descriptor_doc, error_stream)) {
+  auto diagnostics = std::vector<ImportDiagnostic> {};
+  const auto source = GeometrySource::FromDescriptor(
+    *descriptor_text, descriptor_path, diagnostics);
+  for (const auto& diagnostic : diagnostics) {
+    error_stream << "ERROR [" << diagnostic.code << "]: " << diagnostic.message;
+    if (!diagnostic.object_path.empty()) {
+      error_stream << " (" << diagnostic.object_path << ")";
+    }
+    error_stream << '\n';
+  }
+  if (!source.has_value()) {
     return std::nullopt;
   }
 
@@ -105,26 +77,13 @@ auto BuildGeometryDescriptorRequest(
     request.cooked_context_roots.push_back(path.lexically_normal());
   }
 
-  if (!settings.job_name.empty()) {
-    request.job_name = settings.job_name;
-  } else if (descriptor_doc->contains("name")) {
-    request.job_name = descriptor_doc->at("name").get<std::string>();
-  } else {
-    const auto stem = descriptor_path.stem().string();
-    if (!stem.empty()) {
-      request.job_name = stem;
-    }
-  }
-
-  auto with_content_hashing = settings.with_content_hashing;
-  if (descriptor_doc->contains("content_hashing")) {
-    with_content_hashing = descriptor_doc->at("content_hashing").get<bool>();
-  }
-  request.options.with_content_hashing
-    = EffectiveContentHashingEnabled(with_content_hashing);
+  request.job_name
+    = settings.job_name.empty() ? source->name : settings.job_name;
+  request.options.with_content_hashing = EffectiveContentHashingEnabled(
+    source->content_hashing.value_or(settings.with_content_hashing));
 
   request.geometry_descriptor = ImportRequest::GeometryDescriptorPayload {
-    .normalized_descriptor_json = descriptor_doc->dump(),
+    .normalized_descriptor_json = *descriptor_text,
   };
 
   return request;

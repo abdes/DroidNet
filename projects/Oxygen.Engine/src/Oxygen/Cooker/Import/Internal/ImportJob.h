@@ -114,9 +114,16 @@ protected:
   //! Ensure the request has a concrete cooked root on disk.
   OXGN_COOK_API auto EnsureCookedRoot() -> void;
 
-  //! Access the async file reader.
+  //! Read authored inputs, enforcing captured inputs when supplied.
   OXGN_COOK_NDAPI auto FileReader() const noexcept
     -> observer_ptr<IAsyncFileReader>;
+
+  //! Read derived assets resolved through the cooked-root/mount contract.
+  [[nodiscard]] auto CookedReader() const noexcept
+    -> observer_ptr<IAsyncFileReader>
+  {
+    return cooked_reader_;
+  }
 
   //! Retain the input observer while parser workers consume external data.
   [[nodiscard]] auto SourceSnapshot() const noexcept
@@ -233,6 +240,7 @@ private:
   ProgressEventCallback on_progress_;
   std::shared_ptr<co::Event> cancel_event_;
   observer_ptr<IAsyncFileReader> file_reader_;
+  observer_ptr<IAsyncFileReader> cooked_reader_;
   observer_ptr<IAsyncFileWriter> file_writer_;
   observer_ptr<co::ThreadPool> thread_pool_;
   observer_ptr<ResourceTableRegistry> table_registry_;

@@ -26,6 +26,7 @@
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
+#include <Oxygen/Cooker/Import/Internal/SceneBuild.h>
 #include <Oxygen/Cooker/Import/Naming.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/Data/AssetKey.h>
@@ -35,27 +36,6 @@
 #include <Oxygen/OxCo/ThreadPool.h>
 
 namespace oxygen::content::import {
-
-//! One environment system record for the trailing scene block.
-struct SceneEnvironmentSystem {
-  uint32_t system_type = 0;
-  std::vector<std::byte> record_bytes;
-};
-
-//! Intermediate scene build data produced by adapters.
-struct SceneBuild final {
-  std::vector<data::pak::world::NodeRecord> nodes;
-  std::vector<std::byte> strings;
-
-  std::vector<data::pak::world::RenderableRecord> renderables;
-  std::vector<data::pak::world::MaterialOverrideRecord> material_overrides;
-  std::vector<data::pak::world::LocalFogVolumeRecord> local_fog_volumes;
-  std::vector<data::pak::world::PerspectiveCameraRecord> perspective_cameras;
-  std::vector<data::pak::world::OrthographicCameraRecord> orthographic_cameras;
-  std::vector<data::pak::world::DirectionalLightRecord> directional_lights;
-  std::vector<data::pak::world::PointLightRecord> point_lights;
-  std::vector<data::pak::world::SpotLightRecord> spot_lights;
-};
 
 //! Input provided to adapter scene stage processing.
 struct SceneStageInput final {

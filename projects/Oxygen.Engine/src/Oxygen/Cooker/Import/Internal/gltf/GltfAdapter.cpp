@@ -23,6 +23,7 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -54,11 +55,16 @@
 #include <Oxygen/Cooker/Import/Internal/AdapterTypes.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSourceSnapshot.h>
 #include <Oxygen/Cooker/Import/Internal/ImportedLightSemantics.h>
+#include <Oxygen/Cooker/Import/Internal/MaterialSource.h>
 #include <Oxygen/Cooker/Import/Internal/MeshTransformBake.h>
+#include <Oxygen/Cooker/Import/Internal/ModelGeometrySource.h>
+#include <Oxygen/Cooker/Import/Internal/ModelMaterialSource.h>
+#include <Oxygen/Cooker/Import/Internal/ModelTextureSource.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MaterialPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScenePipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/TexturePipeline.h>
+#include <Oxygen/Cooker/Import/Internal/SceneBuild.h>
 #include <Oxygen/Cooker/Import/Internal/SceneNodeImportDefaults.h>
 #include <Oxygen/Cooker/Import/Internal/SourceLayoutHash.h>
 #include <Oxygen/Cooker/Import/Internal/StaticScalarSourceValidation.h>
@@ -79,6 +85,7 @@
 namespace oxygen::content::import::adapters {
 
 struct GltfAdapter::Impl final {
+  std::shared_ptr<detail::ImportSourceSnapshot> source_snapshot;
   std::shared_ptr<const cgltf_data> data_owner;
 };
 
@@ -156,6 +163,8 @@ namespace {
       return "legacy gltf";
     case cgltf_result_io_error:
       return "io error";
+    case cgltf_result_file_not_found:
+      return "file not found";
     default:
       return "unknown error";
     }
@@ -272,15 +281,26 @@ namespace {
   }
 
   // cgltf owns successful reads until file.release; failures retain local RAII.
-  auto ReadCgltfFile(const cgltf_memory_options*, const cgltf_file_options*,
-    const char* path, cgltf_size* size, void** data) noexcept -> cgltf_result
+  auto ReadCgltfFile(const cgltf_memory_options*,
+    const cgltf_file_options* file_options, const char* path, cgltf_size* size,
+    void** data) noexcept -> cgltf_result
   {
     if (path == nullptr || size == nullptr || data == nullptr) {
       return cgltf_result_invalid_options;
     }
     *data = nullptr;
     try {
-      std::ifstream file(base::ToNativePath(PathFromUtf8(path)),
+      const auto logical = PathFromUtf8(path);
+      auto observed
+        = std::optional<detail::ImportSourceSnapshot::ParserRead> {};
+      if (file_options != nullptr && file_options->user_data != nullptr) {
+        auto* snapshot
+          = static_cast<detail::ImportSourceSnapshot*>(file_options->user_data);
+        observed.emplace(snapshot->BeginParserRead(logical));
+      }
+      const auto requested_maximum = *size;
+      std::ifstream file(
+        base::ToNativePath(observed ? observed->PhysicalPath() : logical),
         std::ios::binary | std::ios::ate);
       if (!file) {
         return cgltf_result_file_not_found;
@@ -300,11 +320,24 @@ namespace {
       if (!file.read(bytes.get(), static_cast<std::streamsize>(requested))) {
         return cgltf_result_io_error;
       }
+      if (observed) {
+        observed->Record(std::as_bytes(std::span(bytes.get(), requested)),
+          ReadOptions {
+            .offset = 0U,
+            .max_bytes = requested_maximum,
+            .size_hint = 0U,
+            .alignment = 0U,
+          });
+      }
       *size = requested;
       *data = bytes.release();
       return cgltf_result_success;
     } catch (const std::bad_alloc&) {
       return cgltf_result_out_of_memory;
+    } catch (const std::filesystem::filesystem_error& error) {
+      return error.code() == std::errc::no_such_file_or_directory
+        ? cgltf_result_file_not_found
+        : cgltf_result_io_error;
     } catch (...) {
       return cgltf_result_io_error;
     }
@@ -316,9 +349,10 @@ namespace {
     const std::unique_ptr<char[]> bytes(static_cast<char*>(data));
   }
 
-  auto MakeCgltfOptions() -> cgltf_options
+  auto MakeCgltfOptions(const AdapterInput& input) -> cgltf_options
   {
     cgltf_options options {};
+    options.file.user_data = input.source_snapshot.get();
     options.file.read = &ReadCgltfFile;
     options.file.release = &ReleaseCgltfFile;
     return options;
@@ -335,7 +369,7 @@ namespace {
       return { nullptr, &cgltf_free };
     }
 
-    const auto options = MakeCgltfOptions();
+    const auto options = MakeCgltfOptions(input);
     cgltf_data* data = nullptr;
     const auto parse_result
       = cgltf_parse_file(&options, Utf8Path(path).c_str(), &data);
@@ -367,7 +401,8 @@ namespace {
 
   [[nodiscard]] auto LoadDataFromMemory(const std::span<const std::byte> bytes,
     const AdapterInput& input, std::vector<ImportDiagnostic>& diagnostics,
-    const std::filesystem::path& source_path) -> CgltfDataPtr
+    const std::filesystem::path& source_path, const bool load_external_buffers)
+    -> CgltfDataPtr
   {
     if (input.stop_token.stop_requested()) {
       DLOG_F(WARNING, "glTF load canceled (memory): source_id='{}'",
@@ -376,7 +411,7 @@ namespace {
       return { nullptr, &cgltf_free };
     }
 
-    const auto options = MakeCgltfOptions();
+    const auto options = MakeCgltfOptions(input);
     cgltf_data* data = nullptr;
     const auto parse_result
       = cgltf_parse(&options, bytes.data(), bytes.size(), &data);
@@ -386,6 +421,10 @@ namespace {
       diagnostics.push_back(
         MakeParseDiagnostic(input.source_id_prefix, parse_result));
       return { nullptr, &cgltf_free };
+    }
+
+    if (!load_external_buffers) {
+      return { data, &cgltf_free };
     }
 
     const auto load_result
@@ -402,32 +441,16 @@ namespace {
     return { data, &cgltf_free };
   }
 
-  auto RecordExternalBuffers(const cgltf_data& data,
-    const std::filesystem::path& source_path, const AdapterInput& input) -> void
+  auto ExternalSourcePath(const char* source_uri,
+    const std::filesystem::path& source_path) -> std::filesystem::path
   {
-    if (!input.source_snapshot) {
-      return;
-    }
-    for (const auto& buffer : std::span(data.buffers, data.buffers_count)) {
-      if (!buffer.uri || !buffer.data
-        || std::string_view(buffer.uri).starts_with("data:")) {
-        continue;
-      }
-      auto uri = std::string(buffer.uri);
-      uri.resize(cgltf_decode_uri(uri.data()));
-      auto path_text = Utf8Path(source_path);
-      const auto separator = path_text.find_last_of("/\\");
-      path_text.resize(separator == std::string::npos ? 0U : separator + 1U);
-      path_text += uri;
-      input.source_snapshot->RecordConsumed(PathFromUtf8(path_text),
-        std::span(static_cast<const std::byte*>(buffer.data), buffer.size),
-        ReadOptions {
-          .offset = 0U,
-          .max_bytes = buffer.size,
-          .size_hint = 0U,
-          .alignment = 0U,
-        });
-    }
+    auto uri = std::string(source_uri);
+    uri.resize(cgltf_decode_uri(uri.data()));
+    auto path_text = Utf8Path(source_path);
+    const auto separator = path_text.find_last_of("/\\");
+    path_text.resize(separator == std::string::npos ? 0U : separator + 1U);
+    path_text += uri;
+    return PathFromUtf8(path_text);
   }
 
   [[nodiscard]] auto ReadVec2(const cgltf_accessor* accessor)
@@ -909,7 +932,7 @@ namespace {
   };
 
   [[nodiscard]] auto ResolveImageBytes(const cgltf_image& image,
-    const std::filesystem::path& base_dir,
+    const std::filesystem::path& model_path,
     const std::shared_ptr<const cgltf_data>& owner,
     std::vector<ImportDiagnostic>& diagnostics, std::string_view source_id,
     std::span<const AdapterInput::ExternalTextureBytes> external_texture_bytes)
@@ -965,7 +988,7 @@ namespace {
       };
     }
 
-    const auto path = base_dir / std::filesystem::path(std::string(uri));
+    const auto path = ExternalSourcePath(image.uri, model_path);
     if (!external_texture_bytes.empty()) {
       const auto external_bytes = find_external_bytes(source_id);
       if (external_bytes) {
@@ -1177,6 +1200,66 @@ namespace {
     return hash.Finish();
   }
 
+  auto PrepareGeometryNames(const cgltf_data& data, const AdapterInput& input)
+    -> ModelGeometryPreparation
+  {
+    auto result = ModelGeometryPreparation {};
+    if (input.stop_token.stop_requested()) {
+      result.success = false;
+      result.diagnostics.push_back(
+        MakeCancelDiagnostic(input.source_id_prefix));
+      return result;
+    }
+    CHECK_F(input.naming_service != nullptr, "NamingService must not be null");
+    const auto scene_name = input.request.GetSceneName();
+    const auto source_path_text = input.request.source_path.string();
+    const auto bake_plan
+      = BuildGltfBakePlan(data, input.request.options.coordinate);
+    for (size_t index = 0; index < bake_plan.retained_reasons.size(); ++index) {
+      if (!bake_plan.retained_reasons.at(index).empty()) {
+        result.diagnostics.push_back(
+          MakeWarningDiagnostic("mesh.transform_bake_retained",
+            "Retained authored node transform: "
+              + bake_plan.retained_reasons.at(index),
+            input.source_id_prefix, "/nodes/" + std::to_string(index)));
+      }
+    }
+    result.sources.reserve(bake_plan.variants.size());
+    for (size_t variant_index = 0; variant_index < bake_plan.variants.size();
+      ++variant_index) {
+      if (input.stop_token.stop_requested()) {
+        result.success = false;
+        result.diagnostics.push_back(
+          MakeCancelDiagnostic(input.source_id_prefix));
+        return result;
+      }
+      const auto& variant = bake_plan.variants.at(variant_index);
+      const auto* mesh = &data.meshes[variant.mesh_index];
+      if (mesh == nullptr) {
+        continue;
+      }
+      const auto authored_name
+        = std::string(mesh->name != nullptr ? mesh->name : "")
+        + variant.name_suffix;
+      const auto context = NamingContext {
+        .kind = ImportNameKind::kMesh,
+        .ordinal = static_cast<uint32_t>(variant.mesh_index),
+        .parent_name = {},
+        .source_id = source_path_text,
+        .scene_namespace = scene_name,
+      };
+      auto name = input.naming_service->MakeUniqueName(authored_name, context);
+      auto source_id = BuildSourceId(
+        input.source_id_prefix, name, static_cast<uint32_t>(variant_index));
+      result.sources.push_back({
+        .variant = variant,
+        .name = std::move(name),
+        .source_id = std::move(source_id),
+      });
+    }
+    return result;
+  }
+
   [[nodiscard]] auto StreamWorkItemsFromData(const cgltf_data& data,
     const AdapterInput& input, GeometryWorkItemSink& sink)
     -> WorkItemStreamResult
@@ -1199,9 +1282,6 @@ namespace {
 
     CHECK_F(input.naming_service != nullptr, "NamingService must not be null");
 
-    const auto scene_name = input.request.GetSceneName();
-    const auto source_path_text = input.request.source_path.string();
-    uint32_t mesh_ordinal = 0;
     std::vector<std::optional<base::Sha256Digest>> source_witnesses(
       data.meshes_count);
 
@@ -1224,36 +1304,17 @@ namespace {
       bool has_skin = false;
     };
 
-    const auto bake_plan
-      = BuildGltfBakePlan(data, input.request.options.coordinate);
-    for (size_t index = 0; index < bake_plan.retained_reasons.size(); ++index) {
-      if (!bake_plan.retained_reasons.at(index).empty()) {
-        result.diagnostics.push_back(
-          MakeWarningDiagnostic("mesh.transform_bake_retained",
-            "Retained authored node transform: "
-              + bake_plan.retained_reasons.at(index),
-            input.source_id_prefix, "/nodes/" + std::to_string(index)));
-      }
+    auto prepared = PrepareGeometryNames(data, input);
+    result.success = prepared.success;
+    result.diagnostics = std::move(prepared.diagnostics);
+    if (!result.success) {
+      return result;
     }
-    for (const auto& variant : bake_plan.variants) {
+    for (const auto& source : prepared.sources) {
+      const auto& variant = source.variant;
       const auto mesh_i = variant.mesh_index;
-      const auto* mesh = &data.meshes[mesh_i];
-      if (mesh == nullptr) {
-        continue;
-      }
-
-      const std::string authored_name
-        = std::string(mesh->name != nullptr ? mesh->name : "")
-        + variant.name_suffix;
-      const NamingContext mesh_context {
-        .kind = ImportNameKind::kMesh,
-        .ordinal = static_cast<uint32_t>(mesh_i),
-        .parent_name = {},
-        .source_id = source_path_text,
-        .scene_namespace = scene_name,
-      };
-      const std::string mesh_name
-        = input.naming_service->MakeUniqueName(authored_name, mesh_context);
+      const auto* mesh = &data.meshes[variant.mesh_index];
+      const auto& mesh_name = source.name;
 
       std::vector<PrimitiveInfo> primitives;
       primitives.reserve(mesh->primitives_count);
@@ -1572,8 +1633,7 @@ namespace {
         return result;
       }
       item.source_layout_witness = *witness;
-      item.source_id
-        = BuildSourceId(input.source_id_prefix, mesh_name, mesh_ordinal++);
+      item.source_id = source.source_id;
       item.mesh_name = mesh_name;
       item.storage_mesh_name = mesh_name;
       item.source_key = variant.representative_node != internal::kNoBakeIndex
@@ -2019,10 +2079,13 @@ auto GltfAdapter::InspectSource(const std::filesystem::path& source_path,
 }
 
 auto GltfAdapter::Parse(const std::filesystem::path& source_path,
-  const AdapterInput& input) -> ParseResult
+  const AdapterInput& input, const ModelParseMode mode) -> ParseResult
 {
+  impl_->data_owner.reset();
+  impl_->source_snapshot = input.source_snapshot;
   ParseResult result;
-  auto data = LoadDataFromFile(source_path, input, result.diagnostics);
+  auto data = LoadDataFromFile(
+    source_path, input, result.diagnostics, mode == ModelParseMode::kGeometry);
   if (data == nullptr) {
     DLOG_F(ERROR, "glTF parse failed: path='{}' diagnostics={} ",
       source_path.string(), result.diagnostics.size());
@@ -2034,13 +2097,6 @@ auto GltfAdapter::Parse(const std::filesystem::path& source_path,
     result.success = false;
     return result;
   }
-
-  if (input.source_snapshot) {
-    input.source_snapshot->RecordConsumed(source_path,
-      std::span(
-        static_cast<const std::byte*>(data->file_data), data->file_size));
-  }
-  RecordExternalBuffers(*data, source_path, input);
 
   if (input.request.options.scene_content_policy
       == SceneContentPolicy::kStaticScalar
@@ -2057,11 +2113,13 @@ auto GltfAdapter::Parse(const std::filesystem::path& source_path,
 }
 
 auto GltfAdapter::Parse(const std::span<const std::byte> source_bytes,
-  const AdapterInput& input) -> ParseResult
+  const AdapterInput& input, const ModelParseMode mode) -> ParseResult
 {
+  impl_->data_owner.reset();
+  impl_->source_snapshot = input.source_snapshot;
   ParseResult result;
-  auto data = LoadDataFromMemory(
-    source_bytes, input, result.diagnostics, input.request.source_path);
+  auto data = LoadDataFromMemory(source_bytes, input, result.diagnostics,
+    input.request.source_path, mode == ModelParseMode::kGeometry);
   if (data == nullptr) {
     DLOG_F(ERROR, "glTF parse failed (memory): diagnostics={}",
       result.diagnostics.size());
@@ -2073,8 +2131,6 @@ auto GltfAdapter::Parse(const std::span<const std::byte> source_bytes,
     result.success = false;
     return result;
   }
-
-  RecordExternalBuffers(*data, input.request.source_path, input);
 
   if (input.request.options.scene_content_policy
       == SceneContentPolicy::kStaticScalar
@@ -2088,6 +2144,20 @@ auto GltfAdapter::Parse(const std::span<const std::byte> source_bytes,
   impl_->data_owner
     = std::shared_ptr<const cgltf_data>(data.release(), &cgltf_free);
   return result;
+}
+
+auto GltfAdapter::PrepareGeometry(const AdapterInput& input) const
+  -> ModelGeometryPreparation
+{
+  if (!impl_->data_owner) {
+    auto result = ModelGeometryPreparation {};
+    result.success = false;
+    result.diagnostics.push_back(MakeErrorDiagnostic("gltf.scene.not_parsed",
+      "gltf adapter has no parsed scene", input.source_id_prefix,
+      input.object_path_prefix));
+    return result;
+  }
+  return PrepareGeometryNames(*impl_->data_owner, input);
 }
 
 auto GltfAdapter::BuildWorkItems(GeometryWorkTag, GeometryWorkItemSink& sink,
@@ -2105,11 +2175,11 @@ auto GltfAdapter::BuildWorkItems(GeometryWorkTag, GeometryWorkItemSink& sink,
   return StreamWorkItemsFromData(*impl_->data_owner, input, sink);
 }
 
-auto GltfAdapter::BuildWorkItems(MaterialWorkTag, MaterialWorkItemSink& sink,
-  const AdapterInput& input) -> WorkItemStreamResult
+auto GltfAdapter::PrepareMaterials(const AdapterInput& input)
+  -> ModelMaterialPreparation
 {
   if (!impl_->data_owner) {
-    WorkItemStreamResult result;
+    ModelMaterialPreparation result;
     result.success = false;
     result.diagnostics.push_back(MakeErrorDiagnostic("gltf.scene.not_parsed",
       "glTF adapter has no parsed scene", input.source_id_prefix,
@@ -2119,7 +2189,7 @@ auto GltfAdapter::BuildWorkItems(MaterialWorkTag, MaterialWorkItemSink& sink,
 
   CHECK_F(input.naming_service != nullptr, "NamingService must not be null");
 
-  WorkItemStreamResult result;
+  ModelMaterialPreparation result;
   if (input.stop_token.stop_requested()) {
     result.success = false;
     result.diagnostics.push_back(MakeCancelDiagnostic(input.source_id_prefix));
@@ -2130,7 +2200,14 @@ auto GltfAdapter::BuildWorkItems(MaterialWorkTag, MaterialWorkItemSink& sink,
   const auto source_path_text = input.request.source_path.string();
   const auto& data = *impl_->data_owner;
   const uint32_t material_count = static_cast<uint32_t>(data.materials_count);
+  result.sources.reserve(material_count);
   for (uint32_t i = 0; i < material_count; ++i) {
+    if (input.stop_token.stop_requested()) {
+      result.success = false;
+      result.diagnostics.push_back(
+        MakeCancelDiagnostic(input.source_id_prefix));
+      return result;
+    }
     const auto& material = data.materials[i];
     const std::string_view authored = material.name ? material.name : "";
     const NamingContext material_context {
@@ -2143,74 +2220,81 @@ auto GltfAdapter::BuildWorkItems(MaterialWorkTag, MaterialWorkItemSink& sink,
     const auto material_name
       = input.naming_service->MakeUniqueName(authored, material_context);
 
-    MaterialPipeline::WorkItem item;
+    ModelMaterialSource item;
     item.source_id = BuildSourceId(input.source_id_prefix, material_name, i);
-    item.material_name = material_name;
-    item.storage_material_name = material_name;
+    item.material.name = material_name;
+    item.material.storage_name = material_name;
     item.source_key = &material;
-    item.material_domain = data::MaterialDomain::kOpaque;
-    item.alpha_mode = MaterialAlphaMode::kOpaque;
+    item.material.domain = data::MaterialDomain::kOpaque;
+    item.material.alpha_mode = MaterialAlphaMode::kOpaque;
 
     if (material.alpha_mode == cgltf_alpha_mode_mask) {
-      item.alpha_mode = MaterialAlphaMode::kMasked;
-      item.material_domain = data::MaterialDomain::kMasked;
+      item.material.alpha_mode = MaterialAlphaMode::kMasked;
+      item.material.domain = data::MaterialDomain::kMasked;
     } else if (material.alpha_mode == cgltf_alpha_mode_blend) {
-      item.alpha_mode = MaterialAlphaMode::kBlended;
-      item.material_domain = data::MaterialDomain::kAlphaBlended;
+      item.material.alpha_mode = MaterialAlphaMode::kBlended;
+      item.material.domain = data::MaterialDomain::kAlphaBlended;
     }
 
-    item.inputs.alpha_cutoff = static_cast<float>(material.alpha_cutoff);
-    item.inputs.double_sided = material.double_sided != 0;
-    item.inputs.unlit = material.unlit != 0;
+    item.material.inputs.alpha_cutoff
+      = static_cast<float>(material.alpha_cutoff);
+    item.material.inputs.double_sided = material.double_sided != 0;
+    item.material.inputs.unlit = material.unlit != 0;
 
     if (material.has_pbr_metallic_roughness) {
       const auto& pbr = material.pbr_metallic_roughness;
-      item.inputs.base_color[0] = static_cast<float>(pbr.base_color_factor[0]);
-      item.inputs.base_color[1] = static_cast<float>(pbr.base_color_factor[1]);
-      item.inputs.base_color[2] = static_cast<float>(pbr.base_color_factor[2]);
-      item.inputs.base_color[3] = static_cast<float>(pbr.base_color_factor[3]);
-      item.inputs.metalness = static_cast<float>(pbr.metallic_factor);
-      item.inputs.roughness = static_cast<float>(pbr.roughness_factor);
+      item.material.inputs.base_color[0]
+        = static_cast<float>(pbr.base_color_factor[0]);
+      item.material.inputs.base_color[1]
+        = static_cast<float>(pbr.base_color_factor[1]);
+      item.material.inputs.base_color[2]
+        = static_cast<float>(pbr.base_color_factor[2]);
+      item.material.inputs.base_color[3]
+        = static_cast<float>(pbr.base_color_factor[3]);
+      item.material.inputs.metalness = static_cast<float>(pbr.metallic_factor);
+      item.material.inputs.roughness = static_cast<float>(pbr.roughness_factor);
     }
 
-    item.inputs.emissive_factor[0]
+    item.material.inputs.emissive_factor[0]
       = static_cast<float>(material.emissive_factor[0]);
-    item.inputs.emissive_factor[1]
+    item.material.inputs.emissive_factor[1]
       = static_cast<float>(material.emissive_factor[1]);
-    item.inputs.emissive_factor[2]
+    item.material.inputs.emissive_factor[2]
       = static_cast<float>(material.emissive_factor[2]);
 
     if (material.normal_texture.texture != nullptr) {
-      item.inputs.normal_scale
+      item.material.inputs.normal_scale
         = static_cast<float>(material.normal_texture.scale);
-      ApplyTextureBinding(item.textures.normal, material.normal_texture,
+      ApplyTextureBinding(item.material.textures.normal,
+        material.normal_texture,
         BuildTextureSourceId(input.source_id_prefix, data,
           *material.normal_texture.texture, TextureUsage::kNormal));
     }
 
     if (material.occlusion_texture.texture != nullptr) {
-      item.inputs.ambient_occlusion
+      item.material.inputs.ambient_occlusion
         = static_cast<float>(material.occlusion_texture.scale);
-      ApplyTextureBinding(item.textures.ambient_occlusion,
+      ApplyTextureBinding(item.material.textures.ambient_occlusion,
         material.occlusion_texture,
         BuildTextureSourceId(input.source_id_prefix, data,
           *material.occlusion_texture.texture, TextureUsage::kOcclusion));
     }
 
     if (material.emissive_texture.texture != nullptr) {
-      ApplyTextureBinding(item.textures.emissive, material.emissive_texture,
+      ApplyTextureBinding(item.material.textures.emissive,
+        material.emissive_texture,
         BuildTextureSourceId(input.source_id_prefix, data,
           *material.emissive_texture.texture, TextureUsage::kEmissive));
     }
 
     if (material.has_ior) {
-      item.inputs.ior = material.ior.ior;
+      item.material.inputs.ior = material.ior.ior;
     }
 
     if (material.has_specular) {
-      item.inputs.specular_factor = material.specular.specular_factor;
+      item.material.inputs.specular_factor = material.specular.specular_factor;
       if (material.specular.specular_texture.texture != nullptr) {
-        ApplyTextureBinding(item.textures.specular,
+        ApplyTextureBinding(item.material.textures.specular,
           material.specular.specular_texture,
           BuildTextureSourceId(input.source_id_prefix, data,
             *material.specular.specular_texture.texture,
@@ -2219,14 +2303,14 @@ auto GltfAdapter::BuildWorkItems(MaterialWorkTag, MaterialWorkItemSink& sink,
     }
 
     if (material.has_sheen) {
-      item.inputs.sheen_color_factor[0]
+      item.material.inputs.sheen_color_factor[0]
         = static_cast<float>(material.sheen.sheen_color_factor[0]);
-      item.inputs.sheen_color_factor[1]
+      item.material.inputs.sheen_color_factor[1]
         = static_cast<float>(material.sheen.sheen_color_factor[1]);
-      item.inputs.sheen_color_factor[2]
+      item.material.inputs.sheen_color_factor[2]
         = static_cast<float>(material.sheen.sheen_color_factor[2]);
       if (material.sheen.sheen_color_texture.texture != nullptr) {
-        ApplyTextureBinding(item.textures.sheen_color,
+        ApplyTextureBinding(item.material.textures.sheen_color,
           material.sheen.sheen_color_texture,
           BuildTextureSourceId(input.source_id_prefix, data,
             *material.sheen.sheen_color_texture.texture,
@@ -2235,18 +2319,19 @@ auto GltfAdapter::BuildWorkItems(MaterialWorkTag, MaterialWorkItemSink& sink,
     }
 
     if (material.has_clearcoat) {
-      item.inputs.clearcoat_factor = material.clearcoat.clearcoat_factor;
-      item.inputs.clearcoat_roughness
+      item.material.inputs.clearcoat_factor
+        = material.clearcoat.clearcoat_factor;
+      item.material.inputs.clearcoat_roughness
         = material.clearcoat.clearcoat_roughness_factor;
       if (material.clearcoat.clearcoat_texture.texture != nullptr) {
-        ApplyTextureBinding(item.textures.clearcoat,
+        ApplyTextureBinding(item.material.textures.clearcoat,
           material.clearcoat.clearcoat_texture,
           BuildTextureSourceId(input.source_id_prefix, data,
             *material.clearcoat.clearcoat_texture.texture,
             TextureUsage::kClearcoat));
       }
       if (material.clearcoat.clearcoat_normal_texture.texture != nullptr) {
-        ApplyTextureBinding(item.textures.clearcoat_normal,
+        ApplyTextureBinding(item.material.textures.clearcoat_normal,
           material.clearcoat.clearcoat_normal_texture,
           BuildTextureSourceId(input.source_id_prefix, data,
             *material.clearcoat.clearcoat_normal_texture.texture,
@@ -2255,10 +2340,10 @@ auto GltfAdapter::BuildWorkItems(MaterialWorkTag, MaterialWorkItemSink& sink,
     }
 
     if (material.has_transmission) {
-      item.inputs.transmission_factor
+      item.material.inputs.transmission_factor
         = material.transmission.transmission_factor;
       if (material.transmission.transmission_texture.texture != nullptr) {
-        ApplyTextureBinding(item.textures.transmission,
+        ApplyTextureBinding(item.material.textures.transmission,
           material.transmission.transmission_texture,
           BuildTextureSourceId(input.source_id_prefix, data,
             *material.transmission.transmission_texture.texture,
@@ -2267,16 +2352,17 @@ auto GltfAdapter::BuildWorkItems(MaterialWorkTag, MaterialWorkItemSink& sink,
     }
 
     if (material.has_volume) {
-      item.inputs.thickness_factor = material.volume.thickness_factor;
-      item.inputs.attenuation_distance = material.volume.attenuation_distance;
-      item.inputs.attenuation_color[0]
+      item.material.inputs.thickness_factor = material.volume.thickness_factor;
+      item.material.inputs.attenuation_distance
+        = material.volume.attenuation_distance;
+      item.material.inputs.attenuation_color[0]
         = static_cast<float>(material.volume.attenuation_color[0]);
-      item.inputs.attenuation_color[1]
+      item.material.inputs.attenuation_color[1]
         = static_cast<float>(material.volume.attenuation_color[1]);
-      item.inputs.attenuation_color[2]
+      item.material.inputs.attenuation_color[2]
         = static_cast<float>(material.volume.attenuation_color[2]);
       if (material.volume.thickness_texture.texture != nullptr) {
-        ApplyTextureBinding(item.textures.thickness,
+        ApplyTextureBinding(item.material.textures.thickness,
           material.volume.thickness_texture,
           BuildTextureSourceId(input.source_id_prefix, data,
             *material.volume.thickness_texture.texture,
@@ -2287,7 +2373,8 @@ auto GltfAdapter::BuildWorkItems(MaterialWorkTag, MaterialWorkItemSink& sink,
     if (material.has_pbr_metallic_roughness) {
       const auto& pbr = material.pbr_metallic_roughness;
       if (pbr.base_color_texture.texture != nullptr) {
-        ApplyTextureBinding(item.textures.base_color, pbr.base_color_texture,
+        ApplyTextureBinding(item.material.textures.base_color,
+          pbr.base_color_texture,
           BuildTextureSourceId(input.source_id_prefix, data,
             *pbr.base_color_texture.texture, TextureUsage::kBaseColor));
       }
@@ -2296,33 +2383,61 @@ auto GltfAdapter::BuildWorkItems(MaterialWorkTag, MaterialWorkItemSink& sink,
         const auto source_id = BuildTextureSourceId(input.source_id_prefix,
           data, *pbr.metallic_roughness_texture.texture,
           TextureUsage::kMetallicRoughness);
-        ApplyTextureBinding(
-          item.textures.metallic, pbr.metallic_roughness_texture, source_id);
-        ApplyTextureBinding(
-          item.textures.roughness, pbr.metallic_roughness_texture, source_id);
-        item.orm_policy = OrmPolicy::kAuto;
+        ApplyTextureBinding(item.material.textures.metallic,
+          pbr.metallic_roughness_texture, source_id);
+        ApplyTextureBinding(item.material.textures.roughness,
+          pbr.metallic_roughness_texture, source_id);
+        item.material.orm_policy = OrmPolicy::kAuto;
       }
     }
 
-    item.request = input.request;
-    item.naming_service = input.naming_service;
-    item.stop_token = input.stop_token;
-
-    if (!sink.Consume(std::move(item))) {
+    if (!item.material.Validate(item.source_id, result.diagnostics)) {
+      result.success = false;
       return result;
     }
-
-    ++result.emitted;
+    result.sources.push_back(std::move(item));
   }
 
   return result;
 }
 
-auto GltfAdapter::BuildWorkItems(TextureWorkTag, TextureWorkItemSink& sink,
+auto GltfAdapter::BuildWorkItems(MaterialWorkTag, MaterialWorkItemSink& sink,
   const AdapterInput& input) -> WorkItemStreamResult
 {
+  auto prepared = PrepareMaterials(input);
+  auto result = WorkItemStreamResult {};
+  result.success = prepared.success;
+  result.diagnostics = std::move(prepared.diagnostics);
+  if (!result.success) {
+    return result;
+  }
+  for (auto& source : prepared.sources) {
+    if (input.stop_token.stop_requested()) {
+      result.success = false;
+      result.diagnostics.push_back(
+        MakeCancelDiagnostic(input.source_id_prefix));
+      return result;
+    }
+    auto item = MaterialPipeline::WorkItem {};
+    item.source_id = std::move(source.source_id);
+    item.source_key = source.source_key;
+    item.material = std::move(source.material);
+    item.request = input.request;
+    item.naming_service = input.naming_service;
+    item.stop_token = input.stop_token;
+    if (!sink.Consume(std::move(item))) {
+      return result;
+    }
+    ++result.emitted;
+  }
+  return result;
+}
+
+auto GltfAdapter::PrepareTextures(const AdapterInput& input) const
+  -> ModelTexturePreparation
+{
   if (!impl_->data_owner) {
-    WorkItemStreamResult result;
+    ModelTexturePreparation result;
     result.success = false;
     result.diagnostics.push_back(MakeErrorDiagnostic("gltf.scene.not_parsed",
       "glTF adapter has no parsed scene", input.source_id_prefix,
@@ -2330,7 +2445,7 @@ auto GltfAdapter::BuildWorkItems(TextureWorkTag, TextureWorkItemSink& sink,
     return result;
   }
 
-  WorkItemStreamResult result;
+  ModelTexturePreparation result;
   if (input.stop_token.stop_requested()) {
     result.success = false;
     result.diagnostics.push_back(MakeCancelDiagnostic(input.source_id_prefix));
@@ -2338,9 +2453,8 @@ auto GltfAdapter::BuildWorkItems(TextureWorkTag, TextureWorkItemSink& sink,
   }
 
   const auto& data = *impl_->data_owner;
-  const auto base_dir = input.request.source_path.parent_path();
 
-  std::unordered_map<std::string, TexturePipeline::WorkItem> work_items;
+  std::unordered_map<std::string, ModelTextureSource> work_items;
 
   auto register_texture
     = [&](const cgltf_texture_view& view, const TextureUsage usage) -> void {
@@ -2355,63 +2469,6 @@ auto GltfAdapter::BuildWorkItems(TextureWorkTag, TextureWorkItemSink& sink,
     }
 
     const auto* image = view.texture->image;
-    if (image == nullptr) {
-      result.diagnostics.push_back(MakeWarningDiagnostic(
-        "gltf.image.missing", "glTF texture has no image", source_id, ""));
-      DLOG_F(
-        INFO, "glTF texture register: source_id='{}' missing image", source_id);
-      auto bytes = std::make_shared<std::vector<std::byte>>();
-      TexturePipeline::WorkItem item {};
-      item.source_id = source_id;
-      item.texture_id = source_id;
-      item.source_key = view.texture;
-      item.desc = MakeDescFromPreset(PresetForUsage(usage));
-      item.desc.source_id = source_id;
-      item.desc.stop_token = input.stop_token;
-      const auto& tuning = input.request.options.texture_tuning;
-      if (tuning.enabled) {
-        item.desc.flip_y_on_decode = tuning.flip_y_on_decode;
-        item.desc.force_rgba_on_decode = tuning.force_rgba_on_decode;
-        item.desc.mip_policy = tuning.mip_policy;
-        item.desc.max_mip_levels = tuning.max_mip_levels;
-        item.desc.mip_filter = tuning.mip_filter;
-        item.desc.output_format = (usage == TextureUsage::kBaseColor
-                                    || usage == TextureUsage::kEmissive)
-          ? tuning.color_output_format
-          : tuning.data_output_format;
-        item.desc.bc7_quality = IsBc7Format(item.desc.output_format)
-          ? tuning.bc7_quality
-          : Bc7Quality::kNone;
-      }
-
-      item.packing_policy_id
-        = tuning.enabled ? tuning.packing_policy_id : "d3d12";
-      item.output_format_policy = tuning.enabled
-        ? TexturePipeline::OutputFormatPolicy::kExplicit
-        : TexturePipeline::OutputFormatPolicy::kMaterialPreset;
-      item.failure_policy
-        = input.request.options.texture_tuning.placeholder_on_failure
-        ? TexturePipeline::FailurePolicy::kPlaceholder
-        : TexturePipeline::FailurePolicy::kStrict;
-      item.source = TexturePipeline::SourceBytes {
-        .bytes = std::span<const std::byte>(bytes->data(), bytes->size()),
-        .owner = std::static_pointer_cast<const void>(bytes),
-      };
-      item.stop_token = input.stop_token;
-      work_items.emplace(source_id, std::move(item));
-      return;
-    }
-
-    auto resolved_bytes = ResolveImageBytes(*image, base_dir, impl_->data_owner,
-      result.diagnostics, source_id, input.external_texture_bytes);
-    if (!resolved_bytes.has_value()) {
-      DLOG_F(INFO, "glTF texture register: source_id='{}' no bytes", source_id);
-      return;
-    }
-
-    DLOG_F(INFO, "glTF texture register: source_id='{}' bytes={} usage={}",
-      source_id, resolved_bytes->bytes.bytes.size(), UsageLabel(usage));
-
     auto desc = MakeDescFromPreset(PresetForUsage(usage));
     desc.source_id = source_id;
     desc.stop_token = input.stop_token;
@@ -2430,9 +2487,9 @@ auto GltfAdapter::BuildWorkItems(TextureWorkTag, TextureWorkItemSink& sink,
                                                          : Bc7Quality::kNone;
     }
 
-    TexturePipeline::WorkItem item {};
+    ModelTextureSource item {};
     item.source_id = source_id;
-    item.texture_id = source_id;
+    item.external_texture_id = source_id;
     item.source_key = view.texture;
     item.desc = std::move(desc);
     item.packing_policy_id
@@ -2444,14 +2501,26 @@ auto GltfAdapter::BuildWorkItems(TextureWorkTag, TextureWorkItemSink& sink,
       = input.request.options.texture_tuning.placeholder_on_failure
       ? TexturePipeline::FailurePolicy::kPlaceholder
       : TexturePipeline::FailurePolicy::kStrict;
-    item.source = resolved_bytes->bytes;
-    item.source_path = resolved_bytes->source_path;
-    item.stop_token = input.stop_token;
+    if (image != nullptr) {
+      const auto uri = image->uri != nullptr ? std::string_view(image->uri)
+                                             : std::string_view {};
+      item.embedded = image->buffer_view != nullptr || uri.starts_with("data:");
+      if (!item.embedded && !uri.empty()) {
+        item.source_path
+          = ExternalSourcePath(image->uri, input.request.source_path);
+      }
+    }
 
     work_items.emplace(source_id, std::move(item));
   };
 
   for (cgltf_size i = 0; i < data.materials_count; ++i) {
+    if (input.stop_token.stop_requested()) {
+      result.success = false;
+      result.diagnostics.push_back(
+        MakeCancelDiagnostic(input.source_id_prefix));
+      return result;
+    }
     const auto& material = data.materials[i];
     if (material.has_pbr_metallic_roughness) {
       const auto& pbr = material.pbr_metallic_roughness;
@@ -2464,86 +2533,107 @@ auto GltfAdapter::BuildWorkItems(TextureWorkTag, TextureWorkItemSink& sink,
     register_texture(material.emissive_texture, TextureUsage::kEmissive);
   }
 
+  result.sources.reserve(work_items.size());
   for (auto& [_, item] : work_items) {
+    result.sources.push_back(std::move(item));
+  }
+  return result;
+}
+
+auto GltfAdapter::BuildWorkItems(TextureWorkTag, TextureWorkItemSink& sink,
+  const AdapterInput& input) -> WorkItemStreamResult
+{
+  auto prepared = PrepareTextures(input);
+  auto result = WorkItemStreamResult {};
+  result.success = prepared.success;
+  result.diagnostics = std::move(prepared.diagnostics);
+  if (!result.success) {
+    return result;
+  }
+  for (auto& source : prepared.sources) {
+    if (input.stop_token.stop_requested()) {
+      result.success = false;
+      result.diagnostics.push_back(
+        MakeCancelDiagnostic(input.source_id_prefix));
+      return result;
+    }
+    const auto* texture = static_cast<const cgltf_texture*>(source.source_key);
+    auto resolved = std::optional<ResolvedTextureSource> {};
+    if (texture->image != nullptr) {
+      resolved = ResolveImageBytes(*texture->image, input.request.source_path,
+        impl_->data_owner, result.diagnostics, source.source_id,
+        input.external_texture_bytes);
+    } else {
+      result.diagnostics.push_back(MakeWarningDiagnostic("gltf.image.missing",
+        "glTF texture has no image", source.source_id, ""));
+      auto bytes = std::make_shared<std::vector<std::byte>>();
+      resolved = ResolvedTextureSource {
+        .bytes = TexturePipeline::SourceBytes {
+          .bytes = std::span<const std::byte>(*bytes),
+          .owner = std::static_pointer_cast<const void>(bytes),
+        },
+        .source_path = {},
+      };
+    }
+    if (!resolved.has_value()) {
+      continue;
+    }
+    auto item = TexturePipeline::WorkItem {};
+    item.source_id = std::move(source.source_id);
+    item.texture_id = item.source_id;
+    item.source_key = source.source_key;
+    item.desc = std::move(source.desc);
+    item.packing_policy_id = std::move(source.packing_policy_id);
+    item.output_format_policy = source.output_format_policy;
+    item.failure_policy = source.failure_policy;
+    item.source = resolved->bytes;
+    item.source_path = std::move(resolved->source_path);
+    item.stop_token = input.stop_token;
     if (!sink.Consume(std::move(item))) {
       return result;
     }
     ++result.emitted;
   }
-
   return result;
+}
+
+auto GltfAdapter::CollectExternalBufferSources(const AdapterInput& input) const
+  -> std::vector<std::filesystem::path>
+{
+  auto paths = std::vector<std::filesystem::path> {};
+  if (!impl_->data_owner) {
+    return paths;
+  }
+  const auto& data = *impl_->data_owner;
+  for (const auto& buffer : std::span(data.buffers, data.buffers_count)) {
+    if (buffer.uri != nullptr
+      && !std::string_view(buffer.uri).starts_with("data:")) {
+      paths.push_back(
+        ExternalSourcePath(buffer.uri, input.request.source_path));
+    }
+  }
+  return paths;
 }
 
 auto GltfAdapter::CollectExternalTextureSources(
   const AdapterInput& input, std::vector<ImportDiagnostic>& diagnostics) const
   -> std::vector<ExternalTextureSource>
 {
-  std::vector<ExternalTextureSource> sources;
-  if (!impl_->data_owner) {
-    diagnostics.push_back(MakeErrorDiagnostic("gltf.scene.not_parsed",
-      "glTF adapter has no parsed scene", input.source_id_prefix,
-      input.object_path_prefix));
-    return sources;
+  auto prepared = PrepareTextures(input);
+  for (auto& diagnostic : prepared.diagnostics) {
+    diagnostics.push_back(std::move(diagnostic));
   }
-
-  if (input.stop_token.stop_requested()) {
-    diagnostics.push_back(MakeCancelDiagnostic(input.source_id_prefix));
-    return sources;
+  auto sources = std::vector<ExternalTextureSource> {};
+  auto seen_ids = std::unordered_set<std::string> {};
+  for (auto& source : prepared.sources) {
+    if (!source.embedded && !source.source_path.empty()
+      && seen_ids.insert(source.external_texture_id).second) {
+      sources.push_back({
+        .texture_id = std::move(source.external_texture_id),
+        .resolved_path = std::move(source.source_path),
+      });
+    }
   }
-
-  const auto& data = *impl_->data_owner;
-  const auto base_dir = input.request.source_path.parent_path();
-  std::unordered_set<std::string> seen_ids;
-
-  auto register_texture
-    = [&](const cgltf_texture_view& view, const TextureUsage usage) -> void {
-    if (view.texture == nullptr || view.texture->image == nullptr) {
-      return;
-    }
-
-    const auto source_id = BuildTextureSourceId(
-      input.source_id_prefix, data, *view.texture, usage);
-    if (!seen_ids.insert(source_id).second) {
-      return;
-    }
-
-    const auto& image = *view.texture->image;
-    if (image.buffer_view != nullptr) {
-      return;
-    }
-    if (image.uri == nullptr || *image.uri == '\0') {
-      return;
-    }
-
-    std::string_view uri(image.uri);
-    if (uri.rfind("data:", 0) == 0) {
-      return;
-    }
-
-    sources.push_back(ExternalTextureSource {
-      .texture_id = source_id,
-      .resolved_path = base_dir / std::filesystem::path(std::string(uri)),
-    });
-  };
-
-  for (cgltf_size i = 0; i < data.materials_count; ++i) {
-    if (input.stop_token.stop_requested()) {
-      diagnostics.push_back(MakeCancelDiagnostic(input.source_id_prefix));
-      return sources;
-    }
-
-    const auto& material = data.materials[i];
-    if (material.has_pbr_metallic_roughness) {
-      const auto& pbr = material.pbr_metallic_roughness;
-      register_texture(pbr.base_color_texture, TextureUsage::kBaseColor);
-      register_texture(
-        pbr.metallic_roughness_texture, TextureUsage::kMetallicRoughness);
-    }
-    register_texture(material.normal_texture, TextureUsage::kNormal);
-    register_texture(material.occlusion_texture, TextureUsage::kOcclusion);
-    register_texture(material.emissive_texture, TextureUsage::kEmissive);
-  }
-
   return sources;
 }
 

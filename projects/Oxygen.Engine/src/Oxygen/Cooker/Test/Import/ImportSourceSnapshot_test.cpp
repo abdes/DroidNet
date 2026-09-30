@@ -5,8 +5,10 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <filesystem>
+#include <memory>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -16,7 +18,10 @@
 #include <vector>
 
 #include <Oxygen/Base/Result.h>
+#include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Cooker/Import/CapturedInputSet.h>
 #include <Oxygen/Cooker/Import/FileError.h>
+#include <Oxygen/Cooker/Import/FileInfo.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSourceSnapshot.h>
@@ -24,7 +29,6 @@
 #include <Oxygen/OxCo/Awaitables.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Event.h>
-#include <Oxygen/OxCo/ParkingLot.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/Testing/GTest.h>
@@ -37,20 +41,25 @@ namespace {
     bool block { false };
     bool started { false };
     bool denied { false };
+    bool metadata_denied { false };
+    std::size_t deny_read_number = 0U;
     bool present { true };
     FileInfo metadata {};
     std::size_t content_reads = 0U;
     std::size_t metadata_reads = 0U;
     std::size_t presence_reads = 0U;
-    co::ParkingLot blocked_reads {};
+    std::filesystem::path last_read_path;
+    std::filesystem::path last_info_path;
+    co::Event release_reads {};
     co::Event operation_started {};
 
     auto ReadFile(const std::filesystem::path& path, const ReadOptions options)
       -> co::Co<Result<std::vector<std::byte>, FileErrorInfo>> override
     {
+      last_read_path = path;
       ++content_reads;
       co_await WaitIfBlocked();
-      if (denied) {
+      if (denied || content_reads == deny_read_number) {
         co_return Err(FileErrorInfo {
           .code = FileError::kAccessDenied,
           .path = path,
@@ -74,9 +83,10 @@ namespace {
     auto GetFileInfo(const std::filesystem::path& path)
       -> co::Co<Result<FileInfo, FileErrorInfo>> override
     {
+      last_info_path = path;
       ++metadata_reads;
       co_await WaitIfBlocked();
-      if (denied) {
+      if (denied || metadata_denied) {
         co_return Err(
           MakeFileError(path, FileError::kAccessDenied, "Metadata denied"));
       }
@@ -107,7 +117,7 @@ namespace {
       started = true;
       operation_started.Trigger();
       if (std::exchange(block, false)) {
-        co_await blocked_reads.Park();
+        co_await release_reads;
       }
     }
   };
@@ -119,6 +129,41 @@ namespace {
     MutableSourceReader reader_ {};
     detail::ImportSourceSnapshot snapshot_ { reader_, pool_ };
     const std::filesystem::path source_ { "source.bin" };
+
+    auto CapturedFile(const std::string_view content = "abcdef") const
+      -> CapturedInput
+    {
+      return CapturedInput {
+        .logical_path = std::filesystem::absolute(source_).lexically_normal(),
+        .exists = true,
+        .metadata = FileInfo { .size = content.size(), .last_modified = {},
+          .is_directory = false, .is_symlink = false },
+        .file = CapturedInputFile {
+          .path = std::filesystem::absolute("captured.bin").lexically_normal(),
+          .size = content.size(), .digest = base::ComputeSha256(std::as_bytes(std::span(content))),
+        },
+      };
+    }
+
+    static auto CaptureMap(const CapturedInput& input)
+      -> std::shared_ptr<const CapturedInputSet>
+    {
+      return std::make_shared<const CapturedInputSet>(std::span(&input, 1));
+    }
+
+    auto RejectFirstVerification() -> co::Co<>
+    {
+      EXPECT_THROW(co_await snapshot_.Verify(), std::runtime_error);
+    }
+
+    auto RejectOverlappingVerification() -> co::Co<>
+    {
+      co_await reader_.operation_started;
+      EXPECT_THROW(
+        static_cast<void>(snapshot_.Observations()), std::logic_error);
+      EXPECT_THROW(co_await snapshot_.Verify(), std::runtime_error);
+      reader_.release_reads.Trigger();
+    }
 
     auto RejectIncompleteVerification() -> co::Co<>
     {
@@ -471,6 +516,362 @@ namespace {
           std::string_view::npos);
       }
     });
+  }
+  NOLINT_TEST_F(ImportSourceSnapshotTest, ExportsOnlyVerifiedConsumedRanges)
+  {
+    EXPECT_THROW(static_cast<void>(snapshot_.Observations()), std::logic_error);
+    co::Run(loop_, [&] -> co::Co<> {
+      EXPECT_TRUE(co_await snapshot_.ReadFile(source_,
+        ReadOptions {
+          .offset = 1,
+          .max_bytes = 3,
+          .size_hint = 0,
+          .alignment = 0,
+        }));
+      EXPECT_THROW(
+        static_cast<void>(snapshot_.Observations()), std::logic_error);
+      co_await snapshot_.Verify();
+      const auto observations = snapshot_.Observations();
+      EXPECT_EQ(observations.size(), 1U);
+      if (observations.size() != 1U) {
+        co_return;
+      }
+      const auto& observation = observations.front();
+      EXPECT_EQ(observation.path,
+        std::filesystem::absolute(source_).lexically_normal());
+      EXPECT_TRUE(observation.exists);
+      EXPECT_EQ(observation.reads.size(), 1U);
+      if (observation.reads.size() != 1U) {
+        co_return;
+      }
+      EXPECT_EQ(observation.reads.front().offset, 1U);
+      EXPECT_EQ(observation.reads.front().max_bytes, 3U);
+      EXPECT_EQ(observation.reads.front().digest,
+        base::ComputeSha256(
+          std::as_bytes(std::span(reader_.content)).subspan(1, 3)));
+    });
+  }
+
+  NOLINT_TEST_F(ImportSourceSnapshotTest, ProbeReportDoesNotReadContent)
+  {
+    reader_.present = false;
+    co::Run(loop_, [&] -> co::Co<> {
+      const auto exists = co_await snapshot_.Exists(source_);
+      EXPECT_TRUE(exists.has_value());
+      if (!exists.has_value()) {
+        co_return;
+      }
+      EXPECT_FALSE(exists.value());
+      co_await snapshot_.Verify();
+      const auto observations = snapshot_.Observations();
+      EXPECT_EQ(observations.size(), 1U);
+      if (observations.size() != 1U) {
+        co_return;
+      }
+      EXPECT_FALSE(observations.front().exists);
+      EXPECT_TRUE(observations.front().reads.empty());
+      EXPECT_FALSE(observations.front().metadata.has_value());
+      EXPECT_EQ(reader_.content_reads, 0U);
+    });
+  }
+
+  NOLINT_TEST_F(ImportSourceSnapshotTest, FailedReverificationInvalidatesReport)
+  {
+    co::Run(loop_, [&] -> co::Co<> {
+      EXPECT_TRUE(co_await snapshot_.ReadFile(source_));
+      co_await snapshot_.Verify();
+      EXPECT_EQ(snapshot_.Observations().size(), 1U);
+      reader_.content.at(0) = 'z';
+      EXPECT_THROW(co_await snapshot_.Verify(), std::runtime_error);
+      EXPECT_THROW(
+        static_cast<void>(snapshot_.Observations()), std::logic_error);
+    });
+  }
+  NOLINT_TEST_F(
+    ImportSourceSnapshotTest, OverlappingVerificationCannotExportProofs)
+  {
+    snapshot_.RecordConsumed(
+      source_, std::as_bytes(std::span(reader_.content)));
+    reader_.block = true;
+    co::Run(loop_,
+      co::AllOf(RejectFirstVerification(), RejectOverlappingVerification()));
+    EXPECT_THROW(static_cast<void>(snapshot_.Observations()), std::logic_error);
+  }
+  NOLINT_TEST_F(
+    ImportSourceSnapshotTest, AccessInventorySurvivesFailedVerification)
+  {
+    co::Run(loop_, [&] -> co::Co<> {
+      EXPECT_TRUE(co_await snapshot_.ReadFile(source_));
+      reader_.content.at(0) = 'z';
+      EXPECT_THROW(co_await snapshot_.Verify(), std::runtime_error);
+      EXPECT_THROW(
+        static_cast<void>(snapshot_.Observations()), std::logic_error);
+      EXPECT_EQ(snapshot_.AccessedPaths(),
+        std::vector<std::filesystem::path> {
+          std::filesystem::absolute(source_).lexically_normal() });
+    });
+  }
+  NOLINT_TEST_F(ImportSourceSnapshotTest, CapturedReadsPreserveLogicalIdentity)
+  {
+    const auto input = CapturedFile();
+    if (!input.file.has_value()) {
+      FAIL() << "Expected input.file to contain a value";
+    }
+    auto mapped
+      = detail::ImportSourceSnapshot(reader_, pool_, CaptureMap(input));
+    co::Run(loop_, [&] -> co::Co<> {
+      EXPECT_TRUE(co_await mapped.ReadFile(source_));
+      EXPECT_EQ(reader_.last_read_path, input.file.value().path);
+      co_await mapped.Verify();
+      const auto facts = mapped.Observations();
+      EXPECT_EQ(facts.front().path, input.logical_path);
+      EXPECT_EQ(reader_.content_reads, 2U);
+      EXPECT_EQ(reader_.last_info_path, input.file.value().path);
+    });
+  }
+
+  NOLINT_TEST_F(
+    ImportSourceSnapshotTest, CapturedAbsenceDoesNotConsultTheLiveSource)
+  {
+    const auto input
+      = CapturedInput { .logical_path = std::filesystem::absolute(source_),
+          .exists = false,
+          .metadata = {},
+          .file = {} };
+    auto mapped
+      = detail::ImportSourceSnapshot(reader_, pool_, CaptureMap(input));
+    reader_.present = true;
+    co::Run(loop_, [&] -> co::Co<> {
+      const auto exists = co_await mapped.Exists(source_);
+      EXPECT_TRUE(exists.has_value());
+      EXPECT_FALSE(exists.value());
+      const auto bytes = co_await mapped.ReadFile(source_);
+      EXPECT_FALSE(bytes.has_value());
+      EXPECT_EQ(bytes.error().code, FileError::kNotFound);
+      co_await mapped.Verify();
+    });
+    EXPECT_EQ(reader_.content_reads, 0U);
+    EXPECT_EQ(reader_.presence_reads, 0U);
+    EXPECT_EQ(reader_.metadata_reads, 0U);
+  }
+
+  NOLINT_TEST_F(
+    ImportSourceSnapshotTest, UndeclaredReadRemainsFatalWhenItsErrorIsIgnored)
+  {
+    const auto input = CapturedFile();
+    if (!input.file.has_value()) {
+      FAIL() << "Expected input.file to contain a value";
+    }
+    auto mapped
+      = detail::ImportSourceSnapshot(reader_, pool_, CaptureMap(input));
+    co::Run(loop_, [&] -> co::Co<> {
+      EXPECT_FALSE(co_await mapped.ReadFile("not-declared.bin"));
+      EXPECT_THROW(co_await mapped.Verify(), std::runtime_error);
+    });
+    EXPECT_EQ(reader_.content_reads, 0U);
+  }
+
+  NOLINT_TEST_F(ImportSourceSnapshotTest, ProbeAdmissionDoesNotPermitByteReads)
+  {
+    auto input = CapturedFile();
+    input.file.reset();
+    auto mapped
+      = detail::ImportSourceSnapshot(reader_, pool_, CaptureMap(input));
+    co::Run(loop_, [&] -> co::Co<> {
+      EXPECT_TRUE(co_await mapped.Exists(source_));
+      EXPECT_FALSE(co_await mapped.ReadFile(source_));
+      EXPECT_THROW(co_await mapped.Verify(), std::runtime_error);
+    });
+    EXPECT_EQ(reader_.content_reads, 0U);
+  }
+
+  NOLINT_TEST_F(
+    ImportSourceSnapshotTest, InitiallyCorruptCaptureCannotBeAccepted)
+  {
+    const auto input = CapturedFile();
+    reader_.content = "zbcdef";
+    auto mapped
+      = detail::ImportSourceSnapshot(reader_, pool_, CaptureMap(input));
+    co::Run(loop_, [&] -> co::Co<> {
+      EXPECT_FALSE(co_await mapped.ReadFile(source_));
+      EXPECT_THROW(co_await mapped.Verify(), std::runtime_error);
+    });
+  }
+
+  NOLINT_TEST_F(
+    ImportSourceSnapshotTest, PartialReadStillQualifiesTheCapturedFileDigest)
+  {
+    const auto input = CapturedFile();
+    reader_.content = "zbcdef";
+    auto mapped
+      = detail::ImportSourceSnapshot(reader_, pool_, CaptureMap(input));
+    co::Run(loop_, [&] -> co::Co<> {
+      EXPECT_TRUE(co_await mapped.ReadFile(source_,
+        ReadOptions {
+          .offset = 1U,
+          .max_bytes = 2U,
+          .size_hint = 0U,
+          .alignment = 0U,
+        }));
+      EXPECT_THROW(co_await mapped.Verify(), std::runtime_error);
+    });
+  }
+
+  NOLINT_TEST_F(
+    ImportSourceSnapshotTest, BoundedWholeReadRejectsAppendedCapturedBytes)
+  {
+    const auto input = CapturedFile();
+    if (!input.file.has_value()) {
+      FAIL() << "Expected input.file to contain a value";
+    }
+    auto mapped
+      = detail::ImportSourceSnapshot(reader_, pool_, CaptureMap(input));
+    co::Run(loop_, [&] -> co::Co<> {
+      EXPECT_TRUE(co_await mapped.ReadFile(source_,
+        ReadOptions {
+          .offset = 0U,
+          .max_bytes = input.file.value().size,
+          .size_hint = 0U,
+          .alignment = 0U,
+        }));
+      reader_.content += "tail";
+      EXPECT_THROW(co_await mapped.Verify(), std::runtime_error);
+    });
+  }
+
+  NOLINT_TEST_F(ImportSourceSnapshotTest, UnusedCapturesAreNotScannedByEachJob)
+  {
+    const auto input = CapturedFile();
+    auto unused = CapturedFile("a different larger file");
+    unused.logical_path = std::filesystem::absolute("unused.bin");
+    if (!unused.file.has_value()) {
+      FAIL() << "Expected unused.file to contain a value";
+    }
+    unused.file.value().path = std::filesystem::absolute("unused-copy.bin");
+    const auto entries = std::array { input, unused };
+    auto mapped = detail::ImportSourceSnapshot(reader_, pool_,
+      std::make_shared<const CapturedInputSet>(std::span(entries)));
+    co::Run(loop_, [&] -> co::Co<> {
+      EXPECT_TRUE(co_await mapped.ReadFile(source_));
+      co_await mapped.Verify();
+    });
+    EXPECT_EQ(reader_.content_reads, 2U);
+    EXPECT_EQ(reader_.metadata_reads, 1U);
+  }
+
+  NOLINT_TEST_F(
+    ImportSourceSnapshotTest, CapturedMetadataUsesOriginalSourceFacts)
+  {
+    auto input = CapturedFile();
+    input.metadata = FileInfo { .size = reader_.content.size(),
+      .last_modified = {},
+      .is_directory = false,
+      .is_symlink = true };
+    reader_.metadata.is_directory = true;
+    auto mapped
+      = detail::ImportSourceSnapshot(reader_, pool_, CaptureMap(input));
+    co::Run(loop_, [&] -> co::Co<> {
+      const auto info = co_await mapped.GetFileInfo(source_);
+      EXPECT_TRUE(info.has_value());
+      EXPECT_EQ(info.value(), input.metadata.value());
+      co_await mapped.Verify();
+    });
+    EXPECT_EQ(reader_.metadata_reads, 0U);
+    EXPECT_EQ(reader_.content_reads, 0U);
+  }
+  NOLINT_TEST_F(ImportSourceSnapshotTest, CapturedMetadataFailurePreservesCause)
+  {
+    const auto input = CapturedFile();
+    auto mapped
+      = detail::ImportSourceSnapshot(reader_, pool_, CaptureMap(input));
+    co::Run(loop_, [&] -> co::Co<> {
+      EXPECT_TRUE(co_await mapped.ReadFile(source_));
+      reader_.metadata_denied = true;
+      try {
+        co_await mapped.Verify();
+        ADD_FAILURE() << "Expected metadata verification failure";
+      } catch (const std::runtime_error& error) {
+        EXPECT_THAT(error.what(), ::testing::HasSubstr("Metadata denied"));
+      }
+    });
+  }
+
+  NOLINT_TEST_F(ImportSourceSnapshotTest, CapturedChunkFailurePreservesCause)
+  {
+    const auto input = CapturedFile();
+    auto mapped
+      = detail::ImportSourceSnapshot(reader_, pool_, CaptureMap(input));
+    co::Run(loop_, [&] -> co::Co<> {
+      EXPECT_TRUE(co_await mapped.ReadFile(source_,
+        ReadOptions {
+          .offset = 1U, .max_bytes = 2U, .size_hint = 0U, .alignment = 0U }));
+      // The range is rechecked first; the third read qualifies the whole
+      // capture.
+      reader_.deny_read_number = 3U;
+      try {
+        co_await mapped.Verify();
+        ADD_FAILURE() << "Expected captured-file verification failure";
+      } catch (const std::runtime_error& error) {
+        EXPECT_THAT(error.what(), ::testing::HasSubstr("Read denied"));
+      }
+      EXPECT_EQ(reader_.content_reads, 3U);
+    });
+  }
+
+  NOLINT_TEST_F(ImportSourceSnapshotTest, ParserReadsPreserveLogicalIdentity)
+  {
+    const auto input = CapturedFile();
+    if (!input.file.has_value()) {
+      FAIL() << "Expected input.file to contain a value";
+    }
+    const auto physical_path = input.file.value().path;
+    auto mapped
+      = detail::ImportSourceSnapshot(reader_, pool_, CaptureMap(input));
+    {
+      auto read = mapped.BeginParserRead(source_);
+      EXPECT_EQ(read.PhysicalPath(), physical_path);
+      read.Record(std::as_bytes(std::span(reader_.content)));
+    }
+    co::Run(loop_, [&] -> co::Co<> { co_await mapped.Verify(); });
+    const auto facts = mapped.Observations();
+    ASSERT_EQ(facts.size(), 1U);
+    EXPECT_EQ(facts.front().path, input.logical_path);
+    EXPECT_EQ(reader_.content_reads, 1U);
+  }
+
+  NOLINT_TEST_F(ImportSourceSnapshotTest, ActiveParserReadPreventsVerification)
+  {
+    auto read = snapshot_.BeginParserRead(source_);
+    co::Run(loop_, [&] -> co::Co<> {
+      EXPECT_THROW(co_await snapshot_.Verify(), std::runtime_error);
+    });
+  }
+
+  NOLINT_TEST_F(ImportSourceSnapshotTest, AbandonedCapturedParserReadIsFatal)
+  {
+    const auto input = CapturedFile();
+    auto mapped
+      = detail::ImportSourceSnapshot(reader_, pool_, CaptureMap(input));
+    {
+      auto read = mapped.BeginParserRead(source_);
+    }
+    co::Run(loop_, [&] -> co::Co<> {
+      EXPECT_THROW(co_await mapped.Verify(), std::runtime_error);
+    });
+  }
+
+  NOLINT_TEST_F(ImportSourceSnapshotTest, MovedParserReadRetainsSingleLease)
+  {
+    const auto input = CapturedFile();
+    auto mapped
+      = detail::ImportSourceSnapshot(reader_, pool_, CaptureMap(input));
+    {
+      auto original = mapped.BeginParserRead(source_);
+      auto moved = std::move(original);
+      moved.Record(std::as_bytes(std::span(reader_.content)));
+    }
+    co::Run(loop_, [&] -> co::Co<> { co_await mapped.Verify(); });
+    EXPECT_EQ(mapped.Observations().size(), 1U);
   }
 } // namespace
 } // namespace oxygen::content::import::test

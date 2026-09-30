@@ -23,6 +23,7 @@
 namespace oxygen::content::import {
 
 class MaterialSlotProvenance;
+class CapturedInputSet;
 
 //! Supported authoring source formats.
 enum class ImportFormat : uint8_t {
@@ -127,6 +128,9 @@ struct ImportRequest final {
 
   //! Source file (FBX, glTF, GLB, or primary texture).
   std::filesystem::path source_path;
+
+  //! Optional frozen source inputs; source_path retains its authored identity.
+  std::shared_ptr<const CapturedInputSet> captured_inputs {};
 
   //! Explicit standalone texture descriptor identity; empty uses hashed naming.
   std::string texture_virtual_path {};
@@ -284,6 +288,10 @@ struct ImportRequest final {
    generation. Returns "Scene" if the source path has no stem.
   */
   OXGN_COOK_NDAPI auto GetSceneName() const -> std::string;
+
+  //! Resolve the texture descriptor identity without emitting or reading files.
+  //! Invalid explicit virtual paths throw std::invalid_argument.
+  OXGN_COOK_NDAPI auto GetTextureDescriptorRelPath() const -> std::string;
 
   //! Resolve the explicit or source-derived output root without creating it.
   OXGN_COOK_NDAPI auto ResolveCookedRoot() const -> std::filesystem::path;

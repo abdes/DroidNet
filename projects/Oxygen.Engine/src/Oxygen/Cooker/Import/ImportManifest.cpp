@@ -1770,6 +1770,53 @@ auto ImportManifest::Parse(const std::string_view text,
   return manifest;
 }
 
+auto ImportManifestJob::SourcePath() const -> std::filesystem::path
+{
+  if (job_type == "texture") {
+    return texture.source_path;
+  }
+  if (job_type == "texture-descriptor") {
+    return texture.source_path;
+  }
+  if (job_type == "fbx") {
+    return fbx.source_path;
+  }
+  if (job_type == "gltf") {
+    return gltf.source_path;
+  }
+  if (job_type == "script") {
+    return script.source_path;
+  }
+  if (job_type == "script-sidecar") {
+    return scripting_sidecar.source_path;
+  }
+  if (job_type == "physics-sidecar") {
+    return physics_sidecar.source_path;
+  }
+  if (job_type == "input") {
+    return input.source_path;
+  }
+  if (job_type == "buffer-container") {
+    return buffer_container.descriptor_path;
+  }
+  if (job_type == "material-descriptor") {
+    return material_descriptor.descriptor_path;
+  }
+  if (job_type == "physics-material-descriptor") {
+    return physics_material_descriptor.descriptor_path;
+  }
+  if (job_type == "collision-shape-descriptor") {
+    return collision_shape_descriptor.descriptor_path;
+  }
+  if (job_type == "geometry-descriptor") {
+    return geometry_descriptor.descriptor_path;
+  }
+  if (job_type == "scene-descriptor") {
+    return scene_descriptor.descriptor_path;
+  }
+  return {};
+}
+
 auto ImportManifestJob::BuildRequest(std::ostream& error_stream) const
   -> std::optional<ImportRequest>
 {

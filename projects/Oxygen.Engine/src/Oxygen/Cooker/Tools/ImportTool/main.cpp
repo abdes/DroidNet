@@ -63,6 +63,7 @@
 #include <Oxygen/Cooker/Tools/ImportTool/ReclaimCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/ScriptCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/ScriptingSidecarCommand.h>
+#include <Oxygen/Cooker/Tools/ImportTool/SourceAnalysisCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/SourceInspectionCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/TextureCommand.h>
 
@@ -746,6 +747,8 @@ auto main(int argc, char** argv) -> int
       builtin_catalog_command;
     oxygen::content::import::tool::SourceInspectionCommand
       source_inspection_command;
+    oxygen::content::import::tool::SourceAnalysisCommand
+      source_analysis_command;
     FbxCommand fbx_command(&global_options);
     GltfCommand gltf_command(&global_options);
     InputCommand input_command(&global_options);
@@ -765,6 +768,7 @@ auto main(int argc, char** argv) -> int
       &batch_command,
       &builtin_catalog_command,
       &source_inspection_command,
+      &source_analysis_command,
       &reclaim_command,
     };
 

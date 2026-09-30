@@ -26,7 +26,7 @@
 #include <Oxygen/Cooker/Import/Naming.h>
 #include <Oxygen/Cooker/Import/SceneImportSettings.h>
 
-namespace oxygen::content::import::internal {
+namespace oxygen::content::import {
 
 namespace {
 
@@ -117,15 +117,11 @@ namespace {
 
 } // namespace
 
-auto BuildSceneRequest(const SceneImportSettings& settings,
-  const ImportFormat expected_format, std::ostream& error_stream)
+auto SceneImportSettings::Prepare(const ImportFormat expected_format,
+  const std::string_view external_provenance, std::ostream& error_stream) const
   -> std::optional<ImportRequest>
 {
-  if (settings.cooked_root.empty()) {
-    error_stream << "ERROR: --output or --cooked-root is required\n";
-    return std::nullopt;
-  }
-
+  const auto& settings = *this;
   ImportRequest request {};
   request.source_path = settings.source_path;
   auto provenance_json = settings.material_slot_provenance_json;
@@ -135,13 +131,7 @@ auto BuildSceneRequest(const SceneImportSettings& settings,
                       "file, not both\n";
       return std::nullopt;
     }
-    std::ifstream input(
-      base::ToNativePath(settings.material_slot_provenance_path));
-    if (!input) {
-      error_stream << "ERROR: cannot open material-slot provenance file\n";
-      return std::nullopt;
-    }
-    provenance_json.assign(std::istreambuf_iterator<char>(input), {});
+    provenance_json = std::string(external_provenance);
   }
   try {
     if (!provenance_json.empty()) {
@@ -178,13 +168,6 @@ auto BuildSceneRequest(const SceneImportSettings& settings,
                  << '\n';
     return std::nullopt;
   }
-
-  std::filesystem::path root(settings.cooked_root);
-  if (!root.is_absolute()) {
-    error_stream << "ERROR: cooked root must be an absolute path\n";
-    return std::nullopt;
-  }
-  request.cooked_root = root;
 
   if (!settings.job_name.empty()) {
     request.job_name = settings.job_name;
@@ -282,14 +265,14 @@ auto BuildSceneRequest(const SceneImportSettings& settings,
   }
 
   // Handle texture tuning overrides for the scene
-  if (!MapSettingsToTuning(
+  if (!internal::MapSettingsToTuning(
         settings.texture_defaults, options.texture_tuning, error_stream)) {
     return std::nullopt;
   }
 
   for (const auto& [name, tex_settings] : settings.texture_overrides) {
     ImportOptions::TextureTuning tuning = options.texture_tuning;
-    if (!MapSettingsToTuning(tex_settings, tuning, error_stream)) {
+    if (!internal::MapSettingsToTuning(tex_settings, tuning, error_stream)) {
       return std::nullopt;
     }
     options.texture_overrides[name] = std::move(tuning);
@@ -299,4 +282,46 @@ auto BuildSceneRequest(const SceneImportSettings& settings,
   return request;
 }
 
-} // namespace oxygen::content::import::internal
+namespace internal {
+  auto BuildSceneRequest(const SceneImportSettings& settings,
+    const ImportFormat expected_format, std::ostream& error_stream)
+    -> std::optional<ImportRequest>
+  {
+    if (settings.cooked_root.empty()) {
+      error_stream << "ERROR: --output or --cooked-root is required\n";
+      return std::nullopt;
+    }
+    auto provenance = std::string {};
+    if (!settings.material_slot_provenance_path.empty()) {
+      if (!settings.material_slot_provenance_json.empty()) {
+        error_stream << "ERROR: supply material-slot provenance inline or by "
+                        "file, not both\n";
+        return std::nullopt;
+      }
+      std::ifstream input(
+        base::ToNativePath(settings.material_slot_provenance_path));
+      if (!input) {
+        error_stream << "ERROR: cannot open material-slot provenance file\n";
+        return std::nullopt;
+      }
+      provenance.assign(std::istreambuf_iterator<char>(input), {});
+      if (input.bad()) {
+        error_stream << "ERROR: cannot read material-slot provenance file\n";
+        return std::nullopt;
+      }
+    }
+    auto request = settings.Prepare(expected_format, provenance, error_stream);
+    if (!request.has_value()) {
+      return std::nullopt;
+    }
+    auto root = std::filesystem::path(settings.cooked_root);
+    if (!root.is_absolute()) {
+      error_stream << "ERROR: cooked root must be an absolute path\n";
+      return std::nullopt;
+    }
+    request->cooked_root = std::move(root);
+    return request;
+  }
+} // namespace internal
+
+} // namespace oxygen::content::import

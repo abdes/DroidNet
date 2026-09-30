@@ -81,6 +81,7 @@ ImportJob::ImportJob(ImportJobParams params)
   , on_progress_(std::move(params.on_progress))
   , cancel_event_(std::move(params.cancel_event))
   , file_reader_(params.reader)
+  , cooked_reader_(params.reader)
   , file_writer_(params.writer)
   , thread_pool_(params.thread_pool)
   , table_registry_(params.registry)
@@ -91,11 +92,13 @@ ImportJob::ImportJob(ImportJobParams params)
   , retained_import_(std::move(params.retained_import))
 {
   CHECK_NOTNULL_F(thread_pool_, "ImportJob requires a non-null thread pool");
-  if (retained_import_) {
-    CHECK_NOTNULL_F(file_reader_, "Retained imports require a source reader");
-    source_snapshot_
-      = std::make_shared<ImportSourceSnapshot>(*file_reader_, *thread_pool_);
+  if (retained_import_ || request_.captured_inputs) {
+    CHECK_NOTNULL_F(file_reader_, "Observed imports require a source reader");
+    source_snapshot_ = std::make_shared<ImportSourceSnapshot>(
+      *file_reader_, *thread_pool_, request_.captured_inputs);
     file_reader_ = observer_ptr { source_snapshot_.get() };
+  }
+  if (retained_import_) {
     CHECK_NOTNULL_F(
       file_writer_, "Retained imports require a generation writer");
     generation_writer_ = std::move(params.generation_writer);
@@ -234,18 +237,8 @@ auto ImportJob::IsStopped() const noexcept -> bool
 auto ImportJob::GetNamingService() -> NamingService&
 {
   if (!naming_service_) {
-    NamingService::Config config;
-    if (request_.options.naming_strategy) {
-      config.strategy = request_.options.naming_strategy;
-    } else {
-      NormalizeNamingStrategy::Options normalize_options {};
-      // Keep authored naming style, but normalize unsafe characters so emitted
-      // descriptor virtual paths remain canonical.
-      normalize_options.apply_prefixes = false;
-      config.strategy
-        = std::make_shared<NormalizeNamingStrategy>(normalize_options);
-    }
-    naming_service_ = std::make_unique<NamingService>(std::move(config));
+    naming_service_
+      = std::make_unique<NamingService>(request_.options.naming_strategy);
   }
   return *naming_service_;
 }
@@ -294,7 +287,13 @@ auto ImportJob::ExecuteAndPublishAsync() -> co::Co<ImportReport>
       });
   }
   auto report = co_await ExecuteAsync();
-  if (!retained_import_ || !report.success) {
+  if (!report.success) {
+    co_return report;
+  }
+  if (!retained_import_) {
+    if (source_snapshot_) {
+      co_await source_snapshot_->Verify();
+    }
     co_return report;
   }
   auto candidate = std::make_shared<ImportReport>(std::move(report));

@@ -7,8 +7,12 @@
 #pragma once
 
 #include <map>
+#include <optional>
+#include <ostream>
 #include <string>
+#include <string_view>
 
+#include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/TextureImportSettings.h>
 #include <Oxygen/Cooker/api_export.h>
 
@@ -22,6 +26,12 @@ struct SceneImportSettings {
   //! are not recipes.
   OXGN_COOK_NDAPI static auto FromOptions(const ImportOptions& options,
     std::string naming_policy) -> SceneImportSettings;
+  //! Interpret a model recipe and supplied provenance bytes without file I/O.
+  //! The resulting request has no cooked destination; execution attaches it.
+  OXGN_COOK_NDAPI auto Prepare(ImportFormat expected_format,
+    std::string_view external_provenance, std::ostream& error_stream) const
+    -> std::optional<ImportRequest>;
+
   std::string source_path;
   std::string cooked_root;
   std::string job_name;

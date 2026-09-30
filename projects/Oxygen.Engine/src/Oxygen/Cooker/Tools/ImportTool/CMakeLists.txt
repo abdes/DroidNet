@@ -55,6 +55,8 @@ add_executable(
   "ReclaimCommand.h"
   "ReportJson.cpp"
   "ReportJson.h"
+  "SourceAnalysisCommand.cpp"
+  "SourceAnalysisCommand.h"
   "SourceInspectionCommand.cpp"
   "SourceInspectionCommand.h"
   "ScriptCommand.cpp"

@@ -15,6 +15,20 @@ find_package(ftxui REQUIRED)
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
 add_test(
+  NAME "Oxygen.Cooker.SourceAnalysis.Cli"
+  COMMAND
+    "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Import/source_analysis_cli_test.py"
+    "$<TARGET_FILE:oxygen-cooker-importtool>"
+)
+set_tests_properties(
+  "Oxygen.Cooker.SourceAnalysis.Cli"
+  PROPERTIES
+    TIMEOUT
+      120
+)
+
+add_test(
   NAME "Oxygen.Cooker.RetainedImport.Cli"
   COMMAND
     "${Python3_EXECUTABLE}"
@@ -212,6 +226,7 @@ m_gtest_program(
   AsyncImportGeometryDescriptor
   SOURCES
     "Import/BuiltinGeometryCatalog_test.cpp"
+    "Import/GeometrySource_test.cpp"
     "Import/GeometryDescriptorImportJob_test.cpp"
     "Import/ImportManifest_geometry_descriptor_test.cpp"
     "Import/GeometryDescriptorImportRequestBuilder_test.cpp"
@@ -228,6 +243,7 @@ m_gtest_program(
   AsyncImportSceneDescriptor
   SOURCES
     "Import/SceneImportRequestBuilder_test.cpp"
+    "Import/SceneSource_test.cpp"
     "Import/SceneDescriptorImportJob_test.cpp"
     "Import/ImportManifest_scene_descriptor_test.cpp"
     "Import/SceneDescriptorImportRequestBuilder_test.cpp"
@@ -266,6 +282,18 @@ m_gtest_program(
 target_link_libraries(Oxygen.Cooker.AsyncImportIO.Tests PRIVATE oxygen::serio)
 
 m_gtest_program(
+  ImportSourceAnalysis
+  SOURCES
+    "Import/ImportSourceAnalysis_test.cpp"
+)
+target_link_libraries(
+  Oxygen.Cooker.ImportSourceAnalysis.Tests
+  PRIVATE
+    nlohmann_json::nlohmann_json
+    nlohmann_json_schema_validator
+)
+
+m_gtest_program(
   ImportSourceSnapshot
   SOURCES
     "Import/ImportSourceSnapshot_test.cpp"
@@ -286,6 +314,7 @@ m_gtest_program(
 m_gtest_program(
   AsyncImportBufferContainer
   SOURCES
+    "Import/BufferSource_test.cpp"
     "Import/BufferContainerImportJob_test.cpp"
     "Import/BufferContainerImportRequestBuilder_test.cpp"
     "Import/ImportManifest_buffer_container_test.cpp"
@@ -328,7 +357,12 @@ m_gtest_program(
     "Import/SceneNodeImportDefaults_test.cpp"
 )
 
-m_gtest_program(AsyncImportMaterials SOURCES "Import/MaterialPipeline_test.cpp")
+m_gtest_program(
+  AsyncImportMaterials
+  SOURCES
+    "Import/MaterialPipeline_test.cpp"
+    "Import/MaterialSource_test.cpp"
+)
 
 m_gtest_program(
   AsyncImportTexture
@@ -364,6 +398,9 @@ m_gtest_program(
     "Import/MeshTransformBake_test.cpp"
     "Import/SourceLayoutWitness_test.cpp"
     "Import/SceneSourceInspection_test.cpp"
+    "Import/ModelGeometrySource_test.cpp"
+    "Import/ModelMaterialSource_test.cpp"
+    "Import/ModelTextureSource_test.cpp"
 )
 
 target_link_libraries(

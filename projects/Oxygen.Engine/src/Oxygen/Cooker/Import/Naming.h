@@ -206,6 +206,11 @@ public:
   */
   OXGN_COOK_API explicit NamingService(Config config);
 
+  //! Use normal import naming, preserving authored style when no strategy is
+  //! set.
+  OXGN_COOK_API explicit NamingService(
+    std::shared_ptr<const NamingStrategy> strategy);
+
   ~NamingService() = default;
 
   OXYGEN_MAKE_NON_COPYABLE(NamingService)

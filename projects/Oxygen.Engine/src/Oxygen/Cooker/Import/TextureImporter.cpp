@@ -29,6 +29,7 @@
 #include <Oxygen/Base/Span.h>
 #include <Oxygen/Cooker/Import/Internal/ImageDecode.h>
 #include <Oxygen/Cooker/Import/Internal/TextureCooker.h>
+#include <Oxygen/Cooker/Import/Internal/TextureSourceAssembly_internal.h>
 #include <Oxygen/Cooker/Import/ScratchImage.h>
 #include <Oxygen/Cooker/Import/TextureImportError.h>
 #include <Oxygen/Cooker/Import/TextureImportPresets.h>
@@ -757,7 +758,17 @@ auto ImportCubeMap(const std::filesystem::path& base_path, TexturePreset preset,
   DCHECK_F(!base_path.empty(), "ImportCubeMap: base_path must not be empty");
 
   // Discover face paths
-  auto discovered = DiscoverCubeFacePaths(base_path);
+  auto search = detail::CubeFaceSearch(base_path);
+  while (!search.Candidate().empty()) {
+    auto error = std::error_code {};
+    const auto present
+      = std::filesystem::exists(base::ToNativePath(search.Candidate()), error);
+    if (error) {
+      return Err(TextureImportError::kFileReadFailed);
+    }
+    search.Observe(present);
+  }
+  auto discovered = std::move(search).TakeResult();
   if (!discovered) {
     LOG_F(WARNING, "Could not discover cube face files for base path: {}",
       base_path.string());

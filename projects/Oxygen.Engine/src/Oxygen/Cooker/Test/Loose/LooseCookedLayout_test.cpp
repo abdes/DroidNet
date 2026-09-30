@@ -4,15 +4,42 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Testing/GTest.h>
 
 using oxygen::content::import::LooseCookedLayout;
 using oxygen::data::AssetType;
 
 namespace {
+
+NOLINT_TEST(LooseCookedLayoutTest, SourceSidecarsPreserveStableIdentityNaming)
+{
+  const auto layout = LooseCookedLayout {};
+  EXPECT_EQ(
+    layout.TextureDescriptorRelPath("folder\\paint.albedo.png", "retained-id"),
+    layout.TextureDescriptorRelPath("paint_albedo_4c53d36a5b11011d"));
+  EXPECT_EQ(
+    layout.BufferDescriptorRelPath("folder/vertices.bin", "retained-id"),
+    layout.BufferDescriptorRelPath("vertices_4c53d36a5b11011d"));
+  EXPECT_EQ(layout.TextureDescriptorRelPath("textures/paint.png", ""),
+    layout.TextureDescriptorRelPath("paint_06852ab67af73db3"));
+  EXPECT_EQ(layout.TextureDescriptorRelPath("", ""),
+    layout.TextureDescriptorRelPath("texture_cbf29ce484222325"));
+  EXPECT_EQ(layout.BufferDescriptorRelPath("", ""),
+    layout.BufferDescriptorRelPath("buffer_cbf29ce484222325"));
+}
+
+NOLINT_TEST(LooseCookedLayoutTest, SourceSidecarsRespectConfiguredLayout)
+{
+  auto layout = LooseCookedLayout {};
+  layout.descriptors_dir = "Assets";
+  layout.resources_dir = "Resources2";
+  EXPECT_EQ(layout.TextureDescriptorRelPath("paint.png", "retained-id"),
+    layout.TextureDescriptorRelPath("paint_4c53d36a5b11011d"));
+  EXPECT_NE(layout.TextureDescriptorRelPath("paint.png", "first-source"),
+    layout.TextureDescriptorRelPath("paint.png", "second-source"));
+}
 
 NOLINT_TEST(LooseCookedLayoutTest, DefaultSettingsAreCorrect)
 {

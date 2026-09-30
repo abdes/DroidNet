@@ -27,6 +27,7 @@
 #include <Oxygen/Cooker/Import/Internal/ImportPlanner.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/FbxImportJob.h>
+#include <Oxygen/Cooker/Import/Internal/MaterialSource.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/BufferPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/GeometryPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MaterialPipeline.h>
@@ -343,7 +344,7 @@ auto FbxImportJob::BuildPlan(ParsedFbxScene& scene,
       const auto handle = plan_.payloads.Store(std::move(item));
       auto& payload = plan_.payloads.Material(handle);
       const auto id
-        = plan_.planner.AddMaterialAsset(payload.item.material_name, handle);
+        = plan_.planner.AddMaterialAsset(payload.item.material.name, handle);
       plan_.material_items.push_back(id);
       plan_.material_slots.push_back(id);
 
@@ -363,18 +364,9 @@ auto FbxImportJob::BuildPlan(ParsedFbxScene& scene,
         plan_.planner.AddDependency(id, it->second);
       };
 
-      add_dep(payload.item.textures.base_color);
-      add_dep(payload.item.textures.normal);
-      add_dep(payload.item.textures.metallic);
-      add_dep(payload.item.textures.roughness);
-      add_dep(payload.item.textures.ambient_occlusion);
-      add_dep(payload.item.textures.emissive);
-      add_dep(payload.item.textures.specular);
-      add_dep(payload.item.textures.sheen_color);
-      add_dep(payload.item.textures.clearcoat);
-      add_dep(payload.item.textures.clearcoat_normal);
-      add_dep(payload.item.textures.transmission);
-      add_dep(payload.item.textures.thickness);
+      for (const auto& slot : MaterialSource::TextureSlots()) {
+        add_dep(payload.item.material.textures.*slot.binding);
+      }
 
       return true;
     }

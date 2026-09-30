@@ -8,6 +8,7 @@
 #include <optional>
 #include <ostream>
 #include <string>
+#include <utility>
 
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
@@ -15,28 +16,16 @@
 #include <Oxygen/Cooker/Import/Internal/Utils/ImportSettingsUtils.h>
 #include <Oxygen/Cooker/Import/TextureImportSettings.h>
 
-namespace oxygen::content::import::internal {
+namespace oxygen::content::import {
 
-auto BuildTextureRequest(const TextureImportSettings& settings,
-  std::ostream& error_stream) -> std::optional<ImportRequest>
+auto TextureImportSettings::Prepare(std::ostream& error_stream) const
+  -> std::optional<ImportRequest>
 {
+  const auto& settings = *this;
   ImportRequest request {};
   request.source_path = settings.source_path;
   request.texture_virtual_path = settings.virtual_path;
 
-  if (settings.cooked_root.empty()) {
-    error_stream << "ERROR: --output or --cooked-root is required\n";
-    return std::nullopt;
-  }
-
-  if (!settings.cooked_root.empty()) {
-    std::filesystem::path root(settings.cooked_root);
-    if (!root.is_absolute()) {
-      error_stream << "ERROR: cooked root must be an absolute path\n";
-      return std::nullopt;
-    }
-    request.cooked_root = root;
-  }
   if (!settings.job_name.empty()) {
     request.job_name = settings.job_name;
   } else {
@@ -51,7 +40,7 @@ auto BuildTextureRequest(const TextureImportSettings& settings,
 
   auto& tuning = request.options.texture_tuning;
 
-  if (!MapSettingsToTuning(settings, tuning, error_stream)) {
+  if (!internal::MapSettingsToTuning(settings, tuning, error_stream)) {
     return std::nullopt;
   }
 
@@ -76,4 +65,24 @@ auto BuildTextureRequest(const TextureImportSettings& settings,
   return request;
 }
 
-} // namespace oxygen::content::import::internal
+namespace internal {
+  auto BuildTextureRequest(const TextureImportSettings& settings,
+    std::ostream& error_stream) -> std::optional<ImportRequest>
+  {
+    if (settings.cooked_root.empty()) {
+      error_stream << "ERROR: --output or --cooked-root is required\n";
+      return std::nullopt;
+    }
+    auto root = std::filesystem::path(settings.cooked_root);
+    if (!root.is_absolute()) {
+      error_stream << "ERROR: cooked root must be an absolute path\n";
+      return std::nullopt;
+    }
+    auto request = settings.Prepare(error_stream);
+    if (request.has_value()) {
+      request->cooked_root = std::move(root);
+    }
+    return request;
+  }
+} // namespace internal
+} // namespace oxygen::content::import

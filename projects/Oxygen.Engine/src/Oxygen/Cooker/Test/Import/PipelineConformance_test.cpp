@@ -25,11 +25,13 @@
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
+#include <Oxygen/Cooker/Import/Internal/MaterialSource.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/BufferPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MaterialPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScenePipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/TexturePipeline.h>
+#include <Oxygen/Cooker/Import/Internal/SceneBuild.h>
 #include <Oxygen/Cooker/Import/MaterialSlotProvenance.h>
 #include <Oxygen/Cooker/Import/Naming.h>
 #include <Oxygen/Cooker/Import/ScratchImage.h>
@@ -151,9 +153,9 @@ auto MakeMaterialWorkItem() -> MaterialPipeline::WorkItem
 {
   MaterialPipeline::WorkItem item;
   item.source_id = "mat0";
-  item.material_name = "Material_0";
-  item.storage_material_name = "Material_0";
-  item.shader_requests = {
+  item.material.name = "Material_0";
+  item.material.storage_name = "Material_0";
+  item.material.shader_requests = {
     ShaderRequest {
       .shader_type = 1,
       .source_path = "Vortex/Stages/Translucency/ForwardMesh_VS.hlsl",

@@ -1060,9 +1060,14 @@ readers. Primary/Secondary names remain unchanged.
       Debug and Release builds pass. Each configuration passes 27 source-snapshot,
       60 file-I/O and 17 retained-model tests plus the retained-import CLI test.
       Scoped tidy is clean across 66 contexts; changed-file MSVC checks and
-      extra-high review are clear. Shared preparation/batch analysis (.9.2) and
-      managed cutover (.9.3) remain. The build-target selector also cancels on
+      extra-high review are clear. The build-target selector also cancels on
       EOF/Enter instead of looping; its 29 launcher tests pass.
+      M08.1.9.2.1 shared native preparation, batch analysis and captured model
+      reads are validated. Debug passes 667 owning-suite tests; Release passes
+      106 contract/model tests; both pass four source-analysis CLI tests.
+      The full Debug glTF/FBX imports, scoped tidy, MSVC warning checks and
+      extra-high review pass. Captured batch/descriptor ingress (.9.2.2) and
+      managed cutover (.9.3) remain; no editor workflow closure is claimed here.
 
 - [ ] [M08.F1 descriptor-local reference format](plan/ED-M08.F1-descriptor-local-references.md),
       after M08.1.9 and before M08.2. Separate format cutover, recook and SDK gate.

@@ -18,14 +18,14 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <system_error>
 #include <utility>
 #include <vector>
 
-#include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Span.h>
+#include <Oxygen/Cooker/Import/FileError.h>
+#include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/Internal/TextureSourceAssembly_internal.h>
 #include <Oxygen/Cooker/Import/ScratchImage.h>
 #include <Oxygen/Cooker/Import/TextureImportError.h>
@@ -33,6 +33,7 @@
 #include <Oxygen/Cooker/Import/TextureSourceAssembly.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/OxCo/Co.h>
 
 namespace oxygen::content::import {
 
@@ -104,36 +105,62 @@ auto to_string(const CubeFace face) -> const char*
   return "Unknown";
 }
 
-auto DiscoverCubeFacePaths(const std::filesystem::path& path)
-  -> std::optional<std::array<std::filesystem::path, kCubeFaceCount>>
+detail::CubeFaceSearch::CubeFaceSearch(const std::filesystem::path& source)
+  : parent_(source.parent_path())
+  , stem_(source.stem().string())
+  , extension_(source.extension().string())
 {
-  const auto parent = path.parent_path();
-  const auto stem = path.stem().string();
-  const auto ext = path.extension().string();
+  UpdateCandidate();
+}
 
-  for (const auto& suffix_set : kCubeFaceSuffixSets) {
-    const auto base = StripFaceSuffix(stem, suffix_set.suffixes);
-
-    std::array<std::filesystem::path, kCubeFaceCount> paths;
-    bool all_found = true;
-    for (size_t i = 0; i < kCubeFaceCount; ++i) {
-      const auto face_name
-        = base + std::string(suffix_set.suffixes.at(i)) + ext;
-      const auto face_path = parent / face_name;
-      std::error_code ec;
-      if (!std::filesystem::exists(base::ToNativePath(face_path), ec)) {
-        all_found = false;
-        break;
-      }
-      paths.at(i) = face_path;
-    }
-
-    if (all_found) {
-      return paths;
-    }
+auto detail::CubeFaceSearch::UpdateCandidate() -> void
+{
+  if (face_ == kCubeFaceCount || suffix_set_ == kCubeFaceSuffixSets.size()) {
+    candidate_.clear();
+    return;
   }
+  const auto& suffixes = kCubeFaceSuffixSets.at(suffix_set_).suffixes;
+  const auto base = StripFaceSuffix(stem_, suffixes);
+  candidate_ = parent_ / (base + std::string(suffixes.at(face_)) + extension_);
+}
 
+auto detail::CubeFaceSearch::Observe(const bool present) -> void
+{
+  if (present) {
+    paths_.at(face_) = candidate_;
+    ++face_;
+  } else {
+    face_ = 0;
+    ++suffix_set_;
+  }
+  UpdateCandidate();
+}
+
+auto detail::CubeFaceSearch::TakeResult() && -> std::optional<CubeFacePaths>
+{
+  if (face_ == kCubeFaceCount) {
+    return std::move(paths_);
+  }
   return std::nullopt;
+}
+
+auto detail::DiscoverCubeFacePaths(const std::filesystem::path& path,
+  IAsyncFileReader& reader) -> co::Co<Result<CubeFacePaths, FileErrorInfo>>
+{
+  auto search = CubeFaceSearch(path);
+  while (!search.Candidate().empty()) {
+    const auto exists = co_await reader.Exists(search.Candidate());
+    if (!exists.has_value()) {
+      co_return Err(exists.error());
+    }
+    search.Observe(exists.value());
+  }
+  auto paths = std::move(search).TakeResult();
+  if (paths.has_value()) {
+    co_return Ok(std::move(*paths));
+  }
+  co_return Err(MakeFileError(
+    path, FileError::kNotFound, "No complete cubemap face set was found"));
 }
 
 //=== TextureSourceSet Implementation

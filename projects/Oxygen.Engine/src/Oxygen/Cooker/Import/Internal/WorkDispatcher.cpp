@@ -43,6 +43,7 @@
 #include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/ImportPlanner.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
+#include <Oxygen/Cooker/Import/Internal/MaterialSource.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/BufferPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/GeometryPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MaterialPipeline.h>
@@ -293,7 +294,7 @@ auto WorkDispatcher::EmitTexturePayload(TexturePipeline::WorkResult& result)
       "Texture cooking failed; using fallback texture", result.source_id, ""));
 
     // Ensure the texture emitter is initialized so the fallback index is valid.
-    [[maybe_unused]] auto& texture_emitter = session_.TextureEmitter();
+    session_.TextureEmitter().EnsureFallbackTexture();
     const auto stable_id
       = ChooseStableId(result.texture_id, result.source_id, "texture");
     if (!EmitTextureSidecarDescriptor(data::pak::core::kFallbackResourceIndex,
@@ -514,18 +515,9 @@ auto WorkDispatcher::UpdateMaterialBindings(
       binding.source_id, binding.index);
   };
 
-  resolve_binding(item.textures.base_color, "base_color");
-  resolve_binding(item.textures.normal, "normal");
-  resolve_binding(item.textures.metallic, "metallic");
-  resolve_binding(item.textures.roughness, "roughness");
-  resolve_binding(item.textures.ambient_occlusion, "occlusion");
-  resolve_binding(item.textures.emissive, "emissive");
-  resolve_binding(item.textures.specular, "specular");
-  resolve_binding(item.textures.sheen_color, "sheen_color");
-  resolve_binding(item.textures.clearcoat, "clearcoat");
-  resolve_binding(item.textures.clearcoat_normal, "clearcoat_normal");
-  resolve_binding(item.textures.transmission, "transmission");
-  resolve_binding(item.textures.thickness, "thickness");
+  for (const auto& slot : MaterialSource::TextureSlots()) {
+    resolve_binding(item.material.textures.*slot.binding, slot.name);
+  }
 }
 
 auto WorkDispatcher::EnsureTexturePipeline(co::Nursery& nursery)

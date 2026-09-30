@@ -20,6 +20,7 @@
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
+#include <Oxygen/Cooker/Import/Internal/MaterialSource.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MaterialPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Core/Types/ShaderType.h>
@@ -69,10 +70,10 @@ auto MakeBaseItem() -> MaterialPipeline::WorkItem
 {
   MaterialPipeline::WorkItem item;
   item.source_id = "mat0";
-  item.material_name = "Material_0";
-  item.storage_material_name = "Material_0";
+  item.material.name = "Material_0";
+  item.material.storage_name = "Material_0";
   item.request = MakeRequest();
-  item.shader_requests = {
+  item.material.shader_requests = {
     MakeShaderRequest(ShaderType::kVertex,
       "Vortex/Stages/Translucency/ForwardMesh_VS.hlsl", "VS"),
     MakeShaderRequest(ShaderType::kPixel,
@@ -246,7 +247,7 @@ NOLINT_TEST_F(MaterialPipelineBasicTest, RejectsInvalidCompiledEmission)
              std::numeric_limits<float>::quiet_NaN(),
            }) {
         auto item = MakeBaseItem();
-        item.inputs.emissive_factor[0] = value;
+        item.material.inputs.emissive_factor[0] = value;
         co_await pipeline.Submit(std::move(item));
         const auto result = co_await pipeline.Collect();
         EXPECT_FALSE(result.success);
@@ -268,16 +269,16 @@ NOLINT_TEST_F(MaterialPipelineOrmTest, CollectAutoOrmPackedSetsFlags)
 {
   // Arrange
   auto item = MakeBaseItem();
-  item.orm_policy = OrmPolicy::kAuto;
-  item.textures.metallic = MaterialTextureBinding {
+  item.material.orm_policy = OrmPolicy::kAuto;
+  item.material.textures.metallic = MaterialTextureBinding {
     .index = 7,
     .assigned = true,
     .source_id = "orm",
     .uv_set = 0,
     .uv_transform = {},
   };
-  item.textures.roughness = item.textures.metallic;
-  item.textures.ambient_occlusion = item.textures.metallic;
+  item.material.textures.roughness = item.material.textures.metallic;
+  item.material.textures.ambient_occlusion = item.material.textures.metallic;
 
   MaterialPipeline::WorkResult result;
   co::ThreadPool pool(loop_, 2);
@@ -321,22 +322,22 @@ NOLINT_TEST_F(MaterialPipelineOrmTest, CollectForcePackedInvalidEmitsError)
 {
   // Arrange
   auto item = MakeBaseItem();
-  item.orm_policy = OrmPolicy::kForcePacked;
-  item.textures.metallic = MaterialTextureBinding {
+  item.material.orm_policy = OrmPolicy::kForcePacked;
+  item.material.textures.metallic = MaterialTextureBinding {
     .index = 4,
     .assigned = true,
     .source_id = "metal",
     .uv_set = 0,
     .uv_transform = {},
   };
-  item.textures.roughness = MaterialTextureBinding {
+  item.material.textures.roughness = MaterialTextureBinding {
     .index = 5,
     .assigned = true,
     .source_id = "rough",
     .uv_set = 0,
     .uv_transform = {},
   };
-  item.textures.ambient_occlusion = item.textures.metallic;
+  item.material.textures.ambient_occlusion = item.material.textures.metallic;
 
   MaterialPipeline::WorkResult result;
   co::ThreadPool pool(loop_, 2);
@@ -373,7 +374,7 @@ NOLINT_TEST_F(MaterialPipelineUvTest, CollectSharedTransformWritesExtension)
 {
   // Arrange
   auto item = MakeBaseItem();
-  item.textures.base_color = MaterialTextureBinding {
+  item.material.textures.base_color = MaterialTextureBinding {
     .index = 2,
     .assigned = true,
     .source_id = "base",
@@ -424,14 +425,14 @@ NOLINT_TEST_F(MaterialPipelineUvTest, CollectMismatchedTransformsUsesFirst)
 {
   // Arrange
   auto item = MakeBaseItem();
-  item.textures.base_color = MaterialTextureBinding {
+  item.material.textures.base_color = MaterialTextureBinding {
     .index = 2,
     .assigned = true,
     .source_id = "base",
     .uv_set = 0,
     .uv_transform = { { 2.0F, 2.0F }, { 0.0F, 0.0F }, 0.0F },
   };
-  item.textures.normal = MaterialTextureBinding {
+  item.material.textures.normal = MaterialTextureBinding {
     .index = 3,
     .assigned = true,
     .source_id = "normal",
@@ -485,13 +486,14 @@ NOLINT_TEST_F(MaterialPipelineShaderTest, CollectShaderStagesOrderedByBitIndex)
 {
   // Arrange
   auto item = MakeBaseItem();
-  item.shader_requests = {
+  item.material.shader_requests = {
     MakeShaderRequest(ShaderType::kPixel,
       "Vortex/Stages/Translucency/ForwardMesh_PS.hlsl", "PS"),
     MakeShaderRequest(ShaderType::kVertex,
       "Vortex/Stages/Translucency/ForwardMesh_VS.hlsl", "VS"),
   };
-  const auto expected_stages = ExpectedShaderStages(item.shader_requests);
+  const auto expected_stages
+    = ExpectedShaderStages(item.material.shader_requests);
 
   MaterialPipeline::WorkResult result;
   co::ThreadPool pool(loop_, 2);
@@ -537,7 +539,7 @@ NOLINT_TEST_F(
 {
   // Arrange
   auto item = MakeBaseItem();
-  item.shader_requests = {
+  item.material.shader_requests = {
     MakeShaderRequest(ShaderType::kVertex, std::string(200, 's'),
       std::string(80, 'e'), std::string(300, 'd')),
   };

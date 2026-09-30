@@ -12,13 +12,13 @@
 #include <memory>
 #include <optional>
 #include <span>
-#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Cooker/Import/FileError.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
@@ -32,7 +32,7 @@
 #include <Oxygen/Cooker/Import/Internal/Jobs/TextureImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/TextureImportPolicy.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/TexturePipeline.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
+#include <Oxygen/Cooker/Import/Internal/TextureSourceAssembly_internal.h>
 #include <Oxygen/Cooker/Import/ScratchImage.h>
 #include <Oxygen/Cooker/Import/TextureImportDesc.h>
 #include <Oxygen/Cooker/Import/TextureImportError.h>
@@ -105,26 +105,6 @@ auto IsColorIntent(const TextureIntent intent) -> bool
   return normalized.generic_string();
 }
 
-[[nodiscard]] auto BuildTextureDescriptorNamingIdentity(
-  const oxygen::content::import::ImportRequest& request)
-  -> std::pair<std::string, std::string>
-{
-  if (request.job_name.has_value() && !request.job_name->empty()) {
-    const auto& job_name = *request.job_name;
-    return { job_name, job_name };
-  }
-
-  auto stable_id = NormalizeTextureId(request.source_path);
-  auto name_hint = request.source_path.stem().string();
-  if (name_hint.empty()) {
-    name_hint = stable_id;
-  }
-  if (stable_id.empty()) {
-    stable_id = name_hint;
-  }
-  return { std::move(name_hint), std::move(stable_id) };
-}
-
 [[nodiscard]] auto BuildPreflightDesc(
   const ImportOptions::TextureTuning& tuning, const bool is_hdr_input,
   const bool is_cubemap) -> TextureImportDesc
@@ -193,17 +173,7 @@ namespace oxygen::content::import::detail {
 */
 auto TextureImportJob::ExecuteAsync() -> co::Co<ImportReport>
 {
-  const auto& request = Request();
-  if (!request.texture_virtual_path.empty()
-    && (!internal::IsCanonicalVirtualPath(request.texture_virtual_path)
-      || !internal::TryVirtualPathToRelPath(
-        request, request.texture_virtual_path, descriptor_relative_path_)
-      || std::filesystem::path(descriptor_relative_path_).extension()
-        != ".otex")) {
-    throw std::invalid_argument(
-      "Texture virtual_path must name an .otex descriptor within its mount: "
-      + request.texture_virtual_path);
-  }
+  descriptor_relative_path_ = Request().GetTextureDescriptorRelPath();
 
   DLOG_F(INFO, "Starting job: job_id={} path={}", JobId(),
     Request().source_path.string());
@@ -332,6 +302,7 @@ auto TextureImportJob::ExecuteAsync() -> co::Co<ImportReport>
   } else if (cooked.used_fallback) {
     const auto emit_start = std::chrono::steady_clock::now();
     auto& emitter = session.TextureEmitter();
+    emitter.EnsureFallbackTexture();
     const auto descriptor
       = emitter.TryGetDescriptor(data::pak::core::kFallbackResourceIndex);
     if (!descriptor.has_value()) {
@@ -560,12 +531,15 @@ auto TextureImportJob::LoadSource(ImportSession& session)
       co_return StampDurations(source);
     }
 
-    auto discovered = DiscoverCubeFacePaths(Request().source_path);
+    auto discovered
+      = co_await DiscoverCubeFacePaths(Request().source_path, *reader);
     if (!discovered.has_value()) {
       session.AddDiagnostic({
         .severity = ImportSeverity::kError,
-        .code = "texture.cubemap_faces_missing",
-        .message = "Cubemap faces could not be discovered",
+        .code = discovered.error().code == FileError::kNotFound
+          ? "texture.cubemap_faces_missing"
+          : "texture.read_failed",
+        .message = discovered.error().ToString(),
         .source_path = Request().source_path.string(),
         .object_path = {},
       });
@@ -575,7 +549,7 @@ auto TextureImportJob::LoadSource(ImportSession& session)
     TextureSourceSet sources;
 
     for (size_t i = 0; i < kCubeFaceCount; ++i) {
-      const auto& face_path = discovered->at(i);
+      const auto& face_path = discovered.value().at(i);
       const auto read_start = std::chrono::steady_clock::now();
       auto read_result = co_await reader.get()->ReadFile(face_path);
       const auto read_end = std::chrono::steady_clock::now();
@@ -885,18 +859,8 @@ auto TextureImportJob::EmitDescriptor(ImportSession& session,
   const data::pak::core::ResourceIndexT index,
   const data::pak::core::TextureResourceDesc& descriptor) -> void
 {
-  const auto& request = Request();
-  if (!descriptor_relative_path_.empty()) {
-    static_cast<void>(session.ResourceDescriptorEmitter().EmitTextureAtRelPath(
-      descriptor_relative_path_, index, descriptor));
-    return;
-  }
-
-  const auto [name_hint, stable_id]
-    = BuildTextureDescriptorNamingIdentity(request);
-  static_cast<void>(session.ResourceDescriptorEmitter().EmitTexture(
-    name_hint.empty() ? stable_id : name_hint,
-    stable_id.empty() ? name_hint : stable_id, index, descriptor));
+  static_cast<void>(session.ResourceDescriptorEmitter().EmitTextureAtRelPath(
+    descriptor_relative_path_, index, descriptor));
 }
 
 //! Finalize the session and return the import report.

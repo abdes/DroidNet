@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <optional>
 #include <ostream>
+#include <stop_token>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -31,6 +32,8 @@
 
 namespace oxygen::content::import {
 
+struct ImportSourceAnalysis;
+
 struct ImportManifestJob {
   std::string job_type;
   std::optional<data::SourceKey> source_key {};
@@ -50,6 +53,10 @@ struct ImportManifestJob {
   SceneDescriptorImportSettings scene_descriptor;
   std::string id;
   std::vector<std::string> depends_on;
+
+  //! Declared primary input, available even when preparation fails or is
+  //! unsupported.
+  OXGN_COOK_NDAPI auto SourcePath() const -> std::filesystem::path;
 
   OXGN_COOK_NDAPI auto BuildRequest(std::ostream& error_stream) const
     -> std::optional<ImportRequest>;
@@ -80,6 +87,10 @@ struct ImportManifest {
   std::optional<ImportConcurrency> concurrency;
   ImportManifestDefaults defaults;
   std::vector<ImportManifestJob> jobs;
+
+  //! Discover native dependencies and declared outputs without cooking.
+  OXGN_COOK_NDAPI auto AnalyzeSources(std::stop_token stop_token = {}) const
+    -> ImportSourceAnalysis;
 
   OXGN_COOK_NDAPI auto BuildRequests(std::ostream& error_stream) const
     -> std::vector<ImportRequest>;

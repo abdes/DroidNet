@@ -21,19 +21,65 @@ input observation with native cooking.
 
 ## Source analysis and input observations
 
-Status: input observations validated in ED-M08.1.9.1; shared preparation, batch
-analysis and captured-input enforcement remain ED-M08.1.9.2.
+Status: native analysis and captured model reads pass their Debug/Release checks.
+Captured batch ingress and full qualification remain ED-M08.1.9.2;
+editor integration remains ED-M08.1.9.3.
 
 Native preparation owns descriptor validation,
 logical references and recipe-dependent output naming. Batch analysis invokes
 that preparation without cooking or emitting files. Import jobs consume the same
 interpretation; analysis must not add a second descriptor parser or a no-op cook.
 
+`MaterialSource`, `GeometrySource` and `SceneSource` retain owned source values
+and symbolic references before cooked linking. The model adapters prepare named
+materials, geometry variants and texture uses before producing payloads.
+Metadata parsing omits external glTF geometry buffers and FBX layout witnesses.
+`SceneImportSettings::Prepare` and `TextureImportSettings::Prepare` apply native
+recipe rules without file I/O or a cooked destination; execution builders attach
+the destination afterward.
+
+`ImportManifest::AnalyzeSources` analyzes material, texture, geometry and scene
+descriptors, standalone textures, and glTF/FBX sources. The same operation is
+available from ImportTool:
+
+```text
+Oxygen.Cooker.ImportTool.exe analyze-sources --manifest imports.json --report analysis.json
+```
+
+`--root` selects the authoring root for relative paths, as it does for `batch`.
+No cooked destination is needed. The
+[report schema](../../Import/Schemas/oxygen.source-analysis.schema.json) separates
+declared outputs, logical references, file dependencies and verified observations.
+Model texture files and outputs are optional because native cooking supports
+error-index and placeholder recovery. Cubemap discovery records selected faces
+and the rejected suffix probes. Cooking performs payload validation and resolves
+cooked references.
+
+The caller binds the report to its toolchain artifact fingerprint;
+`producer_version` is a display version. The CLI protects declared and accessed
+inputs from report-path aliases, including after failed verification.
+`accessed_paths` serves that protection; `observations` carries verified facts.
+
 `ImportSourceSnapshot`, the existing reader and parser-buffer observer, records
 byte ranges and presence/absence/metadata observations. A missing file
 is a fact; denied access and I/O failures remain errors. Contradictory observations
 invalidate an attempt. Collection seals before verification, including probes
 that suspend; cancellation releases active-operation ownership.
+`Observations()` exports owned facts only after successful verification.
+Overlapping verification and failed observation bookkeeping invalidate the
+snapshot, preventing partial proof reports.
+
+`ImportRequest::captured_inputs` optionally supplies an immutable
+`CapturedInputSet`: logical authored paths map to private captured files, expected
+size/digest and original metadata, or to explicit presence/absence probes.
+Resource naming continues to use authored paths. Reads use captured files;
+verification never substitutes live originals. Undeclared reads invalidate the
+operation even when a texture importer recovers with a placeholder.
+`ParserRead` scopes synchronous glTF reads through the same observer.
+Cooked asset references use the separate cooked reader and mount resolution.
+Verification checks consumed captures only, reuses full-read hashes and qualifies
+range-only reads with bounded chunks. CLI capture ingestion and descriptor
+builder integration are the remaining native execution work.
 
 M08.1.9.2 moves descriptor preparation to observed bytes and their source location.
 Source adapters use the same observation boundary for parser-owned reads.

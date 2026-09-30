@@ -2,7 +2,7 @@
 
 Status: **in progress — M08.1.1–M08.1.8 validated**
 
-Current: **M08.1.9 native source analysis — input observations validated; shared preparation next**. Commit each remaining sub-slice after its exit checks.
+Current: **M08.1.9.2.2 captured batch execution — native preparation, analysis and captured model reads are validated**. Commit each remaining sub-slice after its exit checks.
 See [owners](#2-implementation-document-map), [remaining increments](#m081-remaining-increments)
 and [exit checklist](#7-exit-checklist). Captured-sky IBL is delivered by
 [VX-IBL-01](../../../projects/Oxygen.Engine/design/vortex/milestones/VX-IBL-01/README.md);
@@ -181,7 +181,7 @@ old-reader retention, source/head crash boundaries, source CAS conflicts, catalo
 head refresh, texture references after consecutive publications and safe automatic
 reclamation. Native source analysis remains M08.1.9.
 
-M08.1.9 uses three commit boundaries; all remain required for closure:
+M08.1.9 has three delivery stages; all remain required for closure:
 
 1. **M08.1.9.1 native input observations — validated:** extend the existing source snapshot
    to retain successful reads and presence/absence/metadata probes. Preserve
@@ -195,6 +195,15 @@ M08.1.9 uses three commit boundaries; all remain required for closure:
    outputs and attributed input observations through one batch tool contract;
    analysis writes no cooked output. Enforce captured input membership during
    cooking and test analysis/cook dependency equality.
+   Commit checkpoints:
+   - **M08.1.9.2.1 native preparation and analysis — validated:** shared source preparation,
+     batch analysis, captured-reader ownership and model-read enforcement.
+     Debug: 667 owning-suite tests; Release: 106 contract/model tests; each
+     configuration passes four CLI tests. Scoped tidy, MSVC warning checks and
+     extra-high review are clear.
+   - **M08.1.9.2.2 captured batch execution:** capture-map ingestion,
+     observed descriptor/provenance ingress and all-family dependency enforcement.
+     Qualify the complete native contract before editor cutover.
 3. **M08.1.9.3 editor cutover:** batch each unresolved dependency frontier,
    capture and compare the reported input proofs, then cook through the native
    contract. Remove duplicate managed cook-dependency parsers. Retain project
