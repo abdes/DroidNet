@@ -37,7 +37,7 @@ public sealed partial class InspectorControlTests
         VisualUserInterfaceTestsApp.MainWindow.Activate();
         var container = new Container();
         await using var containerLifetime = container.ConfigureAwait(true);
-        using var model = fixture.CreateSceneEditor(container);
+        using var model = await fixture.CreateSceneEditorAsync(container).ConfigureAwait(true);
         var view = new SceneEditorView { ViewModel = model };
         await LoadTestContentAsync(view).ConfigureAwait(true);
         var settings = (ToolBarButton)view.FindName("SettingsButton");
@@ -89,7 +89,7 @@ public sealed partial class InspectorControlTests
     {
         var failure = fixture.Results.Last(result => string.Equals(result.OperationKind, RuntimeOperationKinds.SettingsApply, StringComparison.Ordinal));
         _ = failure.Status.Should().Be(OperationStatus.Failed);
-        _ = failure.AffectedScope.DocumentId.Should().Be(fixture.Context.DocumentId);
+        _ = failure.AffectedScope.ProjectId.Should().Be(fixture.Source.Project.ProjectInfo.Id);
         _ = failure.Diagnostics.Should().ContainSingle().Which.Code.Should().Be(DiagnosticCodes.SettingsPrefix + (fps ? "TARGET_FPS_REJECTED" : "LOGGING_VERBOSITY_REJECTED"));
         _ = fixture.Context.History.UndoStack.Should().BeEmpty();
         _ = fixture.Context.Metadata.IsDirty.Should().BeFalse();
@@ -99,10 +99,17 @@ public sealed partial class InspectorControlTests
     {
         public EngineService Runtime => this.engine;
 
-        public SceneEditorViewModel CreateSceneEditor(IContainer container)
+        public async Task<SceneEditorViewModel> CreateSceneEditorAsync(IContainer container)
         {
             var publisher = new Mock<IOperationResultPublisher>();
             _ = publisher.Setup(value => value.Publish(It.IsAny<OperationResult>())).Callback<OperationResult>(this.Results.Enqueue);
+            var preferences = new Oxygen.Editor.World.Workspace.PreviewSettingsService(
+                this.engine,
+                Mock.Of<Oxygen.Editor.Data.Services.IEditorSettingsManager>(),
+                this.projectContexts,
+                publisher.Object,
+                new OperationStatusReducer());
+            await preferences.RestoreAsync(this.projectContexts.ActiveProject!).ConfigureAwait(true);
             return new(
                 this.Context.Metadata,
                 this.documents.Object,
@@ -116,7 +123,8 @@ public sealed partial class InspectorControlTests
                 Mock.Of<IContentPipelineService>(),
                 container,
                 this.messenger,
-                new SceneCookInputRegistrar(new Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentRegistry(), this.manager, this.hosting, this.documents.Object));
+                new SceneCookInputRegistrar(new Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentRegistry(), this.manager, this.hosting, this.documents.Object),
+                preferences);
         }
     }
 }

@@ -217,6 +217,7 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
                 this.container,
                 messenger,
                 this.container.Resolve<SceneCookInputRegistrar>(),
+                this.container.Resolve<Oxygen.Editor.World.Workspace.PreviewSettingsService>(),
                 this.loggerFactory,
                 conflictPrompt: this.container.Resolve<IDocumentConflictPrompt>());
         }

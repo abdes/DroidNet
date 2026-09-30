@@ -57,6 +57,8 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
     private readonly ILogger logger;
     private readonly SemaphoreSlim engineStartupGate = new(initialCount: 1, maxCount: 1);
     private DocumentManager? documentManager;
+    private PreviewSettingsService? previewSettings;
+    private ProjectContext? previewProject;
     private IMessenger? messenger;
 
     /// <summary>
@@ -170,6 +172,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
     /// <inheritdoc />
     protected override void OnSetupChildContainer(IContainer childContainer)
     {
+        this.previewSettings = childContainer.Resolve<PreviewSettingsService>();
         childContainer.Register<IMessenger, StrongReferenceMessenger>(Reuse.Singleton);
 
         // Resolve messenger instance from the child container so the view model can use it.
@@ -236,6 +239,11 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
     {
         if (disposing)
         {
+            if (this.previewProject is { } project)
+            {
+                this.previewSettings?.Deactivate(project);
+            }
+
             this.publicationRegistration?.Dispose();
             this.publicationRegistration = null;
 
@@ -326,6 +334,8 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
             return;
         }
 
+        var stage = "publication admission";
+        var mounted = false;
         try
         {
             var mountService = this.container.Resolve<Oxygen.Editor.ContentPipeline.Mounting.CookedContentMountService>();
@@ -334,8 +344,13 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
             var bindings = reader.Roots.Zip(reader.RootPaths,
                 static (root, path) => new RuntimeCookedRoot(path, root.Owner == Oxygen.Editor.ContentPipeline.Publication.CookPublicationRootOwner.Project ? root.Name : null)).ToArray();
             var mounts = await mountService.PrepareAsync(project, reader, CancellationToken.None).ConfigureAwait(true);
+            stage = "native mount and preview resume";
             await this.engineService.RefreshProjectCookedRootsAsync(bindings, mounts).ConfigureAwait(true);
-            await this.container.Resolve<IProjectAssetCatalog>().RefreshAsync(reader, CancellationToken.None).ConfigureAwait(true);
+            mounted = true;
+            stage = "asset catalog refresh";
+            var catalog = this.cookedCatalog ?? throw new InvalidOperationException("The workspace asset catalog is not initialized.");
+            await catalog.RefreshAsync(reader, CancellationToken.None).ConfigureAwait(true);
+            this.HasContentFailure = false;
             this.LogMountedRoots(mounts.Roots);
             try
             {
@@ -353,8 +368,17 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         }
         catch (Exception exception)
         {
-            this.PublishCookedRootWarning(AssetMountDiagnosticCodes.RefreshFailed, "Cooked content is unavailable", exception.Message, project.ProjectRoot, exception);
-            await this.engineService.SuspendCookedContentAsync().ConfigureAwait(true);
+            this.LogCookedRootRefreshFailed(exception, stage, project.ProjectRoot, mounted ? "mounted" : "unavailable");
+            this.ContentFailureTitle = mounted ? "Content Browser unavailable" : "Preview unavailable";
+            this.ContentFailureMessage = $"Failed during {stage}: {exception.Message.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()}";
+            this.HasContentFailure = true;
+            RuntimeOperationResults.PublishFailure(this.operationResults, this.statusReducer, RuntimeOperationKinds.CookedRootRefresh,
+                FailureDomain.AssetMount, AssetMountDiagnosticCodes.RefreshFailed, this.ContentFailureTitle,
+                this.ContentFailureMessage, this.CreateProjectScope(), project.ProjectRoot, exception, exception.ToString());
+            if (!mounted)
+            {
+                await this.SuspendUnavailablePreviewAsync(project).ConfigureAwait(true);
+            }
         }
     }
 
@@ -428,28 +452,26 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         Justification = "Workspace activation must fail visibly without crashing the Project Browser when runtime startup fails.")]
     private async Task<bool> EnsureEngineRunningAsync()
     {
-        if (this.engineService.State == EngineServiceState.Running)
-        {
-            return true;
-        }
-
         await this.engineStartupGate.WaitAsync().ConfigureAwait(true);
         try
         {
             switch (this.engineService.State)
             {
                 case EngineServiceState.Running:
+                    await this.RestorePreviewSettingsAsync().ConfigureAwait(true);
                     return true;
 
                 case EngineServiceState.NoEngine:
                 case EngineServiceState.Faulted:
                     this.LogEngineStarting();
                     _ = await this.engineService.InitializeAsync().ConfigureAwait(true);
+                    await this.RestorePreviewSettingsAsync().ConfigureAwait(true);
                     await this.engineService.StartAsync().ConfigureAwait(true);
                     return this.engineService.State == EngineServiceState.Running;
 
                 case EngineServiceState.Ready:
                     this.LogInitializedEngineStarting();
+                    await this.RestorePreviewSettingsAsync().ConfigureAwait(true);
                     await this.engineService.StartAsync().ConfigureAwait(true);
                     return this.engineService.State == EngineServiceState.Running;
 
@@ -477,6 +499,17 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         {
             _ = this.engineStartupGate.Release();
         }
+    }
+
+    private Task RestorePreviewSettingsAsync()
+    {
+        if (this.previewSettings is null || this.projectContextService.ActiveProject is not { } project)
+        {
+            throw new InvalidOperationException("The workspace preview preferences are not initialized.");
+        }
+
+        this.previewProject = project;
+        return this.previewSettings.RestoreAsync(project);
     }
 
     private AffectedScope CreateProjectScope()

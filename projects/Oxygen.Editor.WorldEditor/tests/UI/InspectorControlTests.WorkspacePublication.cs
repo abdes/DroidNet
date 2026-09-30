@@ -220,6 +220,6 @@ public sealed partial class InspectorControlTests
 
         public Task<ICookPublicationPreview?> CreateWorkspacePreviewAsync(CatalogWorkloadServices services, IProjectAssetCatalog catalog, Oxygen.Editor.Projects.ProjectContext project)
             => this.hosting.Dispatcher.DispatchAsync(() => Task.FromResult<ICookPublicationPreview?>(
-                new WorkspacePublicationPreview(project, this.engine, this.hosting, catalog, this.messenger, () => ReferenceEquals(project, services.Projects.ActiveProject))));
+                new WorkspacePublicationPreview(project, this.engine, this.hosting, catalog, this.messenger, () => ReferenceEquals(project, services.Projects.ActiveProject), static () => { })));
     }
 }

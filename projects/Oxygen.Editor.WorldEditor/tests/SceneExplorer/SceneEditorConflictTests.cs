@@ -101,7 +101,7 @@ public sealed partial class SceneEditorConflictTests
     {
         private readonly Container container = new();
 
-        public Fixture(bool active)
+        public Fixture(bool active, Oxygen.Editor.World.Workspace.PreviewSettingsService? previewSettings = null, Action? commitInput = null)
         {
             this.Scene = new Scene(Mock.Of<IProject>()) { Name = "Main" };
             this.Replacement = Scene.CreateAndHydrate(this.Scene.Project, this.Scene.Dehydrate());
@@ -121,7 +121,7 @@ public sealed partial class SceneEditorConflictTests
             var documents = new Mock<IDocumentService>();
             _ = documents.Setup(value => value.GetActiveDocumentId(It.IsAny<WindowId>())).Returns(active ? this.Metadata.DocumentId : Guid.NewGuid());
             var input = new Mock<IDocumentInputCommitter>();
-            _ = input.Setup(value => value.CommitAsync(It.IsAny<WindowId>())).Returns(Task.CompletedTask);
+            _ = input.Setup(value => value.CommitAsync(It.IsAny<WindowId>())).Callback(() => commitInput?.Invoke()).Returns(Task.CompletedTask);
             this.Editor = new(
                 this.Metadata,
                 documents.Object,
@@ -140,6 +140,12 @@ public sealed partial class SceneEditorConflictTests
                     Mock.Of<IProjectManagerService>(),
                     new DroidNet.Hosting.WinUI.HostingContext { Dispatcher = null!, Application = null!, DispatcherScheduler = null! },
                     documents.Object),
+                previewSettings ?? new Oxygen.Editor.World.Workspace.PreviewSettingsService(
+                    Mock.Of<IEngineService>(),
+                    Mock.Of<Oxygen.Editor.Data.Services.IEditorSettingsManager>(),
+                    Mock.Of<IProjectContextService>(),
+                    Mock.Of<IOperationResultPublisher>(),
+                    new OperationStatusReducer()),
                 conflictPrompt: this.Prompt.Object);
         }
 

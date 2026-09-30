@@ -54,15 +54,6 @@ public partial class SceneEditorViewModel
 
     [LoggerMessage(
         SkipEnabledCheck = true,
-        Level = LogLevel.Warning,
-        Message = "Failed to set engine target FPS: {Message}")]
-    private static partial void LogFailedToSetEngineTargetFps(ILogger logger, string message, Exception ex);
-
-    private void LogFailedToSetEngineTargetFps(Exception ex)
-        => LogFailedToSetEngineTargetFps(this.logger, ex.Message, ex);
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
         Level = LogLevel.Information,
         Message = "Save requested for document {DocumentId}")]
     private static partial void LogSaveRequested(ILogger logger, Guid? documentId);

@@ -77,7 +77,7 @@ public sealed partial class InspectorControlTests
             var catalog = new Mock<IProjectAssetCatalog>();
             _ = catalog.Setup(value => value.RefreshAsync(It.IsAny<CookPublicationReadLease>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
             using var registration = this.materialPipeline.Publication.RegisterPreview(current, () => Task.FromResult<ICookPublicationPreview?>(
-                new WorkspacePublicationPreview(current, this.engine, this.hosting, catalog.Object, this.messenger, () => ReferenceEquals(current, this.projectContexts.ActiveProject))));
+                new WorkspacePublicationPreview(current, this.engine, this.hosting, catalog.Object, this.messenger, () => ReferenceEquals(current, this.projectContexts.ActiveProject), static () => { })));
             var service = new ContentMountChangeService(this.materialCookCoordinator, this.projectContexts, this.materialPipeline.Publication, catalog.Object, this.hosting);
             await service.ApplyAsync(current, desired, next =>
             {

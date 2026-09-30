@@ -99,7 +99,8 @@ public partial class WorkspaceViewModel
                     this.cookHosting,
                     this.cookedCatalog!,
                     this.messenger,
-                    () => this.publicationRegistration is not null && ReferenceEquals(project, this.projectContextService.ActiveProject))
+                    () => this.publicationRegistration is not null && ReferenceEquals(project, this.projectContextService.ActiveProject),
+                    () => this.HasContentFailure = false)
                 : null));
 
     private void OnCookingRevealRequested(object? sender, EventArgs args)

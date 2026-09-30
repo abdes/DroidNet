@@ -149,6 +149,12 @@ public sealed partial class InspectorControlTests
             container.RegisterInstance<IProjectContextService>(services.Projects);
             container.RegisterInstance<IContentBrowserAssetProvider>(this.AssetCatalog.Object);
             container.RegisterInstance(new SceneCookInputRegistrar(services.Documents, this.manager, this.hosting, documents));
+            container.RegisterInstance(new Oxygen.Editor.World.Workspace.PreviewSettingsService(
+                this.engine,
+                Mock.Of<Oxygen.Editor.Data.Services.IEditorSettingsManager>(),
+                services.Projects,
+                publisher.Object,
+                new OperationStatusReducer()));
             var views = new Mock<IViewLocator>();
             _ = views.Setup(value => value.ResolveView(It.IsAny<object>())).Returns((object model) => model is SceneEditorViewModel ? new SceneEditorView() : new CookedInspectionView());
             return new(

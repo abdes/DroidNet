@@ -224,7 +224,9 @@ M08.1.9 has three delivery stages; all remain required for closure:
      the C++20 SDK consumer, scoped tidy and extra-high review also pass.
    - **M08.1.9.3.2 discovery and status cutover:** replace managed cook parsers,
      batch frontiers, verify captured observations and publish accepted facts;
-     keep badge reads passive and close real editor workflows.
+     keep badge reads passive and close real editor workflows. Workspace acceptance
+     includes visible content-refresh failures and project-scoped preview
+     preferences (60 FPS / Error defaults), as specified in the settings LLD.
 
 M08.1.7 final gate: after the entire native/managed implementation, review the
 whole slice for unnecessary complexity, duplicate state, owner/API integration

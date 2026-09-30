@@ -125,7 +125,7 @@ public sealed partial class InspectorControlTests
             var hosting = CreateStatusHosting();
             var context = this.Projects.ActiveProject!;
             this.registration = this.publication.RegisterPreview(context, () => Task.FromResult<ICookPublicationPreview?>(
-                new WorkspacePublicationPreview(context, this.engine.Object, hosting, catalog.Object, messenger: null, () => ReferenceEquals(context, this.Projects.ActiveProject))));
+                new WorkspacePublicationPreview(context, this.engine.Object, hosting, catalog.Object, messenger: null, () => ReferenceEquals(context, this.Projects.ActiveProject), static () => { })));
             this.Service = new(this.coordinator, this.Projects, this.publication, catalog.Object, hosting);
         }
 

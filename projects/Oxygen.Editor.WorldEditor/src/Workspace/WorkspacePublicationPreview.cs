@@ -20,13 +20,15 @@ namespace Oxygen.Editor.World.Workspace;
 /// <param name="catalog">The catalog refreshed after publication.</param>
 /// <param name="messenger">Asset-change notifications for workspace consumers.</param>
 /// <param name="isCurrent">Checks that this workspace still owns the originating project.</param>
+/// <param name="contentReady">Clears the workspace failure after runtime and catalog recovery.</param>
 internal sealed class WorkspacePublicationPreview(
     ProjectContext project,
     IEngineService engine,
     HostingContext hosting,
     IProjectAssetCatalog catalog,
     IMessenger? messenger,
-    Func<bool> isCurrent) : ICookPublicationPreview
+    Func<bool> isCurrent,
+    Action contentReady) : ICookPublicationPreview
 {
     /// <inheritdoc />
     public bool IsRuntimeAvailable { get; } = engine.State == EngineServiceState.Running;
@@ -88,6 +90,10 @@ internal sealed class WorkspacePublicationPreview(
         {
             await catalog.RefreshAsync(publication, CancellationToken.None).ConfigureAwait(true);
             _ = messenger?.Send(new AssetsChangedMessage());
+            if (isCurrent() && this.IsRuntimeAvailable)
+            {
+                contentReady();
+            }
         }
     });
 

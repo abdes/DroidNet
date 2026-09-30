@@ -264,6 +264,18 @@ public static partial class Program
         RegisterDiagnosticsServices(container);
         RegisterAssetServices(container);
         container.Register<IEngineService, EngineService>(Reuse.Singleton);
+
+        // A dedicated manager owns a separate DbContext; preview I/O is serialized by its service.
+        container.Register<IEditorSettingsManager, EditorSettingsManager>(Reuse.Singleton, serviceKey: nameof(PreviewSettingsService));
+        container.RegisterDelegate(
+            resolver => new PreviewSettingsService(
+                resolver.Resolve<IEngineService>(),
+                resolver.Resolve<IEditorSettingsManager>(serviceKey: nameof(PreviewSettingsService)),
+                resolver.Resolve<IProjectContextService>(),
+                resolver.Resolve<IOperationResultPublisher>(),
+                resolver.Resolve<IStatusReducer>(),
+                resolver.Resolve<ILoggerFactory>()),
+            Reuse.Singleton);
         container.Register<EngineShutdownService>(Reuse.Singleton);
         container.RegisterDelegate<IHostedService>(resolver => resolver.Resolve<EngineShutdownService>(), Reuse.Singleton);
 

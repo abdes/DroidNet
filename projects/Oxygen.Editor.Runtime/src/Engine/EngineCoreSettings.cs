@@ -20,11 +20,6 @@ public sealed class EngineCoreSettings
     public uint? ApplicationVersion { get; set; }
 
     /// <summary>
-    ///     Gets or sets the target frame rate. Zero means uncapped.
-    /// </summary>
-    public uint? TargetFps { get; set; }
-
-    /// <summary>
     ///     Gets or sets the fixed frame count. Zero means unlimited.
     /// </summary>
     public uint? FrameCount { get; set; }

@@ -9,6 +9,12 @@ namespace Oxygen.Editor.Runtime.Engine;
 /// </summary>
 public static class EngineConstants
 {
+    /// <summary>The default editor preview frame rate.</summary>
+    public const int DefaultTargetFps = 60;
+
+    /// <summary>The default native logging threshold (Error).</summary>
+    public const int DefaultLoggingVerbosity = -2;
+
     /// <summary>The minimum allowed logging verbosity for the native engine.</summary>
     public const int MinLoggingVerbosity = -9; // loguru's minimum verbosity
 

@@ -88,6 +88,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     /// <param name="container">DI container used to create child services for viewports.</param>
     /// <param name="messenger">The messenger used for inter-component communication.</param>
     /// <param name="cookInputs">Registers saved scene inputs for coordinated cooking.</param>
+    /// <param name="previewSettings">The shared project preview preferences.</param>
     /// <param name="loggerFactory">The logger factory.</param>
     /// <param name="conflictPrompt">Presents recovery after an ordinary Save conflict.</param>
     public SceneEditorViewModel(
@@ -104,10 +105,12 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         IContainer container,
         IMessenger messenger,
         SceneCookInputRegistrar cookInputs,
+        Workspace.PreviewSettingsService previewSettings,
         ILoggerFactory? loggerFactory = null,
         IDocumentConflictPrompt? conflictPrompt = null)
     {
         this.engineService = engineService;
+        this.PreviewSettings = previewSettings;
         this.sceneEngineSync = sceneEngineSync;
         this.inputCommitter = inputCommitter;
         this.conflictPrompt = conflictPrompt;
@@ -135,11 +138,6 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         // the scene exists (prevents "frame context has no scene").
         this.RegisterMessages();
         this.RefreshCookInputRegistration();
-
-        // Track mutations via the undo stack
-
-        // RunAtFps is sourced directly from the engine service at runtime
-        // (see property implementation). No constructor seeding required.
     }
 
     /// <summary>
@@ -175,99 +173,8 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     /// </summary>
     public IMenuSource QuickAddMenu => this.quickAddMenu ??= this.BuildQuickAddMenu();
 
-    /// <summary>
-    /// Gets or sets run rate target in frames per second for the editor preview.
-    /// Always reads the current value from <see cref="IEngineService"/>.
-    /// </summary>
-    public int RunAtFps
-    {
-        get
-        {
-            try
-            {
-                var raw = (int)this.engineService.TargetFps;
-                var max = (int)this.engineService.MaxTargetFps;
-                return System.Math.Clamp(raw, 0, max);
-            }
-            catch (InvalidOperationException)
-            {
-                // Engine not created yet — return sensible default.
-                return 60;
-            }
-        }
-
-        set
-        {
-            try
-            {
-                // Clamp UI value to engine supported range before forwarding.
-                var max = (int)this.engineService.MaxTargetFps;
-                var clamped = System.Math.Clamp(value, 0, max);
-                this.engineService.TargetFps = (uint)clamped;
-
-                // Notify UI that the value may have changed (source of truth is the service).
-                this.OnPropertyChanged(nameof(this.RunAtFps));
-            }
-            catch (InvalidOperationException ex)
-            {
-                this.LogFailedToSetEngineTargetFps(ex);
-                this.PublishRuntimeSettingsFailure(
-                    DiagnosticCodes.SettingsPrefix + "TARGET_FPS_REJECTED",
-                    "Target FPS was not applied",
-                    "The runtime rejected the target FPS setting.",
-                    ex);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Gets minimum allowed native logging verbosity value for the engine (e.g. -9).
-    /// </summary>
-    public int MinLoggingVerbosity { get; } = EngineConstants.MinLoggingVerbosity;
-
-    /// <summary>
-    /// Gets maximum allowed native logging verbosity value for the engine (e.g. +9).
-    /// </summary>
-    public int MaxLoggingVerbosity { get; } = EngineConstants.MaxLoggingVerbosity;
-
-    /// <summary>
-    /// Gets or sets current native engine logging verbosity; sourced from the engine service.
-    /// Setting writes to the native runtime through the service and is clamped
-    /// to Min/Max.
-    /// </summary>
-    public int LoggingVerbosity
-    {
-        get
-        {
-            try
-            {
-                var raw = this.engineService.EngineLoggingVerbosity;
-                return System.Math.Clamp(raw, this.MinLoggingVerbosity, this.MaxLoggingVerbosity);
-            }
-            catch (InvalidOperationException)
-            {
-                return 0;
-            }
-        }
-
-        set
-        {
-            try
-            {
-                var clamped = System.Math.Clamp(value, this.MinLoggingVerbosity, this.MaxLoggingVerbosity);
-                this.engineService.EngineLoggingVerbosity = clamped;
-                this.OnPropertyChanged(nameof(this.LoggingVerbosity));
-            }
-            catch (Exception ex) when (ex is InvalidOperationException or ArgumentOutOfRangeException)
-            {
-                this.PublishRuntimeSettingsFailure(
-                    DiagnosticCodes.SettingsPrefix + "LOGGING_VERBOSITY_REJECTED",
-                    "Logging verbosity was not applied",
-                    "The runtime rejected the logging verbosity setting.",
-                    ex);
-            }
-        }
-    }
+    /// <summary>Gets the shared project preview preferences.</summary>
+    public Workspace.PreviewSettingsService PreviewSettings { get; }
 
     /// <inheritdoc/>
     public void Dispose()
@@ -305,6 +212,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     public async Task PrepareForCloseAsync()
     {
         await this.inputCommitter.CommitAsync(this.windowId).ConfigureAwait(true);
+        await this.PreviewSettings.FlushAsync().ConfigureAwait(true);
         if (this.scene is not null)
         {
             await this.commandService.CompleteEditSessionsAsync(this.CreateCommandContext(), commit: true).ConfigureAwait(true);
@@ -614,6 +522,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     {
         await this.pendingConflict.ConfigureAwait(true);
         await this.inputCommitter.CommitAsync(this.windowId).ConfigureAwait(true);
+        await this.PreviewSettings.FlushAsync().ConfigureAwait(true);
         if (this.scene is null)
         {
             this.LogSaveRequestedButSceneNotReady();
@@ -794,24 +703,4 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
             this.Metadata,
             this.scene ?? throw new InvalidOperationException("Scene is not loaded."),
             UndoRedo.GetHistory(this.Metadata.DocumentId));
-
-    private void PublishRuntimeSettingsFailure(
-        string code,
-        string title,
-        string message,
-        Exception exception)
-        => RuntimeOperationResults.PublishFailure(
-            this.operationResults,
-            this.statusReducer,
-            RuntimeOperationKinds.SettingsApply,
-            FailureDomain.Settings,
-            code,
-            title,
-            message,
-            new AffectedScope
-            {
-                DocumentId = this.Metadata.DocumentId,
-                DocumentName = this.Metadata.Title,
-            },
-            exception: exception);
 }
