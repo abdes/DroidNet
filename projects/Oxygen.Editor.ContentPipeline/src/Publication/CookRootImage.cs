@@ -17,7 +17,7 @@ internal sealed record CookRootImage(bool Exists, ImmutableDictionary<string, Co
     /// <param name="copyTo">Optional new staging destination.</param>
     /// <param name="cancellationToken">Cancels before publication.</param>
     /// <returns>The protected source content identities.</returns>
-    public static async Task<CookRootImage> CaptureAsync(string root, string? copyTo, CancellationToken cancellationToken)
+    public static async Task<CookRootImage> CaptureAsync(string root, string? copyTo, CancellationToken cancellationToken, bool excludeGenerationMarker = false)
     {
         var files = ImmutableDictionary.CreateBuilder<string, FileImage>(StringComparer.Ordinal);
         CookOutputLease.RejectReparsePoint(root);
@@ -36,6 +36,10 @@ internal sealed record CookRootImage(bool Exists, ImmutableDictionary<string, Co
         {
             cancellationToken.ThrowIfCancellationRequested();
             var relative = Path.GetRelativePath(root, path).Replace('\\', '/');
+            if (excludeGenerationMarker && string.Equals(relative, CookedGeneration.MarkerFileName, StringComparison.Ordinal))
+            {
+                continue;
+            }
             var source = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 65536, FileOptions.Asynchronous | FileOptions.SequentialScan);
             await using var sourceLifetime = source.ConfigureAwait(false);
             var lastWrite = File.GetLastWriteTimeUtc(path);

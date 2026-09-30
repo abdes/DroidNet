@@ -54,7 +54,7 @@ public sealed class ContentImportManifestBuilderTests
 
         var manifest = new ContentImportManifestBuilder().BuildSceneManifest(scope, sceneDescriptor);
 
-        _ = manifest.Output.Should().Be(Path.Combine(workspace.Root, ".cooked", "Content"));
+        _ = manifest.Output.Should().Be(workspace.Output.Path);
         _ = manifest.Layout.VirtualMountRoot.Should().Be("/Content");
         _ = manifest.Jobs.Select(static job => job.Type).Should().Equal(
             "material-descriptor",
@@ -93,11 +93,11 @@ public sealed class ContentImportManifestBuilderTests
             projectContext,
             new ProjectCookScope(projectContext.ProjectId, workspace.Root, Path.Combine(workspace.Root, ".cooked")),
             [CreateMaterialInput(workspace, "Content/Materials/Red.omat.json")],
-            CookTargetKind.Asset);
+            CookTargetKind.Asset) { Output = workspace.Output };
 
         var manifest = new ContentImportManifestBuilder().BuildManifest(scope);
 
-        _ = manifest.Output.Should().Be(Path.Combine(workspace.Root, ".cooked", "Content"));
+        _ = manifest.Output.Should().Be(workspace.Output.Path);
         _ = manifest.Layout.VirtualMountRoot.Should().Be("/Content");
         _ = manifest.Jobs.Should().ContainSingle();
         _ = manifest.Jobs[0].Type.Should().Be("material-descriptor");
@@ -167,7 +167,7 @@ public sealed class ContentImportManifestBuilderTests
                     "/Content/Scenes/Main.oscene",
                     ContentCookInputRole.Primary),
             ],
-            CookTargetKind.CurrentScene);
+            CookTargetKind.CurrentScene) { Output = workspace.Output };
     }
 
     private sealed class TempWorkspace : IDisposable
@@ -181,14 +181,19 @@ public sealed class ContentImportManifestBuilderTests
                 AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
             };
             this.Project = new Project(projectInfo) { Name = "TestProject" };
+            var key = Guid.CreateVersion7();
+            this.Output = new("Content", key, Publication.CookPublicationPaths.Generation(this.Root, key));
         }
 
         public string Root { get; }
 
         public Project Project { get; }
 
+        public Publication.CookStagingRoot Output { get; }
+
         public void Dispose()
         {
+            this.Output.DisposeAsync().GetAwaiter().GetResult();
             if (Directory.Exists(this.Root))
             {
                 Directory.Delete(this.Root, recursive: true);

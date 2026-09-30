@@ -23,20 +23,29 @@ internal sealed partial class NativeContentPipelineFixture : IDisposable
     public NativeContentPipelineFixture(IProjectContextService context, IContentCookCoordinator coordinator, ICookDocumentRegistry documents)
     {
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, this.compatibility);
+        var storage = new NativeStorageProvider(new RealFileSystem());
+        var files = new NativeAtomicFileStore(new RealFileSystem());
+        this.Publication = new Oxygen.Editor.ContentPipeline.Publication.CookPublicationService(coordinator, context, files,
+            new ProjectManagerService(storage, atomicFiles: files));
         this.Pipeline = new ContentPipelineService(
             context,
             coordinator,
-            new ProjectCookScopeProvider(new NativeStorageProvider(new RealFileSystem())),
+            new ProjectCookScopeProvider(storage),
             new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)),
             new ContentImportManifestBuilder(),
             new ContentImportManifestValidator(),
             api,
             documents,
-            this.compatibility);
+            this.compatibility,
+            files,
+            this.Publication);
     }
 
     /// <summary>Gets the production pipeline for fixture operations.</summary>
     public ContentPipelineService Pipeline { get; }
+
+    /// <summary>Gets the same publication owner used by fixture cooking and runtime admission.</summary>
+    public Oxygen.Editor.ContentPipeline.Publication.CookPublicationService Publication { get; }
 
     /// <inheritdoc />
     public void Dispose() => this.compatibility.Dispose();

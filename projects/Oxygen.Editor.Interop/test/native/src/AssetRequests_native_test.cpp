@@ -7,6 +7,7 @@
 #pragma managed(push, off)
 
 #include <cstring>
+#include <filesystem>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -20,6 +21,7 @@
 #include <Commands/SetEnvironmentCommand.h>
 #include <Commands/SetGeometryCommand.h>
 #include <Commands/SetMaterialOverrideCommand.h>
+#include <EditorModule/EditorModule.h>
 #include <EditorModule/SceneAssetRequests.h>
 #include <EditorModule/ThreadSafeQueue.h>
 
@@ -96,6 +98,7 @@ struct Fixture {
   std::vector<Requests::GeometryCompletion> geometry_loads;
   std::vector<Requests::MaterialCompletion> material_loads;
   std::vector<Requests::TextureCompletion> texture_loads;
+  std::vector<oxygen::content::TextureResourceLocator> texture_locators;
   std::unordered_map<std::string, Requests::Geometry> geometry_cache;
   std::unordered_map<std::string, Requests::Material> material_cache;
   std::vector<std::string> diagnostics;
@@ -129,8 +132,9 @@ struct Fixture {
       [this](const std::string& message) { diagnostics.push_back(message); },
       [this](
         const std::string& uri, bool) { return !unavailable.contains(uri); },
-      [this](const oxygen::content::TextureResourceLocator&,
+      [this](const oxygen::content::TextureResourceLocator& locator,
         Requests::TextureCompletion complete) {
+        texture_locators.push_back(locator);
         texture_loads.push_back(std::move(complete));
       });
   }
@@ -1236,10 +1240,77 @@ void ExposureMaskRequestsRespectPauseAndSceneLifetime()
   Require(applied == 0, "mask completion escaped its scene session lifetime");
 }
 
+void ExposureMaskFollowsOwnedGenerationsAndRollback()
+{
+  Fixture f;
+  using oxygen::interop::module::CookedRootBinding;
+  auto roots = [](const char* path) {
+    return std::make_shared<const std::vector<CookedRootBinding>>(
+      std::vector<CookedRootBinding> {
+        { .path = path, .project_mount = L"CONTENT" },
+      });
+  };
+  const auto first = roots("C:/Project/generation-a");
+  const auto next = roots("C:/Project/generation-b");
+  const auto texture = MakeMaskTexture();
+  oxygen::content::ResourceKey applied {};
+  f.requests->SetCookedRoots(first);
+  f.requests->SetExposureMask(
+    *f.scene,
+    oxygen::content::TextureResourceLocator {
+      .cooked_root = first->front().path,
+      .descriptor_relative_path = "Mask.otex" },
+    [&](auto&, auto key) { applied = key; }, {}, {}, L"CONTENT");
+  f.texture_loads.back()(oxygen::content::ResourceKey { 41U }, texture, {});
+  f.requests->Drain(*f.scene);
+  Require(applied == oxygen::content::ResourceKey { 41U },
+    "initial mask did not apply");
+
+  f.requests->SetCookedRoots(next);
+  f.requests->Refresh(*f.scene);
+  Require(f.texture_locators.back().cooked_root == next->front().path,
+    "mask refresh replayed a retired generation");
+  f.texture_loads.back()({}, {}, "new generation failed");
+  f.requests->Drain(*f.scene);
+  Require(
+    !f.requests->RefreshError().empty(), "mask failure did not reject refresh");
+  Require(applied == oxygen::content::ResourceKey { 41U },
+    "failed refresh changed the accepted mask");
+
+  f.requests->SetCookedRoots(first);
+  f.requests->Refresh(*f.scene);
+  Require(f.texture_locators.back().cooked_root == first->front().path,
+    "rollback did not resolve the previous generation");
+  f.texture_loads.back()(oxygen::content::ResourceKey { 41U }, texture, {});
+  f.requests->Drain(*f.scene);
+  Require(
+    f.requests->RefreshError().empty(), "rollback retained a stale mask error");
+
+  f.requests->SetCookedRoots(next);
+  f.requests->Refresh(*f.scene);
+  f.texture_loads.back()(oxygen::content::ResourceKey { 42U }, texture, {});
+  f.requests->Drain(*f.scene);
+  Require(applied == oxygen::content::ResourceKey { 42U },
+    "replacement mask did not apply");
+
+  f.requests->SetExposureMask(*f.scene,
+    oxygen::content::TextureResourceLocator {
+      .cooked_root = "C:/External", .descriptor_relative_path = "Mask.otex" },
+    [&](auto&, auto key) { applied = key; });
+  f.requests->SetCookedRoots(first);
+  f.requests->Refresh(*f.scene);
+  Require(f.texture_locators.back().cooked_root
+      == std::filesystem::path("C:/External"),
+    "project replacement redirected an explicit external locator");
+}
+
 auto RunScenario(int scenario) -> const char*
 {
   try {
     switch (scenario) {
+    case 41:
+      ExposureMaskFollowsOwnedGenerationsAndRollback();
+      break;
     case 38:
       RetainedMaterialIdentitySurvivesInventoryRevisionChange();
       break;
@@ -1423,7 +1494,14 @@ public:
     Check(34);
   }
 
-  [TestMethod] void LoadedMaterialRecoversAfterGeometryFailure() { Check(28); }
+  [TestMethod] void ExposureMaskTracksProjectGenerationsAndRollback() {
+    Check(41);
+  }
+
+    [TestMethod] void LoadedMaterialRecoversAfterGeometryFailure()
+  {
+    Check(28);
+  }
 
     [TestMethod] void MaterialLoadedAfterGeometryFailureRecovers()
   {

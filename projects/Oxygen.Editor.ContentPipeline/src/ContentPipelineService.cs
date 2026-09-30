@@ -29,7 +29,7 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <param name="engineContentPipelineApi">The engine content-pipeline adapter.</param>
 /// <param name="cookDocuments">The registered saved-document owners.</param>
 /// <param name="nativeCompatibility">The compatible producer identity and file ownership.</param>
-/// <param name="provenanceFiles">Atomic storage for incremental product evidence.</param>
+/// <param name="files">Atomic storage for retained source settings.</param>
 /// <param name="publication">The shared journal and runtime-publication owner.</param>
 public sealed partial class ContentPipelineService(
     IProjectContextService projectContextService,
@@ -41,8 +41,8 @@ public sealed partial class ContentPipelineService(
     IEngineContentPipelineApi engineContentPipelineApi,
     ICookDocumentRegistry cookDocuments,
     INativeCompatibilityService nativeCompatibility,
-    DroidNet.Storage.IAtomicFileStore? provenanceFiles = null,
-    Publication.CookPublicationService? publication = null) : IContentPipelineService
+    DroidNet.Storage.IAtomicFileStore files,
+    Publication.CookPublicationService publication) : IContentPipelineService
 {
     private static readonly System.Text.Json.JsonSerializerOptions NativeDescriptorJsonOptions = new()
     {
@@ -50,8 +50,7 @@ public sealed partial class ContentPipelineService(
     };
 
     private readonly INativeCompatibilityService nativeCompatibility = nativeCompatibility;
-    private readonly CookProvenanceStore provenanceStore = new(provenanceFiles ?? new DroidNet.Storage.Native.NativeAtomicFileStore(new Testably.Abstractions.RealFileSystem()));
-    private readonly Publication.CookPublicationService publication = publication ?? new(cookCoordinator, projectContextService, provenanceFiles ?? new DroidNet.Storage.Native.NativeAtomicFileStore(new Testably.Abstractions.RealFileSystem()));
+    private readonly Publication.CookPublicationService publication = publication ?? throw new ArgumentNullException(nameof(publication));
 
     private readonly IProjectContextService projectContextService = projectContextService ?? throw new ArgumentNullException(nameof(projectContextService));
     private readonly IContentCookCoordinator cookCoordinator = cookCoordinator ?? throw new ArgumentNullException(nameof(cookCoordinator));
@@ -676,6 +675,7 @@ public sealed partial class ContentPipelineService(
         var keptIds = keptJobs.Select(static job => job.Id).ToHashSet(StringComparer.Ordinal);
         manifest = manifest with
         {
+            SourceKey = scope.Output?.SourceKey ?? throw new InvalidOperationException("The cook has no generation owner."),
             Jobs = keptJobs.Select(job => job with
             {
                 DependsOn = job.DependsOn.Where(keptIds.Contains).ToArray(),
@@ -697,6 +697,7 @@ public sealed partial class ContentPipelineService(
                 Validation: null);
         }
 
+        await scope.Output.PrepareWriteAsync().ConfigureAwait(false);
         var importResult = await this.ImportManifestAsync(operationId, scope, manifest, cancellationToken)
             .ConfigureAwait(false);
         var nativeDiagnostics = importResult.Diagnostics.Select(issue =>
@@ -739,9 +740,23 @@ public sealed partial class ContentPipelineService(
         CookedInventoryReport inventory;
         try
         {
-            var outputLease = await CookOutputReadLease.AcquireAsync(manifest.Output, cancellationToken).ConfigureAwait(false);
-            await using var outputLifetime = outputLease.ConfigureAwait(false);
-            inventory = await outputLease.ReadInventoryAsync(this.engineContentPipelineApi, cancellationToken, scope.Artifacts).ConfigureAwait(false);
+            CookOutputReadLease? outputLease = await CookOutputReadLease.AcquireAsync(manifest.Output, cancellationToken).ConfigureAwait(false);
+            try
+            {
+                inventory = await outputLease.ReadInventoryAsync(this.engineContentPipelineApi, cancellationToken, scope.Artifacts).ConfigureAwait(false);
+                if (inventory.IsValid)
+                {
+                    (scope.Output ?? throw new InvalidOperationException("The cook has no generation owner.")).AcceptVerification(outputLease, inventory);
+                    outputLease = null;
+                }
+            }
+            finally
+            {
+                if (outputLease is not null)
+                {
+                    await outputLease.DisposeAsync().ConfigureAwait(false);
+                }
+            }
         }
         catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException or System.Text.Json.JsonException or System.ComponentModel.Win32Exception)
         {

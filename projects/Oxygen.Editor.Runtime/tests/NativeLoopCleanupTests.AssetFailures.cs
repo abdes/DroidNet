@@ -53,7 +53,7 @@ public sealed partial class NativeLoopCleanupTests
             {
                 await runner.WaitForEngineReadyAsync().WaitAsync(TimeSpan.FromSeconds(10), this.TestContext.CancellationToken).ConfigureAwait(false);
                 var transport = new NativeRuntimeCommandTransport(context);
-                await transport.ReplaceCookedRootsAsync(cookedRoots ?? []).ConfigureAwait(false);
+                await transport.ReplaceCookedRootsAsync((cookedRoots ?? []).Select(static path => new RuntimeCookedRoot(path)).ToArray()).ConfigureAwait(false);
                 _ = commands.BeginRun(transport, loop);
                 await check(commands).ConfigureAwait(false);
             }

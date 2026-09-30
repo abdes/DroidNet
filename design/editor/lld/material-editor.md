@@ -304,12 +304,12 @@ independently of cooking.
 `MaterialCookService.CookMaterialAsync` routes to
 `IContentPipelineService.CookAssetAsync`. Native material-descriptor cooking owns
 the binary output. Dirty participating documents require explicit Save; automatic
-work shows Needs save. The fixed layout remains:
+work shows Needs save. The selected publication supplies the physical generation:
 
 ```text
 source: <ProjectRoot>/Content/Materials/Gold.omat.json
-cooked: <ProjectRoot>/.cooked/Content/Materials/Gold.omat
-index:  <ProjectRoot>/.cooked/Content/container.index.bin
+cooked: <ProjectRoot>/.cooked/generations/<SourceKey>/Materials/Gold.omat
+index:  <ProjectRoot>/.cooked/generations/<SourceKey>/container.index.bin
 ```
 
 Only validated, journaled publication makes a material current. MaterialEditor

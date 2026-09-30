@@ -33,7 +33,7 @@ public sealed partial class InspectorControlTests
     public Task PhysicalFolderNavigationUsesDeclaredMountIdentity(string mount) => EnqueueAsync(async () =>
     {
         using var fixture = new BrowserRevealFixture(persisted: true, "Published");
-        var (physical, expected) = fixture.ConfigurePhysicalNavigation(mount);
+        var (physical, expected) = await fixture.ConfigurePhysicalNavigationAsync(mount, this.TestContext.CancellationToken).ConfigureAwait(true);
         await fixture.OpenAsync().ConfigureAwait(true);
         await fixture.NavigateHistoryFolderAsync(physical, this.TestContext.CancellationToken, relativeToContent: false).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
@@ -171,7 +171,7 @@ public sealed partial class InspectorControlTests
 
         public void PublishHistoryRows(IReadOnlyList<ContentBrowserAssetItem> rows) => this.items.OnNext(rows);
 
-        public (string physical, string expected) ConfigurePhysicalNavigation(string mount)
+        public async Task<(string physical, string expected)> ConfigurePhysicalNavigationAsync(string mount, CancellationToken token)
         {
             if (string.Equals(mount, "Library", StringComparison.Ordinal))
             {
@@ -181,7 +181,12 @@ public sealed partial class InspectorControlTests
 
             if (string.Equals(mount, "Cooked", StringComparison.Ordinal))
             {
-                return (".cooked/Content/Materials", "Published/Content/Materials");
+                var cooked = CreateNavigationAsset("/Content/Materials/Red.omat", AssetKind.Material) with
+                {
+                    SourcePath = null, DescriptorPath = null, CookedUri = new("asset:///Content/Materials/Red.omat"), PrimaryState = AssetState.Cooked,
+                };
+                await this.SetCookedOutputsAsync([cooked], token).ConfigureAwait(true);
+                return (Path.GetRelativePath(this.directory.FullName, Path.Combine(this.publishedOutputRoot!, "Materials")), "Published/Content/Materials");
             }
 
             this.Projects.Activate(this.Projects.ActiveProject! with { AuthoringMounts = [new("Game", "Content")] });

@@ -5,7 +5,7 @@
 using System.Collections.Immutable;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.Snapshots;
-using Oxygen.Editor.Projects;
+using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline.Incremental;
@@ -13,7 +13,7 @@ namespace Oxygen.Editor.ContentPipeline.Incremental;
 /// <summary>Identifies source-owned repair work before capturing inputs or inheriting cooked bytes.</summary>
 internal sealed record CookRootRepair(ImmutableHashSet<string> EmptyRoots, ImmutableHashSet<Uri> Sources)
 {
-    public static CookRootRepair Create(ProjectContext project, CookProvenance previous,
+    public static CookRootRepair Create(CookPublicationReadLease publication, CookProvenance previous,
         IReadOnlyCollection<string> mounts, ImmutableDictionary<string, CookedInventoryReport> inventories)
     {
         var empty = ImmutableHashSet.CreateBuilder<string>(StringComparer.Ordinal);
@@ -21,12 +21,12 @@ internal sealed record CookRootRepair(ImmutableHashSet<string> EmptyRoots, Immut
         var diagnostics = new List<DiagnosticRecord>();
         foreach (var mount in mounts)
         {
-            var path = ContentPipelinePaths.GetCookedMountRoot(project.ProjectRoot, mount);
+            var path = publication.FindProjectRoot(mount);
             var prior = previous.Roots.FirstOrDefault(root => root.Mount == mount);
             var owners = previous.Products.Where(product => product.Outputs.Any(output => output.RootMount == mount)).ToArray();
             if (!inventories.TryGetValue(mount, out var inventory))
             {
-                if (Directory.Exists(path) && Directory.EnumerateFileSystemEntries(path).Any())
+                if (prior is null && path is not null && Directory.Exists(path) && Directory.EnumerateFileSystemEntries(path).Any())
                 {
                     diagnostics.Add(Failure(path, "The cooked index cannot establish ownership. Restore it before rebuilding this root."));
                 }
@@ -37,6 +37,11 @@ internal sealed record CookRootRepair(ImmutableHashSet<string> EmptyRoots, Immut
                 }
 
                 continue;
+            }
+
+            if (path is null)
+            {
+                throw new InvalidDataException("An inventory has no selected generation.");
             }
 
             if (inventory.IsValid)
@@ -86,9 +91,14 @@ internal sealed record CookRootRepair(ImmutableHashSet<string> EmptyRoots, Immut
 
                 empty.Add(mount);
                 sources.UnionWith(owners.Select(static product => product.SourceUri));
-                if (owners.Length == 0 || inventory.Issues.Any(static issue => issue.Reason is "unexpected" or "linked_path" or "not_regular"))
+                if (owners.Length == 0)
                 {
-                    diagnostics.Add(Failure(path, "The root contains unowned or redirected files. Resolve those files before rebuilding."));
+                    diagnostics.Add(Failure(path, "The root has no source ownership record to rebuild from."));
+                }
+
+                foreach (var issue in inventory.Issues.Where(static issue => issue.Reason is "unexpected" or "linked_path" or "not_regular"))
+                {
+                    diagnostics.Add(Failure(Path.Combine(path, issue.RelativePath), "This file has no safe source reconstruction. Resolve it before rebuilding the root."));
                 }
             }
         }

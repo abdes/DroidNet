@@ -14,6 +14,7 @@ public sealed partial class ContentBrowserAssetProvider
 {
     private readonly Lock refreshSync = new();
     private TaskCompletionSource? refreshCompletion;
+    private Task? refreshTask;
     [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "Non-owning alias; the scan's using scope disposes this source after its readers drain.")]
     private CancellationTokenSource? scanCancellation;
     private long catalogRevision;
@@ -42,7 +43,7 @@ public sealed partial class ContentBrowserAssetProvider
 
                 var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
                 this.refreshCompletion = completion;
-                _ = Task.Run(() => this.RefreshLoopAsync(completion), CancellationToken.None);
+                this.refreshTask = Task.Run(() => this.RefreshLoopAsync(completion), CancellationToken.None);
                 _ = this.ObserveRefreshAsync(completion.Task);
             }
 
@@ -99,10 +100,10 @@ public sealed partial class ContentBrowserAssetProvider
                     if (project is not null)
                     {
                         await this.projectAssetCatalog.RefreshAsync(cancellation.Token).ConfigureAwait(false);
-                        var records = await this.projectAssetCatalog.QueryAsync(new AssetQuery(AssetQueryScope.All), cancellation.Token).ConfigureAwait(false);
+                        using var captured = await this.projectAssetCatalog.ReadSnapshotAsync(new AssetQuery(AssetQueryScope.All), cancellation.Token).ConfigureAwait(false);
                         var scope = this.projectCookScopeProvider.CreateScope(project);
-                        var reduced = this.reducer.Reduce(records, project, scope, AssetBrowserFilter.Default);
-                        snapshot = await this.ApplyCookStatusAsync(project, reduced, cancellation.Token).ConfigureAwait(false);
+                        var reduced = this.reducer.Reduce(captured.Records, project, scope, AssetBrowserFilter.Default);
+                        snapshot = await this.ApplyCookStatusAsync(project, reduced, cancellation.Token, captured.Publication, captured.PublicationError).ConfigureAwait(false);
                     }
                 }
                 catch (OperationCanceledException) when (cancellation.IsCancellationRequested)

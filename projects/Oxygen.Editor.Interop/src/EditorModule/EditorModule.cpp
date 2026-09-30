@@ -1029,6 +1029,7 @@ namespace oxygen::interop::module {
 
     asset_requests_ = std::make_unique<SceneAssetRequests>(
       *asset_loader_, *path_resolver_);
+    asset_requests_->SetCookedRoots(active_roots_);
 
     auto environment = std::make_unique<oxygen::scene::SceneEnvironment>();
     (void)environment
@@ -1217,10 +1218,6 @@ namespace oxygen::interop::module {
         if (scene_ && asset_requests_) {
           asset_requests_->Drain(*scene_);
         }
-        asset_loader_->ClearMounts();
-      }
-      if (path_resolver_) {
-        path_resolver_->ClearMounts();
       }
       {
         std::lock_guard lock(roots_mutex_);
@@ -1235,7 +1232,7 @@ namespace oxygen::interop::module {
   }
 
   auto EditorModule::SynchronizeCookedRootsAsync() -> co::Co<bool> {
-    std::vector<std::string> roots;
+    CookedRootSet roots;
     std::uint64_t revision = 0;
     std::function<void(bool, std::string)> complete;
     std::function<void(bool, std::string)> superseded;
@@ -1260,15 +1257,19 @@ namespace oxygen::interop::module {
       }
       auto next_resolver = co_await platform->Threads().Run([paths = roots] {
         auto next = std::make_unique<content::VirtualPathResolver>();
-        for (const auto& path : paths) {
-          next->AddLooseCookedRoot(path);
+        if (paths) {
+          for (const auto& binding : *paths) {
+            next->AddLooseCookedRoot(binding.path);
+          }
         }
         return next;
       });
       std::vector<std::filesystem::path> paths;
-      paths.reserve(roots.size());
-      for (const auto& root : roots) {
-        paths.emplace_back(root);
+      if (roots) {
+        paths.reserve(roots->size());
+        for (const auto& root : *roots) {
+          paths.push_back(root.path);
+        }
       }
       auto prepared = co_await asset_loader_->PrepareLooseCookedRootsAsync(std::move(paths));
       co_await asset_loader_->WaitForPendingLoadsAsync();
@@ -1278,6 +1279,10 @@ namespace oxygen::interop::module {
       }
       retirement.emplace(asset_loader_->CommitPreparedMounts(std::move(prepared)));
       path_resolver_->Swap(*next_resolver);
+      active_roots_ = roots;
+      if (asset_requests_) {
+        asset_requests_->SetCookedRoots(active_roots_);
+      }
       superseded = std::move(active_roots_completion_);
       active_roots_completion_ = std::move(complete);
     } catch (const co::TaskCancelledException&) {
@@ -1296,44 +1301,19 @@ namespace oxygen::interop::module {
     co_return true;
   }
 
-  void EditorModule::ReplaceCookedRoots(std::vector<std::string> roots,
-    std::function<void(bool, std::string)> complete) {
+  void EditorModule::ReplaceCookedRoots(std::vector<CookedRootBinding> roots,
+    std::function<void(bool, std::string)> complete)
+  {
+    auto bindings = std::make_shared<const std::vector<CookedRootBinding>>(
+      std::move(roots));
     std::function<void(bool, std::string)> superseded;
     {
       std::lock_guard lock(roots_mutex_);
-      mounted_roots_ = std::move(roots);
+      mounted_roots_ = std::move(bindings);
       superseded = std::move(pending_roots_completion_);
       pending_roots_completion_ = std::move(complete);
       ++roots_revision_;
       roots_dirty_ = true;
-    }
-  }
-
-  void EditorModule::AddLooseCookedRoot(std::string_view path) {
-    LOG_F(INFO, "EditorModule::AddLooseCookedRoot: registering root '{}'",
-      std::string(path));
-    try {
-      std::lock_guard lock(roots_mutex_);
-      mounted_roots_.push_back(std::string(path));
-      ++roots_revision_;
-      roots_dirty_ = true;
-    } catch (const std::exception& e) {
-      LOG_F(ERROR, "Failed to add loose cooked root '{}': {}", std::string(path),
-        e.what());
-    }
-  }
-
-  void EditorModule::ClearCookedRoots() {
-    LOG_F(INFO, "EditorModule::ClearCookedRoots: clearing all mounted roots");
-    std::function<void(bool, std::string)> superseded;
-    try {
-      std::lock_guard lock(roots_mutex_);
-      mounted_roots_.clear();
-      superseded = std::move(pending_roots_completion_);
-      ++roots_revision_;
-      roots_dirty_ = true;
-    } catch (const std::exception& e) {
-      LOG_F(ERROR, "Failed to clear cooked roots: {}", e.what());
     }
   }
 

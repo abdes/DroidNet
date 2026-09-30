@@ -18,4 +18,12 @@ public interface IAssetCookStatusReader
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The current cook-owned facts for each requested identity.</returns>
     public Task<IReadOnlyList<AssetCookStatus>> ReadAsync(ProjectContext project, IReadOnlyList<Uri> assetUris, CancellationToken cancellationToken = default);
+
+    /// <summary>Reads source freshness and output facts against an already captured publication.</summary>
+    /// <param name="project">The owning project.</param>
+    /// <param name="publication">The borrowed catalog or inspection snapshot.</param>
+    /// <param name="assetUris">The requested identities.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>Facts bound to that publication's output identities.</returns>
+    public Task<IReadOnlyList<AssetCookStatus>> ReadAsync(ProjectContext project, Publication.CookPublicationReadLease publication, IReadOnlyList<Uri> assetUris, CancellationToken cancellationToken = default);
 }

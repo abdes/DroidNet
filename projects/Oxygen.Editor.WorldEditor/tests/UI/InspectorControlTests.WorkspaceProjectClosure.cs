@@ -27,8 +27,20 @@ public sealed partial class InspectorControlTests
         => EnqueueAsync(() => this.CheckWorkspacePublicationAsync(scope: null, (scenario, token) => CheckProjectClosureAsync(scenario, captured, token)));
 
     private static Dictionary<string, string> ReadPublishedHashes(string projectRoot)
-        => Directory.GetFiles(Path.Combine(projectRoot, ".cooked"), "*", SearchOption.AllDirectories)
+    {
+        var headPath = CookPublicationPaths.Head(projectRoot);
+        if (!File.Exists(headPath))
+        {
+            return [];
+        }
+
+        var head = System.Text.Json.JsonSerializer.Deserialize<CookPublicationHead>(File.ReadAllBytes(headPath), CookPublicationDocument.JsonOptions)!;
+        var documentPath = CookPublicationPaths.Document(projectRoot, head.PublicationId);
+        var document = System.Text.Json.JsonSerializer.Deserialize<CookPublicationDocument>(File.ReadAllBytes(documentPath), CookPublicationDocument.JsonOptions)!;
+        return document.Roots.SelectMany(root => Directory.GetFiles(root.ResolvePath(projectRoot), "*", SearchOption.AllDirectories))
+            .Append(headPath).Append(documentPath)
             .ToDictionary(static path => path, static path => Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))), StringComparer.OrdinalIgnoreCase);
+    }
 
     private static async Task CheckProjectClosureAsync(PublicationScenario scenario, bool captured, CancellationToken cancellationToken)
     {
@@ -69,7 +81,7 @@ public sealed partial class InspectorControlTests
             await scenario.Picker.RefreshAsync(MaterialPickerFilter.Default, cancellationToken).ConfigureAwait(true);
             _ = ReadPublishedHashes(fixture.ProjectRoot).Should().BeEquivalentTo(hashes);
             _ = fixture.Runtime.State.Should().Be(EngineServiceState.NoEngine);
-            using (CookOutputLease.AcquireWrite(fixture.ProjectRoot))
+            using (await CookOutputLease.AcquireWriteAsync(fixture.ProjectRoot, CancellationToken.None).ConfigureAwait(true))
             {
             }
 
@@ -101,9 +113,10 @@ public sealed partial class InspectorControlTests
         services.Projects.Activate(project);
         using var registration = fixture.RegisterWorkspacePublication(services, scenario.Catalog);
         await fixture.InitializeAsync(cancellationToken).ConfigureAwait(true);
-        var reader = await services.Publication.AcquireForMountAsync(project, cancellationToken).ConfigureAwait(true);
-        var mounts = await services.Mounts.PrepareAsync(project, CookedContentMountService.FindProjectRoots(project), reader, cancellationToken).ConfigureAwait(true);
-        await fixture.Runtime.RefreshProjectCookedRootsAsync(mounts.Roots, mounts).ConfigureAwait(true);
+        using var reader = await services.Publication.AcquireForMountAsync(project, cancellationToken).ConfigureAwait(true);
+        var bindings = reader.Roots.Zip(reader.RootPaths, static (root, path) => new RuntimeCookedRoot(path, root.Owner == CookPublicationRootOwner.Project ? root.Name : null)).ToArray();
+        var mounts = await services.Mounts.PrepareAsync(project, reader, cancellationToken).ConfigureAwait(true);
+        await fixture.Runtime.RefreshProjectCookedRootsAsync(bindings, mounts).ConfigureAwait(true);
         await fixture.SaveAndReopenAsync(cancellationToken).ConfigureAwait(true);
         _ = fixture.Runtime.ContentStatus.RunId.Should().NotBe(previousRunId);
         foreach (var node in fixture.Source.RootNodes)

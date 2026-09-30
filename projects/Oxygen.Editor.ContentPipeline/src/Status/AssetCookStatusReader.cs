@@ -18,14 +18,11 @@ namespace Oxygen.Editor.ContentPipeline.Status;
 /// <param name="documents">Document owners protecting acknowledged saved bytes.</param>
 /// <param name="publication">The committed metadata verifier.</param>
 /// <param name="nativeCompatibility">The current cooking producer identity.</param>
-/// <param name="files">The atomic provenance reader.</param>
 public sealed partial class AssetCookStatusReader(
     ICookDocumentRegistry documents,
     CookPublicationService publication,
-    INativeCompatibilityService nativeCompatibility,
-    IAtomicFileStore files) : IAssetCookStatusReader
+    INativeCompatibilityService nativeCompatibility) : IAssetCookStatusReader
 {
-    private readonly CookProvenanceStore provenance = new(files);
 
     /// <inheritdoc />
     public event EventHandler? Changed
@@ -45,8 +42,8 @@ public sealed partial class AssetCookStatusReader(
             return [];
         }
 
-        using var output = await CookOutputLease.AcquireInspectionAsync(project.ProjectRoot, cancellationToken).ConfigureAwait(false);
-        return await this.ReadUnderInspectionAsync(project, assetUris, cancellationToken).ConfigureAwait(false);
+        using var output = await publication.AcquireReadAsync(project, cancellationToken).ConfigureAwait(false);
+        return await this.ReadAsync(project, output, assetUris, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Reads status while the caller retains the project's finite inspection lease.</summary>
@@ -54,15 +51,16 @@ public sealed partial class AssetCookStatusReader(
     /// <param name="assetUris">The requested authored identities.</param>
     /// <param name="cancellationToken">Cancels status reads.</param>
     /// <returns>The current source and output facts.</returns>
-    internal async Task<IReadOnlyList<AssetCookStatus>> ReadUnderInspectionAsync(ProjectContext project, IReadOnlyList<Uri> assetUris, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<AssetCookStatus>> ReadAsync(ProjectContext project, CookPublicationReadLease snapshot, IReadOnlyList<Uri> assetUris, CancellationToken cancellationToken = default)
     {
-        var (prior, version) = await this.provenance.ReadAsync(project, cancellationToken).ConfigureAwait(false);
-        var trusted = await publication.HasCommittedMetadataUnderLeaseAsync(project, cancellationToken).ConfigureAwait(false);
-        var metadataUnavailable = version.Exists && !trusted;
-        if (!trusted)
+        using var retained = snapshot.Retain();
+        if (snapshot.ProjectId != project.ProjectId || !string.Equals(snapshot.ProjectRoot, Path.GetFullPath(project.ProjectRoot), StringComparison.OrdinalIgnoreCase))
         {
-            prior = new(Incremental.CookProvenance.CurrentVersion, project.ProjectId, [], []);
+            throw new ArgumentException("The status publication belongs to another project.", nameof(snapshot));
         }
+
+        var prior = snapshot.ProductState;
+        const bool metadataUnavailable = false;
 
         var requested = assetUris.Distinct().ToArray();
         var builtinOrigins = ResolveBuiltinOutputOrigins(project, prior);
@@ -77,7 +75,7 @@ public sealed partial class AssetCookStatusReader(
         graph = libraries.Apply(graph);
         var validGraph = WithCompleteAssets(graph);
         var producer = prior.Products.IsEmpty ? NativeProducerObservation.Unknown : nativeCompatibility.Observation;
-        var plan = await ReadFreshnessAsync(project, producer.Fingerprint ?? string.Empty, validGraph, prior, cancellationToken).ConfigureAwait(false);
+        var plan = await ReadFreshnessAsync(snapshot, producer.Fingerprint ?? string.Empty, validGraph, prior, cancellationToken).ConfigureAwait(false);
         var changed = await this.FindChangedInputsAsync(graph.Files, cancellationToken).ConfigureAwait(false);
         using var owners = await documents.AcquireAsync(graph.Assets.Select(static asset => asset.SourceAbsolutePath), cancellationToken).ConfigureAwait(false);
         var products = prior.Products.ToDictionary(static product => product.SourceUri);
@@ -93,7 +91,8 @@ public sealed partial class AssetCookStatusReader(
             changed));
         var states = inputs.Select((input, index) => MapImportedStatus(mapped[index].Requested, mapped[index].Resolution, sourceStatuses[input.AssetUri]))
             .Concat(requests.Where(item => IsBuiltinIdentity(item.Source)).Select(item =>
-                CreateBuiltinStatus(item.Source, products, plan, prior.Products.IsEmpty || producer.Fingerprint is not null, metadataUnavailable) with { AssetUri = item.Requested })).ToArray();
+                CreateBuiltinStatus(item.Source, products, plan, prior.Products.IsEmpty || producer.Fingerprint is not null, metadataUnavailable) with { AssetUri = item.Requested }))
+            .Select(state => state with { OutputRoots = snapshot.ProjectRoots }).ToArray();
         return prior.Products.IsEmpty || producer.Revision == nativeCompatibility.Observation.Revision ? states
             : states.Select(static state => state with { Freshness = AssetCookFreshness.Unknown }).ToArray();
     }

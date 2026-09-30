@@ -17,4 +17,10 @@ public sealed record ContentImportManifest(
     [property: JsonPropertyName("version")] int Version,
     [property: JsonPropertyName("output")] string Output,
     [property: JsonPropertyName("layout")] ContentImportLayout Layout,
-    [property: JsonPropertyName("jobs")] IReadOnlyList<ContentImportJob> Jobs);
+    [property: JsonPropertyName("jobs")] IReadOnlyList<ContentImportJob> Jobs)
+{
+    /// <summary>Gets the fresh generation identity assigned by the publication owner.</summary>
+    [JsonPropertyName("source_key")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Guid? SourceKey { get; init; }
+}

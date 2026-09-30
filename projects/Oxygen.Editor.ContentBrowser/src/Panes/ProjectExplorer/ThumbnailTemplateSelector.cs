@@ -45,7 +45,7 @@ public partial class ThumbnailTemplateSelector : DataTemplateSelector
     protected override DataTemplate? SelectTemplateCore(object item, DependencyObject container)
         => item switch
         {
-            FolderTreeItemAdapter => this.FolderTemplate ?? this.DefaultTemplate,
+            FolderTreeItemAdapter or CookedFolderTreeItemAdapter => this.FolderTemplate ?? this.DefaultTemplate,
             ProjectRootTreeItemAdapter => this.ProjectRootTemplate ?? this.DefaultTemplate,
             AuthoringMountPointTreeItemAdapter => this.AuthoringMountTemplate ?? this.DefaultTemplate,
             VirtualFolderMountTreeItemAdapter => this.VirtualFolderMountTemplate ?? this.DefaultTemplate,

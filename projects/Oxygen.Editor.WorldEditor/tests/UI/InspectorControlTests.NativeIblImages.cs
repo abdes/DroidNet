@@ -65,8 +65,7 @@ public sealed partial class InspectorControlTests
         using var services = new CatalogWorkloadServices(fixture);
         var sceneUri = new Uri("asset:///Content/Scenes/" + Uri.EscapeDataString(fixture.Source.Name) + ".oscene.json");
         _ = (await services.Pipeline.CookCurrentSceneAsync(sceneUri, timeout.Token).ConfigureAwait(true)).IsPublished.Should().BeTrue();
-        var cooked = Path.Combine(fixture.ProjectRoot, ".cooked", "Content");
-        await fixture.InitializeAsync(timeout.Token, cooked).ConfigureAwait(true);
+        await fixture.InitializeAsync(timeout.Token, mountPublished: true).ConfigureAwait(true);
         var geometry = await AssertGeometryAsync(fixture, fixture.Source.RootNodes[0].Id, "Cube", timeout.Token).ConfigureAwait(true);
         var first = new SwapChainPanel { Width = 320, Height = 240 };
         var second = new SwapChainPanel { Width = 320, Height = 240 };
@@ -105,6 +104,7 @@ public sealed partial class InspectorControlTests
                 views.Add(view);
             }
 
+            var cooked = await fixture.GetCookedRootAsync(fixture.ProjectRoot, timeout.Token).ConfigureAwait(true);
             await this.RecordIblImageInputsAsync(fixture, output, cooked, geometry, views.Count, (pixelWidth, pixelHeight), captureRequested, timeout.Token).ConfigureAwait(true);
         }
         finally

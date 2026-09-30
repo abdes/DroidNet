@@ -36,13 +36,13 @@ public sealed partial class ContentPipelineServiceTests
         var consumer = foreignLibrary ? foreignConsumer : workspace;
         if (foreignLibrary)
         {
-            consumer.ContextService.Activate(consumer.ProjectContext with { LocalFolderMounts = [new("Library", Path.Combine(workspace.Root, ".cooked/Art"))] });
+            consumer.Activate(consumer.ProjectContext with { LocalFolderMounts = [new("Library", workspace.CookedRoot("Art"))] });
             service = CreateService(consumer, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
         }
 
         AddGeometryNode(consumer, geometry, "Mesh");
         await consumer.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
-        var index = Path.Combine(workspace.Root, ".cooked/Art/container.index.bin");
+        var index = Path.Combine(workspace.CookedRoot("Art"), "container.index.bin");
         Action openForWrite = () => { using var file = new FileStream(index, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite | FileShare.Delete); };
         var observed = false;
         runner.BeforeBatch = () =>

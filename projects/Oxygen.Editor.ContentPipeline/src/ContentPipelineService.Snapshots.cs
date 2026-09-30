@@ -116,13 +116,23 @@ public sealed partial class ContentPipelineService
         CookTargetKind targetKind,
         CancellationToken cancellationToken)
     {
-        await this.publication.RecoverBeforeCookAsync(operation.Project, cancellationToken).ConfigureAwait(false);
+        CookPublicationReadLease baseline;
+        try
+        {
+            baseline = await this.publication.AcquireForOperationAsync(operation, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception failure) when (failure is IOException or InvalidDataException or UnauthorizedAccessException or InvalidOperationException or System.Text.Json.JsonException)
+        {
+            return CreateFailedCook(operation, targetKind, failure);
+        }
+
+        using var baselineLifetime = baseline;
         Incremental.CookProvenance previous;
         Import.ImportedSourceIndex imports;
         ContentCookInput[] primaryInputs;
         try
         {
-            (previous, imports, resolveScopes) = await this.ResolveImportOwnershipAsync(operation, resolveScopes, cancellationToken).ConfigureAwait(false);
+            (previous, imports, resolveScopes) = await this.ResolveImportOwnershipAsync(operation, baseline, resolveScopes, cancellationToken).ConfigureAwait(false);
             primaryInputs = resolveScopes().SelectMany(static scope => scope.Inputs).ToArray();
         }
         catch (Exception failure) when (failure is IOException or InvalidDataException or UnauthorizedAccessException or InvalidOperationException)
@@ -145,7 +155,9 @@ public sealed partial class ContentPipelineService
         Task? retainedDrain = null;
         try
         {
-            return await this.ExecuteIncrementalCookAsync(operation, resolveScopes, targetKind, artifacts, previous, imports, cancellationToken).ConfigureAwait(false);
+            var result = await this.ExecuteIncrementalCookAsync(operation, baseline, resolveScopes, targetKind, artifacts, previous, imports, cancellationToken).ConfigureAwait(false);
+            baseline.Dispose();
+            return await this.ReclaimUnusedCookedOutputAsync(operation, result).ConfigureAwait(false);
         }
         catch (CookInputDiscoveryException failure)
         {
@@ -153,7 +165,7 @@ public sealed partial class ContentPipelineService
         }
         catch (ContentPipelineTerminationException failure)
         {
-            retainedDrain = ReleaseArtifactsAfterDrainAsync(failure.DrainCompletion, artifacts);
+            retainedDrain = ReleaseCookOpeningAfterDrainAsync(failure.DrainCompletion, artifacts, baseline.Retain());
             throw new ContentPipelineTerminationException(failure.InnerException ?? failure, retainedDrain);
         }
         catch (NativeCompatibilityException failure)
@@ -191,16 +203,19 @@ public sealed partial class ContentPipelineService
     }
 
     private async Task<(Incremental.CookProvenance previous, Import.ImportedSourceIndex imports, Func<IReadOnlyList<ContentCookScope>> scopes)> ResolveImportOwnershipAsync(
-        ContentCookOperation operation, Func<IReadOnlyList<ContentCookScope>> scopes, CancellationToken cancellationToken)
+        ContentCookOperation operation, CookPublicationReadLease baseline, Func<IReadOnlyList<ContentCookScope>> scopes, CancellationToken cancellationToken)
     {
-        var (previous, _) = await this.provenanceStore.ReadAsync(operation.Project, cancellationToken).ConfigureAwait(false);
-        if (!await this.publication.HasCommittedMetadataAsync(operation.Project, cancellationToken).ConfigureAwait(false))
-        {
-            previous = new(Incremental.CookProvenance.CurrentVersion, operation.Project.ProjectId, [], []);
-        }
-
+        var previous = baseline.ProductState;
         var imports = await Import.ImportedSourceIndex.ReadAsync(operation.Project, cookDocuments, previous, cancellationToken).ConfigureAwait(false);
         return (previous, imports, () => scopes().Select(imports.ResolveScope).ToArray());
+    }
+
+    private static async Task ReleaseCookOpeningAfterDrainAsync(Task drain, NativeArtifactLease artifacts, CookPublicationReadLease baseline)
+    {
+        using (baseline)
+        {
+            await ReleaseArtifactsAfterDrainAsync(drain, artifacts).ConfigureAwait(false);
+        }
     }
 
     private async Task<(CookInputSnapshot snapshot, CookDependencyGraph graph)> CaptureScopesAsync(

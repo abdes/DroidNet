@@ -34,7 +34,7 @@ public sealed partial class InspectorControlTests
         timeout.CancelAfter(TimeSpan.FromSeconds(40));
         var (originalUri, originalKey) = await fixture.CookTestMaterialAsync("Original", timeout.Token).ConfigureAwait(true);
         var (_, nextKey) = await fixture.CookTestMaterialAsync("New", timeout.Token).ConfigureAwait(true);
-        await fixture.InitializeAsync(timeout.Token, Path.Combine(fixture.ProjectRoot, ".cooked", "Content")).ConfigureAwait(true);
+        await fixture.InitializeAsync(timeout.Token, mountPublished: true).ConfigureAwait(true);
         VisualUserInterfaceTestsApp.MainWindow.Activate();
         var nodes = fixture.Source.RootNodes.Select(node => node.Id).ToArray();
         var defaultState = await AssertGeometryAsync(fixture, nodes[1], "Cube", timeout.Token).ConfigureAwait(true);

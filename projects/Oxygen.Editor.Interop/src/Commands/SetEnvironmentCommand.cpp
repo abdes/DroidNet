@@ -320,7 +320,8 @@ namespace oxygen::interop::module {
     if (context.AssetRequests) {
       context.AssetRequests->SetExposureMask(*context.Scene,
         post_process_.auto_exposure_metering_mask, std::move(apply),
-        std::move(failure_callback_), std::move(success_callback_));
+        std::move(failure_callback_), std::move(success_callback_),
+        post_process_.auto_exposure_metering_mask_mount);
     } else if (post_process_.auto_exposure_metering_mask) {
       throw std::logic_error("Exposure mask requires scene asset request state");
     } else {

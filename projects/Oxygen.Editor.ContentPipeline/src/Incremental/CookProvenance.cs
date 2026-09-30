@@ -4,17 +4,16 @@
 
 using System.Collections.Immutable;
 using Oxygen.Editor.ContentPipeline.Inspection;
+using Oxygen.Editor.Projects;
 
 namespace Oxygen.Editor.ContentPipeline.Incremental;
 
-/// <summary>Verified product origins and output identities retained between editor sessions.</summary>
-/// <param name="Version">The cache format version.</param>
+/// <summary>In-memory product facts projected from the selected publication.</summary>
 /// <param name="ProjectId">The project that owns the output roots.</param>
 /// <param name="Roots">The last verified files in each physical output root.</param>
 /// <param name="Products">The source fingerprints responsible for produced assets.</param>
-internal sealed record CookProvenance(int Version, Guid ProjectId, ImmutableArray<CookProvenance.Root> Roots, ImmutableArray<CookProvenance.Product> Products)
+internal sealed record CookProvenance(Guid ProjectId, ImmutableArray<CookProvenance.Root> Roots, ImmutableArray<CookProvenance.Product> Products)
 {
-    internal const int CurrentVersion = 3;
     /// <summary>The exact native inventory selected for a physical publication mount.</summary>
     /// <param name="Mount">The physical mount, independent of virtual asset names.</param>
     /// <param name="SourceKey">The native source identity.</param>
@@ -69,5 +68,40 @@ internal sealed record CookProvenance(int Version, Guid ProjectId, ImmutableArra
 
         /// <summary>Gets warnings that still apply when the unchanged product is reused.</summary>
         public ImmutableArray<Oxygen.Managed.Core.Diagnostics.DiagnosticRecord> Diagnostics { get; init; } = [];
+    }
+
+    internal bool IsValid(ProjectContext project)
+    {
+        if (this.ProjectId != project.ProjectId || this.Roots.IsDefault || this.Products.IsDefault
+            || this.Roots.Any(static root => root is null || root.SourceKey == Guid.Empty
+                || root.IndexSha256 is not { Length: 64 } || !root.IndexSha256.All(Uri.IsHexDigit))
+            || this.Products.Any(static product => product?.SourceUri is null || !product.SourceUri.IsAbsoluteUri || product.Fingerprint is not { Length: 64 } || !product.Fingerprint.All(Uri.IsHexDigit)
+                || product.ReuseFingerprint is not { Length: 64 } || !product.ReuseFingerprint.All(Uri.IsHexDigit) || product.Dependencies.IsDefault || product.Outputs.IsDefaultOrEmpty || product.Diagnostics.IsDefault || product.Diagnostics.Any(static diagnostic => diagnostic is null)
+                || product.AuxiliaryFiles.IsDefault || product.AuxiliaryFiles.Any(static path => string.IsNullOrWhiteSpace(path)
+                    || path.Contains('\\') || path.Contains(':') || path.Split('/').Any(static segment => segment is "" or "." or ".."))
+                || product.CookedDependencies.IsDefault || product.CookedDependencies.Any(static dependency => dependency?.AssetUri?.IsAbsoluteUri != true
+                    || string.IsNullOrWhiteSpace(dependency.SourceName) || !Path.IsPathFullyQualified(dependency.RootPath)
+                    || string.IsNullOrWhiteSpace(dependency.AssetKey) || dependency.ContentFingerprint is not { Length: 64 } || !dependency.ContentFingerprint.All(Uri.IsHexDigit)))
+            || this.Roots.Select(static root => root.Mount).ToHashSet(StringComparer.Ordinal).Count != this.Roots.Length
+            || this.Products.Select(static product => product.SourceUri).ToHashSet().Count != this.Products.Length)
+        {
+            return false;
+        }
+
+        try
+        {
+            return this.Roots.All(static root => !string.IsNullOrWhiteSpace(root.Mount)
+                    && root.Mount is not ("." or "..") && root.Mount.IndexOfAny(Path.GetInvalidFileNameChars()) < 0)
+                && this.Products.SelectMany(static product => product.Outputs).All(output => output?.Asset is not null
+                && !string.IsNullOrWhiteSpace(output.Asset.VirtualPath)
+                && output.Asset.DescriptorRelativePath is { Length: > 0 } descriptor
+                && !Path.IsPathRooted(descriptor) && !descriptor.Contains('\\') && !descriptor.Contains(':')
+                && !descriptor.Split('/').Any(static segment => segment is "" or "." or "..")
+                && this.Roots.Any(root => string.Equals(root.Mount, output.RootMount, StringComparison.Ordinal)));
+        }
+        catch (Exception exception) when (exception is InvalidDataException or ArgumentException)
+        {
+            return false;
+        }
     }
 }

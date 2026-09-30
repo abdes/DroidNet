@@ -13,14 +13,14 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
-#include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Content/ResourceKey.h>
+#include <Oxygen/Content/TextureResourceLocator.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/MaterialSlotId.h>
-#include <Oxygen/Content/TextureResourceLocator.h>
-
 #include <Oxygen/Scene/Types/NodeHandle.h>
 
 namespace oxygen::content {
@@ -37,6 +37,7 @@ class Scene;
 }
 
 namespace oxygen::interop::module {
+struct CookedRootBinding;
 
 //! New edits validate their observed revision; saved assignments retain identity.
 enum class MaterialSlotAssignmentIntent : std::uint8_t {
@@ -104,8 +105,13 @@ public:
   //! Supersede pending mask work and apply the complete revision when ready.
   void SetExposureMask(scene::Scene& scene,
     std::optional<content::TextureResourceLocator> locator, TextureApply apply,
-    FailureCallback on_failure = {}, SuccessCallback on_success = {});
+    FailureCallback on_failure = {}, SuccessCallback on_success = {},
+    std::optional<std::wstring> project_mount = {});
   [[nodiscard]] auto InspectExposureMask() const -> ExposureMaskStatus;
+
+  //! Accept the same immutable bindings as the native mount owners.
+  void SetCookedRoots(
+    std::shared_ptr<const std::vector<CookedRootBinding>> roots) noexcept;
 
   //! Re-request current bindings after mounted sources have been refreshed.
   //! Existing scene objects remain usable until their replacements arrive.

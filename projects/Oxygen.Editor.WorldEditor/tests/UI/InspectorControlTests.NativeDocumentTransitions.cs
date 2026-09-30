@@ -55,7 +55,7 @@ public sealed partial class InspectorControlTests
         var sceneUri = new Uri("asset:///Content/Scenes/" + Uri.EscapeDataString(fixture.Source.Name) + ".oscene.json");
         _ = (await services.Pipeline.CookCurrentSceneAsync(sceneUri, timeout.Token).ConfigureAwait(true)).IsPublished.Should().BeTrue();
         await fixture.InitializeAsync(timeout.Token).ConfigureAwait(true);
-        await fixture.RefreshCookedRootsAsync(Path.Combine(fixture.ProjectRoot, ".cooked/Content")).ConfigureAwait(true);
+        await fixture.RefreshCookedRootsAsync().ConfigureAwait(true);
         fixture.Runtime.TargetFps = targetFps;
         var container = new Container();
         await using var containerLifetime = container.ConfigureAwait(true);
@@ -73,7 +73,7 @@ public sealed partial class InspectorControlTests
             fixture.NotifyTransitionSceneReady();
             await WaitForDocumentViewportAsync(host, fixture, timeout.Token).ConfigureAwait(true);
             await fixture.SuspendCookedContentAsync().ConfigureAwait(true);
-            await fixture.RefreshCookedRootsAsync(Path.Combine(fixture.ProjectRoot, ".cooked/Content")).ConfigureAwait(true);
+            await fixture.RefreshCookedRootsAsync().ConfigureAwait(true);
             await this.RunInspectionTransitionsAsync(fixture, host, documents, services, window.Id, timeout.Token).ConfigureAwait(true);
         }
         finally

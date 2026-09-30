@@ -31,11 +31,12 @@ public sealed partial class InspectorControlTests
             var uri = new Uri($"asset:///{relative}");
             var result = await native.Pipeline.CookAssetAsync(uri, cancellationToken).ConfigureAwait(true);
             _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.TechnicalMessage ?? issue.Message)));
-            using var indexStream = File.OpenRead(Path.Combine(root, ".cooked", "Content", "container.index.bin"));
+            var cookedRoot = await this.GetCookedRootAsync(root, cancellationToken).ConfigureAwait(true);
+            using var indexStream = File.OpenRead(Path.Combine(cookedRoot, "container.index.bin"));
             var asset = LooseCookedIndex.Read(indexStream).Assets.Single(value => value.VirtualPath == $"/Content/Materials/{name}.omat");
             if (projectRoot is null)
             {
-                var row = new MaterialPickerResult(uri, name, AssetState.Descriptor, AssetState.Cooked, AssetRuntimeAvailability.Mounted, path, Path.Combine(root, ".cooked", "Content", "Materials", $"{name}.omat"), BaseColorPreview: null);
+                var row = new MaterialPickerResult(uri, name, AssetState.Descriptor, AssetState.Cooked, AssetRuntimeAvailability.Mounted, path, Path.Combine(cookedRoot, "Materials", $"{name}.omat"), BaseColorPreview: null);
                 this.SetMaterialChoices(this.materialChoices.Value.Append(row).ToArray());
             }
 

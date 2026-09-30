@@ -25,12 +25,13 @@ public sealed partial class InspectorControlTests
 
         public CatalogWorkloadServices(NativeSceneFixture fixture, IContentPipelineProcessRunner? processRunner = null)
         {
+            this.Projects = fixture.Projects;
             this.Projects.Activate(ProjectContext.FromProject(fixture.Source.Project) with { AuthoringMounts = [new("Content", "Content")] });
             var files = new NativeAtomicFileStore(new RealFileSystem());
             this.Runs = new ContentCookCoordinator(this.Projects, NullLogger<ContentCookCoordinator>.Instance);
             var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), processRunner ?? new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, this.compatibility);
             this.Scopes = new ProjectCookScopeProvider(this.Storage);
-            this.Publication = new(this.Runs, this.Projects, files);
+            this.Publication = new(this.Runs, this.Projects, files, new ProjectManagerService(this.Storage, atomicFiles: files));
             this.Mounts = new();
             this.Pipeline = new ContentPipelineService(this.Projects, this.Runs, this.Scopes, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), new ContentImportManifestBuilder(), new ContentImportManifestValidator(), api, this.Documents, this.compatibility, files, this.Publication);
             var paths = new Mock<IPathFinder>();
@@ -39,7 +40,7 @@ public sealed partial class InspectorControlTests
             this.Builtins = new BuiltinCatalogDiscovery(api, files, paths.Object, NullLogger<BuiltinCatalogDiscovery>.Instance, this.compatibility);
         }
 
-        public ProjectContextService Projects { get; } = new();
+        public ProjectContextService Projects { get; }
 
         public NativeStorageProvider Storage { get; } = new(new RealFileSystem());
 

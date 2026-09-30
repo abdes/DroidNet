@@ -89,13 +89,14 @@ public sealed partial class InspectorControlTests
     [TestMethod]
     public Task SlowFolderLookupCannotRestoreObsoleteTreeSelection() => EnqueueAsync(async () =>
     {
+        using var directory = new NavigationDirectory();
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var leaf = CreateNavigationFolder("Leaf", "C:/Navigation/Content/Slow/Leaf", []);
-        var slow = CreateNavigationFolder("Slow", "C:/Navigation/Content/Slow", [leaf], release.Task, entered);
-        var fast = CreateNavigationFolder("Fast", "C:/Navigation/Content/Fast", []);
-        var content = CreateNavigationFolder("Content", "C:/Navigation/Content", [fast, slow]);
-        var root = CreateNavigationFolder("Navigation", "C:/Navigation", [content]);
+        var leaf = CreateNavigationFolder("Leaf", directory.Path + "/Content/Slow/Leaf", []);
+        var slow = CreateNavigationFolder("Slow", directory.Path + "/Content/Slow", [leaf], release.Task, entered);
+        var fast = CreateNavigationFolder("Fast", directory.Path + "/Content/Fast", []);
+        var content = CreateNavigationFolder("Content", directory.Path + "/Content", [fast, slow]);
+        var root = CreateNavigationFolder("Navigation", directory.Path, [content]);
         var storage = new Mock<IStorageProvider>();
         _ = storage.Setup(value => value.NormalizeRelativeTo(It.IsAny<string>(), It.IsAny<string>())).Returns((string parent, string child) => parent.TrimEnd('/') + "/" + child);
         _ = storage.Setup(value => value.GetFolderFromPathAsync(root.Location, It.IsAny<CancellationToken>())).ReturnsAsync(root);
@@ -114,6 +115,7 @@ public sealed partial class InspectorControlTests
             Mock.Of<IDialogService>(),
             new ViewModelToView(Mock.Of<IViewLocator>()),
             new StrongReferenceMessenger(),
+            CreateNavigationPublication(projects, storage.Object),
             NullLoggerFactory.Instance);
         try
         {
@@ -145,9 +147,10 @@ public sealed partial class InspectorControlTests
     [DataRow(true)]
     public Task BrowserMountSavePreservesOriginsAndFailureState(bool succeeds) => EnqueueAsync(async () =>
     {
-        var root = CreateNavigationFolder("Navigation", "C:/Navigation", []);
-        var content = CreateNavigationFolder("Content", "C:/Navigation/Content", []);
-        var cooked = CreateNavigationFolder("Cooked", "C:/Navigation/.cooked", []);
+        using var directory = new NavigationDirectory();
+        var root = CreateNavigationFolder("Navigation", directory.Path, []);
+        var content = CreateNavigationFolder("Content", directory.Path + "/Content", []);
+        var cooked = CreateNavigationFolder("Cooked", directory.Path + "/.cooked", []);
         var library = CreateNavigationFolder("Library", "D:/Library", []);
         var storage = new Mock<IStorageProvider>();
         _ = storage.Setup(value => value.NormalizeRelativeTo(It.IsAny<string>(), It.IsAny<string>())).Returns((string parent, string child) => parent.TrimEnd('/') + "/" + child);
@@ -183,6 +186,7 @@ public sealed partial class InspectorControlTests
             Mock.Of<IDialogService>(),
             new ViewModelToView(Mock.Of<IViewLocator>()),
             messenger,
+            CreateNavigationPublication(projects, storage.Object),
             NullLoggerFactory.Instance);
         await model.OnNavigatedToAsync(Mock.Of<IActiveRoute>(), null!).ConfigureAwait(true);
         var tree = model.ShownItems.OfType<ProjectRootTreeItemAdapter>().Single();
@@ -203,6 +207,93 @@ public sealed partial class InspectorControlTests
             _ = projects.ActiveProject.Should().BeSameAs(project);
         }
     });
+
+    /// <summary>Publication notifications during preparation cannot install a closed or superseded project's tree.</summary>
+    [TestMethod]
+    [DataRow(false, false)]
+    [DataRow(true, false)]
+    [DataRow(false, true)]
+    [DataRow(true, true)]
+    public Task TreePreparationRejectsOldProjectAfterPublicationNotification(bool close, bool failObsoleteRead) => EnqueueAsync(async () =>
+    {
+        using var firstDirectory = new NavigationDirectory();
+        using var nextDirectory = new NavigationDirectory();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var storage = new Mock<IStorageProvider>();
+        storage.Setup(value => value.NormalizeRelativeTo(It.IsAny<string>(), It.IsAny<string>())).Returns((string root, string path) => Path.Combine(root, path));
+        storage.Setup(value => value.GetFolderFromPathAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(async (string path, CancellationToken token) =>
+            {
+                if (string.Equals(path, firstDirectory.Path, StringComparison.Ordinal))
+                {
+                    entered.TrySetResult();
+                    await release.Task.WaitAsync(token).ConfigureAwait(true);
+                    if (failObsoleteRead)
+                    {
+                        throw new IOException("The obsolete project folder is unavailable.");
+                    }
+                }
+
+                return CreateNavigationFolder(Path.GetFileName(path), path, []);
+            });
+        var projects = new ProjectContextService();
+        var first = new ProjectContext
+        {
+            ProjectId = Guid.NewGuid(), Name = "First", Category = Category.Games, ProjectRoot = firstDirectory.Path,
+            AuthoringMounts = [new("Cooked", ".cooked")], LocalFolderMounts = [], Scenes = [],
+        };
+        projects.Activate(first);
+        var messenger = new StrongReferenceMessenger();
+        using var model = new ProjectLayoutViewModel(projects, storage.Object, new ContentBrowserState(projects), Mock.Of<IDialogService>(),
+            new ViewModelToView(Mock.Of<IViewLocator>()), messenger, CreateNavigationPublication(projects, storage.Object), NullLoggerFactory.Instance);
+        var load = model.OnNavigatedToAsync(Mock.Of<IActiveRoute>(), null!);
+        try
+        {
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(true);
+            messenger.Send(new AssetsChangedMessage());
+            if (close)
+            {
+                projects.Close();
+                model.Dispose();
+            }
+            else
+            {
+                projects.Activate(first with { ProjectId = Guid.NewGuid(), Name = "Next", ProjectRoot = nextDirectory.Path });
+                messenger.Send(new AssetsChangedMessage());
+            }
+        }
+        finally
+        {
+            release.TrySetResult();
+        }
+
+        await load.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(true);
+        if (close)
+        {
+            _ = model.ShownItems.Should().BeEmpty();
+        }
+        else
+        {
+            _ = model.ShownItems.OfType<ProjectRootTreeItemAdapter>().Should().ContainSingle().Which.ProjectRootFolder.Location.Should().Be(nextDirectory.Path);
+        }
+    });
+
+    private sealed class NavigationDirectory : IDisposable
+    {
+        private readonly DirectoryInfo directory = Directory.CreateTempSubdirectory("Oxygen-Navigation-");
+
+        public string Path => this.directory.FullName.Replace('\\', '/');
+
+        public void Dispose() => this.directory.Delete(recursive: true);
+    }
+
+    private static Oxygen.Editor.ContentPipeline.Publication.CookPublicationService CreateNavigationPublication(ProjectContextService projects, IStorageProvider storage)
+    {
+        var files = new DroidNet.Storage.Native.NativeAtomicFileStore(new Testably.Abstractions.RealFileSystem());
+        return new(Mock.Of<Oxygen.Editor.ContentPipeline.IContentCookCoordinator>(), projects, files,
+            new ProjectManagerService(storage, atomicFiles: files));
+    }
 
     private static IFolder CreateNavigationFolder(string name, string path, IReadOnlyList<IFolder> children, Task? wait = null, TaskCompletionSource? entered = null)
     {

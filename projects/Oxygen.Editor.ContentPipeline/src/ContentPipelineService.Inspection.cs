@@ -30,20 +30,16 @@ public sealed partial class ContentPipelineService
         });
         var token = cancellation.Token;
         token.ThrowIfCancellationRequested();
-        IDisposable? publicationRead = await CookOutputLease.AcquireInspectionAsync(project.ProjectRoot, token).ConfigureAwait(false);
+        CookPublicationReadLease? publicationRead = await this.publication.AcquireReadAsync(project, token).ConfigureAwait(false);
         try
         {
-            var (provenance, _) = await this.provenanceStore.ReadAsync(project, token).ConfigureAwait(false);
-            if (!await this.publication.HasCommittedMetadataUnderLeaseAsync(project, token).ConfigureAwait(false))
-            {
-                provenance = new(Incremental.CookProvenance.CurrentVersion, project.ProjectId, [], []);
-            }
+            var provenance = publicationRead.ProductState;
 
-            var requestedRoots = ResolveInspectionRoots(project, scopeUri);
+            var requestedRoots = ResolveInspectionRoots(project, publicationRead, scopeUri);
             if (scopeUri is not null && requestedRoots.All(static root => !root.IsLocal))
             {
                 var imports = await Import.ImportedSourceIndex.ReadAsync(project, cookDocuments, provenance, token).ConfigureAwait(false);
-                requestedRoots = ResolveImportedInspectionRoots(project, scopeUri, requestedRoots, imports.GetInspectionOutputScopes(scopeUri));
+                requestedRoots = ResolveImportedInspectionRoots(project, publicationRead, scopeUri, requestedRoots, imports.GetInspectionOutputScopes(scopeUri));
             }
 
             var roots = new List<CookedRootReport>();
@@ -81,7 +77,7 @@ public sealed partial class ContentPipelineService
         }
     }
 
-    private static InspectionRoot[] ResolveInspectionRoots(ProjectContext project, Uri? scope)
+    private static InspectionRoot[] ResolveInspectionRoots(ProjectContext project, CookPublicationReadLease publication, Uri? scope)
     {
         if (scope is not null && (!scope.IsAbsoluteUri || !string.Equals(scope.Scheme, AssetUris.Scheme, StringComparison.OrdinalIgnoreCase)
             || scope.Query.Length != 0 || scope.Fragment.Length != 0))
@@ -101,16 +97,17 @@ public sealed partial class ContentPipelineService
 
         var split = path.IndexOf('/', StringComparison.Ordinal);
         var mountName = split < 0 ? path : path[..split];
-        if (project.LocalFolderMounts.FirstOrDefault(mount => string.Equals(mount.Name, mountName, StringComparison.OrdinalIgnoreCase)) is { } local)
+        if (publication.Roots.FirstOrDefault(root => root.Owner == CookPublicationRootOwner.Library
+            && string.Equals(root.Name, mountName, StringComparison.OrdinalIgnoreCase)) is { } local)
         {
-            return [new(local.Name, local.AbsolutePath, split < 0 ? string.Empty : path[(split + 1)..], IsLocal: true)];
+            return [new(local.Name, local.LibraryPath, split < 0 ? string.Empty : path[(split + 1)..], IsLocal: true)];
         }
 
         var mounts = project.AuthoringMounts.Where(mount => !IsDerivedRootMount(mount)
             && (path.Length == 0 || string.Equals(mountName, "Engine", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(mount.Name, mountName, StringComparison.OrdinalIgnoreCase))).ToArray();
         return mounts.Length == 0 ? throw new InvalidDataException("The inspection scope does not belong to a project content mount.")
-            : mounts.Select(mount => new InspectionRoot(mount.Name, Path.GetDirectoryName(CookIncrementalPlanner.ResolveOutputPath(project.ProjectRoot, mount.Name, "container.index.bin"))!, path, IsLocal: false)).ToArray();
+            : mounts.Select(mount => new InspectionRoot(mount.Name, publication.FindProjectRoot(mount.Name), path, IsLocal: false)).ToArray();
     }
 
     private static CookedAssetProvenance[] GetInspectionProvenance(
@@ -162,7 +159,7 @@ public sealed partial class ContentPipelineService
         }
     }
 
-    private static InspectionRoot[] ResolveImportedInspectionRoots(ProjectContext project, Uri scope, InspectionRoot[] ordinary, IEnumerable<string> outputScopes)
+    private static InspectionRoot[] ResolveImportedInspectionRoots(ProjectContext project, CookPublicationReadLease publication, Uri scope, InspectionRoot[] ordinary, IEnumerable<string> outputScopes)
     {
         var isModel = Path.GetExtension(scope.AbsolutePath).ToUpperInvariant() is ".GLTF" or ".GLB" or ".FBX";
         var roots = (isModel ? [] : ordinary).ToDictionary(static root => root.Name, StringComparer.OrdinalIgnoreCase);
@@ -173,7 +170,7 @@ public sealed partial class ContentPipelineService
                 continue;
             }
 
-            var root = roots.GetValueOrDefault(group.Key) ?? new(group.Key, Path.GetDirectoryName(CookIncrementalPlanner.ResolveOutputPath(project.ProjectRoot, group.Key, "container.index.bin"))!, AssetUriHelper.GetVirtualPath(scope).Trim('/'), IsLocal: false);
+            var root = roots.GetValueOrDefault(group.Key) ?? new(group.Key, publication.FindProjectRoot(group.Key), AssetUriHelper.GetVirtualPath(scope).Trim('/'), IsLocal: false);
             roots[group.Key] = root with { ImportedScopes = [.. group.Select(static path => path.Trim('/'))] };
         }
 
@@ -182,9 +179,9 @@ public sealed partial class ContentPipelineService
 
     private async Task<CookedRootReport> InspectRootAsync(InspectionRoot root, CookProvenance provenance, bool validate, CancellationToken cancellationToken)
     {
-        if (!Directory.Exists(root.Path))
+        if (root.Path is null || !Directory.Exists(root.Path))
         {
-            return new(root.Name, IsPresent: false, new(root.Path, Succeeded: true, SourceIdentity: null, [], [], []), Validation: null, []);
+            return new(root.Name, IsPresent: false, new(root.Path ?? string.Empty, Succeeded: true, SourceIdentity: null, [], [], []), Validation: null, []);
         }
 
         try
@@ -193,7 +190,7 @@ public sealed partial class ContentPipelineService
             await using var lifetime = lease.ConfigureAwait(false);
             if (lease.GetFiles().Count == 0)
             {
-                return new(root.Name, IsPresent: false, new(root.Path, Succeeded: true, SourceIdentity: null, [], [], []), Validation: null, []);
+                return new(root.Name, IsPresent: false, new(root.Path ?? string.Empty, Succeeded: true, SourceIdentity: null, [], [], []), Validation: null, []);
             }
 
             var actual = await lease.ReadInventoryAsync(this.engineContentPipelineApi, cancellationToken).ConfigureAwait(false);
@@ -230,7 +227,7 @@ public sealed partial class ContentPipelineService
         }
     }
 
-    private sealed record InspectionRoot(string Name, string Path, string Scope, bool IsLocal)
+    private sealed record InspectionRoot(string Name, string? Path, string Scope, bool IsLocal)
     {
         public IReadOnlyList<string> ImportedScopes { get; init; } = [];
     }

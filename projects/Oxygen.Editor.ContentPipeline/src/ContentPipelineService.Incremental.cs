@@ -16,30 +16,24 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <summary>Plans native jobs and preserves source-owned output evidence across partial cooks.</summary>
 public sealed partial class ContentPipelineService
 {
-    private static Task RetainStagingUntilDrain(ContentPipelineTerminationException failure, CookStagingArea staging, CookReferenceRoots? references)
-        => failure.DrainCompletion.ContinueWith(
-            completed =>
+    private static async Task RetainStagingUntilDrain(ContentPipelineTerminationException failure, CookStagingArea staging, CookReferenceRoots? references)
+    {
+        try
+        {
+            await failure.DrainCompletion.ConfigureAwait(false);
+        }
+        finally
+        {
+            try
             {
-                _ = completed.Exception;
-                try
-                {
-                    try
-                    {
-                        references?.Dispose();
-                    }
-                    finally
-                    {
-                        staging.Dispose();
-                    }
-                }
-                catch (Exception cleanup) when (cleanup is IOException or UnauthorizedAccessException)
-                {
-                    failure.Data["StagingCleanupFailure"] = cleanup.Message;
-                }
-            },
-            CancellationToken.None,
-            TaskContinuationOptions.ExecuteSynchronously,
-            TaskScheduler.Default);
+                references?.Dispose();
+            }
+            finally
+            {
+                await staging.DisposeAsync().ConfigureAwait(false);
+            }
+        }
+    }
 
     private static CookProvenance BuildProvenance(CookProvenance previous, CookIncrementalPlan plan, CookDependencyGraph graph, IReadOnlyList<ContentCookResult> results, CookInputSnapshot snapshot, ImmutableArray<CookProducedSourceFile> produced)
     {
@@ -124,7 +118,7 @@ public sealed partial class ContentPipelineService
 
         var retained = products.Values.Where(product => product.Outputs.All(output => inventories.TryGetValue(output.RootMount, out var inventory)
             && output.Asset.DescriptorRelativePath is { } path && inventory.Files.ContainsKey(path)));
-        return new(CookProvenance.CurrentVersion, previous.ProjectId, [.. roots.Values.OrderBy(static root => root.Mount, StringComparer.Ordinal)], [.. retained.OrderBy(static product => product.SourceUri.AbsoluteUri, StringComparer.Ordinal)]);
+        return new(previous.ProjectId, [.. roots.Values.OrderBy(static root => root.Mount, StringComparer.Ordinal)], [.. retained.OrderBy(static product => product.SourceUri.AbsoluteUri, StringComparer.Ordinal)]);
     }
 
     private async Task<IReadOnlyList<ContentCookInput>> PrepareMissingBuiltinsAsync(
@@ -161,12 +155,12 @@ public sealed partial class ContentPipelineService
             ? throw new InvalidDataException("A required generated asset is absent from the native catalog.") : generated;
     }
 
-    private async Task<ContentCookResult> ExecuteIncrementalCookAsync(ContentCookOperation operation, Func<IReadOnlyList<ContentCookScope>> resolveScopes, CookTargetKind targetKind, NativeArtifactLease artifacts, CookProvenance previous, Import.ImportedSourceIndex imports, CancellationToken cancellationToken)
+    private async Task<ContentCookResult> ExecuteIncrementalCookAsync(ContentCookOperation operation, CookPublicationReadLease baseline, Func<IReadOnlyList<ContentCookScope>> resolveScopes, CookTargetKind targetKind, NativeArtifactLease artifacts, CookProvenance previous, Import.ImportedSourceIndex imports, CancellationToken cancellationToken)
     {
         var mounts = operation.Project.AuthoringMounts.Where(static mount => !IsDerivedRootMount(mount))
             .Select(static mount => mount.Name).Concat(previous.Roots.Select(static root => root.Mount)).Distinct(StringComparer.Ordinal).ToArray();
-        var inventories = await CookIncrementalPlanner.ReadInventoriesAsync(operation.Project, mounts, this.engineContentPipelineApi, cancellationToken, artifacts).ConfigureAwait(false);
-        var repair = CookRootRepair.Create(operation.Project, previous, mounts, inventories);
+        var inventories = await CookIncrementalPlanner.ReadInventoriesAsync(baseline, mounts, this.engineContentPipelineApi, cancellationToken, artifacts).ConfigureAwait(false);
+        var repair = CookRootRepair.Create(baseline, previous, mounts, inventories);
         resolveScopes = this.ExpandRepairScopes(operation, resolveScopes, repair, imports, targetKind);
         var libraries = await CookedLibraryReadSet.AcquireAsync(operation.Project, cancellationToken, uri => imports.ResolveOutput(operation.Project, uri, ContentCookInputRole.Dependency), imports.KnownOutputs).ConfigureAwait(false);
         try
@@ -186,7 +180,7 @@ public sealed partial class ContentPipelineService
             }
 
             snapshot = CookedLibraryReadSet.CaptureDependencies(snapshot, graph);
-            return await this.ExecuteCapturedCookAsync(operation, resolveScopes, targetKind, artifacts, previous, snapshot, graph, libraries, inventories, repair, cancellationToken).ConfigureAwait(false);
+            return await this.ExecuteCapturedCookAsync(operation, baseline, resolveScopes, targetKind, artifacts, previous, snapshot, graph, libraries, inventories, repair, cancellationToken).ConfigureAwait(false);
         }
         catch (ContentPipelineTerminationException failure)
         {
@@ -209,7 +203,7 @@ public sealed partial class ContentPipelineService
         }
     }
 
-    private async Task<ContentCookResult> ExecuteCapturedCookAsync(ContentCookOperation operation, Func<IReadOnlyList<ContentCookScope>> resolveScopes, CookTargetKind targetKind, NativeArtifactLease artifacts, CookProvenance previous, CookInputSnapshot snapshot, CookDependencyGraph graph, CookedLibraryReadSet libraries,
+    private async Task<ContentCookResult> ExecuteCapturedCookAsync(ContentCookOperation operation, CookPublicationReadLease baseline, Func<IReadOnlyList<ContentCookScope>> resolveScopes, CookTargetKind targetKind, NativeArtifactLease artifacts, CookProvenance previous, CookInputSnapshot snapshot, CookDependencyGraph graph, CookedLibraryReadSet libraries,
         ImmutableDictionary<string, Inspection.CookedInventoryReport> inventories, CookRootRepair repair, CancellationToken cancellationToken)
     {
         var plan = CookIncrementalPlanner.CreatePlan(snapshot.BuildFingerprint, snapshot.Inputs, graph, previous, inventories, repair.EmptyRoots);
@@ -236,23 +230,24 @@ public sealed partial class ContentPipelineService
             }
 
             CookRunContext.Report(new(Message: "Already up to date."));
-            return new(operation.OperationId, targetKind, plan.Diagnostics.IsEmpty ? OperationStatus.Succeeded : OperationStatus.SucceededWithWarnings, NormalizeDiagnostics(operation.OperationId, plan.Diagnostics), [], Inspection: null, Validation: null)
+            var unchanged = new ContentCookResult(operation.OperationId, targetKind, plan.Diagnostics.IsEmpty ? OperationStatus.Succeeded : OperationStatus.SucceededWithWarnings, NormalizeDiagnostics(operation.OperationId, plan.Diagnostics), [], Inspection: null, Validation: null)
             {
                 IsUpToDate = true,
                 ReusedAssets = plan.ReusedAssets,
                 InputSnapshot = snapshot,
                 InputsAreCurrent = await this.InputsAreCurrentAsync(snapshot, graph, resolveScopes, cancellationToken).ConfigureAwait(false),
             };
+            return await this.publication.PublishObservedBindingsAsync(operation, baseline, libraries, unchanged, cancellationToken).ConfigureAwait(false);
         }
 
         var dirtyInputs = graph.Assets.Where(input => !plan.Reusable.ContainsKey(input.AssetUri)).ToList();
         dirtyInputs.AddRange(await this.PrepareMissingBuiltinsAsync(operation, snapshot, graph, plan, dirtyInputs, artifacts, targetKind, cancellationToken).ConfigureAwait(false));
-        var staging = await CookStagingArea.CreateAsync(operation, dirtyInputs.Select(static input => input.MountName).Distinct(StringComparer.OrdinalIgnoreCase), cancellationToken, repair.EmptyRoots).ConfigureAwait(false);
+        var staging = await this.publication.CreateStagingAsync(operation, baseline, dirtyInputs.Select(static input => input.MountName).Distinct(StringComparer.OrdinalIgnoreCase), repair.EmptyRoots, cancellationToken).ConfigureAwait(false);
         CookReferenceRoots? references = null;
         try
         {
             staging.VerifyAcceptedInventories(inventories, repair.EmptyRoots);
-            references = await CookReferenceRoots.AcquireAsync(operation.Project, staging, previous, plan, this.engineContentPipelineApi, cancellationToken).ConfigureAwait(false);
+            references = await CookReferenceRoots.AcquireAsync(staging, previous, plan, this.engineContentPipelineApi, cancellationToken).ConfigureAwait(false);
             return await this.CookAndPublishStagingAsync(operation, targetKind, artifacts, resolveScopes, snapshot, graph, previous, plan, dirtyInputs, staging, references, libraries, cancellationToken).ConfigureAwait(false);
         }
         catch (ContentPipelineTerminationException failure)
@@ -265,7 +260,10 @@ public sealed partial class ContentPipelineService
         finally
         {
             references?.Dispose();
-            staging?.Dispose();
+            if (staging is not null)
+            {
+                await staging.DisposeAsync().ConfigureAwait(false);
+            }
         }
     }
 
@@ -339,7 +337,7 @@ public sealed partial class ContentPipelineService
                 throw new InvalidOperationException("The retained source has unsaved edits. Save or discard them and review the replacement again.");
             }
 
-            result = await this.publication.PublishAsync(operation, staging, result, BuildProvenance(previous, plan, graph, results, snapshot, result.ProducedSourceFiles), cancellationToken).ConfigureAwait(false);
+            result = await this.publication.PublishAsync(operation, staging, result, BuildProvenance(previous, plan, graph, results, snapshot, result.ProducedSourceFiles), libraries, cancellationToken).ConfigureAwait(false);
             if (!result.IsPublished && resolveScopes().SingleOrDefault(static scope => scope.ImportReplacement is not null) is { } replacement)
             {
                 RetainRolledBackReplacement(replacement, snapshot);

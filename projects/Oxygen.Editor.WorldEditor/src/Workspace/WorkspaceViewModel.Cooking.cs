@@ -97,7 +97,6 @@ public partial class WorkspaceViewModel
                     project,
                     this.engineService,
                     this.cookHosting,
-                    this.container.Resolve<Oxygen.Editor.ContentPipeline.Mounting.CookedContentMountService>(),
                     this.cookedCatalog!,
                     this.messenger,
                     () => this.publicationRegistration is not null && ReferenceEquals(project, this.projectContextService.ActiveProject))

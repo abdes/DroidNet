@@ -21,6 +21,7 @@
         <None Include="..\..\Oxygen.Engine\src\Oxygen\Cooker\Test\Import\Models\static_scalar_triangle.*" Link="Fixtures\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
         <Compile Include="..\..\Oxygen.Managed.Core\testsupport\TemporaryNativeArtifacts.cs" Link="TemporaryNativeArtifacts.cs" />
         <Compile Include="..\testsupport\NativeInventoryFixture.cs" Link="NativeInventoryFixture.cs" />
+        <Compile Include="..\testsupport\NativeInventoryFixture.Api.cs" Link="NativeInventoryFixture.Api.cs" />
         <Compile Include="..\testsupport\NativeContentPipelineFixture.cs" Link="NativeContentPipelineFixture.cs" />
     </ItemGroup>
     <Target Name="CopyContentWorkerProbe" AfterTargets="Build" Condition="'$(TargetFramework)' != ''">

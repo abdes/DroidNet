@@ -31,6 +31,9 @@ public sealed record AssetCookStatus(
     /// <summary>Gets saved authoring paths in this asset's dependency closure, for live document overlays.</summary>
     public ImmutableArray<string> SourcePaths { get; init; } = [];
 
+    /// <summary>Gets the selected generation paths used by this status read, shared across its result batch.</summary>
+    public ImmutableDictionary<string, string> OutputRoots { get; init; } = ImmutableDictionary<string, string>.Empty;
+
     /// <summary>Gets the hash of source bytes used by this status check, for cached source previews.</summary>
     public string? SavedSourceHash { get; init; }
 

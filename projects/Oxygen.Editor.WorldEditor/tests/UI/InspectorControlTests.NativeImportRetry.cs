@@ -32,7 +32,7 @@ public sealed partial class InspectorControlTests
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(this.TestContext.CancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(40));
         using var services = new CatalogWorkloadServices(fixture, new FailFirstImportProcess());
-        using var catalog = new ProjectAssetCatalog(services.Projects, services.Storage, services.Builtins);
+        await using var catalog = new ProjectAssetCatalog(services.Projects, services.Storage, services.Builtins, services.Publication);
         using var provider = new ContentBrowserAssetProvider(catalog, services.Projects, services.Scopes, new AssetIdentityReducer(), services.Pipeline, services.Documents, services.Runs, fixture.Runtime);
         await fixture.InitializeAsync(timeout.Token).ConfigureAwait(true);
         using var publication = fixture.RegisterWorkspacePublication(services, catalog);
@@ -52,7 +52,11 @@ public sealed partial class InspectorControlTests
             _ = failed.Messages.Should().Contain(message => message.Text.Contains(FailFirstImportProcess.Failure, StringComparison.Ordinal));
             _ = failed.Request.IsReimport.Should().BeTrue();
             _ = failed.Request.Import.Should().BeNull();
-            _ = Directory.Exists(Path.Combine(fixture.ProjectRoot, ".cooked/Content")).Should().BeFalse();
+            using (var selected = await services.Publication.AcquireReadAsync(services.Projects.ActiveProject!, timeout.Token).ConfigureAwait(true))
+            {
+                _ = selected.PublicationId.Should().BeNull();
+                _ = selected.Roots.Should().BeEmpty();
+            }
             _ = File.Exists(Path.Combine(fixture.ProjectRoot, "Content/SourceMedia/DCC/ReviewedTriangle/Triangle." + format)).Should().BeTrue();
             File.Delete(path);
             await this.CaptureComponentLayoutAsync(root, "native-import-failure-" + format + ".png").ConfigureAwait(true);

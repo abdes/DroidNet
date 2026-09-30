@@ -140,18 +140,6 @@ internal sealed partial class CookPublicationTransaction
 
     private IEnumerable<PublicationDirectory> Directories()
     {
-        foreach (var root in this.journal.Roots)
-        {
-            yield return new(
-                root.Mount,
-                root.Before,
-                root.After,
-                this.RootPath("published", root.Mount),
-                this.RootPath("output", root.Mount),
-                this.RootPath("previous", root.Mount),
-                this.RootPath("discarded", root.Mount));
-        }
-
         if (this.journal.SourceReplacement is { } source)
         {
             var published = ImportSourceRetention.ResolveDestination(this.project, source.BundleName);

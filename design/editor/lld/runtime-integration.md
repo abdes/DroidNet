@@ -334,8 +334,9 @@ ED-M07 mount contract:
   result. It must not rescan all `.cooked` child directories and accidentally
   mount stale or unrelated cooked output.
 - `EditorModule` applies root changes at frame start through its existing
-  `AddLooseCookedRoot` / `ClearCookedRoots` path; ED-M07 must not manipulate
-  native asset-loader mounts mid-frame.
+  complete-set replacement path. Prepared loader and virtual-path mappings
+  commit together at the owning mutation boundary; individual roots are not
+  added or cleared from managed code.
 - Mount refresh failure is reported under `AssetMount`; staged cook and
   publication outcomes are distinct. ED-M07B restores prior roots or leaves
   preview explicitly unavailable with rollback output retained.
@@ -630,9 +631,10 @@ zero development dependencies. Producer provenance and runtime identity remain
 separate facts. Testing evidence is not a runtime admission manifest, and normal
 startup does not discover development tools or require a qualification result.
 
-Publication briefly pauses preview and drains affected content reads before
-fixed cooked-root replacement. The runtime exposes the required pause/drain/
-remount/resume capabilities; ContentPipeline owns journal, paths and policy.
+Publication briefly pauses preview and admits a complete immutable root set.
+The runtime retains the accepted selection until replacement succeeds; reader
+leases protect old generations. ContentPipeline owns the journal, paths and
+reclamation policy.
 Development standalone validation holds an output read lease. ED-M08's opt-in
 test/tool targets observe native state and rendered frames; validation-only
 instrumentation is excluded from production build graphs. Existing accepted/queued

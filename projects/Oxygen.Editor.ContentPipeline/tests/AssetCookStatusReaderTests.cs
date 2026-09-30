@@ -128,6 +128,8 @@ public sealed partial class AssetCookStatusReaderTests
         private readonly Oxygen.Testing.TemporaryNativeArtifacts native;
         private readonly CookPublicationService publication;
         private readonly Mock<IEngineContentPipelineApi> api = new();
+        private readonly ProjectManagerService manager = new(new NativeStorageProvider(new Testably.Abstractions.RealFileSystem()));
+        private string? selectedRoot;
 
         public StatusProject()
         {
@@ -143,7 +145,12 @@ public sealed partial class AssetCookStatusReaderTests
             this.native = new([new NativeArtifactLocation("producer", producer)]);
             this.api.Setup(value => value.ReadInventoryAsync(It.IsAny<string>(), It.IsAny<NativeArtifactLease?>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync((string root, NativeArtifactLease? _, CancellationToken _) => Oxygen.Testing.NativeInventoryFixture.Read(root));
-            this.publication = new(Mock.Of<IContentCookCoordinator>(), Mock.Of<IProjectContextService>(), this.files);
+            var info = new ProjectInfo(this.Project.ProjectId, this.Project.Name, this.Project.Category, this.Root)
+            {
+                AuthoringMounts = [.. this.Project.AuthoringMounts],
+            };
+            File.WriteAllText(Path.Combine(this.Root, "Project.oxy"), ProjectInfo.ToJson(info));
+            this.publication = new(Mock.Of<IContentCookCoordinator>(), Mock.Of<IProjectContextService>(), this.files, this.manager);
         }
 
         public static string MaterialJson => CreateMaterialJson(0.5f);
@@ -152,7 +159,7 @@ public sealed partial class AssetCookStatusReaderTests
 
         public string SourcePath => Path.Combine(this.Root, "Content", "Material.omat.json");
 
-        public string OutputPath => Path.Combine(this.Root, ".cooked", "Content", "Material.omat");
+        public string OutputPath => Path.Combine(this.selectedRoot ?? throw new InvalidOperationException("Publish the fixture first."), "Material.omat");
 
         public ProjectContext Project { get; }
 
@@ -173,7 +180,7 @@ public sealed partial class AssetCookStatusReaderTests
         }
 
         public AssetCookStatusReader CreateReader(INativeCompatibilityService? compatibility = null)
-            => new(this.Documents, this.publication, compatibility ?? this.native, this.files);
+            => new(this.Documents, this.publication, compatibility ?? this.native);
 
         public async Task<AssetCookStatus> ReadAsync(CancellationToken cancellationToken)
             => (await this.CreateReader().ReadAsync(this.Project, [SourceUri], cancellationToken).ConfigureAwait(false)).Single();
@@ -189,9 +196,12 @@ public sealed partial class AssetCookStatusReaderTests
             await using var producerLifetime = producer.ConfigureAwait(false);
             _ = verified.Succeeded.Should().BeTrue();
             var plan = CookIncrementalPlanner.CreatePlan(producer.Fingerprint, graph.Files, graph,
-                new(CookProvenance.CurrentVersion, this.Project.ProjectId, [], []), ImmutableDictionary<string, Inspection.CookedInventoryReport>.Empty);
-            using var staging = await CookStagingArea.CreateAsync(operation, ["Content"], cancellationToken).ConfigureAwait(false);
-            var root = staging.Roots.Single().StagingPath;
+                new(this.Project.ProjectId, [], []), ImmutableDictionary<string, Inspection.CookedInventoryReport>.Empty);
+            using var baseline = await this.publication.AcquireReadAsync(this.Project, cancellationToken).ConfigureAwait(false);
+            using var ownership = CookOutputLease.AcquireOperation(this.Root, operation.OperationId);
+            await using var staging = await CookStagingArea.CreateAsync(operation, baseline, ["Content"], this.files, this.manager, cancellationToken).ConfigureAwait(false);
+            var candidate = staging.Roots.Single();
+            var root = candidate.Path;
             await File.WriteAllTextAsync(Path.Combine(root, "container.index.bin"), "index", cancellationToken).ConfigureAwait(false);
             var outputs = graph.Assets.Select(asset => new ContentCookedAsset(asset.AssetUri, new Uri("asset://" + asset.OutputVirtualPath), asset.Kind, "Content", asset.OutputVirtualPath ?? throw new InvalidOperationException("Expected a cooked path."))).ToArray();
             var indexed = new List<CookedAssetEntry>();
@@ -204,29 +214,25 @@ public sealed partial class AssetCookStatusReaderTests
                 indexed.Add(new CookedAssetEntry(output.VirtualPath, output.Kind) { DescriptorRelativePath = relative });
             }
 
-            Oxygen.Testing.NativeInventoryFixture.WriteIndex(root, indexed);
+            Oxygen.Testing.NativeInventoryFixture.WriteIndex(root, indexed, candidate.SourceKey);
             var inventory = Oxygen.Testing.NativeInventoryFixture.Read(root);
             var evidence = new CookProvenance.Root("Content", inventory.SourceKey, inventory.IndexSha256);
             var provenance = new CookProvenance(
-                CookProvenance.CurrentVersion,
                 this.Project.ProjectId,
                 [evidence],
                 [
                     .. outputs.Select(output => new CookProvenance.Product(output.SourceAssetUri, plan.Fingerprints[output.SourceAssetUri], graph.Dependencies[output.SourceAssetUri],
                         [new(output with { DescriptorRelativePath = output.VirtualPath["/Content/".Length..] }, "Content")]) { ReuseFingerprint = plan.Fingerprints[output.SourceAssetUri] }),
                 ]);
-            var receipt = new CookPublicationReceipt(3, this.Project.ProjectId, operation.OperationId, DateTimeOffset.UtcNow, producer.Fingerprint, new string('A', 64), graph.Files, [], [evidence], WasMounted: false);
-            var transaction = await CookPublicationTransaction.PrepareAsync(
-                operation,
-                staging,
-                new Dictionary<string, byte[]>(StringComparer.Ordinal)
-            {
-                [CookPublicationTransaction.PublicationMetadata] = JsonSerializer.SerializeToUtf8Bytes(receipt),
-                [CookPublicationTransaction.ProvenanceMetadata] = CookProvenanceStore.Serialize(this.Project, provenance),
-            },
-                this.files,
-                cancellationToken).ConfigureAwait(false);
-            await transaction.PublishAsync(preview: null, static () => { }, cancellationToken).ConfigureAwait(false);
+            var opening = await CookOutputReadLease.AcquireAsync(root, cancellationToken).ConfigureAwait(false);
+            candidate.AcceptVerification(opening, inventory);
+            var document = new CookPublicationDocument(CookPublicationDocument.CurrentVersion, this.Project.ProjectId, operation.OperationId,
+                DateTimeOffset.UtcNow, CookPublicationDocument.ConfigurationIdentity(this.Project), staging.SealRoots(), provenance.Products,
+                new(producer.Fingerprint, new string('A', 64), graph.Files, [], [], []));
+            await staging.Transaction.PrepareAsync(operation, document, sourceReplacement: null, [], projectChange: null, cancellationToken).ConfigureAwait(false);
+            staging.RetainForPublication();
+            using var accepted = await staging.Transaction.PublishAsync(preview: null, baseline, static () => { }, cancellationToken).ConfigureAwait(false);
+            this.selectedRoot = accepted.FindProjectRoot("Content");
         }
 
         public void Dispose()

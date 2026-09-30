@@ -13,6 +13,7 @@ using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.Status;
+using Oxygen.Editor.Projects;
 using Oxygen.Managed.Core.Compatibility;
 using Testably.Abstractions;
 
@@ -39,13 +40,15 @@ public sealed partial class ContentBrowserAssetProviderTests
         var files = new NativeAtomicFileStore(new RealFileSystem());
         var native = new Mock<INativeCompatibilityService>(MockBehavior.Strict);
         var content = new Mock<IEngineContentPipelineApi>(MockBehavior.Strict);
-        var statuses = new AssetCookStatusReader(documents, new CookPublicationService(runs, projects, files), native.Object, files);
-        using var catalog = new ProjectAssetCatalog(projects, new NativeStorageProvider(new RealFileSystem()), CreateEmptyImportBuiltins());
+        var storage = new NativeStorageProvider(new RealFileSystem());
+        var publication = new CookPublicationService(runs, projects, files, new ProjectManagerService(storage, atomicFiles: files));
+        var statuses = new AssetCookStatusReader(documents, publication, native.Object);
+        await using var catalog = new ProjectAssetCatalog(projects, storage, CreateEmptyImportBuiltins(), publication);
         var runtime = Oxygen.Testing.AssetStatusFixture.CreateUnavailableRuntime();
         await using var runtimeLifetime = runtime.ConfigureAwait(false);
         using var provider = new ContentBrowserAssetProvider(catalog, projects, new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer(), statuses, documents, runs, runtime);
         IReadOnlyList<ContentBrowserAssetItem> rows = [];
-        provider.Items.Subscribe(new Observer<IReadOnlyList<ContentBrowserAssetItem>>(value => rows = value), this.TestContext.CancellationToken);
+        provider.Items.Subscribe(new Observer<IReadOnlyList<ContentBrowserAssetItem>>(value => rows = value.Where(static row => row.Kind == AssetKind.Material).ToArray()), this.TestContext.CancellationToken);
         var watch = Stopwatch.StartNew();
         await provider.RefreshAsync(AssetBrowserFilter.Default, this.TestContext.CancellationToken).ConfigureAwait(false);
         var cold = watch.Elapsed;

@@ -42,6 +42,7 @@ public partial class ProjectLayoutViewModel(
     IDialogService dialogService,
     ViewModelToView vmToView,
     IMessenger messenger,
+    Oxygen.Editor.ContentPipeline.Publication.CookPublicationService publications,
     ILoggerFactory? loggerFactory)
     : DynamicTreeViewModel(loggerFactory), IRoutingAware
 {
@@ -138,6 +139,7 @@ public partial class ProjectLayoutViewModel(
 
             // Subscribe to navigation requests
             this.messenger.Register<NavigateToFolderRequestMessage>(this, (_, message) => _ = HandleNavigateRequestAsync(message));
+            this.messenger.Register<AssetsChangedMessage>(this, (_, _) => _ = this.RefreshPublishedFoldersAsync());
 
             this.isSubscribed = true;
         }
@@ -184,51 +186,7 @@ public partial class ProjectLayoutViewModel(
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous refresh operation.</returns>
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "pre-loading happens during route activation and we cannot report exceptions in that stage")]
-    public async Task RefreshTreeAsync()
-    {
-        try
-        {
-            var context = projectContextService.ActiveProject;
-            var projectInfo = this.GetActiveProjectInfo()
-                ?? throw new InvalidOperationException("Project Layout used with no CurrentProject");
-            var folder = await storage.GetFolderFromPathAsync(projectInfo.Location!).ConfigureAwait(true);
-            if (this.selectionDisposed || !ReferenceEquals(context, projectContextService.ActiveProject))
-            {
-                return;
-            }
-
-            this.suppressTreeSelectionEvents = true;
-            try
-            {
-                if (this.projectRoot is not null)
-                {
-                    this.projectRoot.MountRenamed -= this.OnMountRenamed;
-                    this.projectRoot.Dispose();
-                }
-
-                this.projectRoot = new ProjectRootTreeItemAdapter(this.logger, storage, projectInfo, folder) { IsExpanded = true };
-                await this.LoadPersistedMountsAsync(storage, projectInfo).ConfigureAwait(true);
-                if (this.selectionDisposed || !ReferenceEquals(context, projectContextService.ActiveProject))
-                {
-                    return;
-                }
-
-                this.projectRoot.MountRenamed += this.OnMountRenamed;
-                _ = this.projectRoot.Children;
-                await this.InitializeRootAsync(this.projectRoot, skipRoot: false).ConfigureAwait(true);
-            }
-            finally
-            {
-                this.suppressTreeSelectionEvents = false;
-            }
-
-            await this.UpdateTreeSelectionFromStateAsync().ConfigureAwait(true);
-        }
-        catch (Exception ex)
-        {
-            this.LogPreloadingProjectFoldersError(ex);
-        }
-    }
+    public Task RefreshTreeAsync() => this.ReloadMountTreeAsync();
 
     /// <summary>
     ///     Navigates to and selects the specified folder in the tree.
@@ -303,13 +261,13 @@ public partial class ProjectLayoutViewModel(
     /// <param name="currentAdapter">The current adapter to search from.</param>
     /// <param name="targetPath">The target relative path to find.</param>
     /// <returns>The folder adapter if found, null otherwise.</returns>
-    private static async Task<FolderTreeItemAdapter?> FindFolderAdapterAsync(
+    private static async Task<TreeItemAdapter?> FindFolderAdapterAsync(
         TreeItemAdapter currentAdapter,
         string targetPath)
     {
         if (string.IsNullOrEmpty(targetPath) || string.Equals(targetPath, ".", StringComparison.Ordinal))
         {
-            return currentAdapter as FolderTreeItemAdapter;
+            return currentAdapter;
         }
 
         var normalizedPath = targetPath.Replace('\\', '/');
@@ -323,8 +281,8 @@ public partial class ProjectLayoutViewModel(
 
             foreach (var child in children)
             {
-                if (child is FolderTreeItemAdapter folderChild &&
-                    string.Equals(folderChild.Folder.Name, part, StringComparison.OrdinalIgnoreCase))
+                if (child is TreeItemAdapter folderChild && (child is FolderTreeItemAdapter or CookedFolderTreeItemAdapter)
+                    && string.Equals(folderChild.Label, part, StringComparison.OrdinalIgnoreCase))
                 {
                     next = folderChild;
                     break;
@@ -341,7 +299,7 @@ public partial class ProjectLayoutViewModel(
             }
         }
 
-        return current as FolderTreeItemAdapter;
+        return current;
     }
 
     [RelayCommand(CanExecute = nameof(CanChangeMounts))]
@@ -495,94 +453,23 @@ public partial class ProjectLayoutViewModel(
         await this.ApplyMountCandidateAsync(activeProject, projectInfo).ConfigureAwait(true);
     }
 
-    private async Task LoadPersistedMountsAsync(IStorageProvider storage, ProjectInfo projectInfo)
+    private async Task LoadPersistedMountsAsync(ProjectRootTreeItemAdapter root, ProjectInfo projectInfo, ProjectContext context)
     {
-        if (this.projectRoot is null)
-        {
-            return;
-        }
-
         foreach (var mount in projectInfo.AuthoringMounts.Where(IsPersistedProjectRelativeVirtualMount))
         {
-            await this.RestoreMountAsync(storage, mount.Name, mount.RelativePath, isProjectRelative: true, mount.IsExpanded).ConfigureAwait(true);
+            await this.RestoreMountAsync(root, context, mount.Name, mount.RelativePath, isProjectRelative: true, mount.IsExpanded).ConfigureAwait(true);
         }
 
         foreach (var mount in projectInfo.LocalFolderMounts)
         {
-            await this.RestoreMountAsync(storage, mount.Name, mount.AbsolutePath, isProjectRelative: false, mount.IsExpanded).ConfigureAwait(true);
+            await this.RestoreMountAsync(root, context, mount.Name, mount.AbsolutePath, isProjectRelative: false, mount.IsExpanded).ConfigureAwait(true);
         }
     }
 
-    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "pre-loading happens during route activation and we cannot report exceptions in that stage")]
-    private async Task PreloadRecentTemplatesAsync()
-    {
-        try
-        {
-            if (this.projectRoot is null)
-            {
-                // The following method will do sanity checks on the current project and its info. On successful return, we have
-                // guarantee the project info is valid and has a valid location for the project root folder.
-                var projectInfo = this.GetActiveProjectInfo() ??
-                                  throw new InvalidOperationException("Project Layout used with no CurrentProject");
+    private Task PreloadRecentTemplatesAsync() => this.ReloadMountTreeAsync();
 
-                // Create the root TreeItem for the project root folder.
-                var folder = await storage.GetFolderFromPathAsync(projectInfo.Location!).ConfigureAwait(true);
-                this.projectRoot = new ProjectRootTreeItemAdapter(
-                    this.logger,
-                    storage,
-                    projectInfo,
-                    folder)
-                {
-                    IsExpanded = true,
-                };
-
-                // Load persisted local folder mounts
-                await this.LoadPersistedMountsAsync(storage, projectInfo).ConfigureAwait(true);
-
-                this.projectRoot.MountRenamed += this.OnMountRenamed;
-            }
-
-            // Preload the project folders
-            await this.LoadProjectAsync().ConfigureAwait(true);
-        }
-        catch (Exception ex)
-        {
-            this.LogPreloadingProjectFoldersError(ex);
-        }
-    }
-
-    /// <summary>
-    ///     Loads the project asynchronously, starting with the project root folder, and continuing with children that are part
-    ///     of the
-    ///     initial selection set. The selection set can be provided via the navigation URL as query parameters.
-    /// </summary>
-    /// <returns>
-    ///     A <see cref="Task" /> object representing the asynchronous work.
-    /// </returns>
     [RelayCommand]
-    private async Task LoadProjectAsync()
-    {
-        Debug.Assert(this.projectRoot is not null, "project root node should be initialized");
-        Debug.Assert(this.activeRoute is not null, "should have an active route");
-
-        // Ensure the root children are loading to avoid assertion in DoGetChildrenCount
-        // when logging accesses ChildrenCount before the lazy loader is triggered.
-        _ = this.projectRoot.Children;
-
-        // Initialize the project tree
-        await this.InitializeRootAsync(this.projectRoot, skipRoot: false).ConfigureAwait(true);
-
-        // Attach property change listeners to Authoring Mounts (which are loaded by InitializeRootAsync -> LoadChildren)
-        // Virtual Folder Mounts are already handled in LoadPersistedMountsAsync or Mount... methods.
-        var children = await this.projectRoot.Children.ConfigureAwait(true);
-        foreach (var child in children)
-        {
-            if (child is AuthoringMountPointTreeItemAdapter authoringMount)
-            {
-                authoringMount.PropertyChanged += this.OnMountPointPropertyChanged;
-            }
-        }
-    }
+    private Task LoadProjectAsync() => this.ReloadMountTreeAsync();
 
     private ProjectInfo? GetActiveProjectInfo()
     {
@@ -777,6 +664,7 @@ public partial class ProjectLayoutViewModel(
             AuthoringMountPointTreeItemAdapter authoring => authoring.VirtualRootPath,
             VirtualFolderMountTreeItemAdapter virtualMount => virtualMount.VirtualRootPath,
             FolderTreeItemAdapter folder => this.GetFolderVirtualPath(folder),
+            CookedFolderTreeItemAdapter folder => folder.VirtualPath,
             _ => null,
         };
 

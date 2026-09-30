@@ -17,19 +17,16 @@ public sealed partial class CookPublicationTransactionTests
     /// <returns>The asynchronous process interruption regression.</returns>
     [TestMethod]
     [DataRow(true, "Prepared")]
-    [DataRow(true, "Retained:Content")]
-    [DataRow(true, "Retained:Second")]
-    [DataRow(true, "OldRetained")]
-    [DataRow(true, "Installed:Content")]
-    [DataRow(true, "Installed:Second")]
-    [DataRow(true, "RootsInstalled")]
+    [DataRow(true, "Applying")]
+    [DataRow(true, "SourcesApplied")]
+    [DataRow(true, "HeadSelected")]
     [DataRow(true, "RuntimeReady")]
-    [DataRow(true, "Metadata:.build/cook/provenance.json")]
-    [DataRow(true, "Metadata:.cooked/publication.json")]
     [DataRow(true, "Committed")]
     [DataRow(false, "Prepared")]
-    [DataRow(false, "Installed:Content")]
-    [DataRow(false, "Metadata:.cooked/publication.json")]
+    [DataRow(false, "Applying")]
+    [DataRow(false, "SourcesApplied")]
+    [DataRow(false, "HeadSelected")]
+    [DataRow(false, "RuntimeReady")]
     [DataRow(false, "Committed")]
     public async Task PublisherTerminationRecoversActualFilesystemState(bool hadPrevious, string boundary)
     {
@@ -51,10 +48,11 @@ public sealed partial class CookPublicationTransactionTests
             child.Kill();
             await child.WaitForExitAsync(this.TestContext.CancellationToken).WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
             using var writer = await AcquireAfterProcessExitAsync(project.Root, this.TestContext.CancellationToken).ConfigureAwait(false);
-            var recovered = await CookPublicationTransaction.LoadAsync(project.Context, project.Operation.OperationId, project.Files, writer, this.TestContext.CancellationToken).ConfigureAwait(false);
+            var recovered = await CookPublicationTransaction.LoadAsync(project.Context, project.Operation.OperationId, project.Files, project.Manager, writer, this.TestContext.CancellationToken).ConfigureAwait(false);
             if (string.Equals(boundary, "Committed", StringComparison.Ordinal))
             {
-                await recovered.VerifyCommittedAsync(writer).ConfigureAwait(false);
+                using var selected = await CookPublicationReadLease.OpenUnderGateAsync(project.Context, project.Files, writer, this.TestContext.CancellationToken).ConfigureAwait(false);
+                _ = selected.PublicationId.Should().Be(project.Operation.OperationId);
                 project.AssertNew();
             }
             else
@@ -63,7 +61,6 @@ public sealed partial class CookPublicationTransactionTests
                 project.AssertOld();
             }
 
-            await recovered.CleanupAsync(writer).ConfigureAwait(false);
         }
         finally
         {

@@ -62,7 +62,7 @@ public sealed partial class ContentPipelineServiceTests
     {
         using var workspace = new TempWorkspace();
         var original = workspace.ProjectContext;
-        workspace.ContextService.Activate(original with { ProjectId = Guid.NewGuid() });
+        workspace.Activate(original with { ProjectId = Guid.NewGuid() });
         var api = new Mock<IEngineContentPipelineApi>(MockBehavior.Strict);
         var pipeline = CreateService(workspace, new CapturingSceneDescriptorGenerator(workspace, []), api.Object);
         var result = await pipeline.ReadAsync(original, new Uri("asset:///Engine/Generated/BasicShapes/Cube"), this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -89,7 +89,7 @@ public sealed partial class ContentPipelineServiceTests
         var pipeline = CreateService(workspace, new CapturingSceneDescriptorGenerator(workspace, []), api.Object);
         var pending = pipeline.ReadAsync(original, new Uri("asset:///Engine/Generated/BasicShapes/Cube"), this.TestContext.CancellationToken);
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
-        workspace.ContextService.Activate(original with { ProjectId = Guid.NewGuid() });
+        workspace.Activate(original with { ProjectId = Guid.NewGuid() });
         Func<Task> completion = async () => _ = await pending.ConfigureAwait(false);
         _ = await completion.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
     }

@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
+using Oxygen.Editor.ContentPipeline.Publication;
 using Moq;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentBrowser.Materials;
@@ -91,9 +92,25 @@ public sealed partial class ContentBrowserAssetProviderTests
     {
         using var workspace = new TempWorkspace();
         var source = await WriteModelSourceAsync(workspace, configured: true, this.TestContext.CancellationToken).ConfigureAwait(false);
-        var state = ModelStatus(workspace, source, verified: true);
+        var projects = CreateProjectContextService(workspace);
+        var sourceKey = Guid.CreateVersion7();
+        var ownedRoot = CookPublicationPaths.Generation(workspace.Root, sourceKey);
+        Directory.CreateDirectory(ownedRoot);
+        await File.WriteAllBytesAsync(Path.Combine(ownedRoot, CookedGeneration.MarkerFileName), [], this.TestContext.CancellationToken).ConfigureAwait(false);
+        var project = projects.ActiveProject!;
+        var document = new CookPublicationDocument(CookPublicationDocument.CurrentVersion, project.ProjectId, Guid.NewGuid(), DateTimeOffset.UtcNow,
+            CookPublicationDocument.ConfigurationIdentity(project), [new(CookPublicationRootOwner.Project, "Content", sourceKey, new string('0', 64), null)], [], null);
+        var files = new DroidNet.Storage.Native.NativeAtomicFileStore(new Testably.Abstractions.RealFileSystem());
+        using var gate = await CookOutputLease.AcquireWriteAsync(workspace.Root, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var documentPath = CookPublicationPaths.Document(workspace.Root, document.OperationId);
+        Directory.CreateDirectory(Path.GetDirectoryName(documentPath)!);
+        var version = await files.WriteAsync(documentPath, System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(document, CookPublicationDocument.JsonOptions), DroidNet.Storage.FileVersion.Missing, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var head = new CookPublicationHead(CookPublicationHead.CurrentVersion, document.OperationId, version.Sha256);
+        _ = await files.WriteAsync(CookPublicationPaths.Head(workspace.Root), System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(head, CookPublicationDocument.JsonOptions), DroidNet.Storage.FileVersion.Missing, this.TestContext.CancellationToken).ConfigureAwait(false);
+        using var selected = await CookPublicationReadLease.OpenUnderGateAsync(project, files, gate, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var state = ModelStatus(workspace, source, verified: true) with { OutputRoots = selected.ProjectRoots };
         var output = state.Outputs.Single(static asset => asset.Kind == ContentCookAssetKind.Material);
-        var root = workspace.SourcePath(library ? "Library" : ".cooked/Content");
+        var root = library ? workspace.SourcePath("Library") : ownedRoot;
         const string descriptor = "Models/Crate/Materials/Paint.omat";
         _ = Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(root, descriptor))!);
         await File.WriteAllTextAsync(Path.Combine(root, descriptor), "output", this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -102,7 +119,7 @@ public sealed partial class ContentBrowserAssetProviderTests
         var reader = new DelegateStatusReader((_, uris, _) => Task.FromResult<IReadOnlyList<AssetCookStatus>>(uris.Select(uri => state with { AssetUri = uri }).ToArray()));
         var runtime = Oxygen.Testing.AssetStatusFixture.CreateUnavailableRuntime();
         await using var runtimeLifetime = runtime.ConfigureAwait(false);
-        using var provider = new ContentBrowserAssetProvider(new TestProjectAssetCatalog(records), CreateProjectContextService(workspace), new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer(), reader, new CookDocumentRegistry(), EmptyCookRuns(), runtime);
+        using var provider = new ContentBrowserAssetProvider(new TestProjectAssetCatalog(records) { Publication = selected }, projects, new TestProjectCookScopeProvider(workspace), new AssetIdentityReducer(), reader, new CookDocumentRegistry(), EmptyCookRuns(), runtime);
         var row = await provider.ResolveAsync(output.CookedAssetUri, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = row!.CanCook.Should().Be(!library);
         _ = row.CanReimport.Should().Be(!library);

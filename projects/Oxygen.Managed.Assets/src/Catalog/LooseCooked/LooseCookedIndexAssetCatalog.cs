@@ -22,8 +22,8 @@ namespace Oxygen.Managed.Assets.Catalog.LooseCooked;
 /// </remarks>
 public sealed class LooseCookedIndexAssetCatalog : IAssetCatalog, IRefreshableAssetCatalog, IDisposable
 {
-    private readonly IStorageProvider storage;
-    private readonly LooseCookedIndexAssetCatalogOptions options;
+    private readonly IStorageProvider? storage;
+    private readonly LooseCookedIndexAssetCatalogOptions? options;
     private readonly IFileSystemCatalogEventSource eventSource;
 
     private readonly Subject<AssetChange> changes = new();
@@ -32,6 +32,20 @@ public sealed class LooseCookedIndexAssetCatalog : IAssetCatalog, IRefreshableAs
     private IReadOnlyDictionary<Uri, AssetRecord> entriesByUri = new Dictionary<Uri, AssetRecord>();
     private volatile bool isInitialized;
     private string cookedRoot = string.Empty;
+
+    /// <summary>Creates a fixed catalog from an already captured index; it never watches or reloads its source.</summary>
+    /// <param name="document">The decoded index accepted by its content owner.</param>
+    /// <param name="cookedRoot">The physical root named by that index.</param>
+    public LooseCookedIndexAssetCatalog(Document document, string cookedRoot)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        ArgumentException.ThrowIfNullOrWhiteSpace(cookedRoot);
+        this.cookedRoot = Path.GetFullPath(cookedRoot);
+        this.entriesByUri = CreateEntries(document, this.cookedRoot);
+        this.eventSource = new NoopFileSystemCatalogEventSource();
+        this.eventSubscription = Disposable.Empty;
+        this.isInitialized = true;
+    }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="LooseCookedIndexAssetCatalog"/> class.
@@ -74,10 +88,10 @@ public sealed class LooseCookedIndexAssetCatalog : IAssetCatalog, IRefreshableAs
         var filter = options.WatcherFilter ?? options.IndexFileName;
 
         // NOTE:
-        // The cooked root folder for a mount point is typically ".cooked/<MountPoint>".
+        // A configured cooked root may not exist until its first publication.
         // That folder (or even the index file) may not exist yet when this catalog is constructed.
         // If we only watch when the exact root exists, we can permanently miss later creation of
-        // ".cooked/<MountPoint>/container.index.bin". To avoid that, watch the nearest existing
+        // the cooked root's "container.index.bin". To avoid that, watch the nearest existing
         // parent directory (usually the ".cooked" folder) with IncludeSubdirectories enabled.
         var watchRoot = FindNearestExistingDirectory(normalizedRoot);
 
@@ -197,7 +211,7 @@ public sealed class LooseCookedIndexAssetCatalog : IAssetCatalog, IRefreshableAs
             return;
         }
 
-        this.cookedRoot = this.storage.Normalize(this.options.CookedRootFolderPath);
+        this.cookedRoot = this.storage!.Normalize(this.options!.CookedRootFolderPath);
         await this.ReloadSnapshotAsync(cancellationToken).ConfigureAwait(false);
         this.isInitialized = true;
     }
@@ -245,6 +259,11 @@ public sealed class LooseCookedIndexAssetCatalog : IAssetCatalog, IRefreshableAs
 
     private async Task ReloadSnapshotAsync(CancellationToken cancellationToken)
     {
+        if (this.storage is null || this.options is null)
+        {
+            return;
+        }
+
         var indexPath = this.storage.NormalizeRelativeTo(this.cookedRoot, this.options.IndexFileName);
         var indexDoc = await this.storage.GetDocumentFromPathAsync(indexPath, cancellationToken).ConfigureAwait(false);
 
@@ -257,7 +276,11 @@ public sealed class LooseCookedIndexAssetCatalog : IAssetCatalog, IRefreshableAs
         var stream = await indexDoc.OpenReadAsync(cancellationToken).ConfigureAwait(false);
         await using var streamLifetime = stream.ConfigureAwait(false);
         var document = LooseCookedIndex.Read(stream);
+        Volatile.Write(ref this.entriesByUri, CreateEntries(document, this.cookedRoot));
+    }
 
+    private static IReadOnlyDictionary<Uri, AssetRecord> CreateEntries(Document document, string cookedRoot)
+    {
         var next = new Dictionary<Uri, AssetRecord>();
         foreach (var entry in document.Assets)
         {
@@ -269,7 +292,7 @@ public sealed class LooseCookedIndexAssetCatalog : IAssetCatalog, IRefreshableAs
             var uri = VirtualPathToAssetUri(entry.VirtualPath);
             var record = new AssetRecord(uri)
             {
-                Cooked = new(this.cookedRoot, entry.DescriptorRelativePath, document.SourceGuid, entry.AssetKey, entry.AssetType, entry.DescriptorSize, Convert.ToHexString(entry.DescriptorSha256.Span)) { VirtualPath = entry.VirtualPath },
+                Cooked = new(cookedRoot, entry.DescriptorRelativePath, document.SourceGuid, entry.AssetKey, entry.AssetType, entry.DescriptorSize, Convert.ToHexString(entry.DescriptorSha256.Span)) { VirtualPath = entry.VirtualPath },
             };
             if (!next.TryAdd(uri, record))
             {
@@ -277,7 +300,7 @@ public sealed class LooseCookedIndexAssetCatalog : IAssetCatalog, IRefreshableAs
             }
         }
 
-        Volatile.Write(ref this.entriesByUri, next);
+        return next;
     }
 
     private sealed class NoopFileSystemCatalogEventSource : IFileSystemCatalogEventSource

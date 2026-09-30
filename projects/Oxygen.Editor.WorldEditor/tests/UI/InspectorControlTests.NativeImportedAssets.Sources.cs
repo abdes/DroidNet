@@ -54,16 +54,30 @@ public sealed partial class InspectorControlTests
         await using var lifetime = producer.ConfigureAwait(true);
         using var producerServices = new CatalogWorkloadServices(producer);
         var imported = await ImportTypedModelAsync(producer, producerServices, format, cancellationToken).ConfigureAwait(true);
-        var source = Path.Combine(producer.ProjectRoot, ".cooked", "Content");
+        var source = await producer.GetCookedRootAsync(producer.ProjectRoot, cancellationToken).ConfigureAwait(true);
         var library = Path.Combine(consumer.ProjectRoot, "Library");
         foreach (var path in Directory.GetFiles(source, "*", SearchOption.AllDirectories))
         {
+            if (string.Equals(Path.GetFileName(path), ".generation.lock", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
             var target = Path.Combine(library, Path.GetRelativePath(source, path));
             _ = Directory.CreateDirectory(Path.GetDirectoryName(target)!);
             File.Copy(path, target);
         }
 
-        services.Projects.Activate(services.Projects.ActiveProject! with { LocalFolderMounts = [new("Library", library)] });
+        var next = services.Projects.ActiveProject! with { LocalFolderMounts = [new("Library", library)] };
+        var manager = new Oxygen.Editor.Projects.ProjectManagerService(services.Storage);
+        var saved = await manager.LoadProjectInfoAsync(consumer.ProjectRoot).ConfigureAwait(true)
+            ?? throw new InvalidDataException("The consumer project must be saved.");
+        var updated = new Oxygen.Editor.Projects.ProjectInfo(next.ProjectId, next.Name, next.Category, next.ProjectRoot, next.Thumbnail)
+        {
+            AuthoringMounts = [.. next.AuthoringMounts], LocalFolderMounts = [.. next.LocalFolderMounts], CookedContentOrder = [.. next.CookedContentOrder],
+        };
+        await manager.SaveProjectInfoAsync(updated, saved, cancellationToken).ConfigureAwait(true);
+        services.Projects.Activate(next);
         return imported;
     }
 }

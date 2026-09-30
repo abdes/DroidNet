@@ -20,6 +20,24 @@ public sealed class LooseCookedIndexAssetCatalogTests
     public TestContext TestContext { get; set; }
 
     [TestMethod]
+    public async Task CapturedIndex_RemainsReadableWithoutItsFilesAndDoesNotReload()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "oxygen-catalog-snapshot-" + Guid.NewGuid().ToString("N"));
+        var entry = new AssetEntry(new AssetKey(1, 2), "assets/material.bin", "/Content/Material.omat", 1, 0, SHA256.HashData([]));
+        var document = new Document(1, IndexFeatures.HasVirtualPaths, Guid.CreateVersion7(), [entry], []);
+        using var catalog = new LooseCookedIndexAssetCatalog(document, path);
+
+        var before = await catalog.QueryAsync(new(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false);
+        await catalog.RefreshAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        var after = await catalog.QueryAsync(new(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = after.Should().Equal(before);
+        _ = after.Should().ContainSingle();
+        _ = after.Single().Cooked!.SourceIdentity.Should().Be(document.SourceGuid);
+        _ = Directory.Exists(path).Should().BeFalse();
+    }
+
+    [TestMethod]
     public async Task QueryAsync_ShouldEnumerateAssetsFromIndexVirtualPaths()
     {
         var fs = new MockFileSystem();

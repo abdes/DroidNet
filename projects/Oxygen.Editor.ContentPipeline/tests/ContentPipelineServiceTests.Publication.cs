@@ -12,7 +12,7 @@ namespace Oxygen.Editor.ContentPipeline.Tests;
 /// <summary>Runs the real native producer through staged publication and injected runtime failures.</summary>
 public sealed partial class ContentPipelineServiceTests
 {
-    /// <summary>A native recook followed by mount failure restores every published byte and both metadata files.</summary>
+    /// <summary>A native recook followed by mount failure restores every published byte and its selected head and products.</summary>
     /// <returns>The asynchronous native publication regression.</returns>
     [TestMethod]
     [TestCategory("NativeContent")]
@@ -22,11 +22,11 @@ public sealed partial class ContentPipelineServiceTests
         await PrepareIncrementalSceneAsync(workspace).ConfigureAwait(false);
         using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
         var api = CreateRecordingApi(compatibility);
-        var publication = new CookPublicationService(workspace.CookCoordinator, workspace.ContextService, new NativeAtomicFileStore(new Testably.Abstractions.RealFileSystem()));
+        var publication = workspace.Publication;
         var pipeline = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility, publication);
         AssertCookSucceeded(await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false));
         var previous = ReadOutputIdentities(workspace.Root);
-        var provenancePath = Path.Combine(workspace.Root, ".build", "cook", "provenance.json");
+        var provenancePath = CookPublicationPaths.Head(workspace.Root);
         var priorProvenance = await File.ReadAllBytesAsync(provenancePath, this.TestContext.CancellationToken).ConfigureAwait(false);
         workspace.WriteText("Content/Materials/Blue.omat.json", workspace.ReadText("Content/Materials/Blue.omat.json").Replace("0.5", "0.8", StringComparison.Ordinal));
         var preview = new FailingPublicationPreview();
@@ -42,12 +42,12 @@ public sealed partial class ContentPipelineServiceTests
         var restored = ReadOutputIdentities(workspace.Root);
         _ = restored.ToDictionary(static pair => pair.Key, static pair => pair.Value.hash, StringComparer.Ordinal)
             .Should().BeEquivalentTo(previous.ToDictionary(static pair => pair.Key, static pair => pair.Value.hash, StringComparer.Ordinal));
-        var receiptPath = Path.Combine(workspace.Root, ".cooked", "publication.json");
+        var receiptPath = CookPublicationPaths.Head(workspace.Root);
         _ = restored.Where(pair => !string.Equals(pair.Key, receiptPath, StringComparison.Ordinal)).Should()
             .BeEquivalentTo(previous.Where(pair => !string.Equals(pair.Key, receiptPath, StringComparison.Ordinal)));
         _ = (await File.ReadAllBytesAsync(provenancePath, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Equal(priorProvenance);
         _ = preview.Mounts.Should().Be(2);
-        _ = api.Imported.Should().OnlyContain(execution => execution.Manifest.Output.Contains(Path.Combine(".build", "cook"), StringComparison.Ordinal));
+        _ = api.Imported.Should().OnlyContain(execution => execution.Manifest.Output.Contains(Path.Combine(".cooked", "generations"), StringComparison.Ordinal));
         registration.Dispose();
         AssertCookSucceeded(await pipeline.CookAssetAsync(new Uri("asset:///Content/Materials/Blue.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false));
     }
@@ -55,34 +55,25 @@ public sealed partial class ContentPipelineServiceTests
     /// <summary>Recovery skips live operation ownership and restores the same journal after its owner releases it.</summary>
     /// <returns>The asynchronous recovery-orchestration regression.</returns>
     [TestMethod]
-    public async Task RecoveryDistinguishesLiveAndAbandonedPreparedOperations()
+    public async Task MaintenanceDistinguishesLiveAndAbandonedBuilds()
     {
         using var workspace = new TempWorkspace();
-        var files = new NativeAtomicFileStore(new Testably.Abstractions.RealFileSystem());
-        var publication = new CookPublicationService(workspace.CookCoordinator, workspace.ContextService, files);
+        var publication = workspace.Publication;
         var operation = new ContentCookOperation(Guid.NewGuid(), workspace.ProjectContext, 1);
-        var index = Path.Combine(workspace.Root, ".cooked", "Content", "container.index.bin");
-        await File.WriteAllTextAsync(index, "old", this.TestContext.CancellationToken).ConfigureAwait(false);
-        using var staging = await CookStagingArea.CreateAsync(operation, ["Content"], this.TestContext.CancellationToken).ConfigureAwait(false);
-        await File.WriteAllTextAsync(Path.Combine(staging.Roots[0].StagingPath, "container.index.bin"), "new", this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = await CookPublicationTransaction.PrepareAsync(
-            operation,
-            staging,
-            new Dictionary<string, byte[]>(StringComparer.Ordinal)
-            {
-                [CookPublicationTransaction.PublicationMetadata] = System.Text.Encoding.UTF8.GetBytes("new-receipt"),
-            },
-            files,
-            this.TestContext.CancellationToken).ConfigureAwait(false);
-        await publication.RecoverBeforeCookAsync(workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = Directory.Exists(staging.Roots[0].StagingPath).Should().BeTrue();
-        staging.Dispose();
-        await publication.RecoverBeforeCookAsync(workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = Directory.Exists(staging.Roots[0].StagingPath).Should().BeFalse();
-        _ = (await File.ReadAllTextAsync(index, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Be("old");
-        using var writer = await CookOutputLease.AcquireWriteAsync(workspace.Root, this.TestContext.CancellationToken).ConfigureAwait(false);
-        var recovered = await CookPublicationTransaction.LoadAsync(workspace.ProjectContext, operation.OperationId, files, writer, this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = recovered.Phase.Should().Be(CookPublicationPhase.RolledBack);
+        using var owner = CookOutputLease.AcquireOperation(workspace.Root, operation.OperationId);
+        using var baseline = await publication.AcquireReadAsync(workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false);
+        await using var staging = await CookStagingArea.CreateAsync(operation, baseline, ["Content"], workspace.Files, workspace.Manager, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var path = staging.Roots.Single().Path;
+        await File.WriteAllTextAsync(Path.Combine(path, "partial.bin"), "unpublished", this.TestContext.CancellationToken).ConfigureAwait(false);
+        staging.RetainForPublication();
+        _ = (await publication.MaintainAsync(workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeEmpty();
+        _ = Directory.Exists(path).Should().BeTrue();
+        await staging.DisposeAsync().ConfigureAwait(false);
+        owner.Dispose();
+        _ = (await publication.MaintainAsync(workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeEmpty();
+        _ = Directory.Exists(path).Should().BeFalse();
+        _ = File.Exists(CookPublicationPaths.Head(workspace.Root)).Should().BeFalse();
+        _ = Directory.Exists(Path.Combine(workspace.Root, ".build", "cook", operation.OperationId.ToString("N"))).Should().BeFalse();
     }
 
     /// <summary>A verified startup generation remains protected until the runtime takes its reader lease.</summary>
@@ -95,34 +86,82 @@ public sealed partial class ContentPipelineServiceTests
         await PrepareIncrementalSceneAsync(workspace).ConfigureAwait(false);
         using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
         var api = CreateRecordingApi(compatibility);
-        var publication = new CookPublicationService(workspace.CookCoordinator, workspace.ContextService, new NativeAtomicFileStore(new Testably.Abstractions.RealFileSystem()));
+        var publication = workspace.Publication;
         var pipeline = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility, publication);
         AssertCookSucceeded(await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false));
         using var mounted = await publication.AcquireForMountAsync(workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false);
-        Action replace = () => CookOutputLease.AcquireWrite(workspace.Root).Dispose();
-        _ = replace.Should().Throw<CookOutputBusyException>();
+        var path = mounted.FindProjectRoot("Content")!;
+        using var blocked = CookedGeneration.TryClaim(path);
+        _ = blocked.Should().BeNull();
+        using (var gate = await CookOutputLease.AcquireWriteAsync(workspace.Root, this.TestContext.CancellationToken).ConfigureAwait(false))
+        {
+            _ = gate.ProjectRoot.Should().Be(workspace.Root);
+        }
+
         mounted.Dispose();
-        replace();
+        _ = (await publication.MaintainAsync(workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeEmpty();
+        _ = Directory.Exists(path).Should().BeTrue();
     }
 
-    /// <summary>Corrupt generation metadata blocks mounting but an ordinary cook can rebuild it.</summary>
+    /// <summary>A missing generation marker forbids reuse, while intact provenance permits an ordinary cook to rebuild it.</summary>
     /// <returns>The asynchronous metadata repair regression.</returns>
     [TestMethod]
     [TestCategory("NativeContent")]
-    public async Task CookRepairsCorruptPublicationMetadata()
+    public async Task CookRepairsMissingGenerationMarker()
     {
         using var workspace = new TempWorkspace();
         await PrepareIncrementalSceneAsync(workspace).ConfigureAwait(false);
         using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
         var api = CreateRecordingApi(compatibility);
-        var publication = new CookPublicationService(workspace.CookCoordinator, workspace.ContextService, new NativeAtomicFileStore(new Testably.Abstractions.RealFileSystem()));
+        var publication = workspace.Publication;
         var pipeline = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility, publication);
         AssertCookSucceeded(await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false));
-        await File.WriteAllTextAsync(Path.Combine(workspace.Root, ".cooked", "publication.json"), "invalid receipt", this.TestContext.CancellationToken).ConfigureAwait(false);
+        using var previous = await publication.AcquireReadAsync(workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var previousPath = previous.FindProjectRoot("Content")!;
+        File.Delete(Path.Combine(previousPath, CookedGeneration.MarkerFileName));
         var repaired = await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         AssertCookSucceeded(repaired);
         _ = repaired.IsPublished.Should().BeTrue();
+        _ = File.Exists(Path.Combine(previousPath, CookedGeneration.MarkerFileName)).Should().BeFalse();
         using var mounted = await publication.AcquireForMountAsync(workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false);
+    }
+
+    [TestMethod]
+    [TestCategory("NativeContent")]
+    [DataRow("head")]
+    [DataRow("missing-document")]
+    [DataRow("document-digest")]
+    public async Task UntrustedSelectionStopsCookingWithoutGuessingOrReplacingIt(string damage)
+    {
+        using var workspace = new TempWorkspace();
+        await PrepareIncrementalSceneAsync(workspace).ConfigureAwait(false);
+        using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
+        var api = CreateRecordingApi(compatibility);
+        var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
+        AssertCookSucceeded(await service.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false));
+        var headPath = CookPublicationPaths.Head(workspace.Root);
+        var head = System.Text.Json.JsonSerializer.Deserialize<CookPublicationHead>(File.ReadAllBytes(headPath), CookPublicationDocument.JsonOptions)!;
+        var documentPath = CookPublicationPaths.Document(workspace.Root, head.PublicationId);
+        if (damage == "head")
+        {
+            File.WriteAllText(headPath, "invalid head");
+        }
+        else if (damage == "missing-document")
+        {
+            File.Delete(documentPath);
+        }
+        else
+        {
+            File.AppendAllText(documentPath, " ");
+        }
+
+        var before = File.ReadAllBytes(headPath);
+        var imports = api.Imported.Count;
+        var failed = await service.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = failed.Status.Should().Be(OperationStatus.Failed);
+        _ = failed.IsPublished.Should().BeFalse();
+        _ = api.Imported.Count.Should().Be(imports);
+        _ = File.ReadAllBytes(headPath).Should().Equal(before);
     }
 
     private sealed partial class FailingPublicationPreview : ICookPublicationPreview
@@ -133,13 +172,16 @@ public sealed partial class ContentPipelineServiceTests
 
         public Task PrepareReplacementAsync() => Task.CompletedTask;
 
-        public Task MountAsync(IReadOnlyList<string> roots, CookOutputWriteLease? writer)
+        public Task MountAsync(Mounting.CookedContentMountSet mounts)
         {
+            mounts.Dispose();
             this.Mounts++;
             return this.Mounts == 1 ? Task.FromException(new IOException("Injected preview failure")) : Task.CompletedTask;
         }
 
         public Task ResumeAsync() => Task.CompletedTask;
+
+        public Task CommittedAsync(CookPublicationReadLease publication) => Task.CompletedTask;
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }

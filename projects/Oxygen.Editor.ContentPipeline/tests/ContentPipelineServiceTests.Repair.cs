@@ -18,7 +18,7 @@ public sealed partial class ContentPipelineServiceTests
     [DataRow("none")]
     [DataRow("missing source")]
     [DataRow("native")]
-    [DataRow("unknown resource")]
+    [DataRow("unowned output")]
     public async Task AssetCookRebuildsDamagedSharedRoot(string failure)
     {
         using var workspace = new TempWorkspace();
@@ -27,22 +27,13 @@ public sealed partial class ContentPipelineServiceTests
         using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
         var api = CreateRecordingApi(compatibility);
         var pipeline = CreateIncrementalService(workspace, api, compatibility);
-        if (failure == "unknown resource")
-        {
-            workspace.WriteText("Unowned.otex.json", """
-                { "source": "Unowned.tga", "virtual_path": "/Content/Textures/Unowned.otex",
-                  "intent": "data", "output": { "format": "rgba8" } }
-                """);
-            byte[] image = [0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 32, 8, 255, 255, 255, 255];
-            await File.WriteAllBytesAsync(Path.Combine(workspace.Root, "Unowned.tga"), image, this.TestContext.CancellationToken).ConfigureAwait(false);
-            var manifest = new ContentImportManifest(1, Path.Combine(workspace.Root, ".cooked/Content"), new("/Content"),
-                [new("unowned", "texture-descriptor", "Unowned.otex.json", [], Output: null, Name: "Unowned")]);
-            var seeded = await api.ImportAsync(new(Guid.NewGuid(), workspace.Root, Path.Combine(workspace.Root, ".native-seed"), manifest), this.TestContext.CancellationToken).ConfigureAwait(false);
-            _ = seeded.Succeeded.Should().BeTrue();
-        }
         var first = await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         AssertCookSucceeded(first);
-        var root = Path.Combine(workspace.Root, ".cooked", "Content");
+        var root = workspace.CookedRoot("Content");
+        if (failure == "unowned output")
+        {
+            await File.WriteAllTextAsync(Path.Combine(root, "Unowned.otex"), "unowned derived bytes", this.TestContext.CancellationToken).ConfigureAwait(false);
+        }
         var payload = Directory.EnumerateFiles(root, "buffers.data", SearchOption.AllDirectories).Single();
         var bytes = await File.ReadAllBytesAsync(payload, this.TestContext.CancellationToken).ConfigureAwait(false);
         bytes[^1] ^= 0xFF;
@@ -67,7 +58,7 @@ public sealed partial class ContentPipelineServiceTests
                     && diagnostic.AffectedPath.EndsWith("model.gltf", StringComparison.Ordinal));
                 _ = api.Imported.Should().BeEmpty();
             }
-            else if (failure == "unknown resource")
+            else if (failure == "unowned output")
             {
                 _ = result.Diagnostics.Should().Contain(static diagnostic => diagnostic.Code == "asset_cook.repair_source_unknown"
                     && diagnostic.AffectedPath != null && diagnostic.AffectedPath.EndsWith("Unowned.otex", StringComparison.Ordinal));
@@ -81,8 +72,8 @@ public sealed partial class ContentPipelineServiceTests
         _ = result.IsPublished.Should().BeTrue();
         _ = result.CookedAssets.Select(static asset => asset.VirtualPath).Should().BeEquivalentTo(first.CookedAssets.Select(static asset => asset.VirtualPath));
         _ = result.ReusedAssets.Should().BeEmpty();
-        _ = (await api.ReadInventoryAsync(root, null, this.TestContext.CancellationToken).ConfigureAwait(false)).IsValid.Should().BeTrue();
-        _ = (await File.ReadAllBytesAsync(payload, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().NotEqual(bytes);
+        _ = (await api.ReadInventoryAsync(workspace.CookedRoot("Content"), null, this.TestContext.CancellationToken).ConfigureAwait(false)).IsValid.Should().BeTrue();
+        _ = (await File.ReadAllBytesAsync(Path.Combine(workspace.CookedRoot("Content"), Path.GetRelativePath(root, payload)), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().NotEqual(bytes);
         _ = (await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false)).IsUpToDate.Should().BeTrue();
     }
 

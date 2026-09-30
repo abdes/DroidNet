@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Reactive.Subjects;
+using System.Collections.Immutable;
 using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
 using CommunityToolkit.WinUI;
@@ -31,6 +32,8 @@ using Oxygen.Editor.ContentBrowser.Shell;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Discovery;
+using Oxygen.Editor.ContentPipeline.Publication;
+using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Catalog;
@@ -114,7 +117,7 @@ public sealed partial class InspectorControlTests
             CreateNavigationAsset("/Content/Models/Crate/Materials/Paint.omat", AssetKind.Material),
             CreateNavigationAsset("/Content/Models/Crate/Geometry/Mesh.ogeo", AssetKind.Geometry),
         }.Select(static item => item with { SourcePath = null, DescriptorPath = null, CookedUri = item.IdentityUri, PrimaryState = AssetState.Cooked }).ToArray();
-        fixture.SetCookedOutputs(outputs);
+        await fixture.SetCookedOutputsAsync(outputs, this.TestContext.CancellationToken).ConfigureAwait(true);
         await fixture.OpenAsync().ConfigureAwait(true);
         fixture.Browser.Query.SearchText = "hidden";
         _ = (await fixture.Browser.ShowAssetsAsync(outputs.Select(static item => item.IdentityUri).ToArray()).ConfigureAwait(true)).Should().BeTrue(fixture.Diagnostics);
@@ -178,7 +181,9 @@ public sealed partial class InspectorControlTests
                 message.Reply(Task.FromResult(true));
             });
             this.container.RegisterInstance<IProjectContextService>(this.Projects);
-            this.container.RegisterInstance<IStorageProvider>(new NativeStorageProvider(new RealFileSystem()));
+            var storage = new NativeStorageProvider(new RealFileSystem());
+            this.container.RegisterInstance<IStorageProvider>(storage);
+            this.container.RegisterInstance(CreateNavigationPublication(this.Projects, storage));
             this.container.RegisterInstance<IMessenger>(messenger);
             this.container.RegisterInstance(provider.Object);
             this.container.RegisterInstance(CreateStatusHosting());
@@ -217,14 +222,38 @@ public sealed partial class InspectorControlTests
 
         public int MountChanges { get; private set; }
 
-        public void SetCookedOutputs(IReadOnlyList<ContentBrowserAssetItem> outputs)
-        {
-            foreach (var item in outputs)
-            {
-                var relative = Uri.UnescapeDataString(item.IdentityUri.AbsolutePath).TrimStart('/');
-                _ = Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(this.directory.FullName, ".cooked", relative))!);
-            }
+        private string? publishedOutputRoot;
 
+        public async Task SetCookedOutputsAsync(IReadOnlyList<ContentBrowserAssetItem> outputs, CancellationToken token)
+        {
+            var project = this.Projects.ActiveProject!;
+            var key = Guid.CreateVersion7();
+            var root = CookPublicationPaths.Generation(project.ProjectRoot, key);
+            Directory.CreateDirectory(root);
+            await File.WriteAllBytesAsync(Path.Combine(root, CookedGeneration.MarkerFileName), [], token).ConfigureAwait(true);
+            var digest = new string('0', 64);
+            var products = outputs.Select(item =>
+            {
+                var path = Uri.UnescapeDataString(item.IdentityUri.AbsolutePath);
+                var descriptor = path["/Content/".Length..];
+                Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(root, descriptor))!);
+                var kind = item.Kind == AssetKind.Geometry ? ContentCookAssetKind.Geometry : ContentCookAssetKind.Material;
+                return new CookProvenance.Product(item.IdentityUri, digest, [],
+                    [new(new(item.IdentityUri, item.IdentityUri, kind, "Content", path) { DescriptorRelativePath = descriptor }, "Content")]) { ReuseFingerprint = digest };
+            }).ToImmutableArray();
+            var document = new CookPublicationDocument(CookPublicationDocument.CurrentVersion, project.ProjectId, Guid.NewGuid(), DateTimeOffset.UtcNow,
+                CookPublicationDocument.ConfigurationIdentity(project), [new(CookPublicationRootOwner.Project, "Content", key, digest, null)], products,
+                new("logical-folder-fixture", digest, [], [], [], []));
+            var files = new NativeAtomicFileStore(new RealFileSystem());
+            using var gate = await CookOutputLease.AcquireWriteAsync(project.ProjectRoot, token).ConfigureAwait(true);
+            var documentPath = CookPublicationPaths.Document(project.ProjectRoot, document.OperationId);
+            Directory.CreateDirectory(Path.GetDirectoryName(documentPath)!);
+            var version = await files.WriteAsync(documentPath, System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(document, CookPublicationDocument.JsonOptions), FileVersion.Missing, token).ConfigureAwait(true);
+            var headPath = CookPublicationPaths.Head(project.ProjectRoot);
+            var previous = await files.ReadAsync(headPath, token).ConfigureAwait(true);
+            var head = new CookPublicationHead(CookPublicationHead.CurrentVersion, document.OperationId, version.Sha256);
+            _ = await files.WriteAsync(headPath, System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(head, CookPublicationDocument.JsonOptions), previous.Version, token).ConfigureAwait(true);
+            this.publishedOutputRoot = root;
             this.items.OnNext(outputs);
         }
 

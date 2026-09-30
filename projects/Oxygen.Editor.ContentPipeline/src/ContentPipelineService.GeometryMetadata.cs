@@ -62,12 +62,8 @@ public sealed partial class ContentPipelineService : IGeometryMaterialSlotProvid
             return null;
         }
 
-        using var publicationRead = await CookOutputLease.AcquireInspectionAsync(project.ProjectRoot, token).ConfigureAwait(false);
-        var (prior, _) = await this.provenanceStore.ReadAsync(project, token).ConfigureAwait(false);
-        if (!await this.publication.HasCommittedMetadataUnderLeaseAsync(project, token).ConfigureAwait(false))
-        {
-            prior = new(CookProvenance.CurrentVersion, project.ProjectId, [], []);
-        }
+        using var publicationRead = await this.publication.AcquireReadAsync(project, token).ConfigureAwait(false);
+        var prior = publicationRead.ProductState;
 
         var imports = await ImportedSourceIndex.ReadAsync(project, cookDocuments, prior, token).ConfigureAwait(false);
         using var libraries = await CookedLibraryReadSet.AcquireAsync(project, token, uri => imports.ResolveOutput(project, uri, ContentCookInputRole.Dependency), imports.KnownOutputs).ConfigureAwait(false);
@@ -88,9 +84,7 @@ public sealed partial class ContentPipelineService : IGeometryMaterialSlotProvid
                 return VerifyInventoryKey(report.SingleOrDefault(geometryUri), native.AssetKey.ToString());
             }
 
-            var reader = new AssetCookStatusReader(cookDocuments, this.publication, this.nativeCompatibility,
-                provenanceFiles ?? new DroidNet.Storage.Native.NativeAtomicFileStore(new Testably.Abstractions.RealFileSystem()));
-            var status = (await reader.ReadUnderInspectionAsync(project, [geometryUri], token).ConfigureAwait(false)).Single();
+            var status = (await this.statusReader.ReadAsync(project, publicationRead, [geometryUri], token).ConfigureAwait(false)).Single();
             if (!HasCurrentGeometryOutput(status))
             {
                 return null;
@@ -107,7 +101,8 @@ public sealed partial class ContentPipelineService : IGeometryMaterialSlotProvid
             var owner = prior.Products.SelectMany(static product => product.Outputs).SingleOrDefault(output => output.Asset == selected);
             var expectedRoot = owner is null ? null : prior.Roots.FirstOrDefault(root => string.Equals(root.Mount, owner.RootMount, StringComparison.Ordinal));
             if (owner is null || expectedRoot is null) { return null; }
-            var cookedRoot = Path.GetDirectoryName(CookIncrementalPlanner.ResolveOutputPath(project.ProjectRoot, owner.RootMount, "container.index.bin"))!;
+            var cookedRoot = publicationRead.FindProjectRoot(owner.RootMount)
+                ?? throw new InvalidDataException("Geometry output has no selected generation.");
             await using var files = await CookOutputReadLease.AcquireAsync(cookedRoot, token).ConfigureAwait(false);
             var inventory = await files.ReadInventoryAsync(this.engineContentPipelineApi, token).ConfigureAwait(false);
             if (!expectedRoot.Matches(inventory) || !inventory.IsValid) { return null; }
@@ -126,7 +121,7 @@ public sealed partial class ContentPipelineService : IGeometryMaterialSlotProvid
             }
 
             _ = files.GetFiles();
-            var latest = (await reader.ReadUnderInspectionAsync(project, [geometryUri], token).ConfigureAwait(false)).Single();
+            var latest = (await this.statusReader.ReadAsync(project, publicationRead, [geometryUri], token).ConfigureAwait(false)).Single();
             token.ThrowIfCancellationRequested();
             return HasCurrentGeometryOutput(latest) && latest.Outputs.Contains(selected)
                 ? VerifyInventoryKey(geometryReport.SingleOrDefault(geometryUri), expectedKey) : null;

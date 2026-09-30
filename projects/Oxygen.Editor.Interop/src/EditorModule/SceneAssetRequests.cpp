@@ -8,12 +8,15 @@
 #include <algorithm>
 #include <cstdint>
 #include <exception>
+#include <memory>
+#include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
 
 #include "pch.h"
+#include <EditorModule/EditorModule.h>
 #include <EditorModule/SceneAssetRequests.h>
 #include <EditorModule/ThreadSafeQueue.h>
 
@@ -59,6 +62,7 @@ struct SceneAssetRequests::State {
   struct MaskRequest {
     uint64_t generation {};
     std::optional<content::TextureResourceLocator> locator;
+    std::optional<std::wstring> project_mount;
     TextureApply apply;
     FailureCallback on_failure;
     SuccessCallback on_success;
@@ -103,6 +107,7 @@ struct SceneAssetRequests::State {
   Diagnostic diagnostic;
   AssetAvailability available;
   TextureLoader texture_loader;
+  std::shared_ptr<const std::vector<CookedRootBinding>> roots;
   MaskRequest mask;
   std::shared_ptr<ThreadSafeQueue<MaskCompletion>> mask_inbox
     = std::make_shared<ThreadSafeQueue<MaskCompletion>>();
@@ -349,11 +354,13 @@ void SceneAssetRequests::Detach(scene::NodeHandle node)
 
 void SceneAssetRequests::SetExposureMask(scene::Scene& scene,
   std::optional<content::TextureResourceLocator> locator, TextureApply apply,
-  FailureCallback on_failure, SuccessCallback on_success)
+  FailureCallback on_failure, SuccessCallback on_success,
+  std::optional<std::wstring> project_mount)
 {
   auto& request = state_->mask;
   request.generation = ++state_->generation;
   request.locator = std::move(locator);
+  request.project_mount = std::move(project_mount);
   request.apply = std::move(apply);
   request.on_failure = std::move(on_failure);
   request.on_success = std::move(on_success);
@@ -381,6 +388,23 @@ void SceneAssetRequests::SetExposureMask(scene::Scene& scene,
     }
   };
   try {
+    if (request.project_mount) {
+      const CookedRootBinding* binding = nullptr;
+      if (state_->roots) {
+        const auto found
+          = std::ranges::find_if(*state_->roots, [&](const auto& root) {
+              return root.project_mount == request.project_mount;
+            });
+        if (found != state_->roots->end()) {
+          binding = std::addressof(*found);
+        }
+      }
+      if (!binding) {
+        throw std::runtime_error(
+          "The exposure mask's project content mount is unavailable.");
+      }
+      request.locator->cooked_root = binding->path;
+    }
     state_->texture_loader(*request.locator, complete);
   } catch (const std::exception& error) {
     complete({}, {}, error.what());
@@ -394,6 +418,12 @@ auto SceneAssetRequests::InspectExposureMask() const -> ExposureMaskStatus
   return state_->mask.status;
 }
 
+void SceneAssetRequests::SetCookedRoots(
+  std::shared_ptr<const std::vector<CookedRootBinding>> roots) noexcept
+{
+  state_->roots = std::move(roots);
+}
+
 void SceneAssetRequests::Refresh(scene::Scene& scene)
 {
   const auto was_paused = state_->loads_paused;
@@ -403,7 +433,7 @@ void SceneAssetRequests::Refresh(scene::Scene& scene)
   if (state_->mask.apply && state_->mask.locator) {
     const auto previous = state_->mask;
     SetExposureMask(scene, previous.locator, previous.apply,
-      previous.on_failure, previous.on_success);
+      previous.on_failure, previous.on_success, previous.project_mount);
     state_->refresh_requests.insert(state_->mask.generation);
   }
   for (auto& [handle, target] : state_->targets) {

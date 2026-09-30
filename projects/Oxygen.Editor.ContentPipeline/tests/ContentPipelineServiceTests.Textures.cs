@@ -42,7 +42,7 @@ public sealed partial class ContentPipelineServiceTests
         _ = output.Kind.Should().Be(ContentCookAssetKind.Texture);
         _ = output.VirtualPath.Should().Be("/Content/Textures/Meter.otex");
         _ = output.DescriptorRelativePath.Should().Be("Textures/Meter.otex");
-        var root = Path.Combine(workspace.Root, ".cooked/Content");
+        var root = workspace.CookedRoot("Content");
         var inventory = await api.ReadInventoryAsync(root, null, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = inventory.Resources.Should().ContainSingle(resource => resource.DescriptorPath == output.DescriptorRelativePath && resource.ResourceIndex != null);
         _ = inventory.Assets.Should().NotContain(static asset => asset.Type == 4);
@@ -73,7 +73,7 @@ public sealed partial class ContentPipelineServiceTests
         var repaired = await service.CookAssetAsync(texture, this.TestContext.CancellationToken).ConfigureAwait(false);
         AssertCookSucceeded(repaired);
         _ = repaired.CookedAssets.Should().ContainSingle(asset => asset.SourceAssetUri == texture);
-        _ = (await File.ReadAllBytesAsync(path, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Equal(original);
+        _ = (await File.ReadAllBytesAsync(Path.Combine(workspace.CookedRoot("Content"), output.DescriptorRelativePath!), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Equal(original);
         _ = (await service.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false)).IsUpToDate.Should().BeTrue();
     }
 }

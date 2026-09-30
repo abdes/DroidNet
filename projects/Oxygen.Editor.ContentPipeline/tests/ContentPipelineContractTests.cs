@@ -120,10 +120,8 @@ public sealed class ContentPipelineContractTests
     }
 
     [TestMethod]
-    public void MountLayout_ShouldUsePerMountCookedRootAndVirtualRoot()
+    public void MountLayout_ShouldPreserveLogicalVirtualRoot()
     {
-        _ = ContentPipelinePaths.GetCookedMountRoot(@"C:\Project", "Content")
-            .Should().Be(Path.Combine(@"C:\Project", ".cooked", "Content"));
         _ = ContentPipelinePaths.GetVirtualMountRoot("Content").Should().Be("/Content");
     }
 

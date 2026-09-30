@@ -8,5 +8,7 @@
     </PropertyGroup>
     <ItemGroup>
         <ProjectReference Include="..\src\Oxygen.Editor.ContentPipeline.csproj" />
+        <Compile Include="..\testsupport\NativeInventoryFixture.cs" Link="NativeInventoryFixture.cs" />
+        <Compile Include="$(ProjectsRoot)\Oxygen.Managed.Assets\testsupport\LooseCookedIndexFixture.cs" Link="LooseCookedIndexFixture.cs" />
     </ItemGroup>
 </Project>

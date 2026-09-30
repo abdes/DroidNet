@@ -13,6 +13,7 @@ using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Discovery;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.Status;
+using Oxygen.Editor.Projects;
 using Testably.Abstractions;
 
 namespace Oxygen.Editor.ContentBrowser.Tests;
@@ -37,8 +38,11 @@ public sealed partial class ContentBrowserAssetProviderTests
         using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
         var scopes = new TestProjectCookScopeProvider(workspace);
-        var pipeline = new ContentPipelineService(projects, runs, scopes, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), new ContentImportManifestBuilder(), new ContentImportManifestValidator(), api, documents, compatibility);
-        using var catalog = new ProjectAssetCatalog(projects, new NativeStorageProvider(new RealFileSystem()), CreateEmptyImportBuiltins());
+        var storage = new NativeStorageProvider(new RealFileSystem());
+        var files = new NativeAtomicFileStore(new RealFileSystem());
+        var publication = new Oxygen.Editor.ContentPipeline.Publication.CookPublicationService(runs, projects, files, new ProjectManagerService(storage, atomicFiles: files));
+        var pipeline = new ContentPipelineService(projects, runs, scopes, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), new ContentImportManifestBuilder(), new ContentImportManifestValidator(), api, documents, compatibility, files, publication);
+        await using var catalog = new ProjectAssetCatalog(projects, storage, CreateEmptyImportBuiltins(), publication);
         var runtime = Oxygen.Testing.AssetStatusFixture.CreateUnavailableRuntime();
         await using var runtimeLifetime = runtime.ConfigureAwait(false);
         using var provider = new ContentBrowserAssetProvider(catalog, projects, scopes, new AssetIdentityReducer(), pipeline, documents, runs, runtime);

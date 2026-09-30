@@ -105,7 +105,7 @@ public sealed partial class ContentPipelineServiceTests
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
         var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
         _ = (await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false)).IsPublished.Should().BeTrue();
-        var index = Path.Combine(workspace.Root, ".cooked/Content/container.index.bin");
+        var index = Path.Combine(workspace.CookedRoot("Content"), "container.index.bin");
         var before = await File.ReadAllBytesAsync(index, this.TestContext.CancellationToken).ConfigureAwait(false);
         var path = Path.Combine(workspace.Root, "Content/SourceMedia/DCC/Model/model.gltf");
         var content = JsonNode.Parse(await File.ReadAllTextAsync(path, this.TestContext.CancellationToken).ConfigureAwait(false))!;

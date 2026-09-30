@@ -46,8 +46,8 @@ public sealed partial class InspectorControlTests
         _ = definitions.Should().NotBeNull();
         await SeedCatalogWorkloadAsync(fixture, services.Projects.ActiveProject!, services.Pipeline, definitions, timeout.Token).ConfigureAwait(true);
         await this.RecordCatalogWorkloadAsync(fixture, timeout.Token).ConfigureAwait(true);
-        await fixture.InitializeAsync(timeout.Token, Path.Combine(fixture.ProjectRoot, ".cooked/Content")).ConfigureAwait(true);
-        await fixture.RefreshCookedRootsAsync(Path.Combine(fixture.ProjectRoot, ".cooked/Content")).WaitAsync(timeout.Token).ConfigureAwait(true);
+        await fixture.InitializeAsync(timeout.Token, mountPublished: true).ConfigureAwait(true);
+        await fixture.RefreshCookedRootsAsync().WaitAsync(timeout.Token).ConfigureAwait(true);
         _ = fixture.Runtime.ContentStatus.State.Should().Be(RuntimeContentState.Mounted);
         var geometryNodes = fixture.Source.RootNodes.SelectMany(static node => node.Descendants().Prepend(node)).Where(static node => node.Components.OfType<GeometryComponent>().Any()).ToArray();
         _ = geometryNodes.Should().HaveCount(98);
@@ -75,7 +75,7 @@ public sealed partial class InspectorControlTests
             var panel = new SwapChainPanel { Width = 1920 / scale, Height = 1080 / scale };
             var state = new ContentBrowserState(services.Projects);
             state.SetSelectedFolders(["/Content"]);
-            using var catalog = new ProjectAssetCatalog(services.Projects, services.Storage, services.Builtins);
+            await using var catalog = new ProjectAssetCatalog(services.Projects, services.Storage, services.Builtins, services.Publication);
             using var provider = new ContentBrowserAssetProvider(catalog, services.Projects, services.Scopes, new AssetIdentityReducer(), services.Pipeline, services.Documents, services.Runs, fixture.Runtime);
             using AssetsLayoutViewModel layout = tiles
                 ? new TilesLayoutViewModel(provider, services.Projects, state, CreateStatusHosting(), services.Builtins)

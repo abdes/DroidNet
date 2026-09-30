@@ -24,6 +24,8 @@
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
         <InternalsVisibleTo Include="Oxygen.Editor.ContentPipeline.Tests" />
         <InternalsVisibleTo Include="Oxygen.Editor.ContentPipeline.WorkerProbe" />
+        <InternalsVisibleTo Include="Oxygen.Editor.WorldEditor.UI.Tests" />
+        <InternalsVisibleTo Include="DroidNet.Oxygen.Editor.ContentBrowser.Tests" />
     </ItemGroup>
 
     <ItemGroup>

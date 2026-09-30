@@ -6,6 +6,7 @@ using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core.Diagnostics;
@@ -28,9 +29,9 @@ public sealed partial class ContentPipelineServiceTests
         var sceneUri = new Uri("asset:///Content/Scenes/Main.oscene.json");
         var generator = new CapturingSceneDescriptorGenerator(workspace, diagnostics: []);
         var api = new CapturingEngineContentPipelineApi(
-            validation: new CookValidationResult(Path.Combine(workspace.Root, ".cooked", "Content"), Succeeded: true, Diagnostics: []),
+            validation: new CookValidationResult(workspace.Root, Succeeded: true, Diagnostics: []),
             inspection: new CookInspectionResult(
-                Path.Combine(workspace.Root, ".cooked", "Content"),
+                workspace.Root,
                 Succeeded: true,
                 SourceIdentity: Guid.NewGuid(),
                 Assets: [new CookedAssetEntry("/Content/Scenes/Main.oscene", ContentCookAssetKind.Scene)],
@@ -54,8 +55,8 @@ public sealed partial class ContentPipelineServiceTests
         _ = api.ImportedManifest!.Jobs.Should().ContainSingle(job => job.Type == "scene-descriptor");
         _ = api.ValidatedRoot.Should().Be(api.ImportedManifest.Output);
         _ = api.InspectedRoot.Should().Be(api.ImportedManifest.Output);
-        _ = api.ImportedManifest.Output.Should().Contain(Path.Combine(".build", "cook"));
-        _ = result.Validation!.CookedRoot.Should().Be(Path.Combine(workspace.Root, ".cooked", "Content"));
+        _ = api.ImportedManifest.Output.Should().Contain(Path.Combine(".cooked", "generations"));
+        _ = result.Validation!.CookedRoot.Should().Be(workspace.CookedRoot("Content"));
         _ = result.IsPublished.Should().BeTrue();
     }
 
@@ -79,7 +80,7 @@ public sealed partial class ContentPipelineServiceTests
                 },
             ]);
         var api = new CapturingEngineContentPipelineApi(
-            validation: new CookValidationResult(Path.Combine(workspace.Root, ".cooked", "Content"), Succeeded: true, Diagnostics: []),
+            validation: new CookValidationResult(workspace.Root, Succeeded: true, Diagnostics: []),
             inspection: SucceededInspection(workspace));
         var service = CreateService(workspace, generator, api);
 
@@ -103,9 +104,9 @@ public sealed partial class ContentPipelineServiceTests
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
         var materialUri = new Uri("asset:///Content/Materials/Red.omat.json");
         var api = new CapturingEngineContentPipelineApi(
-            validation: new CookValidationResult(Path.Combine(workspace.Root, ".cooked", "Content"), Succeeded: true, Diagnostics: []),
+            validation: new CookValidationResult(workspace.Root, Succeeded: true, Diagnostics: []),
             inspection: new CookInspectionResult(
-                Path.Combine(workspace.Root, ".cooked", "Content"),
+                workspace.Root,
                 Succeeded: true,
                 SourceIdentity: Guid.NewGuid(),
                 Assets: [new CookedAssetEntry("/Content/Materials/Red.omat", ContentCookAssetKind.Material)],
@@ -138,7 +139,7 @@ public sealed partial class ContentPipelineServiceTests
     {
         using var workspace = new TempWorkspace();
         var api = new CapturingEngineContentPipelineApi(
-            validation: new CookValidationResult(Path.Combine(workspace.Root, ".cooked", "Content"), Succeeded: true, Diagnostics: []),
+            validation: new CookValidationResult(workspace.Root, Succeeded: true, Diagnostics: []),
             inspection: SucceededInspection(workspace));
         var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(workspace, diagnostics: []), api);
 
@@ -160,7 +161,7 @@ public sealed partial class ContentPipelineServiceTests
         using var workspace = new TempWorkspace();
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
         var api = new CapturingEngineContentPipelineApi(
-            validation: new CookValidationResult(Path.Combine(workspace.Root, ".cooked", "Content"), Succeeded: true, Diagnostics: []),
+            validation: new CookValidationResult(workspace.Root, Succeeded: true, Diagnostics: []),
             inspection: SucceededInspection(workspace),
             importResult: new NativeImportResult(
                 Succeeded: false,
@@ -195,7 +196,7 @@ public sealed partial class ContentPipelineServiceTests
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
         var api = new CapturingEngineContentPipelineApi(
             validation: new CookValidationResult(
-                Path.Combine(workspace.Root, ".cooked", "Content"),
+                workspace.Root,
                 Succeeded: false,
                 Diagnostics:
                 [
@@ -230,9 +231,9 @@ public sealed partial class ContentPipelineServiceTests
         using var workspace = new TempWorkspace();
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
         var api = new CapturingEngineContentPipelineApi(
-            validation: new CookValidationResult(Path.Combine(workspace.Root, ".cooked", "Content"), Succeeded: true, Diagnostics: []),
+            validation: new CookValidationResult(workspace.Root, Succeeded: true, Diagnostics: []),
             inspection: new CookInspectionResult(
-                Path.Combine(workspace.Root, ".cooked", "Content"),
+                workspace.Root,
                 Succeeded: false,
                 SourceIdentity: null,
                 Assets: [],
@@ -269,7 +270,7 @@ public sealed partial class ContentPipelineServiceTests
         using var workspace = new TempWorkspace();
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
         var api = new CapturingEngineContentPipelineApi(
-            validation: new CookValidationResult(Path.Combine(workspace.Root, ".cooked", "Content"), Succeeded: true, Diagnostics: []),
+            validation: new CookValidationResult(workspace.Root, Succeeded: true, Diagnostics: []),
             inspection: SucceededInspection(workspace));
         var service = new ContentPipelineService(
             workspace.ContextService,
@@ -280,7 +281,9 @@ public sealed partial class ContentPipelineServiceTests
             new ContentImportManifestValidator(),
             api,
             workspace.Documents,
-            workspace.Compatibility);
+            workspace.Compatibility,
+            workspace.Files,
+            workspace.Publication);
 
         var result = await service.CookAssetAsync(new Uri("asset:///Content/Materials/Red.omat.json"), CancellationToken.None)
             .ConfigureAwait(false);
@@ -311,7 +314,7 @@ public sealed partial class ContentPipelineServiceTests
                 },
             ]);
         var api = new CapturingEngineContentPipelineApi(
-            validation: new CookValidationResult(Path.Combine(workspace.Root, ".cooked", "Content"), Succeeded: true, Diagnostics: []),
+            validation: new CookValidationResult(workspace.Root, Succeeded: true, Diagnostics: []),
             inspection: SucceededInspection(workspace));
         var service = CreateService(workspace, generator, api);
 
@@ -335,7 +338,7 @@ public sealed partial class ContentPipelineServiceTests
         workspace.WriteText("Content/Materials/Notes.txt", "not an asset");
         workspace.WriteMaterial("Content/Materials/Nested/Blue.omat.json", "Blue");
         var api = new CapturingEngineContentPipelineApi(
-            validation: new CookValidationResult(Path.Combine(workspace.Root, ".cooked", "Content"), Succeeded: true, Diagnostics: []),
+            validation: new CookValidationResult(workspace.Root, Succeeded: true, Diagnostics: []),
             inspection: SucceededInspection(workspace));
         var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(workspace, diagnostics: []), api);
 
@@ -357,7 +360,7 @@ public sealed partial class ContentPipelineServiceTests
         await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
         var generator = new CapturingSceneDescriptorGenerator(workspace, diagnostics: []);
         var api = new CapturingEngineContentPipelineApi(
-            validation: new CookValidationResult(Path.Combine(workspace.Root, ".cooked", "Content"), Succeeded: true, Diagnostics: []),
+            validation: new CookValidationResult(workspace.Root, Succeeded: true, Diagnostics: []),
             inspection: SucceededInspection(workspace));
         var service = CreateService(workspace, generator, api);
 
@@ -379,7 +382,7 @@ public sealed partial class ContentPipelineServiceTests
         using var workspace = new TempWorkspace();
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
         var api = new CapturingEngineContentPipelineApi(
-            validation: new CookValidationResult(Path.Combine(workspace.Root, ".cooked", "Content"), Succeeded: true, Diagnostics: []),
+            validation: new CookValidationResult(workspace.Root, Succeeded: true, Diagnostics: []),
             inspection: SucceededInspection(workspace));
         var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(workspace, diagnostics: []), api);
 
@@ -398,15 +401,16 @@ public sealed partial class ContentPipelineServiceTests
     public async Task InspectCookedOutputAsync_WhenScopeIsCookedVirtualFolder_ShouldResolveSelectedCookedMount()
     {
         using var workspace = new TempWorkspace();
+        await workspace.SeedEmptyPublicationAsync("Content", CancellationToken.None).ConfigureAwait(false);
         var api = new CapturingEngineContentPipelineApi(
-            validation: new CookValidationResult(Path.Combine(workspace.Root, ".cooked", "Content"), Succeeded: true, Diagnostics: []),
+            validation: new CookValidationResult(workspace.Root, Succeeded: true, Diagnostics: []),
             inspection: SucceededInspection(workspace));
         var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(workspace, diagnostics: []), api);
 
         var report = await service.InspectCookedOutputAsync(new Uri("asset:///Cooked/Content"), CancellationToken.None)
             .ConfigureAwait(false);
 
-        _ = report.Roots.Should().ContainSingle().Which.Inspection.CookedRoot.Should().Be(Path.Combine(workspace.Root, ".cooked", "Content"));
+        _ = report.Roots.Should().ContainSingle().Which.Inspection.CookedRoot.Should().Be(workspace.CookedRoot("Content"));
     }
 
     /// <summary>Skips derived mounts when choosing the default inspection root.</summary>
@@ -419,15 +423,16 @@ public sealed partial class ContentPipelineServiceTests
                 new ProjectMountPoint("Cooked", ".cooked"),
                 new ProjectMountPoint("Content", "Content"),
             ]);
+        await workspace.SeedEmptyPublicationAsync("Content", CancellationToken.None).ConfigureAwait(false);
         var api = new CapturingEngineContentPipelineApi(
-            validation: new CookValidationResult(Path.Combine(workspace.Root, ".cooked", "Content"), Succeeded: true, Diagnostics: []),
+            validation: new CookValidationResult(workspace.Root, Succeeded: true, Diagnostics: []),
             inspection: SucceededInspection(workspace));
         var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(workspace, diagnostics: []), api);
 
         var report = await service.InspectCookedOutputAsync(scopeUri: null, CancellationToken.None)
             .ConfigureAwait(false);
 
-        _ = report.Roots.Should().ContainSingle().Which.Inspection.CookedRoot.Should().Be(Path.Combine(workspace.Root, ".cooked", "Content"));
+        _ = report.Roots.Should().ContainSingle().Which.Inspection.CookedRoot.Should().Be(workspace.CookedRoot("Content"));
     }
 
     private static ContentPipelineService CreateService(
@@ -435,7 +440,7 @@ public sealed partial class ContentPipelineServiceTests
         ISceneDescriptorGenerator generator,
         IEngineContentPipelineApi api,
         Oxygen.Managed.Core.Compatibility.INativeCompatibilityService? compatibility = null,
-        Publication.CookPublicationService? publication = null)
+        CookPublicationService? publication = null)
         => new(
             workspace.ContextService,
             workspace.CookCoordinator,
@@ -446,11 +451,12 @@ public sealed partial class ContentPipelineServiceTests
             api,
             workspace.Documents,
             compatibility ?? workspace.Compatibility,
-            publication: publication);
+            workspace.Files,
+            publication ?? workspace.Publication);
 
     private static CookInspectionResult SucceededInspection(TempWorkspace workspace)
         => new(
-            Path.Combine(workspace.Root, ".cooked", "Content"),
+            workspace.Root,
             Succeeded: true,
             SourceIdentity: null,
             Assets: [],
@@ -543,7 +549,8 @@ public sealed partial class ContentPipelineServiceTests
                 await File.WriteAllBytesAsync(path, new byte[checked((int)file.Size)], cancellationToken).ConfigureAwait(false);
             }
 
-            Oxygen.Testing.NativeInventoryFixture.WriteIndex(manifest.Output, this.inspected.Assets, this.inspected.SourceIdentity);
+            Oxygen.Testing.NativeInventoryFixture.WriteIndex(manifest.Output, this.inspected.Assets,
+                manifest.SourceKey ?? throw new InvalidOperationException("A candidate import requires its generation key."));
             return importResult ?? new NativeImportResult(Succeeded: true, Diagnostics: []);
         }
 
@@ -608,15 +615,16 @@ public sealed partial class ContentPipelineServiceTests
             this.Root = Path.Combine(Path.GetTempPath(), "oxygen-content-pipeline-service-tests", Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(Path.Combine(this.Root, "Content", "Scenes"));
             Directory.CreateDirectory(Path.Combine(this.Root, "Content", "Materials"));
-            Directory.CreateDirectory(Path.Combine(this.Root, ".cooked", "Content"));
             var projectInfo = new ProjectInfo("TestProject", Category.Games, this.Root)
             {
                 AuthoringMounts = authoringMounts is null ? [new ProjectMountPoint("Content", "Content")] : [.. authoringMounts],
             };
             this.Project = new Project(projectInfo) { Name = "TestProject" };
+            File.WriteAllText(Path.Combine(this.Root, "Project.oxy"), ProjectInfo.ToJson(projectInfo));
             this.ProjectContext = ProjectContext.FromProject(this.Project);
-            this.ContextService.Activate(this.ProjectContext);
+            this.Activate(this.ProjectContext);
             this.CookCoordinator = new ContentCookCoordinator(this.ContextService, NullLogger<ContentCookCoordinator>.Instance);
+            this.Publication = new(this.CookCoordinator, this.ContextService, this.Files, this.Manager);
             this.Scene = new Scene(this.Project) { Name = "Main" };
             var producer = Path.Combine(this.Root, "producer.bin");
             File.WriteAllText(producer, "fixed test producer");
@@ -624,6 +632,80 @@ public sealed partial class ContentPipelineServiceTests
         }
 
         public string Root { get; }
+
+        public DroidNet.Storage.Native.NativeAtomicFileStore Files { get; } = new(new Testably.Abstractions.RealFileSystem());
+
+        public ProjectManagerService Manager { get; } = new(new DroidNet.Storage.Native.NativeStorageProvider(new Testably.Abstractions.RealFileSystem()));
+
+        public CookPublicationService Publication { get; }
+
+        public async Task SeedEmptyPublicationAsync(string mount, CancellationToken token)
+        {
+            var key = Guid.CreateVersion7();
+            var root = CookPublicationPaths.Generation(this.Root, key);
+            Directory.CreateDirectory(root);
+            Oxygen.Testing.NativeInventoryFixture.WriteIndex(root, [], key);
+            File.WriteAllBytes(Path.Combine(root, CookedGeneration.MarkerFileName), []);
+            var digest = Oxygen.Testing.NativeInventoryFixture.Read(root).IndexSha256;
+            var document = new CookPublicationDocument(CookPublicationDocument.CurrentVersion, this.ProjectContext.ProjectId, Guid.NewGuid(),
+                DateTimeOffset.UtcNow, CookPublicationDocument.ConfigurationIdentity(this.ProjectContext),
+                [new(CookPublicationRootOwner.Project, mount, key, digest, null)], [], null);
+            var path = CookPublicationPaths.Document(this.Root, document.OperationId);
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            using var gate = await CookOutputLease.AcquireWriteAsync(this.Root, token).ConfigureAwait(false);
+            var version = await this.Files.WriteAsync(path, System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(document, CookPublicationDocument.JsonOptions), DroidNet.Storage.FileVersion.Missing, token).ConfigureAwait(false);
+            var head = new CookPublicationHead(CookPublicationHead.CurrentVersion, document.OperationId, version.Sha256);
+            _ = await this.Files.WriteAsync(CookPublicationPaths.Head(this.Root), System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(head, CookPublicationDocument.JsonOptions), DroidNet.Storage.FileVersion.Missing, token).ConfigureAwait(false);
+        }
+
+        public void Activate(ProjectContext context)
+        {
+            var info = new ProjectInfo(context.ProjectId, context.Name, context.Category, context.ProjectRoot, context.Thumbnail)
+            {
+                AuthoringMounts = [.. context.AuthoringMounts],
+                LocalFolderMounts = [.. context.LocalFolderMounts],
+                CookedContentOrder = [.. context.CookedContentOrder],
+            };
+            File.WriteAllText(Path.Combine(context.ProjectRoot, "Project.oxy"), ProjectInfo.ToJson(info));
+            this.ContextService.Activate(context);
+        }
+
+        public string CookedRoot(string mount)
+        {
+            var head = System.Text.Json.JsonSerializer.Deserialize<CookPublicationHead>(File.ReadAllBytes(CookPublicationPaths.Head(this.Root)), CookPublicationDocument.JsonOptions)!;
+            var document = System.Text.Json.JsonSerializer.Deserialize<CookPublicationDocument>(File.ReadAllBytes(CookPublicationPaths.Document(this.Root, head.PublicationId)), CookPublicationDocument.JsonOptions)!;
+            return document.Roots.Single(root => root.Owner == CookPublicationRootOwner.Project && root.Name == mount).ResolvePath(this.Root);
+        }
+
+        public string CookedPath(string virtualPath)
+        {
+            var path = virtualPath.TrimStart('/');
+            var separator = path.IndexOf('/', StringComparison.Ordinal);
+            return Path.Combine(this.CookedRoot(path[..separator]), path[(separator + 1)..]);
+        }
+
+        public async Task<string> ExportRootAsync(string mount, CancellationToken token)
+        {
+            using var selected = await this.Publication.AcquireReadAsync(this.ProjectContext, token).ConfigureAwait(false);
+            var source = selected.FindProjectRoot(mount) ?? throw new InvalidOperationException("Cook the fixture before exporting it.");
+            var destination = Path.Combine(this.Root, "exports", mount);
+            if (Directory.Exists(destination))
+            {
+                Directory.Delete(destination, recursive: true);
+            }
+
+            Directory.CreateDirectory(destination);
+            foreach (var path in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories)
+                .Where(static path => Path.GetFileName(path) != CookedGeneration.MarkerFileName))
+            {
+                token.ThrowIfCancellationRequested();
+                var target = Path.Combine(destination, Path.GetRelativePath(source, path));
+                Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                File.Copy(path, target);
+            }
+
+            return destination;
+        }
 
         public Project Project { get; }
 

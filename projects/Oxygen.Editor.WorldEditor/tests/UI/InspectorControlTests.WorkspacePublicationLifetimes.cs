@@ -100,14 +100,13 @@ public sealed partial class InspectorControlTests
         _ = (await scenario.Fixture.Commands.SaveSceneAsync(scenario.Fixture.Context).ConfigureAwait(true)).Succeeded.Should().BeTrue();
         _ = await CookPublicationScopeAsync(scenario, scope, cancellationToken).ConfigureAwait(true);
         var content = scenario.Fixture.Runtime.ContentStatus;
-        var root = Path.Combine(scenario.Fixture.ProjectRoot, ".cooked");
-        var files = Directory.GetFiles(root, "*", SearchOption.AllDirectories).ToDictionary(static path => path, File.GetLastWriteTimeUtc, StringComparer.OrdinalIgnoreCase);
+        var files = ReadPublishedHashes(scenario.Fixture.ProjectRoot).Keys.ToDictionary(static path => path, File.GetLastWriteTimeUtc, StringComparer.OrdinalIgnoreCase);
         var result = await CookPublicationScopeAsync(scenario, scope, cancellationToken).ConfigureAwait(true);
         _ = result.IsUpToDate.Should().BeTrue();
         _ = result.CookedAssets.Should().BeEmpty();
         _ = result.ReusedAssets.Should().NotBeEmpty();
         _ = scenario.Fixture.Runtime.ContentStatus.Should().Be(content);
-        _ = Directory.GetFiles(root, "*", SearchOption.AllDirectories).ToDictionary(static path => path, File.GetLastWriteTimeUtc, StringComparer.OrdinalIgnoreCase).Should().BeEquivalentTo(files);
+        _ = ReadPublishedHashes(scenario.Fixture.ProjectRoot).Keys.ToDictionary(static path => path, File.GetLastWriteTimeUtc, StringComparer.OrdinalIgnoreCase).Should().BeEquivalentTo(files);
         var state = await scenario.Fixture.ReadNodeAsync(scenario.Fixture.Source.RootNodes[0].Id, cancellationToken).ConfigureAwait(true);
         _ = state.MaterialBaseColors.Should().ContainSingle().Which.Should().Be(new Vector4(1, 0, 0, 1));
     }

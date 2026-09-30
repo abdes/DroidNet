@@ -23,8 +23,7 @@ public sealed partial class InspectorControlTests
         var red = new Vector4(1, 0, 0, 1);
         var green = new Vector4(0, 1, 0, 1);
         var (uri, key) = await fixture.CookTestMaterialAsync("Refresh", timeout.Token, red).ConfigureAwait(true);
-        var root = Path.Combine(fixture.ProjectRoot, ".cooked", "Content");
-        await fixture.InitializeAsync(timeout.Token, root).ConfigureAwait(true);
+        await fixture.InitializeAsync(timeout.Token, mountPublished: true).ConfigureAwait(true);
         var node = fixture.Source.RootNodes.Single();
         _ = (await fixture.Commands.EditMaterialSlotAsync(fixture.Context, [node.Id], await fixture.ReadSingleMaterialSlotAsync(node.Id, timeout.Token).ConfigureAwait(true), uri, EditSessionToken.OneShot).ConfigureAwait(true)).Succeeded.Should().BeTrue();
         _ = await WaitForNodeAsync(fixture, node.Id, value => value.MaterialBaseColors.Length == 1 && Vector4.Distance(value.MaterialBaseColors[0], red) < 0.001f, timeout.Token).ConfigureAwait(true);
@@ -34,7 +33,7 @@ public sealed partial class InspectorControlTests
         await fixture.SuspendCookedContentAsync().WaitAsync(timeout.Token).ConfigureAwait(true);
         var (_, recookedKey) = await fixture.CookTestMaterialAsync("Refresh", timeout.Token, green).ConfigureAwait(true);
         _ = recookedKey.Should().Be(key);
-        await fixture.RefreshCookedRootsAsync(root).WaitAsync(timeout.Token).ConfigureAwait(true);
+        await fixture.RefreshCookedRootsAsync().WaitAsync(timeout.Token).ConfigureAwait(true);
         var refreshed = await fixture.ReadNodeAsync(node.Id, timeout.Token).ConfigureAwait(true);
         _ = refreshed.MaterialBaseColors.Should().ContainSingle().Which.Should().Be(green);
         _ = refreshed.MaterialKeys.Should().ContainSingle().Which.Should().BeEquivalentTo(key);

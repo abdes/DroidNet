@@ -8,133 +8,13 @@ using Oxygen.Editor.Projects;
 
 namespace Oxygen.Editor.ContentPipeline.Publication;
 
-/// <summary>Restores complete prior roots without deleting unrecognized content.</summary>
+/// <summary>Restores source and head state while retaining immutable generations for readers.</summary>
 internal sealed partial class CookPublicationTransaction
 {
-    /// <summary>Loads recovery metadata only for the held project's operation directory.</summary>
-    /// <param name="project">The project being reopened.</param>
-    /// <param name="operationId">The operation directory to inspect.</param>
-    /// <param name="files">The atomic metadata store.</param>
-    /// <param name="writer">The exclusive recovery owner.</param>
-    /// <param name="cancellationToken">Cancels loading before restoration starts.</param>
-    /// <returns>The validated journal owner.</returns>
-    public static async Task<CookPublicationTransaction> LoadAsync(ProjectContext project, Guid operationId, IAtomicFileStore files, CookOutputWriteLease writer, CancellationToken cancellationToken)
+    internal static async Task<CookPublicationTransaction> LoadAsync(ProjectContext project, Guid operationId,
+        IAtomicFileStore files, IProjectManagerService manager, CookOutputWriteLease gate, CancellationToken cancellationToken)
     {
-        writer.VerifyOwner(project.ProjectRoot);
-        return await ReadJournalAsync(project, operationId, files, cancellationToken).ConfigureAwait(false);
-    }
-
-    /// <summary>Restores unfinished work before any new cook or runtime mount.</summary>
-    /// <param name="writer">The exclusive recovery owner.</param>
-    /// <returns>Completion after prior roots and metadata have been restored.</returns>
-    public async Task RecoverAsync(CookOutputWriteLease writer)
-    {
-        writer.VerifyOwner(this.project.ProjectRoot);
-        if (this.Phase is CookPublicationPhase.Committed or CookPublicationPhase.RolledBack)
-        {
-            return;
-        }
-
-        await this.RestoreFilesAsync().ConfigureAwait(false);
-        await this.WriteJournalAsync(CookPublicationPhase.RolledBack, CancellationToken.None).ConfigureAwait(false);
-    }
-
-    /// <summary>Removes only verified operation-owned output after commit or successful restoration.</summary>
-    /// <param name="writer">The exclusive cleanup owner.</param>
-    /// <returns>Completion after private roots have been removed.</returns>
-    public async Task CleanupAsync(CookOutputWriteLease writer)
-    {
-        writer.VerifyOwner(this.project.ProjectRoot);
-        if (this.Phase is not (CookPublicationPhase.Committed or CookPublicationPhase.RolledBack))
-        {
-            throw new InvalidOperationException("Unfinished publication retains its recovery files.");
-        }
-
-        var owned = new List<string>();
-        foreach (var root in this.Directories())
-        {
-            foreach (var (path, expected) in new[] { (root.Previous, root.Before), (root.Discarded, root.After), (root.Staged, root.After) })
-            {
-                var image = await CookRootImage.CaptureAsync(path, copyTo: null, CancellationToken.None).ConfigureAwait(false);
-                if (!image.Exists)
-                {
-                    continue;
-                }
-
-                if (!image.Matches(expected))
-                {
-                    throw new InvalidDataException("Private publication files changed; cleanup retained them for review.");
-                }
-
-                owned.Add(path);
-            }
-        }
-
-        foreach (var path in owned)
-        {
-            Directory.Delete(path, recursive: true);
-        }
-    }
-
-    /// <summary>Verifies the current committed generation before it is mounted.</summary>
-    /// <param name="writer">The exclusive recovery owner.</param>
-    /// <returns>Completion if current root and metadata bytes match their committed identities.</returns>
-    public async Task VerifyCommittedAsync(CookOutputWriteLease? writer = null)
-    {
-        using var reader = writer is null ? await CookOutputLease.AcquireInspectionAsync(this.project.ProjectRoot, CancellationToken.None).ConfigureAwait(false) : null;
-        writer?.VerifyOwner(this.project.ProjectRoot);
-        await this.VerifyCommittedUnderLeaseAsync().ConfigureAwait(false);
-    }
-
-    /// <summary>Reads a committed journal while the caller's lease excludes publication.</summary>
-    /// <param name="project">The project being inspected.</param>
-    /// <param name="operationId">The journal identity.</param>
-    /// <param name="files">The metadata store.</param>
-    /// <param name="cancellationToken">Cancels inspection.</param>
-    /// <returns>The validated journal.</returns>
-    internal static Task<CookPublicationTransaction> LoadReadOnlyUnderLeaseAsync(ProjectContext project, Guid operationId, IAtomicFileStore files, CancellationToken cancellationToken)
-        => ReadJournalAsync(project, operationId, files, cancellationToken);
-
-    /// <summary>Verifies committed roots and metadata while the caller protects the generation.</summary>
-    /// <returns>Completion after all recorded content has been verified.</returns>
-    internal async Task VerifyCommittedUnderLeaseAsync()
-    {
-        if (this.Phase != CookPublicationPhase.Committed)
-        {
-            throw new InvalidOperationException("The current publication has not committed.");
-        }
-
-        foreach (var root in this.journal.Roots)
-        {
-            if (!root.After.Matches(await this.ReadAreaAsync("published", root.Mount).ConfigureAwait(false)))
-            {
-                throw new InvalidDataException($"Committed cooked content changed in '{root.Mount}'.");
-            }
-        }
-
-        await this.VerifyCommittedMetadataUnderLeaseAsync().ConfigureAwait(false);
-    }
-
-    /// <summary>Verifies generation metadata while the caller protects the committed generation.</summary>
-    /// <returns>Completion if both committed metadata files are unchanged.</returns>
-    internal async Task VerifyCommittedMetadataUnderLeaseAsync()
-    {
-        if (this.Phase != CookPublicationPhase.Committed)
-        {
-            throw new InvalidDataException("The publication has not committed.");
-        }
-
-        foreach (var metadata in this.journal.Metadata)
-        {
-            if ((await this.files.ReadAsync(this.MetadataPath(metadata), CancellationToken.None).ConfigureAwait(false)).Version != Version(metadata.After))
-            {
-                throw new InvalidDataException("Committed publication metadata changed.");
-            }
-        }
-    }
-
-    private static async Task<CookPublicationTransaction> ReadJournalAsync(ProjectContext project, Guid operationId, IAtomicFileStore files, CancellationToken cancellationToken)
-    {
+        gate.VerifyOwner(project.ProjectRoot);
         var directory = Path.Combine(project.ProjectRoot, ".build", "cook", operationId.ToString("N"));
         CookOutputLease.RejectReparsePoint(directory);
         var path = Path.Combine(directory, "publication.json");
@@ -145,74 +25,183 @@ internal sealed partial class CookPublicationTransaction
             throw new InvalidDataException("The publication recovery journal is missing.");
         }
 
-        var loadedJournal = JsonSerializer.Deserialize<CookPublicationJournal>(snapshot.Content.AsSpan(), JsonOptions)
+        var journal = JsonSerializer.Deserialize<CookPublicationJournal>(snapshot.Content.AsSpan(), JsonOptions)
             ?? throw new InvalidDataException("The publication recovery journal is empty.");
-        ValidateJournal(loadedJournal, project.ProjectId, operationId);
-        foreach (var sourceFile in loadedJournal.SourceFiles)
+        ValidateJournal(journal, project.ProjectId, operationId);
+        var transaction = new CookPublicationTransaction(project, files, manager, journal, snapshot.Version, checkpoint: null);
+        foreach (var file in journal.SourceFiles)
         {
-            _ = ProducedSourcePath(project, sourceFile);
-            if (loadedJournal.SourceReplacement is { } replacement && IsWithinSourceBundle(project, replacement.BundleName, sourceFile.RelativePath))
+            if (MayHaveMutated(journal.Phase))
             {
-                throw new InvalidDataException("A source file overlaps a journaled source-directory replacement.");
+                _ = ProducedSourcePath(project, file);
+                if (journal.SourceReplacement is { } replacement && IsWithinSourceBundle(project, replacement.BundleName, file.RelativePath))
+                {
+                    throw new InvalidDataException("A source update overlaps a source-directory replacement.");
+                }
             }
         }
-        if (loadedJournal.SourceReplacement is { } source)
+
+        if (journal.SourceReplacement is { } source)
         {
             try
             {
-                _ = Import.ImportSourceRetention.ResolveDestination(project, source.BundleName);
+                Import.ImportSourceRetention.ValidateBundleName(source.BundleName);
+                if (MayHaveMutated(journal.Phase))
+                {
+                    _ = Import.ImportSourceRetention.ResolveDestination(project, source.BundleName);
+                }
             }
-            catch (ArgumentException exception)
+            catch (ArgumentException invalid)
             {
-                throw new InvalidDataException("The source replacement journal contains an invalid bundle name.", exception);
+                throw new InvalidDataException("The recovery journal contains an invalid source bundle.", invalid);
             }
-
             ValidateImage(source.Before);
             ValidateImage(source.After);
             if (!source.Before.Exists || source.Before.Files.IsEmpty || !source.After.Exists || source.After.Files.IsEmpty)
             {
-                throw new InvalidDataException("The source replacement journal has incomplete bundle identities.");
+                throw new InvalidDataException("A source replacement lacks its before/after identities.");
             }
         }
 
-        return new(project, files, loadedJournal, snapshot.Version, checkpoint: null);
+        if (journal.ProjectChange is { } configuration)
+        {
+            _ = transaction.ParseProjectConfiguration(configuration.BeforeJson);
+            _ = transaction.ParseProjectConfiguration(configuration.AfterJson);
+        }
+
+        return transaction;
     }
+
+    internal async Task RecoverAsync(CookOutputWriteLease gate)
+    {
+        gate.VerifyOwner(this.project.ProjectRoot);
+        if (this.Phase is CookPublicationPhase.Committed or CookPublicationPhase.RolledBack)
+        {
+            return;
+        }
+
+        if (MayHaveMutated(this.Phase))
+        {
+            await this.RestoreFilesAsync().ConfigureAwait(false);
+        }
+
+        await this.WriteJournalAsync(CookPublicationPhase.RolledBack, CancellationToken.None).ConfigureAwait(false);
+    }
+
+    // The caller already owns the selection gate. Never acquire it recursively
+    // and never wait for an operation lock while holding it.
+    internal static async Task RecoverInterruptedMutationsAsync(ProjectContext project, IAtomicFileStore files,
+        IProjectManagerService manager, CookOutputWriteLease gate, Guid? currentOperation, CancellationToken cancellationToken)
+    {
+        gate.VerifyOwner(project.ProjectRoot);
+        foreach (var id in await PendingMutationsAsync(project, files, currentOperation, cancellationToken).ConfigureAwait(false))
+        {
+            using var operation = CookOutputLease.AcquireOperation(project.ProjectRoot, id);
+            var saved = await manager.LoadProjectInfoAsync(project.ProjectRoot).ConfigureAwait(false)
+                ?? throw new InvalidDataException("The saved project is unavailable for publication recovery.");
+            if (saved.Id != project.ProjectId)
+            {
+                throw new InvalidDataException("Publication recovery encountered another project's configuration.");
+            }
+
+            var recoveryProject = ProjectContext.FromProjectInfo(saved, []);
+            var pending = await LoadAsync(recoveryProject, id, files, manager, gate, cancellationToken).ConfigureAwait(false);
+            await pending.RecoverAsync(gate).ConfigureAwait(false);
+        }
+    }
+
+    internal static async Task RequireSettledSelectionAsync(ProjectContext project, IAtomicFileStore files,
+        CookOutputWriteLease gate, CancellationToken cancellationToken)
+    {
+        gate.VerifyOwner(project.ProjectRoot);
+        if ((await PendingMutationsAsync(project, files, currentOperation: null, cancellationToken).ConfigureAwait(false)).Count != 0)
+        {
+            throw new CookOutputBusyException("Cook or reopen the project to recover an interrupted publication.");
+        }
+    }
+
+    private static async Task<List<Guid>> PendingMutationsAsync(ProjectContext project, IAtomicFileStore files,
+        Guid? currentOperation, CancellationToken cancellationToken)
+    {
+        var pending = new List<Guid>();
+        var operations = Path.Combine(project.ProjectRoot, ".build", "cook");
+        foreach (var directory in Directory.EnumerateDirectories(operations))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!Guid.TryParseExact(Path.GetFileName(directory), "N", out var id) || id == currentOperation)
+            {
+                continue;
+            }
+
+            CookOutputLease.RejectReparsePoint(directory);
+            var path = Path.Combine(directory, "publication.json");
+            CookOutputLease.RejectReparsePoint(path);
+            var bytes = await files.ReadAsync(path, cancellationToken).ConfigureAwait(false);
+            if (!bytes.Version.Exists)
+            {
+                continue;
+            }
+
+            var journal = JsonSerializer.Deserialize<CookPublicationJournal>(bytes.Content.AsSpan(), JsonOptions)
+                ?? throw new InvalidDataException("A publication recovery journal is empty.");
+            ValidateJournal(journal, project.ProjectId, id);
+            if (!MayHaveMutated(journal.Phase))
+            {
+                continue;
+            }
+
+            pending.Add(id);
+        }
+
+        return pending;
+    }
+
+    private static bool MayHaveMutated(CookPublicationPhase phase)
+        => phase is CookPublicationPhase.Applying or CookPublicationPhase.SourcesApplied
+            or CookPublicationPhase.HeadSelected or CookPublicationPhase.RuntimeReady;
 
     private static void ValidateJournal(CookPublicationJournal journal, Guid projectId, Guid operationId)
     {
-        if (journal.Version != 2 || journal.ProjectId != projectId || journal.OperationId != operationId
-            || !Enum.IsDefined(journal.Phase) || journal.Roots.IsDefaultOrEmpty || journal.Metadata.IsDefaultOrEmpty
-            || journal.Roots.Any(static root => root is null) || journal.Metadata.Any(static file => file is null || file.After is null)
-            || !journal.Metadata.Any(static file => string.Equals(file.RelativePath, PublicationMetadata, StringComparison.Ordinal))
-            || journal.Metadata.Select(static file => file.RelativePath).ToHashSet(StringComparer.Ordinal).Count != journal.Metadata.Length
+        if (journal.Version != CookPublicationJournal.CurrentVersion || journal.ProjectId != projectId || journal.OperationId != operationId
+            || !Enum.IsDefined(journal.Phase) || journal.CandidateGenerations.IsDefault
+            || journal.CandidateGenerations.Any(static id => id == Guid.Empty)
+            || journal.CandidateGenerations.Distinct().Count() != journal.CandidateGenerations.Length
             || journal.SourceFiles.IsDefault || journal.SourceFiles.Any(static file => file is null)
-            || journal.SourceFiles.Select(static file => file.RelativePath).ToHashSet(StringComparer.OrdinalIgnoreCase).Count != journal.SourceFiles.Length)
+            || journal.SourceFiles.Select(static file => file.RelativePath).Distinct(StringComparer.OrdinalIgnoreCase).Count() != journal.SourceFiles.Length
+            || (journal.Phase is not (CookPublicationPhase.Building or CookPublicationPhase.RolledBack) && journal.CandidateHead is null))
         {
             throw new InvalidDataException("The publication journal does not identify a complete operation for this project.");
         }
 
-        try
+        ValidateHeadSnapshot(journal.PreviousHead);
+        if (journal.CandidateHead is { } candidate)
         {
-            _ = CookStagingArea.ValidateMounts(journal.Roots.Select(static root => root.Mount));
-        }
-        catch (ArgumentException exception)
-        {
-            throw new InvalidDataException("The publication journal contains invalid mount names.", exception);
-        }
-
-        foreach (var root in journal.Roots)
-        {
-            ValidateImage(root.Before);
-            ValidateImage(root.After);
-            if (!root.After.Exists || !root.After.Files.ContainsKey("container.index.bin"))
+            ValidateHeadSnapshot(candidate);
+            var head = JsonSerializer.Deserialize<CookPublicationHead>(candidate.Content.AsSpan(), JsonOptions);
+            if (!candidate.Version.Exists || head?.PublicationId != operationId)
             {
-                throw new InvalidDataException("The journal's new root has no cooked index.");
+                throw new InvalidDataException("The candidate head belongs to another operation.");
             }
         }
+    }
 
-        foreach (var metadata in journal.Metadata)
+    private static void ValidateHeadSnapshot(FileSnapshot snapshot)
+    {
+        if (snapshot?.Version is null || snapshot.Content.IsDefault
+            || snapshot.Version != (snapshot.Version.Exists ? Version(snapshot.Content.ToArray()) : FileVersion.Missing)
+            || (!snapshot.Version.Exists && !snapshot.Content.IsEmpty))
         {
-            ValidateMetadataPath(metadata.RelativePath);
+            throw new InvalidDataException("A journaled head has an invalid byte identity.");
+        }
+
+        if (snapshot.Version.Exists)
+        {
+            var head = JsonSerializer.Deserialize<CookPublicationHead>(snapshot.Content.AsSpan(), JsonOptions);
+            if (head is null || head.Version != CookPublicationHead.CurrentVersion || head.PublicationId == Guid.Empty
+                || !CookPublicationDocument.IsDigest(head.DocumentSha256))
+            {
+                throw new InvalidDataException("A journaled publication head is invalid.");
+            }
         }
     }
 
@@ -221,85 +210,91 @@ internal sealed partial class CookPublicationTransaction
         if (image?.Files is null || (!image.Exists && image.Files.Count != 0)
             || image.Files.Any(static item => string.IsNullOrEmpty(item.Key) || Path.IsPathRooted(item.Key)
                 || item.Key.Split('/').Any(static part => part is "" or "." or "..") || item.Key.Contains('\\', StringComparison.Ordinal)
-                || item.Value is null || item.Value.Size < 0 || item.Value.Sha256 is not { Length: 64 }
-                || !item.Value.Sha256.All(Uri.IsHexDigit)))
+                || item.Value is null || item.Value.Size < 0 || !CookPublicationDocument.IsDigest(item.Value.Sha256)))
         {
-            throw new InvalidDataException("The publication journal contains an invalid root identity.");
+            throw new InvalidDataException("The source journal contains an invalid directory identity.");
         }
     }
 
     private async Task RestoreFilesAsync()
     {
+        var headPath = CookPublicationPaths.Head(this.project.ProjectRoot);
+        var head = await this.files.ReadAsync(headPath, CancellationToken.None).ConfigureAwait(false);
+        if (head.Version != this.PreviousHead.Version && head.Version != this.journal.CandidateHead?.Version)
+        {
+            throw new StorageWriteConflictException("The publication head changed outside this transaction.");
+        }
+
         foreach (var update in this.journal.SourceFiles)
         {
             var current = await this.files.ReadAsync(ProducedSourcePath(this.project, update), CancellationToken.None).ConfigureAwait(false);
             if (current.Version != Version(update.Before) && current.Version != Version(update.After))
             {
-                throw new StorageWriteConflictException("Retained source settings changed outside this transaction; recovery files were retained.");
+                throw new StorageWriteConflictException("Source settings changed outside this transaction.");
             }
         }
 
-        // Verify all recovery material before changing any root.
-        foreach (var root in this.Directories())
+        var restoreProject = false;
+        if (this.journal.ProjectChange is { } change)
         {
-            var previous = await CookRootImage.CaptureAsync(root.Previous, copyTo: null, CancellationToken.None).ConfigureAwait(false);
-            var published = await CookRootImage.CaptureAsync(root.Published, copyTo: null, CancellationToken.None).ConfigureAwait(false);
-            var staged = await CookRootImage.CaptureAsync(root.Staged, copyTo: null, CancellationToken.None).ConfigureAwait(false);
-            if ((previous.Exists && !previous.Matches(root.Before))
-                || (root.Before.Exists && !previous.Exists && !published.Matches(root.Before))
-                || (!root.Before.Exists && published.Exists && staged.Exists)
-                || (published.Exists && !published.Matches(root.Before) && !published.Matches(root.After)))
+            var actual = await this.projectManager.LoadProjectInfoAsync(this.project.ProjectRoot).ConfigureAwait(false)
+                ?? throw new InvalidDataException("The project's configuration cannot be read for recovery.");
+            var json = ProjectInfo.ToJson(actual);
+            var before = ProjectInfo.ToJson(this.ParseProjectConfiguration(change.BeforeJson));
+            var after = ProjectInfo.ToJson(this.ParseProjectConfiguration(change.AfterJson));
+            if (!string.Equals(json, before, StringComparison.Ordinal) && !string.Equals(json, after, StringComparison.Ordinal))
             {
-                throw new InvalidDataException($"Recovery material for '{root.Name}' is missing or changed. Files have been retained.");
+                throw new StorageWriteConflictException("The project configuration changed outside this transaction.");
+            }
+
+            restoreProject = !string.Equals(json, before, StringComparison.Ordinal);
+        }
+
+        foreach (var directory in this.Directories())
+        {
+            var previous = await CookRootImage.CaptureAsync(directory.Previous, copyTo: null, CancellationToken.None).ConfigureAwait(false);
+            var published = await CookRootImage.CaptureAsync(directory.Published, copyTo: null, CancellationToken.None).ConfigureAwait(false);
+            if ((previous.Exists && !previous.Matches(directory.Before))
+                || (!previous.Exists && !published.Matches(directory.Before))
+                || (published.Exists && !published.Matches(directory.Before) && !published.Matches(directory.After)))
+            {
+                throw new InvalidDataException($"Source recovery material for '{directory.Name}' is missing or changed.");
             }
         }
 
         await this.RestoreSourceFilesAsync().ConfigureAwait(false);
-        foreach (var root in this.Directories().Reverse())
+        foreach (var directory in this.Directories().Reverse())
         {
-            var previous = await CookRootImage.CaptureAsync(root.Previous, copyTo: null, CancellationToken.None).ConfigureAwait(false);
-            var published = await CookRootImage.CaptureAsync(root.Published, copyTo: null, CancellationToken.None).ConfigureAwait(false);
-            if (published.Matches(root.Before))
+            var published = await CookRootImage.CaptureAsync(directory.Published, copyTo: null, CancellationToken.None).ConfigureAwait(false);
+            if (published.Matches(directory.Before))
             {
                 continue;
             }
 
             if (published.Exists)
             {
-                MoveOwnedRoot(root.Published, root.Discarded);
+                MoveOwnedRoot(directory.Published, directory.Discarded);
             }
 
-            if (previous.Exists)
-            {
-                MoveOwnedRoot(root.Previous, root.Published);
-            }
+            MoveOwnedRoot(directory.Previous, directory.Published);
         }
 
-        foreach (var metadata in this.journal.Metadata.Reverse())
+        if (restoreProject && this.journal.ProjectChange is { } configuration)
         {
-            var path = this.MetadataPath(metadata);
-            var current = await this.files.ReadAsync(path, CancellationToken.None).ConfigureAwait(false);
-            if (current.Version == Version(metadata.Before))
-            {
-                continue;
-            }
+            await this.projectManager.SaveProjectInfoAsync(this.ParseProjectConfiguration(configuration.BeforeJson),
+                this.ParseProjectConfiguration(configuration.AfterJson), CancellationToken.None).ConfigureAwait(false);
+        }
 
-            if (current.Version != Version(metadata.After))
+        if (head.Version != this.PreviousHead.Version)
+        {
+            if (this.PreviousHead.Version.Exists)
             {
-                throw new StorageWriteConflictException($"Publication metadata changed outside this transaction: '{path}'.");
-            }
-
-            if (metadata.Before is null)
-            {
-                File.Delete(path);
+                _ = await this.files.WriteAsync(headPath, this.PreviousHead.Content.ToArray(), head.Version, CancellationToken.None).ConfigureAwait(false);
             }
             else
             {
-                _ = await this.files.WriteAsync(path, metadata.Before, current.Version, CancellationToken.None).ConfigureAwait(false);
+                File.Delete(headPath);
             }
         }
     }
-
-    private Task<CookRootImage> ReadAreaAsync(string area, string mount)
-        => CookRootImage.CaptureAsync(this.RootPath(area, mount), copyTo: null, CancellationToken.None);
 }

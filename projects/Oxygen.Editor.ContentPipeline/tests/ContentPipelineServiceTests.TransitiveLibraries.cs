@@ -43,11 +43,11 @@ public sealed partial class ContentPipelineServiceTests
         var context = consumer.ProjectContext with
         {
             LocalFolderMounts = materialLibraryMounted
-                ? [new("Materials", Path.Combine(library.Root, ".cooked/Art")), new("Meshes", Path.Combine(library.Root, ".cooked/Content"))]
-                : [new("Meshes", Path.Combine(library.Root, ".cooked/Content"))],
+                ? [new("Materials", await library.ExportRootAsync("Art", this.TestContext.CancellationToken).ConfigureAwait(false)), new("Meshes", library.CookedRoot("Content"))]
+                : [new("Meshes", library.CookedRoot("Content"))],
             CookedContentOrder = projectWins ? [] : [new(Oxygen.Editor.World.CookedContentSourceKind.ProjectOutput), new(Oxygen.Editor.World.CookedContentSourceKind.LocalFolder, "Materials"), new(Oxygen.Editor.World.CookedContentSourceKind.LocalFolder, "Meshes")],
         };
-        consumer.ContextService.Activate(context);
+        consumer.Activate(context);
         AddGeometryNode(consumer, new("asset:///Content/Geometry/AuthoredCube.ogeo"), "Library mesh");
         await consumer.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
         var service = CreateService(consumer, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
@@ -74,6 +74,7 @@ public sealed partial class ContentPipelineServiceTests
         _ = (await service.ReadAsync(context, [scene], this.TestContext.CancellationToken).ConfigureAwait(false)).Single().Freshness.Should().Be(AssetCookFreshness.Current);
         WriteMaterialRoughness(library, material, 0.93);
         _ = (await producer.CookAssetAsync(new("asset:///" + material), this.TestContext.CancellationToken).ConfigureAwait(false)).IsPublished.Should().BeTrue();
+        _ = await library.ExportRootAsync("Art", this.TestContext.CancellationToken).ConfigureAwait(false);
         var status = (await service.ReadAsync(context, [scene], this.TestContext.CancellationToken).ConfigureAwait(false)).Single();
         _ = status.Freshness.Should().Be(projectWins ? AssetCookFreshness.Current : AssetCookFreshness.OutOfDate);
         _ = (await service.CookCurrentSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false)).Status.Should().Be(Oxygen.Managed.Core.Diagnostics.OperationStatus.Succeeded);
@@ -105,9 +106,9 @@ public sealed partial class ContentPipelineServiceTests
         _ = exported.IsPublished.Should().BeTrue();
         var context = consumer.ProjectContext with
         {
-            LocalFolderMounts = [new("Materials", Path.Combine(library.Root, ".cooked/Art")), new("Meshes", Path.Combine(library.Root, ".cooked/Content"))],
+            LocalFolderMounts = [new("Materials", await library.ExportRootAsync("Art", this.TestContext.CancellationToken).ConfigureAwait(false)), new("Meshes", library.CookedRoot("Content"))],
         };
-        consumer.ContextService.Activate(context);
+        consumer.Activate(context);
         AddGeometryNode(consumer, new("asset:///Content/Geometry/AuthoredCube.ogeo"), "Library mesh");
         await consumer.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
         var service = CreateService(consumer, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
@@ -119,6 +120,7 @@ public sealed partial class ContentPipelineServiceTests
         source["parameters"]!["roughness"] = 0.9;
         library.WriteText(material, source.ToJsonString());
         _ = (await producer.CookAssetAsync(new("asset:///" + material), this.TestContext.CancellationToken).ConfigureAwait(false)).IsPublished.Should().BeTrue();
+        _ = await library.ExportRootAsync("Art", this.TestContext.CancellationToken).ConfigureAwait(false);
         var workers = runner.Count;
         var status = await service.ReadAsync(context, [scene], this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = runner.Count.Should().Be(workers, "ordinary status reads must not start native inspection");

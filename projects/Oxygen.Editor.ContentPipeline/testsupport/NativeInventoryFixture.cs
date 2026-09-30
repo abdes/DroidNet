@@ -4,8 +4,6 @@
 
 using System.Security.Cryptography;
 using System.Text.Json;
-using Moq;
-using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Managed.Assets.Persistence.LooseCooked.V2;
@@ -13,16 +11,8 @@ using Oxygen.Managed.Assets.Persistence.LooseCooked.V2;
 namespace Oxygen.Testing;
 
 /// <summary>Models the native inventory protocol for orchestration tests; native tests verify binary payload semantics.</summary>
-internal static class NativeInventoryFixture
+internal static partial class NativeInventoryFixture
 {
-    public static IEngineContentPipelineApi CreateApi()
-    {
-        var api = new Mock<IEngineContentPipelineApi>(MockBehavior.Strict);
-        api.Setup(value => value.ReadInventoryAsync(It.IsAny<string>(), It.IsAny<NativeArtifactLease?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((string root, NativeArtifactLease? _, CancellationToken _) => Read(root));
-        return api.Object;
-    }
-
     public static void WriteIndex(string root, IEnumerable<CookedAssetEntry> assets, Guid? sourceKey = null)
     {
         var entries = assets.Where(static asset => asset.Kind != ContentCookAssetKind.Texture).Select(asset =>

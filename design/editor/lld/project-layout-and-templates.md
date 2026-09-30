@@ -155,7 +155,7 @@ asset:///Content/Scenes/<SceneName>.oscene.json
 Rules:
 
 - `*.oscene.json` is the editor-authored scene source document.
-- `*.oscene` is the cooked runtime output produced under `.cooked/<Mount>/...`.
+- `*.oscene` is runtime output inside a generation selected by `.cooked/head.json`.
 - top-level `Scenes/` is not part of the V0.1 project layout.
 - scene create, scene open, scene save, starter-scene template payloads, and
   Content Browser scene rows use `Content/Scenes/*.oscene.json`.
@@ -324,19 +324,19 @@ Cooked output mapping:
 
 ```text
 source: <ProjectRoot>/Content/Materials/Gold.omat.json
-cooked: <ProjectRoot>/.cooked/Content/Materials/Gold.omat
-index:  <ProjectRoot>/.cooked/Content/container.index.bin
+cooked: <ProjectRoot>/.cooked/generations/<SourceKey>/Materials/Gold.omat
+index:  <ProjectRoot>/.cooked/generations/<SourceKey>/container.index.bin
 
 source: <ProjectRoot>/Content/Scenes/Main.oscene.json
-cooked: <ProjectRoot>/.cooked/Content/Scenes/Main.oscene
-index:  <ProjectRoot>/.cooked/Content/container.index.bin
+cooked: <ProjectRoot>/.cooked/generations/<SourceKey>/Scenes/Main.oscene
+index:  <ProjectRoot>/.cooked/generations/<SourceKey>/container.index.bin
 ```
 
 Rules:
 
-- `.cooked/<MountName>/container.index.bin` is the loose cooked index for that
+- `.cooked/generations/<SourceKey>/container.index.bin` is the loose cooked index for that
   mount.
-- `.cooked/<MountName>/...` paths are display/diagnostic facts, not persisted
+- `.cooked/generations/<SourceKey>/...` paths are display/diagnostic facts, not persisted
   authored identities.
 - `.imported` contains import intermediate output.
 - `.build` contains build/package output.
@@ -667,7 +667,7 @@ Project layout/template work is complete when these checks pass:
     and build roots with the required labels.
 14. `Content/SourceMedia` rows reduce to source/importable state, not cooked
     state.
-15. `.cooked/<Mount>/container.index.bin` is displayed as derived output and is
+15. The selected generation's `container.index.bin` is displayed as derived output and is
     never persisted as an authored asset identity.
 
 ## 15. Open Issues
@@ -683,11 +683,12 @@ retaining Project.oxy, Content/SourceMedia, authored descriptors/import settings
 and Config. Absolute local mounts are nonportable and reported as dependencies;
 the release fixture uses project-relative mounts.
 
-ED-M07B stages inputs/output and retains its publication journal/backups beneath
-`.build/cook/<OperationId>`. Successful publication preserves fixed
-`.cooked/<Mount>/container.index.bin` paths and writes derived
-`.cooked/publication.json`. These files describe a published cook, not authored
-identity. Interrupted transactions are recovered before mounting. ED-M08 evidence
+Input snapshots and source-recovery files live beneath `.build/cook/<OperationId>`.
+Native output is cooked directly into fresh `.cooked/generations/<SourceKey>` roots;
+one atomic head selects an immutable publication. The
+[content-pipeline transaction](content-pipeline.md#16-saved-inputs-and-publication-transaction)
+owns layout, recovery and automatic reclamation. Interrupted transactions recover
+before project validation and mounting. ED-M08 evidence
 lives under its explicit owned `EvidenceRoot`, defaulting to repository
 `artifacts/ed-m08/runs/<operation-id>/`; it is not inferred from the project layout.
 The [standalone qualification contract](standalone-runtime-validation.md#5-ownership-build-isolation-and-dependency-direction)

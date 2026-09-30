@@ -85,13 +85,13 @@ public sealed partial class ContentPipelineServiceTests
     /// <summary>Inspection and validation retain one generation until native work and its file readers finish.</summary>
     /// <returns>The asynchronous publication/inspection race regression.</returns>
     [TestMethod]
-    public async Task InspectionHoldsFilesAndDelaysPublicationUntilReadFinishes()
+    public async Task InspectionHoldsItsFilesWithoutBlockingThePublicationGate()
     {
         using var workspace = new TempWorkspace();
-        var root = Path.Combine(workspace.Root, ".cooked", "Content");
+        await workspace.SeedEmptyPublicationAsync("Content", this.TestContext.CancellationToken).ConfigureAwait(false);
+        var root = workspace.CookedRoot("Content");
         Directory.CreateDirectory(root);
         var index = Path.Combine(root, "container.index.bin");
-        NativeInventoryFixture.WriteIndex(root, []);
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var api = new Mock<IEngineContentPipelineApi>();
@@ -109,10 +109,9 @@ public sealed partial class ContentPipelineServiceTests
         {
             await entered.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
             var writer = CookOutputLease.AcquireWriteAsync(workspace.Root, this.TestContext.CancellationToken);
-            _ = writer.IsCompleted.Should().BeFalse();
+            using var publication = await writer.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
             release.SetResult();
             _ = (await inspection.ConfigureAwait(false)).Roots.Single().Validation!.Succeeded.Should().BeTrue();
-            using var publication = await writer.ConfigureAwait(false);
             await File.WriteAllTextAsync(index, "new generation", this.TestContext.CancellationToken).ConfigureAwait(false);
         }
         finally
@@ -128,9 +127,9 @@ public sealed partial class ContentPipelineServiceTests
     public async Task ProjectClosureCancelsInspectionAndReleasesItsReaders()
     {
         using var workspace = new TempWorkspace();
-        var root = Path.Combine(workspace.Root, ".cooked", "Content");
+        await workspace.SeedEmptyPublicationAsync("Content", this.TestContext.CancellationToken).ConfigureAwait(false);
+        var root = workspace.CookedRoot("Content");
         var index = Path.Combine(root, "container.index.bin");
-        NativeInventoryFixture.WriteIndex(root, []);
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var api = new Mock<IEngineContentPipelineApi>();
         _ = api.Setup(value => value.ReadInventoryAsync(root, It.IsAny<NativeArtifactLease?>(), It.IsAny<CancellationToken>())).Returns(async (string _, NativeArtifactLease? _, CancellationToken token) =>
@@ -160,7 +159,7 @@ public sealed partial class ContentPipelineServiceTests
         var root = Path.Combine(workspace.Root, "ExternalLibrary");
         Directory.CreateDirectory(root);
         var project = workspace.ProjectContext with { LocalFolderMounts = [new("Library", root)] };
-        workspace.ContextService.Activate(project);
+        workspace.Activate(project);
         var api = new Mock<IEngineContentPipelineApi>();
         CookedAssetEntry[] entries =
         [
@@ -175,6 +174,7 @@ public sealed partial class ContentPipelineServiceTests
         }
 
         NativeInventoryFixture.WriteIndex(root, entries);
+        using var accepted = await workspace.Publication.AcquireForMountAsync(project, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = api.Setup(value => value.ReadInventoryAsync(root, It.IsAny<NativeArtifactLease?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => NativeInventoryFixture.Read(root));
         var pipeline = CreateService(workspace, new CapturingSceneDescriptorGenerator(workspace, []), api.Object);

@@ -7,11 +7,11 @@
 #pragma managed
 
 #include <array>
-#include <cstddef>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <functional>
-#include <glm/fwd.hpp>
 #include <memory>
 #include <new>
 #include <optional>
@@ -19,33 +19,22 @@
 #include <utility>
 #include <vector>
 
-#include <msclr/gcroot.h>
-#include <msclr/marshal.h>
-#include <msclr/marshal_cppstd.h>
-
-#include <Oxygen/EditorInterface/EngineContext.h>
-#include <Oxygen/Engine/AsyncEngine.h>
-#include <Oxygen/Scene/Types/NodeHandle.h>
-
 #include <Commands/AttachCameraCommand.h>
-#include <Oxygen/Scene/Light/DirectionalLight.h>
-#include <Oxygen/Scene/Light/PointLight.h>
-#include <Oxygen/Scene/Light/SpotLight.h>
 #include <Commands/AttachLightCommand.h>
 #include <Commands/CreateSceneNodeCommand.h>
 #include <Commands/DetachGeometryCommand.h>
+#include <Commands/PropertyApplierRegistry.h>
 #include <Commands/RemoveSceneNodeCommand.h>
 #include <Commands/RemoveSceneNodesCommand.h>
 #include <Commands/RenameSceneNodeCommand.h>
 #include <Commands/ReparentSceneNodeCommand.h>
 #include <Commands/ReparentSceneNodesCommand.h>
-#include <Commands/SetGeometryCommand.h>
-#include <Commands/SetEnvironmentCommand.h>
 #include <Commands/SetBackgroundColorCommand.h>
+#include <Commands/SetEnvironmentCommand.h>
+#include <Commands/SetGeometryCommand.h>
 #include <Commands/SetLocalTransformCommand.h>
 #include <Commands/SetMaterialOverrideCommand.h>
 #include <Commands/SetPropertiesCommand.h>
-#include <Commands/PropertyApplierRegistry.h>
 #include <Commands/SetVisibilityCommand.h>
 #include <Commands/UpdateTransformsForNodesCommand.h>
 #include <EditorModule/CommandFactory.h>
@@ -53,6 +42,17 @@
 #include <EditorModule/NodeRegistry.h>
 #include <EditorModule/SceneAssetRequests.h>
 #include <World/OxygenWorld.h>
+#include <glm/fwd.hpp>
+#include <msclr/gcroot.h>
+#include <msclr/marshal.h>
+#include <msclr/marshal_cppstd.h>
+
+#include <Oxygen/EditorInterface/EngineContext.h>
+#include <Oxygen/Engine/AsyncEngine.h>
+#include <Oxygen/Scene/Light/DirectionalLight.h>
+#include <Oxygen/Scene/Light/PointLight.h>
+#include <Oxygen/Scene/Light/SpotLight.h>
+#include <Oxygen/Scene/Types/NodeHandle.h>
 
 using namespace System::Threading::Tasks;
 
@@ -765,48 +765,30 @@ namespace Oxygen::Interop::World {
     return completion->Task;
   }
 
-  void OxygenWorld::SetEnvironment(
-    bool atmosphereEnabled,
-    bool sunDiskEnabled,
-    float planetRadiusMeters,
-    float atmosphereHeightMeters,
-    System::Numerics::Vector3 groundAlbedoRgb,
-    float rayleighScaleHeightMeters,
-    float mieScaleHeightMeters,
-    float mieAnisotropy,
+  void OxygenWorld::SetEnvironment(bool atmosphereEnabled, bool sunDiskEnabled,
+    float planetRadiusMeters, float atmosphereHeightMeters,
+    System::Numerics::Vector3 groundAlbedoRgb, float rayleighScaleHeightMeters,
+    float mieScaleHeightMeters, float mieAnisotropy,
     System::Numerics::Vector3 skyLuminanceFactorRgb,
-    float aerialPerspectiveDistanceScale,
-    float aerialScatteringStrength,
-    float aerialPerspectiveStartDepthMeters,
-    float heightFogContribution,
-    int exposureMode,
-    bool exposureEnabled,
-    float exposureKey,
-    float manualExposureEv,
-    float exposureCompensation,
-    int toneMapping,
-    int autoExposureMeteringMode,
-    float autoExposureMinEv,
-    float autoExposureMaxEv,
-    float autoExposureSpeedUp,
-    float autoExposureSpeedDown,
-    float autoExposureLowPercentile,
-    float autoExposureHighPercentile,
-    float autoExposureMinLogLuminance,
-    float autoExposureLogLuminanceRange,
-    float autoExposureTargetLuminance,
-    float autoExposureSpotMeterRadius,
-    float autoExposureBlackInfluence,
+    float aerialPerspectiveDistanceScale, float aerialScatteringStrength,
+    float aerialPerspectiveStartDepthMeters, float heightFogContribution,
+    int exposureMode, bool exposureEnabled, float exposureKey,
+    float manualExposureEv, float exposureCompensation, int toneMapping,
+    int autoExposureMeteringMode, float autoExposureMinEv,
+    float autoExposureMaxEv, float autoExposureSpeedUp,
+    float autoExposureSpeedDown, float autoExposureLowPercentile,
+    float autoExposureHighPercentile, float autoExposureMinLogLuminance,
+    float autoExposureLogLuminanceRange, float autoExposureTargetLuminance,
+    float autoExposureSpotMeterRadius, float autoExposureBlackInfluence,
     float autoExposureTransitionDistanceEv,
-    cli::array<ExposureCompensationKeyManaged>^ autoExposureCompensationCurve,
-    String^ exposureMaskCookedRoot, String^ exposureMaskDescriptorPath,
-    float bloomIntensity,
-    float bloomThreshold,
-    float saturation,
-    float contrast,
-    float vignetteIntensity,
-    float displayGamma,
-    Action<System::UInt64, String^>^ onFailure, Action<System::UInt64>^ onSuccess) {
+    cli::array<ExposureCompensationKeyManaged> ^ autoExposureCompensationCurve,
+    String ^ exposureMaskCookedRoot, String ^ exposureMaskDescriptorPath,
+    String ^ exposureMaskProjectMount, float bloomIntensity,
+    float bloomThreshold, float saturation, float contrast,
+    float vignetteIntensity, float displayGamma,
+    Action<System::UInt64, String ^> ^ onFailure,
+    Action<System::UInt64> ^ onSuccess)
+  {
     auto native_ctx = context_->NativePtr();
     if (!native_ctx || !native_ctx->engine) {
       throw gcnew System::InvalidOperationException(
@@ -881,6 +863,11 @@ namespace Oxygen::Interop::World {
         .cooked_root = std::filesystem::path(msclr::interop::marshal_as<std::wstring>(exposureMaskCookedRoot)),
         .descriptor_relative_path = std::filesystem::path(msclr::interop::marshal_as<std::wstring>(exposureMaskDescriptorPath)),
       };
+      if (exposureMaskProjectMount != nullptr) {
+        post_process.auto_exposure_metering_mask_mount
+          = msclr::interop::marshal_as<std::wstring>(
+            exposureMaskProjectMount->ToUpperInvariant());
+      }
     }
     post_process.bloom_intensity = bloomIntensity;
     post_process.bloom_threshold = bloomThreshold;
@@ -1188,34 +1175,36 @@ namespace Oxygen::Interop::World {
     // TODO: implement selection state handling (editor-side)
   }
 
-  void OxygenWorld::AddLooseCookedRoot(String^ path) {
+  Task
+    ^ OxygenWorld::ReplaceCookedRootsAsync(
+      array<CookedRootBindingManaged> ^ bindings)
+  {
+    if (bindings == nullptr) {
+      throw gcnew System::ArgumentNullException("bindings");
+    }
     auto native_ctx = context_->NativePtr();
-    if (!native_ctx || !native_ctx->engine)
-      return;
-
-    auto editor_module = native_ctx->engine->GetModule<EditorModule>();
-    if (!editor_module)
-      return;
-
-    msclr::interop::marshal_context marshal;
-    auto native_path = marshal.marshal_as<std::string>(path);
-    editor_module->get().AddLooseCookedRoot(native_path);
-  }
-
-  Task^ OxygenWorld::ReplaceCookedRootsAsync(array<String^>^ paths) {
-    if (paths == nullptr)
-      throw gcnew System::ArgumentNullException("paths");
-    auto native_ctx = context_->NativePtr();
-    if (!native_ctx || !native_ctx->engine)
+    if (!native_ctx || !native_ctx->engine) {
       throw gcnew System::InvalidOperationException("The native runtime is unavailable.");
+    }
     auto editor_module = native_ctx->engine->GetModule<EditorModule>();
-    if (!editor_module)
+    if (!editor_module) {
       throw gcnew System::InvalidOperationException("The editor module is unavailable.");
-    std::vector<std::string> roots;
-    roots.reserve(static_cast<std::size_t>(paths->Length));
-    msclr::interop::marshal_context marshal;
-    for each (String^ path in paths) {
-      roots.push_back(marshal.marshal_as<std::string>(path));
+    }
+    std::vector<oxygen::interop::module::CookedRootBinding> roots;
+    roots.reserve(static_cast<std::size_t>(bindings->Length));
+    for each (CookedRootBindingManaged binding in bindings) {
+      if (String::IsNullOrWhiteSpace(binding.Path)) {
+        throw gcnew System::ArgumentException(
+          "A cooked root needs an absolute path.", "bindings");
+      }
+      roots.push_back({
+        .path = std::filesystem::path(
+          msclr::interop::marshal_as<std::wstring>(binding.Path)),
+        .project_mount = binding.ProjectMount == nullptr
+          ? std::nullopt
+          : std::optional(msclr::interop::marshal_as<std::wstring>(
+              binding.ProjectMount->ToUpperInvariant())),
+      });
     }
     auto completion = gcnew TaskCompletionSource<bool>(TaskCreationOptions::RunContinuationsAsynchronously);
     editor_module->get().ReplaceCookedRoots(std::move(roots),
@@ -1234,18 +1223,6 @@ namespace Oxygen::Interop::World {
     editor_module->get().SetCookedContentPaused(paused,
       MakeCookedRootsCallback(completion));
     return completion->Task;
-  }
-
-  void OxygenWorld::ClearCookedRoots() {
-    auto native_ctx = context_->NativePtr();
-    if (!native_ctx || !native_ctx->engine)
-      return;
-
-    auto editor_module = native_ctx->engine->GetModule<EditorModule>();
-    if (!editor_module)
-      return;
-
-    editor_module->get().ClearCookedRoots();
   }
 
 } // namespace Oxygen::Interop::World

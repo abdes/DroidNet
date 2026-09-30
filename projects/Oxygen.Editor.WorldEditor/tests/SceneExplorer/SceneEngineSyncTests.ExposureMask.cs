@@ -41,6 +41,8 @@ public sealed partial class SceneEngineSyncTests
         _ = publisher.Setup(value => value.Publish(It.IsAny<OperationResult>())).Callback<OperationResult>(results.Add);
         using var sut = new SceneEngineSync(engine.Object, operationResults: publisher.Object);
         var projectRoot = Path.Combine(Path.GetTempPath(), "Mask project");
+        var generation = Path.Combine(projectRoot, ".cooked", "generations", Guid.NewGuid().ToString("N"));
+        _ = engine.SetupGet(value => value.ContentStatus).Returns(new RuntimeContentSnapshot(Guid.NewGuid(), 1, RuntimeContentState.Mounted, [new(generation, mount)]));
         var project = new Project(new ProjectInfo("Mask project", Category.Games, projectRoot, "preview.png")) { Name = "Mask project" };
         var scene = new Scene(project) { Name = "Masked scene" };
         var mask = new Uri($"asset:///{mount}/Textures/Meter.otex.json");
@@ -51,7 +53,7 @@ public sealed partial class SceneEngineSyncTests
 
         var request = requests.Should().ContainSingle(value => value.Command is RuntimeSetEnvironment).Subject;
         var environment = (RuntimeSetEnvironment)request.Command;
-        _ = environment.AutoExposureMeteringMask.Should().Be(new RuntimeTextureReference(mask, Path.Combine(projectRoot, ".cooked", mount), "Textures/Meter.otex"));
+        _ = environment.AutoExposureMeteringMask.Should().Be(new RuntimeTextureReference(mask, generation, "Textures/Meter.otex") { ProjectMount = mount });
         var failure = new RuntimeAssetLoadFailedEventArgs(request, 71, "Texture could not be loaded");
         commands.Raise(value => value.AssetLoadFailed += null, failure);
         current = false;

@@ -7,7 +7,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.Inspection;
-using Oxygen.Editor.Projects;
+using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Managed.Core.Compatibility;
 
 namespace Oxygen.Editor.ContentPipeline.Incremental;
@@ -17,12 +17,18 @@ internal static class CookIncrementalPlanner
 {
     /// <summary>Verifies published roots before input capture or reuse planning.</summary>
     public static async Task<ImmutableDictionary<string, CookedInventoryReport>> ReadInventoriesAsync(
-        ProjectContext project, IEnumerable<string> mounts, IEngineContentPipelineApi native, CancellationToken cancellationToken, NativeArtifactLease? artifacts = null)
+        CookPublicationReadLease publication, IEnumerable<string> mounts, IEngineContentPipelineApi native, CancellationToken cancellationToken, NativeArtifactLease? artifacts = null)
     {
         var inventories = ImmutableDictionary.CreateBuilder<string, CookedInventoryReport>(StringComparer.Ordinal);
         foreach (var mount in mounts.Distinct(StringComparer.Ordinal))
         {
-            var inventory = await ReadRootAsync(project.ProjectRoot, mount, native, cancellationToken, artifacts).ConfigureAwait(false);
+            if (publication.UnavailableRoots.Any(root => root.Name == mount)
+                || publication.FindProjectRoot(mount) is not { } path)
+            {
+                continue;
+            }
+
+            var inventory = await ReadRootAsync(path, native, cancellationToken, artifacts).ConfigureAwait(false);
             if (inventory is not null)
             {
                 inventories.Add(mount, inventory);
@@ -81,24 +87,6 @@ internal static class CookIncrementalPlanner
     /// <returns>The deterministic fingerprint.</returns>
     public static string GeneratedFingerprint(Uri source, string producer) => Hash(new { Version = 1, Source = source.AbsoluteUri, Producer = producer });
 
-    /// <summary>Resolves a cache path only within the declared cooked root.</summary>
-    /// <param name="projectRoot">The project directory.</param>
-    /// <param name="mount">The physical output mount.</param>
-    /// <param name="relative">The root-relative file path.</param>
-    /// <returns>The contained absolute path.</returns>
-    public static string ResolveOutputPath(string projectRoot, string mount, string relative)
-    {
-        if (string.IsNullOrWhiteSpace(mount) || mount is "." or ".." || mount.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
-        {
-            throw new InvalidDataException("Cook provenance contains an invalid mount name.");
-        }
-
-        var root = Path.GetFullPath(ContentPipelinePaths.GetCookedMountRoot(projectRoot, mount));
-        var path = Path.GetFullPath(Path.Combine(root, relative));
-        return path.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
-            ? path : throw new InvalidDataException("Cook provenance contains a file outside its output root.");
-    }
-
     internal static string Fingerprint(ContentCookInput input, string producer, IReadOnlyList<CookSnapshotInput> inputs, CookDependencyGraph graph)
     {
         var files = inputs.ToDictionary(static file => file.RelativePath, StringComparer.Ordinal);
@@ -121,11 +109,11 @@ internal static class CookIncrementalPlanner
 
     private static string Hash<T>(T value) => Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(value)));
 
-    private static async Task<CookedInventoryReport?> ReadRootAsync(string projectRoot, string mount, IEngineContentPipelineApi native, CancellationToken cancellationToken, NativeArtifactLease? artifacts)
+    private static async Task<CookedInventoryReport?> ReadRootAsync(string path, IEngineContentPipelineApi native, CancellationToken cancellationToken, NativeArtifactLease? artifacts)
     {
         try
         {
-            var lease = await CookOutputReadLease.AcquireAsync(ContentPipelinePaths.GetCookedMountRoot(projectRoot, mount), cancellationToken).ConfigureAwait(false);
+            var lease = await CookOutputReadLease.AcquireAsync(path, cancellationToken).ConfigureAwait(false);
             await using var lifetime = lease.ConfigureAwait(false);
             return lease.HasIndex ? await lease.ReadInventoryAsync(native, cancellationToken, artifacts).ConfigureAwait(false) : null;
         }

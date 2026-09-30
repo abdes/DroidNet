@@ -28,13 +28,14 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
             throw new InvalidOperationException("One content import manifest cannot span multiple authoring mounts.");
         }
 
+        var output = scope.Output ?? throw new InvalidOperationException("A manifest requires an owned candidate generation.");
         var jobs = CreateDependencyJobs(scope, scope.Inputs);
 
         return new ContentImportManifest(
             Version: 1,
-            Output: scope.StagingOutputRoot ?? ContentPipelinePaths.GetCookedMountRoot(scope.Project.ProjectRoot, mountName),
+            Output: output.Path,
             Layout: new ContentImportLayout(ContentPipelinePaths.GetVirtualMountRoot(mountName)),
-            Jobs: jobs);
+            Jobs: jobs) { SourceKey = output.SourceKey };
     }
 
     /// <inheritdoc />
@@ -57,6 +58,7 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
         }
 
         var mountName = GetSingleMountName(scope);
+        var output = scope.Output ?? throw new InvalidOperationException("A manifest requires an owned candidate generation.");
         var inputs = sceneDescriptors.SelectMany(static descriptor => descriptor.Dependencies)
             .Concat(scope.Inputs.Where(static input => input.Kind != ContentCookAssetKind.Scene))
             .DistinctBy(static input => input.SourceRelativePath, StringComparer.Ordinal).ToArray();
@@ -82,9 +84,9 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
 
         return new ContentImportManifest(
             Version: 1,
-            Output: scope.StagingOutputRoot ?? ContentPipelinePaths.GetCookedMountRoot(scope.Project.ProjectRoot, mountName),
+            Output: output.Path,
             Layout: new ContentImportLayout(ContentPipelinePaths.GetVirtualMountRoot(mountName)),
-            Jobs: jobs);
+            Jobs: jobs) { SourceKey = output.SourceKey };
     }
 
     private static List<ContentImportJob> CreateDependencyJobs(ContentCookScope scope, IReadOnlyList<ContentCookInput> inputs)

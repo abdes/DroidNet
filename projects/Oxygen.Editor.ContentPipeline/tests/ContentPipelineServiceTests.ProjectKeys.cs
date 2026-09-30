@@ -47,7 +47,7 @@ public sealed partial class ContentPipelineServiceTests
         _ = index.IsPending.Should().BeFalse();
         _ = index.Resolve(key).Should().BeNull();
         _ = runner.Count.Should().Be(2);
-        _ = Directory.EnumerateFiles(Path.Combine(workspace.Root, ".cooked"), "*", SearchOption.AllDirectories).Should().BeEmpty();
+        _ = File.Exists(Publication.CookPublicationPaths.Head(workspace.Root)).Should().BeFalse();
     }
 
     /// <summary>Malformed and semantically mismatched cached maps cannot prove a candidate's identity.</summary>

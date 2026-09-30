@@ -48,7 +48,7 @@ public sealed partial class InspectorControlTests
                 _ = view.IsValid.Should().BeTrue();
                 await ObserveRenderedFramesAsync(fixture, timeout.Token).ConfigureAwait(true);
                 await fixture.SuspendCookedContentAsync().WaitAsync(timeout.Token).ConfigureAwait(true);
-                await fixture.RefreshCookedRootsAsync().WaitAsync(timeout.Token).ConfigureAwait(true);
+                await fixture.RefreshCookedRootsAsync(mountPublished: false).WaitAsync(timeout.Token).ConfigureAwait(true);
                 await ObserveRenderedFramesAsync(fixture, timeout.Token).ConfigureAwait(true);
             }
             finally

@@ -34,8 +34,8 @@ public sealed partial class ContentPipelineServiceTests
         var materialProducer = CreateService(materials, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
         var imported = await materialProducer.CookAssetAsync(new("asset:///" + material), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = imported.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, imported.Diagnostics.Select(static issue => issue.TechnicalMessage ?? issue.Message)));
-        var materialRoot = Path.Combine(materials.Root, ".cooked/Art");
-        meshes.ContextService.Activate(meshes.ProjectContext with { LocalFolderMounts = [new("Materials", materialRoot)] });
+        var materialRoot = await materials.ExportRootAsync("Art", this.TestContext.CancellationToken).ConfigureAwait(false);
+        meshes.Activate(meshes.ProjectContext with { LocalFolderMounts = [new("Materials", materialRoot)] });
         WriteAuthoredGeometry(meshes, withBuffer: false);
         var descriptor = JsonNode.Parse(meshes.ReadText("Content/Geometry/AuthoredCube.ogeo.json"))!;
         descriptor["lods"]![0]!["submeshes"]![0]!["material_ref"] = "/Art/Materials/Shared.omat";
@@ -43,9 +43,9 @@ public sealed partial class ContentPipelineServiceTests
         var producer = CreateService(meshes, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
         var geometry = await producer.CookAssetAsync(new("asset:///Content/Geometry/AuthoredCube.ogeo.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = geometry.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, geometry.Diagnostics.Select(static issue => issue.TechnicalMessage ?? issue.Message)));
-        consumer.ContextService.Activate(consumer.ProjectContext with
+        consumer.Activate(consumer.ProjectContext with
         {
-            LocalFolderMounts = [new("Materials", materialRoot), new("Meshes", Path.Combine(meshes.Root, ".cooked/Content"))],
+            LocalFolderMounts = [new("Materials", materialRoot), new("Meshes", meshes.CookedRoot("Content"))],
         });
         AddGeometryNode(consumer, new("asset:///Content/Geometry/AuthoredCube.ogeo"), "Library mesh");
         await consumer.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
@@ -84,6 +84,7 @@ public sealed partial class ContentPipelineServiceTests
         _ = (await service.CookFolderAsync(folder, this.TestContext.CancellationToken).ConfigureAwait(false)).IsPublished.Should().BeTrue();
         WriteMaterialRoughness(materials, "Art/Materials/Shared.omat.json", 0.2);
         _ = (await materialProducer.CookAssetAsync(new("asset:///Art/Materials/Shared.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false)).IsPublished.Should().BeTrue();
+        _ = await materials.ExportRootAsync("Art", this.TestContext.CancellationToken).ConfigureAwait(false);
         states = await service.ReadAsync(project, uris, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = states.Should().OnlyContain(state => state.Freshness == AssetCookFreshness.Current);
     }

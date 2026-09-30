@@ -4,6 +4,7 @@
 
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.ContentPipeline.Cooking;
+using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Projects;
 
 namespace Oxygen.Editor.ContentPipeline;
@@ -105,6 +106,7 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IC
 
         this.subscription.Dispose();
         _ = this.CancelLifetimeAsync(cancellation);
+        this.ReleaseRetryInputsIfClosed();
     }
 
     /// <inheritdoc />
@@ -129,6 +131,7 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IC
         }
 
         _ = this.CancelLifetimeAsync(previous);
+        this.ReleaseRetryInputsIfClosed();
         this.PropertyChanged?.Invoke(this, new(nameof(this.IsAutomaticCookingPaused)));
     }
 
@@ -150,6 +153,7 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IC
         IProgress<CookRunProgress>? progress = null;
         var acquired = false;
         var retained = false;
+        FileStream? operationOwnership = null;
         try
         {
             progress = request is null ? null : this.AddRun(operation, request, requestCancellation, shared);
@@ -167,6 +171,7 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IC
 
                 requestCancellation.Token.ThrowIfCancellationRequested();
                 this.VerifyCurrent(operation);
+                operationOwnership ??= CookOutputLease.AcquireOperation(operation.Project.ProjectRoot, operation.OperationId);
                 progress?.Report(new(Message: "Checking saved inputs and dependencies.", State: CookRunState.Preparing));
                 try
                 {
@@ -186,8 +191,9 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IC
         {
             retained = true;
             progress?.Report(new(Message: "Unable to stop owned work yet. Waiting for it to drain.", State: CookRunState.Cancelling));
-            this.ReleaseAfterDrain(operation, requestCancellation, ex);
-            throw;
+            var drain = this.ReleaseAfterDrain(operation, requestCancellation, operationOwnership, ex);
+            operationOwnership = null;
+            throw new ContentPipelineTerminationException(ex.InnerException ?? ex, drain);
         }
         catch (Exception ex)
         {
@@ -198,7 +204,14 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IC
         {
             if (!retained)
             {
-                this.CompleteRequest(acquired, requestCancellation);
+                try
+                {
+                    this.RetainRetryInputOrRelease(operation, operationOwnership);
+                }
+                finally
+                {
+                    this.CompleteRequest(acquired, requestCancellation);
+                }
             }
         }
     }
@@ -219,13 +232,26 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IC
         return this.CompleteRunAsync(operation, result, cancellationToken);
     }
 
-    private void ReleaseAfterDrain(ContentCookOperation operation, CancellationTokenSource cancellation, ContentPipelineTerminationException failure)
-        => _ = failure.DrainCompletion.ContinueWith(
+    private Task ReleaseAfterDrain(ContentCookOperation operation, CancellationTokenSource cancellation, FileStream? ownership, ContentPipelineTerminationException failure)
+        => failure.DrainCompletion.ContinueWith(
             completed =>
             {
                 _ = completed.Exception;
-                this.FailRun(operation.OperationId, failure);
-                this.CompleteRequest(acquired: true, cancellation);
+                try
+                {
+                    this.FailRun(operation.OperationId, failure);
+                }
+                finally
+                {
+                    try
+                    {
+                        this.RetainRetryInputOrRelease(operation, ownership);
+                    }
+                    finally
+                    {
+                        this.CompleteRequest(acquired: true, cancellation);
+                    }
+                }
             },
             CancellationToken.None,
             TaskContinuationOptions.ExecuteSynchronously,
@@ -265,6 +291,60 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IC
         {
             this.activeOperation = null;
             this.DispatchNextWriter();
+        }
+
+        this.ReleaseRetryInputsIfClosed();
+    }
+
+    private void RetainRetryInputOrRelease(ContentCookOperation operation, FileStream? ownership)
+    {
+        try
+        {
+            lock (this.stateLock)
+            {
+                if (!this.disposed && operation.ProjectLifetime == this.lifetime && ownership is not null
+                    && this.runs.TryGetValue(operation.OperationId, out var run)
+                    && run.Snapshot.State is CookRunState.Failed or CookRunState.Cancelled
+                    && run.Snapshot.Request.Import?.ReplacementCandidatePath is { } candidate
+                    && Path.GetFullPath(candidate).StartsWith(
+                        Path.GetFullPath(Path.Combine(operation.Project.ProjectRoot, ".build", "cook", operation.OperationId.ToString("N")))
+                        + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                {
+                    run.RetryOwnership = CookOutputLease.TryAcquireRetryInput(operation.Project.ProjectRoot, operation.OperationId)
+                        ?? throw new CookOutputBusyException("The retry input is already owned.");
+                }
+            }
+        }
+        finally
+        {
+            ownership?.Dispose();
+        }
+    }
+
+    private void ReleaseRetryInputsIfClosed()
+    {
+        List<FileStream> release = [];
+        lock (this.stateLock)
+        {
+            if (this.activeOperation is not null)
+            {
+                return;
+            }
+
+            foreach (var run in this.runs.Values)
+            {
+                if (run.RetryOwnership is { } ownership
+                    && (this.disposed || !ReferenceEquals(run.Snapshot.Request.OriginContext, this.project)))
+                {
+                    release.Add(ownership);
+                    run.RetryOwnership = null;
+                }
+            }
+        }
+
+        foreach (var ownership in release)
+        {
+            ownership.Dispose();
         }
     }
 

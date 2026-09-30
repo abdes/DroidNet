@@ -23,19 +23,20 @@ public sealed partial class CookPublicationTransactionTests
     public async Task ProducedSettingsCommitWithoutRewritingConsumedSnapshot()
     {
         using var project = new PublicationProject(hadPrevious: true);
-        using var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        await using var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         var update = await this.CreateSourceUpdateAsync(project, "Model").ConfigureAwait(false);
         var captured = Path.Combine(project.Root, ".build/cook", project.Operation.OperationId.ToString("N"), "inputs", update.RelativePath);
         _ = Directory.CreateDirectory(Path.GetDirectoryName(captured)!);
         await File.WriteAllBytesAsync(captured, update.Before, this.TestContext.CancellationToken).ConfigureAwait(false);
         var transaction = await project.PrepareAsync(staging, this.TestContext.CancellationToken, producedSourceFiles: [update]).ConfigureAwait(false);
-        await transaction.PublishAsync(null, static () => { }, this.TestContext.CancellationToken).ConfigureAwait(false);
+        using var accepted = await transaction.PublishAsync(null, project.Baseline, static () => { }, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = (await File.ReadAllBytesAsync(captured, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Equal(update.Before);
         _ = (await File.ReadAllBytesAsync(Path.Combine(project.Root, update.RelativePath), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Equal(update.After);
         await File.WriteAllTextAsync(Path.Combine(project.Root, update.RelativePath), "later authored change", this.TestContext.CancellationToken).ConfigureAwait(false);
         using var writer = await CookOutputLease.AcquireWriteAsync(project.Root, this.TestContext.CancellationToken).ConfigureAwait(false);
-        var loaded = await CookPublicationTransaction.LoadAsync(project.Context, project.Operation.OperationId, project.Files, writer, this.TestContext.CancellationToken).ConfigureAwait(false);
-        await loaded.VerifyCommittedAsync(writer).ConfigureAwait(false);
+        var loaded = await CookPublicationTransaction.LoadAsync(project.Context, project.Operation.OperationId, project.Files, project.Manager, writer, this.TestContext.CancellationToken).ConfigureAwait(false);
+        using var selection = await CookPublicationReadLease.OpenUnderGateAsync(project.Context, project.Files, writer, this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = selection.PublicationId.Should().Be(project.Operation.OperationId);
         project.AssertNew();
     }
 
@@ -45,7 +46,7 @@ public sealed partial class CookPublicationTransactionTests
     public async Task ProducedSettingsJoinExplicitBundleReplacement()
     {
         using var project = new PublicationProject(hadPrevious: true);
-        using var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        await using var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         var update = await this.CreateSourceUpdateAsync(project, "Model").ConfigureAwait(false);
         var published = Path.Combine(project.Root, SourceBundle);
         await File.WriteAllTextAsync(Path.Combine(published, "model.gltf"), "source", this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -53,7 +54,7 @@ public sealed partial class CookPublicationTransactionTests
         var before = await CookRootImage.CaptureAsync(published, captured, this.TestContext.CancellationToken).ConfigureAwait(false);
         var transaction = await project.PrepareAsync(staging, this.TestContext.CancellationToken,
             sourceReplacement: new("Model", before), producedSourceFiles: [update]).ConfigureAwait(false);
-        await transaction.PublishAsync(null, static () => { }, this.TestContext.CancellationToken).ConfigureAwait(false);
+        using var accepted = await transaction.PublishAsync(null, project.Baseline, static () => { }, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = (await File.ReadAllBytesAsync(Path.Combine(captured, "model.gltf.import.json"), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Equal(update.Before);
         _ = (await File.ReadAllBytesAsync(Path.Combine(published, "model.gltf.import.json"), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Equal(update.After);
         project.AssertNew();
@@ -65,12 +66,12 @@ public sealed partial class CookPublicationTransactionTests
     public async Task ProducedSettingsRejectAnExternalEditBeforeInstallation()
     {
         using var project = new PublicationProject(hadPrevious: true);
-        using var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        await using var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         var update = await this.CreateSourceUpdateAsync(project, "Model").ConfigureAwait(false);
         var transaction = await project.PrepareAsync(staging, this.TestContext.CancellationToken, producedSourceFiles: [update]).ConfigureAwait(false);
         var path = Path.Combine(project.Root, update.RelativePath);
         await File.WriteAllTextAsync(path, "external edit", this.TestContext.CancellationToken).ConfigureAwait(false);
-        Func<Task> publish = () => transaction.PublishAsync(null, static () => { }, this.TestContext.CancellationToken);
+        Func<Task> publish = () => transaction.PublishAsync(null, project.Baseline, static () => { }, this.TestContext.CancellationToken);
         _ = await publish.Should().ThrowAsync<DroidNet.Storage.StorageWriteConflictException>().ConfigureAwait(false);
         _ = (await File.ReadAllTextAsync(path, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Be("external edit");
         project.AssertOld();
@@ -88,7 +89,7 @@ public sealed partial class CookPublicationTransactionTests
     public async Task ProducedSettingsRollbackAcrossMultipleSources(bool persisted, bool projectOwned)
     {
         using var project = new PublicationProject(hadPrevious: true);
-        using var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        await using var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         var first = await this.CreateSourceUpdateAsync(project, "First", projectOwned).ConfigureAwait(false);
         var second = await this.CreateSourceUpdateAsync(project, "Second", projectOwned).ConfigureAwait(false);
         var replica = Directory.CreateTempSubdirectory("oxygen-source-metadata-recovery-");
@@ -106,7 +107,7 @@ public sealed partial class CookPublicationTransactionTests
                     throw new IOException("Injected source metadata interruption");
                 }
             }, producedSourceFiles: [first, second]).ConfigureAwait(false);
-            Func<Task> publish = () => transaction.PublishAsync(null, static () => { }, this.TestContext.CancellationToken);
+            Func<Task> publish = () => transaction.PublishAsync(null, project.Baseline, static () => { }, this.TestContext.CancellationToken);
             _ = await publish.Should().ThrowAsync<IOException>().ConfigureAwait(false);
             project.AssertOld();
             foreach (var update in new[] { first, second })
@@ -117,7 +118,7 @@ public sealed partial class CookPublicationTransactionTests
             if (persisted)
             {
                 using var writer = await CookOutputLease.AcquireWriteAsync(replica.FullName, this.TestContext.CancellationToken).ConfigureAwait(false);
-                var loaded = await CookPublicationTransaction.LoadAsync(project.Context with { ProjectRoot = replica.FullName }, project.Operation.OperationId, project.Files, writer, this.TestContext.CancellationToken).ConfigureAwait(false);
+                var loaded = await CookPublicationTransaction.LoadAsync(project.Context with { ProjectRoot = replica.FullName }, project.Operation.OperationId, project.Files, project.Manager, writer, this.TestContext.CancellationToken).ConfigureAwait(false);
                 await loaded.RecoverAsync(writer).ConfigureAwait(false);
                 foreach (var update in new[] { first, second })
                 {
@@ -160,10 +161,9 @@ public sealed partial class CookPublicationTransactionTests
         var rootPath = Path.Combine(project.Root, ".cooked", "Content");
         Oxygen.Testing.NativeInventoryFixture.WriteIndex(rootPath, [new(output.VirtualPath, output.Kind) { DescriptorRelativePath = "Geometry/Model.ogeo" }]);
         var inventory = Oxygen.Testing.NativeInventoryFixture.Read(rootPath);
-        var native = Oxygen.Testing.NativeInventoryFixture.CreateApi();
         var root = new CookProvenance.Root("Content", inventory.SourceKey, inventory.IndexSha256);
-        var previous = new CookProvenance(CookProvenance.CurrentVersion, project.Context.ProjectId, [root], [product]);
-        var verified = await CookIncrementalPlanner.ReadInventoriesAsync(project.Context, ["Content"], native, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var previous = new CookProvenance(project.Context.ProjectId, [root], [product]);
+        var verified = ImmutableDictionary<string, Inspection.CookedInventoryReport>.Empty.Add("Content", inventory);
         var plan = CookIncrementalPlanner.CreatePlan(producer, accepted, graph, previous, verified);
         _ = plan.Reusable.Keys.Should().Contain(uri);
         _ = product.Fingerprint.Should().Be(beforeFingerprint).And.NotBe(reuseFingerprint);

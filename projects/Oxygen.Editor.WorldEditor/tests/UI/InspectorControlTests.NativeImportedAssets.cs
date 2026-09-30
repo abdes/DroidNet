@@ -43,11 +43,11 @@ public sealed partial class InspectorControlTests
         timeout.CancelAfter(TimeSpan.FromSeconds(120));
         using var services = new CatalogWorkloadServices(fixture);
         var imported = libraryOnly ? await CreateImportedLibraryAsync(fixture, services, format, timeout.Token).ConfigureAwait(true) : null;
-        using var catalog = new ProjectAssetCatalog(services.Projects, services.Storage, services.Builtins);
-        using var provider = new ContentBrowserAssetProvider(catalog, services.Projects, services.Scopes, new AssetIdentityReducer(), services.Pipeline, services.Documents, services.Runs, fixture.Runtime);
+        await using var catalog = new ProjectAssetCatalog(services.Projects, services.Storage, services.Builtins, services.Publication);
+        await using var provider = new ContentBrowserAssetProvider(catalog, services.Projects, services.Scopes, new AssetIdentityReducer(), services.Pipeline, services.Documents, services.Runs, fixture.Runtime);
         using var picker = new MaterialPickerService(provider);
         await fixture.InitializeAsync(timeout.Token).ConfigureAwait(true);
-        using var publication = fixture.RegisterWorkspacePublication(services, catalog);
+        using var previewRegistration = fixture.RegisterWorkspacePublication(services, catalog);
         if (imported is null)
         {
             imported = await ImportTypedModelAsync(fixture, services, format, timeout.Token).ConfigureAwait(true);
@@ -55,8 +55,10 @@ public sealed partial class InspectorControlTests
         }
         else
         {
-            var mounts = await services.Mounts.PrepareAsync(services.Projects.ActiveProject!, [], await CookOutputLease.AcquireReadAsync(fixture.ProjectRoot, timeout.Token).ConfigureAwait(true), timeout.Token).ConfigureAwait(true);
-            await fixture.Runtime.RefreshProjectCookedRootsAsync(mounts.Roots, mounts).ConfigureAwait(true);
+            using var publication = await services.Publication.AcquireForMountAsync(services.Projects.ActiveProject!, timeout.Token).ConfigureAwait(true);
+            var bindings = publication.Roots.Zip(publication.RootPaths, static (root, path) => new Oxygen.Editor.Runtime.Engine.RuntimeCookedRoot(path, root.Owner == CookPublicationRootOwner.Project ? root.Name : null)).ToArray();
+            var mounts = await services.Mounts.PrepareAsync(services.Projects.ActiveProject!, publication, timeout.Token).ConfigureAwait(true);
+            await fixture.Runtime.RefreshProjectCookedRootsAsync(bindings, mounts).ConfigureAwait(true);
         }
 
         var geometry = imported.CookedAssets.Single(static asset => asset.Kind == ContentCookAssetKind.Geometry);
@@ -67,7 +69,15 @@ public sealed partial class InspectorControlTests
         AssertImportedAssetInformation(materialRow!, libraryOnly);
         using var demand = fixture.CreateImportedAssetDemand(services, provider);
         using var host = fixture.CreateInspectorHost([fixture.Source.RootNodes[0]], provider, picker, services.Builtins, demand);
-        var view = new GeometryView { ViewModel = host.PropertyEditors.OfType<GeometryViewModel>().Single() };
+        var model = host.PropertyEditors.OfType<GeometryViewModel>().Single();
+        await model.RefreshMaterialSlotsAsync().ConfigureAwait(true);
+        while (model.IsMaterialSlotLoading)
+        {
+            await Task.Delay(10, timeout.Token).ConfigureAwait(true);
+        }
+
+        _ = model.CanEditMaterialSlot.Should().BeTrue("the current native slot must be editable: " + model.MaterialSlotNotice);
+        var view = new GeometryView { ViewModel = model };
         var scroller = new ScrollViewer { Content = view, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Width = 480, Height = 560 };
         await LoadTestContentAsync(scroller).ConfigureAwait(true);
         try
@@ -75,7 +85,8 @@ public sealed partial class InspectorControlTests
             var cookCount = services.Runs.Runs.Count;
             await CheckImportedAssetControlsAsync(fixture, scroller, geometryRow!, materialRow!, timeout.Token).ConfigureAwait(true);
             _ = services.Runs.Runs.Should().HaveCount(cookCount, "using verified mounted outputs must not start another cook");
-            _ = (await services.Pipeline.CookCurrentSceneAsync(new("asset:///Content/Scenes/" + Uri.EscapeDataString(fixture.Source.Name) + ".oscene.json"), timeout.Token).ConfigureAwait(true)).IsPublished.Should().BeTrue();
+            var sceneCook = await services.Pipeline.CookCurrentSceneAsync(new("asset:///Content/Scenes/" + Uri.EscapeDataString(fixture.Source.Name) + ".oscene.json"), timeout.Token).ConfigureAwait(true);
+            _ = sceneCook.IsPublished.Should().BeTrue(DescribeWorkloadCook(sceneCook));
         }
         finally
         {
@@ -106,32 +117,41 @@ public sealed partial class InspectorControlTests
     private static async Task CheckImportedAssetControlsAsync(NativeSceneFixture fixture, ScrollViewer scroller, ContentBrowserAssetItem geometry, ContentBrowserAssetItem material, CancellationToken cancellationToken)
     {
         var view = (GeometryView)scroller.Content;
+        var model = view.ViewModel ?? throw new InvalidOperationException("The geometry inspector must be bound.");
         var node = fixture.Source.RootNodes[0];
         var original = await AssertGeometryAsync(fixture, node.Id, "Cube", cancellationToken).ConfigureAwait(true);
-        var materialButton = (SplitButton)await FindInspectorControlAsync(scroller, () => view.FindDescendant<SplitButton>(button => string.Equals(button.Name, "MaterialSplitButton", StringComparison.Ordinal)), "Material", cancellationToken).ConfigureAwait(true);
-        await DismissImportedAssetPickerAsync(materialButton, cancellationToken).ConfigureAwait(true);
-        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
-        await PickAssetAsync(materialButton, material.DisplayName, material: true, cancellationToken).ConfigureAwait(true);
-        var assigned = await WaitForNodeAsync(fixture, node.Id, value => value.MaterialBaseColors.Length == 1 && Vector4.Distance(value.MaterialBaseColors[0], new(0.8f, 0.2f, 0.1f, 1)) < 0.001f, cancellationToken).ConfigureAwait(true);
-        _ = assigned.MaterialKeys.Should().ContainSingle().Which.Should().Be(ImportedNativeKey(material));
         var geometryButton = (SplitButton)await FindInspectorControlAsync(scroller, () => view.FindDescendant<SplitButton>(button => string.Equals(button.Name, "AssetSplitButton", StringComparison.Ordinal)), "Geometry", cancellationToken).ConfigureAwait(true);
         await DismissImportedAssetPickerAsync(geometryButton, cancellationToken).ConfigureAwait(true);
-        _ = fixture.Context.History.UndoStack.Should().ContainSingle();
+        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
         await PickAssetAsync(geometryButton, geometry.DisplayName, material: false, cancellationToken).ConfigureAwait(true);
         var selected = await WaitForNodeAsync(fixture, node.Id, static value => value.IndexCount == 3, cancellationToken).ConfigureAwait(true);
         _ = selected.GeometryKey.Should().Be(ImportedNativeKey(geometry));
-        _ = fixture.Context.History.UndoStack.Should().HaveCount(2);
-        _ = selected.MaterialKeys.Should().Equal(assigned.MaterialKeys);
-        _ = node.Components.OfType<GeometryComponent>().Single().Geometry!.Uri.Should().Be(geometry.IdentityUri);
+        _ = fixture.Context.History.UndoStack.Should().ContainSingle();
+        await model.RefreshMaterialSlotsAsync().ConfigureAwait(true);
+        while (model.IsMaterialSlotLoading)
+        {
+            await Task.Delay(10, cancellationToken).ConfigureAwait(true);
+        }
+
+        _ = model.CanEditMaterialSlot.Should().BeTrue(model.MaterialSlotNotice);
+        var materialButton = (SplitButton)await FindInspectorControlAsync(scroller, () => view.FindDescendant<SplitButton>(button => string.Equals(button.Name, "MaterialSplitButton", StringComparison.Ordinal)), "Material", cancellationToken).ConfigureAwait(true);
+        await DismissImportedAssetPickerAsync(materialButton, cancellationToken).ConfigureAwait(true);
+        _ = fixture.Context.History.UndoStack.Should().ContainSingle();
+        await PickAssetAsync(materialButton, material.DisplayName, material: true, cancellationToken).ConfigureAwait(true);
+        _ = fixture.Context.History.UndoStack.Should().HaveCount(2, "the enabled picker must apply an authored material edit");
         _ = ReadMaterialUri(node).Should().Be(material.IdentityUri);
+        var assigned = await WaitForNodeAsync(fixture, node.Id, value => value.MaterialBaseColors.Length == 1 && Vector4.Distance(value.MaterialBaseColors[0], new(0.8f, 0.2f, 0.1f, 1)) < 0.001f, cancellationToken).ConfigureAwait(true);
+        _ = assigned.MaterialKeys.Should().ContainSingle().Which.Should().Be(ImportedNativeKey(material));
+        _ = node.Components.OfType<GeometryComponent>().Single().Geometry!.Uri.Should().Be(geometry.IdentityUri);
+        await fixture.Context.History.UndoAsync(cancellationToken).ConfigureAwait(true);
+        _ = node.Components.OfType<GeometryComponent>().Single().OverrideSlots.Should().BeEmpty();
         await fixture.Context.History.UndoAsync(cancellationToken).ConfigureAwait(true);
         _ = await WaitForNodeAsync(fixture, node.Id, value => string.Equals(value.GeometryKey, original.GeometryKey, StringComparison.Ordinal), cancellationToken).ConfigureAwait(true);
-        await fixture.Context.History.UndoAsync(cancellationToken).ConfigureAwait(true);
         await AssertMaterialAsync(fixture, node.Id, original.MaterialKeys.Single(), cancellationToken).ConfigureAwait(true);
         await fixture.Context.History.RedoAsync(cancellationToken).ConfigureAwait(true);
-        await AssertMaterialAsync(fixture, node.Id, assigned.MaterialKeys.Single(), cancellationToken).ConfigureAwait(true);
+        _ = await WaitForNodeAsync(fixture, node.Id, static value => value.IndexCount == 3, cancellationToken).ConfigureAwait(true);
         await fixture.Context.History.RedoAsync(cancellationToken).ConfigureAwait(true);
-        _ = await WaitForNodeAsync(fixture, node.Id, value => string.Equals(value.GeometryKey, selected.GeometryKey, StringComparison.Ordinal), cancellationToken).ConfigureAwait(true);
+        await AssertMaterialAsync(fixture, node.Id, assigned.MaterialKeys.Single(), cancellationToken).ConfigureAwait(true);
         await fixture.SaveAndReopenAsync(cancellationToken).ConfigureAwait(true);
         var reopened = await WaitForNodeAsync(fixture, node.Id, value => string.Equals(value.GeometryKey, selected.GeometryKey, StringComparison.Ordinal), cancellationToken).ConfigureAwait(true);
         _ = reopened.MaterialKeys.Should().Equal(assigned.MaterialKeys);

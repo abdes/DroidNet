@@ -44,7 +44,7 @@ editor-only JSON schemas for runtime content.
 - `ARCHITECTURE.md`: game project files, content pipeline subsystem, project
   policy, runtime/content boundaries.
 - `project-layout-and-templates.md`: canonical `Content/...` layout and
-  `.cooked/<Mount>/container.index.bin` output rules.
+  generation-root output and atomic publication rules in section 16.
 - `project-services.md`: active project context, authoring mounts, local
   mounts, and `ProjectCookScope`.
 - `asset-primitives.md`: reusable asset identity/catalog/import/cook
@@ -57,7 +57,7 @@ editor-only JSON schemas for runtime content.
 
 `ContentPipelineService` coordinates scene/asset/folder/project work through
 saved snapshots, native ImportTool execution, Inspector validation, provenance
-and journaled fixed-root publication. `MaterialCookService` delegates to that
+and journaled immutable-generation publication. `MaterialCookService` delegates to that
 same service. Managed source readers/writers and catalog projections remain
 reusable; they are not alternative native-format cook/publication paths.
 
@@ -93,9 +93,9 @@ engine-owned descriptor schema through a typed managed model:
 Content/Scenes/Main.oscene.json        # authored scene
 Content/Materials/Red.omat.json        # canonical engine-schema material source
 Content/Geometry/Cube.ogeo.json        # canonical geometry source when authored
-.cooked/Content/Scenes/Main.oscene     # derived runtime output
-.cooked/Content/Materials/Red.omat
-.cooked/Content/container.index.bin
+.cooked/generations/<SourceKey>/Scenes/Main.oscene     # derived runtime output
+.cooked/generations/<SourceKey>/Materials/Red.omat
+.cooked/generations/<SourceKey>/container.index.bin
 ```
 
 Derived descriptors/manifests never replace authored URI identities. Save owns
@@ -297,13 +297,13 @@ snake_case schema shape.
 Mount layout rules:
 
 - Each authored mount cooks to its own physical loose root:
-  `<ProjectRoot>/.cooked/<MountName>`.
+  `<ProjectRoot>/.cooked/generations/<SourceKey>`, selected by the project head.
 - The manifest `output` is that physical loose root.
 - The manifest `layout.virtual_mount_root` is `/<MountName>`.
 - Native descriptor references and cooked-index virtual paths use the same
   `/<MountName>/...` prefix.
 - Example for the built-in content mount:
-  - `output = <ProjectRoot>/.cooked/Content`
+  - `output = <ProjectRoot>/.cooked/generations/<SourceKey>`
   - `layout.virtual_mount_root = /Content`
   - material descriptor URI `asset:///Content/Materials/Red.omat.json`
     becomes native path `/Content/Materials/Red.omat`
@@ -426,7 +426,7 @@ Illustrative result summary:
 Cook Current Scene: Main
 Generated descriptor: Content/Scenes/Main.oscene.json -> .pipeline/...
 Cooked: 1 scene, 1 material, 1 geometry
-Validated: .cooked/Content/container.index.bin
+Validated: .cooked/generations/<SourceKey>/container.index.bin
 Mounted: Content
 ```
 
@@ -448,8 +448,8 @@ Derived artifacts:
 - native scene descriptors generated from editor scenes.
 - generated procedural geometry descriptors.
 - import manifests.
-- `.cooked/<Mount>/...` runtime output.
-- `.cooked/<Mount>/container.index.bin`.
+- `.cooked/generations/<SourceKey>/` runtime containers.
+- `.cooked/publications/<OperationId>.json` and the atomic `.cooked/head.json`.
 - optional inspect reports.
 
 Derived artifacts must not be used as authored identity in scene files,
@@ -542,7 +542,7 @@ The following production paths require regression coverage:
    inputs or fail with visible diagnostics.
 3. cooking the current scene cooks its referenced V0.1 material and geometry
    dependencies or reports which dependency blocked the cook.
-4. cooked output contains `.cooked/Content/container.index.bin` and cooked
+4. cooked output contains `.cooked/generations/<SourceKey>/container.index.bin` and cooked
    `.oscene`, `.omat`, and required `.ogeo` entries for the test scene.
 5. inspect output shows asset entries and file entries for the cooked root.
 6. validation runs before runtime mount refresh; failed validation blocks mount
@@ -557,7 +557,7 @@ The following production paths require regression coverage:
     refresh messages.
 11. URI normalization tests prove `.omat.json`/`.ogeo.json` authored asset URIs
     become native `.omat`/`.ogeo` descriptor paths and reject invalid inputs.
-12. manifest layout tests prove `.cooked/Content` uses virtual root `/Content`
+12. manifest layout tests prove the selected Content generation uses virtual root `/Content`
     and cooked-index virtual paths round-trip to `asset:///Content/...`.
 13. scene descriptor name tests prove display/file names with spaces normalize
     to native schema identifiers without changing authored display names.
@@ -581,10 +581,10 @@ current field tables define the supported surface.
 
 ## 16. Saved Inputs And Publication Transaction
 
-Fixed published paths remain `.cooked/<Mount>/container.index.bin` and
-companions. Every producer uses this transaction. Development qualification
-consumes its publication/provenance/read leases through an opt-in adapter; it
-does not add a second writer or shipping qualification workflow.
+One immutable publication document owns the accepted root order, native index
+identities, products and consumed-input evidence. `.cooked/head.json` atomically
+selects its ID and digest. All producers use this transaction; development
+qualification borrows its normal publication and read APIs.
 
 ### Input Capture And Serialization
 
@@ -632,9 +632,11 @@ production API.
 
 ### Staging And Validation
 
-- Write native output to `.build/cook/<OperationId>/output/<Mount>` on the same
-  volume as the published root. The manifest's physical output is staging;
-  virtual paths remain `/<Mount>/...` and authoring URIs remain unchanged.
+- Reserve fresh native SourceKeys in the operation journal before creating
+  `.cooked/generations/<SourceKey>` candidates. Cook directly at those final paths;
+  virtual paths remain `/<Mount>/...`. Source snapshots and backups stay in `.build`.
+  Exclude `.generation.lock` when seeding; seal only after the final native writer.
+  Retain the final write-denying validation opening through sealing and publication.
 - For a partial asset/folder cook, seed staging from the previous published
   root and replace the selected assets and dependencies. Preserve unrelated
   entries. Track generated subassets so reimport removes superseded outputs
@@ -648,52 +650,48 @@ production API.
 
 ### Publication And Rollback
 
-1. Record the complete affected-root set and prior publication metadata in a
-   durable transaction journal at `.build/cook/<OperationId>/publication.json`.
-   Use explicit states Prepared, OldRetained, RootsInstalled, RuntimeReady,
-   Committed, and RolledBack. Each filesystem step is recoverable from the journal.
-   The journal retains prior and proposed bytes for both `.cooked/publication.json`
-   and `.build/cook/provenance.json`, so a failed generation cannot leave its
-   product cache ahead of the restored roots. Recovery resolves mount names within
-   the owning project rather than trusting paths stored in the journal.
-2. Announce `Publishing cooked content` and suspend preview at a runtime boundary.
-   The runtime drains requests/reads using affected roots and releases conflicting
-   file handles. UI and authoring remain responsive. An external content
-   reader holds a project-output lease; publication waits for its release or reports
-   busy, without terminating another process or writing through its lease.
-   A registration gate and OS-held reader markers under `.build/cook/readers`
-   coordinate processes. The publisher holds the gate through replacement and
-   registers the resumed runtime's reader before releasing it. A marker is
-   reclaimable only after its file can be opened exclusively; a recorded PID or
-   an exit signal alone does not establish released file ownership.
-   Asynchronous readers and publishers wait cancellably for the registration
-   gate using non-throwing contention checks. Finite staging and metadata reads
-   register inspection markers; persistent native readers remain distinct.
-   Verification reuses its caller's lease throughout nested journal, metadata
-   and root reads, so a waiting publisher cannot deadlock a finishing inspection.
-3. Retain previous roots under the same operation's `previous/<Mount>` directory,
-   then install validated staging roots at the fixed `.cooked/<Mount>` locations.
-   Same-volume directory renames and a journal protect replacement; all affected
-   roots form one logical transaction. A partial swap cannot become published.
-4. Mount the complete validated root set through the normal runtime service.
-   Resynchronize the current active authoring scene, with its current document
-   lifetime and revision. Retain pending/newer edits and show their stale-material
-   state where their source is newer than the captured cook.
-5. Atomically publish `.cooked/publication.json`: operation ID, project identity,
-   input revisions/hashes, schema/build fingerprint, output/index hashes, root
-   set, and completion time. Refresh catalog rows from that publication and
-   resume preview; only then report full publication success. With no live
-   runtime, record validated disk publication and `NotMounted`, never `Mounted`.
-6. If replacement/remount fails, restore all prior roots and metadata, remount
-   the prior validated set, and resume. Report publication failure independently
-   from successful staging/cook. If restoration/remount also fails, retain the
-   journal and backups and leave preview visibly unavailable; never report the
-   new set current or destroy the last recoverable validated output.
-7. Recovery runs before new cook or runtime mount on project reopen. An
-   uncommitted journal restores the prior complete root set. A committed journal
-   verifies the published set before mounting. Missing/invalid recovery material
-   produces a blocking pipeline diagnostic with preserved files. Cleanup removes
-   only operation-owned staging/backups after commit/rollback and released leases.
+1. Write `.cooked/publications/<OperationId>.json` with one ordered binding table:
+   owned logical mounts name SourceKey generations; external libraries name absolute
+   paths and observed index identities. Products reference logical mounts. Preserve
+   the last cook's consumed inputs during mount-only changes so changed dependencies
+   remain stale. `Project.oxy` is authored intent, updated through project-manager CAS.
+2. Prepare and validate the complete native mount set before the selection gate.
+   Capture one publication lease for mounting, catalog refresh and readers. Fixed
+   catalogs verify the bound index digest and never watch/reload that index in place.
+   Passive status/catalog reads cannot publish or cook.
+3. Under the selection gate, recover abandoned mutating journals using saved project
+   configuration, then check this operation's original head, configuration and source
+   baselines. Never silently rebase a cook. A live operation lock blocks recovery.
+4. Pause preview and drain pending I/O while retaining old mounts and generation
+   readers. The operation journal is `.build/cook/<OperationId>/publication.json`.
+   Persist `Applying` before any authored-source or head mutation. The
+   journal phases are `Building`, `Prepared`, `Applying`, `SourcesApplied`,
+   `HeadSelected`, `RuntimeReady`, `Committed` and `RolledBack`.
+5. Apply source changes, atomically select the candidate head, accept native mounts,
+   commit any confirmed `Project.oxy` change, resume preview and durably commit.
+   The gate covers this sequence and rollback. Loader and resolver switch before
+   retirement callbacks run; old objects retain their exact source bindings.
+6. Return the existing candidate lease, then refresh derived catalogs and notify
+   readers outside the gate. With no runtime, report disk publication and `NotMounted`.
+   Failure restores source/configuration/head state and the prior usable preview.
+   Failed restoration retains the journal and leaves preview unavailable.
+7. Recover before project validation/activation on reopen; re-read the manifest after
+   recovery. A recovery conflict blocks cooked admission while preserving valid
+   authoring access. Missing owned generation markers preserve provenance for repair
+   but forbid reuse and mounting. Rebuild fresh generations; never recreate a marker.
+
+After publication, maintenance reclaims unused generations automatically. It protects
+selected documents, active/recovery roots and native or managed reader leases, claims
+under the selection gate, and deletes payloads outside it. Delete the index first,
+payloads next and marker last; partial deletion retains the marker for retry. Nonempty
+markerless roots require proof they were never prepared for publication; otherwise
+retain them. An empty shell can be removed nonrecursively.
+
+Completed operation scratch needs both the operation and retry-input claims before
+deletion. Retry input does not block source/head recovery. Keep the reservation
+journal if an unsealed candidate cannot be deleted. Settled scratch is owned generated
+data: cleanup checks containment and reparse points without rehashing its payloads.
+Reverting authored sources recooks them; retained generations are not a history UI.
 
 Cancellation before publication drains the worker and ends as Cancelled without
 changing published output. Cancellation during publication is deferred until
@@ -845,7 +843,7 @@ not change the selected source.
 
 Cooked-library dependencies retain the selected source, native key/type and a
 fingerprint of its protected container files. These facts participate in consumer
-freshness and the publication receipt. Library inputs remain read-only and leased
+freshness and the selected publication document. Library inputs remain read-only and leased
 through native work, publication and failed-worker drain. Source priority is
 resolved from the saved project order for both cooking and preview; no library is
 copied into project authoring or claimed as a newly produced project asset.
@@ -1146,7 +1144,7 @@ reproducible output/cache directories must not change slot identities. The
 source/import-settings publication journal commits updated identity provenance
 with the produced geometry, never ahead of it.
 
-Captured inputs and the publication receipt retain the exact consumed bytes.
+Captured inputs and the selected publication document retain the exact consumed bytes.
 Returned native provenance is a produced source-file update with distinct before
 and after hashes. The existing publication journal installs ordinary sidecar
 updates through atomic compare-and-swap writes and restores them with cooked
@@ -1294,41 +1292,11 @@ Earlier evidence remains in [ED-M07B closeout](../validation/ED-M07B-closeout-au
 The canonical changes above require their own implementation and evidence in
 ED-M08; this LLD is a contract, not a completion report.
 
-## 23. Immutable publication and native analysis
+## 23. Native source analysis
 
-M08.1.8–M08.1.9 build on native identities, ownership and integrity inventory. [The milestone plan](../plan/ED-M08-runtime-parity-and-standalone-validation.md#m081-remaining-increments)
+M08.1.9 builds on the immutable publication contract in [section 16](#16-saved-inputs-and-publication-transaction).
+[The milestone plan](../plan/ED-M08-runtime-parity-and-standalone-validation.md#m081-remaining-increments)
 owns execution order and gates.
-
-Immutable project publication stores the ordered root set, native inventory
-identities, captured document/input identities, product provenance and produced
-source transitions in one immutable publication document. One atomic head selects
-its ID and digest; paths derive from those IDs. Keep the project writer, document
-ownership and authored-source CAS/recovery transaction. Validate the complete native
-mount set before changing precedence; old objects retain old generation leases.
-
-Publication seals candidate roots, checks head/source baselines, journals source
-transitions, applies source CAS, selects the new head, accepts preview and commits.
-Failure restores head/source state with preview held. Remove cooked-directory
-swap/recovery phases. Existing incremental staging seed copies remain initially;
-no hardlinks to append-mutated resource files or accumulating overlay chains.
-The selection gate covers head/source changes through durable preview acceptance
-or rollback; existing generation readers remain usable. Validate and seal before
-entering that gate. Preview receives the candidate lease directly; refresh derived
-catalogs and notify other readers after commit and gate release.
-Consumed snapshots remain immutable; reuse fingerprints account only for committed
-produced-source changes. Later source edits affect freshness, not historical validity.
-
-Every new physical root generation has a fresh native SourceKey. Writable staging
-copies exclude `.generation.lock`; seal that marker on each completed root, never
-on their shared parent. Native mount preparation validates the complete source
-context before changing precedence. Loader and resolver switch before retirement
-callbacks run; retained objects continue using their exact old source bindings.
-
-After successful publication, owned maintenance automatically reclaims unselected
-generations that are neither needed for recovery nor held by runtime readers.
-Source files remain authoring data. Reverting source recooks it; publication does
-not add a historical rollback feature. Failure to acquire an old generation's
-exclusive reclamation lease defers cleanup without delaying preview acceptance.
 
 Native source analysis extends the existing tool/API with a batch request/result:
 producer/schema identity, declared outputs, logical references, actual file/absence

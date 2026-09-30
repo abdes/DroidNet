@@ -7,29 +7,27 @@ using Oxygen.Editor.ContentPipeline.Publication;
 
 namespace Oxygen.Editor.ContentPipeline.Tests;
 
-/// <summary>Checks that coherent verification never registers nested readers behind a waiting publisher.</summary>
+/// <summary>Old immutable readers do not block publication of a replacement.</summary>
 public sealed partial class CookPublicationTransactionTests
 {
-    /// <summary>An existing inspection can finish journal and metadata reads while a publisher waits for it.</summary>
+    /// <summary>Publication can finish while an earlier inspection keeps its exact generation alive.</summary>
     /// <returns>The nested-reader deadlock regression.</returns>
     [TestMethod]
-    public async Task CommittedVerificationFinishesUnderExistingReaderWhilePublisherWaits()
+    public async Task PublicationCompletesWhilePriorInspectionRemainsUsable()
     {
         using var project = new PublicationProject(hadPrevious: true);
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(this.TestContext.CancellationToken);
         cancellation.CancelAfter(TimeSpan.FromSeconds(5));
-        using var staging = await project.StageAsync(cancellation.Token).ConfigureAwait(false);
+        await using var staging = await project.StageAsync(cancellation.Token).ConfigureAwait(false);
         var transaction = await project.PrepareAsync(staging, cancellation.Token).ConfigureAwait(false);
-        await transaction.PublishAsync(preview: null, static () => { }, cancellation.Token).ConfigureAwait(false);
-        using var reader = await CookOutputLease.AcquireInspectionAsync(project.Root, cancellation.Token).ConfigureAwait(false);
-        var publication = CookOutputLease.AcquireWriteAsync(project.Root, cancellation.Token);
-        _ = publication.IsCompleted.Should().BeFalse();
-        var loaded = await CookPublicationTransaction.LoadReadOnlyUnderLeaseAsync(project.Context, project.Operation.OperationId, project.Files, cancellation.Token).ConfigureAwait(false);
-        await loaded.VerifyCommittedMetadataUnderLeaseAsync().WaitAsync(cancellation.Token).ConfigureAwait(false);
-        await loaded.VerifyCommittedUnderLeaseAsync().WaitAsync(cancellation.Token).ConfigureAwait(false);
-        _ = publication.IsCompleted.Should().BeFalse();
-        reader.Dispose();
-        using var writer = await publication.WaitAsync(cancellation.Token).ConfigureAwait(false);
+        using var reader = project.Baseline.Retain();
+        using var accepted = await transaction.PublishAsync(preview: null, project.Baseline, static () => { }, cancellation.Token).WaitAsync(cancellation.Token).ConfigureAwait(false);
+        var oldRoot = reader.FindProjectRoot("Content")!;
+        _ = (reader.PublicationId == accepted.PublicationId).Should().BeFalse();
+        using var catalog = await reader.CreateCatalogAsync(reader.Roots.Single(static root => root.Name == "Content"), cancellation.Token).ConfigureAwait(false);
+        _ = File.ReadAllText(Path.Combine(oldRoot, "value.txt")).Should().Be("old:Content");
+        using var claimed = CookedGeneration.TryClaim(oldRoot);
+        _ = claimed.Should().BeNull();
         project.AssertNew();
     }
 }

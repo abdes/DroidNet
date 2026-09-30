@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Immutable;
-using DroidNet.Storage.Native;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.Snapshots;
@@ -17,7 +16,7 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <summary>Owns explicit source retention, settings and cooking as one visible operation.</summary>
 public sealed partial class ContentPipelineService
 {
-    private readonly DroidNet.Storage.IAtomicFileStore importSettingsFiles = provenanceFiles ?? new NativeAtomicFileStore(new Testably.Abstractions.RealFileSystem());
+    private readonly DroidNet.Storage.IAtomicFileStore importSettingsFiles = files;
 
     /// <inheritdoc />
     public Task<ContentCookResult> ImportSourceAsync(SceneImportRequest request, CancellationToken cancellationToken)

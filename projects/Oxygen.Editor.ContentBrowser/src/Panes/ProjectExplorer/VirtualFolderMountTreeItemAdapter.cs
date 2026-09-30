@@ -120,6 +120,9 @@ public sealed partial class VirtualFolderMountTreeItemAdapter : TreeItemAdapter,
     /// </summary>
     public IFolder RootFolder { get; }
 
+    /// <summary>Gets accepted logical output paths for a Cooked projection; null uses ordinary physical folders.</summary>
+    public IReadOnlyList<string>? CookedVirtualPaths { get; init; }
+
     /// <summary>
     ///     Gets the backing folder path string used to define this mount.
     /// </summary>
@@ -174,6 +177,16 @@ public sealed partial class VirtualFolderMountTreeItemAdapter : TreeItemAdapter,
     {
         try
         {
+            if (this.CookedVirtualPaths is { } paths)
+            {
+                foreach (var folder in CookedFolderTreeItemAdapter.Build(this, paths))
+                {
+                    this.AddChildInternal(folder);
+                }
+
+                return;
+            }
+
             // Virtual folder mounts must tolerate missing backing folders.
             if (!await this.RootFolder.ExistsAsync().ConfigureAwait(true))
             {

@@ -173,7 +173,7 @@ public sealed partial class InspectorControlTests
         using var services = new CatalogWorkloadServices(fixture);
         services.Runs.IsAutomaticCookingPaused = true;
         using var automatic = new AutomaticCookService(services.Projects, services.Pipeline, services.Runs, NullLogger<AutomaticCookService>.Instance);
-        using var catalog = new ProjectAssetCatalog(services.Projects, services.Storage, services.Builtins);
+        await using var catalog = new ProjectAssetCatalog(services.Projects, services.Storage, services.Builtins, services.Publication);
         using var provider = new ContentBrowserAssetProvider(catalog, services.Projects, services.Scopes, new AssetIdentityReducer(), services.Pipeline, services.Documents, services.Runs, fixture.Runtime);
         using var picker = new MaterialPickerService(provider);
         await fixture.InitializeAsync(timeout.Token).ConfigureAwait(true);
@@ -220,6 +220,6 @@ public sealed partial class InspectorControlTests
 
         public Task<ICookPublicationPreview?> CreateWorkspacePreviewAsync(CatalogWorkloadServices services, IProjectAssetCatalog catalog, Oxygen.Editor.Projects.ProjectContext project)
             => this.hosting.Dispatcher.DispatchAsync(() => Task.FromResult<ICookPublicationPreview?>(
-                new WorkspacePublicationPreview(project, this.engine, this.hosting, services.Mounts, catalog, this.messenger, () => ReferenceEquals(project, services.Projects.ActiveProject))));
+                new WorkspacePublicationPreview(project, this.engine, this.hosting, catalog, this.messenger, () => ReferenceEquals(project, services.Projects.ActiveProject))));
     }
 }

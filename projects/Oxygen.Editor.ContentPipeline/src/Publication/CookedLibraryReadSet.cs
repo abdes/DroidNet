@@ -60,12 +60,12 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
                 {
                     CookOutputLease.RejectReparsePoint(path);
                     files = await CookOutputReadLease.AcquireAsync(path, cancellationToken).ConfigureAwait(false);
-                    using var catalog = new LooseCookedIndexAssetCatalog(new NativeStorageProvider(new RealFileSystem()), new LooseCookedIndexAssetCatalogOptions { CookedRootFolderPath = path });
-                    var records = await catalog.QueryAsync(new(AssetQueryScope.All), cancellationToken).ConfigureAwait(false);
                     var index = await CookedIndexSnapshot.ReadAsync(path, cancellationToken).ConfigureAwait(false);
+                    using var catalog = new LooseCookedIndexAssetCatalog(index.Index, path);
+                    var records = await catalog.QueryAsync(new(AssetQueryScope.All), cancellationToken).ConfigureAwait(false);
                     var fingerprint = index.Fingerprint;
                     var metadata = await CookedDependencyCache.ReadAsync(project.ProjectRoot, fingerprint, records, cancellationToken).ConfigureAwait(false);
-                    result.roots.Add(new(mount.Name, path, records, fingerprint, files) { Dependencies = metadata });
+                    result.roots.Add(new(mount.Name, path, records, fingerprint, files) { SourceKey = index.Index.SourceGuid, Dependencies = metadata });
                     files = null;
                 }
                 catch (Exception failure) when (failure is IOException or InvalidDataException or UnauthorizedAccessException)
@@ -243,13 +243,6 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
             }
         }
 
-        var usedRoots = graph.CookedDependencies.Values.SelectMany(static bindings => bindings).Select(static binding => binding.RootPath).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        foreach (var unused in this.roots.Where(root => !usedRoots.Contains(root.Path)).ToArray())
-        {
-            unused.Reader.Dispose();
-            _ = this.roots.Remove(unused);
-        }
-
         return graph with { Diagnostics = diagnostics.ToImmutable() };
 
         void AddIssue(Uri uri, string code, string message)
@@ -264,6 +257,31 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
     /// <summary>Uses the same saved low-to-high source order as runtime mounting.</summary>
     /// <param name="projectRoots">The operation's staged and reusable project roots.</param>
     /// <returns>Native lookup roots ordered from lowest to highest priority.</returns>
+    internal ImmutableArray<CookPublicationRoot> OrderBindings(IEnumerable<CookPublicationRoot> projectRoots)
+    {
+        if (this.failures.Count != 0)
+        {
+            throw new InvalidDataException("Cooked libraries could not be read: "
+                + string.Join("; ", this.failures.Select(static failure => failure.name + ": " + failure.message)));
+        }
+
+        var owned = projectRoots.OrderBy(static root => root.Name, StringComparer.Ordinal).ToArray();
+        var result = new List<CookPublicationRoot>();
+        foreach (var source in this.order)
+        {
+            if (source.Kind == CookedContentSourceKind.ProjectOutput)
+            {
+                result.AddRange(owned);
+            }
+            else if (this.roots.FirstOrDefault(root => string.Equals(root.Name, source.Name, StringComparison.OrdinalIgnoreCase)) is { } library)
+            {
+                result.Add(new(CookPublicationRootOwner.Library, library.Name, library.SourceKey, library.Fingerprint, library.Path));
+            }
+        }
+
+        return [.. result.AsEnumerable().Reverse().DistinctBy(root => root.ResolvePath(this.projectRoot), StringComparer.OrdinalIgnoreCase).Reverse()];
+    }
+
     public IReadOnlyList<string> OrderRoots(IEnumerable<string> projectRoots)
     {
         var paths = this.order.SelectMany(source => source.Kind == CookedContentSourceKind.ProjectOutput ? projectRoots.Order(StringComparer.Ordinal)
@@ -368,6 +386,8 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
 
     private sealed record Root(string Name, string Path, IReadOnlyList<AssetRecord> Assets, string Fingerprint, CookOutputReadLease Reader)
     {
+        public required Guid SourceKey { get; init; }
+
         public CookedDependencyReport? Dependencies { get; set; }
     }
 }

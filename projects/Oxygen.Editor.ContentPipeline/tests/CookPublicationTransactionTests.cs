@@ -3,7 +3,11 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Immutable;
-using System.Text;
+using System.Text.Json;
+using DroidNet.Storage;
+using Oxygen.Editor.ContentPipeline.Incremental;
+using Oxygen.Testing;
+using Testably.Abstractions;
 using AwesomeAssertions;
 using DroidNet.Storage.Native;
 using Oxygen.Editor.ContentPipeline.Publication;
@@ -20,158 +24,104 @@ public sealed partial class CookPublicationTransactionTests
     /// <summary>Gets or sets the running test context.</summary>
     public TestContext TestContext { get; set; } = null!;
 
-    /// <summary>Successful publication updates all affected roots and metadata while leaving unrelated roots intact.</summary>
-    /// <returns>The asynchronous publication regression.</returns>
     [TestMethod]
-    public async Task CommitInstallsAllRootsAndHandsReadOwnershipToPreview()
+    public async Task CommitSelectsAllRootsWhileOldReadersRemainUsable()
     {
         using var project = new PublicationProject(hadPrevious: true);
-        using var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        await using var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        using var old = project.Baseline.Retain();
+        var oldContent = old.FindProjectRoot("Content")!;
         var transaction = await project.PrepareAsync(staging, this.TestContext.CancellationToken).ConfigureAwait(false);
-        var preview = new Preview(project.Root);
-        await using var previewLifetime = preview.ConfigureAwait(false);
-        await transaction.PublishAsync(preview, static () => { }, this.TestContext.CancellationToken).ConfigureAwait(false);
+        await using var preview = new Preview(project.Root);
+        using var accepted = await transaction.PublishAsync(preview, project.Baseline, static () => { }, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = transaction.Phase.Should().Be(CookPublicationPhase.Committed);
         project.AssertNew();
         _ = preview.Resumed.Should().BeTrue();
         _ = preview.MountedRoots.Should().HaveCount(3);
-        Action competing = () => CookOutputLease.AcquireWrite(project.Root).Dispose();
-        _ = competing.Should().Throw<CookOutputBusyException>();
-        await preview.DisposeAsync().ConfigureAwait(false);
-        using var writer = await CookOutputLease.AcquireWriteAsync(project.Root, this.TestContext.CancellationToken).ConfigureAwait(false);
-        var loaded = await CookPublicationTransaction.LoadAsync(project.Context, project.Operation.OperationId, project.Files, writer, this.TestContext.CancellationToken).ConfigureAwait(false);
-        await loaded.VerifyCommittedAsync(writer).ConfigureAwait(false);
-        await loaded.CleanupAsync(writer).ConfigureAwait(false);
-        project.AssertNew();
+        _ = File.ReadAllText(Path.Combine(oldContent, "value.txt")).Should().Be("old:Content");
+        using var gate = await CookOutputLease.AcquireWriteAsync(project.Root, this.TestContext.CancellationToken).ConfigureAwait(false);
+        using var selected = await CookPublicationReadLease.OpenUnderGateAsync(project.Context, project.Files, gate, this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = selected.PublicationId.Should().Be(accepted.PublicationId);
     }
 
-    /// <summary>Failure between any directory or metadata steps restores the whole prior publication.</summary>
-    /// <param name="hadPrevious">Whether previous output existed.</param>
-    /// <param name="boundary">The boundary that fails.</param>
-    /// <returns>The asynchronous failure regression.</returns>
     [TestMethod]
-    [DataRow(true, "Retained:Content")]
-    [DataRow(true, "Retained:Second")]
-    [DataRow(true, "OldRetained")]
-    [DataRow(true, "Installed:Content")]
-    [DataRow(true, "Installed:Second")]
-    [DataRow(true, "RootsInstalled")]
+    [DataRow(true, "Applying")]
+    [DataRow(true, "SourcesApplied")]
+    [DataRow(true, "HeadSelected")]
     [DataRow(true, "RuntimeReady")]
-    [DataRow(true, "Metadata:.build/cook/provenance.json")]
-    [DataRow(true, "Metadata:.cooked/publication.json")]
-    [DataRow(false, "OldRetained")]
-    [DataRow(false, "Installed:Content")]
-    [DataRow(false, "Installed:Second")]
-    [DataRow(false, "RootsInstalled")]
-    [DataRow(false, "Metadata:.cooked/publication.json")]
-    public async Task FailureRestoresRootsAndMetadata(bool hadPrevious, string boundary)
+    [DataRow(false, "Applying")]
+    [DataRow(false, "SourcesApplied")]
+    [DataRow(false, "HeadSelected")]
+    [DataRow(false, "RuntimeReady")]
+    public async Task FailureRestoresTheWholePublication(bool hadPrevious, string boundary)
     {
         using var project = new PublicationProject(hadPrevious);
-        using var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
-        var transaction = await project.PrepareAsync(
-            staging,
-            this.TestContext.CancellationToken,
-            name => string.Equals(name, boundary, StringComparison.Ordinal) ? Task.FromException(new IOException("Injected publication failure")) : Task.CompletedTask).ConfigureAwait(false);
-        var preview = new Preview(project.Root);
-        await using var previewLifetime = preview.ConfigureAwait(false);
-        Func<Task> publish = () => transaction.PublishAsync(preview, static () => { }, this.TestContext.CancellationToken);
+        await using var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        var transaction = await project.PrepareAsync(staging, this.TestContext.CancellationToken,
+            name => name == boundary ? Task.FromException(new IOException("Injected publication failure")) : Task.CompletedTask).ConfigureAwait(false);
+        await using var preview = new Preview(project.Root);
+        Func<Task> publish = () => transaction.PublishAsync(preview, project.Baseline, static () => { }, this.TestContext.CancellationToken);
         _ = await publish.Should().ThrowAsync<IOException>().ConfigureAwait(false);
         _ = transaction.Phase.Should().Be(CookPublicationPhase.RolledBack);
         project.AssertOld();
         _ = preview.Resumed.Should().BeTrue();
     }
 
-    /// <summary>A failed new mount restores old roots before remounting the previous preview.</summary>
-    /// <returns>The asynchronous runtime rollback regression.</returns>
     [TestMethod]
     public async Task FailedMountRestoresPreviousPublication()
     {
         using var project = new PublicationProject(hadPrevious: true);
-        using var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        await using var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         var transaction = await project.PrepareAsync(staging, this.TestContext.CancellationToken).ConfigureAwait(false);
-        var preview = new Preview(project.Root) { FailFirstMount = true };
-        await using var previewLifetime = preview.ConfigureAwait(false);
-        Func<Task> publish = () => transaction.PublishAsync(preview, static () => { }, this.TestContext.CancellationToken);
+        await using var preview = new Preview(project.Root) { FailFirstMount = true };
+        Func<Task> publish = () => transaction.PublishAsync(preview, project.Baseline, static () => { }, this.TestContext.CancellationToken);
         _ = await publish.Should().ThrowAsync<IOException>().ConfigureAwait(false);
         project.AssertOld();
         _ = preview.MountCount.Should().Be(2);
         _ = preview.Resumed.Should().BeTrue();
     }
 
-    /// <summary>Failure to remount the restored output retains recovery state and does not resume preview.</summary>
-    /// <returns>The asynchronous double-mount-failure regression.</returns>
     [TestMethod]
     public async Task FailedRollbackMountRetainsRecoverableState()
     {
         using var project = new PublicationProject(hadPrevious: true);
-        using var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        await using var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         var transaction = await project.PrepareAsync(staging, this.TestContext.CancellationToken).ConfigureAwait(false);
-        var preview = new Preview(project.Root) { FailAllMounts = true };
-        await using var previewLifetime = preview.ConfigureAwait(false);
-        Func<Task> publish = () => transaction.PublishAsync(preview, static () => { }, this.TestContext.CancellationToken);
+        await using var preview = new Preview(project.Root) { FailAllMounts = true };
+        Func<Task> publish = () => transaction.PublishAsync(preview, project.Baseline, static () => { }, this.TestContext.CancellationToken);
         _ = await publish.Should().ThrowAsync<AggregateException>().ConfigureAwait(false);
         project.AssertOld();
         _ = preview.Resumed.Should().BeFalse();
-        _ = transaction.Phase.Should().NotBe(CookPublicationPhase.RolledBack);
-        await preview.DisposeAsync().ConfigureAwait(false);
-        using var writer = await CookOutputLease.AcquireWriteAsync(project.Root, this.TestContext.CancellationToken).ConfigureAwait(false);
-        var recovery = await CookPublicationTransaction.LoadAsync(project.Context, project.Operation.OperationId, project.Files, writer, this.TestContext.CancellationToken).ConfigureAwait(false);
-        await recovery.RecoverAsync(writer).ConfigureAwait(false);
-        await recovery.CleanupAsync(writer).ConfigureAwait(false);
-        project.AssertOld();
+        using var gate = await CookOutputLease.AcquireWriteAsync(project.Root, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var recovery = await CookPublicationTransaction.LoadAsync(project.Context, project.Operation.OperationId, project.Files, project.Manager, gate, this.TestContext.CancellationToken).ConfigureAwait(false);
+        await recovery.RecoverAsync(gate).ConfigureAwait(false);
+        _ = recovery.Phase.Should().Be(CookPublicationPhase.RolledBack);
     }
 
-    /// <summary>A busy standalone reader causes no replacement and the paused preview is restored.</summary>
-    /// <returns>The asynchronous busy-output regression.</returns>
     [TestMethod]
-    public async Task BusyReaderRestoresUnchangedPreview()
-    {
-        using var project = new PublicationProject(hadPrevious: true);
-        using var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
-        var transaction = await project.PrepareAsync(staging, this.TestContext.CancellationToken).ConfigureAwait(false);
-        using var external = await CookOutputLease.AcquireReadAsync(project.Root, this.TestContext.CancellationToken).ConfigureAwait(false);
-        var preview = new Preview(project.Root);
-        await using var previewLifetime = preview.ConfigureAwait(false);
-        Func<Task> publish = () => transaction.PublishAsync(preview, static () => { }, this.TestContext.CancellationToken);
-        _ = await publish.Should().ThrowAsync<CookOutputBusyException>().ConfigureAwait(false);
-        project.AssertOld();
-        _ = preview.Resumed.Should().BeTrue();
-    }
-
-    /// <summary>Cancellation during replacement finishes the actual committed outcome.</summary>
-    /// <returns>The asynchronous critical-section cancellation regression.</returns>
-    [TestMethod]
-    public async Task CancellationAfterReplacementStartsDefersUntilCommit()
+    public async Task CancellationAfterApplyingDefersUntilCommit()
     {
         using var project = new PublicationProject(hadPrevious: true);
         using var cancellation = new CancellationTokenSource();
-        using var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
-        var transaction = await project.PrepareAsync(staging, this.TestContext.CancellationToken, async name =>
-        {
-            if (string.Equals(name, "Installed:Content", StringComparison.Ordinal))
-            {
-                await cancellation.CancelAsync().ConfigureAwait(false);
-            }
-        }).ConfigureAwait(false);
-        await transaction.PublishAsync(preview: null, static () => { }, cancellation.Token).ConfigureAwait(false);
+        await using var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        var transaction = await project.PrepareAsync(staging, this.TestContext.CancellationToken,
+            name => name == "Applying" ? cancellation.CancelAsync() : Task.CompletedTask).ConfigureAwait(false);
+        using var accepted = await transaction.PublishAsync(preview: null, project.Baseline, static () => { }, cancellation.Token).ConfigureAwait(false);
         _ = transaction.Phase.Should().Be(CookPublicationPhase.Committed);
         project.AssertNew();
     }
 
-    /// <summary>A project closed during replacement cannot commit its partially installed roots.</summary>
-    /// <param name="boundary">The point where project ownership changes.</param>
-    /// <returns>The asynchronous ownership regression.</returns>
     [TestMethod]
-    [DataRow("Installed:Content")]
-    [DataRow("Metadata:.cooked/publication.json")]
-    public async Task LostProjectOwnershipRollsBackAllRoots(string boundary)
+    [DataRow("SourcesApplied")]
+    [DataRow("RuntimeReady")]
+    public async Task LostProjectOwnershipRestoresThePreviousHead(string boundary)
     {
         using var project = new PublicationProject(hadPrevious: true);
-        using var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        await using var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         var current = true;
         var transaction = await project.PrepareAsync(staging, this.TestContext.CancellationToken, name =>
         {
-            if (string.Equals(name, boundary, StringComparison.Ordinal))
+            if (name == boundary)
             {
                 current = false;
             }
@@ -186,68 +136,61 @@ public sealed partial class CookPublicationTransactionTests
             }
         }
 
-        Func<Task> publish = () => transaction.PublishAsync(preview: null, Verify, this.TestContext.CancellationToken);
+        Func<Task> publish = () => transaction.PublishAsync(preview: null, project.Baseline, Verify, this.TestContext.CancellationToken);
         _ = await publish.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
         project.AssertOld();
     }
 
-    /// <summary>Cancellation before publication leaves the running preview and published files untouched.</summary>
-    /// <returns>The asynchronous cancellation regression.</returns>
     [TestMethod]
     public async Task CancelledPreparedCookNeverPausesPreview()
     {
         using var project = new PublicationProject(hadPrevious: true);
-        using var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        await using var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         var transaction = await project.PrepareAsync(staging, this.TestContext.CancellationToken).ConfigureAwait(false);
-        var preview = new Preview(project.Root);
-        await using var previewLifetime = preview.ConfigureAwait(false);
-        Func<Task> publish = () => transaction.PublishAsync(preview, static () => { }, new CancellationToken(canceled: true));
+        await using var preview = new Preview(project.Root);
+        Func<Task> publish = () => transaction.PublishAsync(preview, project.Baseline, static () => { }, new CancellationToken(canceled: true));
         _ = await publish.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
-        _ = preview.Resumed.Should().BeTrue();
-        _ = preview.MountCount.Should().Be(0);
         project.AssertOld();
+        _ = preview.Resumed.Should().BeTrue();
     }
 
     private sealed partial class Preview(string projectRoot) : ICookPublicationPreview
     {
-        private readonly List<FileStream> openFiles = [];
-        private IDisposable? reader = CookOutputLease.AcquireRead(projectRoot);
+        private Mounting.CookedContentMountSet? reader;
 
         public bool IsRuntimeAvailable => true;
-
         public bool FailFirstMount { get; init; }
-
         public bool FailAllMounts { get; init; }
-
         public bool Resumed { get; private set; } = true;
-
         public int MountCount { get; private set; }
-
         public IReadOnlyList<string> MountedRoots { get; private set; } = [];
 
-        public async Task PrepareReplacementAsync()
+        public Task PrepareReplacementAsync()
         {
             this.Resumed = false;
-            foreach (var file in this.openFiles)
-            {
-                await file.DisposeAsync().ConfigureAwait(false);
-            }
-
-            this.openFiles.Clear();
-            this.reader?.Dispose();
-            this.reader = null;
+            return Task.CompletedTask;
         }
 
-        public async Task MountAsync(IReadOnlyList<string> roots, CookOutputWriteLease? writer)
+        public Task MountAsync(Mounting.CookedContentMountSet mounts)
         {
             this.MountCount++;
-            this.reader = writer?.CreateReader() ?? await CookOutputLease.AcquireReadAsync(projectRoot, CancellationToken.None).ConfigureAwait(false);
-            this.MountedRoots = roots;
-            this.openFiles.AddRange(roots.Select(root => new FileStream(Path.Combine(root, "container.index.bin"), FileMode.Open, FileAccess.Read, FileShare.Read)));
             if (this.FailAllMounts || (this.FailFirstMount && this.MountCount == 1))
             {
+                mounts.Dispose();
                 throw new IOException("Injected native mount failure");
             }
+
+            var publication = mounts.Publication;
+            if (!string.Equals(publication.ProjectRoot, projectRoot, StringComparison.OrdinalIgnoreCase))
+            {
+                mounts.Dispose();
+                throw new InvalidOperationException("Unexpected preview project.");
+            }
+
+            this.reader?.Dispose();
+            this.reader = mounts;
+            this.MountedRoots = publication.RootPaths;
+            return Task.CompletedTask;
         }
 
         public Task ResumeAsync()
@@ -256,129 +199,157 @@ public sealed partial class CookPublicationTransactionTests
             return Task.CompletedTask;
         }
 
-        public async ValueTask DisposeAsync() => await this.PrepareReplacementAsync().ConfigureAwait(false);
+        public Task CommittedAsync(CookPublicationReadLease publication) => Task.CompletedTask;
+
+        public ValueTask DisposeAsync()
+        {
+            this.reader?.Dispose();
+            this.reader = null;
+            return ValueTask.CompletedTask;
+        }
     }
 
     private sealed partial class PublicationProject : IDisposable
     {
         private readonly DirectoryInfo directory = Directory.CreateTempSubdirectory("oxygen-publication-");
         private readonly bool hadPrevious;
+        private readonly ImmutableArray<CookPublicationRoot> originalRoots;
+        private readonly byte[]? originalHead;
+        private FileStream? ownership;
+        private CookPublicationReadLease? baseline;
+        private Func<string, Task> checkpoint = static _ => Task.CompletedTask;
 
         public PublicationProject(bool hadPrevious)
         {
             this.hadPrevious = hadPrevious;
-            this.Context = new ProjectContext
+            var info = new ProjectInfo(Guid.NewGuid(), "Publication", Category.Games, this.Root)
             {
-                ProjectId = Guid.NewGuid(), ProjectRoot = this.Root, Name = "Publication", Category = Category.Games,
-                AuthoringMounts = [new("Content", "Content"), new("Second", "Second")], LocalFolderMounts = [], Scenes = [],
+                AuthoringMounts = [new("Content", "Content"), new("Second", "Second"), new("Unrelated", "Unrelated")],
             };
+            this.Context = ProjectContext.FromProjectInfo(info, []);
             this.Operation = new(Guid.NewGuid(), this.Context, 1);
+            this.Write("Project.oxy", ProjectInfo.ToJson(info));
+            var roots = ImmutableArray.CreateBuilder<CookPublicationRoot>();
             if (hadPrevious)
             {
                 foreach (var mount in new[] { "Content", "Second", "Unrelated" })
                 {
-                    this.Write(".cooked/" + mount + "/container.index.bin", "old:" + mount);
-                    this.Write(".cooked/" + mount + "/keep.bin", "keep:" + mount);
+                    var key = Guid.CreateVersion7();
+                    var root = CookPublicationPaths.Generation(this.Root, key);
+                    Directory.CreateDirectory(root);
+                    File.WriteAllText(Path.Combine(root, "value.txt"), "old:" + mount);
+                    File.WriteAllText(Path.Combine(root, "keep.bin"), "keep:" + mount);
+                    NativeInventoryFixture.WriteIndex(root, [], key);
+                    File.WriteAllBytes(Path.Combine(root, CookedGeneration.MarkerFileName), []);
+                    roots.Add(new(CookPublicationRootOwner.Project, mount, key, NativeInventoryFixture.Read(root).IndexSha256, null));
                 }
 
-                this.Write(CookPublicationTransaction.PublicationMetadata, "old-receipt");
-                this.Write(CookPublicationTransaction.ProvenanceMetadata, "old-provenance");
+                var document = new CookPublicationDocument(CookPublicationDocument.CurrentVersion, this.Context.ProjectId, Guid.NewGuid(),
+                    DateTimeOffset.UtcNow, CookPublicationDocument.ConfigurationIdentity(this.Context), roots.ToImmutable(), [], null);
+                var bytes = JsonSerializer.SerializeToUtf8Bytes(document, CookPublicationDocument.JsonOptions);
+                var path = CookPublicationPaths.Document(this.Root, document.OperationId);
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                File.WriteAllBytes(path, bytes);
+                this.originalHead = JsonSerializer.SerializeToUtf8Bytes(new CookPublicationHead(CookPublicationHead.CurrentVersion,
+                    document.OperationId, Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes))), CookPublicationDocument.JsonOptions);
+                File.WriteAllBytes(CookPublicationPaths.Head(this.Root), this.originalHead);
             }
+
+            this.originalRoots = roots.ToImmutable();
         }
 
         public string Root => this.directory.FullName;
-
         public ProjectContext Context { get; }
-
         public ContentCookOperation Operation { get; }
-
-        public NativeAtomicFileStore Files { get; } = new(new Testably.Abstractions.RealFileSystem());
+        public NativeAtomicFileStore Files { get; } = new(new RealFileSystem());
+        public ProjectManagerService Manager { get; } = new(new NativeStorageProvider(new RealFileSystem()));
+        public CookPublicationReadLease Baseline => this.baseline ?? throw new InvalidOperationException("Prepare staging first.");
 
         public async Task<CookStagingArea> StageAsync(CancellationToken cancellationToken)
         {
-            var staging = await CookStagingArea.CreateAsync(this.Operation, ["Content", "Second"], cancellationToken).ConfigureAwait(false);
+            this.ownership = CookOutputLease.AcquireOperation(this.Root, this.Operation.OperationId);
+            using (var gate = await CookOutputLease.AcquireWriteAsync(this.Root, cancellationToken).ConfigureAwait(false))
+            {
+                this.baseline = await CookPublicationReadLease.OpenUnderGateAsync(this.Context, this.Files, gate, cancellationToken).ConfigureAwait(false);
+            }
+
+            var staging = await CookStagingArea.CreateAsync(this.Operation, this.baseline, ["Content", "Second"], this.Files, this.Manager,
+                cancellationToken, checkpoint: name => this.checkpoint(name)).ConfigureAwait(false);
             foreach (var root in staging.Roots)
             {
-                await File.WriteAllTextAsync(Path.Combine(root.StagingPath, "container.index.bin"), "new:" + root.Mount, cancellationToken).ConfigureAwait(false);
+                await File.WriteAllTextAsync(Path.Combine(root.Path, "value.txt"), "new:" + root.Mount, cancellationToken).ConfigureAwait(false);
+                NativeInventoryFixture.WriteIndex(root.Path, [], root.SourceKey);
+                var opening = await CookOutputReadLease.AcquireAsync(root.Path, cancellationToken).ConfigureAwait(false);
+                root.AcceptVerification(opening, NativeInventoryFixture.Read(root.Path));
             }
 
             return staging;
         }
 
-        public Task<CookPublicationTransaction> PrepareAsync(CookStagingArea staging, CancellationToken cancellationToken, Func<string, Task>? checkpoint = null, CookSourceReplacement? sourceReplacement = null,
-            ImmutableArray<CookProducedSourceFile> producedSourceFiles = default)
-            => CookPublicationTransaction.PrepareAsync(
-                this.Operation,
-                staging,
-                new Dictionary<string, byte[]>(StringComparer.Ordinal)
-                {
-                    [CookPublicationTransaction.PublicationMetadata] = Encoding.UTF8.GetBytes("new-receipt"),
-                    [CookPublicationTransaction.ProvenanceMetadata] = Encoding.UTF8.GetBytes("new-provenance"),
-                },
-                this.Files,
-                cancellationToken,
-                checkpoint,
-                sourceReplacement,
-                producedSourceFiles);
+        public async Task<CookPublicationTransaction> PrepareAsync(CookStagingArea staging, CancellationToken cancellationToken,
+            Func<string, Task>? checkpoint = null, CookSourceReplacement? sourceReplacement = null, ImmutableArray<CookProducedSourceFile> producedSourceFiles = default)
+        {
+            this.checkpoint = checkpoint ?? (static _ => Task.CompletedTask);
+            var replacements = staging.SealRoots();
+            var roots = staging.Baseline.Roots.Where(root => !replacements.Any(replacement => replacement.Name == root.Name)).Concat(replacements).ToImmutableArray();
+            var document = new CookPublicationDocument(CookPublicationDocument.CurrentVersion, this.Context.ProjectId, this.Operation.OperationId,
+                DateTimeOffset.UtcNow, CookPublicationDocument.ConfigurationIdentity(this.Context), roots, [], null);
+            await staging.Transaction.PrepareAsync(this.Operation, document, sourceReplacement,
+                producedSourceFiles.IsDefault ? [] : producedSourceFiles, projectChange: null, cancellationToken).ConfigureAwait(false);
+            staging.RetainForPublication();
+            return staging.Transaction;
+        }
 
         public void AssertOld()
         {
-            foreach (var mount in new[] { "Content", "Second" })
+            var head = CookPublicationPaths.Head(this.Root);
+            if (this.hadPrevious)
             {
-                var path = Path.Combine(this.Root, ".cooked", mount, "container.index.bin");
-                if (this.hadPrevious)
+                _ = File.ReadAllBytes(head).Should().Equal(this.originalHead!);
+                foreach (var root in this.originalRoots)
                 {
-                    _ = File.ReadAllText(path).Should().Be("old:" + mount);
-                }
-                else
-                {
-                    _ = Directory.Exists(Path.GetDirectoryName(path)).Should().BeFalse();
+                    _ = File.ReadAllText(Path.Combine(root.ResolvePath(this.Root), "value.txt")).Should().Be("old:" + root.Name);
                 }
             }
-
-            this.AssertMetadata(CookPublicationTransaction.PublicationMetadata, "old-receipt");
-            this.AssertMetadata(CookPublicationTransaction.ProvenanceMetadata, "old-provenance");
+            else
+            {
+                _ = File.Exists(head).Should().BeFalse();
+            }
         }
 
         public void AssertNew()
         {
+            var head = JsonSerializer.Deserialize<CookPublicationHead>(File.ReadAllBytes(CookPublicationPaths.Head(this.Root)), CookPublicationDocument.JsonOptions)!;
+            _ = head.PublicationId.Should().Be(this.Operation.OperationId);
+            var document = JsonSerializer.Deserialize<CookPublicationDocument>(File.ReadAllBytes(CookPublicationPaths.Document(this.Root, head.PublicationId)), CookPublicationDocument.JsonOptions)!;
             foreach (var mount in new[] { "Content", "Second" })
             {
-                _ = File.ReadAllText(Path.Combine(this.Root, ".cooked", mount, "container.index.bin")).Should().Be("new:" + mount);
+                var root = document.Roots.Single(root => root.Name == mount);
+                _ = File.ReadAllText(Path.Combine(root.ResolvePath(this.Root), "value.txt")).Should().Be("new:" + mount);
                 if (this.hadPrevious)
                 {
-                    _ = File.ReadAllText(Path.Combine(this.Root, ".cooked", mount, "keep.bin")).Should().Be("keep:" + mount);
+                    _ = File.ReadAllText(Path.Combine(root.ResolvePath(this.Root), "keep.bin")).Should().Be("keep:" + mount);
                 }
             }
 
-            _ = File.ReadAllText(Path.Combine(this.Root, CookPublicationTransaction.PublicationMetadata)).Should().Be("new-receipt");
-            _ = File.ReadAllText(Path.Combine(this.Root, CookPublicationTransaction.ProvenanceMetadata)).Should().Be("new-provenance");
             if (this.hadPrevious)
             {
-                _ = File.ReadAllText(Path.Combine(this.Root, ".cooked", "Unrelated", "container.index.bin")).Should().Be("old:Unrelated");
+                _ = document.Roots.Single(root => root.Name == "Unrelated").Should().Be(this.originalRoots.Single(root => root.Name == "Unrelated"));
             }
         }
 
-        public void Dispose() => this.directory.Delete(recursive: true);
+        public void Dispose()
+        {
+            this.baseline?.Dispose();
+            this.ownership?.Dispose();
+            this.directory.Delete(recursive: true);
+        }
 
         private void Write(string relative, string text)
         {
             var path = Path.Combine(this.Root, relative);
-            _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             File.WriteAllText(path, text);
-        }
-
-        private void AssertMetadata(string relative, string previous)
-        {
-            var path = Path.Combine(this.Root, relative);
-            if (this.hadPrevious)
-            {
-                _ = File.ReadAllText(path).Should().Be(previous);
-            }
-            else
-            {
-                _ = File.Exists(path).Should().BeFalse();
-            }
         }
     }
 }

@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Publication;
@@ -16,24 +17,21 @@ public sealed partial class CookPublicationTransactionTests
     /// <param name="boundary">The interrupted durable boundary.</param>
     /// <returns>The asynchronous recovery regression.</returns>
     [TestMethod]
-    [DataRow(true, "Retained:Content")]
-    [DataRow(true, "Retained:Second")]
-    [DataRow(true, "OldRetained")]
-    [DataRow(true, "Installed:Content")]
-    [DataRow(true, "Installed:Second")]
-    [DataRow(true, "RootsInstalled")]
+    [DataRow(true, "Applying")]
+    [DataRow(true, "SourcesApplied")]
+    [DataRow(true, "HeadSelected")]
     [DataRow(true, "RuntimeReady")]
-    [DataRow(true, "Metadata:.build/cook/provenance.json")]
-    [DataRow(true, "Metadata:.cooked/publication.json")]
-    [DataRow(false, "Installed:Content")]
-    [DataRow(false, "Metadata:.cooked/publication.json")]
+    [DataRow(false, "Applying")]
+    [DataRow(false, "SourcesApplied")]
+    [DataRow(false, "HeadSelected")]
+    [DataRow(false, "RuntimeReady")]
     public async Task PersistedInterruptionRestoresTheCompletePriorState(bool hadPrevious, string boundary)
     {
         using var project = new PublicationProject(hadPrevious);
         var replica = Directory.CreateTempSubdirectory("oxygen-publication-recovery-");
         try
         {
-            using var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+            await using var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
             var captured = false;
             var transaction = await project.PrepareAsync(staging, this.TestContext.CancellationToken, async name =>
             {
@@ -44,18 +42,17 @@ public sealed partial class CookPublicationTransactionTests
                     throw new IOException("Stop after capturing interrupted state");
                 }
             }).ConfigureAwait(false);
-            Func<Task> publish = () => transaction.PublishAsync(preview: null, static () => { }, this.TestContext.CancellationToken);
+            Func<Task> publish = () => transaction.PublishAsync(preview: null, project.Baseline, static () => { }, this.TestContext.CancellationToken);
             _ = await publish.Should().ThrowAsync<IOException>().ConfigureAwait(false);
             _ = captured.Should().BeTrue();
             var reopened = project.Context with { ProjectRoot = replica.FullName };
             using var writer = await CookOutputLease.AcquireWriteAsync(replica.FullName, this.TestContext.CancellationToken).ConfigureAwait(false);
-            var recovery = await CookPublicationTransaction.LoadAsync(reopened, project.Operation.OperationId, project.Files, writer, this.TestContext.CancellationToken).ConfigureAwait(false);
+            var recovery = await CookPublicationTransaction.LoadAsync(reopened, project.Operation.OperationId, project.Files, project.Manager, writer, this.TestContext.CancellationToken).ConfigureAwait(false);
             await recovery.RecoverAsync(writer).ConfigureAwait(false);
             _ = recovery.Phase.Should().Be(CookPublicationPhase.RolledBack);
             AssertRecoveredRoot(replica.FullName, "Content", hadPrevious);
             AssertRecoveredRoot(replica.FullName, "Second", hadPrevious);
-            AssertRecoveredMetadata(replica.FullName, CookPublicationTransaction.PublicationMetadata, "old-receipt", hadPrevious);
-            AssertRecoveredMetadata(replica.FullName, CookPublicationTransaction.ProvenanceMetadata, "old-provenance", hadPrevious);
+
         }
         finally
         {
@@ -63,48 +60,46 @@ public sealed partial class CookPublicationTransactionTests
         }
     }
 
-    /// <summary>Missing rollback material preserves both the installed output and the remaining backup.</summary>
-    /// <returns>The asynchronous recovery-material regression.</returns>
+    /// <summary>Recovery cannot replace a head written outside the interrupted transaction.</summary>
     [TestMethod]
-    public async Task ChangedBackupBlocksRecoveryAndRetainsEvidence()
+    public async Task ChangedHeadBlocksRecoveryAndRetainsJournal()
     {
         using var project = new PublicationProject(hadPrevious: true);
-        using var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
-        var operationRoot = Path.Combine(project.Root, ".build", "cook", project.Operation.OperationId.ToString("N"));
+        await using var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        var head = CookPublicationPaths.Head(project.Root);
         var transaction = await project.PrepareAsync(staging, this.TestContext.CancellationToken, async name =>
         {
-            if (string.Equals(name, "RootsInstalled", StringComparison.Ordinal))
+            if (name == "HeadSelected")
             {
-                await File.WriteAllTextAsync(Path.Combine(operationRoot, "previous", "Content", "container.index.bin"), "changed backup", this.TestContext.CancellationToken).ConfigureAwait(false);
-                throw new IOException("Injected failure after backup changed");
+                await File.WriteAllTextAsync(head, "external selection", this.TestContext.CancellationToken).ConfigureAwait(false);
+                throw new IOException("Injected external head change");
             }
         }).ConfigureAwait(false);
-        Func<Task> publish = () => transaction.PublishAsync(preview: null, static () => { }, this.TestContext.CancellationToken);
+        Func<Task> publish = () => transaction.PublishAsync(preview: null, project.Baseline, static () => { }, this.TestContext.CancellationToken);
         _ = await publish.Should().ThrowAsync<AggregateException>().ConfigureAwait(false);
-        _ = transaction.Phase.Should().Be(CookPublicationPhase.RootsInstalled);
-        _ = (await File.ReadAllTextAsync(Path.Combine(operationRoot, "previous", "Second", "container.index.bin"), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Be("old:Second");
-        _ = (await File.ReadAllTextAsync(Path.Combine(project.Root, ".cooked", "Second", "container.index.bin"), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Be("new:Second");
-        using var writer = await CookOutputLease.AcquireWriteAsync(project.Root, this.TestContext.CancellationToken).ConfigureAwait(false);
-        var recovery = await CookPublicationTransaction.LoadAsync(project.Context, project.Operation.OperationId, project.Files, writer, this.TestContext.CancellationToken).ConfigureAwait(false);
-        Func<Task> restore = async () => await recovery.RecoverAsync(writer).ConfigureAwait(false);
-        _ = await restore.Should().ThrowAsync<InvalidDataException>().ConfigureAwait(false);
-        _ = File.Exists(Path.Combine(operationRoot, "publication.json")).Should().BeTrue();
+        _ = transaction.Phase.Should().Be(CookPublicationPhase.HeadSelected);
+        using var gate = await CookOutputLease.AcquireWriteAsync(project.Root, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var recovery = await CookPublicationTransaction.LoadAsync(project.Context, project.Operation.OperationId, project.Files, project.Manager, gate, this.TestContext.CancellationToken).ConfigureAwait(false);
+        Func<Task> recover = () => recovery.RecoverAsync(gate);
+        _ = await recover.Should().ThrowAsync<DroidNet.Storage.StorageWriteConflictException>().ConfigureAwait(false);
+        _ = File.ReadAllText(head).Should().Be("external selection");
+        _ = File.Exists(Path.Combine(project.Root, ".build", "cook", project.Operation.OperationId.ToString("N"), "publication.json")).Should().BeTrue();
     }
 
-    /// <summary>A journal cannot redirect recovery outside its project-owned root names.</summary>
+    /// <summary>A journal names contained generations by valid identities rather than arbitrary physical paths.</summary>
     /// <returns>The asynchronous journal-validation regression.</returns>
     [TestMethod]
-    public async Task JournalTraversalIsRejectedBeforeFilesAreMoved()
+    public async Task InvalidGenerationIdentityIsRejectedBeforeRecovery()
     {
         using var project = new PublicationProject(hadPrevious: true);
-        using var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        await using var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = await project.PrepareAsync(staging, this.TestContext.CancellationToken).ConfigureAwait(false);
         var path = Path.Combine(project.Root, ".build", "cook", project.Operation.OperationId.ToString("N"), "publication.json");
         var journal = JsonNode.Parse(await File.ReadAllTextAsync(path, this.TestContext.CancellationToken).ConfigureAwait(false))!;
-        journal["roots"]![0]!["mount"] = "../outside";
+        journal["candidateGenerations"]![0] = Guid.Empty.ToString("D");
         await File.WriteAllTextAsync(path, journal.ToJsonString(), this.TestContext.CancellationToken).ConfigureAwait(false);
         using var writer = await CookOutputLease.AcquireWriteAsync(project.Root, this.TestContext.CancellationToken).ConfigureAwait(false);
-        Func<Task> read = async () => _ = await CookPublicationTransaction.LoadAsync(project.Context, project.Operation.OperationId, project.Files, writer, this.TestContext.CancellationToken).ConfigureAwait(false);
+        Func<Task> read = async () => _ = await CookPublicationTransaction.LoadAsync(project.Context, project.Operation.OperationId, project.Files, project.Manager, writer, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = await read.Should().ThrowAsync<InvalidDataException>().ConfigureAwait(false);
         project.AssertOld();
     }
@@ -115,16 +110,22 @@ public sealed partial class CookPublicationTransactionTests
     public async Task CommittedOutputMustStillMatchItsProof()
     {
         using var project = new PublicationProject(hadPrevious: true);
-        using var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        await using var staging = await project.StageAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         var transaction = await project.PrepareAsync(staging, this.TestContext.CancellationToken).ConfigureAwait(false);
-        await transaction.PublishAsync(preview: null, static () => { }, this.TestContext.CancellationToken).ConfigureAwait(false);
-        var path = Path.Combine(project.Root, ".cooked", "Content", "container.index.bin");
+        using var accepted = await transaction.PublishAsync(preview: null, project.Baseline, static () => { }, this.TestContext.CancellationToken).ConfigureAwait(false);
+        await staging.DisposeAsync().ConfigureAwait(false);
+        var path = Path.Combine(accepted.FindProjectRoot("Content")!, "container.index.bin");
         var timestamp = File.GetLastWriteTimeUtc(path);
-        await File.WriteAllTextAsync(path, "bad:Content", this.TestContext.CancellationToken).ConfigureAwait(false);
+        var bytes = await File.ReadAllBytesAsync(path, this.TestContext.CancellationToken).ConfigureAwait(false);
+        bytes[^1] ^= 1;
+        await File.WriteAllBytesAsync(path, bytes, this.TestContext.CancellationToken).ConfigureAwait(false);
         File.SetLastWriteTimeUtc(path, timestamp);
         using var writer = await CookOutputLease.AcquireWriteAsync(project.Root, this.TestContext.CancellationToken).ConfigureAwait(false);
-        var loaded = await CookPublicationTransaction.LoadAsync(project.Context, project.Operation.OperationId, project.Files, writer, this.TestContext.CancellationToken).ConfigureAwait(false);
-        Func<Task> verify = async () => await loaded.VerifyCommittedAsync(writer).ConfigureAwait(false);
+        var loaded = await CookPublicationTransaction.LoadAsync(project.Context, project.Operation.OperationId, project.Files, project.Manager, writer, this.TestContext.CancellationToken).ConfigureAwait(false);
+        Func<Task> verify = async () =>
+        {
+            using var catalog = await accepted.CreateCatalogAsync(accepted.Roots.Single(static root => root.Name == "Content"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        };
         _ = await verify.Should().ThrowAsync<InvalidDataException>().ConfigureAwait(false);
     }
 
@@ -137,7 +138,7 @@ public sealed partial class CookPublicationTransactionTests
 
         foreach (var path in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
         {
-            if (Path.GetExtension(path) is ".lock" or ".lease")
+            if (Path.GetFileName(path) != CookedGeneration.MarkerFileName && Path.GetExtension(path) is ".lock" or ".lease")
             {
                 continue;
             }
@@ -149,28 +150,17 @@ public sealed partial class CookPublicationTransactionTests
 
     private static void AssertRecoveredRoot(string projectRoot, string mount, bool hadPrevious)
     {
-        var root = Path.Combine(projectRoot, ".cooked", mount);
-        if (hadPrevious)
+        var headPath = CookPublicationPaths.Head(projectRoot);
+        if (!hadPrevious)
         {
-            _ = File.ReadAllText(Path.Combine(root, "container.index.bin")).Should().Be("old:" + mount);
-            _ = File.ReadAllText(Path.Combine(root, "keep.bin")).Should().Be("keep:" + mount);
+            _ = File.Exists(headPath).Should().BeFalse();
+            return;
         }
-        else
-        {
-            _ = Directory.Exists(root).Should().BeFalse();
-        }
-    }
 
-    private static void AssertRecoveredMetadata(string projectRoot, string relative, string expected, bool hadPrevious)
-    {
-        var path = Path.Combine(projectRoot, relative);
-        if (hadPrevious)
-        {
-            _ = File.ReadAllText(path).Should().Be(expected);
-        }
-        else
-        {
-            _ = File.Exists(path).Should().BeFalse();
-        }
+        var head = JsonSerializer.Deserialize<CookPublicationHead>(File.ReadAllBytes(headPath), CookPublicationDocument.JsonOptions)!;
+        var document = JsonSerializer.Deserialize<CookPublicationDocument>(File.ReadAllBytes(CookPublicationPaths.Document(projectRoot, head.PublicationId)), CookPublicationDocument.JsonOptions)!;
+        var root = document.Roots.Single(root => root.Name == mount).ResolvePath(projectRoot);
+        _ = File.ReadAllText(Path.Combine(root, "value.txt")).Should().Be("old:" + mount);
+        _ = File.ReadAllText(Path.Combine(root, "keep.bin")).Should().Be("keep:" + mount);
     }
 }

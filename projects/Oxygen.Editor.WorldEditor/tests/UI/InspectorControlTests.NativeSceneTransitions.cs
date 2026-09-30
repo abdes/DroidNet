@@ -62,7 +62,7 @@ public sealed partial class InspectorControlTests
                     _ = await fixture.Runtime.SetViewCameraSettingsAsync(view, 90, 0.1f, 1000).ConfigureAwait(true);
                     await ObserveRenderedFramesAsync(fixture, timeout.Token).ConfigureAwait(true);
                     await fixture.SuspendCookedContentAsync().WaitAsync(timeout.Token).ConfigureAwait(true);
-                    await fixture.RefreshCookedRootsAsync().WaitAsync(timeout.Token).ConfigureAwait(true);
+                    await fixture.RefreshCookedRootsAsync(mountPublished: false).WaitAsync(timeout.Token).ConfigureAwait(true);
                 }
                 finally
                 {

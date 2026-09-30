@@ -3,12 +3,11 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Managed.Assets.Catalog;
-using DroidNet.Storage;
 
 namespace Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
 
 /// <summary>
-/// A catalog that aggregates the project's assets and allows dynamic addition of folders.
+/// A project catalog bound to its accepted content publication.
 /// </summary>
 public interface IProjectAssetCatalog : IAssetCatalog
 {
@@ -18,6 +17,12 @@ public interface IProjectAssetCatalog : IAssetCatalog
     /// <returns>A task that completes when initialization is done.</returns>
     Task InitializeAsync();
 
+    /// <summary>Captures records and their shared publication for status and logical-folder projection.</summary>
+    /// <param name="query">The requested catalog scope.</param>
+    /// <param name="cancellationToken">Cancels discovery.</param>
+    /// <returns>An owned snapshot disposed after dependent reads finish.</returns>
+    Task<ProjectAssetSnapshot> ReadSnapshotAsync(AssetQuery query, CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Refreshes any underlying catalogs that expose an explicit refresh capability.
     /// </summary>
@@ -25,11 +30,10 @@ public interface IProjectAssetCatalog : IAssetCatalog
     /// <returns>A task that completes when refreshable catalog snapshots are current.</returns>
     Task RefreshAsync(CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Adds a folder to the catalog.
-    /// </summary>
-    /// <param name="folder">The folder to add.</param>
-    /// <param name="mountPoint">The mount point to use for the assets in this folder (e.g. "project", "mount-name").</param>
-    /// <returns>A task that completes when the folder has been added.</returns>
-    Task AddFolderAsync(IFolder folder, string mountPoint);
+    /// <summary>Refreshes from the exact publication accepted by the runtime.</summary>
+    /// <param name="publication">A borrowed, coherent selected publication.</param>
+    /// <param name="cancellationToken">Cancels catalog preparation.</param>
+    /// <returns>Completion after the accepted snapshot is visible.</returns>
+    Task RefreshAsync(Oxygen.Editor.ContentPipeline.Publication.CookPublicationReadLease publication, CancellationToken cancellationToken = default);
+
 }

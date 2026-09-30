@@ -30,6 +30,7 @@ public static class AssetStatusPresentation
             {
                 AssetCookFreshness.MissingSource => "Source missing",
                 AssetCookFreshness.InvalidSource => "Invalid source",
+                AssetCookFreshness.Unknown when status.Diagnostics.Any(static diagnostic => diagnostic.Severity == Oxygen.Managed.Core.Diagnostics.DiagnosticSeverity.Error) => "Status unavailable",
                 AssetCookFreshness.Unknown => "Status pending",
                 _ when status.HasPublishedOutput && status.OutputAvailability == CookedOutputAvailability.Missing => "Needs cooking",
                 _ when status.HasPublishedOutput && status.OutputAvailability == CookedOutputAvailability.Unknown => "Status pending",
@@ -52,7 +53,7 @@ public static class AssetStatusPresentation
     public static string GetTone(AssetCookStatus? status, AssetCookActivity? activity, bool hasUnsavedChanges = false, AssetRuntimeAvailability runtimeAvailability = AssetRuntimeAvailability.Unknown)
         => GetText(status, activity, hasUnsavedChanges, runtimeAvailability) switch
         {
-            "Unsaved changes" or "Needs save" or "Out of date" => "Caution",
+            "Unsaved changes" or "Needs save" or "Out of date" or "Status unavailable" => "Caution",
             "Cook failed" or "Source missing" or "Invalid source" or "Preview issue" => "Critical",
             "Cooked" or "Ready" => "Success",
             _ => "Neutral",
@@ -79,6 +80,7 @@ public static class AssetStatusPresentation
             "Cook failed" => "Cooking failed. Open Cooking for details and Retry.",
             "Source missing" => "Restore the missing source or choose a replacement.",
             "Invalid source" => "Correct the source errors before cooking.",
+            "Status unavailable" => string.Join(" ", status!.Diagnostics.Select(static diagnostic => diagnostic.Message)),
             "Status pending" => "Waiting for current source, publication or engine information.",
             "Needs cooking" when status?.HasPublishedOutput == true => "Cooked output is missing. Cook again to restore it.",
             "Needs cooking" => "No cooked content yet. Cooking is needed to use this asset in the viewport.",

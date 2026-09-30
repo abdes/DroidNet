@@ -55,10 +55,10 @@ public sealed partial class ContentPipelineServiceTests
         _ = result.CookedAssets.Concat(result.ReusedAssets).Select(static asset => asset.CookedAssetUri).Should().BeEquivalentTo(inputs.Select(static path => new Uri("asset:///" + path[..^5])));
         foreach (var path in inputs)
         {
-            _ = File.Exists(Path.Combine(workspace.Root, ".cooked", path[..^5])).Should().BeTrue(path);
+            _ = File.Exists(workspace.CookedPath(path[..^5])).Should().BeTrue(path);
         }
 
-        var inspected = await api.InspectLooseCookedRootAsync(Path.Combine(workspace.Root, ".cooked/Content"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var inspected = await api.InspectLooseCookedRootAsync(workspace.CookedRoot("Content"), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = inspected.Succeeded.Should().BeTrue();
         _ = inspected.Assets.Where(static asset => asset.Kind == ContentCookAssetKind.Material).Select(static asset => asset.AssetKey)
             .Should().HaveCount(2).And.OnlyHaveUniqueItems().And.NotContainNulls();

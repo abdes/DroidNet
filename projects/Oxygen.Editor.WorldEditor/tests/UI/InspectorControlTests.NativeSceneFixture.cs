@@ -77,6 +77,7 @@ public sealed partial class InspectorControlTests
             {
                 AuthoringMounts = [new("Content", "Content")],
             }) { Name = "Environment fields" };
+            File.WriteAllText(Path.Combine(this.directory.FullName, "Project.oxy"), ProjectInfo.ToJson(project.ProjectInfo));
             this.projectContexts.Activate(ProjectContext.FromProjectInfo(project.ProjectInfo));
             this.materialCookCoordinator = new(this.projectContexts, NullLogger<ContentCookCoordinator>.Instance);
             this.materialPipeline = new(this.projectContexts, this.materialCookCoordinator, new CookDocumentRegistry());
@@ -135,6 +136,8 @@ public sealed partial class InspectorControlTests
 
         public string ProjectRoot => this.directory.FullName;
 
+        public ProjectContextService Projects => this.projectContexts;
+
         public async Task<MaterialSlotTarget> ReadSingleMaterialSlotAsync(Guid nodeId, CancellationToken cancellationToken)
         {
             var node = this.Source.RootNodes.Select(root => SceneTraversal.FindNodeById(root, nodeId)).OfType<SceneNode>().Single();
@@ -155,10 +158,12 @@ public sealed partial class InspectorControlTests
             if (!this.foreignMaterialPipelines.TryGetValue(root, out var value))
             {
                 var contexts = new ProjectContextService();
-                contexts.Activate(ProjectContext.FromProjectInfo(new ProjectInfo("Foreign material fixture", Category.Games, root)
+                var info = new ProjectInfo("Foreign material fixture", Category.Games, root)
                 {
                     AuthoringMounts = [new("Content", "Content")],
-                }));
+                };
+                File.WriteAllText(Path.Combine(root, "Project.oxy"), ProjectInfo.ToJson(info));
+                contexts.Activate(ProjectContext.FromProjectInfo(info));
                 var coordinator = new ContentCookCoordinator(contexts, NullLogger<ContentCookCoordinator>.Instance);
                 value = (coordinator, new(contexts, coordinator, new CookDocumentRegistry()));
                 this.foreignMaterialPipelines.Add(root, value);
@@ -169,9 +174,21 @@ public sealed partial class InspectorControlTests
 
         public void SetMaterialChoices(IReadOnlyList<MaterialPickerResult> choices) => this.materialChoices.OnNext(choices);
 
-        public void MountCookedRoot(string path) => this.engine.MountProjectCookedRoot(path);
+        public async Task<string> GetCookedRootAsync(string projectRoot, CancellationToken token)
+        {
+            var info = await this.manager.LoadProjectInfoAsync(projectRoot).ConfigureAwait(true)
+                ?? throw new InvalidOperationException("The native fixture project has not been saved.");
+            using var publication = await this.MaterialPipelineFor(projectRoot).Publication.AcquireReadAsync(ProjectContext.FromProjectInfo(info), token).ConfigureAwait(true);
+            return publication.FindProjectRoot("Content") ?? throw new InvalidOperationException("The fixture has not cooked its Content mount.");
+        }
 
-        public Task RefreshCookedRootsAsync(params string[] paths) => this.engine.RefreshProjectCookedRootsAsync(paths);
+        public async Task RefreshCookedRootsAsync(bool mountPublished = true)
+        {
+            using var selected = await this.materialPipeline.Publication.AcquireReadAsync(this.projectContexts.ActiveProject!, CancellationToken.None).ConfigureAwait(true);
+            var bindings = mountPublished ? selected.Roots.Zip(selected.RootPaths)
+                .Select(static entry => new RuntimeCookedRoot(entry.Second, entry.First.Owner == Oxygen.Editor.ContentPipeline.Publication.CookPublicationRootOwner.Project ? entry.First.Name : null)).ToArray() : [];
+            await this.engine.RefreshProjectCookedRootsAsync(bindings, selected.Retain()).ConfigureAwait(true);
+        }
 
         public Task SuspendCookedContentAsync() => this.engine.SuspendCookedContentAsync();
 
@@ -186,14 +203,14 @@ public sealed partial class InspectorControlTests
             return new(this.hosting, new ViewModelToView(Mock.Of<IViewLocator>()), this.messenger, this.Commands, this.documents.Object, default, assets ?? this.AssetCatalog.Object, materials ?? this.MaterialPicker.Object, this.sync, builtins ?? new Oxygen.Testing.BuiltinCatalogDiscoveryFixture(), contentDemand ?? Mock.Of<ISceneContentDemandService>(), this.materialPipeline.Pipeline, this.projectContexts);
         }
 
-        public async Task InitializeAsync(CancellationToken cancellationToken, string? cookedRoot = null)
+        public async Task InitializeAsync(CancellationToken cancellationToken, bool mountPublished = false)
         {
             _ = (await this.engine.InitializeAsync(cancellationToken).ConfigureAwait(true)).Should().BeTrue();
             this.engine.TargetFps = 60;
             await this.engine.StartAsync().ConfigureAwait(true);
-            if (cookedRoot is not null)
+            if (mountPublished)
             {
-                this.MountCookedRoot(cookedRoot);
+                await this.RefreshCookedRootsAsync().ConfigureAwait(true);
             }
 
             await this.SynchronizeAsync(cancellationToken).ConfigureAwait(true);

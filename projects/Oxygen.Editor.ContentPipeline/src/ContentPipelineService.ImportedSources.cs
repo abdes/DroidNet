@@ -81,17 +81,7 @@ public sealed partial class ContentPipelineService
         }).ToArray();
     }
 
-    private static async Task ReleaseImportedDiscoveryAfterDrainAsync(Task drain, FileStream ownership)
-    {
-        try
-        {
-            await drain.ConfigureAwait(false);
-        }
-        finally
-        {
-            await ownership.DisposeAsync().ConfigureAwait(false);
-        }
-    }
+
 
     private static ContentCookResult ValidateImportedIdentities(Guid operationId, ContentCookScope scope, ContentCookInput source, ContentCookResult result)
     {
@@ -151,25 +141,9 @@ public sealed partial class ContentPipelineService
     {
         var inspector = this.engineContentPipelineApi as ISceneSourceInspector
             ?? throw new InvalidOperationException("The native pipeline cannot inspect changed model sources.");
-        var ownership = CookOutputLease.AcquireOperation(operation.Project.ProjectRoot, operation.OperationId);
-        Task? retainedDrain = null;
-        try
-        {
-            return await new SceneImportSourceDiscovery(cookDocuments, this.cookCoordinator, inspector)
-                .DiscoverAsync(operation, input.SourceAbsolutePath, cancellationToken, artifacts).ConfigureAwait(false);
-        }
-        catch (ContentPipelineTerminationException failure)
-        {
-            retainedDrain = ReleaseImportedDiscoveryAfterDrainAsync(failure.DrainCompletion, ownership);
-            throw new ContentPipelineTerminationException(failure.InnerException ?? failure, retainedDrain);
-        }
-        finally
-        {
-            if (retainedDrain is null)
-            {
-                await ownership.DisposeAsync().ConfigureAwait(false);
-            }
-        }
+        this.cookCoordinator.VerifyWriter(operation);
+        return await new SceneImportSourceDiscovery(cookDocuments, this.cookCoordinator, inspector)
+            .DiscoverAsync(operation, input.SourceAbsolutePath, cancellationToken, artifacts).ConfigureAwait(false);
     }
 
     private async Task<ContentCookResult> CookWithImportedSourcesAsync(Guid operationId, ContentCookScope scope, CancellationToken cancellationToken)
@@ -188,7 +162,7 @@ public sealed partial class ContentPipelineService
             var sourceScope = scope with { Inputs = [input] };
             var manifest = new ContentImportManifest(
                 1,
-                scope.StagingOutputRoot!,
+                (scope.Output ?? throw new InvalidOperationException("The import has no generation owner.")).Path,
                 settings.CreateLayout(),
                 [
                     new ContentImportJob(
@@ -242,12 +216,12 @@ public sealed partial class ContentPipelineService
             }
         }
 
-        if (!File.Exists(Path.Combine(scope.StagingOutputRoot!, "container.index.bin")))
+        if (!File.Exists(Path.Combine((scope.Output ?? throw new InvalidOperationException("The import has no generation owner.")).Path, "container.index.bin")))
         {
             return null;
         }
 
-        var inspection = await this.engineContentPipelineApi.InspectLooseCookedRootAsync(scope.StagingOutputRoot!, cancellationToken).ConfigureAwait(false);
+        var inspection = await this.engineContentPipelineApi.InspectLooseCookedRootAsync((scope.Output ?? throw new InvalidOperationException("The import has no generation owner.")).Path, cancellationToken).ConfigureAwait(false);
         var owned = scope.PreviousProvenance?.Products.FirstOrDefault(product => product.SourceUri == source.AssetUri)?.Outputs
             .Select(static output => output.Asset.VirtualPath).ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
         var conflict = inspection.Assets.FirstOrDefault(asset => prefixes.Any(prefix => asset.VirtualPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) && !owned.Contains(asset.VirtualPath));

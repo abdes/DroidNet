@@ -80,7 +80,7 @@ public sealed partial class AssetIdentityReducerTests
             workspace,
             [
                 new AssetRecord(new Uri("asset:///Content/Materials/Red.omat.json")),
-                new AssetRecord(new Uri("asset:///Content/Materials/Red.omat")),
+                IndexedOutput(new Uri("asset:///Content/Materials/Red.omat"), cookedPath),
             ]);
 
         _ = rows.Should().ContainSingle();
@@ -152,7 +152,7 @@ public sealed partial class AssetIdentityReducerTests
             workspace,
             [
                 new AssetRecord(new Uri("asset:///Content/Materials/Red.omat.json")),
-                new AssetRecord(new Uri("asset:///Content/Materials/Red.omat")),
+                IndexedOutput(new Uri("asset:///Content/Materials/Red.omat"), cookedPath),
                 new AssetRecord(new Uri("asset:///Cooked/Content/Materials/Red.omat")),
             ]);
 
@@ -179,7 +179,7 @@ public sealed partial class AssetIdentityReducerTests
             workspace,
             [
                 new AssetRecord(new Uri("asset:///Content/Materials/Gold.omat.json")),
-                new AssetRecord(new Uri("asset:///Content/Materials/Gold.omat")),
+                IndexedOutput(new Uri("asset:///Content/Materials/Gold.omat"), cookedPath),
             ]);
 
         _ = rows[0].PrimaryState.Should().Be(AssetState.Descriptor);
@@ -187,7 +187,7 @@ public sealed partial class AssetIdentityReducerTests
     }
 
     [TestMethod]
-    public void Reduce_ShouldResolveCookedPathsFromProjectCookScope()
+    public void ReduceResolvesCookedPathsFromIndexedMetadata()
     {
         using var workspace = new TempWorkspace();
         var descriptorPath = workspace.SourcePath("Content/Materials/Red.omat.json");
@@ -200,7 +200,7 @@ public sealed partial class AssetIdentityReducerTests
         var rows = new AssetIdentityReducer().Reduce(
             [
                 new AssetRecord(new Uri("asset:///Content/Materials/Red.omat.json")),
-                new AssetRecord(new Uri("asset:///Content/Materials/Red.omat")),
+                IndexedOutput(new Uri("asset:///Content/Materials/Red.omat"), cookedPath),
             ],
             project,
             new ProjectCookScope(project.ProjectId, project.ProjectRoot, workspace.SourcePath("custom-cooked")),
@@ -228,7 +228,7 @@ public sealed partial class AssetIdentityReducerTests
         var rows = new AssetIdentityReducer().Reduce(
             [
                 new AssetRecord(new Uri("asset:///Content/Materials/Red.omat.json")),
-                new AssetRecord(new Uri("asset:///Content/Materials/Red.omat")),
+                IndexedOutput(new Uri("asset:///Content/Materials/Red.omat"), cookedPath),
             ],
             project,
             CreateCookScope(workspace, project),
@@ -262,6 +262,13 @@ public sealed partial class AssetIdentityReducerTests
         _ = row.IdentityUri.Should().Be(uri);
         _ = row.PrimaryState.Should().Be(AssetState.Missing);
         _ = row.DiagnosticCodes.Should().Contain(AssetIdentityDiagnosticCodes.ResolveMissing);
+    }
+
+    private static AssetRecord IndexedOutput(Uri uri, string path)
+    {
+        var descriptor = uri.AbsolutePath["/Content/".Length..];
+        var root = path[..^(descriptor.Length + 1)];
+        return new(uri) { Cooked = new(root, descriptor, Guid.NewGuid(), new(1, 2), 1, 6, new string('0', 64)) { VirtualPath = uri.AbsolutePath } };
     }
 
     private static IReadOnlyList<ContentBrowserAssetItem> Reduce(TempWorkspace workspace, IReadOnlyList<AssetRecord> records)

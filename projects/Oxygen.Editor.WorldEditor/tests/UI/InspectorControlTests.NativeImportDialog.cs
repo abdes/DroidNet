@@ -48,7 +48,7 @@ public sealed partial class InspectorControlTests
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(this.TestContext.CancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(30));
         using var services = new CatalogWorkloadServices(fixture);
-        using var catalog = new ProjectAssetCatalog(services.Projects, services.Storage, services.Builtins);
+        await using var catalog = new ProjectAssetCatalog(services.Projects, services.Storage, services.Builtins, services.Publication);
         using var provider = new ContentBrowserAssetProvider(catalog, services.Projects, services.Scopes, new AssetIdentityReducer(), services.Pipeline, services.Documents, services.Runs, fixture.Runtime);
         await fixture.InitializeAsync(timeout.Token).ConfigureAwait(true);
         using var publication = fixture.RegisterWorkspacePublication(services, catalog);

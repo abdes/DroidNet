@@ -129,7 +129,7 @@ public sealed partial class ContentPipelineServiceTests
         foreach (var (path, bytes) in descriptors)
         {
             var entry = first.Inspection.Assets.Single(asset => string.Equals(asset.VirtualPath, path, StringComparison.Ordinal));
-            _ = (await File.ReadAllBytesAsync(Path.Combine(first.Inspection.CookedRoot, entry.DescriptorRelativePath!), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Equal(bytes);
+            _ = (await File.ReadAllBytesAsync(Path.Combine(workspace.CookedRoot("Content"), entry.DescriptorRelativePath!), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Equal(bytes);
         }
 
         _ = (await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false)).IsUpToDate.Should().BeTrue();
@@ -164,7 +164,7 @@ public sealed partial class ContentPipelineServiceTests
         _ = repaired.IsUpToDate.Should().BeFalse();
         _ = api.Imported.Should().ContainSingle();
         _ = api.Imported[0].Manifest.Jobs.Should().ContainSingle(job => job.Type == "geometry-descriptor");
-        _ = (await File.ReadAllBytesAsync(path, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Equal(bytes);
+        _ = (await File.ReadAllBytesAsync(Path.Combine(workspace.CookedRoot("Content"), geometry.DescriptorRelativePath!), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Equal(bytes);
         _ = (await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false)).IsUpToDate.Should().BeTrue();
     }
 
@@ -180,7 +180,7 @@ public sealed partial class ContentPipelineServiceTests
         var api = CreateRecordingApi(compatibility);
         var pipeline = CreateIncrementalService(workspace, api, compatibility);
         AssertCookSucceeded(await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false));
-        var path = Path.Combine(workspace.Root, ".build", "cook", "provenance.json");
+        var path = Publication.CookPublicationPaths.Head(workspace.Root);
         var before = await File.ReadAllBytesAsync(path, this.TestContext.CancellationToken).ConfigureAwait(false);
         workspace.WriteText("Content/Materials/Blue.omat.json", workspace.ReadText("Content/Materials/Blue.omat.json").Replace("0.5", "0.8", StringComparison.Ordinal));
         api.FailNextImport = true;
@@ -226,8 +226,21 @@ public sealed partial class ContentPipelineServiceTests
         => _ = result.Status.Should().BeOneOf([OperationStatus.Succeeded, OperationStatus.SucceededWithWarnings], string.Join(Environment.NewLine, result.Diagnostics.Select(static diagnostic => diagnostic.TechnicalMessage ?? diagnostic.Message)));
 
     private static Dictionary<string, (string hash, DateTime write)> ReadOutputIdentities(string projectRoot)
-        => Directory.EnumerateFiles(Path.Combine(projectRoot, ".cooked"), "*", SearchOption.AllDirectories)
-            .ToDictionary(static path => path, static path => (Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))), File.GetLastWriteTimeUtc(path)), StringComparer.Ordinal);
+    {
+        var headPath = Publication.CookPublicationPaths.Head(projectRoot);
+        if (!File.Exists(headPath))
+        {
+            return [];
+        }
+
+        var head = System.Text.Json.JsonSerializer.Deserialize<Publication.CookPublicationHead>(File.ReadAllBytes(headPath), Publication.CookPublicationDocument.JsonOptions)!;
+        var document = System.Text.Json.JsonSerializer.Deserialize<Publication.CookPublicationDocument>(File.ReadAllBytes(Publication.CookPublicationPaths.Document(projectRoot, head.PublicationId)), Publication.CookPublicationDocument.JsonOptions)!;
+        return document.Roots.Where(static root => root.Owner == Publication.CookPublicationRootOwner.Project)
+            .SelectMany(root => Directory.EnumerateFiles(root.ResolvePath(projectRoot), "*", SearchOption.AllDirectories)
+                .Where(static path => Path.GetFileName(path) != Publication.CookedGeneration.MarkerFileName)
+                .Select(path => (Key: root.Name + "/" + Path.GetRelativePath(root.ResolvePath(projectRoot), path).Replace('\\', '/'), Path: path)))
+            .ToDictionary(static file => file.Key, static file => (Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(file.Path))), File.GetLastWriteTimeUtc(file.Path)), StringComparer.Ordinal);
+    }
 
     private static async Task PrepareIncrementalSceneAsync(TempWorkspace workspace)
     {

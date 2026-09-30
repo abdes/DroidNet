@@ -710,7 +710,7 @@ public sealed partial class SceneEngineSync(
         return await revertSync(cancellationToken).ConfigureAwait(false);
     }
 
-    private static RuntimeSetEnvironment BuildEnvironmentCommand(Scene scene, SceneEnvironmentData environment)
+    private RuntimeSetEnvironment BuildEnvironmentCommand(Scene scene, SceneEnvironmentData environment)
     {
         var sky = environment.SkyAtmosphere ?? new SkyAtmosphereEnvironmentData();
         var post = environment.PostProcess ?? new PostProcessEnvironmentData();
@@ -748,7 +748,7 @@ public sealed partial class SceneEngineSync(
                 post.AutoExposureBlackInfluence,
                 post.AutoExposureTransitionDistanceEv,
                 post.AutoExposureCompensationCurve.Select(static key => new RuntimeExposureCompensationKey(key.MeteredEv, key.CompensationEv)).ToImmutableArray(),
-                CreateExposureMaskReference(scene, post.AutoExposureMeteringMask),
+                this.CreateExposureMaskReference(scene, post.AutoExposureMeteringMask),
                 post.BloomIntensity,
                 post.BloomThreshold,
                 post.Saturation,
@@ -757,7 +757,7 @@ public sealed partial class SceneEngineSync(
                 post.DisplayGamma);
     }
 
-    private static RuntimeTextureReference? CreateExposureMaskReference(Scene scene, Uri? mask)
+    private RuntimeTextureReference? CreateExposureMaskReference(Scene scene, Uri? mask)
     {
         if (mask is null)
         {
@@ -773,8 +773,9 @@ public sealed partial class SceneEngineSync(
         }
 
         return new(mask,
-            ContentPipeline.ContentPipelinePaths.GetCookedMountRoot(projectRoot, path[1..separator]),
-            path[(separator + 1)..]);
+            this.engineService.ContentStatus.Bindings.SingleOrDefault(root => string.Equals(root.ProjectMount, path[1..separator], StringComparison.OrdinalIgnoreCase))?.Path
+                ?? throw new InvalidOperationException("The exposure mask has no accepted cooked generation. Cook its content before previewing it."),
+            path[(separator + 1)..]) { ProjectMount = path[1..separator] };
     }
 
     private async Task<bool> SyncSceneCoreAsync(Scene scene, bool skipIfCurrent, CancellationToken cancellationToken)
@@ -917,7 +918,7 @@ public sealed partial class SceneEngineSync(
             return false;
         }
 
-        world.Execute(BuildEnvironmentCommand(scene, scene.Environment));
+        world.Execute(this.BuildEnvironmentCommand(scene, scene.Environment));
         world.Execute(new RuntimeSetBackgroundColor(scene.Environment.BackgroundColor));
         lock (this.documentGate)
         {
@@ -1017,7 +1018,7 @@ public sealed partial class SceneEngineSync(
             SceneOperationKinds.EditEnvironment,
             LiveSyncDiagnosticCodes.EnvironmentRejected,
             LiveSyncDiagnosticCodes.EnvironmentFailed,
-            world => world.Execute(BuildEnvironmentCommand(scene, environment)),
+            world => world.Execute(this.BuildEnvironmentCommand(scene, environment)),
             cancellationToken,
             dispatchOverride);
     }

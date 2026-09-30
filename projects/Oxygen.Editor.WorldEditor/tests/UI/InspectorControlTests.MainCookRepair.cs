@@ -45,7 +45,7 @@ public sealed partial class InspectorControlTests
         fixture.Context.Metadata.Title = "Main";
         _ = (await fixture.Commands.SaveSceneAsync(fixture.Context).ConfigureAwait(true)).Succeeded.Should().BeTrue();
         using var services = new CatalogWorkloadServices(fixture);
-        using var catalog = new ProjectAssetCatalog(services.Projects, services.Storage, services.Builtins);
+        await using var catalog = new ProjectAssetCatalog(services.Projects, services.Storage, services.Builtins, services.Publication);
         using var publication = fixture.RegisterWorkspacePublication(services, catalog);
         using var document = fixture.RegisterMainCookDocument(services);
         var uri = new Uri("asset:///Content/Scenes/Main.oscene.json");

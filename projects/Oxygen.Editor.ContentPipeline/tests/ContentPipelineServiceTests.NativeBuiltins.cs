@@ -47,7 +47,7 @@ public sealed partial class ContentPipelineServiceTests
             PostProcess = new PostProcessEnvironmentData { ExposureMode = ExposureMode.Auto },
         });
         await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
-        _ = Directory.EnumerateFiles(Path.Combine(workspace.Root, ".cooked"), "*", SearchOption.AllDirectories).Should().BeEmpty();
+        _ = File.Exists(Publication.CookPublicationPaths.Head(workspace.Root)).Should().BeFalse();
         using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
         var pipeline = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
@@ -95,7 +95,7 @@ public sealed partial class ContentPipelineServiceTests
         foreach (var definition in catalog.AuthoringGeometries)
         {
             _ = result.CookedAssets.Should().Contain(asset => asset.SourceAssetUri == definition.AssetUri);
-            var path = Path.Combine(workspace.Root, ".cooked", definition.Contribution.VirtualPath.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
+            var path = workspace.CookedPath(definition.Contribution.VirtualPath);
             _ = File.Exists(path).Should().BeTrue(definition.Name);
         }
 
@@ -145,7 +145,7 @@ public sealed partial class ContentPipelineServiceTests
         }
 
         var shape = catalog.Geometries[0];
-        var path = Path.Combine(workspace.Root, ".cooked", shape.Contribution.VirtualPath.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
+        var path = workspace.CookedPath(shape.Contribution.VirtualPath);
         await File.WriteAllTextAsync(path, "unrelated replacement", this.TestContext.CancellationToken).ConfigureAwait(false);
         var changed = await pipeline.ReadAsync(workspace.ProjectContext, [shape.AssetUri, new Uri("asset://" + shape.Contribution.VirtualPath)], this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = changed.Should().HaveCount(2).And.OnlyContain(

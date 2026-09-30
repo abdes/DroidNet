@@ -52,7 +52,7 @@ internal sealed partial class NativeRuntimeCommandTransport(EngineContext contex
                 this.world.SetBackgroundColor(value.Color);
                 break;
             case RuntimeSetEnvironment value:
-                this.world.SetEnvironment(value.AtmosphereEnabled, value.SunDiskEnabled, value.PlanetRadiusMeters, value.AtmosphereHeightMeters, value.GroundAlbedoRgb, value.RayleighScaleHeightMeters, value.MieScaleHeightMeters, value.MieAnisotropy, value.SkyLuminanceFactorRgb, value.AerialPerspectiveDistanceScale, value.AerialScatteringStrength, value.AerialPerspectiveStartDepthMeters, value.HeightFogContribution, value.ExposureMode, value.ExposureEnabled, value.ExposureKey, value.ManualExposureEv, value.ExposureCompensation, value.ToneMapping, value.AutoExposureMeteringMode, value.AutoExposureMinEv, value.AutoExposureMaxEv, value.AutoExposureSpeedUp, value.AutoExposureSpeedDown, value.AutoExposureLowPercentile, value.AutoExposureHighPercentile, value.AutoExposureMinLogLuminance, value.AutoExposureLogLuminanceRange, value.AutoExposureTargetLuminance, value.AutoExposureSpotMeterRadius, value.AutoExposureBlackInfluence, value.AutoExposureTransitionDistanceEv, value.AutoExposureCompensationCurve.Select(static key => new ExposureCompensationKeyManaged { MeteredEv = key.MeteredEv, CompensationEv = key.CompensationEv }).ToArray(), value.AutoExposureMeteringMask?.CookedRoot, value.AutoExposureMeteringMask?.DescriptorRelativePath, value.BloomIntensity, value.BloomThreshold, value.Saturation, value.Contrast, value.VignetteIntensity, value.DisplayGamma, (generation, message) => this.OnAssetLoadFailed(request, generation, message), generation => this.OnAssetLoadSucceeded(request, generation));
+                this.world.SetEnvironment(value.AtmosphereEnabled, value.SunDiskEnabled, value.PlanetRadiusMeters, value.AtmosphereHeightMeters, value.GroundAlbedoRgb, value.RayleighScaleHeightMeters, value.MieScaleHeightMeters, value.MieAnisotropy, value.SkyLuminanceFactorRgb, value.AerialPerspectiveDistanceScale, value.AerialScatteringStrength, value.AerialPerspectiveStartDepthMeters, value.HeightFogContribution, value.ExposureMode, value.ExposureEnabled, value.ExposureKey, value.ManualExposureEv, value.ExposureCompensation, value.ToneMapping, value.AutoExposureMeteringMode, value.AutoExposureMinEv, value.AutoExposureMaxEv, value.AutoExposureSpeedUp, value.AutoExposureSpeedDown, value.AutoExposureLowPercentile, value.AutoExposureHighPercentile, value.AutoExposureMinLogLuminance, value.AutoExposureLogLuminanceRange, value.AutoExposureTargetLuminance, value.AutoExposureSpotMeterRadius, value.AutoExposureBlackInfluence, value.AutoExposureTransitionDistanceEv, value.AutoExposureCompensationCurve.Select(static key => new ExposureCompensationKeyManaged { MeteredEv = key.MeteredEv, CompensationEv = key.CompensationEv }).ToArray(), value.AutoExposureMeteringMask?.CookedRoot, value.AutoExposureMeteringMask?.DescriptorRelativePath, value.AutoExposureMeteringMask?.ProjectMount, value.BloomIntensity, value.BloomThreshold, value.Saturation, value.Contrast, value.VignetteIntensity, value.DisplayGamma, (generation, message) => this.OnAssetLoadFailed(request, generation, message), generation => this.OnAssetLoadSucceeded(request, generation));
                 break;
             case RuntimeDetachGeometry value:
                 this.world.DetachGeometry(value.NodeId);
@@ -129,14 +129,9 @@ internal sealed partial class NativeRuntimeCommandTransport(EngineContext contex
         }
     }
 
-    /// <inheritdoc/>
-    public void MountCookedRoot(string path) => this.world.AddLooseCookedRoot(path);
-
-    /// <inheritdoc/>
-    public void ClearCookedRoots() => this.world.ClearCookedRoots();
-
     /// <inheritdoc />
-    public Task ReplaceCookedRootsAsync(IReadOnlyList<string> paths) => this.world.ReplaceCookedRootsAsync([.. paths]);
+    public Task ReplaceCookedRootsAsync(IReadOnlyList<RuntimeCookedRoot> bindings)
+        => this.world.ReplaceCookedRootsAsync([.. bindings.Select(static root => new CookedRootBindingManaged { Path = root.Path, ProjectMount = root.ProjectMount })]);
 
     /// <inheritdoc />
     public Task SetCookedContentPausedAsync(bool paused) => this.world.SetCookedContentPausedAsync(paused);

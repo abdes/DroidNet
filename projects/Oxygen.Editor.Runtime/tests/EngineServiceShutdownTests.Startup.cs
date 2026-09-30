@@ -25,15 +25,15 @@ public sealed partial class EngineServiceShutdownTests
 
         _ = service.State.Should().Be(EngineServiceState.Starting);
         _ = startup.IsCompleted.Should().BeFalse();
-        Action clear = service.UnmountProjectCookedRoot;
-        _ = clear.Should().Throw<InvalidOperationException>();
-        Mock.Get(native.Commands).Verify(commands => commands.ClearCookedRoots(), Times.Never());
+        var refresh = service.RefreshProjectCookedRootsAsync([]);
+        _ = refresh.IsCompleted.Should().BeFalse();
+        Mock.Get(native.Commands).Verify(commands => commands.ReplaceCookedRootsAsync(It.IsAny<IReadOnlyList<RuntimeCookedRoot>>()), Times.Never());
 
         ready.SetResult();
         await startup.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
-        service.UnmountProjectCookedRoot();
+        await refresh.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = service.State.Should().Be(EngineServiceState.Running);
-        Mock.Get(native.Commands).Verify(commands => commands.ClearCookedRoots(), Times.Once());
+        Mock.Get(native.Commands).Verify(commands => commands.ReplaceCookedRootsAsync(It.IsAny<IReadOnlyList<RuntimeCookedRoot>>()), Times.Once());
     }
 
     /// <summary>Preserves native startup failure and releases partially started ownership.</summary>

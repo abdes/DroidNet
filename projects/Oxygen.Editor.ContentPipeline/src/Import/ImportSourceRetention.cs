@@ -32,52 +32,35 @@ public sealed class ImportSourceRetention(ICookDocumentRegistry documents, ICont
         coordinator.VerifyWriter(operation);
         var destination = ResolveDestination(operation.Project, bundleName);
         EnsureAvailable(destination);
-        var ownership = CookOutputLease.AcquireOperation(operation.Project.ProjectRoot, operation.OperationId);
-        Task? retainedDrain = null;
-        try
-        {
-            string? primary = null;
-            var capture = new CookInputSnapshotCapture(documents, coordinator);
-            var result = await capture.CaptureAsync(
-                operation,
-                async token =>
-                {
-                    var bundle = await discover(token).ConfigureAwait(false);
-                    primary = ValidateBundle(bundle);
-                    return bundle.Files;
-                },
-                buildFingerprint: "Oxygen.SourceRetention/v1",
-                cancellationToken).ConfigureAwait(false);
-            if (result.Snapshot is not { } snapshot)
+        string? primary = null;
+        var capture = new CookInputSnapshotCapture(documents, coordinator);
+        var result = await capture.CaptureAsync(
+            operation,
+            async token =>
             {
-                return new(Source: null, result.NeedsSave, result.ExternalChanges);
-            }
+                var bundle = await discover(token).ConfigureAwait(false);
+                primary = ValidateBundle(bundle);
+                return bundle.Files;
+            },
+            buildFingerprint: "Oxygen.SourceRetention/v1",
+            cancellationToken).ConfigureAwait(false);
+        if (result.Snapshot is not { } snapshot)
+        {
+            return new(Source: null, result.NeedsSave, result.ExternalChanges);
+        }
 
-            cancellationToken.ThrowIfCancellationRequested();
-            coordinator.VerifyWriter(operation);
-            EnsureAvailable(destination);
-            var parent = Path.GetDirectoryName(destination)!;
-            _ = Directory.CreateDirectory(parent);
-            CookOutputLease.RejectReparsePoint(parent);
-            Directory.Move(snapshot.InputRoot, destination);
-            var retained = new RetainedImportSource(
-                Path.GetRelativePath(operation.Project.ProjectRoot, destination).Replace('\\', '/'),
-                snapshot.Inputs.Single(file => string.Equals(file.RelativePath, primary, StringComparison.OrdinalIgnoreCase)).RelativePath,
-                snapshot.Inputs.Select(static file => new RetainedImportSourceFile(file.RelativePath, file.DiscoveryHash)).ToImmutableArray());
-            return new(retained, [], []);
-        }
-        catch (ContentPipelineTerminationException failure)
-        {
-            retainedDrain = ReleaseAfterDrainAsync(failure.DrainCompletion, ownership);
-            throw new ContentPipelineTerminationException(failure.InnerException ?? failure, retainedDrain);
-        }
-        finally
-        {
-            if (retainedDrain is null)
-            {
-                await ownership.DisposeAsync().ConfigureAwait(false);
-            }
-        }
+        cancellationToken.ThrowIfCancellationRequested();
+        coordinator.VerifyWriter(operation);
+        EnsureAvailable(destination);
+        var parent = Path.GetDirectoryName(destination)!;
+        _ = Directory.CreateDirectory(parent);
+        CookOutputLease.RejectReparsePoint(parent);
+        Directory.Move(snapshot.InputRoot, destination);
+        var retained = new RetainedImportSource(
+            Path.GetRelativePath(operation.Project.ProjectRoot, destination).Replace('\\', '/'),
+            snapshot.Inputs.Single(file => string.Equals(file.RelativePath, primary, StringComparison.OrdinalIgnoreCase)).RelativePath,
+            snapshot.Inputs.Select(static file => new RetainedImportSourceFile(file.RelativePath, file.DiscoveryHash)).ToImmutableArray());
+        return new(retained, [], []);
     }
 
     /// <summary>Resolves a retained-source directory within the declared Content authoring mount.</summary>
@@ -86,14 +69,7 @@ public sealed class ImportSourceRetention(ICookDocumentRegistry documents, ICont
     /// <returns>The contained absolute source directory.</returns>
     internal static string ResolveDestination(ProjectContext project, string bundleName)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(bundleName);
-        if (bundleName is "." or ".." || bundleName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0
-            || bundleName.Contains('/', StringComparison.Ordinal) || bundleName.Contains('\\', StringComparison.Ordinal)
-            || bundleName.EndsWith('.') || bundleName.EndsWith(' '))
-        {
-            throw new ArgumentException("A source bundle needs one valid directory name beneath Content/SourceMedia/DCC.", nameof(bundleName));
-        }
-
+        ValidateBundleName(bundleName);
         var content = project.AuthoringMounts.FirstOrDefault(static mount => string.Equals(mount.Name, "Content", StringComparison.OrdinalIgnoreCase))
             ?? throw new InvalidOperationException("Source retention requires the project's Content authoring mount.");
         var projectRoot = Path.GetFullPath(project.ProjectRoot);
@@ -115,6 +91,17 @@ public sealed class ImportSourceRetention(ICookDocumentRegistry documents, ICont
         return Path.Combine(sourceRoot, bundleName);
     }
 
+    internal static void ValidateBundleName(string bundleName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(bundleName);
+        if (bundleName is "." or ".." || bundleName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0
+            || bundleName.Contains('/', StringComparison.Ordinal) || bundleName.Contains('\\', StringComparison.Ordinal)
+            || bundleName.EndsWith('.') || bundleName.EndsWith(' '))
+        {
+            throw new ArgumentException("A source bundle needs one valid directory name beneath Content/SourceMedia/DCC.", nameof(bundleName));
+        }
+    }
+
     private static string ValidateBundle(ImportSourceBundle bundle)
     {
         if (string.IsNullOrWhiteSpace(bundle.PrimaryRelativePath))
@@ -129,17 +116,7 @@ public sealed class ImportSourceRetention(ICookDocumentRegistry documents, ICont
             : primary;
     }
 
-    private static async Task ReleaseAfterDrainAsync(Task drain, FileStream ownership)
-    {
-        try
-        {
-            await drain.ConfigureAwait(false);
-        }
-        finally
-        {
-            await ownership.DisposeAsync().ConfigureAwait(false);
-        }
-    }
+
 
     private static void EnsureAvailable(string destination)
     {

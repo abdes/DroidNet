@@ -44,16 +44,16 @@ public sealed partial class MaterialCookServiceTests
         _ = workspace.CookCoordinator.Runs.Should().ContainSingle();
         _ = result.OperationId.Should().Be(workspace.CookCoordinator.Runs.Single().OperationId);
         _ = result.CookedMaterialUri.Should().Be(new Uri("asset:///Content/Materials/Wood.omat"));
-        _ = File.Exists(Path.Combine(workspace.Root, ".cooked", "Content", "Materials", "Wood.omat")).Should().BeTrue();
+        _ = File.Exists(Path.Combine(workspace.CookedRoot, "Materials", "Wood.omat")).Should().BeTrue();
 
-        var indexPath = Path.Combine(workspace.Root, ".cooked", "Content", "container.index.bin");
+        var indexPath = Path.Combine(workspace.CookedRoot, "container.index.bin");
         _ = File.Exists(indexPath).Should().BeTrue();
         var index = File.OpenRead(indexPath);
         await using var indexLifetime = index.ConfigureAwait(false);
         var document = LooseCookedIndex.Read(index);
         _ = document.Assets.Should().ContainSingle(asset => string.Equals(asset.VirtualPath, "/Content/Materials/Wood.omat", StringComparison.Ordinal));
         var asset = document.Assets.Single(asset => string.Equals(asset.VirtualPath, "/Content/Materials/Wood.omat", StringComparison.Ordinal));
-        var cookedPath = Path.Combine(workspace.Root, ".cooked", "Content", "Materials", "Wood.omat");
+        var cookedPath = Path.Combine(workspace.CookedRoot, "Materials", "Wood.omat");
         _ = asset.DescriptorSize.Should().Be((ulong)new FileInfo(cookedPath).Length);
     }
 
@@ -74,7 +74,7 @@ public sealed partial class MaterialCookServiceTests
             "Content/Materials/Wood.omat.json");
 
         var first = await service.CookMaterialAsync(request, CancellationToken.None).ConfigureAwait(false);
-        var descriptorPath = Path.Combine(workspace.Root, ".cooked", "Content", "Materials", "Wood.omat");
+        var descriptorPath = Path.Combine(workspace.CookedRoot, "Materials", "Wood.omat");
         var originalBytes = await File.ReadAllBytesAsync(descriptorPath, CancellationToken.None).ConfigureAwait(false);
         await WriteMaterialAsync(source, CreateMaterial("Wood", metallicFactor: 0.8f, roughnessFactor: 0.2f)).ConfigureAwait(false);
         var second = await service.CookMaterialAsync(request, CancellationToken.None).ConfigureAwait(false);
@@ -82,7 +82,7 @@ public sealed partial class MaterialCookServiceTests
         _ = first.State.Should().Be(MaterialCookState.Cooked);
         _ = second.State.Should().Be(MaterialCookState.Cooked);
 
-        var indexPath = Path.Combine(workspace.Root, ".cooked", "Content", "container.index.bin");
+        var indexPath = Path.Combine(workspace.CookedRoot, "container.index.bin");
         var index = File.OpenRead(indexPath);
         await using var indexLifetime = index.ConfigureAwait(false);
         var document = LooseCookedIndex.Read(index);
@@ -91,7 +91,7 @@ public sealed partial class MaterialCookServiceTests
             .Should()
             .ContainSingle();
 
-        var cookedBytes = await File.ReadAllBytesAsync(Path.Combine(workspace.Root, ".cooked", "Content", "Materials", "Wood.omat"), CancellationToken.None).ConfigureAwait(false);
+        var cookedBytes = await File.ReadAllBytesAsync(Path.Combine(workspace.CookedRoot, "Materials", "Wood.omat"), CancellationToken.None).ConfigureAwait(false);
         _ = cookedBytes.Should().NotEqual(originalBytes);
         _ = document.Assets.Single().DescriptorSha256.Span.ToArray().Should().Equal(System.Security.Cryptography.SHA256.HashData(cookedBytes));
     }
@@ -135,8 +135,8 @@ public sealed partial class MaterialCookServiceTests
 
         _ = result.State.Should().Be(MaterialCookState.Cooked);
         _ = result.CookedMaterialUri.Should().Be(new Uri("asset:///Content/Materials/Gold.omat"));
-        _ = File.Exists(Path.Combine(workspace.Root, ".cooked", "Content", "Materials", "Gold.omat")).Should().BeTrue();
-        _ = File.Exists(Path.Combine(workspace.Root, ".cooked", "Authoring", "Materials", "Gold.omat")).Should().BeFalse();
+        _ = File.Exists(Path.Combine(workspace.CookedRoot, "Materials", "Gold.omat")).Should().BeTrue();
+        _ = workspace.CookedRoot.Should().Contain(Path.Combine(".cooked", "generations"));
     }
 
     /// <summary>Inconsistent project facts cannot target another source or create a cook run.</summary>
@@ -207,11 +207,22 @@ public sealed partial class MaterialCookServiceTests
             {
                 AuthoringMounts = [new ProjectMountPoint("Content", authoringFolder)],
             };
+            File.WriteAllText(Path.Combine(this.Root, "Project.oxy"), ProjectInfo.ToJson(project));
             this.ContextService.Activate(ProjectContext.FromProjectInfo(project));
             this.CookCoordinator = new ContentCookCoordinator(this.ContextService, NullLogger<ContentCookCoordinator>.Instance);
         }
 
         public string Root { get; }
+
+        public string CookedRoot
+        {
+            get
+            {
+                var head = System.Text.Json.JsonSerializer.Deserialize<Publication.CookPublicationHead>(File.ReadAllBytes(Publication.CookPublicationPaths.Head(this.Root)), Publication.CookPublicationDocument.JsonOptions)!;
+                var document = System.Text.Json.JsonSerializer.Deserialize<Publication.CookPublicationDocument>(File.ReadAllBytes(Publication.CookPublicationPaths.Document(this.Root, head.PublicationId)), Publication.CookPublicationDocument.JsonOptions)!;
+                return document.Roots.Single(static root => root.Owner == Publication.CookPublicationRootOwner.Project && root.Name == "Content").ResolvePath(this.Root);
+            }
+        }
 
         public ProjectContextService ContextService { get; } = new();
 

@@ -104,39 +104,14 @@ public interface IEngineService : IAsyncDisposable
     /// <summary>Gets managed viewport input commands with run and view-generation validation.</summary>
     public IRuntimeInputCommands InputCommands { get; }
 
-    /// <summary>
-    ///     Mounts the project's cooked assets root directory in the engine's virtual path resolver.
-    ///     This allows the engine to resolve virtual paths to actual files on disk within the
-    ///     project's cooked assets folder.
-    /// </summary>
-    /// <param name="path">The absolute path to the project's cooked assets directory.</param>
-    /// <remarks>
-    ///     Allowed only in the following states:
-    ///     <list type="bullet">
-    ///      <item><see cref="EngineServiceState.Running"/></item>
-    ///     </list>
-    /// </remarks>
-    public void MountProjectCookedRoot(string path);
-
-    /// <summary>
-    ///     Unmounts the project's cooked assets root in the engine's virtual path resolver.
-    /// </summary>
-    /// <remarks>
-    ///     Allowed only in the following states:
-    ///     <list type="bullet">
-    ///      <item><see cref="EngineServiceState.Running"/></item>
-    ///     </list>
-    /// </remarks>
-    public void UnmountProjectCookedRoot();
-
     /// <summary>Refreshes all project cooked roots and the current scene's asset bindings.</summary>
-    /// <param name="paths">The complete set of validated project cooked roots.</param>
+    /// <param name="bindings">The complete validated root order and owned logical mounts.</param>
     /// <param name="readLease">Optional read ownership transferred to the native session, including on failure.</param>
     /// <param name="keepPaused">Whether the publisher will resume rendering after committing metadata.</param>
     /// <returns>Completion after native loading and current binding replacement settle.</returns>
-    public Task RefreshProjectCookedRootsAsync(IReadOnlyList<string> paths, IDisposable? readLease = null, bool keepPaused = false);
+    public Task RefreshProjectCookedRootsAsync(IReadOnlyList<RuntimeCookedRoot> bindings, IDisposable? readLease = null, bool keepPaused = false);
 
-    /// <summary>Suspends preview and releases content readers only after native I/O drains and roots unmount.</summary>
+    /// <summary>Suspends preview and drains native I/O while retaining accepted immutable roots and their readers.</summary>
     /// <returns>The native suspension acknowledgement.</returns>
     public Task SuspendCookedContentAsync();
 

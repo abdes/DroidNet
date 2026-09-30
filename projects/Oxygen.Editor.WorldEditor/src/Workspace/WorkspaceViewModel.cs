@@ -329,12 +329,27 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         try
         {
             var mountService = this.container.Resolve<Oxygen.Editor.ContentPipeline.Mounting.CookedContentMountService>();
-            var roots = Oxygen.Editor.ContentPipeline.Mounting.CookedContentMountService.FindProjectRoots(project);
-            var reader = await this.container.Resolve<Oxygen.Editor.ContentPipeline.Publication.CookPublicationService>()
-                .AcquireForMountAsync(project, CancellationToken.None).ConfigureAwait(true);
-            var mounts = await mountService.PrepareAsync(project, roots, reader, CancellationToken.None).ConfigureAwait(true);
-            await this.engineService.RefreshProjectCookedRootsAsync(mounts.Roots, mounts).ConfigureAwait(true);
+            var publication = this.container.Resolve<Oxygen.Editor.ContentPipeline.Publication.CookPublicationService>();
+            using var reader = await publication.AcquireForMountAsync(project, CancellationToken.None).ConfigureAwait(true);
+            var bindings = reader.Roots.Zip(reader.RootPaths,
+                static (root, path) => new RuntimeCookedRoot(path, root.Owner == Oxygen.Editor.ContentPipeline.Publication.CookPublicationRootOwner.Project ? root.Name : null)).ToArray();
+            var mounts = await mountService.PrepareAsync(project, reader, CancellationToken.None).ConfigureAwait(true);
+            await this.engineService.RefreshProjectCookedRootsAsync(bindings, mounts).ConfigureAwait(true);
+            await this.container.Resolve<IProjectAssetCatalog>().RefreshAsync(reader, CancellationToken.None).ConfigureAwait(true);
             this.LogMountedRoots(mounts.Roots);
+            try
+            {
+                var cleanupFailures = await publication.MaintainAsync(project, CancellationToken.None).ConfigureAwait(true);
+                if (cleanupFailures.Count != 0)
+                {
+                    this.PublishCookedRootWarning("Cook.CleanupDeferred", "Unused output cleanup deferred",
+                        string.Join(Environment.NewLine, cleanupFailures), project.ProjectRoot);
+                }
+            }
+            catch (Exception cleanup) when (cleanup is IOException or InvalidDataException or UnauthorizedAccessException or InvalidOperationException)
+            {
+                this.PublishCookedRootWarning("Cook.CleanupDeferred", "Unused output cleanup deferred", cleanup.Message, project.ProjectRoot, cleanup);
+            }
         }
         catch (Exception exception)
         {

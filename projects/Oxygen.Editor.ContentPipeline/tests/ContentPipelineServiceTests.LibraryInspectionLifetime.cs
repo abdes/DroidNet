@@ -31,7 +31,7 @@ public sealed partial class ContentPipelineServiceTests
         var drain = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         Action openForWrite = () =>
         {
-            using var file = new FileStream(Path.Combine(workspace.Root, ".cooked/Content/container.index.bin"), FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite | FileShare.Delete);
+            using var file = new FileStream(Path.Combine(workspace.CookedRoot("Content"), "container.index.bin"), FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite | FileShare.Delete);
         };
         runner.BeforeInventoryInspection = () => Task.FromException(new ContentPipelineTerminationException(new IOException("Simulated inventory termination failure."), drain.Task));
         try
@@ -46,11 +46,12 @@ public sealed partial class ContentPipelineServiceTests
                     .WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken);
                 var failure = await work.Should().ThrowAsync<ContentPipelineTerminationException>().ConfigureAwait(false);
                 _ = openForWrite.Should().Throw<IOException>();
-                Action publish = () => { using var writer = CookOutputLease.AcquireWrite(workspace.Root); };
-                _ = publish.Should().Throw<CookOutputBusyException>();
+                using (var writer = await CookOutputLease.AcquireWriteAsync(workspace.Root, this.TestContext.CancellationToken).ConfigureAwait(false))
+                {
+                    _ = writer.ProjectRoot.Should().Be(workspace.Root);
+                }
                 drain.SetResult();
                 await failure.Which.DrainCompletion.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
-                publish();
             }
 
             openForWrite();
@@ -75,9 +76,9 @@ public sealed partial class ContentPipelineServiceTests
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
         var producer = CreateService(library, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
         _ = (await producer.CookAssetAsync(new("asset:///Content/Materials/Shared.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false)).IsPublished.Should().BeTrue();
-        var root = Path.Combine(library.Root, ".cooked/Content");
+        var root = library.CookedRoot("Content");
         var context = consumer.ProjectContext with { LocalFolderMounts = [new("Library", root)] };
-        consumer.ContextService.Activate(context);
+        consumer.Activate(context);
         var drain = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         Action openForWrite = () => { using var file = new FileStream(Path.Combine(root, "container.index.bin"), FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite | FileShare.Delete); };
         runner.BeforeDependencyInspection = () =>

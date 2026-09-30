@@ -139,22 +139,6 @@ public sealed partial class EngineService(
     /// <inheritdoc/>
     public IRuntimeInputCommands InputCommands => this.commandDispatcher;
 
-    /// <inheritdoc/>
-    public void MountProjectCookedRoot(string path)
-    {
-        _ = this.EnsureIsRunning();
-        this.ChangeContentStatus(RuntimeContentState.Updating, []);
-        this.session!.Commands.MountCookedRoot(path);
-    }
-
-    /// <inheritdoc/>
-    public void UnmountProjectCookedRoot()
-    {
-        _ = this.EnsureIsRunning();
-        this.ChangeContentStatus(RuntimeContentState.Unmounted, []);
-        this.session!.Commands.ClearCookedRoots();
-    }
-
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1859:Use concrete types when possible for improved performance", Justification = "The factory signature stays on the managed boundary so service construction does not require the native session type.")]
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
     private static EngineSession CreateNativeSession(HostingContext hostingContext, NativeArtifactLease artifacts) => new NativeEngineSession(hostingContext, artifacts);

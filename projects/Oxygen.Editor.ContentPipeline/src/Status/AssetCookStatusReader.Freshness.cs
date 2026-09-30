@@ -5,21 +5,25 @@
 using System.Collections.Immutable;
 using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Snapshots;
-using Oxygen.Editor.Projects;
+using Oxygen.Editor.ContentPipeline.Publication;
 
 namespace Oxygen.Editor.ContentPipeline.Status;
 
 /// <summary>Compares publication metadata without verifying cooked payload bytes.</summary>
 public sealed partial class AssetCookStatusReader
 {
-    private static async Task<FreshnessSnapshot> ReadFreshnessAsync(ProjectContext project, string producer,
+    private static async Task<FreshnessSnapshot> ReadFreshnessAsync(CookPublicationReadLease publication, string producer,
         CookDependencyGraph graph, CookProvenance previous, CancellationToken cancellationToken)
     {
         var available = ImmutableHashSet.CreateBuilder<(string rootMount, string virtualPath)>();
         var unknown = ImmutableHashSet.CreateBuilder<string>(StringComparer.Ordinal);
         foreach (var root in previous.Roots)
         {
-            var path = ContentPipelinePaths.GetCookedMountRoot(project.ProjectRoot, root.Mount);
+            if (publication.UnavailableRoots.Any(binding => binding.Name == root.Mount)
+                || publication.FindProjectRoot(root.Mount) is not { } path)
+            {
+                continue;
+            }
             try
             {
                 var current = await CookedIndexSnapshot.ReadAsync(path, cancellationToken).ConfigureAwait(false);

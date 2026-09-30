@@ -120,8 +120,8 @@ public sealed partial class ContentPipelineServiceTests
     {
         using var workspace = new TempWorkspace();
         var request = new SceneImportRequest(workspace.ProjectContext, Path.Combine(workspace.Root, "model.gltf"), "Model", new("asset:///Content/Models"));
-        workspace.ContextService.Activate(workspace.ProjectContext with { Name = "Changed" });
-        var api = new CapturingEngineContentPipelineApi(new(Path.Combine(workspace.Root, ".cooked/Content"), Succeeded: true, []), SucceededInspection(workspace));
+        workspace.Activate(workspace.ProjectContext with { Name = "Changed" });
+        var api = new CapturingEngineContentPipelineApi(new(workspace.Root, Succeeded: true, []), SucceededInspection(workspace));
         var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(workspace, []), api);
         var result = await service.ImportSourceAsync(request, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.Status.Should().Be(OperationStatus.Failed);
@@ -154,7 +154,8 @@ public sealed partial class ContentPipelineServiceTests
                 api,
                 workspace.Documents,
                 compatibility,
-                files);
+                files,
+                workspace.Publication);
             var result = await service.ImportSourceAsync(new(workspace.ProjectContext, source, "Model", new("asset:///Content/Models")), this.TestContext.CancellationToken).ConfigureAwait(false);
             _ = result.Status.Should().Be(OperationStatus.Failed);
             _ = result.RetainedSourceUri.Should().NotBeNull();

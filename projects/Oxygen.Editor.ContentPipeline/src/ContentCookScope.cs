@@ -34,7 +34,7 @@ public sealed record ContentCookScope(
     public string InputRoot => this.Snapshot?.InputRoot ?? this.Project.ProjectRoot;
 
     /// <summary>Gets the private native output root when the cook is preparing a publication.</summary>
-    public string? StagingOutputRoot { get; init; }
+    internal Publication.CookStagingRoot? Output { get; init; }
 
     /// <summary>Gets exact imported outputs that must exist before this request can succeed.</summary>
     internal System.Collections.Immutable.ImmutableArray<Uri> RequiredImportedOutputs { get; init; } = [];

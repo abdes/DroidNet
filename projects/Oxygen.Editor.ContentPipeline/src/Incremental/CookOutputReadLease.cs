@@ -4,6 +4,7 @@
 
 using System.Security.Cryptography;
 using Oxygen.Editor.ContentPipeline.Inspection;
+using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Managed.Core.Compatibility;
 
 namespace Oxygen.Editor.ContentPipeline.Incremental;
@@ -14,6 +15,7 @@ internal sealed partial class CookOutputReadLease : IAsyncDisposable, IDisposabl
     private readonly string root;
     private readonly Dictionary<string, FileStream> files = [with(StringComparer.Ordinal)];
     private readonly Lock verificationGate = new();
+    private FileStream? generation;
     private Task<CookedInventoryReport>? inventory;
     private Task? nativeDrain;
     private Task? closing;
@@ -40,7 +42,12 @@ internal sealed partial class CookOutputReadLease : IAsyncDisposable, IDisposabl
         var lease = new CookOutputReadLease(root);
         try
         {
-            foreach (var path in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
+            if (File.Exists(Path.Combine(root, CookedGeneration.MarkerFileName)))
+            {
+                lease.RetainGeneration();
+            }
+
+            foreach (var path in lease.ContentPaths())
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 lease.files.Add(Path.GetRelativePath(root, path).Replace('\\', '/'), new(path, FileMode.Open, FileAccess.Read, FileShare.Read, 65536, FileOptions.Asynchronous | FileOptions.SequentialScan));
@@ -53,6 +60,16 @@ internal sealed partial class CookOutputReadLease : IAsyncDisposable, IDisposabl
         {
             await lease.DisposeAsync().ConfigureAwait(false);
             throw;
+        }
+    }
+
+    /// <summary>Retains the sealed generation without reopening its verified index or payloads.</summary>
+    internal void RetainGeneration()
+    {
+        lock (this.verificationGate)
+        {
+            ObjectDisposedException.ThrowIf(this.disposed, this);
+            this.generation ??= WindowsCookFile.OpenGenerationReader(Path.Combine(this.root, CookedGeneration.MarkerFileName));
         }
     }
 
@@ -156,19 +173,29 @@ internal sealed partial class CookOutputReadLease : IAsyncDisposable, IDisposabl
         }
         finally
         {
-            foreach (var stream in this.files.Values)
+            try
             {
-                await stream.DisposeAsync().ConfigureAwait(false);
+                foreach (var stream in this.files.Values)
+                {
+                    await stream.DisposeAsync().ConfigureAwait(false);
+                }
+            }
+            finally
+            {
+                this.generation?.Dispose();
             }
         }
     }
 
     private void CheckMembership()
     {
-        var current = Directory.EnumerateFiles(this.root, "*", SearchOption.AllDirectories).Select(path => Path.GetRelativePath(this.root, path).Replace('\\', '/')).ToHashSet(StringComparer.Ordinal);
+        var current = this.ContentPaths().Select(path => Path.GetRelativePath(this.root, path).Replace('\\', '/')).ToHashSet(StringComparer.Ordinal);
         if (!current.SetEquals(this.files.Keys))
         {
             throw new IOException("Cooked output changed while its files were being validated.");
         }
     }
+
+    private IEnumerable<string> ContentPaths() => Directory.EnumerateFiles(this.root, "*", SearchOption.AllDirectories)
+        .Where(path => !string.Equals(Path.GetRelativePath(this.root, path), CookedGeneration.MarkerFileName, StringComparison.Ordinal));
 }

@@ -161,5 +161,5 @@ public sealed partial class ContentPipelineServiceTests
         => new(Guid.NewGuid(), path, Path.GetFileName(path), 1, 1, IsDirty: false, Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))));
 
     private static CapturingEngineContentPipelineApi CreateSuccessfulApi(TempWorkspace workspace)
-        => new(new(Path.Combine(workspace.Root, ".cooked", "Content"), Succeeded: true, []), SucceededInspection(workspace));
+        => new(new(workspace.Root, Succeeded: true, []), SucceededInspection(workspace));
 }

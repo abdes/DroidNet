@@ -11,6 +11,10 @@ using Oxygen.Editor.ContentPipeline.Mounting;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
+using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
+using Oxygen.Editor.World.Services;
+using Oxygen.Editor.World.Workspace;
+using Moq;
 using Testably.Abstractions;
 
 namespace Oxygen.Editor.World.Tests;
@@ -32,11 +36,11 @@ public sealed partial class InspectorControlTests
         var (uri, key) = await fixture.CookTestMaterialAsync("Shared", timeout.Token, red).ConfigureAwait(true);
         var libraryProject = Path.Combine(fixture.ProjectRoot, "LibraryProject");
         var (_, libraryKey) = await fixture.CookTestMaterialAsync("Shared", timeout.Token, blue, libraryProject).ConfigureAwait(true);
-        _ = libraryKey.Should().NotBe(key, "the independent library defines a different native identity at the same virtual path");
+        _ = libraryKey.Should().Be(key, "stable asset keys preserve the same logical identity while source precedence selects its content");
         var project = ProjectContext.FromProject(fixture.Source.Project) with
         {
             AuthoringMounts = [new("Content", "Content")],
-            LocalFolderMounts = [new("Library", Path.Combine(libraryProject, ".cooked", "Content"))],
+            LocalFolderMounts = [new("Library", await fixture.GetCookedRootAsync(libraryProject, timeout.Token).ConfigureAwait(true))],
         };
         await fixture.InitializeAsync(timeout.Token).ConfigureAwait(true);
         await fixture.ApplyContentPriorityAsync(project, timeout.Token).ConfigureAwait(true);
@@ -63,10 +67,33 @@ public sealed partial class InspectorControlTests
     {
         public async Task ApplyContentPriorityAsync(ProjectContext project, CancellationToken cancellationToken)
         {
-            var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, this.compatibility);
-            var service = new CookedContentMountService();
-            var mounts = await service.PrepareAsync(project, CookedContentMountService.FindProjectRoots(project), await CookOutputLease.AcquireReadAsync(project.ProjectRoot, cancellationToken).ConfigureAwait(true), cancellationToken).ConfigureAwait(true);
-            await this.engine.RefreshProjectCookedRootsAsync(mounts.Roots, mounts).ConfigureAwait(true);
+            var current = this.projectContexts.ActiveProject!;
+            var desired = new ProjectInfo(project.ProjectId, project.Name, project.Category, project.ProjectRoot, project.Thumbnail)
+            {
+                AuthoringMounts = [.. project.AuthoringMounts],
+                LocalFolderMounts = [.. project.LocalFolderMounts],
+                CookedContentOrder = [.. project.CookedContentOrder],
+            };
+            var catalog = new Mock<IProjectAssetCatalog>();
+            _ = catalog.Setup(value => value.RefreshAsync(It.IsAny<CookPublicationReadLease>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+            using var registration = this.materialPipeline.Publication.RegisterPreview(current, () => Task.FromResult<ICookPublicationPreview?>(
+                new WorkspacePublicationPreview(current, this.engine, this.hosting, catalog.Object, this.messenger, () => ReferenceEquals(current, this.projectContexts.ActiveProject))));
+            var service = new ContentMountChangeService(this.materialCookCoordinator, this.projectContexts, this.materialPipeline.Publication, catalog.Object, this.hosting);
+            await service.ApplyAsync(current, desired, next =>
+            {
+                var info = this.Source.Project.ProjectInfo;
+                info.LocalFolderMounts.Clear();
+                foreach (var mount in next.LocalFolderMounts)
+                {
+                    info.LocalFolderMounts.Add(mount);
+                }
+
+                info.CookedContentOrder.Clear();
+                foreach (var entry in next.CookedContentOrder)
+                {
+                    info.CookedContentOrder.Add(entry);
+                }
+            }, cancellationToken).ConfigureAwait(true);
         }
     }
 }

@@ -111,11 +111,8 @@ public sealed partial class ContentPipelineService : ICookedLibraryMetadataServi
             }
         }
 
-        var (previous, _) = await this.provenanceStore.ReadAsync(operation.Project, cancellationToken).ConfigureAwait(false);
-        if (!await this.publication.HasCommittedMetadataAsync(operation.Project, cancellationToken).ConfigureAwait(false))
-        {
-            previous = new(Incremental.CookProvenance.CurrentVersion, operation.Project.ProjectId, [], []);
-        }
+        using var publicationRead = await this.publication.AcquireForOperationAsync(operation, cancellationToken).ConfigureAwait(false);
+        var previous = publicationRead.ProductState;
 
         var imports = await Import.ImportedSourceIndex.ReadAsync(operation.Project, cookDocuments, previous, cancellationToken).ConfigureAwait(false);
         var candidates = await ProjectAssetKeyIndex.ReadAsync(operation.Project, imports.KnownOutputs, cancellationToken).ConfigureAwait(false);

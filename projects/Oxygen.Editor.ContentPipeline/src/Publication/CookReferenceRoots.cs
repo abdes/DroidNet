@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.ContentPipeline.Incremental;
-using Oxygen.Editor.Projects;
 
 namespace Oxygen.Editor.ContentPipeline.Publication;
 
@@ -16,16 +15,15 @@ internal sealed partial class CookReferenceRoots : IDisposable
     public IReadOnlyList<string> Paths { get; private set; } = [];
 
     /// <summary>Acquires unchanged referenced roots and checks their recorded byte identities before native work.</summary>
-    /// <param name="project">The owning project.</param>
     /// <param name="staging">Private roots that remain writable by this operation.</param>
     /// <param name="previous">Verified prior publication metadata.</param>
     /// <param name="plan">The reused products needed by the closure.</param>
     /// <param name="cancellationToken">Cancels reader acquisition.</param>
     /// <returns>The lookup paths and retained readers.</returns>
-    public static async Task<CookReferenceRoots> AcquireAsync(ProjectContext project, CookStagingArea staging, CookProvenance previous, CookIncrementalPlan plan, IEngineContentPipelineApi native, CancellationToken cancellationToken)
+    public static async Task<CookReferenceRoots> AcquireAsync(CookStagingArea staging, CookProvenance previous, CookIncrementalPlan plan, IEngineContentPipelineApi native, CancellationToken cancellationToken)
     {
         var result = new CookReferenceRoots();
-        var paths = staging.Roots.ToDictionary(static root => root.Mount, static root => root.StagingPath, StringComparer.OrdinalIgnoreCase);
+        var paths = staging.Roots.ToDictionary(static root => root.Mount, static root => root.Path, StringComparer.OrdinalIgnoreCase);
         try
         {
             foreach (var mount in plan.ReusedAssets.Select(static asset => asset.MountName).Distinct(StringComparer.OrdinalIgnoreCase))
@@ -35,7 +33,7 @@ internal sealed partial class CookReferenceRoots : IDisposable
                     continue;
                 }
 
-                var path = Path.GetDirectoryName(CookIncrementalPlanner.ResolveOutputPath(project.ProjectRoot, mount, "container.index.bin"))!;
+                var path = staging.Baseline.FindProjectRoot(mount) ?? throw new InvalidDataException($"No selected generation owns dependency mount '{mount}'.");
                 CookOutputLease.RejectReparsePoint(path);
                 var lease = await CookOutputReadLease.AcquireAsync(path, cancellationToken).ConfigureAwait(false);
                 result.readers.Add(lease);

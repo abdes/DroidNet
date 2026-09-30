@@ -3,6 +3,11 @@
 // SPDX-License-Identifier: MIT
 
 using System.Security.Cryptography;
+using System.Text.Json;
+using DroidNet.Storage;
+using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.ContentPipeline.Publication;
+using Oxygen.Editor.ContentPipeline.Incremental;
 using AwesomeAssertions;
 using DroidNet.Storage.Native;
 using Moq;
@@ -30,6 +35,7 @@ public sealed partial class CookedLibraryBrowserTests
     public async Task LibraryScopeShowsItsOwnOverriddenCopyWithoutInventingSourceOwnership()
     {
         using var fixture = new Fixture();
+        await fixture.PublishSelectionAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         using var catalog = fixture.CreateCatalog();
         var records = await catalog.QueryAsync(new(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false);
         var rows = fixture.Reduce(records);
@@ -54,12 +60,14 @@ public sealed partial class CookedLibraryBrowserTests
     public async Task ChangedPriorityAndRestartSelectTheSameSource()
     {
         using var fixture = new Fixture();
+        await fixture.PublishSelectionAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         using var catalog = fixture.CreateCatalog();
         _ = await catalog.QueryAsync(new(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false);
         fixture.Projects.Activate(fixture.Projects.ActiveProject! with
         {
             CookedContentOrder = [new(CookedContentSourceKind.LocalFolder, "First"), new(CookedContentSourceKind.ProjectOutput), new(CookedContentSourceKind.LocalFolder, "Second")],
         });
+        await fixture.PublishSelectionAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         var current = await catalog.QueryAsync(new(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = current.Single(static record => string.Equals(record.Uri.AbsolutePath, "/Content/Shared.omat", StringComparison.Ordinal)).Cooked!.RootFolderPath.Should().Be(fixture.Second);
         using var restarted = fixture.CreateCatalog();
@@ -73,6 +81,8 @@ public sealed partial class CookedLibraryBrowserTests
     {
         private readonly DirectoryInfo directory = Directory.CreateTempSubdirectory("Oxygen-LibraryBrowser-");
         private readonly NativeStorageProvider storage = new(new RealFileSystem());
+        private readonly NativeAtomicFileStore files = new(new RealFileSystem());
+        private readonly Guid sourceKey = Guid.CreateVersion7();
 
         public Fixture()
         {
@@ -80,7 +90,8 @@ public sealed partial class CookedLibraryBrowserTests
             File.WriteAllText(
                 Path.Combine(this.directory.FullName, "Content", "Shared.omat.json"),
                 """{"name":"Shared","parameters":{"base_color":[1,0,0,1],"metalness":0,"roughness":0.5}}""");
-            this.ProjectOutput = this.WriteRoot(".cooked/Content", 1);
+            this.ProjectOutput = this.WriteRoot(Path.GetRelativePath(this.directory.FullName, CookPublicationPaths.Generation(this.directory.FullName, this.sourceKey)), 1, this.sourceKey);
+            File.WriteAllBytes(Path.Combine(this.ProjectOutput, CookedGeneration.MarkerFileName), []);
             this.First = this.WriteRoot("Libraries/First", 2);
             this.Second = this.WriteRoot("Libraries/Second", 3);
             this.Projects.Activate(new()
@@ -104,15 +115,32 @@ public sealed partial class CookedLibraryBrowserTests
             var snapshot = new BuiltinCatalogSnapshot(Catalog: null, IsLastKnown: false, Notice: null);
             _ = builtins.SetupGet(value => value.Snapshot).Returns(snapshot);
             _ = builtins.Setup(value => value.GetAsync(It.IsAny<CancellationToken>())).ReturnsAsync(snapshot);
-            return new(this.Projects, this.storage, builtins.Object);
+            return new(this.Projects, this.storage, builtins.Object, new CookPublicationService(Mock.Of<IContentCookCoordinator>(), this.Projects, this.files, new ProjectManagerService(this.storage, atomicFiles: this.files)));
         }
 
         public IReadOnlyList<ContentBrowserAssetItem> Reduce(IReadOnlyList<AssetRecord> records)
             => new AssetIdentityReducer().Reduce(records, this.Projects.ActiveProject!, new(this.Projects.ActiveProject!.ProjectId, this.directory.FullName, Path.Combine(this.directory.FullName, ".cooked")), AssetBrowserFilter.Default);
 
+        public async Task PublishSelectionAsync(CancellationToken token)
+        {
+            var project = this.Projects.ActiveProject!;
+            using var libraries = await CookedLibraryReadSet.AcquireAsync(project, token).ConfigureAwait(false);
+            var index = await CookedIndexSnapshot.ReadAsync(this.ProjectOutput, token).ConfigureAwait(false);
+            var roots = libraries.OrderBindings([new(CookPublicationRootOwner.Project, "Content", this.sourceKey, index.Fingerprint, null)]);
+            var document = new CookPublicationDocument(CookPublicationDocument.CurrentVersion, project.ProjectId, Guid.NewGuid(),
+                DateTimeOffset.UtcNow, CookPublicationDocument.ConfigurationIdentity(project), roots, [], null);
+            using var gate = await CookOutputLease.AcquireWriteAsync(project.ProjectRoot, token).ConfigureAwait(false);
+            var previous = await this.files.ReadAsync(CookPublicationPaths.Head(project.ProjectRoot), token).ConfigureAwait(false);
+            var path = CookPublicationPaths.Document(project.ProjectRoot, document.OperationId);
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            var version = await this.files.WriteAsync(path, JsonSerializer.SerializeToUtf8Bytes(document, CookPublicationDocument.JsonOptions), FileVersion.Missing, token).ConfigureAwait(false);
+            var head = new CookPublicationHead(CookPublicationHead.CurrentVersion, document.OperationId, version.Sha256);
+            _ = await this.files.WriteAsync(CookPublicationPaths.Head(project.ProjectRoot), JsonSerializer.SerializeToUtf8Bytes(head, CookPublicationDocument.JsonOptions), previous.Version, token).ConfigureAwait(false);
+        }
+
         public void Dispose() => this.directory.Delete(recursive: true);
 
-        private string WriteRoot(string relative, byte value)
+        private string WriteRoot(string relative, byte value, Guid? sourceKey = null)
         {
             var root = Path.GetFullPath(Path.Combine(this.directory.FullName, relative));
             _ = Directory.CreateDirectory(Path.Combine(root, "payloads"));
@@ -122,7 +150,7 @@ public sealed partial class CookedLibraryBrowserTests
             Oxygen.Testing.LooseCookedIndexFixture.Write(stream, new Document(
                 1,
                 IndexFeatures.HasVirtualPaths,
-                Guid.CreateVersion7(),
+                sourceKey ?? Guid.CreateVersion7(),
                 [new(new AssetKey(1, 2), "payloads/shared.bin", "/Content/Shared.omat", 1, 1, SHA256.HashData(bytes))],
                 []));
             return root;

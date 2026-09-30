@@ -16,6 +16,27 @@ namespace Oxygen.Editor.ContentBrowser.ProjectExplorer;
 /// <summary>Separates mount presentation, persistence and restoration operations.</summary>
 public partial class ProjectLayoutViewModel
 {
+    private async Task RefreshPublishedFoldersAsync()
+    {
+        if (this.selectionDisposed || projectContextService.ActiveProject?.AuthoringMounts.Any(static mount => string.Equals(mount.RelativePath.Replace('\\', '/').Trim('/'), ".cooked", StringComparison.OrdinalIgnoreCase)) != true)
+        {
+            return;
+        }
+
+        try
+        {
+            await this.ReloadMountTreeAsync().ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            // Project closure or a newer tree refresh supersedes this projection.
+        }
+        catch (Exception failure) when (failure is IOException or InvalidDataException or InvalidOperationException)
+        {
+            this.LogCookedProjectionFailure(failure);
+        }
+    }
+
     private static string? GetRelativeMountPath(string projectRoot, string path)
     {
         try
@@ -86,28 +107,36 @@ public partial class ProjectLayoutViewModel
     }
 
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A failed mount is reported independently so remaining persisted mounts can still be restored.")]
-    private async Task RestoreMountAsync(IStorageProvider provider, string name, string backingPath, bool isProjectRelative, bool expanded)
+    private async Task RestoreMountAsync(ProjectRootTreeItemAdapter root, ProjectContext context, string name, string backingPath, bool isProjectRelative, bool expanded)
     {
         try
         {
-            var location = isProjectRelative ? provider.NormalizeRelativeTo(this.projectRoot!.ProjectRootFolder.Location, backingPath) : backingPath;
-            var folder = await provider.GetFolderFromPathAsync(location).ConfigureAwait(true);
+            var location = isProjectRelative ? storage.NormalizeRelativeTo(root.ProjectRootFolder.Location, backingPath) : backingPath;
+            var folder = await storage.GetFolderFromPathAsync(location).ConfigureAwait(true);
+            if (this.selectionDisposed || !ReferenceEquals(context, projectContextService.ActiveProject))
+            {
+                return;
+            }
+
+            IReadOnlyList<string>? outputPaths = null;
+            if (isProjectRelative && string.Equals(backingPath.Replace('\\', '/').Trim('/'), ".cooked", StringComparison.OrdinalIgnoreCase)
+                && !this.selectionDisposed)
+            {
+                using var selected = await publications.AcquireReadAsync(context, CancellationToken.None).ConfigureAwait(true);
+                outputPaths = selected.ProjectOutputPaths.Distinct(StringComparer.Ordinal).ToArray();
+            }
             VirtualFolderMountTreeItemAdapter? mount = null;
             try
             {
                 mount = new(this.logger, name, folder, backingPath, isProjectRelative ? VirtualFolderMountBackingPathKind.ProjectRelative : VirtualFolderMountBackingPathKind.Absolute)
                 {
                     IsExpanded = expanded,
+                    CookedVirtualPaths = outputPaths,
                 };
                 mount.PropertyChanged += this.OnMountPointPropertyChanged;
-                if (await this.projectRoot!.MountVirtualFolderAsync(mount).ConfigureAwait(true))
+                if (await root.MountVirtualFolderAsync(mount).ConfigureAwait(true))
                 {
-                    var mounted = mount;
                     mount = null;
-                    if (this.projectRoot.AreChildrenLoaded)
-                    {
-                        await this.InsertItemAsync(mounted, this.projectRoot, this.projectRoot.ChildrenCount).ConfigureAwait(true);
-                    }
                 }
             }
             finally

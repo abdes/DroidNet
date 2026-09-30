@@ -66,7 +66,7 @@ public sealed partial class ContentPipelineServiceTests
             using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
             var runner = new FailImportBatchRunner { Fail = false };
             var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-            var publication = new CookPublicationService(workspace.CookCoordinator, workspace.ContextService, new NativeAtomicFileStore(new Testably.Abstractions.RealFileSystem()));
+            var publication = workspace.Publication;
             var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility, publication);
             var first = repair
                 ? await service.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false)

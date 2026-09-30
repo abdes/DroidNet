@@ -36,7 +36,7 @@ public sealed partial class CookInputSnapshotCaptureTests
         _ = result.Snapshot.Should().BeNull();
         _ = result.NeedsSave.Should().ContainSingle().Which.Should().Be(state);
         _ = released.Should().BeTrue();
-        _ = Directory.Exists(Path.Combine(workspace.Root, ".build")).Should().BeFalse();
+        _ = Directory.EnumerateFiles(Path.Combine(workspace.Root, ".build"), "*", SearchOption.AllDirectories).Should().BeEmpty();
     }
 
     /// <summary>Does not block a material cook on a dirty scene that merely consumes that material.</summary>
@@ -171,7 +171,7 @@ public sealed partial class CookInputSnapshotCaptureTests
         var capture = () => workspace.CaptureAsync([input]);
         _ = await capture.Should().ThrowAsync<ArgumentException>().ConfigureAwait(false);
 
-        _ = Directory.Exists(Path.Combine(workspace.Root, ".build")).Should().BeFalse();
+        _ = Directory.EnumerateFiles(Path.Combine(workspace.Root, ".build"), "*", SearchOption.AllDirectories).Should().BeEmpty();
     }
 
     /// <summary>Uses logical source content and compatible artifacts, independently of workspace and operation paths.</summary>
@@ -208,7 +208,7 @@ public sealed partial class CookInputSnapshotCaptureTests
             CancellationToken.None);
         _ = await capture.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false);
 
-        _ = Directory.Exists(Path.Combine(workspace.Root, ".build")).Should().BeFalse();
+        _ = Directory.EnumerateFiles(Path.Combine(workspace.Root, ".build"), "*", SearchOption.AllDirectories).Should().BeEmpty();
     }
 
     /// <summary>Rejects relative asset identity before moving any captured input into its final directory.</summary>
@@ -222,7 +222,7 @@ public sealed partial class CookInputSnapshotCaptureTests
         var capture = () => workspace.CaptureAsync([input]);
         _ = await capture.Should().ThrowAsync<ArgumentException>().ConfigureAwait(false);
 
-        _ = Directory.Exists(Path.Combine(workspace.Root, ".build")).Should().BeFalse();
+        _ = Directory.EnumerateFiles(Path.Combine(workspace.Root, ".build"), "*", SearchOption.AllDirectories).Should().BeEmpty();
     }
 
     private static CookDocumentState State(CookSnapshotInput input)

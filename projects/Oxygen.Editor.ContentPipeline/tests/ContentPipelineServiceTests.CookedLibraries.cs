@@ -26,9 +26,9 @@ public sealed partial class ContentPipelineServiceTests
         var imported = await CreateService(library, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility).CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = imported.IsPublished.Should().BeTrue();
         var geometry = imported.CookedAssets.First(static output => output.Kind == ContentCookAssetKind.Geometry).CookedAssetUri;
-        var root = Path.Combine(library.Root, ".cooked/Art");
+        var root = await library.ExportRootAsync("Art", this.TestContext.CancellationToken).ConfigureAwait(false);
         var context = consumer.ProjectContext with { LocalFolderMounts = [new("Art library", root)] };
-        consumer.ContextService.Activate(context);
+        consumer.Activate(context);
         AddGeometryNode(consumer, geometry, "Library mesh");
         await consumer.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
         var service = CreateService(consumer, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
@@ -56,6 +56,7 @@ public sealed partial class ContentPipelineServiceTests
         model["materials"]![0]!["pbrMetallicRoughness"]!["roughnessFactor"] = 0.1;
         await File.WriteAllTextAsync(modelPath, model.ToJsonString(), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = (await CreateService(library, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility).CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false)).IsPublished.Should().BeTrue();
+        _ = await library.ExportRootAsync("Art", this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = (await service.ReadAsync(context, [scene], this.TestContext.CancellationToken).ConfigureAwait(false)).Single().Freshness.Should().Be(AssetCookFreshness.OutOfDate);
         var updated = await service.CookCurrentSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = updated.IsPublished.Should().BeTrue();
@@ -87,8 +88,8 @@ public sealed partial class ContentPipelineServiceTests
             geometry = result.CookedAssets.First(static output => output.Kind == ContentCookAssetKind.Geometry).CookedAssetUri;
         }
 
-        var context = consumer.ProjectContext with { LocalFolderMounts = [new("Older", Path.Combine(older.Root, ".cooked/Art")), new("Newer", Path.Combine(newer.Root, ".cooked/Art"))] };
-        consumer.ContextService.Activate(context);
+        var context = consumer.ProjectContext with { LocalFolderMounts = [new("Older", older.CookedRoot("Art")), new("Newer", newer.CookedRoot("Art"))] };
+        consumer.Activate(context);
         AddGeometryNode(consumer, geometry!, "Library mesh");
         await consumer.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
         var scene = new Uri("asset:///Content/Scenes/Main.oscene.json");
@@ -97,7 +98,7 @@ public sealed partial class ContentPipelineServiceTests
         _ = first.IsPublished.Should().BeTrue();
         _ = first.InputSnapshot!.CookedDependencies.Select(static dependency => dependency.SourceName).Distinct(StringComparer.Ordinal).Should().ContainSingle().Which.Should().Be("Newer");
         var changed = context with { CookedContentOrder = [new(CookedContentSourceKind.LocalFolder, "Newer"), new(CookedContentSourceKind.LocalFolder, "Older"), new(CookedContentSourceKind.ProjectOutput)] };
-        consumer.ContextService.Activate(changed);
+        consumer.Activate(changed);
         var workers = runner.Count;
         _ = (await service.ReadAsync(changed, [scene], this.TestContext.CancellationToken).ConfigureAwait(false)).Single().Freshness.Should().Be(AssetCookFreshness.OutOfDate);
         _ = runner.Count.Should().Be(workers, "status checks must not start a native process");
@@ -108,17 +109,17 @@ public sealed partial class ContentPipelineServiceTests
 
     private async Task AssertLibraryFailuresPreserveOutputAsync(TempWorkspace consumer, Oxygen.Editor.Projects.ProjectContext context, string libraryProject, string root, ContentPipelineService service, Uri scene)
     {
-        var index = Path.Combine(consumer.Root, ".cooked/Content/container.index.bin");
+        var index = Path.Combine(consumer.CookedRoot("Content"), "container.index.bin");
         var before = await File.ReadAllBytesAsync(index, this.TestContext.CancellationToken).ConfigureAwait(false);
         var unavailable = context with { LocalFolderMounts = [new("Art library", Path.Combine(libraryProject, "Offline"))] };
-        consumer.ContextService.Activate(unavailable);
+        consumer.Activate(unavailable);
         _ = (await service.ReadAsync(unavailable, [scene], this.TestContext.CancellationToken).ConfigureAwait(false)).Single().Freshness.Should().Be(AssetCookFreshness.InvalidSource);
         var missing = await service.CookCurrentSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = missing.IsPublished.Should().BeFalse();
         _ = missing.Diagnostics.Should().Contain(issue => issue.Code == "asset_cook.library_reference_missing" && issue.AffectedVirtualPath == scene.AbsolutePath);
         _ = (await File.ReadAllBytesAsync(index, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Equal(before);
 
-        consumer.ContextService.Activate(context);
+        consumer.Activate(context);
         await File.WriteAllTextAsync(Path.Combine(root, "container.index.bin"), "broken", this.TestContext.CancellationToken).ConfigureAwait(false);
         var corruptStatus = (await service.ReadAsync(context, [scene], this.TestContext.CancellationToken).ConfigureAwait(false)).Single();
         _ = corruptStatus.HasAvailableOutput.Should().BeTrue("the scene's published output still exists; the library error affects its source dependencies");

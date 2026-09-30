@@ -4,6 +4,7 @@
 
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Oxygen.Editor.ContentPipeline.Publication;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.Status;
@@ -163,7 +164,7 @@ public sealed partial class ContentPipelineServiceTests
         using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
         var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
-        var index = Path.Combine(workspace.Root, ".cooked/Content/container.index.bin");
+        var index = CookPublicationPaths.Head(workspace.Root);
         byte[]? before = null;
         if (alreadyCooked)
         {
@@ -254,7 +255,7 @@ public sealed partial class ContentPipelineServiceTests
         AddGeometryNode(workspace, geometry, "Imported mesh");
         await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
         var scene = new Uri("asset:///Content/Scenes/Main.oscene.json");
-        var index = Path.Combine(workspace.Root, ".cooked/Content/container.index.bin");
+        var index = Path.Combine(workspace.CookedRoot("Content"), "container.index.bin");
         var before = await File.ReadAllBytesAsync(index, this.TestContext.CancellationToken).ConfigureAwait(false);
         if (externalBuffer)
         {

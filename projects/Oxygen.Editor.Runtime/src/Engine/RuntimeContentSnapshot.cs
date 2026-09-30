@@ -10,6 +10,18 @@ namespace Oxygen.Editor.Runtime.Engine;
 /// <param name="RunId">The native runtime lifetime.</param>
 /// <param name="Revision">The monotonically increasing status revision.</param>
 /// <param name="State">The acknowledged content state.</param>
-/// <param name="Roots">The complete last acknowledged root set; use only when the state is Mounted.</param>
+/// <param name="Bindings">The complete last acknowledged roots and their optional project mount identities.</param>
 /// <param name="Reason">An optional explanation of native unavailability.</param>
-public sealed record RuntimeContentSnapshot(Guid RunId, long Revision, RuntimeContentState State, ImmutableArray<string> Roots, string? Reason = null);
+public sealed record RuntimeContentSnapshot(Guid RunId, long Revision, RuntimeContentState State, ImmutableArray<RuntimeCookedRoot> Bindings, string? Reason = null)
+{
+    /// <summary>Gets immutable accepted bindings; changing them creates a new snapshot.</summary>
+    public ImmutableArray<RuntimeCookedRoot> Bindings { get; } = Bindings;
+
+    /// <summary>Gets physical paths in native precedence order.</summary>
+    public ImmutableArray<string> Roots { get; } = [.. Bindings.Select(static root => root.Path)];
+}
+
+/// <summary>An accepted native root with its project-owned logical mount, if any.</summary>
+/// <param name="Path">The physical container root.</param>
+/// <param name="ProjectMount">The logical authoring mount; null for an external library.</param>
+public sealed record RuntimeCookedRoot(string Path, string? ProjectMount = null);

@@ -107,7 +107,7 @@ public sealed partial class ContentPipelineService
                 var scope = this.CreateScope(operation.Project, inputs, targetKind) with
                 {
                     Snapshot = snapshot, Artifacts = artifacts, ReusableSources = completed.ToImmutableHashSet(), PreviousProvenance = previous, PreviousInventories = plan.PriorInventories,
-                    StagingOutputRoot = staging.Roots.Single(root => string.Equals(root.Mount, mount.Key, StringComparison.OrdinalIgnoreCase)).StagingPath,
+                    Output = staging.Roots.Single(root => string.Equals(root.Mount, mount.Key, StringComparison.OrdinalIgnoreCase)),
                     CookedContextRoots = referenceRoots,
                     InputDependencies = graph.Dependencies.SetItems(graph.Builtins.Where(ProceduralGeometryDescriptorService.IsGeneratedBasicShape)
                         .Select(static uri => KeyValuePair.Create<Uri, ImmutableArray<Uri>>(uri, [AssetUris.BuildGeneratedUri("Materials/Default")]))),
