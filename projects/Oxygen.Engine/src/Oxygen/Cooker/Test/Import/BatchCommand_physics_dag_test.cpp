@@ -9,7 +9,6 @@
 #include <filesystem>
 #include <fstream>
 #include <ios>
-#include <iterator>
 #include <memory>
 #include <optional>
 #include <sstream>
@@ -17,6 +16,9 @@
 #include <string_view>
 #include <system_error>
 #include <vector>
+
+#include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Uuid.h>
@@ -145,7 +147,9 @@ protected:
 
   auto RunBatch(const std::filesystem::path& manifest_path,
     const std::optional<std::filesystem::path>& cooked_root_override
-    = std::nullopt) -> std::expected<void, std::error_code>
+    = std::nullopt,
+    const std::optional<std::filesystem::path>& report_path = std::nullopt)
+    -> std::expected<void, std::error_code>
   {
     options_.cooked_root = cooked_root_override.has_value()
       ? cooked_root_override->generic_string()
@@ -159,9 +163,18 @@ protected:
                        .Build();
 
     const auto manifest_arg = manifest_path.generic_string();
-    const char* argv[]
-      = { "tool", "batch", "--manifest", manifest_arg.c_str() };
-    (void)cli->Parse(static_cast<int>(std::size(argv)), argv);
+    const auto report_arg = report_path.has_value()
+      ? report_path->generic_string()
+      : std::string {};
+    std::vector<const char*> argv { "tool", "batch", "--manifest",
+      manifest_arg.c_str() };
+    options_.command_line = "tool batch --manifest " + manifest_arg;
+    if (report_path.has_value()) {
+      argv.push_back("--report");
+      argv.push_back(report_arg.c_str());
+      options_.command_line += " --report " + report_arg;
+    }
+    static_cast<void>(cli->Parse(static_cast<int>(argv.size()), argv.data()));
 
     return command.Run();
   }
@@ -201,6 +214,29 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   EXPECT_EQ(result.error(), std::make_error_code(std::errc::invalid_argument));
   EXPECT_TRUE(std::filesystem::exists(root / ".cooked/Materials/Valid.omat"));
   EXPECT_NE(Messages().find("validation_errors=1"), std::string::npos);
+}
+
+NOLINT_TEST_F(BatchCommandPhysicsDagTest,
+  InvalidTexturePathWritesFailedReportWithoutAborting)
+{
+  const auto root = MakeScenarioDir("invalid_texture_report");
+  const auto manifest_path = root / "manifest.json";
+  const auto report_path = root / "report.json";
+  WriteTextFile(root / "texture.json",
+    R"({"source":"missing.png","virtual_path":"/Other/Meter.otex"})");
+  WriteTextFile(manifest_path, R"({"version":1,"output":"cooked",
+    "layout":{"virtual_mount_root":"/Content"},
+    "jobs":[{"type":"texture-descriptor","source":"texture.json"}]})");
+  EXPECT_FALSE(RunBatch(manifest_path, std::nullopt, report_path).has_value());
+  auto stream = std::ifstream(report_path);
+  ASSERT_TRUE(stream.is_open());
+  const auto report = nlohmann::json::parse(stream);
+  const auto& job = report.at("jobs").at(0);
+  EXPECT_EQ(job.at("status"), "failed");
+  EXPECT_EQ(job.at("stats").at("time_ms_io"), 0.0);
+  EXPECT_TRUE(job.at("stats").at("time_ms_total").is_number());
+  EXPECT_FALSE(job.at("diagnostics").empty());
+  EXPECT_FALSE(std::filesystem::exists(root / "cooked"));
 }
 
 NOLINT_TEST_F(BatchCommandPhysicsDagTest,

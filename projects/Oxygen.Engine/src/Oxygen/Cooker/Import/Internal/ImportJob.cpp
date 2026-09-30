@@ -333,11 +333,14 @@ auto ImportJob::MainAsync() -> co::Co<>
 
 auto ImportJob::RunOwnedSessionToCompletion() -> co::Co<>
 {
+  const auto started = std::chrono::steady_clock::now();
   const auto completion = ScopeGuard([this]() noexcept {
     completed_.Trigger();
     Stop();
   });
   ImportReport report {};
+  auto fallback_telemetry = MakeZeroTelemetry();
+  report.telemetry = fallback_telemetry;
   bool execution_completed = false;
   std::exception_ptr execution_failure;
   std::exception_ptr drain_failure;
@@ -377,12 +380,26 @@ auto ImportJob::RunOwnedSessionToCompletion() -> co::Co<>
   }
   producer_nursery_ = nullptr;
   pipelines_.clear();
+  const auto capture_session_timing = [&]() noexcept {
+    if (!execution_completed && session_) {
+      fallback_telemetry.io_duration = session_->IoDuration();
+      fallback_telemetry.source_load_duration = session_->SourceLoadDuration();
+      fallback_telemetry.decode_duration = session_->DecodeDuration();
+      fallback_telemetry.load_duration
+        = session_->SourceLoadDuration() + session_->LoadDuration();
+      fallback_telemetry.cook_duration = session_->CookDuration();
+      fallback_telemetry.emit_duration = session_->EmitDuration();
+      fallback_telemetry.finalize_duration = session_->FinalizeDuration();
+    }
+  };
   try {
     if (session_) {
       co_await session_->DrainAndRetire();
+      capture_session_timing();
       session_.reset();
     }
   } catch (...) {
+    capture_session_timing();
     drain_failure = std::current_exception();
   }
 
@@ -415,6 +432,12 @@ auto ImportJob::RunOwnedSessionToCompletion() -> co::Co<>
   }
   if (drain_failure) {
     describe_failure(drain_failure);
+  }
+  if (!execution_completed) {
+    fallback_telemetry.total_duration
+      = std::chrono::duration_cast<std::chrono::microseconds>(
+        std::chrono::steady_clock::now() - started);
+    report.telemetry = fallback_telemetry;
   }
   try {
     ReportJobEvent(ProgressEventKind::kJobFinished,

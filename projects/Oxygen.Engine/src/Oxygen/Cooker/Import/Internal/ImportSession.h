@@ -198,6 +198,10 @@ public:
   //! Get total emit duration accumulated for this session.
   OXGN_COOK_NDAPI auto EmitDuration() const noexcept
     -> std::chrono::microseconds;
+
+  //! Accumulated finalization and drain time, including exceptional exits.
+  OXGN_COOK_NDAPI auto FinalizeDuration() const noexcept
+    -> std::chrono::microseconds;
   //=== Diagnostics
   //===--------------------------------------------------------//
 
@@ -285,6 +289,7 @@ private:
   std::chrono::microseconds load_duration_ { 0 };
   std::chrono::microseconds cook_duration_ { 0 };
   std::chrono::microseconds emit_duration_ { 0 };
+  std::chrono::microseconds finalize_duration_ { 0 };
 };
 
 } // namespace oxygen::content::import

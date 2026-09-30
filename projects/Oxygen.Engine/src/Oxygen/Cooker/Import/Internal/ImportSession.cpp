@@ -27,6 +27,7 @@
 #include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
@@ -303,6 +304,11 @@ ImportSession::~ImportSession() { DLOG_F(INFO, "Session destroyed"); }
 
 auto ImportSession::DrainAndRetire() -> co::Co<>
 {
+  const auto started = std::chrono::steady_clock::now();
+  const auto timing = ScopeGuard([this, started]() noexcept {
+    finalize_duration_ += std::chrono::duration_cast<std::chrono::microseconds>(
+      std::chrono::steady_clock::now() - started);
+  });
   std::exception_ptr failure;
   try {
     const auto flushed = co_await co::NonCancellable(file_writer_->Flush());
@@ -555,6 +561,12 @@ auto ImportSession::EmitDuration() const noexcept -> std::chrono::microseconds
   return emit_duration_;
 }
 
+auto ImportSession::FinalizeDuration() const noexcept
+  -> std::chrono::microseconds
+{
+  return finalize_duration_;
+}
+
 auto ImportSession::AddMaterialSlotProvenance(
   MaterialSlotGeometryProvenance geometry) -> void
 {
@@ -617,6 +629,11 @@ auto ImportSession::HasErrors() const noexcept -> bool
 
 auto ImportSession::Finalize() -> co::Co<ImportReport>
 {
+  const auto started = std::chrono::steady_clock::now();
+  const auto timing = ScopeGuard([this, started]() noexcept {
+    finalize_duration_ += std::chrono::duration_cast<std::chrono::microseconds>(
+      std::chrono::steady_clock::now() - started);
+  });
   if (!table_participation_.has_value() || !index_participation_.has_value()) {
     throw std::logic_error(
       "Import finalization requires both registry participations");

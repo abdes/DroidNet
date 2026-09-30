@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
@@ -222,6 +223,88 @@ private:
   }
   ProducerState& state_;
 };
+
+constexpr auto kRecordedIo = std::chrono::microseconds { 17 };
+
+class FinalizedFailureJob final : public imp::detail::ImportJob {
+  OXYGEN_TYPED(FinalizedFailureJob)
+public:
+  using ImportJob::ImportJob;
+  ~FinalizedFailureJob() override = default;
+  OXYGEN_MAKE_NON_COPYABLE(FinalizedFailureJob)
+  OXYGEN_MAKE_NON_MOVABLE(FinalizedFailureJob)
+
+private:
+  auto ExecuteAsync() -> co::Co<imp::ImportReport> override
+  {
+    EnsureCookedRoot();
+    auto& session = Session();
+    session.AddIoDuration(kRecordedIo);
+    auto report = co_await session.Finalize();
+    if (report.success) {
+      throw std::runtime_error("Failure after recorded session work");
+    }
+    co_return report;
+  }
+};
+
+auto RunFailingJob(imp::detail::ImportJob* job) -> co::Co<>
+{
+  OXCO_WITH_NURSERY(jobs)
+  {
+    co_await jobs.Start(&imp::detail::ImportJob::ActivateAsync, job);
+    job->Run();
+    co_await job->Wait();
+    co_return co::kJoin;
+  };
+}
+
+NOLINT_TEST(ImportJobLifetimeTest, ExceptionPreservesDrainedSessionTelemetry)
+{
+  imp::ImportEventLoop loop;
+  auto reader = imp::CreateAsyncFileReader(loop);
+  auto writer = imp::CreateAsyncFileWriter(loop);
+  co::ThreadPool pool(loop, 1);
+  imp::ResourceTableRegistry tables(*writer);
+  imp::LooseCookedIndexRegistry indexes;
+  const auto root = std::filesystem::temp_directory_path()
+    / oxygen::Uuid::Generate().ToString();
+  imp::ImportRequest request;
+  request.source_path = root / "source.json";
+  request.cooked_root = root;
+  imp::ImportReport result;
+  auto job = FinalizedFailureJob(imp::detail::ImportJobParams {
+    .id = imp::ImportJobId { 1 },
+    .request = request,
+    .on_complete = [&](auto, const auto& report) { result = report; },
+    .on_progress = {},
+    .cancel_event = {},
+    .reader = oxygen::make_observer(reader.get()),
+    .writer = oxygen::make_observer(writer.get()),
+    .thread_pool = oxygen::make_observer(&pool),
+    .registry = oxygen::make_observer(&tables),
+    .index_registry = oxygen::make_observer(&indexes),
+    .concurrency = {},
+    .script_compile_callback = {},
+    .stop_token = {},
+    .retained_import = {},
+    .generation_writer = {},
+  });
+  co::Run(loop, RunFailingJob(&job));
+  EXPECT_FALSE(result.success);
+  EXPECT_EQ(writer->PendingCount(), 0U);
+  EXPECT_EQ(result.telemetry.io_duration, kRecordedIo);
+  EXPECT_TRUE(result.telemetry.source_load_duration.has_value());
+  EXPECT_TRUE(result.telemetry.decode_duration.has_value());
+  EXPECT_TRUE(result.telemetry.load_duration.has_value());
+  EXPECT_TRUE(result.telemetry.cook_duration.has_value());
+  EXPECT_TRUE(result.telemetry.emit_duration.has_value());
+  EXPECT_TRUE(result.telemetry.finalize_duration.has_value());
+  EXPECT_TRUE(result.telemetry.total_duration.has_value());
+  EXPECT_GE(
+    result.telemetry.total_duration, result.telemetry.finalize_duration);
+  std::filesystem::remove_all(root);
+}
 
 NOLINT_TEST(
   ImportJobLifetimeTest, CancellationDrainsCallbacksAndAllowsSameRootRetry)
