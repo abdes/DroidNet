@@ -2,7 +2,7 @@
 
 Status: **in progress — M08.1.1–M08.1.8 validated**
 
-Current: **M08.1.9.3 editor cutover — native analysis and captured batch execution are validated**. Commit each remaining sub-slice after its exit checks.
+Current: **M08.1.9.3.2 discovery and status cutover — the native client and capture transport are validated**. Commit each remaining sub-slice after its exit checks.
 See [owners](#2-implementation-document-map), [remaining increments](#m081-remaining-increments)
 and [exit checklist](#7-exit-checklist). Captured-sky IBL is delivered by
 [VX-IBL-01](../../../projects/Oxygen.Engine/design/vortex/milestones/VX-IBL-01/README.md);
@@ -214,6 +214,17 @@ M08.1.9 has three delivery stages; all remain required for closure:
    resolution, source editing, dirty-document policy and progress/diagnostics;
    badge refresh uses accepted dependency facts without launching native tools.
    Qualify bounded process launches and real import/cook/reimport workflows.
+   Commit checkpoints:
+   - **M08.1.9.3.1 native client and capture transport — validated:** typed reports,
+     leased schemas, correlated batch queries and capture-map transport. Replacement
+     analysis preserves logical identity without installing incoming sources. The
+     exposed worker drain includes file/artifact cleanup. Debug/Release each pass
+     73 client/compatibility tests and the installed-tool analysis/capture/cook
+     roundtrip; native analysis/snapshot suites, 14 CLI cases per configuration,
+     the C++20 SDK consumer, scoped tidy and extra-high review also pass.
+   - **M08.1.9.3.2 discovery and status cutover:** replace managed cook parsers,
+     batch frontiers, verify captured observations and publish accepted facts;
+     keep badge reads passive and close real editor workflows.
 
 M08.1.7 final gate: after the entire native/managed implementation, review the
 whole slice for unnecessary complexity, duplicate state, owner/API integration

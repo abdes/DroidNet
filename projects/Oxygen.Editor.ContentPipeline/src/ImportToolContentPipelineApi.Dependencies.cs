@@ -30,8 +30,13 @@ public sealed partial class ImportToolContentPipelineApi : ICookedDependencyInsp
 
     /// <inheritdoc />
     public Task<CookedInventoryReport> ReadInventoryAsync(string cookedRoot, NativeArtifactLease? artifacts, CancellationToken cancellationToken)
-        => this.RunInspectorAsync(Path.Combine(Path.GetTempPath(), "Oxygen", "ContentInventory"),
-            ["inventory", Path.GetFullPath(cookedRoot)], request: null, CookedInventoryReport.Parse, artifacts, cancellationToken);
+        => this.RunInspectorAsync(
+            Path.Combine(Path.GetTempPath(), "Oxygen", "ContentInventory"),
+            ["inventory", Path.GetFullPath(cookedRoot)],
+            request: null,
+            CookedInventoryReport.Parse,
+            artifacts,
+            cancellationToken);
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Failed termination transfers the Inspector handle to the returned worker-drain continuation; ordinary completion awaits disposal in finally.")]
     private async Task<T> RunInspectorAsync<T>(string operationRoot, IReadOnlyList<string> arguments, string? request, Func<string, T> parse, NativeArtifactLease? artifacts, CancellationToken cancellationToken)
@@ -68,7 +73,7 @@ public sealed partial class ImportToolContentPipelineApi : ICookedDependencyInsp
         }
         catch (ContentPipelineTerminationException failure)
         {
-            drain = ReleaseAfterWorkerDrainAsync(failure.DrainCompletion, output, artifacts is null ? compatible : null, additionalPath: input, additionalLease: inspector);
+            drain = ReleaseAfterWorkerDrainAsync(failure.DrainCompletion, input is null ? [output] : [output, input], artifacts is null ? compatible : null, additionalLease: inspector);
             inspector = null;
             throw new ContentPipelineTerminationException(failure.InnerException ?? failure, drain);
         }

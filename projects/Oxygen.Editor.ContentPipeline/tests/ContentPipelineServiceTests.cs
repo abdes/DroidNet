@@ -5,8 +5,8 @@
 using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
-using Oxygen.Editor.Projects;
 using Oxygen.Editor.ContentPipeline.Publication;
+using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core.Diagnostics;
@@ -507,6 +507,8 @@ public sealed partial class ContentPipelineServiceTests
 
         public Func<ContentImportExecution, CancellationToken, Task>? BeforeImport { get; init; }
 
+        public Func<ContentSourceAnalysisExecution, CancellationToken, Task<Import.NativeSourceAnalysisReport>>? SourceAnalysis { get; init; }
+
         public List<ContentImportExecution> Executions { get; } = [];
 
         public ContentImportExecution? ImportedExecution { get; private set; }
@@ -518,6 +520,10 @@ public sealed partial class ContentPipelineServiceTests
         public string? InspectedRoot { get; private set; }
 
         public string? ValidatedRoot { get; private set; }
+
+        public Task<Import.NativeSourceAnalysisReport> AnalyzeSourcesAsync(ContentSourceAnalysisExecution execution, CancellationToken cancellationToken)
+            => this.SourceAnalysis?.Invoke(execution, cancellationToken)
+                ?? throw new InvalidOperationException("This test did not configure native source analysis.");
 
         public async Task<NativeImportResult> ImportAsync(
             ContentImportExecution execution,
@@ -549,7 +555,9 @@ public sealed partial class ContentPipelineServiceTests
                 await File.WriteAllBytesAsync(path, new byte[checked((int)file.Size)], cancellationToken).ConfigureAwait(false);
             }
 
-            Oxygen.Testing.NativeInventoryFixture.WriteIndex(manifest.Output, this.inspected.Assets,
+            Oxygen.Testing.NativeInventoryFixture.WriteIndex(
+                manifest.Output,
+                this.inspected.Assets,
                 manifest.SourceKey ?? throw new InvalidOperationException("A candidate import requires its generation key."));
             return importResult ?? new NativeImportResult(Succeeded: true, Diagnostics: []);
         }
@@ -557,7 +565,11 @@ public sealed partial class ContentPipelineServiceTests
         public Task<Inspection.CookedInventoryReport> ReadInventoryAsync(string root, Oxygen.Managed.Core.Compatibility.NativeArtifactLease? artifacts, CancellationToken cancellationToken)
         {
             this.InspectedRoot = root;
-            if (!this.inspected.Succeeded) { throw new InvalidDataException("Controlled native index inspection failure."); }
+            if (!this.inspected.Succeeded)
+            {
+                throw new InvalidDataException("Controlled native index inspection failure.");
+            }
+
             this.ValidatedRoot = root;
             return Task.FromResult(Oxygen.Testing.NativeInventoryFixture.Read(root, forceFailure: !validation.Succeeded));
         }
@@ -639,6 +651,20 @@ public sealed partial class ContentPipelineServiceTests
 
         public CookPublicationService Publication { get; }
 
+        public Project Project { get; }
+
+        public ProjectContext ProjectContext { get; }
+
+        public ProjectContextService ContextService { get; } = new();
+
+        public ContentCookCoordinator CookCoordinator { get; }
+
+        public Scene Scene { get; }
+
+        public Oxygen.Testing.TemporaryNativeArtifacts Compatibility { get; }
+
+        public Snapshots.CookDocumentRegistry Documents { get; } = new();
+
         public async Task SeedEmptyPublicationAsync(string mount, CancellationToken token)
         {
             var key = Guid.CreateVersion7();
@@ -647,9 +673,15 @@ public sealed partial class ContentPipelineServiceTests
             Oxygen.Testing.NativeInventoryFixture.WriteIndex(root, [], key);
             File.WriteAllBytes(Path.Combine(root, CookedGeneration.MarkerFileName), []);
             var digest = Oxygen.Testing.NativeInventoryFixture.Read(root).IndexSha256;
-            var document = new CookPublicationDocument(CookPublicationDocument.CurrentVersion, this.ProjectContext.ProjectId, Guid.NewGuid(),
-                DateTimeOffset.UtcNow, CookPublicationDocument.ConfigurationIdentity(this.ProjectContext),
-                [new(CookPublicationRootOwner.Project, mount, key, digest, null)], [], null);
+            var document = new CookPublicationDocument(
+                CookPublicationDocument.CurrentVersion,
+                this.ProjectContext.ProjectId,
+                Guid.NewGuid(),
+                DateTimeOffset.UtcNow,
+                CookPublicationDocument.ConfigurationIdentity(this.ProjectContext),
+                [new(CookPublicationRootOwner.Project, mount, key, digest, null)],
+                [],
+                null);
             var path = CookPublicationPaths.Document(this.Root, document.OperationId);
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             using var gate = await CookOutputLease.AcquireWriteAsync(this.Root, token).ConfigureAwait(false);
@@ -674,7 +706,7 @@ public sealed partial class ContentPipelineServiceTests
         {
             var head = System.Text.Json.JsonSerializer.Deserialize<CookPublicationHead>(File.ReadAllBytes(CookPublicationPaths.Head(this.Root)), CookPublicationDocument.JsonOptions)!;
             var document = System.Text.Json.JsonSerializer.Deserialize<CookPublicationDocument>(File.ReadAllBytes(CookPublicationPaths.Document(this.Root, head.PublicationId)), CookPublicationDocument.JsonOptions)!;
-            return document.Roots.Single(root => root.Owner == CookPublicationRootOwner.Project && root.Name == mount).ResolvePath(this.Root);
+            return document.Roots.Single(root => root.Owner == CookPublicationRootOwner.Project && string.Equals(root.Name, mount, StringComparison.Ordinal)).ResolvePath(this.Root);
         }
 
         public string CookedPath(string virtualPath)
@@ -696,7 +728,7 @@ public sealed partial class ContentPipelineServiceTests
 
             Directory.CreateDirectory(destination);
             foreach (var path in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories)
-                .Where(static path => Path.GetFileName(path) != CookedGeneration.MarkerFileName))
+                .Where(static path => !string.Equals(Path.GetFileName(path), CookedGeneration.MarkerFileName, StringComparison.Ordinal)))
             {
                 token.ThrowIfCancellationRequested();
                 var target = Path.Combine(destination, Path.GetRelativePath(source, path));
@@ -706,20 +738,6 @@ public sealed partial class ContentPipelineServiceTests
 
             return destination;
         }
-
-        public Project Project { get; }
-
-        public ProjectContext ProjectContext { get; }
-
-        public ProjectContextService ContextService { get; } = new();
-
-        public ContentCookCoordinator CookCoordinator { get; }
-
-        public Scene Scene { get; }
-
-        public Oxygen.Testing.TemporaryNativeArtifacts Compatibility { get; }
-
-        public Snapshots.CookDocumentRegistry Documents { get; } = new();
 
         public void WriteText(string relativePath, string content)
         {

@@ -349,6 +349,7 @@ public sealed partial class ImportToolContentPipelineApiTests
                 });
                 await File.WriteAllTextAsync(reportPath, report, cancellationToken).ConfigureAwait(false);
             }
+
             return result;
         }
     }
@@ -367,7 +368,12 @@ public sealed partial class ImportToolContentPipelineApiTests
             this.ToolPath = Path.Combine(this.Root, "Oxygen.Cooker.ImportTool.exe");
             File.WriteAllText(this.ToolPath, "Test tool");
             File.WriteAllText(Path.Combine(this.Root, "Oxygen.Cooker.Inspector.exe"), "Test Inspector");
-            this.Compatibility = new([new(Oxygen.Managed.Core.Compatibility.NativeArtifactInventory.ImportToolId, this.ToolPath)]);
+            this.Compatibility = new(
+            [
+                new(Oxygen.Managed.Core.Compatibility.NativeArtifactInventory.ImportToolId, this.ToolPath),
+                new(Oxygen.Managed.Core.Compatibility.NativeArtifactInventory.SourceAnalysisSchemaId, Path.Combine(AppContext.BaseDirectory, "Schemas", "oxygen.source-analysis.schema.json")),
+                new(Oxygen.Managed.Core.Compatibility.NativeArtifactInventory.CapturedInputsSchemaId, Path.Combine(AppContext.BaseDirectory, "Schemas", "oxygen.captured-inputs.schema.json")),
+            ]);
         }
 
         public string Root { get; }

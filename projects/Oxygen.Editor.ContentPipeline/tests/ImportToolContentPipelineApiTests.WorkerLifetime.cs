@@ -27,7 +27,7 @@ public sealed partial class ImportToolContentPipelineApiTests
             new FixedToolLocator(workspace.ToolPath), runner, NullLogger<ImportToolContentPipelineApi>.Instance, workspace.Compatibility);
 
         var import = async () => await api.ImportAsync(CreateExecution(workspace, CreateManifest(workspace)), CancellationToken.None).ConfigureAwait(false);
-        _ = await import.Should().ThrowAsync<ContentPipelineTerminationException>().ConfigureAwait(false);
+        var thrown = await import.Should().ThrowAsync<ContentPipelineTerminationException>().ConfigureAwait(false);
         _ = File.Exists(runner.ManifestPath).Should().BeTrue();
         if (readerFailed)
         {
@@ -39,10 +39,8 @@ public sealed partial class ImportToolContentPipelineApiTests
         }
 
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        while (File.Exists(runner.ManifestPath))
-        {
-            await Task.Delay(20, timeout.Token).ConfigureAwait(false);
-        }
+        await thrown.Which.DrainCompletion.WaitAsync(timeout.Token).ConfigureAwait(false);
+        _ = File.Exists(runner.ManifestPath).Should().BeFalse();
     }
 
     /// <summary>Cleans operation input when process creation fails.</summary>

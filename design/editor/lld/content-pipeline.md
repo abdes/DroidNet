@@ -1307,6 +1307,18 @@ DTO projection and capture ownership. Analyze, capture the reported closure, com
 input proofs, then cook captured input; reject unreported reads or use the existing
 conflict/retry path. No daemon or universal graph is introduced.
 
+The cook owns one verified native artifact lease across its queries and execution.
+Analysis and capture schemas participate in that artifact identity; each report is
+validated against the leased schema and correlated with the submitted job IDs,
+types and logical source paths. Incomplete reports retain source-attributed
+diagnostics. A failed worker termination retains manifests, reports, capture maps
+and owned artifacts until its exposed drain completes cleanup.
+
+Replacement analysis uses incoming captured bytes under the retained source paths.
+The current publication and live source bundle remain unchanged until publication
+succeeds. The same logical paths and capture map feed cooking, so operation-directory
+names cannot change output identities.
+
 Remove parallel managed descriptor-dependency parsers and repeated small native
 queries where this batch supplies their facts. Preserve separate source invalidation,
 import scheduling and runtime ownership graphs. Tests cover multi-root crash/preview

@@ -1076,7 +1076,13 @@ readers. Primary/Secondary names remain unchanged.
       validation in both formats; controlled appearance captures visually match.
       This validation also fixed saved-scene restoration to prefer stable keys
       over display labels. Scoped tidy and extra-high review are clear.
-      Editor discovery, capture transport and passive-status cutover remain .9.3.
+      M08.1.9.3.1 native client/capture transport is validated: leased schemas,
+      correlated reports, cleanup-inclusive worker drains and captured replacement
+      analysis. Debug/Release each pass 73 client/compatibility tests, including
+      installed-tool analysis/capture/cook; mapped native analysis passes its owning
+      suites, 14 CLI tests per configuration, C++20 SDK validation and scoped tidy.
+      Extra-high review is clear. Discovery and passive-status cutover remain .9.3.2;
+      real editor workflow acceptance is still required.
 
 - [ ] [M08.F1 descriptor-local reference format](plan/ED-M08.F1-descriptor-local-references.md),
       after M08.1.9 and before M08.2. Separate format cutover, recook and SDK gate.

@@ -237,7 +237,7 @@ public sealed partial class ContentPipelineServiceTests
         var document = System.Text.Json.JsonSerializer.Deserialize<Publication.CookPublicationDocument>(File.ReadAllBytes(Publication.CookPublicationPaths.Document(projectRoot, head.PublicationId)), Publication.CookPublicationDocument.JsonOptions)!;
         return document.Roots.Where(static root => root.Owner == Publication.CookPublicationRootOwner.Project)
             .SelectMany(root => Directory.EnumerateFiles(root.ResolvePath(projectRoot), "*", SearchOption.AllDirectories)
-                .Where(static path => Path.GetFileName(path) != Publication.CookedGeneration.MarkerFileName)
+                .Where(static path => !string.Equals(Path.GetFileName(path), Publication.CookedGeneration.MarkerFileName, StringComparison.Ordinal))
                 .Select(path => (Key: root.Name + "/" + Path.GetRelativePath(root.ResolvePath(projectRoot), path).Replace('\\', '/'), Path: path)))
             .ToDictionary(static file => file.Key, static file => (Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(file.Path))), File.GetLastWriteTimeUtc(file.Path)), StringComparer.Ordinal);
     }
@@ -275,11 +275,19 @@ public sealed partial class ContentPipelineServiceTests
     {
         public List<ContentImportExecution> Imported { get; } = [];
 
+        public List<ContentSourceAnalysisExecution> Analyzed { get; } = [];
+
         public int CatalogRequests { get; private set; }
 
         public bool FailNextImport { get; set; }
 
         public bool AddSceneWarning { get; set; }
+
+        public Task<Import.NativeSourceAnalysisReport> AnalyzeSourcesAsync(ContentSourceAnalysisExecution execution, CancellationToken cancellationToken)
+        {
+            this.Analyzed.Add(execution);
+            return native.AnalyzeSourcesAsync(execution, cancellationToken);
+        }
 
         public async Task<NativeImportResult> ImportAsync(ContentImportExecution execution, CancellationToken cancellationToken)
         {

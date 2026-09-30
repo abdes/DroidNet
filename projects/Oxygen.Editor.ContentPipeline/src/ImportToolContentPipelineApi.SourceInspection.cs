@@ -54,8 +54,8 @@ public sealed partial class ImportToolContentPipelineApi : ISceneSourceInspector
         }
         catch (ContentPipelineTerminationException exception)
         {
-            retainedWorkerDrain = exception.DrainCompletion;
-            throw;
+            retainedWorkerDrain = ReleaseAfterWorkerDrainAsync(exception.DrainCompletion, [output], artifacts is null ? compatible : null);
+            throw new ContentPipelineTerminationException(exception.InnerException ?? exception, retainedWorkerDrain);
         }
         finally
         {
@@ -67,10 +67,6 @@ public sealed partial class ImportToolContentPipelineApi : ISceneSourceInspector
                 }
 
                 TryDeleteFile(output);
-            }
-            else
-            {
-                _ = ReleaseAfterWorkerDrainAsync(retainedWorkerDrain, output, artifacts is null ? compatible : null);
             }
         }
     }

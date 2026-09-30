@@ -14,7 +14,7 @@ using Oxygen.Managed.Core.Diagnostics;
 namespace Oxygen.Editor.ContentPipeline;
 
 /// <summary>
-/// Bounded ImportTool fallback for ED-M07 engine content-pipeline operations.
+/// Runs native content tools under owned process and artifact lifetimes.
 /// </summary>
 /// <param name="toolLocator">The native tool locator.</param>
 /// <param name="processRunner">The contained worker runner.</param>
@@ -27,6 +27,7 @@ public sealed partial class ImportToolContentPipelineApi(
     INativeCompatibilityService nativeCompatibility) : IEngineContentPipelineApi
 {
     private static readonly JsonSerializerOptions ManifestJsonOptions = new() { WriteIndented = true };
+    private static readonly JsonSerializerOptions CaptureJsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
 
     private readonly IEngineContentPipelineToolLocator toolLocator = toolLocator ?? throw new ArgumentNullException(nameof(toolLocator));
     private readonly IContentPipelineProcessRunner processRunner = processRunner ?? throw new ArgumentNullException(nameof(processRunner));
@@ -54,16 +55,18 @@ public sealed partial class ImportToolContentPipelineApi(
         var artifacts = compatibility.Artifacts!;
         var manifestPath = Path.Combine(execution.OperationRoot, "manifests", $"import-{Guid.NewGuid():N}.json");
         var reportPath = manifestPath + ".report.json";
+        var capturePath = execution.CapturedInputs is null ? null : manifestPath + ".captures.json";
+        string[] ownedPaths = capturePath is null ? [manifestPath, reportPath] : [manifestPath, reportPath, capturePath];
         Task? retainedWorkerDrain = null;
 
         try
         {
-            return await this.RunImportWorkerAsync(execution, artifacts, manifestPath, reportPath, cancellationToken).ConfigureAwait(false);
+            return await this.RunImportWorkerAsync(execution, artifacts, manifestPath, reportPath, capturePath, cancellationToken).ConfigureAwait(false);
         }
         catch (ContentPipelineTerminationException ex)
         {
-            retainedWorkerDrain = ex.DrainCompletion;
-            throw;
+            retainedWorkerDrain = ReleaseAfterWorkerDrainAsync(ex.DrainCompletion, ownedPaths, execution.Artifacts is null ? artifacts : null);
+            throw new ContentPipelineTerminationException(ex.InnerException ?? ex, retainedWorkerDrain);
         }
         finally
         {
@@ -74,12 +77,10 @@ public sealed partial class ImportToolContentPipelineApi(
                     await artifacts.DisposeAsync().ConfigureAwait(false);
                 }
 
-                TryDeleteFile(manifestPath);
-                TryDeleteFile(reportPath);
-            }
-            else
-            {
-                _ = ReleaseAfterWorkerDrainAsync(retainedWorkerDrain, manifestPath, execution.Artifacts is null ? artifacts : null, reportPath);
+                foreach (var path in ownedPaths)
+                {
+                    TryDeleteFile(path);
+                }
             }
         }
     }
@@ -138,6 +139,15 @@ public sealed partial class ImportToolContentPipelineApi(
             toolPath,
             ["--no-tui", "--no-color", "--cooked-root", output, "batch", "--manifest", manifestPath, "--root", inputRoot],
             inputRoot);
+
+    private static async Task WriteCapturedInputsAsync(Import.NativeCapturedInputSet inputs, string path, CancellationToken cancellationToken)
+    {
+        var capture = File.Create(path);
+        await using (capture.ConfigureAwait(false))
+        {
+            await JsonSerializer.SerializeAsync(capture, inputs, CaptureJsonOptions, cancellationToken).ConfigureAwait(false);
+        }
+    }
 
     [SuppressMessage(
         "Design",
@@ -208,7 +218,7 @@ public sealed partial class ImportToolContentPipelineApi(
         Message = "Invoking ImportTool '{ToolPath}' with manifest '{ManifestPath}' in '{WorkingDirectory}'.")]
     private partial void LogImportToolInvoked(string toolPath, string manifestPath, string workingDirectory);
 
-    private async Task<NativeImportResult> RunImportWorkerAsync(ContentImportExecution execution, NativeArtifactLease artifacts, string manifestPath, string reportPath, CancellationToken cancellationToken)
+    private async Task<NativeImportResult> RunImportWorkerAsync(ContentImportExecution execution, NativeArtifactLease artifacts, string manifestPath, string reportPath, string? capturePath, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var toolPath = this.GetCompatibleToolPath(artifacts);
@@ -220,6 +230,11 @@ public sealed partial class ImportToolContentPipelineApi(
         };
 
         request = request with { Arguments = [.. request.Arguments, "--report", reportPath] };
+        if (capturePath is not null)
+        {
+            await WriteCapturedInputsAsync(execution.CapturedInputs!, capturePath, cancellationToken).ConfigureAwait(false);
+            request = request with { Arguments = [.. request.Arguments, "--captured-inputs", capturePath] };
+        }
 
         this.LogImportToolInvoked(toolPath, manifestPath, execution.InputRoot);
         var result = await this.processRunner.RunAsync(request, cancellationToken).ConfigureAwait(false);

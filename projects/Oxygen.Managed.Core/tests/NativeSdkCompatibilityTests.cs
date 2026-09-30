@@ -67,13 +67,17 @@ public sealed partial class NativeSdkCompatibilityTests
     }
 
     /// <summary>Schema disagreement blocks cooking while runtime startup remains available.</summary>
+    /// <param name="schemaFile">The cooking protocol whose editor copy differs.</param>
     /// <returns>The asynchronous operation-scoping test.</returns>
     [TestMethod]
-    public async Task CookingSchemaMismatchDoesNotBlockRuntime()
+    [DataRow("oxygen.scene-descriptor.schema.json")]
+    [DataRow("oxygen.source-analysis.schema.json")]
+    [DataRow("oxygen.captured-inputs.schema.json")]
+    public async Task CookingSchemaMismatchDoesNotBlockRuntime(string schemaFile)
     {
         using var fixture = new Fixture();
         fixture.CreateCookingInputs();
-        await File.WriteAllTextAsync(Path.Combine(fixture.Installation.EditorRoot, "Schemas", "oxygen.scene-descriptor.schema.json"), """{"$id":"different"}""", this.TestContext.CancellationToken).ConfigureAwait(false);
+        await File.WriteAllTextAsync(Path.Combine(fixture.Installation.EditorRoot, "Schemas", schemaFile), """{"$id":"different"}""", this.TestContext.CancellationToken).ConfigureAwait(false);
         using var compatibility = new EditorNativeCompatibilityService(fixture.Installation, cooking: true);
         var result = await compatibility.VerifyAsync(Guid.NewGuid(), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.Succeeded.Should().BeFalse();

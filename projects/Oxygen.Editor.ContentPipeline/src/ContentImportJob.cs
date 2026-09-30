@@ -16,6 +16,7 @@ public sealed record ContentImportJob(
     [property: JsonPropertyName("depends_on")] IReadOnlyList<string> DependsOn,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     [property: JsonPropertyName("output")] string? Output,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     [property: JsonPropertyName("name")] string? Name)
 {
     /// <summary>Gets the retained source namespace used by native slot allocation.</summary>

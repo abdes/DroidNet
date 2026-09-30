@@ -100,7 +100,7 @@ public sealed partial class ImportToolContentPipelineApiTests
         var runner = new SourceInspectionRunner(SupportedSourceReport, new ContentPipelineTerminationException(new IOException("Termination failed"), drain.Task));
         var api = CreateSourceInspectionApi(workspace, runner);
         Func<Task> inspect = () => api.InspectSceneSourceAsync(Guid.NewGuid(), workspace.Root, "source.gltf", this.TestContext.CancellationToken);
-        _ = await inspect.Should().ThrowAsync<ContentPipelineTerminationException>().ConfigureAwait(false);
+        var failure = await inspect.Should().ThrowAsync<ContentPipelineTerminationException>().ConfigureAwait(false);
         _ = File.Exists(runner.ReportPath).Should().BeTrue();
         Action overwrite = () => File.WriteAllText(workspace.ToolPath, "replacement");
         try
@@ -113,10 +113,8 @@ public sealed partial class ImportToolContentPipelineApiTests
         }
 
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        while (File.Exists(runner.ReportPath))
-        {
-            await Task.Delay(20, timeout.Token).ConfigureAwait(false);
-        }
+        await failure.Which.DrainCompletion.WaitAsync(timeout.Token).ConfigureAwait(false);
+        _ = File.Exists(runner.ReportPath).Should().BeFalse();
 
         _ = overwrite.Should().NotThrow();
     }
