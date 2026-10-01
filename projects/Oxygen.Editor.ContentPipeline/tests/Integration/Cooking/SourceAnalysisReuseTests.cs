@@ -8,6 +8,7 @@ using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World;
 using Oxygen.Managed.Assets.Model;
+using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core;
 using static Oxygen.Editor.ContentPipeline.TestSupport.IncrementalCookScenario;
 
@@ -41,7 +42,7 @@ public sealed class SourceAnalysisReuseTests
             await new Oxygen.Editor.World.Serialization.SceneSerializer(workspace.Project).SerializeAsync(source, second).ConfigureAwait(false);
         }
 
-        using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
+        using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
         var pipeline = CreateIncrementalService(workspace, api, compatibility);
         var first = await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -69,7 +70,7 @@ public sealed class SourceAnalysisReuseTests
     {
         using var workspace = new CookWorkspace();
         await PrepareIncrementalSceneAsync(workspace).ConfigureAwait(false);
-        using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
+        using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
         var pipeline = CreateIncrementalService(workspace, api, compatibility);
         var first = await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -101,7 +102,7 @@ public sealed class SourceAnalysisReuseTests
         workspace.WriteText(".build/captured/" + relative, workspace.ReadText(relative));
         workspace.Scene.RootNodes[0].Name = "EditedAfterCapture";
         await workspace.WriteSceneAsync(relative).ConfigureAwait(false);
-        using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
+        using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var operation = new ContentCookOperation(Guid.NewGuid(), workspace.ProjectContext, 1);
         var verified = await compatibility.VerifyAsync(operation.OperationId, this.TestContext.CancellationToken).ConfigureAwait(false);
         var artifacts = verified.Artifacts ?? throw new InvalidOperationException("The native test artifacts are unavailable.");

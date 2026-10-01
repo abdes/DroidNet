@@ -10,6 +10,7 @@ using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.World.Slots;
 using Oxygen.Editor.World;
 using Oxygen.Managed.Assets.Model;
+using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookScenario;
 using static Oxygen.Editor.ContentPipeline.TestSupport.DependencyScenario;
@@ -41,7 +42,7 @@ public sealed class NestedDescriptorCookTests
         descriptor["lods"]![0]!["submeshes"]![0]!["material_ref"] = "/" + first[..^5];
         workspace.WriteText(geometry, descriptor.ToJsonString());
         File.Delete(original);
-        using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
+        using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
         var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
         var geometryUri = new Uri("asset:///" + geometry);

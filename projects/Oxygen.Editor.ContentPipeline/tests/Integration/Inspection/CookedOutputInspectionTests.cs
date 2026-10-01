@@ -27,7 +27,7 @@ public sealed class CookedOutputInspectionTests
     {
         using var workspace = new CookWorkspace();
         await PrepareIncrementalSceneAsync(workspace).ConfigureAwait(false);
-        using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
+        using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
         var pipeline = CreateIncrementalService(workspace, api, compatibility);
         AssertCookSucceeded(await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false));
@@ -55,7 +55,7 @@ public sealed class CookedOutputInspectionTests
     {
         using var workspace = new CookWorkspace();
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
-        using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
+        using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var pipeline = CreateIncrementalService(workspace, CreateRecordingApi(compatibility), compatibility);
         AssertCookSucceeded(await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false));
         var first = await pipeline.InspectCookedOutputAsync(scopeUri: null, this.TestContext.CancellationToken).ConfigureAwait(false);

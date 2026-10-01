@@ -11,6 +11,7 @@ using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Slots;
 using Oxygen.Editor.World;
 using Oxygen.Managed.Assets.Model;
+using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookScenario;
 using static Oxygen.Editor.ContentPipeline.TestSupport.DependencyScenario;
@@ -36,7 +37,7 @@ public sealed class MaterialKeyPriorityTests
         const string material = "Art/Materials/Shared.omat.json";
         materials.WriteMaterial(material, "Library material");
         consumer.WriteMaterial(material, "Project material");
-        using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
+        using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
         var materialProducer = CreateService(materials, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
         var imported = await materialProducer.CookAssetAsync(new("asset:///" + material), this.TestContext.CancellationToken).ConfigureAwait(false);

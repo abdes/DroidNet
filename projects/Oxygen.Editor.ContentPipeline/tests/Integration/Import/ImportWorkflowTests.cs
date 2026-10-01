@@ -10,6 +10,7 @@ using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookScenario;
@@ -35,7 +36,7 @@ public sealed class ImportWorkflowTests
         {
             var source = Path.Combine(external.FullName, "Model.gltf");
             File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "static_scalar_triangle.gltf"), source);
-            using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
+            using var compatibility = EditorNativeCompatibilityService.ForCooking();
             var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
             var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
             var result = await service.ImportSourceAsync(new(workspace.ProjectContext, source, "Model", new("asset:///Content")), this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -74,7 +75,7 @@ public sealed class ImportWorkflowTests
         var path = Path.Combine(workspace.Root, "Content/SourceMedia/DCC/model.fbx");
         _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "static_scalar_triangle.fbx"), path);
-        using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
+        using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
         var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
         var result = await service.ImportSourceAsync(new(workspace.ProjectContext, path, "Model", new("asset:///Content/Models")), this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -95,7 +96,7 @@ public sealed class ImportWorkflowTests
         {
             var path = Path.Combine(external.FullName, "model.gltf");
             File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "static_scalar_triangle.gltf"), path);
-            using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
+            using var compatibility = EditorNativeCompatibilityService.ForCooking();
             var runner = new FailImportBatchRunner();
             var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
             var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
@@ -148,7 +149,7 @@ public sealed class ImportWorkflowTests
         {
             var source = Path.Combine(external.FullName, "model.gltf");
             File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "static_scalar_triangle.gltf"), source);
-            using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
+            using var compatibility = EditorNativeCompatibilityService.ForCooking();
             var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
             var files = new FailSettingsStore();
             var service = new ContentPipelineService(
@@ -205,7 +206,7 @@ public sealed class ImportWorkflowTests
                     _ = blocked.TrySetResult(args.Run.OperationId);
                 }
             };
-            using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
+            using var compatibility = EditorNativeCompatibilityService.ForCooking();
             var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
             var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
             var pending = service.ImportSourceAsync(new(workspace.ProjectContext, source, "Model", new("asset:///Content/Models")), this.TestContext.CancellationToken);

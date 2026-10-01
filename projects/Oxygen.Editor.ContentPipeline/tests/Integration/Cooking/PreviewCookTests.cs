@@ -5,6 +5,7 @@
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Managed.Core.Compatibility;
 using static Oxygen.Editor.ContentPipeline.TestSupport.DependencyScenario;
 using static Oxygen.Editor.ContentPipeline.TestSupport.IncrementalCookScenario;
 using static Oxygen.Editor.ContentPipeline.TestSupport.SavedSourceScenario;
@@ -25,7 +26,7 @@ public sealed class PreviewCookTests
     {
         using var workspace = new CookWorkspace();
         await PrepareIncrementalSceneAsync(workspace).ConfigureAwait(false);
-        using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
+        using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var pipeline = CreateIncrementalService(workspace, CreateRecordingApi(compatibility), compatibility);
         var materialUri = new Uri("asset:///Content/Materials/Blue.omat.json");
         var scenePath = Path.Combine(workspace.Root, "Content", "Scenes", "Main.oscene.json");
@@ -58,7 +59,7 @@ public sealed class PreviewCookTests
         using var workspace = new CookWorkspace();
         WriteAuthoredGeometry(workspace, withBuffer: false);
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
-        using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
+        using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var pipeline = CreateIncrementalService(workspace, CreateRecordingApi(compatibility), compatibility);
         var geometryUri = new Uri("asset:///Content/Geometry/AuthoredCube.ogeo.json");
         var result = await pipeline.CookPreviewAssetAsync(geometryUri, workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false);

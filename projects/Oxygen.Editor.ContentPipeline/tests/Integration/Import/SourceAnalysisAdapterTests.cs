@@ -31,7 +31,7 @@ public sealed class SourceAnalysisAdapterTests
         using var workspace = new ImportAdapterWorkspace();
         await File.WriteAllTextAsync(Path.Combine(workspace.Root, "first.json"), "{\"name\":\"First\"}", this.TestContext.CancellationToken).ConfigureAwait(false);
         await File.WriteAllTextAsync(Path.Combine(workspace.Root, "second.json"), "{\"name\":\"Second\"}", this.TestContext.CancellationToken).ConfigureAwait(false);
-        using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
+        using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var verified = await compatibility.VerifyAsync(Guid.NewGuid(), this.TestContext.CancellationToken).ConfigureAwait(false);
         var artifacts = verified.Artifacts!;
         await using var lifetime = artifacts.ConfigureAwait(false);

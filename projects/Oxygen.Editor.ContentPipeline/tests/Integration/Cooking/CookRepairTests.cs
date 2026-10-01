@@ -4,6 +4,7 @@
 
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
 using static Oxygen.Editor.ContentPipeline.TestSupport.IncrementalCookScenario;
 using static Oxygen.Editor.ContentPipeline.TestSupport.RetainedModelScenario;
@@ -30,7 +31,7 @@ public sealed class CookRepairTests
         using var workspace = new CookWorkspace();
         workspace.WriteMaterial("Content/Materials/Blue.omat.json", "Blue");
         _ = await WriteRetainedModelAsync(workspace, "Model", "gltf", this.TestContext.CancellationToken).ConfigureAwait(false);
-        using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
+        using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
         var pipeline = CreateIncrementalService(workspace, api, compatibility);
         var first = await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -95,7 +96,7 @@ public sealed class CookRepairTests
         using var workspace = new CookWorkspace();
         workspace.WriteMaterial("Content/Materials/Blue.omat.json", "Blue");
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
-        using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
+        using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
         var pipeline = CreateIncrementalService(workspace, api, compatibility);
         var first = await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false);

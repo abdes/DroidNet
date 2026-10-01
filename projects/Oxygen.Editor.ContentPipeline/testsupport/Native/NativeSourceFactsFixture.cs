@@ -5,6 +5,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core.Compatibility;
 
 namespace Oxygen.Editor.ContentPipeline.TestSupport;
 
@@ -13,7 +14,7 @@ internal sealed class NativeSourceFactsFixture(ProjectContext project, ICookDocu
 {
     public static async Task<global::Oxygen.Editor.ContentPipeline.Import.NativeSourceAnalysisReport> AnalyzeAsync(ContentSourceAnalysisExecution execution, CancellationToken cancellationToken)
     {
-        using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
+        using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var native = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
         var report = await native.AnalyzeSourcesAsync(execution with { Artifacts = null }, cancellationToken).ConfigureAwait(false);
 
@@ -23,7 +24,7 @@ internal sealed class NativeSourceFactsFixture(ProjectContext project, ICookDocu
 
     public async Task<CookSourceFrontier> ReadAsync(IReadOnlyList<ContentCookInput> inputs, CancellationToken cancellationToken)
     {
-        using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
+        using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var operation = new ContentCookOperation(Guid.NewGuid(), project, 1);
         var verified = await compatibility.VerifyAsync(operation.OperationId, cancellationToken).ConfigureAwait(false);
         var artifacts = verified.Artifacts ?? throw new InvalidOperationException("The installed test SDK is unavailable.");

@@ -2,4 +2,4 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-[assembly: DoNotParallelize]
+[assembly: Parallelize(Workers = 2, Scope = ExecutionScope.ClassLevel)]

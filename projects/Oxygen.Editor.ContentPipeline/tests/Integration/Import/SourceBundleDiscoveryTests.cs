@@ -83,7 +83,7 @@ public sealed class SourceBundleDiscoveryTests
             await File.WriteAllBytesAsync(dependency.SourcePath, bufferBytes, this.TestContext.CancellationToken).ConfigureAwait(false);
         }
 
-        using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
+        using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var native = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
         var retained = await RetainDiscoveredAsync(workspace, primary.SourcePath, native, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = retained.Source.Should().NotBeNull();

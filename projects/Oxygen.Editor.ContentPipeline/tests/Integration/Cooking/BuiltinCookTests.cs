@@ -13,6 +13,7 @@ using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Slots;
 using Oxygen.Editor.World;
 using Oxygen.Managed.Assets.Model;
+using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
 using Oxygen.Managed.Core;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookScenario;
@@ -21,6 +22,7 @@ using static Oxygen.Editor.ContentPipeline.TestSupport.IncrementalCookScenario;
 namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Cooking;
 
 [TestClass]
+[DoNotParallelize] // These scenarios observe process-wide first-chance exceptions.
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers public test classes with the repository discovery configuration.")]
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Naming", "CA1707:Identifiers should not contain underscores", Justification = "Scenario-based MSTest method names separate the operation and expected behavior.")]
 public sealed class BuiltinCookTests
@@ -52,7 +54,7 @@ public sealed class BuiltinCookTests
         });
         await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
         _ = File.Exists(global::Oxygen.Editor.ContentPipeline.Publication.CookPublicationPaths.Head(workspace.Root)).Should().BeFalse();
-        using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
+        using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
         var pipeline = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
         var result = await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -72,7 +74,7 @@ public sealed class BuiltinCookTests
     public async Task EveryBuiltinCooksThroughNativeSceneAndProjectWorkflows(bool projectCook)
     {
         using var workspace = new CookWorkspace();
-        using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
+        using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
         var catalog = await api.GetBuiltinGeometryCatalogAsync(workspace.Root, "Content", this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = catalog.AuthoringGeometries.Should().HaveCount(10);

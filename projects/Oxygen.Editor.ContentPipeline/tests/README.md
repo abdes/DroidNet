@@ -32,6 +32,11 @@ traverse Invoke-Tests --start projects/Oxygen.Editor.ContentPipeline/tests/Bench
 
 Selecting the entire `tests` directory includes every program below it.
 
+Integration runs at most two test classes concurrently; cases within each class
+remain sequential. Process-wide exception probes opt out with `DoNotParallelize`.
+Benchmarks remain serialized. This uses MSTest's supported
+[class-level execution policy](https://learn.microsoft.com/en-us/dotnet/core/testing/unit-testing-mstest-writing-tests-controlling-execution).
+
 ## Ownership
 
 Folders and namespaces follow Cooking, Descriptors, Import, Inspection,
@@ -53,13 +58,37 @@ same assertions with 256 outputs.
   use controlled material/scene facts; status tests declare their dependency
   graph directly. Neither fixture parses native descriptors or starts a cooker.
 - `../testsupport/Native` composes actual native services and shared workflows.
-  Native compatibility and integrity verification remain active.
+  Ordinary scenarios use the production cooking compatibility service instead
+  of constructing and then verifying a redundant SDK receipt. Producer-mutation
+  scenarios keep their controlled receipts. Native compatibility, protected
+  artifact leases and content-integrity verification remain active.
 - `../testsupport/Filesystem` owns shared publication and generation fixtures.
   Every scenario owns its mutable project, files and leases.
 - `../testsupport/WorkerProbe` is the real child-process fixture. Only Integration
   builds and stages it. Cancellation and termination tests operate on their own
   child processes.
 
+Keep imported projects and publication/recovery state private to each case.
+Their provenance includes project identities and absolute source paths; copying
+a cooked project is not a safe fixture shortcut. Only portable, immutable cooked
+library inputs are candidates for shared preparation.
+
 Use explicit completion signals for asynchronous work. Do not add screenshots,
 archives or attachments merely to record execution. Retain hashes that exercise
 source freshness or content integrity, and measurements useful for comparison.
+
+## Focused performance baseline
+
+Local Debug comparison on 2026-10-01, AMD Ryzen 9 9950X, .NET 9. The same
+18 transitive-library and import-replacement cases passed in each run. These
+are elapsed times for that subset, not a full-suite performance claim.
+
+| Configuration                                       | Elapsed |
+| --------------------------------------------------- | ------: |
+| Receipt fixture, serial                             |  49.5 s |
+| Production cooking compatibility, serial            |  48.1 s |
+| Production cooking compatibility, two class workers |  25.8 s |
+
+```powershell
+dotnet test --project projects/Oxygen.Editor.ContentPipeline/tests/Integration/Oxygen.Editor.ContentPipeline.Integration.Tests.csproj --no-build -c Debug --filter 'FullyQualifiedName~TransitiveLibraryTests|FullyQualifiedName~ImportReplacementTests' --minimum-expected-tests 18
+```

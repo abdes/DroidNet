@@ -9,6 +9,7 @@ using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookScenario;
 using static Oxygen.Editor.ContentPipeline.TestSupport.DependencyScenario;
@@ -71,7 +72,7 @@ public sealed class ImportReplacementTests
                 geometry["buffers"]![0]!["uri"] = "../SourceMedia/DCC/Model/retired.bin";
                 workspace.WriteText("Content/Geometry/AuthoredCube.ogeo.json", geometry.ToJsonString());
             }
-            using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
+            using var compatibility = EditorNativeCompatibilityService.ForCooking();
             var runner = new FailImportBatchRunner { Fail = false };
             var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
             var publication = workspace.Publication;
@@ -160,7 +161,7 @@ public sealed class ImportReplacementTests
         try
         {
             var source = await WriteRetainedModelAsync(workspace, "Model", "gltf", this.TestContext.CancellationToken).ConfigureAwait(false);
-            using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
+            using var compatibility = EditorNativeCompatibilityService.ForCooking();
             var runner = new ContextLeaseRunner();
             var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
             var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);

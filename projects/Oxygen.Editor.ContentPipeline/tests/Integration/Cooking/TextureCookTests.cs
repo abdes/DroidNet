@@ -6,6 +6,7 @@ using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Core.Compatibility;
 using static Oxygen.Editor.ContentPipeline.TestSupport.IncrementalCookScenario;
 
 namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Cooking;
@@ -38,7 +39,7 @@ public sealed class TextureCookTests
         workspace.WriteText("Content/Materials/Masked.omat.json", """
             { "name": "Masked", "textures": { "base_color": { "virtual_path": "/Content/Textures/Meter.otex" } } }
             """);
-        using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
+        using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
         var service = CreateIncrementalService(workspace, api, compatibility);
         var first = await service.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false);

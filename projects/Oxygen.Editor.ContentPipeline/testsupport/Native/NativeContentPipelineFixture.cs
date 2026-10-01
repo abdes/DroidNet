@@ -7,14 +7,15 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core.Compatibility;
 using Testably.Abstractions;
 
 namespace Oxygen.Testing;
 
-/// <summary>Composes the production native pipeline under a fixture-owned compatibility manifest.</summary>
+/// <summary>Composes the production native pipeline and cooking compatibility checks.</summary>
 internal sealed partial class NativeContentPipelineFixture : IDisposable
 {
-    private readonly TemporaryNativeArtifacts compatibility = TemporaryNativeArtifacts.ForInstalledEngine();
+    private readonly EditorNativeCompatibilityService compatibility = EditorNativeCompatibilityService.ForCooking();
 
     /// <summary>Initializes a new instance of the <see cref="NativeContentPipelineFixture"/> class.</summary>
     /// <param name="context">The active fixture project.</param>

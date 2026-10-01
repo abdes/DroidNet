@@ -32,7 +32,7 @@ public sealed class IncrementalCookTests
     {
         using var workspace = new CookWorkspace();
         await PrepareIncrementalSceneAsync(workspace).ConfigureAwait(false);
-        using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
+        using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
         var pipeline = CreateIncrementalService(workspace, api, compatibility);
         var revealed = false;
@@ -59,7 +59,7 @@ public sealed class IncrementalCookTests
     {
         using var workspace = new CookWorkspace();
         await PrepareIncrementalSceneAsync(workspace).ConfigureAwait(false);
-        using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
+        using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var pipeline = CreateIncrementalService(workspace, CreateRecordingApi(compatibility), compatibility);
         var sceneUri = new Uri("asset:///Content/Scenes/Main.oscene.json");
         workspace.CookCoordinator.IsAutomaticCookingPaused = true;
@@ -84,7 +84,7 @@ public sealed class IncrementalCookTests
     {
         using var workspace = new CookWorkspace();
         await PrepareIncrementalSceneAsync(workspace).ConfigureAwait(false);
-        using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
+        using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
         var first = await CreateIncrementalService(workspace, api, compatibility).CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         AssertCookSucceeded(first);
@@ -110,7 +110,7 @@ public sealed class IncrementalCookTests
     {
         using var workspace = new CookWorkspace();
         await PrepareIncrementalSceneAsync(workspace).ConfigureAwait(false);
-        using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
+        using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
         var pipeline = CreateIncrementalService(workspace, api, compatibility);
         var first = await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -150,7 +150,7 @@ public sealed class IncrementalCookTests
     {
         using var workspace = new CookWorkspace();
         await PrepareIncrementalSceneAsync(workspace).ConfigureAwait(false);
-        using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
+        using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
         var pipeline = CreateIncrementalService(workspace, api, compatibility);
         var first = await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -183,7 +183,7 @@ public sealed class IncrementalCookTests
     {
         using var workspace = new CookWorkspace();
         await PrepareIncrementalSceneAsync(workspace).ConfigureAwait(false);
-        using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
+        using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
         var pipeline = CreateIncrementalService(workspace, api, compatibility);
         AssertCookSucceeded(await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false));
@@ -209,7 +209,7 @@ public sealed class IncrementalCookTests
     {
         using var workspace = new CookWorkspace();
         await PrepareIncrementalSceneAsync(workspace).ConfigureAwait(false);
-        using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
+        using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
         api.AddSceneWarning = true;
         var pipeline = CreateIncrementalService(workspace, api, compatibility);

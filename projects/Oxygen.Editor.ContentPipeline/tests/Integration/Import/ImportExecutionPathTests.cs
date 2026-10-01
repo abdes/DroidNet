@@ -6,6 +6,7 @@ using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Managed.Core.Compatibility;
 using static Oxygen.Editor.ContentPipeline.TestSupport.ImportAdapterScenario;
 
 namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Import;
@@ -45,7 +46,7 @@ public sealed class ImportExecutionPathTests
         Directory.CreateDirectory(publishedRoot);
         var previous = Path.Combine(publishedRoot, "previous-generation.txt");
         await File.WriteAllTextAsync(previous, "Previous publication", this.TestContext.CancellationToken).ConfigureAwait(false);
-        using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
+        using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
 
         var result = await api.ImportAsync(new(operationId, inputRoot, operationRoot, manifest), this.TestContext.CancellationToken).ConfigureAwait(false);
