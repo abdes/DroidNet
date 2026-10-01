@@ -179,16 +179,16 @@ commits separate:
 The gates are failed/stale multi-root preparation, reentrant eviction reloads,
 old-reader retention, source/head crash boundaries, source CAS conflicts, catalog
 head refresh, texture references after consecutive publications and safe automatic
-reclamation. Native source analysis remains M08.1.9.
+reclamation. Native source analysis is delivered by M08.1.9.
 
-M08.1.9 has three delivery stages; all remain required for closure:
+M08.1.9's three delivery stages are validated:
 
 1. **M08.1.9.1 native input observations — validated:** extend the existing source snapshot
    to retain successful reads and presence/absence/metadata probes. Preserve
    original I/O errors, reject contradictory observations and verify the same
    facts before publication. Test missing-file appearance, metadata changes,
    cancellation and ranged reads. Keep this mechanism in Cooker.
-2. **M08.1.9.2 shared preparation and batch analysis:** extract preparation from
+2. **M08.1.9.2 shared preparation and batch analysis — validated:** extract preparation from
    native descriptor builders/jobs and model adapters. Analysis and cooking use
    the same validation, references, naming and recipe interpretation for
    materials, textures, geometry, projected scenes and glTF/FBX. Expose declared
@@ -208,7 +208,7 @@ M08.1.9 has three delivery stages; all remain required for closure:
      All 16 Content scenes recook, and packaging reports no warnings/errors.
      RenderScene validates loose and PAK scene replacement, IBL and matching
      appearance. Scoped tidy, compiler warnings and extra-high review are clear.
-3. **M08.1.9.3 editor cutover:** batch each unresolved dependency frontier,
+3. **M08.1.9.3 editor cutover — validated:** batch each unresolved dependency frontier,
    capture and compare the reported input proofs, then cook through the native
    contract. Remove duplicate managed cook-dependency parsers. Retain project
    resolution, source editing, dirty-document policy and progress/diagnostics;
@@ -243,10 +243,9 @@ M08.1.9 has three delivery stages; all remain required for closure:
      and passive badge reads launch no native workers. Extra-high correctness
      and complexity review is clear.
 
-M08.1.7 final gate: after the entire native/managed implementation, review the
-whole slice for unnecessary complexity, duplicate state, owner/API integration
-and readable, efficient C++20/23 use. Apply simplifications and rerun affected
-checks before the slice commits.
+M08.1.7's whole-slice review is complete: unnecessary complexity, duplicate state,
+owner/API integration and C++20/23 use were reviewed, with affected checks rerun
+after corrections. The validation ledger records the accepted scope.
 
 Execute M08.1.5 → .6 → .7 → .8 → .9 after the current-format M08.1.4
 checkpoint. These are the approved simplification order; all are validated.
@@ -485,12 +484,15 @@ controls with their defined field semantics.
 
 Replace single-directional surface/shadow selection with independent participating
 sources. Primary and Secondary both illuminate and cast requested shadows;
-None remains an ordinary directional source. Complete captured-sky diffuse
-irradiance, roughness-dependent specular products, readiness and invalidation.
-Activate Stage 13 indirect evaluation and retire the Stage 12 ambient bridge.
-Use the scene-global capture anchor and shared producer/consumer filtering rules
-in the IBL contract; camera navigation does not change authored sky lighting.
-The native [VX-IBL-01 plan](../../../projects/Oxygen.Engine/design/vortex/milestones/VX-IBL-01/README.md) delivers height-fog capture, immediate authoring, budgeted runtime updates and DemoShell UI within this rendering work.
+None remains an ordinary directional source.
+
+[VX-IBL-01](../../../projects/Oxygen.Engine/design/vortex/milestones/VX-IBL-01/README.md)
+already delivers captured diffuse/specular sky lighting, readiness/invalidation,
+Stage 13 evaluation, height-fog capture, both update schedules and DemoShell UI;
+the Stage 12 ambient bridge is removed. M08.2 preserves and qualifies that
+implementation against the canonical light/view behavior. Keep its scene-global
+capture anchor and shared filtering rules: camera navigation does not change
+authored sky lighting.
 
 Resolve the exact camera and parented pose. Auto derives target aspect with
 unchanged vertical FOV; Fixed preserves ratio/composition with a centred content

@@ -10,8 +10,9 @@ See [STATUS.md](STATUS.md) for progress and [OPEN_ITEMS.md](OPEN_ITEMS.md) for p
 - [Desktop renderer baseline](#desktop-renderer-baseline): VTX-M00 through VTX-M08.
 - [Exposure and LightBench](milestones/exposure/README.md): EX01–EX10, including
   the inserted performance, quality, console and widget-automation slices.
-- [ED-M08 native editor extension](milestones/ED-M08/README.md): native authoring,
-  captured-sky IBL and editor integration; the editor plan owns its schedule.
+- [ED-M08 native editor extension](milestones/ED-M08/README.md): canonical data,
+  remaining rendering parity and editor integration, reusing delivered captured-sky
+  IBL; the editor plan owns its schedule, including the M08.F1 format cutover.
 - [VX-IBL-01 captured sky lighting](milestones/VX-IBL-01/README.md): atmosphere/height-fog diffuse and specular IBL, immediate authoring and budgeted runtime updates; [S7](milestones/VX-IBL-01/README.md#s7--reusable-infrastructure) promotes reusable infrastructure.
 - [Material sidedness correction](milestones/material-sidedness/README.md).
 - [RenderScene preview sun](milestones/preview-sun/README.md).
