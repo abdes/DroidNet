@@ -15,7 +15,7 @@
         <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/BuiltinCatalogDiscoveryFixture.cs" Link="Fixtures/BuiltinCatalogDiscoveryFixture.cs" />
         <Compile Include="$(ProjectsRoot)/Oxygen.Managed.Assets/testsupport/LooseCookedIndexFixture.cs" Link="Fixtures/LooseCookedIndexFixture.cs" />
         <Compile Include="$(ProjectsRoot)/Oxygen.Managed.Core/testsupport/TemporaryNativeArtifacts.cs" Link="Fixtures/TemporaryNativeArtifacts.cs" />
-        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/NativeContentPipelineFixture.cs" Link="Fixtures/NativeContentPipelineFixture.cs" />
+        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Native/NativeContentPipelineFixture.cs" Link="Fixtures/NativeContentPipelineFixture.cs" />
         <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/Authoring/InspectorFieldCases.cs" Link="Support/InspectorFieldCases.cs" />
         <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/Authoring/SceneAuthoringFixture.cs" Link="Support/SceneAuthoringFixture.cs" />
         <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/Authoring/SceneTestData.cs" Link="Support/SceneTestData.cs" />

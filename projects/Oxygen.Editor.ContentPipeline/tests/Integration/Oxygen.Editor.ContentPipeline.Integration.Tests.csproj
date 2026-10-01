@@ -1,0 +1,67 @@
+<Project Sdk="MSTest.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net9.0-windows10.0.26100.0</TargetFramework>
+        <RootNamespace>Oxygen.Editor.ContentPipeline.Integration.Tests</RootNamespace>
+        <AssemblyName>$(MSBuildProjectName)</AssemblyName>
+        <DroidNetTestTier>Integration</DroidNetTestTier>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <AccelerateBuildsInVisualStudio>false</AccelerateBuildsInVisualStudio>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="../../src/Oxygen.Editor.ContentPipeline.csproj" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+        <PackageReference Include="Moq" />
+        <None Include="../Fixtures/BuiltinGeometryCatalog.json" Link="Fixtures/BuiltinGeometryCatalog.json" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="$(ProjectsRoot)/Oxygen.Engine/src/Oxygen/Cooker/Test/Import/Models/static_scalar_triangle.*" Link="Fixtures/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="$(ProjectsRoot)/Oxygen.Engine/src/Oxygen/Cooker/Test/Import/Models/static_textured_triangle.*" Link="Fixtures/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="$(ProjectsRoot)/Oxygen.Engine/src/Oxygen/Cooker/Test/Import/Models/static_textured_checker.png" Link="Fixtures/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/BuiltinCatalogFixture.cs" Link="Support/BuiltinCatalogFixture.cs" />
+        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/CapturingEngineContentPipelineApi.cs" Link="Support/CapturingEngineContentPipelineApi.cs" />
+        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/CapturingSceneDescriptorGenerator.cs" Link="Support/CapturingSceneDescriptorGenerator.cs" />
+        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/ControlledSourceAnalysis.cs" Link="Support/ControlledSourceAnalysis.cs" />
+        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/CookScenario.cs" Link="Support/CookScenario.cs" />
+        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/CookWorkspace.cs" Link="Support/CookWorkspace.cs" />
+        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/FixedCookScopeProvider.cs" Link="Support/FixedCookScopeProvider.cs" />
+        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/FixedToolLocator.cs" Link="Support/FixedToolLocator.cs" />
+        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/ImportAdapterScenario.cs" Link="Support/ImportAdapterScenario.cs" />
+        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/ImportAdapterWorkspace.cs" Link="Support/ImportAdapterWorkspace.cs" />
+        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/NativeInventoryFixture.Api.cs" Link="Support/NativeInventoryFixture.Api.cs" />
+        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/NativeInventoryFixture.cs" Link="Support/NativeInventoryFixture.cs" />
+        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/RetainedModelScenario.cs" Link="Support/RetainedModelScenario.cs" />
+        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/SavedSourceScenario.cs" Link="Support/SavedSourceScenario.cs" />
+        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Filesystem/GenerationScenario.cs" Link="Support/GenerationScenario.cs" />
+        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Filesystem/ProjectDirectory.cs" Link="Support/ProjectDirectory.cs" />
+        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Filesystem/PublicationProject.cs" Link="Support/PublicationProject.cs" />
+        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Filesystem/PublicationScenario.cs" Link="Support/PublicationScenario.cs" />
+        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Native/ContentPipelineProcessRunnerScenario.cs" Link="Support/ContentPipelineProcessRunnerScenario.cs" />
+        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Native/ContextLeaseRunner.cs" Link="Support/ContextLeaseRunner.cs" />
+        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Native/CountingSourceRunner.cs" Link="Support/CountingSourceRunner.cs" />
+        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Native/DependencyScenario.cs" Link="Support/DependencyScenario.cs" />
+        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Native/FailImportBatchRunner.cs" Link="Support/FailImportBatchRunner.cs" />
+        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Native/FailingPublicationPreview.cs" Link="Support/FailingPublicationPreview.cs" />
+        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Native/IncrementalCookScenario.cs" Link="Support/IncrementalCookScenario.cs" />
+        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Native/NativeContentPipelineFixture.cs" Link="Support/NativeContentPipelineFixture.cs" />
+        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Native/NativeSourceFactsFixture.cs" Link="Support/NativeSourceFactsFixture.cs" />
+        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Native/RecordingNativeApi.cs" Link="Support/RecordingNativeApi.cs" />
+        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Native/RetentionWorkspace.cs" Link="Support/RetentionWorkspace.cs" />
+        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Native/WorkerScope.cs" Link="Support/WorkerScope.cs" />
+        <Compile Include="$(ProjectsRoot)/Oxygen.Managed.Core/testsupport/TemporaryNativeArtifacts.cs" Link="Support/TemporaryNativeArtifacts.cs" />
+        <Compile Include="$(ProjectsRoot)/Oxygen.Managed.Assets/testsupport/LooseCookedIndexFixture.cs" Link="Support/LooseCookedIndexFixture.cs" />
+        <Compile Include="../../testsupport/Native/SharedSourceStatusScenario.cs" Link="Support/SharedSourceStatusScenario.cs" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="../../testsupport/WorkerProbe/Oxygen.Editor.ContentPipeline.WorkerProbe.csproj" ReferenceOutputAssembly="false" Private="false" GlobalPropertiesToRemove="ErrorLog" />
+    </ItemGroup>
+    <Target Name="CopyContentWorkerProbe" AfterTargets="Build" Condition="'$(TargetFramework)' != ''">
+        <MSBuild Projects="../../testsupport/WorkerProbe/Oxygen.Editor.ContentPipeline.WorkerProbe.csproj" Targets="GetTargetPath" Properties="Configuration=$(Configuration);Platform=$(Platform);TargetFramework=$(TargetFramework)" RemoveProperties="BuildingInsideVisualStudio;BuildingSolutionFile;CurrentSolutionConfigurationContents;ErrorLog">
+            <Output TaskParameter="TargetOutputs" ItemName="_ContentWorkerProbeAssembly" />
+        </MSBuild>
+        <PropertyGroup>
+            <_ContentWorkerProbeDirectory>@(_ContentWorkerProbeAssembly->'%(RootDir)%(Directory)')</_ContentWorkerProbeDirectory>
+        </PropertyGroup>
+        <ItemGroup>
+            <_ContentWorkerProbeFiles Include="$(_ContentWorkerProbeDirectory)*" />
+        </ItemGroup>
+        <Copy SourceFiles="@(_ContentWorkerProbeFiles)" DestinationFolder="$(OutDir)WorkerProbe" SkipUnchangedFiles="true" />
+    </Target>
+</Project>

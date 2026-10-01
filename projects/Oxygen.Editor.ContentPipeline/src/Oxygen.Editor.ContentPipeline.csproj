@@ -22,7 +22,9 @@
         <EmbeddedResource Include="$(ProjectsRoot)\Oxygen.Engine\src\Oxygen\Cooker\Tools\Inspector\Schemas\oxygen.cooked-inventory.schema.json"
                           LogicalName="oxygen.cooked-inventory.schema.json" />
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
-        <InternalsVisibleTo Include="Oxygen.Editor.ContentPipeline.Tests" />
+        <InternalsVisibleTo Include="Oxygen.Editor.ContentPipeline.Unit.Tests" />
+        <InternalsVisibleTo Include="Oxygen.Editor.ContentPipeline.Integration.Tests" />
+        <InternalsVisibleTo Include="Oxygen.Editor.ContentPipeline.Benchmarks.Tests" />
         <InternalsVisibleTo Include="Oxygen.Editor.ContentPipeline.WorkerProbe" />
         <InternalsVisibleTo Include="Oxygen.Editor.WorldEditor.Unit.UI.Tests" />
         <InternalsVisibleTo Include="Oxygen.Editor.WorldEditor.Integration.UI.Tests" />

@@ -1,0 +1,51 @@
+// Distributed under the MIT License. See accompanying file LICENSE or copy
+// at https://opensource.org/licenses/MIT.
+// SPDX-License-Identifier: MIT
+
+using AwesomeAssertions;
+using Oxygen.Editor.ContentPipeline.TestSupport;
+using static Oxygen.Editor.ContentPipeline.TestSupport.CookCoordinatorScenario;
+
+namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Cooking;
+
+[TestClass]
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers public test classes with the repository discovery configuration.")]
+public sealed class CookProjectChangeTests
+{
+    public TestContext TestContext { get; set; } = null!;
+    /// <summary>Context replacement does not cancel the committed change or allow a competing cook to enter early.</summary>
+    /// <returns>The asynchronous project-change ownership regression.</returns>
+    [TestMethod]
+    public async Task ProjectChangeOwnsTheWriterThroughContextReplacementAndResume()
+    {
+        var context = CreateContextService();
+        using var coordinator = CreateCoordinator(context);
+        coordinator.IsAutomaticCookingPaused = true;
+        var replaced = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var resume = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var change = coordinator.RunProjectChangeAsync(
+            async (operation, token) =>
+            {
+                coordinator.VerifyWriter(operation);
+                token.ThrowIfCancellationRequested();
+                context.Activate(operation.Project with { Thumbnail = "updated.png" });
+                replaced.SetResult();
+                await resume.Task.ConfigureAwait(false);
+            },
+            this.TestContext.CancellationToken);
+        await replaced.Task.WaitAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = coordinator.IsAutomaticCookingPaused.Should().BeTrue();
+        var entered = false;
+        var cook = coordinator.RunAsync(
+            (_, _) =>
+            {
+                entered = true;
+                return Task.FromResult(1);
+            },
+            this.TestContext.CancellationToken);
+        _ = entered.Should().BeFalse();
+        resume.SetResult();
+        await change.ConfigureAwait(false);
+        _ = (await cook.ConfigureAwait(false)).Should().Be(1);
+    }
+}

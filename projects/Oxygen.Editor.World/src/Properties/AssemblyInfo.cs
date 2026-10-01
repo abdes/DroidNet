@@ -15,4 +15,6 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("Oxygen.Editor.World.Tests")]
 [assembly: InternalsVisibleTo("Oxygen.Editor.WorldEditor")]
 [assembly: InternalsVisibleTo("Oxygen.Editor.WorldEditor.Unit.Tests")]
-[assembly: InternalsVisibleTo("Oxygen.Editor.ContentPipeline.Tests")]
+[assembly: InternalsVisibleTo("Oxygen.Editor.ContentPipeline.Unit.Tests")]
+[assembly: InternalsVisibleTo("Oxygen.Editor.ContentPipeline.Integration.Tests")]
+[assembly: InternalsVisibleTo("Oxygen.Editor.ContentPipeline.Benchmarks.Tests")]
