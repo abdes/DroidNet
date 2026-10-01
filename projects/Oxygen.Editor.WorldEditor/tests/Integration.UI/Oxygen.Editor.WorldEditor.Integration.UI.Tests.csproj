@@ -1,0 +1,46 @@
+<Project Sdk="MSTest.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net9.0-windows10.0.26100.0</TargetFramework>
+        <RootNamespace>Oxygen.Editor.WorldEditor.Integration.UI.Tests</RootNamespace>
+        <AssemblyName>$(MSBuildProjectName)</AssemblyName>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <DroidNetTestTier>Integration</DroidNetTestTier>
+    </PropertyGroup>
+    <ItemGroup>
+        <Compile Include="../../testsupport/Native/DocumentTransitionScenario.cs" Link="Support/DocumentTransitionScenario.cs" />
+        <Compile Include="$(ProjectsRoot)/UITests.Shared/testsupport/ScaledXamlHost.cs" Link="Support/ScaledXamlHost.cs" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.WorldEditor/src/Oxygen.Editor.WorldEditor.csproj" />
+        <PackageReference Include="Moq" />
+        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentBrowser/testsupport/AssetStatusFixture.cs" Link="Fixtures/AssetStatusFixture.cs" />
+        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/BuiltinCatalogDiscoveryFixture.cs" Link="Fixtures/BuiltinCatalogDiscoveryFixture.cs" />
+        <Compile Include="$(ProjectsRoot)/Oxygen.Managed.Assets/testsupport/LooseCookedIndexFixture.cs" Link="Fixtures/LooseCookedIndexFixture.cs" />
+        <Compile Include="$(ProjectsRoot)/Oxygen.Managed.Core/testsupport/TemporaryNativeArtifacts.cs" Link="Fixtures/TemporaryNativeArtifacts.cs" />
+        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/NativeContentPipelineFixture.cs" Link="Fixtures/NativeContentPipelineFixture.cs" />
+        <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/Authoring/InspectorFieldCases.cs" Link="Support/InspectorFieldCases.cs" />
+        <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/Authoring/SceneAuthoringFixture.cs" Link="Support/SceneAuthoringFixture.cs" />
+        <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/Authoring/SceneTestData.cs" Link="Support/SceneTestData.cs" />
+        <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/Native/CatalogWorkload.cs" Link="Support/CatalogWorkload.cs" />
+        <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/Native/CatalogWorkloadServices.cs" Link="Support/CatalogWorkloadServices.cs" />
+        <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/Native/CookingScenario.cs" Link="Support/CookingScenario.cs" />
+        <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/Native/ModelImportScenario.cs" Link="Support/ModelImportScenario.cs" />
+        <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/Native/NativeSceneAssertions.cs" Link="Support/NativeSceneAssertions.cs" />
+        <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/Native/NativeSceneData.cs" Link="Support/NativeSceneData.cs" />
+        <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/Native/NativeSceneFixture.cs" Link="Support/NativeSceneFixture.cs" />
+        <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/Native/PublicationWorkflows.cs" Link="Support/PublicationWorkflows.cs" />
+        <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/UI/InspectorControls.cs" Link="Support/InspectorControls.cs" />
+        <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/UI/InspectorFieldControls.cs" Link="Support/InspectorFieldControls.cs" />
+        <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/UI/NativeEnvironmentSupport.cs" Link="Support/NativeEnvironmentSupport.cs" />
+        <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/UI/RotationReopenSupport.cs" Link="Support/RotationReopenSupport.cs" />
+        <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/UI/SceneAuthoringFixture.Views.cs" Link="Support/SceneAuthoringFixture.Views.cs" />
+        <Compile Include="$(MyTopLevelDirectory)projects/UITests.Shared/testsupport/UiTestHosting.cs" Link="Support/UiTestHosting.cs" />
+        <None Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/tests/Fixtures/BuiltinGeometryCatalog.json" Link="Fixtures/BuiltinGeometryCatalog.json" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="$(ProjectsRoot)/Oxygen.Engine/src/Oxygen/Cooker/Test/Import/Models/static_scalar_triangle.gltf" Link="Fixtures/static_scalar_triangle.gltf" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="$(ProjectsRoot)/Oxygen.Engine/src/Oxygen/Cooker/Test/Import/Models/static_textured_triangle.gltf" Link="Fixtures/static_textured_triangle.gltf" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="$(ProjectsRoot)/Oxygen.Engine/src/Oxygen/Cooker/Test/Import/Models/static_textured_triangle.fbx" Link="Fixtures/static_textured_triangle.fbx" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="$(ProjectsRoot)/Oxygen.Engine/src/Oxygen/Cooker/Test/Import/Models/static_textured_checker.png" Link="Fixtures/static_textured_checker.png" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+    <Import Project="$(ProjectsRoot)/UITests.Shared/src/UITests.Shared.projitems" Label="Shared" />
+    <ItemGroup Condition="Exists('$(ProjectsRoot)/Oxygen.Engine/out/install/$(Configuration)/bin')">
+        <None Include="$(ProjectsRoot)/Oxygen.Engine/out/install/$(Configuration)/bin/*.dll" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+</Project>

@@ -17,20 +17,20 @@ visual evidence.
 
 ## 2. PRD Traceability
 
-| ID | Coverage |
-| --- | --- |
-| `GOAL-001` | The editor can open a project and show a usable live viewport. |
-| `GOAL-003` | The embedded Vortex preview is stable enough to support future authoring validation. |
-| `GOAL-006` | Runtime/viewport failures are visible and useful instead of being log-only or assertion-only. |
-| `REQ-022` | Scoped: ED-M02 runtime startup, cooked-root refresh, surface, view, layout, and runtime-setting failures produce visible operation results or output/log diagnostics. |
-| `REQ-023` | Scoped: ED-M02 engine/runtime viewport failures produce useful logs correlated to document/viewport/runtime state where known. |
-| `REQ-024` | Scoped: ED-M02 diagnostics distinguish missing content/cooked-root state, surface/view state, settings rejection, and engine runtime state. |
-| `REQ-025` | A live embedded viewport renders the active scene. |
-| `REQ-027` | Scoped: the supported single live viewport layout is stable; multi-viewport layouts are deferred. |
-| `REQ-028` | Scoped: the supported single live viewport presents to the correct surface; multi-viewport surface routing is deferred. |
-| `REQ-030` | Partial: ED-M02 establishes the embedded preview path; full preview parity remains ED-M08. |
-| `SUCCESS-003` | Users can see the scene in the editor viewport. |
-| `SUCCESS-005` | Viewport interaction is stable enough for later viewport authoring tools. |
+| ID            | Coverage                                                                                                                                                              |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GOAL-001`    | The editor can open a project and show a usable live viewport.                                                                                                        |
+| `GOAL-003`    | The embedded Vortex preview is stable enough to support future authoring validation.                                                                                  |
+| `GOAL-006`    | Runtime/viewport failures are visible and useful instead of being log-only or assertion-only.                                                                         |
+| `REQ-022`     | Scoped: ED-M02 runtime startup, cooked-root refresh, surface, view, layout, and runtime-setting failures produce visible operation results or output/log diagnostics. |
+| `REQ-023`     | Scoped: ED-M02 engine/runtime viewport failures produce useful logs correlated to document/viewport/runtime state where known.                                        |
+| `REQ-024`     | Scoped: ED-M02 diagnostics distinguish missing content/cooked-root state, surface/view state, settings rejection, and engine runtime state.                           |
+| `REQ-025`     | A live embedded viewport renders the active scene.                                                                                                                    |
+| `REQ-027`     | Scoped: the supported single live viewport layout is stable; multi-viewport layouts are deferred.                                                                     |
+| `REQ-028`     | Scoped: the supported single live viewport presents to the correct surface; multi-viewport surface routing is deferred.                                               |
+| `REQ-030`     | Partial: ED-M02 establishes the embedded preview path; full preview parity remains ED-M08.                                                                            |
+| `SUCCESS-003` | Users can see the scene in the editor viewport.                                                                                                                       |
+| `SUCCESS-005` | Viewport interaction is stable enough for later viewport authoring tools.                                                                                             |
 
 `REQ-029` is not claimed by ED-M02. Initial camera framing is validation
 evidence for `REQ-025` and `SUCCESS-003`; explicit camera navigation and frame
@@ -351,7 +351,7 @@ Expected primary touch points:
   - `ViewportViewModel.cs`
   - `SceneLayoutHelpers.cs`
   - logging partials for diagnostic evidence.
-- `projects/Oxygen.Editor.WorldEditor/tests/SceneExplorer/Oxygen.Editor.WorldEditor.SceneExplorer.Tests.csproj`
+- `projects/Oxygen.Editor.WorldEditor/tests/Unit/Oxygen.Editor.WorldEditor.Unit.Tests.csproj`
   - layout helper or viewport metadata tests where WinUI-independent.
 - `projects/Oxygen.Editor.WorldEditor/src/Output/`
   - output/log panel integration only if ED-M02 diagnostics need new
@@ -375,17 +375,17 @@ Expected project/reference constraints:
 
 ## 8. Dependency And Migration Risks
 
-| Risk | Mitigation |
-| --- | --- |
-| ED-M02 already has partially landed behavior, so a plan could accidentally rewrite stable code. | Treat current implementation as baseline and harden only the seams required by the LLDs. |
-| Runtime invalid-state calls can assert before producing user-visible diagnostics. | Add service-level guards and operation-result/output-log diagnostics before UI paths call runtime operations. |
-| Multi-viewport work could be accidentally reopened while closing ED-M02. | Do not validate, harden, or gate ED-M02 on multi-viewport behavior. Record two/four/three-pane live viewport stability as deferred. |
-| Resize behavior is timing-sensitive and can become flaky. | Coalesce resize requests but guarantee latest measured size is eventually submitted while the lease is active. |
-| Missing cooked roots can be mistaken for a content-pipeline failure. | ED-M02 only reports non-fatal `AssetMount` warnings; ED-M07 owns cooked-index policy and cook/mount refresh after cooking. |
-| Runtime settings UI can silently log failures. | Convert settings write failures into `Runtime.Settings.Apply` results and output/log diagnostics. |
+| Risk                                                                                                                                                         | Mitigation                                                                                                                                                                                                                  |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ED-M02 already has partially landed behavior, so a plan could accidentally rewrite stable code.                                                              | Treat current implementation as baseline and harden only the seams required by the LLDs.                                                                                                                                    |
+| Runtime invalid-state calls can assert before producing user-visible diagnostics.                                                                            | Add service-level guards and operation-result/output-log diagnostics before UI paths call runtime operations.                                                                                                               |
+| Multi-viewport work could be accidentally reopened while closing ED-M02.                                                                                     | Do not validate, harden, or gate ED-M02 on multi-viewport behavior. Record two/four/three-pane live viewport stability as deferred.                                                                                         |
+| Resize behavior is timing-sensitive and can become flaky.                                                                                                    | Coalesce resize requests but guarantee latest measured size is eventually submitted while the lease is active.                                                                                                              |
+| Missing cooked roots can be mistaken for a content-pipeline failure.                                                                                         | ED-M02 only reports non-fatal `AssetMount` warnings; ED-M07 owns cooked-index policy and cook/mount refresh after cooking.                                                                                                  |
+| Runtime settings UI can silently log failures.                                                                                                               | Convert settings write failures into `Runtime.Settings.Apply` results and output/log diagnostics.                                                                                                                           |
 | `Oxygen.Editor.Runtime` currently exposes a WinUI `SwapChainPanel` surface attach seam that is not fully documented in the architecture brownfield register. | ED-M02 accepts the existing seam and keeps `SwapChainPanel` access at the surface attach boundary only. A brownfield-register architecture update should be filed alongside this plan before a later abstraction milestone. |
-| Manual validation is required because no managed presented-frame signal exists. | Make screenshots or structured manual notes part of ED-M02 closure. |
-| Build validation can drift from repository expectations. | Use MSBuild and the existing repository test runner only; do not use `dotnet build` or alternate build trees. |
+| Manual validation is required because no managed presented-frame signal exists.                                                                              | Make screenshots or structured manual notes part of ED-M02 closure.                                                                                                                                                         |
+| Build validation can drift from repository expectations.                                                                                                     | Use MSBuild and the existing repository test runner only; do not use `dotnet build` or alternate build trees.                                                                                                               |
 
 ## 9. Validation Gates
 

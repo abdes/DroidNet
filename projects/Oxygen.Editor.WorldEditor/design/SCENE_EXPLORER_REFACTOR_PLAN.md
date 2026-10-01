@@ -61,7 +61,7 @@ Scope: Phase-1 refactor to split scene vs layout operations and harden UX/undo. 
   - [ ] Use atomic change recording; remove double reconstruction during undo.
   - [ ] Wrap undo actions with try/log; optional notification on failure.
 
-## Testing Tasks (Oxygen.Editor.WorldEditor.SceneExplorer.Tests)
+## Testing Tasks (Oxygen.Editor.WorldEditor.Unit.Tests)
 
 - [x] **Infrastructure**
   - [x] Fixtures for `Scene`, `SceneNode`, `ExplorerEntryData`, adapters; DI/mocks.
@@ -79,7 +79,7 @@ Scope: Phase-1 refactor to split scene vs layout operations and harden UX/undo. 
   - [ ] **Layout Operations**
     - [x] Create Folder from Selection: Moves items, updates layout.
     - [x] Move to Folder: Updates layout, enforces lineage.
-    - [ ] **Layout-Only Guard**: Verify folder operations (create, move) do *not* trigger `ISceneEngineSync`.
+    - [ ] **Layout-Only Guard**: Verify folder operations (create, move) do _not_ trigger `ISceneEngineSync`.
   - [ ] **Undo/Redo**
     - [x] Basic Add/Remove.
     - [ ] **Complex Undo**: Verify Undo/Redo of "Create Folder from Selection" restores original layout and selection.

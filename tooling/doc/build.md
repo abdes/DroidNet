@@ -70,7 +70,7 @@ process. Forward runner-specific options after `--`.
 
 ### WinUI hosting
 
-All 14 UI test projects use the shared unpackaged MTP host, consistently locally
+UI test projects use the shared unpackaged MTP host, consistently locally
 and in CI. DroidNet's dispatcher, realized-content, render-wait and fixture
 helpers remain available. Use a packaged host only for tests whose behavior
 requires package identity.
@@ -84,7 +84,7 @@ an existing window and exits when the runner finishes.
 Build with Visual Studio MSBuild, then run selected tests without rebuilding:
 
 ```powershell
-traverse Invoke-Tests --start projects/Oxygen.Editor.WorldEditor/tests/UI -- --filter FullyQualifiedName~AssetStatusUpdatesPreserve
+traverse Invoke-Tests --start projects/Oxygen.Editor.ContentBrowser/tests/UI -- --filter FullyQualifiedName~AssetStatusUpdatesPreserve
 dotnet test --project projects/Controls/DynamicTree/tests/UI/Controls.DynamicTree.UI.Tests.csproj --no-build -c Release --filter FullyQualifiedName~ReusesWindowAcrossContentLoads
 ```
 
@@ -94,9 +94,11 @@ source commit `19db2c848caec237de9ba5e3388e5e694b68ad37`, from Microsoft's
 tracks qualification of the final release and removal of the preview feed.
 See the [migration plan](test-migration.md) for validation status and commit scope.
 
-MrtCore emits two `PRI263` warnings for MSTest's localized satellite assemblies;
-[upstream documents this limitation](https://github.com/microsoft/testfx/blob/19db2c848caec237de9ba5e3388e5e694b68ad37/docs/winui-testing.md#behavior-notes).
-Localization is retained and warnings are not suppressed.
+C# test projects use embedded English diagnostics for the MSTest adapter and
+platform-service assemblies via `EnableMSTestV2CopyResources=false`. Their localized
+satellites otherwise enter the Windows PRI index without a neutral file candidate,
+causing `PRI263`. Application localization and the test thread's culture remain
+unchanged; warnings are not suppressed.
 
 Build-infrastructure regression checks:
 

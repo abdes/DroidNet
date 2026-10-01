@@ -1,106 +1,52 @@
 # MSTest migration
 
-Status: implemented. All 43 test projects and four examples are migrated.
-The Debug build and focused failure checks pass. The repository owner runs
-full-suite validation in Visual Studio; agent checks are limited to affected cases. See [scope](#scope), [commit-boundaries](#commit-boundaries),
-[validation](#validation), and [release tracking](https://github.com/abdes/DroidNet/issues/19).
+Status: the C# test projects and templates use MSTest.Sdk and the shared unpackaged
+WinUI host. The final-release update remains tracked in
+[DroidNet #19](https://github.com/abdes/DroidNet/issues/19).
+See [hosting](#hosting), [release qualification](#release-qualification), and
+[WorldEditor test organization](../../projects/Oxygen.Editor.WorldEditor/tests/README.md).
 
-## Scope
+## Hosting
 
-- Migrate 43 C# test projects to the pinned MSTest SDK, including 14 WinUI suites.
-  Native C++ tests retain their supported Visual Studio runner. Engine CMake is
-  outside this work.
-- Use the validated shared UI host: dispatcher available at startup, one window
-  created only for realized content, reuse between cases, and runner-owned exit.
-  Preserve fixture setup/cleanup, parallelism declarations, UI dispatch, rendering
-  and visual-state waits. Host-lifecycle regression cases stay in the two pilot
-  consumers; they must not force a window into dispatcher-only suites.
-- Consolidate the six independent startup implementations: Bootstrap, Hosting,
-  Converters, Mvvm, Mvvm.Generators integration and OutputLog. Update all four test
-  project examples, including both UI templates, so new projects follow the same pattern.
-- Choose hosting from test requirements. The source audit found no explicit
-  package-identity assertions in the current UI suites; qualify their resources
-  and native dependencies unpackaged. Keep any demonstrated identity-dependent
-  coverage in an explicitly packaged host, not a duplicate of every UI suite.
-- Remove superseded manual runner bootstraps, SDK-owned package/property
-  duplication, unused test MSIX assets and local/CI hosting differences. Keep
-  product application packaging separate from test-host configuration.
+- The SDK is pinned to `4.5.0-preview.26480.13`, with MTP
+  `2.5.0-preview.26480.13`, from Microsoft's public `test-tools` feed. Its source
+  revision is `19db2c848caec237de9ba5e3388e5e694b68ad37`.
+- C# projects use the generated MTP entry point. Native C++ tests retain VSTest.
+  Managed test discovery uses `IsTestApplication`; native discovery uses
+  `IsTestProject`. Production interop is explicitly not a test project.
+- UI programs preserve DroidNet's fixture, dispatcher, realized-content and
+  render-wait helpers. Discovery and dispatcher-only cases create no window;
+  realized-content cases reuse one window, closed by the host at completion.
+- UI hosting is consistently unpackaged locally and in CI. Product application
+  packaging remains separate. Tests needing package identity belong in an
+  explicitly packaged integration host.
+- Project selection uses the Unit, Integration and Benchmarks tiers described in
+  [solution generation](solution-files.md). Every UI-hosted test project has `.UI`
+  in its name. Full-suite validation is owned by the repository maintainer;
+  implementation checks target affected cases.
 
-Package-sensitive production paths in Resources asset resolution and Project
-Browser thumbnail loading currently lack direct tests. Track that coverage gap
-without describing the component migration as packaged-application validation.
+## Release qualification
 
-## Commit boundaries
+Before replacing the pin, check Test Explorer discovery, selected execution and
+debugging; CLI failure/timeout propagation; resource/native dependency loading;
+and host startup/shutdown. Then remove the upstream feed when no longer needed.
 
-Source branch: `codex/ed-m08.1-canonical-data`.
-Implementation branch: `codex/droidnet-build-streamlining`.
+Package-sensitive asset resolution and Project Browser thumbnail loading need
+explicit coverage. Running unpackaged component tests does not cover those paths.
+C# test projects use the supported `EnableMSTestV2CopyResources=false` setting
+for English adapter/platform-service diagnostics. This removes their satellite
+DLLs from the PRI inputs without suppressing warnings or changing application
+localization. Preserve this policy when upgrading the SDK.
 
-| Order | Commit                        | Contents                                                                                                                                           |
-| ----- | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1     | General infrastructure        | Build/analysis separation, explicit packaging, artifact paths, SlnGen, tooling commands and shell setup; associated docs/tests                     |
-| 2     | Test-project migration        | SDK/feed pin, project and template migration, shared UI host/lifecycle tests, removal of unused runner/packaging code; migration and workflow docs |
-| 3     | Reusable-library test fixes   | Collections notifications, Coordinates compile/thread checks, Mvvm fixture registration and Routing resource isolation                             |
-| 4     | Editor test fixtures          | Generator diagnostic hashes/newline assertions, repository discovery, browser publication/navigation fixtures and native camera expectations       |
-| 5     | Content-browser behavior      | Disable folder cooking for derived mounts; corresponding built-in ownership/action tests                                                           |
-| 6     | Desktop-independent UI checks | Replace global input tests with color edit-session checks; retain numeric cancellation coverage and verify import-review tab order                 |
+Visual Studio may log `Could not determine target device configuration` from
+`GetRemoteMachineAddressAsync` even when discovery succeeds. Microsoft identifies
+this exact exception as a
+[known Test Explorer issue unrelated to MSTest](https://github.com/microsoft/testfx/issues/4729#issuecomment-2613036876).
+It does not justify changing local launch profiles or adding remote-device settings.
 
-Preserve existing baseline failures in the record until diagnosed. Fix a product
-defect in its owning module when tests expose one; do not hide it by weakening the
-test. Keep those fixes separate from the migration commit as well.
+## Delivery
 
-Keep these boundaries in history. After merge approval, merge the implementation
-branch into the source branch using `git merge --no-ff`. The merge must preserve
-the internal commit sequence; do not squash the migration into the source branch.
-
-## Validation
-
-| Boundary          | Required check                                                                                                                   |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| Project migration | Restore/evaluate every C# test project; preserve framework/platform targets and test discovery                                   |
-| Compilation       | Debug test graph passes; affected rebuilds only. Repository owner validates Release                                              |
-| Ordinary suites   | Repository owner runs full suites; agent runs only cases affected by fixes. Preserve failure and timeout exit codes              |
-| UI suites         | Target failing cases/data rows; verify fixture behavior, realized content/resources and process shutdown                         |
-| IDE               | Test Explorer discovery and execution; selected tests and debugger behavior on representative suites                             |
-| Host lifecycle    | Discovery/dispatcher-only execution: zero visible windows; realized UI: one reused window; failure/timeout: no remaining process |
-| Closure           | Separate and resolve test-case defects, review warnings and update concise status before commits                                 |
-
-Pilot evidence: DynamicTree passes 51/51 in Debug and Release and 51/51 in
-Visual Studio Insiders 18.11 Test Explorer. Five selected WorldEditor interaction
-and host-lifecycle checks pass in Debug. Discovery and dispatcher-only execution
-show zero windows; UI execution reuses one. Forced minimum-count failure and
-timeout return nonzero status and leave no test processes. Editor IDE selection,
-debugging and full-suite/Release qualification remain with the repository owner.
-
-The two upstream-documented MSTest localization `PRI263` warnings remain visible;
-no localization data or analyzer checks are disabled.
-
-## Failure fixes
-
-| Area                       | Correction                                                                                              | Focused verification                                 |
-| -------------------------- | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| Collections                | Assert documented incremental notifications instead of Reset; use typed enumerable assertions           | 94/94 passed                                         |
-| Data generator             | Reconcile diagnostic SHA256 values with unchanged generated source; enforce trailing-newline assertions | 33/33 passed                                         |
-| Schema tests               | Locate the repository by stable build/project files                                                     | 13/13 passed                                         |
-| Coordinates                | Dispatch window access to the UI thread; replace inconclusive placeholders with compile checks          | 91/91 passed                                         |
-| Mvvm generator integration | Register the fixture's view in its DI container                                                         | 2/2 passed                                           |
-| Routing.WinUI              | Restore application resources after the default-converter test                                          | 8/8 passed twice                                     |
-| WorldEditor navigation     | Correct publication provenance and remove the windowless test's render wait                             | Cooked row passed alone: 428 ms                      |
-| WorldEditor browser        | Correct catalog/mount fixtures; reject cooking derived folders                                          | Catalog case and all four folder-action cases passed |
-| WorldEditor camera         | Include aperture, shutter rate, ISO and aspect mode in native-state expectations                        | Four reported camera rows passed                     |
-| WorldEditor color history  | Replace desktop input with deterministic edit-session checks                                            | Six inspector cases and three material cases passed  |
-| Import review              | Verify tab stops and order without global keyboard input                                                | Selected Dark / new import / 100% scale case passed  |
-
-Full-suite validation remains with the repository owner. Only affected tests are
-run during these fixes.
-
-## Desktop-independent execution
-
-Normal test runs must not send global mouse/keyboard input or acquire foreground
-focus. Color history tests use the existing edit-session APIs to verify previews,
-commit/cancel, dirty state and undo/redo. Numeric cancellation retains its existing
-control-event coverage. Import-review tests verify tab stops and declared order
-without injecting Tab. The WorldEditor desktop-input injector is removed.
-
-These checks do not claim to validate Windows pointer routing, native spectrum
-capture/release or physical Escape/Tab delivery. Those are interactive integration
-checks on a dedicated desktop, not a prerequisite for ordinary Test Explorer runs.
+Keep build infrastructure, runner migration and behavioral/test corrections in
+separate commits. The migration branch is `codex/droidnet-build-streamlining`;
+its source branch is `codex/ed-m08.1-canonical-data`. After merge approval, use
+`git merge --no-ff` to preserve the scoped commit history.

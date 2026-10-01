@@ -5,6 +5,7 @@
     <PropertyGroup>
         <TargetFramework>net9.0-windows10.0.26100.0</TargetFramework>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <DefaultItemExcludes>$(DefaultItemExcludes);UI/**</DefaultItemExcludes>
 
         <RootNamespace>Oxygen.Editor.ContentBrowser.Tests</RootNamespace>
     </PropertyGroup>
