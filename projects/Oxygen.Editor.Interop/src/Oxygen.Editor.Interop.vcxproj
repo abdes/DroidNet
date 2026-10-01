@@ -153,11 +153,6 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="$(OxygenEditorInterfaceProject)">
-      <Project>{1e967650-3973-4151-b313-ab8f3fbac717}</Project>
-      <Private>true</Private>
-      <CopyLocalSatelliteAssemblies>false</CopyLocalSatelliteAssemblies>
-    </ProjectReference>
     <ProjectReference Include="..\..\Oxygen.Managed.Core\src\Oxygen.Managed.Core.csproj">
       <Private>true</Private>
     </ProjectReference>
@@ -251,11 +246,8 @@
     <TargetFramework>net9.0</TargetFramework>
     <ProjectName>Oxygen.Editor.Interop</ProjectName>
   </PropertyGroup>
-  <PropertyGroup>
-    <_InteropArtifactsPath Condition="'$(ArtifactsPath)' != ''">$([MSBuild]::EnsureTrailingSlash($(ArtifactsPath)))</_InteropArtifactsPath>
-    <_InteropArtifactsPath Condition="'$(_InteropArtifactsPath)' == ''">$([MSBuild]::EnsureTrailingSlash($(MSBuildThisFileDirectory)../../..\artifacts))</_InteropArtifactsPath>
-    <BaseIntermediateOutputPath>$(_InteropArtifactsPath)obj\$(MSBuildProjectName)\</BaseIntermediateOutputPath>
-  </PropertyGroup>
+  <Import Project="../../../tooling/msbuild/Artifacts.props" />
+  <Import Project="../../../tooling/msbuild/ArtifactPivots.props" />
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
@@ -283,12 +275,8 @@
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup>
-    <_InteropArtifactsPivot Condition="'$(ArtifactsPivots)' != ''">$(ArtifactsPivots)</_InteropArtifactsPivot>
-    <_InteropArtifactsPivot Condition="'$(_InteropArtifactsPivot)' == '' and '$(TargetFramework)' != '' and '$(RuntimeIdentifier)' != ''">$(Configuration)_$(TargetFramework)_$(RuntimeIdentifier)</_InteropArtifactsPivot>
-    <_InteropArtifactsPivot Condition="'$(_InteropArtifactsPivot)' == '' and '$(TargetFramework)' != '' and '$(RuntimeIdentifier)' == ''">$(Configuration)_$(TargetFramework)</_InteropArtifactsPivot>
-    <_InteropArtifactsPivot Condition="'$(_InteropArtifactsPivot)' == ''">$(Configuration)_$(Platform)</_InteropArtifactsPivot>
-    <_InteropOutDir>$(_InteropArtifactsPath)bin\$(MSBuildProjectName)\$(_InteropArtifactsPivot)\</_InteropOutDir>
-    <_InteropIntDir>$(_InteropArtifactsPath)obj\$(MSBuildProjectName)\$(_InteropArtifactsPivot)\</_InteropIntDir>
+    <_InteropOutDir>$(ArtifactsPath)\bin\$(MSBuildProjectName)\$(ArtifactsPivots)\</_InteropOutDir>
+    <_InteropIntDir>$(ArtifactsPath)\obj\$(MSBuildProjectName)\$(ArtifactsPivots)\</_InteropIntDir>
   </PropertyGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">

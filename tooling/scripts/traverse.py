@@ -16,13 +16,31 @@ from .traversal.task_registry import get_global_registry
 
 
 def build_parser() -> argparse.ArgumentParser:
-    description = (
-        "Discover *.csproj files and run registered tasks on each project.\n\n"
-        "Examples:\n"
-        "  python -m tooling.scripts.traverse Select-Path\n"
-        "  python -m tooling.scripts.traverse Invoke-Tests --start ./projects --exclude-tests -- --framework net9.0\n"
-        "  python -m tooling.scripts.traverse New-Package --PackageCertificateKeyFile F:/certs/test.pfx"
-    )
+    description = """Discover source projects and execute selected tasks.
+
+Examples:
+  traverse Select-Path --start projects/Storage
+  traverse Invoke-Tests --start projects/Storage/tests --configuration Release
+  traverse Invoke-Tests --start projects/Oxygen.Editor.ContentPipeline/tests --timeout 600
+  traverse Invoke-Tests --start projects/Aura/tests -- --TestCaseFilter:Name~Example
+  traverse New-Package --start projects/Oxygen.Editor --PackageCertificateKeyFile C:/certs/test.pfx
+
+Invoke-Tests runs existing outputs; build first using Visual Studio or MSBuild.exe.
+Managed executable tests use MSTest; WinUI/native tests use VSTest. All declared
+frameworks are tested unless --framework/-f is supplied. Supported task options:
+  --configuration/-c NAME   Configuration of existing outputs (default: Debug).
+  --framework/-f TFM        Select one target framework.
+  --timeout SECONDS        Per-process timeout (default: 300).
+Pass runner-specific arguments after --, using the selected runner's syntax.
+Failures and timeouts produce a nonzero final exit code.
+
+New-Package creates MSIX packages using Visual Studio MSBuild with references.
+It requires --PackageCertificateKeyFile ABSOLUTE_PATH. Optional task settings:
+  --configuration NAME     Debug (default) or Release.
+  --platform NAME          Target platform (default: x64).
+  --verbosity LEVEL        MSBuild verbosity (default: minimal).
+  --packagelocation PATH   Package destination (default: project/Packages).
+Use the explicit MSBuild Pack target for NuGet libraries, not New-Package."""
     parser = argparse.ArgumentParser(
         prog="traverse",
         description=description,
@@ -30,7 +48,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("tasks", nargs="*", help="Task names to execute (case-insensitive)")
     parser.add_argument("--start", default=".", help="Traversal start directory (default: current working directory)")
-    parser.add_argument("--exclude-tests", action="store_true", help="Skip directories named 'tests'")
+    parser.add_argument("--exclude-tests", action="store_true", help="Skip directories named 'test' or 'tests'")
     parser.add_argument("--exclude-samples", action="store_true", help="Skip directories named 'samples'")
     parser.add_argument("--exclude", dest="exclude", help="Regex to filter out project names")
     parser.add_argument("--dry-run", action="store_true", help="Preview actions without executing commands")
@@ -52,7 +70,7 @@ def configure_console(color_flag: Optional[bool]) -> Console:
 def configure_logging(console: Console, debug: bool) -> logging.Logger:
     level = logging.DEBUG if debug else logging.INFO
     handler = RichHandler(console=console, show_time=False, show_path=False)
-    logging.basicConfig(level=level, handlers=[handler], force=True)
+    logging.basicConfig(level=level, format="%(message)s", handlers=[handler], force=True)
     return logging.getLogger("traverse")
 
 

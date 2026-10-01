@@ -40,11 +40,8 @@
     <ProjectName>Oxygen.Editor.Interop.NativeTests</ProjectName>
     <WindowsTargetPlatformMinVersion>7.0</WindowsTargetPlatformMinVersion>
   </PropertyGroup>
-  <PropertyGroup>
-    <_NativeTestsArtifactsPath Condition="'$(ArtifactsPath)' != ''">$([MSBuild]::EnsureTrailingSlash($(ArtifactsPath)))</_NativeTestsArtifactsPath>
-    <_NativeTestsArtifactsPath Condition="'$(_NativeTestsArtifactsPath)' == ''">$([MSBuild]::EnsureTrailingSlash($(MSBuildThisFileDirectory)..\..\..\..\artifacts))</_NativeTestsArtifactsPath>
-    <BaseIntermediateOutputPath>$(_NativeTestsArtifactsPath)obj\$(MSBuildProjectName)\</BaseIntermediateOutputPath>
-  </PropertyGroup>
+  <Import Project="../../../../tooling/msbuild/Artifacts.props" />
+  <Import Project="../../../../tooling/msbuild/ArtifactPivots.props" />
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <!-- Debug -->
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
@@ -64,13 +61,9 @@
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <PropertyGroup>
-    <_NativeTestsArtifactsPivot Condition="'$(ArtifactsPivots)' != ''">$(ArtifactsPivots)</_NativeTestsArtifactsPivot>
-    <_NativeTestsArtifactsPivot Condition="'$(_NativeTestsArtifactsPivot)' == '' and '$(TargetFramework)' != '' and '$(RuntimeIdentifier)' != ''">$(Configuration)_$(TargetFramework)_$(RuntimeIdentifier)</_NativeTestsArtifactsPivot>
-    <_NativeTestsArtifactsPivot Condition="'$(_NativeTestsArtifactsPivot)' == '' and '$(TargetFramework)' != '' and '$(RuntimeIdentifier)' == ''">$(Configuration)_$(TargetFramework)</_NativeTestsArtifactsPivot>
-    <_NativeTestsArtifactsPivot Condition="'$(_NativeTestsArtifactsPivot)' == ''">$(Configuration)_$(Platform)</_NativeTestsArtifactsPivot>
-    <_NativeTestsOutDir>$(_NativeTestsArtifactsPath)bin\$(MSBuildProjectName)\$(_NativeTestsArtifactsPivot)\</_NativeTestsOutDir>
-    <_NativeTestsIntDir>$(_NativeTestsArtifactsPath)obj\$(MSBuildProjectName)\$(_NativeTestsArtifactsPivot)\</_NativeTestsIntDir>
-    <InteropBinaryDir>$(_NativeTestsArtifactsPath)bin\Oxygen.Editor.Interop\$(Configuration)_$(TargetFramework)\</InteropBinaryDir>
+    <_NativeTestsOutDir>$(ArtifactsPath)\bin\$(MSBuildProjectName)\$(ArtifactsPivots)\</_NativeTestsOutDir>
+    <_NativeTestsIntDir>$(ArtifactsPath)\obj\$(MSBuildProjectName)\$(ArtifactsPivots)\</_NativeTestsIntDir>
+    <InteropBinaryDir>$(ArtifactsPath)\bin\Oxygen.Editor.Interop\$(Configuration)_$(TargetFramework)\</InteropBinaryDir>
     <RunSettingsFilePath>$(_NativeTestsIntDir)$(MSBuildProjectName).runsettings</RunSettingsFilePath>
   </PropertyGroup>
   <!-- Source Files -->

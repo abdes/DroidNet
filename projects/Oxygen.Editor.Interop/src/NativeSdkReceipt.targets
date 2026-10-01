@@ -1,16 +1,22 @@
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup>
+    <NativeSdkCompileHeader>$(IntDir)NativeSdkCompile.h</NativeSdkCompileHeader>
     <NativeSdkReceiptHeader>$(IntDir)NativeSdkReceipt.h</NativeSdkReceiptHeader>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
-      <ForcedIncludeFiles>$(NativeSdkReceiptHeader);%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ForcedIncludeFiles>$(NativeSdkCompileHeader);%(ForcedIncludeFiles)</ForcedIncludeFiles>
     </ClCompile>
   </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Update="AssemblyInfo.cpp">
+      <ForcedIncludeFiles>$(NativeSdkReceiptHeader);$(NativeSdkCompileHeader);%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+  </ItemGroup>
   <Target Name="RecordInteropNativeSdk" BeforeTargets="ClCompile" Condition="'$(DesignTimeBuild)' != 'true'">
-    <Exec Command="powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)..\tools\Write-NativeSdkReceipt.ps1&quot; -SdkRoot &quot;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)&quot; -Configuration &quot;$(Configuration)&quot; -OutputHeader &quot;$(NativeSdkReceiptHeader)&quot;" />
+    <Exec Command="powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)..\tools\Write-NativeSdkReceipt.ps1&quot; -SdkRoot &quot;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)&quot; -Configuration &quot;$(Configuration)&quot; -OutputHeader &quot;$(NativeSdkReceiptHeader)&quot; -CompileHeader &quot;$(NativeSdkCompileHeader)&quot;" />
     <ItemGroup>
-      <FileWrites Include="$(NativeSdkReceiptHeader)" />
+      <FileWrites Include="$(NativeSdkReceiptHeader);$(NativeSdkCompileHeader)" />
     </ItemGroup>
   </Target>
 </Project>

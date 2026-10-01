@@ -3,7 +3,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
+        <!-- This project stages a helper process after Build. -->
+        <AccelerateBuildsInVisualStudio>false</AccelerateBuildsInVisualStudio>
+        <TargetFramework>net9.0-windows10.0.26100.0</TargetFramework>
 
         <RootNamespace>DroidNet.Storage.Tests</RootNamespace>
     </PropertyGroup>
@@ -18,9 +20,6 @@
     </ItemGroup>
 
     <Target Name="CopyAtomicWriteProbe" AfterTargets="Build" Condition="'$(TargetFramework)' != ''">
-        <MSBuild Projects="..\testhost\Storage.AtomicWriteProbe.csproj" Targets="Build"
-                 Properties="Configuration=$(Configuration);Platform=$(Platform);TargetFramework=$(TargetFramework)"
-                 RemoveProperties="BuildingInsideVisualStudio;BuildingSolutionFile;CurrentSolutionConfigurationContents" />
         <MSBuild Projects="..\testhost\Storage.AtomicWriteProbe.csproj" Targets="GetTargetPath"
                  Properties="Configuration=$(Configuration);Platform=$(Platform);TargetFramework=$(TargetFramework)"
                  RemoveProperties="BuildingInsideVisualStudio;BuildingSolutionFile;CurrentSolutionConfigurationContents">

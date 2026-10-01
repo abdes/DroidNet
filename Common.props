@@ -31,18 +31,13 @@
     </PropertyGroup>
 
     <PropertyGroup>
-        <!--
-        We use TargetFrameworks even though we'e specifying a single TF here because in MSBuild, TF takes precedence over TFS.
-        So, if a project wants to multi-target (e.g using EF Core tools), it will not be able to reference other projects in the
-        repo because they single TF. So we use TargetFrameworks to allow multi-targeting.
-        -->
         <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
         <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
         <Platforms>x64</Platforms>
     </PropertyGroup>
 
     <!-- Language Options -->
-    <PropertyGroup>
+    <PropertyGroup Condition="'$(MSBuildProjectExtension)' == '.csproj'">
         <LangVersion>preview</LangVersion>
         <Features>Strict</Features>
         <Nullable>enable</Nullable>
@@ -56,18 +51,12 @@
         <AnalysisLevel>latest</AnalysisLevel>
         <AnalysisMode>All</AnalysisMode>
         <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+        <!-- Analysis is explicit in Visual Studio or an opt-in verification build. -->
+        <RunAnalyzersDuringBuild Condition="'$(RunAnalyzersDuringBuild)' == ''">false</RunAnalyzersDuringBuild>
     </PropertyGroup>
 
-    <ItemGroup>
+    <ItemGroup Condition="'$(MSBuildProjectExtension)' == '.csproj'">
         <PackageReference Include="Roslynator.Analyzers">
-            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-            <PrivateAssets>all</PrivateAssets>
-        </PackageReference>
-        <PackageReference Include="Roslynator.CodeAnalysis.Analyzers">
-            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-            <PrivateAssets>all</PrivateAssets>
-        </PackageReference>
-        <PackageReference Include="Roslynator.Formatting.Analyzers">
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
             <PrivateAssets>all</PrivateAssets>
         </PackageReference>
@@ -85,49 +74,18 @@
 
     <!-- Package Options -->
     <PropertyGroup>
-        <IsPackable>true</IsPackable>
+        <IsPackable>false</IsPackable>
+        <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
         <IsPublishable>true</IsPublishable>
         <IncludeSymbols Condition=" '$(DebugType)' != 'embedded' ">true</IncludeSymbols>
         <SymbolPackageFormat>snupkg</SymbolPackageFormat>
-        <PackageOutputPath>bin\Package</PackageOutputPath>
         <AllowedOutputExtensionsInPackageBuildOutputFolder>.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
         <PublishRepositoryUrl>true</PublishRepositoryUrl>
     </PropertyGroup>
-    <PropertyGroup>
-        <PackageTags Condition="'$(PackageTags)' != ''">$(CommonTags);$(PackageTags)</PackageTags>
-        <PackageTags Condition="'$(PackageTags)' == ''">$(CommonTags)</PackageTags>
-    </PropertyGroup>
-    <ItemGroup Condition="'$(Configuration)' == 'Release'">
-        <PackageReference Include="NuGet.Build.Tasks.Pack" PrivateAssets="all" Pack="false" />
-    </ItemGroup>
 
-    <!-- Detect project README.md presence -->
-    <!-- Typical project layout in this repository:
-         projects/<ProjectName>/src/<ProjectName>.csproj
-         Example: 'projects/Aura/src/Aura.csproj'
-
-         Project-level README.md files live at the project root (next to the folder that contains 'src').
-         Example README for the data layer: 'projects/Aura/README.md' -->
-    <PropertyGroup>
-        <_ProjectReadmePath>$(MSBuildProjectDirectory)\..\README.md</_ProjectReadmePath>
-        <HasProjectReadme Condition="Exists('$(_ProjectReadmePath)')">true</HasProjectReadme>
-    </PropertyGroup>
-
-    <ItemGroup>
-        <None Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'icon.png'))" Pack="true" PackagePath="\" />
-        <None Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'LICENSE'))" Pack="true" PackagePath="\" />
-        <!-- Include README.md from the project directory if present -->
-        <None Include="$(_ProjectReadmePath)" Condition="'$(HasProjectReadme)' == 'true'" Pack="true" PackagePath="\" />
-    </ItemGroup>
-
-    <!-- If a project has a README.md, tell NuGet to use it as the package readme file -->
-    <PropertyGroup Condition="'$(IsPackable)'=='True' AND '$(HasProjectReadme)' == 'true'">
-        <PackageReadmeFile>README.md</PackageReadmeFile>
-    </PropertyGroup>
-
-    <!-- Workaround for the stupid intellisense in vscode not seeing the generated files for XAML -->
+    <!-- Include generated XAML declarations for non-Visual-Studio design-time hosts -->
     <!-- Only include for design-time builds (IntelliSense), not for actual compilation -->
-    <ItemGroup Condition="'$(BuildingInsideVisualStudio)' != 'True' AND '$(DesignTimeBuild)' == 'True'">
+    <ItemGroup Condition="'$(MSBuildProjectExtension)' == '.csproj' AND '$(BuildingInsideVisualStudio)' != 'True' AND '$(DesignTimeBuild)' == 'True'">
         <Compile Include="$(IntermediateOutputPath)\**\*.cs" AutoGen="True" />
     </ItemGroup>
 
@@ -153,8 +111,6 @@
         <!-- This entire repo has just one version.json file, so compute the version once and share with all projects in a large build. -->
         <GitVersionBaseDirectory>$(MSBuildThisFileDirectory)</GitVersionBaseDirectory>
 
-        <!-- Automatically install pre-commit hooks if not already done. Set to `false` in CI builds. -->
-        <DN_PrecommitHooks>true</DN_PrecommitHooks>
     </PropertyGroup>
     <!-- In Release build, we want to specifically target the x64 platform -->
     <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
@@ -165,13 +121,11 @@
     <PropertyGroup Condition="'$(Configuration)' == 'Release'">
         <Deterministic>true</Deterministic>
         <EmbedUntrackedSources>true</EmbedUntrackedSources>
-        <AccelerateBuildsInVisualStudio>false</AccelerateBuildsInVisualStudio>
-        <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     </PropertyGroup>
 
     <!-- Test Projects -->
     <Choose>
-        <When Condition="$(MSBuildProjectName.EndsWith('.Tests'))">
+        <When Condition="'$(MSBuildProjectExtension)' == '.csproj' And $(MSBuildProjectName.EndsWith('.Tests'))">
             <PropertyGroup>
                 <IsTestProject>True</IsTestProject>
                 <IsPackable>False</IsPackable>
@@ -191,7 +145,7 @@
         </When>
     </Choose>
     <Choose>
-        <When Condition="$(MSBuildProjectName.EndsWith('.Tests')) And !$(MSBuildProjectName.EndsWith('.UI.Tests'))">
+        <When Condition="'$(MSBuildProjectExtension)' == '.csproj' And $(MSBuildProjectName.EndsWith('.Tests')) And !$(MSBuildProjectName.EndsWith('.UI.Tests'))">
             <PropertyGroup>
                 <!-- Enable the MSTest runner, this is an opt-in feature -->
                 <EnableMSTestRunner>true</EnableMSTestRunner>
@@ -208,7 +162,7 @@
         </When>
     </Choose>
     <Choose>
-        <When Condition="$(MSBuildProjectName.EndsWith('.UI.Tests'))">
+        <When Condition="'$(MSBuildProjectExtension)' == '.csproj' And $(MSBuildProjectName.EndsWith('.UI.Tests'))">
             <PropertyGroup>
                 <UseWinUI>true</UseWinUI>
                 <EnableMsixTooling>true</EnableMsixTooling>
@@ -233,7 +187,7 @@
 
     <!-- WinUI Application Projects -->
     <Choose>
-        <When Condition="$(MSBuildProjectName.EndsWith('.App')) Or $(MSBuildProjectName.EndsWith('.UI.Tests'))">
+        <When Condition="'$(MSBuildProjectExtension)' == '.csproj' And ($(MSBuildProjectName.EndsWith('.App')) Or $(MSBuildProjectName.EndsWith('.UI.Tests')))">
             <PropertyGroup>
                 <IsPackable>false</IsPackable>
                 <OutputType>WinExe</OutputType>
@@ -248,17 +202,10 @@
                 <ApplicationManifest>Properties\app.manifest</ApplicationManifest>
                 <RuntimeIdentifier>win-x64</RuntimeIdentifier>
                 <PublishProfile>$(RuntimeIdentifier).pubxml</PublishProfile>
-                <EnableMsixTooling>true</EnableMsixTooling>
             </PropertyGroup>
             <ItemGroup>
                 <Manifest Include="$(ApplicationManifest)" />
             </ItemGroup>
-        </When>
-        <When Condition="$(MSBuildProjectName.EndsWith('.App')) And !$(MSBuildProjectName.EndsWith('.UI.Tests'))">
-            <PropertyGroup>
-                <!-- For the debug symbols package -->
-                <DebugType>portable</DebugType>
-            </PropertyGroup>
         </When>
     </Choose>
 

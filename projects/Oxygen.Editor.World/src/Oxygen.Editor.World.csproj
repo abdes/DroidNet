@@ -3,15 +3,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
+        <TargetFramework>net9.0-windows10.0.26100.0</TargetFramework>
 
         <Title>Oxygen Editor World Model</Title>
         <Description>Shared module, providing the abstractions and utilities for manipulating Oxygen world model objects.</Description>
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <PackageTags>oxygen;gameengine;editor;world;model</PackageTags>
         <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
-        <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
-
         <RootNamespace>Oxygen.Editor.World</RootNamespace>
         <AssemblyName>$(MSBuildProjectName)</AssemblyName>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>

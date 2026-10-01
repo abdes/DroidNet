@@ -3,7 +3,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
+        <TargetFramework>net9.0-windows10.0.26100.0</TargetFramework>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
         <Title>Oxygen Editor Projects</Title>
@@ -11,8 +11,6 @@
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <PackageTags>oxygen;gameengine</PackageTags>
         <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
-        <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
-
         <RootNamespace>Oxygen.Editor.Projects</RootNamespace>
         <AssemblyName>$(MSBuildProjectName)</AssemblyName>
     </PropertyGroup>

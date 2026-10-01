@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
-        <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
+        <TargetFramework>net9.0-windows10.0.26100.0</TargetFramework>
         <RootNamespace>Oxygen.Editor.World.Tests</RootNamespace>
         <AssemblyName>Oxygen.Editor.WorldEditor.UI.Tests</AssemblyName>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>

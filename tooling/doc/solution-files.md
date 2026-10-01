@@ -1,35 +1,43 @@
-# Generating solution files
+# Visual Studio solutions
 
-Visual Studio solutions generally do not scale well for large project trees.
-They are scoped views of a set of projects. Maintaining Visual Studio solutions
-becomes hard because you have to keep them in sync with the other build logic.
-Therefore, we do not use pre-made solution files. Instead we use [Visual Studio
-solution generator](https://microsoft.github.io/slngen/).
+Solutions are generated, ignored views of the project graph. Project references
+remain the dependency authority. Do not hand-edit generated solutions.
 
-SlnGen reads the project references of a given project to create a Visual Studio
-solution on demand. For example, you can run it against a unit test project and
-be presented with a Visual Studio solution containing the unit test project and
-all of its project references. You can also run SlnGen against a traversal
-project in a rooted folder to open a Visual Studio solution containing that view
-of your project tree.
+## Common workflows
 
-See detailed instructions for how to get started and use SlnGen on its [project
-web site](https://microsoft.github.io/slngen/).
+```powershell
+# Open a project and its dependencies.
+./projects/Oxygen.Editor/open.cmd
 
-When working on a certain project, you can generate a solution for that project
-and all its references by running the following command:
+# Generate without opening another Visual Studio window.
+./projects/Storage/open.cmd -NoLaunch
 
-```shell
-MSBuild /Target:SlnGen /Verbosity:Minimal /NoLogo
+# All product projects, including standalone native tests.
+./tooling/GenerateSolution.ps1 -Scope projects -SolutionPath projects/Projects.sln
+
+# Product projects and tooling samples.
+./tooling/GenerateSolution.ps1
+
+# Show every option and example.
+./tooling/GenerateSolution.ps1 --help
 ```
 
-To generate without launching visual studio:
+All `open.cmd` entry points call the same generator and work independently of
+the caller's current directory. Generated solutions use Debug/Release and x64.
+The generator enumerates tracked and non-ignored new C# and C++/CLI projects;
+it excludes the engine's CMake tree and follows project references transitively.
 
-```shell
-MSBuild /Target:SlnGen /Verbosity:Minimal /NoLogo /Property:"SlnGenLaunchVisualStudio=false"
-```
+## Tool selection
 
-## Helper scripts
+Run `dotnet tool restore` once after cloning or updating the tool manifest.
+`.config/dotnet-tools.json` pins SlnGen. The generator uses that package's .NET
+Framework executable with Visual Studio MSBuild discovered by `vswhere`.
+This host supports C++/CLI evaluation; the `dotnet slngen` host cannot reliably
+evaluate the native project imports in this solution.
 
-For the purpose of CI, we need to build all projects. The
-[`GenerateAllSolution.ps1`](../GenerateAllSolution.ps1) script can do that.
+The script preserves existing solutions so SlnGen can reuse Visual Studio's
+cache. It never restores packages, builds projects, or upgrades tools implicitly.
+Use `-UseDiagnostics` only when investigating generation; its log stays in
+ignored `artifacts/build-streamlining/`.
+
+See [build, analysis and packaging](build.md) for the resulting workflows.

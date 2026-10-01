@@ -38,65 +38,68 @@ Additionally, you'll find the following notable files in the `obj/Debug/net9.0/`
 To use this project template for a real console application, follow these steps to customize it:
 
 1. **Change the .csproj file to use the real project name**:
-	* Rename the `src/NetConsoleApp.csproj` file to match your desired project name, e.g., `src/YourAppName.csproj`.
+   - Rename the `src/NetConsoleApp.csproj` file to match your desired project name, e.g., `src/YourAppName.csproj`.
 
 2. **Change the RootNamespace**:
-	* Open the `src/NetConsoleApp.csproj` file (replace `NetConsoleApp` with your desired project name).
-	* Update the `<RootNamespace>` property with your desired namespace.
-	```xml
-	<PropertyGroup>
-	  <OutputType>Exe</OutputType>
-	  <TargetFramework>net9.0</TargetFramework>
+   - Open the `src/NetConsoleApp.csproj` file (replace `NetConsoleApp` with your desired project name).
+   - Update the `<RootNamespace>` property with your desired namespace.
 
-	  <IsPackable>False</IsPackable>
+   ```xml
+   <PropertyGroup>
+     <OutputType>Exe</OutputType>
+     <TargetFramework>net9.0</TargetFramework>
 
-	  <RootNamespace>DroidNet.YourAppName</RootNamespace>
-	</PropertyGroup>
-	```
+     <IsPackable>False</IsPackable>
+
+     <RootNamespace>DroidNet.YourAppName</RootNamespace>
+   </PropertyGroup>
+   ```
 
 3. **Change the open.cmd script**:
-	* Update the `open.cmd` script located in the project root folder to use the real project name.
-	```bat
-    SET COMMAND=dotnet slngen -d . -o YourAppName.sln --folders false .\**\*.csproj
-	```
+   - Update the `open.cmd` script located in the project root folder to use the real project name.
+
+   ```bat
+   REM See open.cmd for the shared solution-generation entry point.
+   ```
 
 4. **Update references**:
-	* Open the `src/YourAppName.csproj` file.
-	* Update the `<RootNamespace>` property with your desired namespace and replace `NetConsoleApp` with your real console app project name, and update the `<ProjectReference>` path to point to your actual library project.
-	```xml
-	<Project Sdk="Microsoft.NET.Sdk">
+   - Open the `src/YourAppName.csproj` file.
+   - Update the `<RootNamespace>` property with your desired namespace and replace `NetConsoleApp` with your real console app project name, and update the `<ProjectReference>` path to point to your actual library project.
 
-	  <PropertyGroup>
-	    <OutputType>Exe</OutputType>
-	    <TargetFramework>net9.0</TargetFramework>
+   ```xml
+   <Project Sdk="Microsoft.NET.Sdk">
 
-	    <IsPackable>False</IsPackable>
+     <PropertyGroup>
+       <OutputType>Exe</OutputType>
+       <TargetFramework>net9.0</TargetFramework>
 
-	    <RootNamespace>$(RootNamespace).YourAppName</RootNamespace>
-	  </PropertyGroup>
+       <IsPackable>False</IsPackable>
 
-	  <ItemGroup>
-	    <ProjectReference Include="..\path\to\your\libraries\src\YourLibrary.csproj" />
-	  </ItemGroup>
+       <RootNamespace>$(RootNamespace).YourAppName</RootNamespace>
+     </PropertyGroup>
 
-	</Project>
-	```
+     <ItemGroup>
+       <ProjectReference Include="..\path\to\your\libraries\src\YourLibrary.csproj" />
+     </ItemGroup>
+
+   </Project>
+   ```
 
 5. **Update `Program.cs` file**:
-	* Open the `src/Program.cs` file.
-	* Update the namespace declaration to match your real console app's namespace and update the using directive to import your actual library.
-	```csharp
-	namespace DroidNet.YourAppName;
+   - Open the `src/Program.cs` file.
+   - Update the namespace declaration to match your real console app's namespace and update the using directive to import your actual library.
+   ```csharp
+   namespace DroidNet.YourAppName;
 
-	using YourLibrary.Namespace; // Replace with your actual library's namespace
+   using YourLibrary.Namespace; // Replace with your actual library's namespace
 
-	internal static class Program
-	{
-		public static void Main(string[] args)
-		{
-			// ... rest of the code ...
-		}
-	}
-	```
+   internal static class Program
+   {
+       public static void Main(string[] args)
+       {
+           // ... rest of the code ...
+       }
+   }
+   ```
 
 After completing these customization steps, the project is ready for use as a real .NET console application that depends on your actual library.
