@@ -622,8 +622,9 @@ public partial class AssetsViewModel(
         }
 
         var path = this.GetSelectedFolderUri().AbsolutePath.TrimEnd('/');
-        return project.AuthoringMounts.Any(mount => string.Equals(path, "/" + mount.Name, StringComparison.OrdinalIgnoreCase)
-            || path.StartsWith("/" + mount.Name + "/", StringComparison.OrdinalIgnoreCase));
+        return project.AuthoringMounts.Any(mount => !ProjectExplorer.ProjectLayoutViewModel.IsPersistedProjectRelativeVirtualMount(mount)
+            && (string.Equals(path, "/" + mount.Name, StringComparison.OrdinalIgnoreCase)
+                || path.StartsWith("/" + mount.Name + "/", StringComparison.OrdinalIgnoreCase)));
     }
 
     private void OnAssetSelectionChanged(object? sender, PropertyChangedEventArgs args)

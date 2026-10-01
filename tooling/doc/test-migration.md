@@ -76,16 +76,17 @@ no localization data or analyzer checks are disabled.
 
 ## Failure fixes
 
-| Area                       | Correction                                                                                              | Focused verification             |
-| -------------------------- | ------------------------------------------------------------------------------------------------------- | -------------------------------- |
-| Collections                | Assert documented incremental notifications instead of Reset; use typed enumerable assertions           | 94/94 passed                     |
-| Data generator             | Reconcile diagnostic SHA256 values with unchanged generated source; enforce trailing-newline assertions | 33/33 passed                     |
-| Schema tests               | Locate the repository by stable build/project files                                                     | 13/13 passed                     |
-| Coordinates                | Dispatch window access to the UI thread; replace inconclusive placeholders with compile checks          | 91/91 passed                     |
-| Mvvm generator integration | Register the fixture's view in its DI container                                                         | 2/2 passed                       |
-| Routing.WinUI              | Restore application resources after the default-converter test                                          | 8/8 passed twice                 |
-| WorldEditor navigation     | Correct publication provenance and remove the windowless test's render wait                             | Cooked row passed alone: 428 ms  |
-| WorldEditor camera         | Include aperture, shutter rate, ISO and aspect mode in native-state expectations                        | Four reported camera rows passed |
+| Area                       | Correction                                                                                              | Focused verification                                 |
+| -------------------------- | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| Collections                | Assert documented incremental notifications instead of Reset; use typed enumerable assertions           | 94/94 passed                                         |
+| Data generator             | Reconcile diagnostic SHA256 values with unchanged generated source; enforce trailing-newline assertions | 33/33 passed                                         |
+| Schema tests               | Locate the repository by stable build/project files                                                     | 13/13 passed                                         |
+| Coordinates                | Dispatch window access to the UI thread; replace inconclusive placeholders with compile checks          | 91/91 passed                                         |
+| Mvvm generator integration | Register the fixture's view in its DI container                                                         | 2/2 passed                                           |
+| Routing.WinUI              | Restore application resources after the default-converter test                                          | 8/8 passed twice                                     |
+| WorldEditor navigation     | Correct publication provenance and remove the windowless test's render wait                             | Cooked row passed alone: 428 ms                      |
+| WorldEditor browser        | Correct catalog/mount fixtures; reject cooking derived folders                                          | Catalog case and all four folder-action cases passed |
+| WorldEditor camera         | Include aperture, shutter rate, ISO and aspect mode in native-state expectations                        | Four reported camera rows passed                     |
 
 Full-suite validation remains with the repository owner. Only affected tests are
 run during these fixes.
