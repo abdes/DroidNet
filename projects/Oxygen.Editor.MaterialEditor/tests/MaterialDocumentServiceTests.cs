@@ -393,12 +393,16 @@ public sealed partial class MaterialDocumentServiceTests
         _ = save.Succeeded.Should().BeTrue();
         _ = cook.State.Should().Be(MaterialCookState.Cooked);
 
-        var cookedBytes = await File.ReadAllBytesAsync(
-            Path.Combine(workspace.Root, ".cooked", "Content", "Materials", "RoundTrip.omat"), cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
-        var indexStream = File.OpenRead(Path.Combine(workspace.Root, ".cooked", "Content", "container.index.bin"));
+        using var publication = await workspace.NativePipeline.Publication.AcquireReadAsync(
+            workspace.ContextService.ActiveProject!, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var cookedRoot = publication.FindProjectRoot("Content")
+            ?? throw new InvalidDataException("The material cook did not publish its Content root.");
+        var indexStream = File.OpenRead(Path.Combine(cookedRoot, "container.index.bin"));
         await using var indexLifetime = indexStream.ConfigureAwait(false);
         var index = Oxygen.Managed.Assets.Persistence.LooseCooked.V2.LooseCookedIndex.Read(indexStream);
         var materialEntry = index.Assets.Single(static asset => string.Equals(asset.VirtualPath, "/Content/Materials/RoundTrip.omat", StringComparison.Ordinal));
+        var cookedBytes = await File.ReadAllBytesAsync(
+            Path.Combine(cookedRoot, materialEntry.DescriptorRelativePath), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = cookedBytes.Should().HaveCount(checked((int)materialEntry.DescriptorSize));
         _ = ReadSingle(cookedBytes, 0x70).Should().BeApproximately(0.25f, 0.0001f);
         _ = ReadSingle(cookedBytes, 0x74).Should().BeApproximately(0.5f, 0.0001f);
@@ -406,7 +410,8 @@ public sealed partial class MaterialDocumentServiceTests
         _ = ReadSingle(cookedBytes, 0x7C).Should().BeApproximately(1.0f, 0.0001f);
         _ = ReadUnorm16(cookedBytes, 0x84).Should().BeApproximately(0.8f, 0.0001f);
         _ = ReadUnorm16(cookedBytes, 0x86).Should().BeApproximately(0.2f, 0.0001f);
-        _ = ReadUnorm16(cookedBytes, 0xC0).Should().BeApproximately(0.4f, 0.0001f);
+        // Material v3 stores three float32 emission channels before alpha cutoff.
+        _ = ReadUnorm16(cookedBytes, 0xC6).Should().BeApproximately(0.4f, 0.0001f);
         _ = cookedBytes[0x67].Should().Be(3);
 
         var flags = BinaryPrimitives.ReadUInt32LittleEndian(cookedBytes.AsSpan(0x68, 4));
@@ -749,10 +754,12 @@ public sealed partial class MaterialDocumentServiceTests
         {
             this.Root = Path.Combine(Path.GetTempPath(), "oxygen-material-editor-tests", Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(this.Root);
-            this.ContextService.Activate(ProjectContext.FromProjectInfo(new ProjectInfo("Material tests", Category.Games, this.Root)
+            var project = new ProjectInfo("Material tests", Category.Games, this.Root)
             {
                 AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
-            }));
+            };
+            File.WriteAllText(Path.Combine(this.Root, Constants.ProjectFileName), ProjectInfo.ToJson(project));
+            this.ContextService.Activate(ProjectContext.FromProjectInfo(project));
             this.CookCoordinator = new ContentCookCoordinator(this.ContextService, NullLogger<ContentCookCoordinator>.Instance);
         }
 

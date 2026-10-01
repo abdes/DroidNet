@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using System.Reactive.Concurrency;
-using System.Reactive.Linq;
 using AwesomeAssertions;
 using DroidNet.Storage.Native;
 using Moq;
@@ -11,8 +10,8 @@ using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
 using Oxygen.Editor.ContentBrowser.Materials;
 using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.ContentPipeline.Discovery;
 using Oxygen.Editor.Projects;
-using Oxygen.Managed.Assets.Catalog;
 
 namespace Oxygen.Editor.MaterialEditor.Tests;
 
@@ -35,21 +34,26 @@ public sealed partial class MaterialDocumentServiceTests
         var created = await service.CreateAsync(uri, this.TestContext.CancellationToken).ConfigureAwait(false);
         await service.CloseAsync(created.DocumentId, discard: false, this.TestContext.CancellationToken).ConfigureAwait(false);
         var pipeline = workspace.NativePipeline.Pipeline;
-        var catalog = new Mock<IProjectAssetCatalog>();
-        _ = catalog.SetupGet(value => value.Changes).Returns(Observable.Empty<AssetChange>());
-        _ = catalog.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-        _ = catalog.Setup(value => value.QueryAsync(It.IsAny<AssetQuery>(), It.IsAny<CancellationToken>())).ReturnsAsync([new AssetRecord(uri)]);
+        var storage = new NativeStorageProvider(new Testably.Abstractions.RealFileSystem());
+        var builtins = new Mock<IBuiltinCatalogDiscovery>();
+        var builtinSnapshot = new BuiltinCatalogSnapshot(Catalog: null, IsLastKnown: false, Notice: null);
+        _ = builtins.SetupGet(value => value.Snapshot).Returns(builtinSnapshot);
+        _ = builtins.Setup(value => value.GetAsync(It.IsAny<CancellationToken>())).ReturnsAsync(builtinSnapshot);
+        var catalog = new ProjectAssetCatalog(
+            workspace.ContextService, storage, builtins.Object, workspace.NativePipeline.Publication);
+        await using var catalogLifetime = catalog.ConfigureAwait(false);
         var unavailableRuntime = Oxygen.Testing.AssetStatusFixture.CreateUnavailableRuntime();
         await using var runtimeLifetime = unavailableRuntime.ConfigureAwait(false);
-        using var provider = new ContentBrowserAssetProvider(
-            catalog.Object,
+        var provider = new ContentBrowserAssetProvider(
+            catalog,
             workspace.ContextService,
-            new ProjectCookScopeProvider(new NativeStorageProvider(new Testably.Abstractions.RealFileSystem())),
+            new ProjectCookScopeProvider(storage),
             new AssetIdentityReducer(),
             pipeline,
             workspace.CookDocuments,
             workspace.CookCoordinator,
             unavailableRuntime);
+        await using var providerLifetime = provider.ConfigureAwait(false);
         using var picker = new MaterialPickerService(provider);
         using var editor = new MaterialEditorViewModel(new MaterialDocumentMetadata(uri), service, provider, ImmediateScheduler.Instance);
         await WaitForMaterialUiAsync(() => editor.IsLoaded && string.Equals(editor.CookStatusText, "Needs cooking", StringComparison.Ordinal), this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -59,7 +63,7 @@ public sealed partial class MaterialDocumentServiceTests
         var result = await CookScopeAsync().ConfigureAwait(false);
         _ = result.IsPublished.Should().BeTrue(string.Join("; ", result.Diagnostics.Select(static diagnostic => diagnostic.Message)));
         await WaitForMaterialUiAsync(() => string.Equals(editor.CookStatusText, "Cooked", StringComparison.Ordinal), this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = editor.AssetStatus!.CookStatus!.HasVerifiedOutput.Should().BeTrue();
+        _ = editor.AssetStatus!.CookStatus!.HasAvailableOutput.Should().BeTrue();
         _ = workspace.CookCoordinator.Runs.Should().HaveCount(initialCookCount + 1);
         var choice = await picker.ResolveAsync(uri, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = choice!.StatusText.Should().Be(editor.CookStatusText);
@@ -67,7 +71,7 @@ public sealed partial class MaterialDocumentServiceTests
         editor.RoughnessFactor = 0.73f;
         await WaitForMaterialUiAsync(() => editor.IsDirty, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = editor.CookStatusText.Should().Be("Unsaved changes");
-        _ = editor.AssetStatus!.CookStatus!.HasVerifiedOutput.Should().BeTrue("a later edit does not erase prior published output");
+        _ = editor.AssetStatus!.CookStatus!.HasAvailableOutput.Should().BeTrue("a later edit does not erase prior published output");
         await provider.RefreshAsync(AssetBrowserFilter.Default, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = editor.CookStatusText.Should().Be("Unsaved changes");
         _ = editor.RoughnessFactor.Should().Be(0.73f);
