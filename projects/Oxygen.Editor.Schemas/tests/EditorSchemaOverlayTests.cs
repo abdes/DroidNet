@@ -311,7 +311,7 @@ public sealed class EditorSchemaOverlayTests
         var current = new DirectoryInfo(AppContext.BaseDirectory);
         while (current is not null)
         {
-            if (File.Exists(Path.Combine(current.FullName, "design", "editor", "lld", "property-pipeline-redesign.md"))
+            if (File.Exists(Path.Combine(current.FullName, "Directory.build.props"))
                 && Directory.Exists(Path.Combine(current.FullName, "projects", "Oxygen.Engine")))
             {
                 return current.FullName;

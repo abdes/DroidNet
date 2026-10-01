@@ -312,22 +312,12 @@ public sealed partial class NewlineSettings : Oxygen.Editor.Data.Models.ModuleSe
         var result = driver.GetRunResult();
         var outputs = result.Results.SelectMany(r => r.GeneratedSources.Select(g => new { g.HintName, Source = g.SourceText.ToString() })).ToArray();
 
-        // Verify that each source ends with exactly one newline
+        _ = outputs.Should().NotBeEmpty();
         foreach (var o in outputs)
         {
-            var s = o.Source;
-
-            // Use StringComparison ordinal to avoid locale influenced behavior
-            if (!s.EndsWith('\n'))
-            {
-                // If this happens, we'll let the snapshot show the content — no explicit diagnostic
-            }
-
-            // Ensure not double newline
-            if (s.EndsWith("\n\n", StringComparison.Ordinal))
-            {
-                // Let snapshot show double newline if it exists; snapshot verification will fail
-            }
+            _ = o.Source.Should().EndWith("\n")
+                .And.NotEndWith("\n\n")
+                .And.NotEndWith("\r\n");
         }
 
         var diagnostics = result.Diagnostics.Select(d => new { d.Id, Message = d.GetMessage(System.Globalization.CultureInfo.InvariantCulture) }).ToArray();

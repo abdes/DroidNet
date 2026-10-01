@@ -36,8 +36,7 @@ public sealed partial class InspectorControlTests
         var (physical, expected) = await fixture.ConfigurePhysicalNavigationAsync(mount, this.TestContext.CancellationToken).ConfigureAwait(true);
         await fixture.OpenAsync().ConfigureAwait(true);
         await fixture.NavigateHistoryFolderAsync(physical, this.TestContext.CancellationToken, relativeToContent: false).ConfigureAwait(true);
-        await WaitForRenderAsync().ConfigureAwait(true);
-        _ = fixture.Browser.Breadcrumbs[^1].RelativePath.Trim('/').Should().Be(expected);
+        _ = fixture.Browser.Breadcrumbs[^1].RelativePath.Trim('/').Should().Be(expected, fixture.Diagnostics);
         _ = fixture.Explorer.SelectedItem!.Label.Should().Be("Materials");
         _ = fixture.Explorer.ShownItems.Should().Contain(fixture.Explorer.SelectedItem);
     });

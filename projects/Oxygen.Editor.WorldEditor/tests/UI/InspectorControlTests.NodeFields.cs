@@ -64,7 +64,8 @@ public sealed partial class InspectorControlTests
         Add(1, [position.X, position.Y, position.Z, rotation.X, rotation.Y, rotation.Z, scale.X, scale.Y, scale.Z]);
         if (node.Components.OfType<PerspectiveCamera>().FirstOrDefault() is { } camera)
         {
-            Add(2, [camera.FieldOfView * MathF.PI / 180f, camera.AspectRatio, camera.NearPlane, camera.FarPlane]);
+            Add(2, [camera.FieldOfView * MathF.PI / 180f, camera.AspectRatio, camera.NearPlane, camera.FarPlane,
+                camera.ApertureF, camera.ShutterRate, camera.Iso, (float)camera.AspectMode]);
         }
 
         if (node.Components.OfType<DirectionalLightComponent>().FirstOrDefault() is { } light)
@@ -83,7 +84,10 @@ public sealed partial class InspectorControlTests
                 (int)light.AtmosphereSlot, light.UsePerPixelAtmosphereTransmittance ? 1f : 0f,
                 light.AtmosphereDiskLuminanceScaleRgb.X, light.AtmosphereDiskLuminanceScaleRgb.Y, light.AtmosphereDiskLuminanceScaleRgb.Z,
             ]);
-            foreach (ushort removed in new ushort[] { 4, 13, 14 }) result.Remove((3, removed));
+            foreach (ushort removed in new ushort[] { 4, 13, 14 })
+            {
+                result.Remove((3, removed));
+            }
         }
 
         return result;

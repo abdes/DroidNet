@@ -57,7 +57,9 @@ public sealed partial class InspectorControlTests
             _ = button.DataContext.Should().BeSameAs(row);
             _ = button.FindDescendant<TextBlock>(label => string.Equals(label.Text, "Geometry · Queued", StringComparison.Ordinal)).Should().NotBeNull();
             _ = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(view.XamlRoot).Should().BeSameAs(button);
-            _ = model.Groups.Single(group => string.Equals(group.Key, "Engine", StringComparison.Ordinal)).Items.Should().HaveCount(11);
+            _ = model.Groups.Single(group => string.Equals(group.Key, "Engine", StringComparison.Ordinal)).Items
+                .Select(choice => choice.Item.Uri).Should().BeEquivalentTo(
+                    builtins.Snapshot.Catalog!.AuthoringGeometries.Select(definition => definition.AssetUri));
         }
         finally
         {
