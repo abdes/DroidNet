@@ -47,6 +47,12 @@
     </ItemGroup>
     <!-- End Visual Studio solution generator -->
 
+    <!-- Test execution tiers select projects, never hide tests inside an assembly. -->
+    <PropertyGroup Condition="'$(IsSlnGen)' == 'true' And '$(DroidNetTestTier)' != ''">
+        <DroidNetTestScope Condition="'$(DroidNetTestScope)' == ''">All</DroidNetTestScope>
+        <IncludeInSolutionFile Condition="'$(DroidNetTestScope)' != 'All' And '$(DroidNetTestScope)' != '$(DroidNetTestTier)'">false</IncludeInSolutionFile>
+    </PropertyGroup>
+
     <!--
         Code Quality
 

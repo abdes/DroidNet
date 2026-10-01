@@ -16,6 +16,10 @@
     Suppress opening Visual Studio, including when open.cmd supplies -Launch.
 .PARAMETER UseDiagnostics
     Save the generator's binary log in artifacts/build-streamlining/slngen.binlog.
+.PARAMETER TestScope
+    Include All (default), Unit, Integration, or Benchmarks test projects.
+    Production projects and their references remain included. Non-default scopes
+    use a distinct solution filename unless SolutionPath is supplied.
 .PARAMETER Help
     Show all options and examples. Aliases: -h and --help.
 .EXAMPLE
@@ -30,6 +34,12 @@
 .EXAMPLE
     ./tooling/GenerateSolution.ps1 -Scope projects -SolutionPath artifacts/Check.sln -UseDiagnostics
     Generate all product projects, including native tests, with a diagnostic log.
+.EXAMPLE
+    ./projects/Oxygen.Editor.WorldEditor/open.cmd -TestScope Integration
+    Open native integration tests separately from routine unit and UI tests.
+.EXAMPLE
+    ./projects/Oxygen.Editor.WorldEditor/open.cmd -TestScope Benchmarks -NoLaunch
+    Generate the explicit benchmark solution without opening Visual Studio.
 #>
 [CmdletBinding()]
 param(
@@ -38,6 +48,7 @@ param(
     [switch] $Launch,
     [switch] $NoLaunch,
     [switch] $UseDiagnostics,
+    [ValidateSet('Unit', 'Integration', 'Benchmarks', 'All')][string] $TestScope = 'All',
     [Alias('h', '-help')][switch] $Help
 )
 if ($Help) { Get-Help $PSCommandPath -Full; return }
@@ -50,7 +61,8 @@ if (!$SolutionPath) {
     $name = if ($scopePath.TrimEnd('\', '/') -eq $repoRoot) { 'AllProjects' } else { Split-Path $scopePath -Leaf }
     $directory = if (Test-Path -LiteralPath $scopePath -PathType Leaf) { Split-Path $scopePath -Parent } else { $scopePath }
     if (Test-Path -LiteralPath $scopePath -PathType Leaf) { $name = [IO.Path]::GetFileNameWithoutExtension($name) }
-    $SolutionPath = Join-Path $directory "$name.sln"
+    $suffix = if ($TestScope -eq 'All') { '' } else { ".$TestScope" }
+    $SolutionPath = Join-Path $directory "$name$suffix.sln"
 }
 $SolutionPath = [IO.Path]::GetFullPath($SolutionPath)
 $originalPath = $env:PATH
@@ -63,7 +75,7 @@ try {
         if ($LASTEXITCODE -ne 0) { throw 'Could not enumerate source projects.' }
         $prefix = $scopePath.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
         $projects = @($files | ForEach-Object { [IO.Path]::GetFullPath((Join-Path $repoRoot $_)) } |
-            Where-Object { $_.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase) } | Sort-Object -Unique)
+            Where-Object { $_.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase) -and [IO.File]::Exists($_) } | Sort-Object -Unique)
     }
     if ($projects.Count -eq 0) { throw "No source projects in $scopePath" }
     [void][IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($SolutionPath))
@@ -79,6 +91,7 @@ try {
     if (!(Test-Path -LiteralPath $slngen)) { throw 'Run dotnet tool restore before generating solutions.' }
     $arguments = @('--launch', ($Launch.IsPresent -and !$NoLaunch.IsPresent).ToString().ToLowerInvariant(),
         '--solutionfile', $SolutionPath, '--folders', 'false', '--platform', 'x64', '--configuration', 'Debug;Release')
+    $arguments += @('--property', "DroidNetTestScope=$TestScope")
     if ($UseDiagnostics) {
         $logs = Join-Path $repoRoot 'artifacts/build-streamlining'
         [void][IO.Directory]::CreateDirectory($logs)

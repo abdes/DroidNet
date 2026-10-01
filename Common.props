@@ -126,6 +126,11 @@
     <!-- Test Projects -->
     <Choose>
         <When Condition="'$(MSBuildProjectExtension)' == '.csproj' And $(MSBuildProjectName.EndsWith('.Tests'))">
+            <PropertyGroup>
+                <DroidNetTestTier Condition="'$(DroidNetTestTier)' == ''">Unit</DroidNetTestTier>
+                <!-- Use embedded English adapter diagnostics without changing application localization. -->
+                <EnableMSTestV2CopyResources>false</EnableMSTestV2CopyResources>
+            </PropertyGroup>
             <ItemGroup>
                 <PackageReference Include="AwesomeAssertions" />
                 <PackageReference Include="AwesomeAssertions.Analyzers">

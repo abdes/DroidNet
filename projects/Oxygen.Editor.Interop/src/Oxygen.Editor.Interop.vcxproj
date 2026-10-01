@@ -244,6 +244,8 @@
     <RootNamespace>OxygenEditorInterop</RootNamespace>
     <WindowsTargetPlatformVersion>10.0.26100.0</WindowsTargetPlatformVersion>
     <TargetFramework>net9.0</TargetFramework>
+    <!-- The production C++/CLI bridge is not a Test Explorer test container. -->
+    <IsTestProject>false</IsTestProject>
     <ProjectName>Oxygen.Editor.Interop</ProjectName>
   </PropertyGroup>
   <Import Project="../../../tooling/msbuild/Artifacts.props" />

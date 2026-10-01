@@ -12,7 +12,7 @@ remain the dependency authority. Do not hand-edit generated solutions.
 # Generate without opening another Visual Studio window.
 ./projects/Storage/open.cmd -NoLaunch
 
-# All product projects, including standalone native tests.
+# All product and test projects, including standalone native tests.
 ./tooling/GenerateSolution.ps1 -Scope projects -SolutionPath projects/Projects.sln
 
 # Product projects and tooling samples.
@@ -25,7 +25,27 @@ remain the dependency authority. Do not hand-edit generated solutions.
 All `open.cmd` entry points call the same generator and work independently of
 the caller's current directory. Generated solutions use Debug/Release and x64.
 The generator enumerates tracked and non-ignored new C# and C++/CLI projects;
-it excludes the engine's CMake tree and follows project references transitively.
+it excludes the engine's CMake tree, ignores deleted paths awaiting commit, and
+follows project references transitively.
+
+## Test execution tiers
+
+`-TestScope All` is the default: `open.cmd` includes every test project. Use `Unit`, `Integration`, or `Benchmarks` explicitly to select a reduced set. Production projects remain included.
+Projects declare `DroidNetTestTier`; ordinary C# test projects default to `Unit`.
+This selects whole projects through SlnGen's supported
+[`IncludeInSolutionFile` property](https://microsoft.github.io/slngen/FAQ#how-do-i-leave-projects-out-of-the-solution),
+without conditional test compilation or hidden discovery filters.
+
+```powershell
+./projects/Oxygen.Editor.WorldEditor/open.cmd -TestScope Integration
+./projects/Oxygen.Editor.WorldEditor/open.cmd -TestScope Benchmarks
+./tooling/GenerateSolution.ps1 -Scope projects -TestScope All -NoLaunch
+```
+
+The `open.cmd` wrappers supply a fixed solution path. Passing `-TestScope` to a
+wrapper regenerates that same file with the selected projects. To keep a filtered
+solution alongside the complete solution, call `GenerateSolution.ps1` directly
+with a distinct `-SolutionPath`, or let it choose a scope-suffixed filename.
 
 ## Tool selection
 
