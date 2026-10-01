@@ -67,7 +67,7 @@ public class SpatialMapperErrorTests : VisualUserInterfaceTests
     });
 
     [TestMethod]
-    public void Mapper_WithoutElement_ElementConversion_Throws()
+    public Task Mapper_WithoutElement_ElementConversion_Throws() => EnqueueAsync(() =>
     {
         // Arrange - Create mapper without element
         var window = VisualUserInterfaceTestsApp.MainWindow;
@@ -78,7 +78,7 @@ public class SpatialMapperErrorTests : VisualUserInterfaceTests
         Action act = () => mapper.Convert<WindowSpace, ElementSpace>(windowPoint);
         _ = act.Should().Throw<InvalidOperationException>()
             .WithMessage("*Element is required for ElementSpace conversions*");
-    }
+    });
 
     [TestMethod]
     public Task Mapper_ElementNotInVisualTree_Throws_Async() => EnqueueAsync(async () =>
@@ -152,7 +152,7 @@ public class SpatialMapperErrorTests : VisualUserInterfaceTests
     });
 
     [TestMethod]
-    public void Mapper_WithoutElement_ToElement_Throws()
+    public Task Mapper_WithoutElement_ToElement_Throws() => EnqueueAsync(() =>
     {
         // Arrange - Create mapper with only window, no element
         var window = VisualUserInterfaceTestsApp.MainWindow;
@@ -163,7 +163,7 @@ public class SpatialMapperErrorTests : VisualUserInterfaceTests
         Action act = () => mapper.ToElement(screenPoint);
         _ = act.Should().Throw<InvalidOperationException>()
             .WithMessage("*Element is required for ElementSpace conversions*");
-    }
+    });
 
     [TestMethod]
     public void Mapper_WithoutWindow_ToWindow_Throws()

@@ -4,6 +4,8 @@
 
 using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Windows.Foundation;
 
 namespace DroidNet.Coordinates.Tests;
@@ -82,29 +84,41 @@ public class SpatialPointTests
         _ = diff.Point.Should().Be(new Point(2, 2));
     }
 
-#pragma warning disable IDE0022 // Use expression body for method
     [TestMethod]
-    public void SpatialPoint_Add_DifferentSpace_CompileError()
+    [DataRow("+")]
+    [DataRow("-")]
+    public void SpatialPoint_Arithmetic_RequiresMatchingSpaces(string operation)
     {
-        // This test demonstrates that adding SpatialPoints of different spaces does not compile
-        // Uncommenting the following lines would cause a compile error:
-        // var a = new SpatialPoint<ElementSpace>(new Point(1, 2));
-        // var b = new SpatialPoint<WindowSpace>(new Point(3, 4));
-        // var sum = a + b; // Compile error: cannot implicitly convert
-        Assert.Inconclusive("This test shows that adding different spaces should not compile.");
-    }
+        var platformAssemblies = (string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES");
+        _ = platformAssemblies.Should().NotBeNullOrEmpty();
+        var references = platformAssemblies!.Split(Path.PathSeparator)
+            .Append(typeof(SpatialPoint<>).Assembly.Location)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(path => MetadataReference.CreateFromFile(path))
+            .ToArray();
 
-    [TestMethod]
-    public void SpatialPoint_Subtract_DifferentSpace_CompileError()
-    {
-        // This test demonstrates that subtracting SpatialPoints of different spaces does not compile
-        // Uncommenting the following lines would cause a compile error:
-        // var a = new SpatialPoint<ElementSpace>(new Point(1, 2));
-        // var b = new SpatialPoint<WindowSpace>(new Point(3, 4));
-        // var diff = a - b; // Compile error: cannot implicitly convert
-        Assert.Inconclusive("This test shows that subtracting different spaces should not compile.");
+        _ = Compile(nameof(ElementSpace)).Should().BeEmpty("same-space arithmetic must compile");
+        _ = Compile(nameof(WindowSpace)).Should().ContainSingle().Which.Id.Should().Be("CS0019");
+
+        Diagnostic[] Compile(string rightSpace)
+        {
+            var source = $$"""
+                using DroidNet.Coordinates;
+                public static class ArithmeticProbe
+                {
+                    public static SpatialPoint<ElementSpace> Apply(
+                        SpatialPoint<ElementSpace> left, SpatialPoint<{{rightSpace}}> right)
+                        => left {{operation}} right;
+                }
+                """;
+            var compilation = CSharpCompilation.Create(
+                "SpatialArithmeticProbe",
+                [CSharpSyntaxTree.ParseText(source)],
+                references,
+                new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+            return [.. compilation.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error)];
+        }
     }
-#pragma warning restore IDE0022 // Use expression body for method
 
     [TestMethod]
     public void SpatialPoint_Equality_SameSpace_SamePoint()

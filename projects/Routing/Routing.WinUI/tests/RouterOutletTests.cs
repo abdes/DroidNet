@@ -36,19 +36,27 @@ public partial class RouterOutletTests : VisualUserInterfaceTests
     public Task UsesDefaultVmToViewConverter_Async() => EnqueueAsync(
     async () =>
     {
-        // Arrange
-        if (!Application.Current.Resources.ContainsKey("VmToViewConverter"))
+        var resources = Application.Current.Resources;
+        var hadOriginal = resources.TryGetValue("VmToViewConverter", out var original);
+        var converter = new TestVmToViewConverter();
+        try
         {
-            Application.Current.Resources["VmToViewConverter"] = new TestVmToViewConverter();
+            resources["VmToViewConverter"] = converter;
+            var outlet = new RouterOutlet() { VmToViewConverter = null };
+            await LoadTestContentAsync(outlet).ConfigureAwait(true);
+            _ = outlet.VmToViewConverter.Should().BeSameAs(converter);
         }
-
-        var outlet = new RouterOutlet() { VmToViewConverter = null };
-
-        // Act
-        await LoadTestContentAsync(outlet).ConfigureAwait(true);
-
-        // Assert
-        _ = outlet.VmToViewConverter.Should().NotBeNull();
+        finally
+        {
+            if (hadOriginal)
+            {
+                resources["VmToViewConverter"] = original;
+            }
+            else
+            {
+                _ = resources.Remove("VmToViewConverter");
+            }
+        }
     });
 
     [TestMethod]

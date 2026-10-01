@@ -18,6 +18,7 @@
 
     <ItemGroup>
         <PackageReference Include="DryIoc.dll" />
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" />
     </ItemGroup>
 
 </Project>

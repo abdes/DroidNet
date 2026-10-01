@@ -73,3 +73,15 @@ debugging and full-suite/Release qualification remain with the repository owner.
 
 The two upstream-documented MSTest localization `PRI263` warnings remain visible;
 no localization data or analyzer checks are disabled.
+
+## Failure fixes
+
+| Area                       | Correction                                                                                     | Focused verification |
+| -------------------------- | ---------------------------------------------------------------------------------------------- | -------------------- |
+| Collections                | Assert documented incremental notifications instead of Reset; use typed enumerable assertions  | 94/94 passed         |
+| Coordinates                | Dispatch window access to the UI thread; replace inconclusive placeholders with compile checks | 91/91 passed         |
+| Mvvm generator integration | Register the fixture's view in its DI container                                                | 2/2 passed           |
+| Routing.WinUI              | Restore application resources after the default-converter test                                 | 8/8 passed twice     |
+
+Full-suite validation remains with the repository owner. Only affected tests are
+run during these fixes.
