@@ -9,6 +9,11 @@
     <Import_RootNamespace>UITests.Shared</Import_RootNamespace>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="CommunityToolkit.WinUI.Extensions" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Debug" />
+    <Using Include="$(RootNamespace).MicrosoftTestingPlatformApplication" Alias="MSTestApplication" />
+  </ItemGroup>
+  <ItemGroup>
     <Page Include="$(MSBuildThisFileDirectory)MainWindow.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>

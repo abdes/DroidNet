@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 
-<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="MSTest.Sdk">
 
     <PropertyGroup>
         <TargetFramework>net9.0-windows10.0.26100.0</TargetFramework>
@@ -13,8 +13,6 @@
     <Import Project="$(ProjectsRoot)\UITests.Shared\src\UITests.Shared.projitems" Label="Shared" />
 
     <ItemGroup>
-        <PackageReference Include="CommunityToolkit.WinUI.Extensions" />
-        <PackageReference Include="Microsoft.Extensions.Logging.Debug" />
     </ItemGroup>
 
     <ItemGroup>

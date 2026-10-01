@@ -8,27 +8,23 @@ using Microsoft.UI.Xaml;
 using Microsoft.VisualStudio.TestTools.UnitTesting.AppContainer;
 using Windows.Graphics;
 
-#if MSTEST_RUNNER
-using Microsoft.Testing.Platform.Builder;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
-#endif
-
 namespace DroidNet.Tests;
 
 /// <summary>
 /// Shared base Application class for all Visual User Interface tests.
-/// Properly initializes the test framework, with our without MSTest runner.
+/// Hosts the runner and creates a reusable window when tests need realized content.
 /// </summary>
 [ExcludeFromCodeCoverage]
 [SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "The Application class must be public")]
 public abstract class VisualUserInterfaceTestsApp : Application
 {
     private Window? window;
+    private DispatcherQueue? dispatcherQueue;
 
     /// <summary>
-    /// Gets the main window of the application.
+    /// Gets the reusable test window, creating it on first access from the UI thread.
     /// </summary>
-    public static Window MainWindow => ((VisualUserInterfaceTestsApp)Current).window!;
+    public static Window MainWindow => ((VisualUserInterfaceTestsApp)Current).GetOrCreateWindow();
 
     /// <summary>
     /// Gets or sets the content root of the main window.
@@ -39,56 +35,67 @@ public abstract class VisualUserInterfaceTestsApp : Application
     /// </remarks>
     public static FrameworkElement? ContentRoot
     {
-        get => MainWindow.Content as FrameworkElement;
-        set => MainWindow.Content = value;
+        get => ((VisualUserInterfaceTestsApp)Current).window?.Content as FrameworkElement;
+        set
+        {
+            // Fixture cleanup must not create a window for a dispatcher-only test.
+            if (value is not null || ((VisualUserInterfaceTestsApp)Current).window is not null)
+            {
+                MainWindow.Content = value;
+            }
+        }
     }
 
     /// <summary>
-    /// Gets the DispatcherQueue for the main window.
+    /// Gets the application's UI dispatcher without creating a test window.
     /// </summary>
-    public static DispatcherQueue DispatcherQueue => MainWindow.DispatcherQueue;
+    public static DispatcherQueue DispatcherQueue => ((VisualUserInterfaceTestsApp)Current).dispatcherQueue
+        ?? throw new InvalidOperationException("The UI test application has not started.");
 
     /// <summary>
     /// Invoked when the application is launched.
     /// </summary>
     /// <param name="args">Details about the launch request and process.</param>
-    protected override
-#if MSTEST_RUNNER
-    async
-#endif
-    void OnLaunched(LaunchActivatedEventArgs args)
+    protected override async void OnLaunched(LaunchActivatedEventArgs args)
     {
-#if !MSTEST_RUNNER
-        Microsoft.VisualStudio.TestPlatform.TestExecutor.UnitTestClient.CreateDefaultUI();
-#endif
-        this.window = new MainWindow();
-        this.window.AppWindow.Resize(new SizeInt32(800, 600));
-        this.window.Activate();
+        this.dispatcherQueue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread()
+            ?? throw new InvalidOperationException("The UI test application requires a dispatcher queue.");
+        UITestMethodAttribute.DispatcherQueue = this.dispatcherQueue;
 
-        UITestMethodAttribute.DispatcherQueue = DispatcherQueue.GetForCurrentThread();
-
-        // Replace back with e.Arguments when https://github.com/microsoft/microsoft-ui-xaml/issues/3368 is fixed
-#if MSTEST_RUNNER
-        // Ideally we would want to reuse the generated main so we don't have to manually handle all dependencies
-        // but this type is generated too late in the build process so we fail before.
-        // You can build, inspect the generated type to copy its content if you want.
-        // await TestingPlatformEntryPoint.Main(Environment.GetCommandLineArgs().Skip(1).ToArray());
+        Environment.ExitCode = 1;
         try
         {
-            var cliArgs = Environment.GetCommandLineArgs().Skip(1).ToArray();
-            var builder = await TestApplication.CreateBuilderAsync(cliArgs).ConfigureAwait(false);
-            Microsoft.Testing.Platform.MSBuild.TestingPlatformBuilderHook.AddExtensions(builder, cliArgs);
-            Microsoft.Testing.Extensions.Telemetry.TestingPlatformBuilderHook.AddExtensions(builder, cliArgs);
-            TestingPlatformBuilderHook.AddExtensions(builder, cliArgs);
-            using var app = await builder.BuildAsync().ConfigureAwait(false);
-            await app.RunAsync().ConfigureAwait(false);
+            // Resume on the UI thread to close DroidNet's window after the run.
+            Environment.ExitCode = await MSTestApplication.RunAsync(
+                Environment.GetCommandLineArgs()[1..]).ConfigureAwait(true);
+        }
+        catch (Exception exception)
+        {
+            // Application.Exit can end the message loop before async-void faults surface.
+            Console.Error.WriteLine(exception);
+            throw;
         }
         finally
         {
-            this.window.Close();
+            this.window?.Close();
+            this.Exit();
         }
-#else
-        Microsoft.VisualStudio.TestPlatform.TestExecutor.UnitTestClient.Run(Environment.CommandLine);
-#endif
+    }
+
+    private Window GetOrCreateWindow()
+    {
+        if (!DispatcherQueue.HasThreadAccess)
+        {
+            throw new InvalidOperationException("Access the test window on the UI thread.");
+        }
+
+        if (this.window is null)
+        {
+            this.window = new MainWindow();
+            this.window.AppWindow.Resize(new SizeInt32(800, 600));
+            this.window.Activate();
+        }
+
+        return this.window;
     }
 }

@@ -126,13 +126,7 @@
     <!-- Test Projects -->
     <Choose>
         <When Condition="'$(MSBuildProjectExtension)' == '.csproj' And $(MSBuildProjectName.EndsWith('.Tests'))">
-            <PropertyGroup>
-                <IsTestProject>True</IsTestProject>
-                <IsPackable>False</IsPackable>
-            </PropertyGroup>
             <ItemGroup>
-                <ProjectCapability Include="TestContainer" />
-                <PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" />
                 <PackageReference Include="AwesomeAssertions" />
                 <PackageReference Include="AwesomeAssertions.Analyzers">
                     <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -145,42 +139,15 @@
         </When>
     </Choose>
     <Choose>
-        <When Condition="'$(MSBuildProjectExtension)' == '.csproj' And $(MSBuildProjectName.EndsWith('.Tests')) And !$(MSBuildProjectName.EndsWith('.UI.Tests'))">
-            <PropertyGroup>
-                <!-- Enable the MSTest runner, this is an opt-in feature -->
-                <EnableMSTestRunner>true</EnableMSTestRunner>
-                <!-- We need to produce an executable and not a DLL -->
-                <OutputType>Exe</OutputType>
-                <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
-
-                <!-- Code Coverage Settings -->
-                <CodeCoverageEnabled>true</CodeCoverageEnabled>
-            </PropertyGroup>
-            <ItemGroup>
-                <PackageReference Include="MSTest" />
-            </ItemGroup>
-        </When>
-    </Choose>
-    <Choose>
         <When Condition="'$(MSBuildProjectExtension)' == '.csproj' And $(MSBuildProjectName.EndsWith('.UI.Tests'))">
             <PropertyGroup>
                 <UseWinUI>true</UseWinUI>
-                <EnableMsixTooling>true</EnableMsixTooling>
-                <!-- Disable until https://github.com/microsoft/testfx/issues/4056 is fixed -->
-                <EnableMSTestRunner>false</EnableMSTestRunner>
-                <GenerateTestingPlatformEntryPoint Condition=" '$(EnableMSTestRunner)' == 'true' ">false</GenerateTestingPlatformEntryPoint>
-                <DefineConstants Condition=" '$(EnableMSTestRunner)' == 'true' ">$(DefineConstants);MSTEST_RUNNER</DefineConstants>
+                <WindowsPackageType>None</WindowsPackageType>
+                <EnableMsixTooling>false</EnableMsixTooling>
             </PropertyGroup>
             <ItemGroup>
                 <PackageReference Include="Microsoft.WindowsAppSDK" />
                 <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
-                <PackageReference Include="Microsoft.TestPlatform.TestHost" Condition="'$(EnableMSTestRunner)' != 'true'" />
-                <PackageReference Include="MSTest.Analyzers">
-                    <PrivateAssets>all</PrivateAssets>
-                    <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-                </PackageReference>
-                <PackageReference Include="MSTest.TestAdapter" />
-                <PackageReference Include="MSTest.TestFramework" />
             </ItemGroup>
         </When>
     </Choose>
@@ -193,10 +160,9 @@
                 <OutputType>WinExe</OutputType>
                 <UseWinUI>true</UseWinUI>
 
-                <!-- The App is Packaged, unless we're running a GitHub workflow -->
-                <WindowsPackageType Condition="'$(GITHUB_ACTIONS)'=='true'">None</WindowsPackageType>
-                <!-- Keep this for dotnet build CLI, although not needed for MSBuild -->
-                <EnableMsixTooling>true</EnableMsixTooling>
+                <!-- Product application packaging is independent of the UI test host. -->
+                <WindowsPackageType Condition="'$(GITHUB_ACTIONS)'=='true' And $(MSBuildProjectName.EndsWith('.App'))">None</WindowsPackageType>
+                <EnableMsixTooling Condition="$(MSBuildProjectName.EndsWith('.App'))">true</EnableMsixTooling>
                 <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
                 <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
                 <ApplicationManifest>Properties\app.manifest</ApplicationManifest>

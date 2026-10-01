@@ -62,11 +62,41 @@ traverse Invoke-Tests --start projects/Oxygen.Editor.ContentPipeline/tests --tim
 traverse Invoke-Tests --start projects/Oxygen.Editor.Interop/test/native --configuration Release
 ```
 
-The runner uses each project's evaluated target paths. Ordinary tests run their
-MSTest executable; WinUI and native tests use VSTest. It tests every declared
-framework unless `--framework` selects one. UI tests may open test windows.
+The runner uses each project's evaluated target paths. C# tests, including WinUI,
+run their MTP executable; native C++ tests use VSTest. It tests every declared
+framework unless `--framework` selects one. UI tests may open a test window.
 Failures and timeouts fail the command; the default timeout is 300 seconds per
 process. Forward runner-specific options after `--`.
+
+### WinUI hosting
+
+All 14 UI test projects use the shared unpackaged MTP host, consistently locally
+and in CI. DroidNet's dispatcher, realized-content, render-wait and fixture
+helpers remain available. Use a packaged host only for tests whose behavior
+requires package identity.
+
+The host starts its UI dispatcher without displaying a window. The first
+non-null `ContentRoot` assignment or `MainWindow` access creates the test window
+on the UI thread. Tests reuse it; fixture cleanup unloads content without creating
+a window. Discovery and dispatcher-only tests remain window-free. The host closes
+an existing window and exits when the runner finishes.
+
+Build with Visual Studio MSBuild, then run selected tests without rebuilding:
+
+```powershell
+traverse Invoke-Tests --start projects/Oxygen.Editor.WorldEditor/tests/UI -- --filter FullyQualifiedName~AssetStatusUpdatesPreserve
+dotnet test --project projects/Controls/DynamicTree/tests/UI/Controls.DynamicTree.UI.Tests.csproj --no-build -c Release --filter FullyQualifiedName~ReusesWindowAcrossContentLoads
+```
+
+The SDK is pinned to `4.5.0-preview.26480.13` (MTP `2.5.0-preview.26480.13`),
+source commit `19db2c848caec237de9ba5e3388e5e694b68ad37`, from Microsoft's
+`test-tools` feed. [DroidNet #19](https://github.com/abdes/DroidNet/issues/19)
+tracks qualification of the final release and removal of the preview feed.
+See the [migration plan](test-migration.md) for validation status and commit scope.
+
+MrtCore emits two `PRI263` warnings for MSTest's localized satellite assemblies;
+[upstream documents this limitation](https://github.com/microsoft/testfx/blob/19db2c848caec237de9ba5e3388e5e694b68ad37/docs/winui-testing.md#behavior-notes).
+Localization is retained and warnings are not suppressed.
 
 Build-infrastructure regression checks:
 

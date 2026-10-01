@@ -22,11 +22,11 @@ Examples:
   traverse Select-Path --start projects/Storage
   traverse Invoke-Tests --start projects/Storage/tests --configuration Release
   traverse Invoke-Tests --start projects/Oxygen.Editor.ContentPipeline/tests --timeout 600
-  traverse Invoke-Tests --start projects/Aura/tests -- --TestCaseFilter:Name~Example
+  traverse Invoke-Tests --start projects/Aura/tests -- --filter FullyQualifiedName~Example
   traverse New-Package --start projects/Oxygen.Editor --PackageCertificateKeyFile C:/certs/test.pfx
 
 Invoke-Tests runs existing outputs; build first using Visual Studio or MSBuild.exe.
-Managed executable tests use MSTest; WinUI/native tests use VSTest. All declared
+All C# tests, including WinUI, use MSTest's executable runner; native C++ tests use VSTest. All declared
 frameworks are tested unless --framework/-f is supplied. Supported task options:
   --configuration/-c NAME   Configuration of existing outputs (default: Debug).
   --framework/-f TFM        Select one target framework.

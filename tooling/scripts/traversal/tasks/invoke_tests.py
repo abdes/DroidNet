@@ -23,24 +23,24 @@ def invoke_tests(project: Path, context: TraversalContext) -> None:
         raise ValueError("--timeout must be greater than zero")
     for framework in frameworks:
         values, _ = query_msbuild_properties(
-            project, ["IsTestProject", "TargetPath", "TargetDir", "TargetName", "EnableMSTestRunner",
-                      "RunSettingsFilePath", "UseWinUI", "WindowsPackageType", "MSBuildProjectName"], configuration=configuration, target_framework=framework,
+            project, ["IsTestProject", "IsTestApplication", "TargetPath", "TargetDir", "TargetName", "EnableMSTestRunner",
+                      "RunSettingsFilePath"], configuration=configuration, target_framework=framework,
         )
-        if values["IsTestProject"].lower() != "true":
+        native = project.suffix.lower() == ".vcxproj"
+        test_property = "IsTestProject" if native else "IsTestApplication"
+        if values[test_property].lower() != "true":
             continue
-        if values["EnableMSTestRunner"].lower() == "true":
-            executable = Path(values["TargetDir"]) / (values["TargetName"] + ".exe")
-            args = [str(executable), *context.extra_arguments]
-        else:
+        if native:
             executable = Path(values["TargetPath"])
-            if values.get("UseWinUI", "").lower() == "true":
-                if values.get("WindowsPackageType", "").lower() == "none":
-                    raise RuntimeError("Unpackaged WinUI tests require an MTP test host; build the packaged test configuration for VSTest.")
-                executable = Path(values["TargetDir"]) / (values["MSBuildProjectName"] + ".build.appxrecipe")
             args = [str(visual_studio_tool("vstest")), str(executable), "/Platform:x64"]
             if values["RunSettingsFilePath"]:
                 args.append("/Settings:" + values["RunSettingsFilePath"])
             args.extend(context.extra_arguments)
+        else:
+            if values["EnableMSTestRunner"].lower() != "true":
+                raise RuntimeError(f"Managed test project must enable the MSTest SDK runner: {project}")
+            executable = Path(values["TargetDir"]) / (values["TargetName"] + ".exe")
+            args = [str(executable), *context.extra_arguments]
         context.logger.info("Invoke-Tests: %s", subprocess.list2cmdline(args))
         if context.dry_run:
             continue

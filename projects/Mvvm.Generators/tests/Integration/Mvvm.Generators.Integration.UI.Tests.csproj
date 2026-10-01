@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 
-<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="MSTest.Sdk">
 
     <PropertyGroup>
         <TargetFramework>net9.0-windows10.0.26100.0</TargetFramework>
@@ -29,4 +29,5 @@
         <ProjectReference Include="$(ProjectsRoot)\Mvvm.Generators.Attributes\src\Mvvm.Generators.Attributes.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
     </ItemGroup>
 
+    <Import Project="$(ProjectsRoot)\UITests.Shared\src\UITests.Shared.projitems" Label="Shared" />
 </Project>

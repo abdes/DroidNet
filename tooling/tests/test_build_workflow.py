@@ -23,7 +23,7 @@ class TestFailurePropagation(unittest.TestCase):
             project = Path(directory) / "Process.Tests.csproj"
             project.touch()
             values = {
-                "IsTestProject": "true", "EnableMSTestRunner": "true",
+                "IsTestProject": "", "IsTestApplication": "true", "EnableMSTestRunner": "true",
                 "TargetDir": str(Path(sys.executable).parent),
                 "TargetName": Path(sys.executable).stem,
             }

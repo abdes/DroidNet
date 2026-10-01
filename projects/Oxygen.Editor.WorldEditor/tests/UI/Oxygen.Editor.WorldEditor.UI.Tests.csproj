@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="MSTest.Sdk">
     <PropertyGroup>
         <TargetFramework>net9.0-windows10.0.26100.0</TargetFramework>
         <RootNamespace>Oxygen.Editor.World.Tests</RootNamespace>
@@ -6,11 +6,10 @@
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     </PropertyGroup>
     <ItemGroup>
+        <Compile Include="$(ProjectsRoot)\UITests.Shared\tests\TestHostLifecycleTests.cs" Link="TestHostLifecycleTests.cs" />
         <Compile Include="..\..\..\Oxygen.Editor.ContentBrowser\testsupport\AssetStatusFixture.cs" Link="AssetStatusFixture.cs" />
         <ProjectReference Include="..\..\src\Oxygen.Editor.WorldEditor.csproj" />
         <PackageReference Include="Moq" />
-        <PackageReference Include="CommunityToolkit.WinUI.Extensions" />
-        <PackageReference Include="Microsoft.Extensions.Logging.Debug" />
         <Compile Include="$(ProjectsRoot)\Oxygen.Managed.Core\testsupport\TemporaryNativeArtifacts.cs" Link="TemporaryNativeArtifacts.cs" />
         <Compile Include="$(ProjectsRoot)\Oxygen.Editor.ContentPipeline\testsupport\BuiltinCatalogDiscoveryFixture.cs" Link="BuiltinCatalogDiscoveryFixture.cs" />
         <Compile Include="$(ProjectsRoot)\Oxygen.Editor.ContentPipeline\testsupport\NativeContentPipelineFixture.cs" Link="NativeContentPipelineFixture.cs" />
