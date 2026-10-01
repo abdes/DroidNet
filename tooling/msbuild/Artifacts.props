@@ -1,0 +1,11 @@
+<Project>
+    <PropertyGroup>
+        <DroidNetArtifactsImported>true</DroidNetArtifactsImported>
+        <Configuration Condition="'$(Configuration)' == ''">Debug</Configuration>
+        <ArtifactsPath Condition="'$(ArtifactsPath)' == ''">$([MSBuild]::NormalizePath('$(MSBuildThisFileDirectory)', '..', '..', 'artifacts'))</ArtifactsPath>
+        <UseArtifactsOutput>true</UseArtifactsOutput>
+        <BaseIntermediateOutputPath Condition="'$(MSBuildProjectExtension)' == '.vcxproj'">$(ArtifactsPath)\obj\$(MSBuildProjectName)\</BaseIntermediateOutputPath>
+        <!-- Runs after project properties, before the SDK calculates output paths. -->
+        <AfterTargetFrameworkInferenceTargets Condition="'$(MSBuildProjectExtension)' == '.csproj'">$(MSBuildThisFileDirectory)ArtifactPivots.props</AfterTargetFrameworkInferenceTargets>
+    </PropertyGroup>
+</Project>

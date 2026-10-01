@@ -4,30 +4,22 @@
   "tools": {
     "dotnet-format": {
       "version": "5.1.250801",
-      "commands": [
-        "dotnet-format"
-      ],
+      "commands": ["dotnet-format"],
       "rollForward": false
     },
     "xamlstyler.console": {
       "version": "3.2501.8",
-      "commands": [
-        "xstyler"
-      ],
+      "commands": ["xstyler"],
       "rollForward": false
     },
     "microsoft.visualstudio.slngen.tool": {
-      "version": "12.0.23",
-      "commands": [
-        "slngen"
-      ],
+      "version": "12.0.53",
+      "commands": ["slngen"],
       "rollForward": false
     },
     "nbgv": {
       "version": "3.10.94",
-      "commands": [
-        "nbgv"
-      ],
+      "commands": ["nbgv"],
       "rollForward": false
     }
   }

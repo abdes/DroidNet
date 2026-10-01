@@ -4,5 +4,7 @@
 
 using System.Runtime.CompilerServices;
 
-[assembly: InternalsVisibleTo("Oxygen.Editor.WorldEditor.SceneExplorer.Tests")]
-[assembly: InternalsVisibleTo("Oxygen.Editor.WorldEditor.UI.Tests")]
+[assembly: InternalsVisibleTo("Oxygen.Editor.WorldEditor.Unit.Tests")]
+[assembly: InternalsVisibleTo("Oxygen.Editor.WorldEditor.Unit.UI.Tests")]
+[assembly: InternalsVisibleTo("Oxygen.Editor.WorldEditor.Integration.UI.Tests")]
+[assembly: InternalsVisibleTo("Oxygen.Editor.WorldEditor.Benchmarks.UI.Tests")]

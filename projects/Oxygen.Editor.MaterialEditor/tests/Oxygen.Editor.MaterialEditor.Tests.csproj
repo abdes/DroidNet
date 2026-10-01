@@ -1,6 +1,6 @@
-<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="MSTest.Sdk">
     <PropertyGroup>
-        <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
+        <TargetFramework>net9.0-windows10.0.26100.0</TargetFramework>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
         <RootNamespace>Oxygen.Editor.MaterialEditor.Tests</RootNamespace>
@@ -11,7 +11,7 @@
         <PackageReference Include="Moq" />
         <ProjectReference Include="..\src\Oxygen.Editor.MaterialEditor.csproj" />
         <Compile Include="..\..\Oxygen.Managed.Core\testsupport\TemporaryNativeArtifacts.cs" Link="TemporaryNativeArtifacts.cs" />
-        <Compile Include="..\..\Oxygen.Editor.ContentPipeline\testsupport\NativeContentPipelineFixture.cs" Link="NativeContentPipelineFixture.cs" />
+        <Compile Include="..\..\Oxygen.Editor.ContentPipeline\testsupport\Native\NativeContentPipelineFixture.cs" Link="NativeContentPipelineFixture.cs" />
         <Compile Include="..\..\Oxygen.Editor.ContentBrowser\testsupport\AssetStatusFixture.cs" Link="AssetStatusFixture.cs" />
     </ItemGroup>
 

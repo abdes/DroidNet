@@ -3,7 +3,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
+        <TargetFramework>net9.0-windows10.0.26100.0</TargetFramework>
         <RootNamespace>$(RootNamespace).Resources.Generator.Sample.Greeter</RootNamespace>
         <AssemblyName>DroidNet.Resources.Generator.Sample.Greeter</AssemblyName>
 

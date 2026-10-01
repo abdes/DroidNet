@@ -1,91 +1,34 @@
-# Tooling scripts
+# Repository command-line tools
 
-This folder contains Python helper scripts used by the DroidNet repo.
+Run `./init.ps1` once in your PowerShell session (or `init.cmd` in CMD). It
+installs the editable workspace and exposes these commands in that shell. Each public command supports `-h` and `--help`, including
+all options, defaults and usage examples.
 
-How the package works
+| Command         | Purpose                                                      |
+| --------------- | ------------------------------------------------------------ |
+| `get-artifacts` | Query actual MSBuild output paths and optionally list files. |
+| `traverse`      | Discover projects and run selected tasks.                    |
 
-- Each script is a Python module in `tooling/scripts/`. You can run a module directly using:
-
-```pwsh
-python -m tooling.scripts.<module>
+```powershell
+get-artifacts -p Oxygen.Editor -c Release -j
+get-artifacts -p Collections --framework-all
+traverse Select-Path --start projects/Storage
+traverse Invoke-Tests --start projects/Storage/tests --configuration Debug
+traverse --list-tasks
 ```
 
-For example (long flags):
+`Invoke-Tests` runs already-built outputs, including all declared frameworks by
+default. It chooses MSTest executables or VSTest according to the project.
+Pass runner arguments after `--`. Failed processes and timeouts produce a failed
+traversal result; `--timeout` overrides the 300-second per-process limit.
 
-```pwsh
-python -m tooling.scripts.get_artifacts --project projects/Mvvm.Generators/src/Mvvm.Generators.csproj --configuration Debug --json
-```
+`New-Package` creates MSIX packages through Visual Studio MSBuild. It requires
+an absolute signing-certificate path and builds project references. NuGet library
+packing is a separate MSBuild `Pack` operation.
 
-Short flags are also supported (recommended for CLI workflow):
+Shared implementation belongs in `msbuild.py`; traversal tasks remain under
+`traversal/tasks/`. Add behavioral tests under `tooling/tests/`. Do not maintain
+parallel guessed artifact paths or shell-specific build implementations.
 
-```pwsh
-python -m tooling.scripts.get_artifacts -p Mvvm.Generators/src/Mvvm.Generators.csproj -c Debug -l -n
-```
-
-Notes on path heuristics:
-
-- If you pass a relative path (not starting with `projects`), it is interpreted relative to `repo-root/projects/`. For example `-p Mvvm.Generators/src/Mvvm.Generators.csproj` will be resolved to `repo-root/projects/Mvvm.Generators/src/Mvvm.Generators.csproj`.
-- If you pass `-p projects/Whatever/...` it is interpreted as `repo-root/projects/Whatever/...`.
-- If you pass an absolute path it is used as-is.
-- Use `-p .` to point to the current working directory (legacy behavior).
-
-- To add a new script, add a new file `tooling/scripts/<name>.py` and implement a `run()` function and a `__main__` block that calls `run()` so it can be executed both ways.
-
-Example template
-
-```python
-# tooling/scripts/hello.py
-import argparse
-import sys
-
-
-def run():
-    parser = argparse.ArgumentParser(prog="hello")
-    parser.add_argument("--name", default="world")
-    args = parser.parse_args()
-    print(f"Hello, {args.name}!")
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(run())
-```
-
-How to make scripts available on PATH
-
-- If you'd like to run scripts as `get-project-artifacts` without `python -m`, you can install the package in editable mode and specify a console script entry point in `pyproject.toml`:
-
-```toml
-[project]
-name = "droidnet-tooling-scripts"
-...
-
-[project.scripts]
-get-artifacts = "get_artifacts:run"
-hello-tooling = "hello:run"
-```
-
-Then install the package in your environment (developer mode is convenient):
-
-```pwsh
-cd tooling\scripts
-uv sync --locked --project ../..
-```
-
-- That creates console entry points in your virtualenv or Python install directory so you can run the script directly.
-  This creates two commands in your PATH when installed in editable mode:
-
-```pwsh
-get-artifacts --project projects\Mvvm.Generators\src\Mvvm.Generators.csproj --configuration Debug --list
-hello-tooling --name Test
-```
-
-Dependencies
-
-- `tooling/scripts/pyproject.toml` declares the package dependencies. Run `uv sync --locked` at the repository root to provision the shared environment.
-
-Notes
-
-- Use `python -m tooling.scripts.<module>` for cross-platform and idempotent invocations.
-- Ensure each script calls `run()` in `if __name__ == '__main__'` to maintain consistent CLI behavior.
-- Keep the `tooling/scripts` package small and focused to avoid install-time dependency issues.
+See [build and analysis](../doc/build.md), [solution generation](../doc/solution-files.md),
+and [artifact locations](../ARTIFACTS-README.md).

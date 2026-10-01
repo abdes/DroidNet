@@ -138,18 +138,18 @@ Decorations are resolved from `WindowDecorationOptions` and may include details 
 
 1. Clone the DroidNet repository:
 
-    ```powershell
-    git clone https://github.com/abdes/DroidNet.git
-    cd DroidNet/projects/Aura
-    ```
+   ```powershell
+   git clone https://github.com/abdes/DroidNet.git
+   cd DroidNet/projects/Aura
+   ```
 
 2. Generate and open the solution using the provided script:
 
-    ```powershell
-    .\open.cmd
-    ```
+   ```powershell
+   .\open.cmd
+   ```
 
-    This script uses the [SlnGen](https://microsoft.github.io/slngen/) .NET tool to dynamically generate the `Aura.sln` solution file from all `*.csproj` files in the directory tree, then opens it in Visual Studio.
+   This script uses the [SlnGen](https://microsoft.github.io/slngen/) .NET tool to dynamically generate the `Aura.sln` solution file from all `*.csproj` files in the directory tree, then opens it in Visual Studio.
 
 > **Note:** The solution file (`Aura.sln`) is generated on-demand and not checked into source control. Always use `open.cmd` to ensure you have the latest project references.
 
@@ -167,9 +167,9 @@ Add the NuGet package reference to your project:
 
 1. Generate and open the solution:
 
-    ```powershell
-    .\open.cmd
-    ```
+   ```powershell
+   .\open.cmd
+   ```
 
 2. Build the solution: `Ctrl+Shift+B`
 
@@ -179,7 +179,7 @@ Generate the solution file first, then build:
 
 ```powershell
 # Generate the solution file using SlnGen
-dotnet slngen -d . -o Aura.sln --folders false .\**\*.csproj
+./open.cmd
 
 # Build the solution
 dotnet build Aura.sln
@@ -198,23 +198,23 @@ The SingleWindow sample demonstrates Aura in action:
 
 1. Navigate to the sample directory:
 
-    ```powershell
-    cd samples/SingleWindow
-    ```
+   ```powershell
+   cd samples/SingleWindow
+   ```
 
 2. Run the application:
 
-    ```powershell
-    dotnet run
-    ```
+   ```powershell
+   dotnet run
+   ```
 
-    The sample project is pre-configured with `TargetFramework` and `RuntimeIdentifier` set to `win-x64`, so no additional parameters are needed.
+   The sample project is pre-configured with `TargetFramework` and `RuntimeIdentifier` set to `win-x64`, so no additional parameters are needed.
 
 Or set `Aura.SingleWindow.App` as the startup project in Visual Studio and press `F5`.
 
 ## Project Structure
 
-``` text
+```text
 Aura/
 ├── src/                          # Core library source
 │   ├── Aura.csproj              # Main project file
@@ -256,9 +256,10 @@ Aura/
 - **Manager-Tracked Windows** - Use `IWindowManagerService` to register and track windows; windows are represented by `ManagedWindow` which exposes `Id`, `Category`, `Decorations`, `MenuSource`, `Metadata`, `PresenterState` and other helpful properties.
 - **Placement Persistence** - Aura can save and restore window layout and presenter state. When you record a window’s placement, Aura captures its last “normal” size and position (even if currently maximized or minimized), the relevant monitor work area, and whether it was restored, maximized, minimized, or full screen. This information is serialized as a JSON blob, which you can store in your preferred settings or profile system. When restoring, Aura reads the blob, clamps or centers the bounds to keep the window visible, applies the geometry, and then reapplies the presenter state—so windows return exactly as you left them, without flicker or misplaced sizing.
 
-    > **Note**
-    >
-    > Aura provides the serialization and restore logic; you control where and how the placement data is persisted.
+  > **Note**
+  >
+  > Aura provides the serialization and restore logic; you control where and how the placement data is persisted.
+
 - **Lifecycle Events & Observables** - Subscribe to lifecycle events via `IWindowManagerService.WindowEvents` (an `IObservable<WindowLifecycleEvent>`) or async event handlers (`PresenterStateChanging`, `PresenterStateChanged`, `WindowClosing`, `WindowClosed`, `WindowBoundsChanged`). Event types include: `WindowLifecycleEventType.Created`, `WindowLifecycleEventType.Activated`, `WindowLifecycleEventType.Deactivated`, and `WindowLifecycleEventType.Closed`.
 - **Programmatic Control** - Programmatically activate, minimize, maximize, restore and close windows using the manager API (`ActivateWindow`, `MinimizeWindowAsync`, `MaximizeWindowAsync`, `RestoreWindowAsync`, `CloseWindowAsync`).
 - **Metadata & Menu Providers** - Attach arbitrary metadata to windows using `SetMetadata` and integrate UI menus using `IMenuProvider` when decoration contains a menu provider ID.
@@ -300,7 +301,7 @@ Aura uses [SlnGen](https://microsoft.github.io/slngen/) to dynamically generate 
 .\open.cmd
 
 # Or generate manually
-dotnet slngen -d . -o Aura.sln --folders false .\**\*.csproj
+./open.cmd
 ```
 
 **Benefits of SlnGen:**
@@ -344,44 +345,44 @@ dotnet run --project samples/SingleWindow/Aura.SingleWindow.App.csproj
 
 1. **Reference the package** in your WinUI project:
 
-    ```xml
-    <PackageReference Include="DroidNet.Aura" Version="1.0.0-alpha" />
-    ```
+   ```xml
+   <PackageReference Include="DroidNet.Aura" Version="1.0.0-alpha" />
+   ```
 
 2. **Register Aura into your DryIoc container.** Aura exposes a fluent `WithAura()` extension on `DryIoc.IContainer` to register mandatory services and optional features via `AuraOptions`:
 
-    ```csharp
-    using DryIoc;
+   ```csharp
+   using DryIoc;
 
-    var container = new Container();
+   var container = new Container();
 
-    // Minimal registration (mandatory services only)
-    container.WithAura();
+   // Minimal registration (mandatory services only)
+   container.WithAura();
 
-    // Full registration with optional features
-    container.WithAura(options => options
-        .WithDecorationSettings()
-        .WithAppearanceSettings()
-        .WithBackdropService()
-        .WithThemeModeService()
-        .WithDrag()
-    );
+   // Full registration with optional features
+   container.WithAura(options => options
+       .WithDecorationSettings()
+       .WithAppearanceSettings()
+       .WithBackdropService()
+       .WithThemeModeService()
+       .WithDrag()
+   );
 
-    // Register windows for factory resolution
-    container.AddWindow<RoutedWindow>();
+   // Register windows for factory resolution
+   container.AddWindow<RoutedWindow>();
 
-    // Register menu providers separately as singletons implementing IMenuProvider
-    // container.Register<IMenuProvider>(Made.Of(() => new MenuProvider(...)), Reuse.Singleton);
-    ```
+   // Register menu providers separately as singletons implementing IMenuProvider
+   // container.Register<IMenuProvider>(Made.Of(() => new MenuProvider(...)), Reuse.Singleton);
+   ```
 
 3. **Use `MainShellView`** as your root view in XAML. The sample uses a host `Window` with the shell view inserted as content:
 
-    ```xaml
-    <local:MainWindow
-        xmlns:aura="using:DroidNet.Aura">
-        <aura:MainShellView DataContext="{Binding MainShellViewModel}" />
-    </local:MainWindow>
-    ```
+   ```xaml
+   <local:MainWindow
+       xmlns:aura="using:DroidNet.Aura">
+       <aura:MainShellView DataContext="{Binding MainShellViewModel}" />
+   </local:MainWindow>
+   ```
 
 ## Usage Examples
 
@@ -621,7 +622,7 @@ All submissions require review. We use GitHub pull requests for this purpose. Co
 
 This project is licensed under the **MIT License** - see the [LICENSE](../../LICENSE) file for details.
 
-``` text
+```text
 Copyright (c) 2024 Abdessattar Sassi
 
 Permission is hereby granted, free of charge, to any person obtaining a copy

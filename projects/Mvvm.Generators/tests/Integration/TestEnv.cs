@@ -3,7 +3,9 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
+using DroidNet.Mvvm.Generators.Tests.Demo;
 using DroidNet.TestHelpers;
+using DryIoc;
 using Serilog;
 
 namespace DroidNet.Mvvm.Generators.Tests;
@@ -19,7 +21,8 @@ public class TestEnv : CommonTestEnv
         _ = context; // unused
 
         ConfigureLogging(TestContainer);
-        Log.Information("Test session ended");
+        TestContainer.Register<IViewFor<DemoViewModel>, DemoView>();
+        Log.Information("Test session started");
 
         ConfigureVerify();
     }

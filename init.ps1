@@ -14,6 +14,8 @@
     add install location to the current process PATH.
 .PARAMETER NoRestore
     Skips the package restore step.
+.PARAMETER NoPythonRestore
+    Skip uv sync; expose the existing repository Python environment if present.
 .PARAMETER NoToolRestore
     Skips the dotnet tool restore step.
 .PARAMETER Interactive
@@ -22,29 +24,45 @@
 .PARAMETER NoPreCommitHooks
     Skips the installation of pre-commit (https://pre-commit.com/) and its
     hooks.
+.PARAMETER Help
+    Print all options and examples. Aliases: -h and --help.
+.EXAMPLE
+    ./init.ps1
+    Restore repository tools and existing root/Projects solutions, and install hooks.
+.EXAMPLE
+    ./init.ps1 -NoRestore -NoPreCommitHooks
+    Restore the pinned .NET tools and editable Python workspace, and expose its commands.
+.EXAMPLE
+    ./init.ps1 -DotNetInstall -Interactive
+    Install the selected .NET SDK and allow authentication during restore.
+.EXAMPLE
+    ./init.ps1 -NoRestore -NoToolRestore -NoPythonRestore -NoPreCommitHooks
+    Expose already-installed repository tools in this shell without restoring packages.
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 Param (
     [Parameter()]
     [switch]$DotNetInstall,
     [Parameter()]
-    [switch]$UpgradePrerequisites,
-    [Parameter()]
     [switch]$NoRestore,
     [Parameter()]
     [switch]$NoToolRestore,
+    [Parameter()]
+    [switch]$NoPythonRestore,
     [Parameter()]
     [switch]$Interactive,
     [Parameter()]
     [switch]$NoPreCommitHooks,
     [Parameter()]
-    [switch]$Help
+    [Alias("h", "-help")][switch]$Help
 )
 
 if ($Help) {
-    Get-Help $MyInvocation.MyCommand.Definition
-    exit
+    Get-Help $MyInvocation.MyCommand.Definition -Full
+    return
 }
+
+$ErrorActionPreference = 'Stop'
 
 # Environment variables and Path that can be propagated via a temp file to a
 # caller script.
@@ -56,48 +74,57 @@ $PrependPath = @()
 $HeaderColor = 'Green'
 $ToolsDirectory = "$PSScriptRoot\tooling"
 
-if ($DotNetInstall) {
-    & "$ToolsDirectory\dotnet-install.ps1" -JSonFile "$PSScriptRoot\global.json"
-    if ($LASTEXITCODE -ne 0) {
-        Exit $LASTEXITCODE
-    }
-}
-
-# Check if the pre-commit hooks were already installed in the repo.
-$lockFile = ".pre-commit.installed.lock";
-$preCommitInstalled = Test-Path -Path $lockFile
-if (!$NoPreCommitHooks -and !$preCommitInstalled -and $PSCmdlet.ShouldProcess("pip install", "pre-commit")) {
-    Write-Host "Installing pre-commit and its hooks" -ForegroundColor $HeaderColor
-    New-Item $lockFile
-
-    pip install pre-commit
-    if ($LASTEXITCODE -ne 0) {
-        Exit $LASTEXITCODE
-    }
-
-    pre-commit install
-    if ($LASTEXITCODE -ne 0) {
-        Exit $LASTEXITCODE
-    }
-
-    Write-Host ""
-}
-
 Push-Location $PSScriptRoot
 try {
+    if (!$NoPythonRestore -and $PSCmdlet.ShouldProcess("Repository Python environment", "uv sync --locked")) {
+        if (!(Get-Command uv -ErrorAction SilentlyContinue)) { throw 'Install uv, then rerun init. See tooling/PYTHON.md.' }
+        & uv sync --locked --no-active
+        if ($LASTEXITCODE -ne 0) { throw 'Repository Python environment setup failed.' }
+    }
+    $pythonScripts = Join-Path $PSScriptRoot '.venv/Scripts'
+    foreach ($command in @('get-artifacts.exe', 'traverse.exe')) {
+        if (!(Test-Path -LiteralPath (Join-Path $pythonScripts $command)) -and !$WhatIfPreference) {
+            throw 'Repository Python commands are missing. Rerun init without -NoPythonRestore.'
+        }
+    }
+    if ($env:PS1UnderCmd -ne '1' -and $PSCmdlet.ShouldProcess("Current PowerShell session", "Activate repository environment")) {
+        & (Join-Path $pythonScripts 'Activate.ps1')
+    }
+
+    $lockFile = Join-Path $PSScriptRoot '.pre-commit.installed.lock'
+    if (!$NoPreCommitHooks -and !(Test-Path -LiteralPath $lockFile) -and $PSCmdlet.ShouldProcess("Repository hooks", "Install")) {
+        $preCommit = Join-Path $pythonScripts 'pre-commit.exe'
+        if (!(Test-Path -LiteralPath $preCommit)) { throw 'Run init without -NoPythonRestore to provision pre-commit.' }
+        & $preCommit install
+        if ($LASTEXITCODE -ne 0) { throw 'Pre-commit hook installation failed.' }
+        [void](New-Item -ItemType File -Path $lockFile -Force)
+    }
+
+    $pathBeforeSdk = $env:PATH
+    if ($DotNetInstall -and $PSCmdlet.ShouldProcess(".NET SDK", "Install")) {
+        & "$ToolsDirectory/dotnet-install.ps1" -JSonFile "$PSScriptRoot/global.json"
+        if ($LASTEXITCODE -ne 0) { throw '.NET SDK installation failed.' }
+    }
+    if ($env:PATH -ne $pathBeforeSdk) { $EnvVars['PATH'] = $env:PATH }
+
     $RestoreArguments = @()
     if ($Interactive) {
         $RestoreArguments += '--interactive'
     }
 
-    # Check if the current directory contains a .sln or .csproj file and if yes,
-    # restore nuget packages
-    $haveSolutionOrProject = Test-Path -Path "*.sln,*.csproj"
-    if (!$NoRestore -and $haveSolutionOrProject -and $PSCmdlet.ShouldProcess("NuGet packages", "Restore")) {
-        Write-Host "Restoring NuGet packages" -ForegroundColor $HeaderColor
-        dotnet restore @RestoreArguments
-        if ($lastexitcode -ne 0) {
-            throw "Failure while restoring packages."
+    $restoreSolutions = @(Get-ChildItem -LiteralPath $PSScriptRoot -Filter '*.sln' -File)
+    if (!$restoreSolutions -and (Test-Path -LiteralPath "$PSScriptRoot/projects/Projects.sln")) {
+        $restoreSolutions = @(Get-Item -LiteralPath "$PSScriptRoot/projects/Projects.sln")
+    }
+    if (!$NoRestore -and $restoreSolutions.Count -gt 0 -and $PSCmdlet.ShouldProcess("NuGet packages", "Restore")) {
+        $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
+        $msbuild = @(& $vswhere -latest -prerelease -products '*' -requires Microsoft.Component.MSBuild -find 'MSBuild/**/Bin/amd64/MSBuild.exe') | Select-Object -First 1
+        if (!$msbuild) { throw 'Install Visual Studio MSBuild before restoring projects.' }
+        foreach ($solution in $restoreSolutions) {
+            $arguments = @($solution.FullName, '/t:Restore', '/m', '/nologo')
+            if ($Interactive) { $arguments += '/p:NuGetInteractive=true' }
+            & $msbuild @arguments
+            if ($LASTEXITCODE -ne 0) { throw "Restore failed: $($solution.FullName)" }
         }
     }
 
@@ -112,11 +139,25 @@ try {
         }
     }
 
-    & "$ToolsDirectory/Set-EnvVars.ps1" -Variables $EnvVars -PrependPath $PrependPath | Out-Null
+    if ($env:PS1UnderCmd -eq '1') {
+        # A .cmd invoked from PowerShell cannot change that parent PowerShell's environment.
+        $self = Get-CimInstance Win32_Process -Filter "ProcessId=$PID"
+        $cmd = Get-CimInstance Win32_Process -Filter "ProcessId=$($self.ParentProcessId)"
+        $caller = Get-CimInstance Win32_Process -Filter "ProcessId=$($cmd.ParentProcessId)"
+        $EnvVars['DROIDNET_INIT_POWERSHELL_CALLER'] = if ($caller.Name -in @('pwsh.exe', 'powershell.exe') -and $cmd.CommandLine -match '(?i)\s/c\s') { '1' } else { '0' }
+        & "$ToolsDirectory/Set-EnvVars.ps1" -Variables $EnvVars -PrependPath $PrependPath 6>$null | Out-Null
+    } elseif (!$WhatIfPreference) {
+        foreach ($command in @('get-artifacts', 'traverse')) {
+            $resolved = Get-Command $command -ErrorAction Stop
+            $expected = [IO.Path]::GetFullPath((Join-Path $pythonScripts "$command.exe"))
+            if ($resolved.CommandType -ne 'Application' -or [IO.Path]::GetFullPath($resolved.Source) -ne $expected) { throw "$command resolves outside the repository environment: $($resolved.Source)" }
+        }
+        Write-Host 'Ready in this PowerShell session: get-artifacts --help; traverse --help' -ForegroundColor $HeaderColor
+    }
 }
 catch {
     Write-Error $error[0]
-    exit $lastexitcode
+    exit 1
 }
 finally {
     Pop-Location

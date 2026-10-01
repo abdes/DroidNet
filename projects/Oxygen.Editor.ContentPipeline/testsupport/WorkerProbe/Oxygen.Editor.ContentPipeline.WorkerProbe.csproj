@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net9.0-windows10.0.26100.0</TargetFramework>
+        <OutputType>Exe</OutputType>
+        <AssemblyName>Oxygen.Editor.ContentPipeline.WorkerProbe</AssemblyName>
+        <RootNamespace>Oxygen.Editor.ContentPipeline.WorkerProbe</RootNamespace>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\..\src\Oxygen.Editor.ContentPipeline.csproj" />
+        <Compile Include="..\Controlled\NativeInventoryFixture.cs" Link="NativeInventoryFixture.cs" />
+        <Compile Include="$(ProjectsRoot)\Oxygen.Managed.Assets\testsupport\LooseCookedIndexFixture.cs" Link="LooseCookedIndexFixture.cs" />
+    </ItemGroup>
+</Project>

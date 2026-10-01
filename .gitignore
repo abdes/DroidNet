@@ -420,7 +420,7 @@ FodyWeavers.xsd
 # Solution files - We use Visual Studio solution generator
 # https://microsoft.github.io/slngen/
 # From within a project directory, run:
-# > msbuild /Target:SlnGen /Verbosity:Minimal /NoLogo
+# > tooling/GenerateSolution.ps1 -Scope projects
 *.sln
 
 Trash/

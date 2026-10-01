@@ -154,7 +154,7 @@ The Routing.Debugger application follows a modular, layered architecture:
    .\open.cmd
    ```
 
-   This regenerates and opens `Projects.sln` using `dotnet slngen`.
+   This regenerates and opens `Projects.sln` using the shared SlnGen script.
 
 3. **Build the project**:
 

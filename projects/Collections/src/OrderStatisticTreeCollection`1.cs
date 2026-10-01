@@ -325,12 +325,13 @@ public class OrderStatisticTreeCollection<T> : IReadOnlyCollection<T>
 
     private void UpdateSizeUpwards(Node? x)
     {
+#if DEBUG
         var depth = 0;
+#endif // DEBUG
         while (x is not null)
         {
 #if DEBUG
             // Safety: Detect cycles in parent pointers (e.g. from bugs in rotation/delete logic).
-            // This prevents infinite hangs in production if the tree structure is corrupted.
             if (depth++ > 1000)
             {
                 throw new InvalidOperationException("Possible cycle detected in parent pointers during size update.");

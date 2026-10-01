@@ -16,7 +16,7 @@
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <!--  ReSharper disable Xaml.PathError  -->
-                <ResourceDictionary Source="ms-appx:///Oxygen.Editor.WorldEditor/Styles/GridSplitterStyles.xaml" />
+                <ResourceDictionary Source="ms-appx:///Oxygen.Editor.ContentBrowser/Styles/GridSplitterStyles.xaml" />
                 <!--  ReSharper restore Xaml.PathError  -->
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>

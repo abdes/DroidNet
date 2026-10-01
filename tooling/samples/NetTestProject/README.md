@@ -11,7 +11,9 @@ The project is set up using a .NET class library with a corresponding unit test 
 
 ### Project File
 
-The `NetTestProject.Tests.csproj` file is designed to focus on the project specific dependencies and configurations for running the unit tests. All references and configuration of MSTest and related dependencies, including AwesomeAssertions, are already taken care of in the common MSBuild props files.
+The project uses `MSTest.Sdk`, pinned by the repository's `global.json`. The SDK
+owns the framework, adapter, analyzers and runner. Common repository settings add
+AwesomeAssertions and TestHelpers; declare only project-specific dependencies here.
 
 ## Adding Test Cases
 

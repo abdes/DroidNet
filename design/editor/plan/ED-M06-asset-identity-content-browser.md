@@ -27,20 +27,20 @@ cook execution remains `ED-M07`; runtime parity remains `ED-M08`.
 
 ## 2. PRD Traceability
 
-| ID | ED-M06 Coverage |
-| --- | --- |
-| `GOAL-004` | Material/content identity created in ED-M05 becomes browseable and selectable through shared browser rows. |
-| `GOAL-005` | Source, descriptor, cooked, stale, missing, and broken asset state is visible. |
-| `GOAL-006` | Missing/broken asset and root failures produce visible diagnostics. |
-| `REQ-013` | Typed asset picking returns stable asset identity instead of display strings or cooked paths. |
-| `REQ-020` | Content Browser exposes project content roots and asset rows as editor concepts. |
-| `REQ-021` | Asset state distinguishes authoring descriptors, cooked output, generated assets, and invalid references. |
-| `REQ-022` | Browser refresh, asset resolve, missing/broken references, and picker failures produce operation results where user-visible. |
-| `REQ-024` | Diagnostics classify asset identity, project content-root, and content-pipeline state failures. |
-| `REQ-036` | Asset identity and browser state support later cook/inspect workflows. |
-| `REQ-037` | Authoring data persists stable asset URIs and does not serialize browser-only state. |
-| `SUCCESS-006` | Import/cook/mount state visibility has the browser side of the contract ready for ED-M07. |
-| `SUCCESS-007` | Material assets can be found and assigned through the generalized browser/picker surface. |
+| ID            | ED-M06 Coverage                                                                                                              |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `GOAL-004`    | Material/content identity created in ED-M05 becomes browseable and selectable through shared browser rows.                   |
+| `GOAL-005`    | Source, descriptor, cooked, stale, missing, and broken asset state is visible.                                               |
+| `GOAL-006`    | Missing/broken asset and root failures produce visible diagnostics.                                                          |
+| `REQ-013`     | Typed asset picking returns stable asset identity instead of display strings or cooked paths.                                |
+| `REQ-020`     | Content Browser exposes project content roots and asset rows as editor concepts.                                             |
+| `REQ-021`     | Asset state distinguishes authoring descriptors, cooked output, generated assets, and invalid references.                    |
+| `REQ-022`     | Browser refresh, asset resolve, missing/broken references, and picker failures produce operation results where user-visible. |
+| `REQ-024`     | Diagnostics classify asset identity, project content-root, and content-pipeline state failures.                              |
+| `REQ-036`     | Asset identity and browser state support later cook/inspect workflows.                                                       |
+| `REQ-037`     | Authoring data persists stable asset URIs and does not serialize browser-only state.                                         |
+| `SUCCESS-006` | Import/cook/mount state visibility has the browser side of the contract ready for ED-M07.                                    |
+| `SUCCESS-007` | Material assets can be found and assigned through the generalized browser/picker surface.                                    |
 
 ## 3. Required LLDs
 
@@ -483,7 +483,7 @@ Likely test touch points:
 - new Content Browser tests for reducer/provider/filter behavior.
 - `projects/Oxygen.Editor.World/tests/Oxygen.Editor.World.Tests.csproj` for
   `SceneSerializer` material-slot JSON round-trip coverage.
-- `projects/Oxygen.Editor.WorldEditor/tests/Oxygen.Editor.WorldEditor.SceneExplorer.Tests.csproj`
+- `projects/Oxygen.Editor.WorldEditor/tests/Unit/Oxygen.Editor.WorldEditor.Unit.Tests.csproj`
   only if the Geometry inspector consumer migration needs a focused test.
 - `projects/Oxygen.Editor.Projects/tests/Oxygen.Editor.Projects.Tests.csproj`
 - `projects/Oxygen.Managed.Core/tests/Oxygen.Managed.Core.Tests.csproj`
@@ -493,16 +493,16 @@ add browser UI state to `Oxygen.Managed.Assets`.
 
 ## 8. Dependency And Migration Risks
 
-| Risk | Mitigation |
-| --- | --- |
-| `AssetState.Source` changes meaning for material descriptors. | Migrate MaterialPicker, Geometry material slot row, and browser row rendering in the same slice; descriptors become `Descriptor`, raw non-descriptor files remain `Source`. |
-| Existing `GameAsset` drives invocation routing. | Use an adapter only as a temporary bridge; `ContentBrowserAssetItem` is the ED-M06 row contract. |
-| Broken-state validation becomes slow or UI-thread bound. | Validate descriptors off UI thread and cache by URI + last-write timestamp until `AssetChange`. |
-| Cooked-root paths drift from project policy. | Read `ProjectCookScope.CookedOutputRoot` through `IProjectCookScopeProvider` for browser display, diagnostics, and reducer paths; catalog composition may retain LLD-permitted `.cooked/<MountName>` index discovery. |
-| Material picker keeps a second state reducer. | Project `MaterialPickerFilter` into `AssetBrowserFilter` and use the shared provider/reducer. |
-| Browser rows accidentally become persisted authoring data. | Add serializer round-trip tests and keep browser-only fields out of scene/material/project writers. |
-| Users confuse cooked outputs with authoring targets. | UI shows cooked state as derived; create/open workflows remain content-mount oriented. |
-| Search/filter churn floods operation results. | Only navigation, refresh, query, resolve, copy, and pick failures publish user-visible operation results. |
+| Risk                                                          | Mitigation                                                                                                                                                                                                            |
+| ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AssetState.Source` changes meaning for material descriptors. | Migrate MaterialPicker, Geometry material slot row, and browser row rendering in the same slice; descriptors become `Descriptor`, raw non-descriptor files remain `Source`.                                           |
+| Existing `GameAsset` drives invocation routing.               | Use an adapter only as a temporary bridge; `ContentBrowserAssetItem` is the ED-M06 row contract.                                                                                                                      |
+| Broken-state validation becomes slow or UI-thread bound.      | Validate descriptors off UI thread and cache by URI + last-write timestamp until `AssetChange`.                                                                                                                       |
+| Cooked-root paths drift from project policy.                  | Read `ProjectCookScope.CookedOutputRoot` through `IProjectCookScopeProvider` for browser display, diagnostics, and reducer paths; catalog composition may retain LLD-permitted `.cooked/<MountName>` index discovery. |
+| Material picker keeps a second state reducer.                 | Project `MaterialPickerFilter` into `AssetBrowserFilter` and use the shared provider/reducer.                                                                                                                         |
+| Browser rows accidentally become persisted authoring data.    | Add serializer round-trip tests and keep browser-only fields out of scene/material/project writers.                                                                                                                   |
+| Users confuse cooked outputs with authoring targets.          | UI shows cooked state as derived; create/open workflows remain content-mount oriented.                                                                                                                                |
+| Search/filter churn floods operation results.                 | Only navigation, refresh, query, resolve, copy, and pick failures publish user-visible operation results.                                                                                                             |
 
 ## 9. Manual Validation Script
 

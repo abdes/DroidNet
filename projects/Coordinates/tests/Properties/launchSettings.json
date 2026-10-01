@@ -1,10 +1,7 @@
 {
-    "profiles": {
-        "UI Tests (Package)": {
-            "commandName": "MsixPackage"
-        },
-        "UI Tests (Unpackaged)": {
-            "commandName": "Project"
-        }
+  "profiles": {
+    "UI Tests": {
+      "commandName": "Project"
     }
+  }
 }

@@ -4,7 +4,8 @@ Editor-side orchestration for producing runtime content from authoring data.
 
 Read [workflow stages](#explicit-workflow-stages),
 [worker ownership](#tool-process-boundary) and
-[freshness and validation](#freshness-and-validation).
+[freshness and validation](#freshness-and-validation), and
+[test organization](tests/README.md).
 
 ## Ownership
 
@@ -19,8 +20,8 @@ successful cook does not itself prove mounting, presentation, or standalone
 runtime parity.
 
 The ownership contracts are defined in the
-[content pipeline LLD](../../design/editor/lld/content-pipeline.md) and
-[editor architecture](../../design/editor/ARCHITECTURE.md).
+[content pipeline LLD](../../../design/editor/lld/content-pipeline.md) and
+[editor architecture](../../../design/editor/ARCHITECTURE.md).
 
 ## Explicit workflow stages
 
@@ -84,14 +85,15 @@ cannot remove a source file still needed by another asset.
 
 ## Verification boundaries
 
-[ContentPipelineServiceTests](tests/ContentPipelineServiceTests.cs),
-[SceneDescriptorGeneratorTests](tests/SceneDescriptorGeneratorTests.cs), and
-[ImportToolContentPipelineApiTests](tests/ImportToolContentPipelineApiTests.cs)
-provide focused orchestration, descriptor, and adapter coverage. The adapter
-tests substitute the process runner, so they do not establish the lifetime
-behavior of a real cancelled tool.
+[Unit tests](tests/Unit) cover orchestration, descriptors, source snapshots and
+status using controlled dependencies. [Integration tests](tests/Integration)
+exercise the installed native tools, real worker processes and filesystem
+publication/recovery. [Benchmarks](tests/Benchmarks) retain large-workload
+measurements separately from routine correctness checks.
+
+See the [test guide](tests/README.md) for project selection and fixture ownership.
 
 Keep source-level tests, real tool execution, cooked-root validation, and
 standalone/visual validation distinct. Current workflow evidence belongs in
-[IMPLEMENTATION_STATUS.md](../../design/editor/IMPLEMENTATION_STATUS.md);
+[IMPLEMENTATION_STATUS.md](../../../design/editor/IMPLEMENTATION_STATUS.md);
 test files alone do not close those gates.

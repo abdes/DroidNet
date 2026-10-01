@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import List
 
-from .msbuild import query_msbuild_properties
+from ..msbuild import query_msbuild_properties
 
 __all__ = ["discover_target_frameworks"]
 
@@ -13,7 +13,7 @@ def discover_target_frameworks(project: Path, *, configuration: str | None = Non
 
     The function requests both ``TargetFrameworks`` (multi-targeting) and
     ``TargetFramework`` (single) using the MSBuild property querying support in
-    ``dotnet build``. When both properties are empty, the function raises a
+    Visual Studio MSBuild. When both properties are empty, the function raises a
     ``RuntimeError`` so callers can decide on a fallback strategy.
     """
 
@@ -38,7 +38,7 @@ def discover_target_frameworks(project: Path, *, configuration: str | None = Non
 
     if completed.returncode != 0:
         raise RuntimeError(
-            f"dotnet build returned exit code {completed.returncode} when evaluating TargetFrameworks"
+            f"MSBuild returned exit code {completed.returncode} when evaluating TargetFrameworks"
         )
 
     raise RuntimeError("Unable to determine TargetFramework from MSBuild properties")

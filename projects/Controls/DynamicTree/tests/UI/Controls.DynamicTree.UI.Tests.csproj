@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 
-<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="MSTest.Sdk">
 
     <PropertyGroup>
-        <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
+        <TargetFramework>net9.0-windows10.0.26100.0</TargetFramework>
 
         <RootNamespace>$(RootNamespace).Controls.Tests</RootNamespace>
         <AssemblyName>DroidNet.Controls.DynamicTree.UI.Tests</AssemblyName>
@@ -11,6 +11,7 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <Compile Include="$(ProjectsRoot)\UITests.Shared\tests\TestHostLifecycleTests.cs" Link="TestHostLifecycleTests.cs" />
         <ProjectReference Include="$(ProjectsRoot)\Controls\DynamicTree\src\Controls.DynamicTree.csproj" />
     </ItemGroup>
 
@@ -18,8 +19,6 @@
 
     <ItemGroup>
         <PackageReference Include="Moq" />
-        <PackageReference Include="CommunityToolkit.WinUI.Extensions" />
-        <PackageReference Include="Microsoft.Extensions.Logging.Debug" />
     </ItemGroup>
 
 </Project>

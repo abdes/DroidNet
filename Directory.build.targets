@@ -32,29 +32,8 @@
         <PackageOutputPath>$(ArtifactsPath)\package\$(Configuration)\</PackageOutputPath>
     </PropertyGroup>
 
-    <!--
-        Install pre-commit hooks if it has not been done already or if the lock
-        file was removed to force a reinstall
-    -->
-    <PropertyGroup>
-        <PreCommitInstallLockFilePath>$(MyTopLevelDirectory)\.pre-commit.installed.lock</PreCommitInstallLockFilePath>
-    </PropertyGroup>
-    <Target Name="InstallPreCommitHooks" BeforeTargets="BeforeBuild" Condition="!Exists('$(PreCommitInstallLockFilePath)') And '$(DN_PrecommitHooks)' != 'false' And '$(GITHUB_ACTIONS)' != 'true' And Exists('$(MyTopLevelDirectory)\.git')">
-        <Touch Files="$(PreCommitInstallLockFilePath)" AlwaysCreate="true" />
-        <Exec Command="pre-commit install" />
-    </Target>
-    <!-- End pre-commit hooks -->
 
-    <!--
-        Visual Studio solution generator is a MSBuild target, which can be used on
-        any project for which a solution needs to be generated. Rather than adding
-        it to many places, it is recommended to simply add the reference in the
-        root `Directory.build.props`.
-
-        To use it on a project, move to the project folder and run:
-
-        $ msbuild /Target:SlnGen /Verbosity:Minimal /NoLogo
-    -->
+    <!-- Solution items consumed by tooling/GenerateSolution.ps1. -->
     <ItemGroup>
         <SlnGenSolutionItem Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), '.editorconfig'))" />
         <SlnGenSolutionItem Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'settings.xamlstyler'))" />
@@ -68,6 +47,12 @@
     </ItemGroup>
     <!-- End Visual Studio solution generator -->
 
+    <!-- Test execution tiers select projects, never hide tests inside an assembly. -->
+    <PropertyGroup Condition="'$(IsSlnGen)' == 'true' And '$(DroidNetTestTier)' != ''">
+        <DroidNetTestScope Condition="'$(DroidNetTestScope)' == ''">All</DroidNetTestScope>
+        <IncludeInSolutionFile Condition="'$(DroidNetTestScope)' != 'All' And '$(DroidNetTestScope)' != '$(DroidNetTestTier)'">false</IncludeInSolutionFile>
+    </PropertyGroup>
+
     <!--
         Code Quality
 
@@ -77,20 +62,38 @@
 
         Enable maximum help from the compiler and IDE.
     -->
-    <ItemGroup>
+    <ItemGroup Condition="'$(MSBuildProjectExtension)' == '.csproj'">
         <PackageReference Include="StyleCop.Analyzers">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
         </PackageReference>
     </ItemGroup>
-    <ItemGroup>
+    <ItemGroup Condition="'$(MSBuildProjectExtension)' == '.csproj'">
+        <PackageReference Include="Roslynator.CodeAnalysis.Analyzers" PrivateAssets="all"
+                          Condition="'@(PackageReference->WithMetadataValue('Identity', 'Microsoft.CodeAnalysis.CSharp'))' != ''" />
         <AdditionalFiles Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'stylecop.json'))" Link="stylecop.json" />
     </ItemGroup>
     <PropertyGroup Condition="'$(Configuration)'=='Release'">
-        <!-- Treat warnings as errors only in Release builds -->
+        <!-- Nullable warnings remain errors; other warnings keep their configured severity. -->
         <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     </PropertyGroup>
     <!-- End Code Quality -->
+
+    <PropertyGroup Condition="'$(MSBuildProjectExtension)' == '.csproj' and '$(AccelerateBuildsInVisualStudio)' == '' and '$(UseWinUI)' != 'true'">
+        <AccelerateBuildsInVisualStudio>true</AccelerateBuildsInVisualStudio>
+    </PropertyGroup>
+
+    <!-- Package metadata depends on the project's final values. -->
+    <PropertyGroup Condition="'$(IsPackable)' == 'true'">
+        <PackageTags>$(CommonTags);$(PackageTags)</PackageTags>
+        <_ProjectReadmePath>$(MSBuildProjectDirectory)\..\README.md</_ProjectReadmePath>
+        <PackageReadmeFile Condition="Exists('$(_ProjectReadmePath)')">README.md</PackageReadmeFile>
+    </PropertyGroup>
+    <ItemGroup Condition="'$(IsPackable)' == 'true'">
+        <None Include="$(MyTopLevelDirectory)icon.png" Pack="true" PackagePath="/" />
+        <None Include="$(MyTopLevelDirectory)LICENSE" Pack="true" PackagePath="/" />
+        <None Include="$(_ProjectReadmePath)" Condition="Exists('$(_ProjectReadmePath)')" Pack="true" PackagePath="/" />
+    </ItemGroup>
 
     <!-- Git Versioning -->
     <ItemGroup>

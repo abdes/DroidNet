@@ -32,22 +32,22 @@ of this milestone unless an ED-M04 LLD explicitly requires a seam.
 
 ## 3. PRD Traceability
 
-| ID | ED-M04 Coverage |
-| --- | --- |
-| `GOAL-002` | V0.1 component and environment values become persisted authoring data. |
-| `GOAL-003` | Supported inspector edits request live preview sync when runtime is available. |
-| `GOAL-006` | Invalid edits and sync/settings failures produce visible diagnostics. |
-| `REQ-005` | Add/remove/edit behavior for scoped V0.1 components. |
-| `REQ-007` | Supported component and environment edits save and reopen. |
-| `REQ-008` | Supported edits request live sync or visible unsupported/skipped result. |
-| `REQ-009` | Transform, Geometry, PerspectiveCamera, DirectionalLight, Environment, material slot identity. |
-| `REQ-022` | Inspector/save/sync/settings failures are visible. |
-| `REQ-024` | Diagnostics distinguish scene authoring, asset identity, live sync, settings, runtime causes. |
-| `REQ-026` | Embedded preview reflects supported edits where engine APIs exist. |
-| `REQ-037` | Supported data round-trips without manual repair. |
-| `SUCCESS-002` | Supported scene edits survive save/reopen. |
-| `SUCCESS-003` | Live preview is updated or visibly explains why it could not update. |
-| `SUCCESS-004` | Environment/material-slot authoring data is available for later cook/parity. |
+| ID            | ED-M04 Coverage                                                                                |
+| ------------- | ---------------------------------------------------------------------------------------------- |
+| `GOAL-002`    | V0.1 component and environment values become persisted authoring data.                         |
+| `GOAL-003`    | Supported inspector edits request live preview sync when runtime is available.                 |
+| `GOAL-006`    | Invalid edits and sync/settings failures produce visible diagnostics.                          |
+| `REQ-005`     | Add/remove/edit behavior for scoped V0.1 components.                                           |
+| `REQ-007`     | Supported component and environment edits save and reopen.                                     |
+| `REQ-008`     | Supported edits request live sync or visible unsupported/skipped result.                       |
+| `REQ-009`     | Transform, Geometry, PerspectiveCamera, DirectionalLight, Environment, material slot identity. |
+| `REQ-022`     | Inspector/save/sync/settings failures are visible.                                             |
+| `REQ-024`     | Diagnostics distinguish scene authoring, asset identity, live sync, settings, runtime causes.  |
+| `REQ-026`     | Embedded preview reflects supported edits where engine APIs exist.                             |
+| `REQ-037`     | Supported data round-trips without manual repair.                                              |
+| `SUCCESS-002` | Supported scene edits survive save/reopen.                                                     |
+| `SUCCESS-003` | Live preview is updated or visibly explains why it could not update.                           |
+| `SUCCESS-004` | Environment/material-slot authoring data is available for later cook/parity.                   |
 
 ## 4. Required LLDs
 
@@ -147,7 +147,7 @@ Tasks:
   material override and unsupported slot methods.
 - Confirm exact test host:
   - `projects/Oxygen.Editor.World/tests/Oxygen.Editor.World.Tests.csproj`
-  - `projects/Oxygen.Editor.WorldEditor/tests/SceneExplorer/Oxygen.Editor.WorldEditor.SceneExplorer.Tests.csproj`
+  - `projects/Oxygen.Editor.WorldEditor/tests/Unit/Oxygen.Editor.WorldEditor.Unit.Tests.csproj`
   - `projects/Oxygen.Managed.Core/tests` for diagnostics vocabulary only if new
     constants are added.
 - Record any remaining direct inspector mutation paths in this plan before
@@ -166,7 +166,7 @@ Audit result:
   `diagnostics-operation-results`.
 - Confirmed test hosts:
   - `projects/Oxygen.Editor.World/tests/Oxygen.Editor.World.Tests.csproj`
-  - `projects/Oxygen.Editor.WorldEditor/tests/SceneExplorer/Oxygen.Editor.WorldEditor.SceneExplorer.Tests.csproj`
+  - `projects/Oxygen.Editor.WorldEditor/tests/Unit/Oxygen.Editor.WorldEditor.Unit.Tests.csproj`
   - `projects/Oxygen.Managed.Core/tests/Oxygen.Managed.Core.Tests.csproj`
 - Current direct inspector mutation paths to migrate:
   - `TransformViewModel.OnPosition*/OnRotation*/OnScale*Changed` mutates
@@ -433,7 +433,7 @@ Tasks:
   - `OXE.SCENE.ENVIRONMENT.SunRefStale` (warning)
   - `OXE.SCENE.ENVIRONMENT.<Field>.Invalid` for each environment enum/value
     field.
-  Tests assert against these constants, never against magic strings.
+    Tests assert against these constants, never against magic strings.
 - Material-slot validation diagnostics (e.g. malformed URI on paste) use
   `FailureDomain.SceneAuthoring`. Do **not** introduce
   `FailureDomain.MaterialAuthoring` in ED-M04; that is owned by ED-M05.
@@ -679,25 +679,25 @@ Likely diagnostics files:
 Likely test files:
 
 - `projects/Oxygen.Editor.World/tests/*`
-- `projects/Oxygen.Editor.WorldEditor/tests/SceneExplorer/*`
+- `projects/Oxygen.Editor.WorldEditor/tests/Unit/*`
 - `projects/Oxygen.Managed.Core/tests/*` for diagnostics vocabulary constants.
 
 ## 9. Dependency And Migration Risks
 
-| Risk | Mitigation |
-| --- | --- |
-| Inspector VMs keep direct mutation and sync calls. | ED-M04-supported fields must route through command service. Direct message handlers are deleted or made temporary command adapters. |
-| Edit-session batching breaks `VectorBox` UX. | Preserve existing controls and add command/session behavior around them. Do not replace with lower-quality controls. |
-| Sync throttling creates many undo entries. | Undo is owned by `EditSessionToken`; preview sync cadence never determines undo granularity. |
-| Material slot turns into a hidden material editor. | ED-M04 stores identity only. No scalar material fields, no material document UI, no material cook. |
-| Environment schema drifts from engine concepts. | ED-M04 fields use engine-aligned names/units and persist as scene authoring data; ED-M07 chooses cooked descriptor shape. |
-| Runtime not running blocks authoring. | Commands commit authoring state and publish `LiveSync.SkippedNotRunning` warning. |
+| Risk                                                                        | Mitigation                                                                                                                                                                                                                              |
+| --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Inspector VMs keep direct mutation and sync calls.                          | ED-M04-supported fields must route through command service. Direct message handlers are deleted or made temporary command adapters.                                                                                                     |
+| Edit-session batching breaks `VectorBox` UX.                                | Preserve existing controls and add command/session behavior around them. Do not replace with lower-quality controls.                                                                                                                    |
+| Sync throttling creates many undo entries.                                  | Undo is owned by `EditSessionToken`; preview sync cadence never determines undo granularity.                                                                                                                                            |
+| Material slot turns into a hidden material editor.                          | ED-M04 stores identity only. No scalar material fields, no material document UI, no material cook.                                                                                                                                      |
+| Environment schema drifts from engine concepts.                             | ED-M04 fields use engine-aligned names/units and persist as scene authoring data; ED-M07 chooses cooked descriptor shape.                                                                                                               |
+| Runtime not running blocks authoring.                                       | Commands commit authoring state and publish `LiveSync.SkippedNotRunning` warning.                                                                                                                                                       |
 | Settings changes cross persistence scopes or break startup/project loading. | Follow the settings placement matrix and validate startup/project loading when a durable setting is migrated. Scene, workspace, editor preference, project policy, and runtime-session state keep their own mutation and storage paths. |
-| Validation reruns full scans or presents duplicate failures. | Review incremental invalidation and result publication together in the ED-M04/ED-M09 design work; scoped field messages and operation summaries must remain usable without a new validation dashboard. |
-| Unsupported engine APIs throw. | Unsupported environment paths return `SyncOutcome.Unsupported`; material slots use the runtime override path and classify rejection/failure. |
-| Point/spot/orthographic editor scope creeps in. | Existing add/remove can remain. Production editors are deferred unless trivial raw/read-only blocks are added. |
-| Tests become fake because WinUI is hard to automate. | Test pure command/domain/sync seams. Mark true visual checks as manual with exact expected result. |
-| ED-M02 multi-viewport remains deferred. | ED-M04 validates only the supported single live viewport path. |
+| Validation reruns full scans or presents duplicate failures.                | Review incremental invalidation and result publication together in the ED-M04/ED-M09 design work; scoped field messages and operation summaries must remain usable without a new validation dashboard.                                  |
+| Unsupported engine APIs throw.                                              | Unsupported environment paths return `SyncOutcome.Unsupported`; material slots use the runtime override path and classify rejection/failure.                                                                                            |
+| Point/spot/orthographic editor scope creeps in.                             | Existing add/remove can remain. Production editors are deferred unless trivial raw/read-only blocks are added.                                                                                                                          |
+| Tests become fake because WinUI is hard to automate.                        | Test pure command/domain/sync seams. Mark true visual checks as manual with exact expected result.                                                                                                                                      |
+| ED-M02 multi-viewport remains deferred.                                     | ED-M04 validates only the supported single live viewport path.                                                                                                                                                                          |
 
 ## 10. Manual Validation Script
 
@@ -735,8 +735,10 @@ The user should validate these visually after implementation and build:
      shows `--`; picking an asset assigns it to both with one undo entry;
      `<None>` clears both;
    - unresolved identity is preserved across save/reopen;
-  - live sync maps the descriptor URI to the cooked `.omat` runtime path and
-    does not crash or block authoring.
+
+- live sync maps the descriptor URI to the cooked `.omat` runtime path and
+  does not crash or block authoring.
+
 7. PerspectiveCamera:
    - add/select a node with PerspectiveCamera;
    - edit FOV and Near/Far;
@@ -799,14 +801,14 @@ Keep M04's recorded delivery and partial validation evidence at their original
 scope. Do not supersede the milestone, re-run its planning, or turn an unproven
 field into a completed claim. The following concrete gaps execute under new IDs:
 
-| Remaining behavior/evidence | Execution owner |
-| --- | --- |
-| BackgroundColor is marked with the environment sync result although the native SetEnvironment call carries no background RGB. | [ED-M07A.1](./ED-M07A-authoring-integrity-and-runtime-convergence.md#07a1---background-application-and-truthful-per-field-results) |
-| Camera/light/environment callbacks use OneShot rather than a complete gesture session. | [ED-M07A.2](./ED-M07A-authoring-integrity-and-runtime-convergence.md#07a2---real-gesture-sessions-for-existing-inspectors) |
-| Rejected camera edits lack field-result binding and refresh of committed values; current field errors need revision/target ownership. | [ED-M07A.3](./ED-M07A-authoring-integrity-and-runtime-convergence.md#07a3---scoped-current-field-diagnostics) |
-| Offline replay lacks document-lifetime/revision identity and drains failed work. | [ED-M07A.4](./ED-M07A-authoring-integrity-and-runtime-convergence.md#07a4---revision-aware-offline-convergence) |
-| Complete control/native field evidence, including defaults, empty-selection environment, sun deletion, settings rejection and material identity behavior, was not established by the partial M04 manual record. | [ED-M07A.6](./ED-M07A-authoring-integrity-and-runtime-convergence.md#07a6---complete-the-missing-workflow-evidence) |
-| PostProcess/Background descriptor/native-load mapping is missing from the later content path. This is a cook-path gap, not evidence that the Environment inspector is absent. | [ED-M07B.3](./ED-M07B-safe-content-publication-and-compatibility.md#07b3---complete-native-descriptorload-mappings) |
+| Remaining behavior/evidence                                                                                                                                                                                     | Execution owner                                                                                                                    |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| BackgroundColor is marked with the environment sync result although the native SetEnvironment call carries no background RGB.                                                                                   | [ED-M07A.1](./ED-M07A-authoring-integrity-and-runtime-convergence.md#07a1---background-application-and-truthful-per-field-results) |
+| Camera/light/environment callbacks use OneShot rather than a complete gesture session.                                                                                                                          | [ED-M07A.2](./ED-M07A-authoring-integrity-and-runtime-convergence.md#07a2---real-gesture-sessions-for-existing-inspectors)         |
+| Rejected camera edits lack field-result binding and refresh of committed values; current field errors need revision/target ownership.                                                                           | [ED-M07A.3](./ED-M07A-authoring-integrity-and-runtime-convergence.md#07a3---scoped-current-field-diagnostics)                      |
+| Offline replay lacks document-lifetime/revision identity and drains failed work.                                                                                                                                | [ED-M07A.4](./ED-M07A-authoring-integrity-and-runtime-convergence.md#07a4---revision-aware-offline-convergence)                    |
+| Complete control/native field evidence, including defaults, empty-selection environment, sun deletion, settings rejection and material identity behavior, was not established by the partial M04 manual record. | [ED-M07A.6](./ED-M07A-authoring-integrity-and-runtime-convergence.md#07a6---complete-the-missing-workflow-evidence)                |
+| PostProcess/Background descriptor/native-load mapping is missing from the later content path. This is a cook-path gap, not evidence that the Environment inspector is absent.                                   | [ED-M07B.3](./ED-M07B-safe-content-publication-and-compatibility.md#07b3---complete-native-descriptorload-mappings)                |
 
 The field controls, scene-level Environment host, material override API path,
 command validators, undo machinery and coalescer already exist. The new plans

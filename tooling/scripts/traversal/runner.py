@@ -114,7 +114,7 @@ class TraversalRunner:
 
             if current.is_dir():
                 name_lower = current.name.lower()
-                if exclude_tests and name_lower == "tests":
+                if exclude_tests and name_lower in {"test", "tests"}:
                     log.debug("Skipping tests directory: %s", current)
                     continue
                 if exclude_samples and name_lower == "samples":
@@ -130,7 +130,7 @@ class TraversalRunner:
                 stack.extend(children)
                 continue
 
-            if current.suffix.lower() == ".csproj":
+            if current.suffix.lower() in {".csproj", ".vcxproj"}:
                 project_name = current.stem
                 if exclude_pattern and exclude_pattern.search(project_name):
                     log.debug("Skipping project due to exclude regex: %s", current)

@@ -3,7 +3,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
+        <IsPackable>true</IsPackable>
+        <TargetFramework>net9.0-windows10.0.26100.0</TargetFramework>
 
         <RootNamespace>$(RootNamespace).Converters</RootNamespace>
         <AssemblyName>DroidNet.Converters</AssemblyName>

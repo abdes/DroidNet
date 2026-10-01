@@ -4,21 +4,24 @@
 
 using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
+using DroidNet.Tests;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.VisualStudio.TestTools.UnitTesting.AppContainer;
 
 namespace DroidNet.Samples.Tests;
 
 [TestClass]
 [TestCategory("UITest")]
 [ExcludeFromCodeCoverage]
-public class SampleTest
+public class SampleTest : VisualUserInterfaceTests
 {
-    [UITestMethod]
-    public void TestMethod1()
+    [TestMethod]
+    public Task ControlIsRealizedInTheSharedWindow() => EnqueueAsync(async () =>
     {
-        var grid = new Grid();
+        var grid = new Grid { Width = 160, Height = 80 };
+        await LoadTestContentAsync(grid).ConfigureAwait(true);
 
-        _ = grid.Should().NotBeNull();
-    }
+        _ = grid.IsLoaded.Should().BeTrue();
+        _ = grid.XamlRoot.Should().NotBeNull();
+        _ = grid.ActualWidth.Should().BeGreaterThan(0);
+    });
 }
