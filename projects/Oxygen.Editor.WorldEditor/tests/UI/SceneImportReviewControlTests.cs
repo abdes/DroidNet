@@ -10,7 +10,6 @@ using DroidNet.Tests;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Markup;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Moq;
@@ -93,10 +92,11 @@ public sealed class SceneImportReviewControlTests : VisualUserInterfaceTests
         _ = destination.Text.Should().Be("/Content/Models");
         _ = model.CanAccept.Should().Be(!replacement);
         _ = view.ActualHeight.Should().BeLessThan(replacement ? 500 : 360);
-        using var keyboard = InspectorControlTests.PointerInput.Capture();
-        _ = name.Focus(FocusState.Keyboard).Should().BeTrue();
-        await InspectorControlTests.PointerInput.KeyAsync(0x09).ConfigureAwait(true);
-        _ = FocusManager.GetFocusedElement(view.XamlRoot).Should().BeSameAs(destination);
+        _ = name.IsTabStop.Should().BeTrue();
+        _ = destination.IsTabStop.Should().BeTrue();
+        _ = view.FindDescendants().OfType<TextBox>()
+            .Where(field => ReferenceEquals(field, name) || ReferenceEquals(field, destination))
+            .OrderBy(static field => field.TabIndex).Should().Equal(name, destination);
         name.Text = "../invalid";
         await Task.Yield();
         var error = view.FindDescendant<TextBlock>(item => string.Equals(AutomationProperties.GetAutomationId(item), "ModelImportError", StringComparison.Ordinal))!;

@@ -70,7 +70,6 @@ public sealed partial class InspectorControlTests
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(this.TestContext.CancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(30));
         await fixture.InitializeAsync(timeout.Token).ConfigureAwait(true);
-        VisualUserInterfaceTestsApp.MainWindow.Activate();
         var node = fixture.Source.RootNodes.Single();
         using var host = fixture.CreateInspectorHost([node]);
         var model = host.PropertyEditors.Single(editor => MatchesInspector(editor, kind));

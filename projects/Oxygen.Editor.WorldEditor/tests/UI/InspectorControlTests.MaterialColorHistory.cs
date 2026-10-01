@@ -3,27 +3,28 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
+using DroidNet.Controls;
 using DroidNet.Storage.Native;
-using Microsoft.UI.Xaml.Controls;
 using Moq;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.MaterialEditor;
 using Testably.Abstractions;
+using Windows.UI;
 
 namespace Oxygen.Editor.World.Tests;
 
-/// <summary>Exercises the material picker with real document history and Windows pointer input.</summary>
+/// <summary>Checks material color transactions against real document history without desktop input.</summary>
 public sealed partial class InspectorControlTests
 {
-    /// <summary>Material color release creates one history entry, while interrupted capture restores the source.</summary>
-    /// <param name="drag">Whether to move while the button is held.</param>
-    /// <param name="cancel">Whether to interrupt capture before releasing the button.</param>
+    /// <summary>Material color samples commit once or cancel completely without dirtying the document.</summary>
+    /// <param name="samples">The number of preview samples.</param>
+    /// <param name="cancel">Whether to cancel the edit session.</param>
     /// <returns>The test task.</returns>
     [TestMethod]
-    [DataRow(false, false)]
-    [DataRow(true, false)]
-    [DataRow(true, true)]
-    public Task MaterialSpectrumPointerCompletionPreservesHistory(bool drag, bool cancel) => EnqueueAsync(async () =>
+    [DataRow(1, false)]
+    [DataRow(3, false)]
+    [DataRow(3, true)]
+    public Task MaterialColorEditSessionPreservesHistory(int samples, bool cancel) => EnqueueAsync(async () =>
     {
         var directory = Directory.CreateTempSubdirectory("OxygenMaterialPicker-");
         try
@@ -42,14 +43,12 @@ public sealed partial class InspectorControlTests
             using var model = new MaterialEditorViewModel(new MaterialDocumentMetadata(uri), service, Oxygen.Testing.AssetStatusFixture.EmptyProvider, System.Reactive.Concurrency.ImmediateScheduler.Instance);
             await model.PrepareForCloseAsync().ConfigureAwait(true);
             model.ResumeEditing();
-            var flyout = await OpenColorFlyoutAsync(new MaterialEditorView { ViewModel = model }).ConfigureAwait(true);
             try
             {
-                await CheckMaterialColorGestureAsync(model, (ColorPicker)flyout.Content, drag, cancel).ConfigureAwait(true);
+                await CheckMaterialColorGestureAsync(model, samples, cancel).ConfigureAwait(true);
             }
             finally
             {
-                await CloseColorFlyoutAsync(flyout).ConfigureAwait(true);
                 await model.CloseAsync(discard: true).ConfigureAwait(true);
             }
         }
@@ -59,10 +58,20 @@ public sealed partial class InspectorControlTests
         }
     });
 
-    private static async Task CheckMaterialColorGestureAsync(MaterialEditorViewModel model, ColorPicker picker, bool drag, bool cancel)
+    private static async Task CheckMaterialColorGestureAsync(MaterialEditorViewModel model, int samples, bool cancel)
     {
         var before = model.BaseColorColor;
-        var preview = await DriveSpectrumAsync(picker, drag, cancel).ConfigureAwait(true);
+        model.BeginEditSession("Base color", NumberBoxEditInteractionKind.PointerDrag);
+        var preview = default(Color);
+        for (var sample = 1; sample <= samples; sample++)
+        {
+            preview = Color.FromArgb(255, (byte)(48 * sample), 80, 160);
+            model.SetBaseColor(preview);
+        }
+
+        _ = model.BaseColorColor.Should().NotBe(before);
+        _ = model.UndoCommand.CanExecute(parameter: null).Should().BeTrue("Undo can cancel the active material preview");
+        model.EndEditSession(cancel ? NumberBoxEditCompletionKind.Cancel : NumberBoxEditCompletionKind.Commit);
         _ = model.BaseColorColor.Should().Be(cancel ? before : preview);
         _ = model.UndoCommand.CanExecute(parameter: null).Should().Be(!cancel);
         _ = model.IsDirty.Should().Be(!cancel);
@@ -71,7 +80,7 @@ public sealed partial class InspectorControlTests
             await model.UndoCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
             _ = model.BaseColorColor.Should().Be(before);
             _ = model.IsDirty.Should().BeFalse();
-            _ = model.UndoCommand.CanExecute(parameter: null).Should().BeFalse("one gesture must create exactly one history entry");
+            _ = model.UndoCommand.CanExecute(parameter: null).Should().BeFalse("one edit session must create exactly one history entry");
             await model.RedoCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
             _ = model.BaseColorColor.Should().Be(preview);
             _ = model.IsDirty.Should().BeTrue();

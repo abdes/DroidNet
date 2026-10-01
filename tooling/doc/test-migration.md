@@ -1,6 +1,6 @@
 # MSTest migration
 
-Status: rollout implemented; focused corrections are being committed. All 43 test projects and four examples are migrated.
+Status: implemented. All 43 test projects and four examples are migrated.
 The Debug build and focused failure checks pass. The repository owner runs
 full-suite validation in Visual Studio; agent checks are limited to affected cases. See [scope](#scope), [commit-boundaries](#commit-boundaries),
 [validation](#validation), and [release tracking](https://github.com/abdes/DroidNet/issues/19).
@@ -87,6 +87,20 @@ no localization data or analyzer checks are disabled.
 | WorldEditor navigation     | Correct publication provenance and remove the windowless test's render wait                             | Cooked row passed alone: 428 ms                      |
 | WorldEditor browser        | Correct catalog/mount fixtures; reject cooking derived folders                                          | Catalog case and all four folder-action cases passed |
 | WorldEditor camera         | Include aperture, shutter rate, ISO and aspect mode in native-state expectations                        | Four reported camera rows passed                     |
+| WorldEditor color history  | Replace desktop input with deterministic edit-session checks                                            | Six inspector cases and three material cases passed  |
+| Import review              | Verify tab stops and order without global keyboard input                                                | Selected Dark / new import / 100% scale case passed  |
 
 Full-suite validation remains with the repository owner. Only affected tests are
 run during these fixes.
+
+## Desktop-independent execution
+
+Normal test runs must not send global mouse/keyboard input or acquire foreground
+focus. Color history tests use the existing edit-session APIs to verify previews,
+commit/cancel, dirty state and undo/redo. Numeric cancellation retains its existing
+control-event coverage. Import-review tests verify tab stops and declared order
+without injecting Tab. The WorldEditor desktop-input injector is removed.
+
+These checks do not claim to validate Windows pointer routing, native spectrum
+capture/release or physical Escape/Tab delivery. Those are interactive integration
+checks on a dedicated desktop, not a prerequisite for ordinary Test Explorer runs.
