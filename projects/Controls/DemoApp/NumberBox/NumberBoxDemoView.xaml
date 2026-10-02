@@ -25,13 +25,34 @@
         <ScrollViewer>
             <StackPanel
                 Margin="20"
-                HorizontalAlignment="Left"
+                HorizontalAlignment="Stretch"
                 VerticalAlignment="Top"
                 Spacing="20">
 
                 <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="NumberBox demos" />
                 <Border Style="{StaticResource DemoPanelBorderStyle}">
                     <controls:NumberBox Label="Basic NumberBox" NumberValue="{x:Bind ViewModel.NumberValue, Mode=TwoWay}" />
+                </Border>
+
+                <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Compact colored label" />
+                <Border Style="{StaticResource DemoPanelBorderStyle}">
+                    <StackPanel Spacing="8">
+                        <controls:NumberBox
+                            HorizontalAlignment="Stretch"
+                            HorizontalValueAlignment="Right"
+                            IsCompact="True"
+                            Label="X"
+                            LabelForeground="Red"
+                            LabelPosition="Left"
+                            Mask="~.##"
+                            NumberValue="{x:Bind ViewModel.NumberValue, Mode=TwoWay}" />
+                        <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Drag the label to adjust; click the value to type. The wheel scrolls the page." />
+                        <controls:NumberBox
+                            Label=""
+                            LabelPosition="None"
+                            Mask="~.##"
+                            NumberValue="{x:Bind ViewModel.NumberValue, Mode=TwoWay}" />
+                    </StackPanel>
                 </Border>
 
                 <Border Style="{StaticResource DemoPanelBorderStyle}">

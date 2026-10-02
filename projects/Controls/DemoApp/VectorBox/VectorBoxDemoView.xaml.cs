@@ -3,8 +3,10 @@
 // SPDX-License-Identifier: MIT
 
 using DroidNet.Mvvm.Generators;
+using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 
 namespace DroidNet.Controls.Demo.InPlaceEdit;
 
@@ -22,6 +24,14 @@ public sealed partial class VectorBoxDemoView
     {
         this.InitializeComponent();
 
+        ConfigureAxisLabels(this.PositionVector);
+        ConfigureAxisLabels(this.RotationVector);
+        ConfigureAxisLabels(this.TransformScaleVector);
+        this.LinearColorVector.ComponentLabels["X"] = "R";
+        this.LinearColorVector.ComponentLabels["Y"] = "G";
+        this.LinearColorVector.ComponentLabels["Z"] = "B";
+        ConfigureAxisLabels(this.LinearColorVector);
+
         this.Loaded += (_, _) =>
         {
             // Validation for constrained vector (must be between -180 and 180)
@@ -32,6 +42,9 @@ public sealed partial class VectorBoxDemoView
                     e.IsValid = e.NewValue is <= 180.0f and >= -180.0f;
                 }
             };
+
+            this.LinearColorVector.Validate += (_, e) =>
+                e.IsValid = float.IsFinite(e.NewValue) && e.NewValue is >= 0.0f and <= 1.0f;
 
             // Custom masks for mixed mask vector
             this.MixedMaskVector.ComponentMasks["X"] = "±###.#";
@@ -44,6 +57,13 @@ public sealed partial class VectorBoxDemoView
             this.ConfigurableVectorBox?.SetValue(VectorBox.YValueProperty, 2.0f);
             this.ConfigurableVectorBox?.SetValue(VectorBox.ZValueProperty, 3.0f);
         };
+    }
+
+    private static void ConfigureAxisLabels(VectorBox vector)
+    {
+        vector.ComponentLabelForegrounds["X"] = new SolidColorBrush(Colors.Red);
+        vector.ComponentLabelForegrounds["Y"] = new SolidColorBrush(Colors.Green);
+        vector.ComponentLabelForegrounds["Z"] = new SolidColorBrush(Colors.Blue);
     }
 
     private void ToggleXIndeterminate_Click(object sender, RoutedEventArgs args)

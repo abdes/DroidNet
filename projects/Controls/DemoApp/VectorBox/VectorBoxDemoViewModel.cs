@@ -3,6 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using CommunityToolkit.Mvvm.ComponentModel;
+using Microsoft.UI.Xaml.Media;
+using Windows.UI;
 
 namespace DroidNet.Controls.Demo.InPlaceEdit;
 
@@ -21,6 +23,51 @@ public partial class VectorBoxDemoViewModel : ObservableObject
 
     [ObservableProperty]
     public partial float Position3DZ { get; set; } = 3.7f;
+
+    [ObservableProperty]
+    public partial float TransformScaleX { get; set; } = 1.0f;
+
+    [ObservableProperty]
+    public partial float TransformScaleY { get; set; } = 1.0f;
+
+    [ObservableProperty]
+    public partial float TransformScaleZ { get; set; } = 1.0f;
+
+    [ObservableProperty]
+    public partial float ColorRed { get; set; } = 1.0f;
+
+    [ObservableProperty]
+    public partial float ColorGreen { get; set; } = 1.0f;
+
+    [ObservableProperty]
+    public partial float ColorBlue { get; set; } = 1.0f;
+
+    /// <summary>Gets the display-encoded color preview from the linear RGB values.</summary>
+    public SolidColorBrush ColorPreviewBrush
+    {
+        get
+        {
+            static byte ToSrgbByte(float linear)
+            {
+                if (!float.IsFinite(linear))
+                {
+                    return 0;
+                }
+
+                var clamped = Math.Clamp(linear, 0.0f, 1.0f);
+                var srgb = clamped <= 0.0031308f
+                    ? 12.92f * clamped
+                    : (1.055f * MathF.Pow(clamped, 1.0f / 2.4f)) - 0.055f;
+                return (byte)MathF.Round(srgb * byte.MaxValue);
+            }
+
+            return new SolidColorBrush(Color.FromArgb(
+                255,
+                ToSrgbByte(this.ColorRed),
+                ToSrgbByte(this.ColorGreen),
+                ToSrgbByte(this.ColorBlue)));
+        }
+    }
 
     // ============ 2D Vector ============
     [ObservableProperty]
@@ -126,4 +173,10 @@ public partial class VectorBoxDemoViewModel : ObservableObject
             return $"Component(s) {string.Join(", ", indeterminate)} showing indeterminate '-.-' (mixed values in multi-selection).";
         }
     }
+
+    partial void OnColorRedChanged(float value) => this.OnPropertyChanged(nameof(ColorPreviewBrush));
+
+    partial void OnColorGreenChanged(float value) => this.OnPropertyChanged(nameof(ColorPreviewBrush));
+
+    partial void OnColorBlueChanged(float value) => this.OnPropertyChanged(nameof(ColorPreviewBrush));
 }

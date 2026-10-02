@@ -25,23 +25,108 @@
         <ScrollViewer>
             <StackPanel
                 Margin="20"
-                HorizontalAlignment="Left"
+                HorizontalAlignment="Stretch"
                 VerticalAlignment="Top"
                 Spacing="20">
 
-                <!--  Vector with Custom Mask  -->
-                <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Vector with Degrees Mask (###.##°)" />
+                <!--  Transform vectors use compact, axis-colored component labels.  -->
+                <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Transform vectors" />
                 <Border Style="{StaticResource DemoPanelBorderStyle}">
-                    <controls:VectorBox
-                        x:Name="RotationVector"
-                        ComponentLabelPosition="Left"
-                        ComponentMask="###.##°"
-                        Dimension="3"
-                        Label="Rotation"
-                        LabelPosition="Left"
-                        XValue="{x:Bind ViewModel.RotationX, Mode=TwoWay}"
-                        YValue="{x:Bind ViewModel.RotationY, Mode=TwoWay}"
-                        ZValue="{x:Bind ViewModel.RotationZ, Mode=TwoWay}" />
+                    <Grid ColumnSpacing="12" RowSpacing="8">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock VerticalAlignment="Center" Text="Position" />
+                        <controls:VectorBox
+                            x:Name="PositionVector"
+                            Grid.Row="0"
+                            Grid.Column="1"
+                            HorizontalAlignment="Stretch"
+                            ComponentLabelPosition="Left"
+                            Dimension="3"
+                            HorizontalValueAlignment="Right"
+                            LabelPosition="None"
+                            XValue="{x:Bind ViewModel.Position3DX, Mode=TwoWay}"
+                            YValue="{x:Bind ViewModel.Position3DY, Mode=TwoWay}"
+                            ZValue="{x:Bind ViewModel.Position3DZ, Mode=TwoWay}" />
+                        <TextBlock
+                            Grid.Row="1"
+                            VerticalAlignment="Center"
+                            Text="Rotation" />
+                        <controls:VectorBox
+                            x:Name="RotationVector"
+                            Grid.Row="1"
+                            Grid.Column="1"
+                            HorizontalAlignment="Stretch"
+                            ComponentLabelPosition="Left"
+                            ComponentMask="###.##°"
+                            Dimension="3"
+                            HorizontalValueAlignment="Right"
+                            LabelPosition="None"
+                            XValue="{x:Bind ViewModel.RotationX, Mode=TwoWay}"
+                            YValue="{x:Bind ViewModel.RotationY, Mode=TwoWay}"
+                            ZValue="{x:Bind ViewModel.RotationZ, Mode=TwoWay}" />
+                        <TextBlock
+                            Grid.Row="2"
+                            VerticalAlignment="Center"
+                            Text="Scale" />
+                        <controls:VectorBox
+                            x:Name="TransformScaleVector"
+                            Grid.Row="2"
+                            Grid.Column="1"
+                            HorizontalAlignment="Stretch"
+                            ComponentLabelPosition="Left"
+                            Dimension="3"
+                            HorizontalValueAlignment="Right"
+                            LabelPosition="None"
+                            XValue="{x:Bind ViewModel.TransformScaleX, Mode=TwoWay}"
+                            YValue="{x:Bind ViewModel.TransformScaleY, Mode=TwoWay}"
+                            ZValue="{x:Bind ViewModel.TransformScaleZ, Mode=TwoWay}" />
+                    </Grid>
+                </Border>
+
+                <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Color vector" />
+                <Border Style="{StaticResource DemoPanelBorderStyle}">
+                    <StackPanel Spacing="8">
+                        <Grid>
+                            <TextBlock FontSize="16" Text="Color" />
+                            <TextBlock
+                                HorizontalAlignment="Right"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="Linear RGB" />
+                        </Grid>
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Border
+                                Width="36"
+                                Height="36"
+                                VerticalAlignment="Center"
+                                BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                                BorderThickness="1">
+                                <Rectangle Fill="{x:Bind ViewModel.ColorPreviewBrush, Mode=OneWay}" />
+                            </Border>
+                            <controls:VectorBox
+                                x:Name="LinearColorVector"
+                                Grid.Column="1"
+                                HorizontalAlignment="Stretch"
+                                ComponentLabelPosition="Left"
+                                ComponentMask="~.###"
+                                Dimension="3"
+                                HorizontalValueAlignment="Right"
+                                XValue="{x:Bind ViewModel.ColorRed, Mode=TwoWay}"
+                                YValue="{x:Bind ViewModel.ColorGreen, Mode=TwoWay}"
+                                ZValue="{x:Bind ViewModel.ColorBlue, Mode=TwoWay}" />
+                        </Grid>
+                    </StackPanel>
                 </Border>
 
                 <!--  Vector with Per-Component Masks  -->
