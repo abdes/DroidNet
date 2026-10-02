@@ -124,6 +124,103 @@ public sealed class MaterialCookTests
         _ = workspace.CookedRoot.Should().Contain(Path.Combine(".cooked", "generations"));
     }
 
+    /// <summary>Changing a referenced texture image recooks the texture and retains the material in the cook result.</summary>
+    /// <returns>The asynchronous test operation.</returns>
+    [TestMethod]
+    public async Task CookMaterialAsync_WhenReferencedImageChanges_ShouldRecookTextureAndRetainMaterial()
+    {
+        using var workspace = new MaterialWorkspace();
+        var textureDirectory = Path.Combine(workspace.Root, "Content", "Textures");
+        Directory.CreateDirectory(textureDirectory);
+        var imagePath = Path.Combine(textureDirectory, "Surface.tga");
+        byte[] firstImage = [0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 32, 8, 255, 0, 0, 255];
+        await File.WriteAllBytesAsync(imagePath, firstImage, this.TestContext.CancellationToken).ConfigureAwait(false);
+        await File.WriteAllTextAsync(Path.Combine(textureDirectory, "Surface.otex.json"), """
+            { "source": "Surface.tga", "intent": "albedo", "virtual_path": "/Content/Textures/Surface.otex",
+              "decode": { "color_space": "srgb" }, "output": { "format": "rgba8_srgb" } }
+            """, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var materialPath = Path.Combine(workspace.Root, "Content", "Materials", "Textured.omat.json");
+        await WriteMaterialAsync(materialPath, CreateMaterial("Textured", metallicFactor: 0.0f, roughnessFactor: 0.6f)
+            .WithTextureReference("base_color", "/Content/Textures/Surface.otex")).ConfigureAwait(false);
+        var service = CreateService(workspace);
+        var request = new MaterialCookRequest(
+            new Uri("asset:///Content/Materials/Textured.omat.json"),
+            workspace.Root,
+            "Content",
+            "Content/Materials/Textured.omat.json");
+
+        var first = await service.CookMaterialAsync(request, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var firstTextureInput = first.Cook!.InputSnapshot!.Inputs.Single(input => input.RelativePath == "Content/Textures/Surface.tga");
+        firstImage[^2] = 255;
+        await File.WriteAllBytesAsync(imagePath, firstImage, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var second = await service.CookMaterialAsync(request, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var secondTextureInput = second.Cook!.InputSnapshot!.Inputs.Single(input => input.RelativePath == "Content/Textures/Surface.tga");
+
+        _ = first.State.Should().Be(MaterialCookState.Cooked);
+        _ = second.State.Should().Be(MaterialCookState.Cooked);
+        _ = secondTextureInput.DiscoveryHash.Should().NotBe(firstTextureInput.DiscoveryHash);
+        _ = second.Cook.CookedAssets.Should().Contain(asset => asset.Kind == ContentCookAssetKind.Texture
+            && asset.SourceAssetUri == new Uri("asset:///Content/Textures/Surface.otex.json"));
+        _ = second.Cook.CookedAssets.Concat(second.Cook.ReusedAssets).Should().Contain(asset => asset.Kind == ContentCookAssetKind.Material
+            && asset.SourceAssetUri == request.MaterialSourceUri);
+    }
+
+    /// <summary>Missing texture descriptors report the owning material and schema channel.</summary>
+    /// <returns>The asynchronous test operation.</returns>
+    [TestMethod]
+    public async Task CookMaterialAsync_WhenTextureDescriptorIsMissing_ShouldReportMaterialAndChannel()
+    {
+        using var workspace = new MaterialWorkspace();
+        var materialPath = Path.Combine(workspace.Root, "Content", "Materials", "Broken.omat.json");
+        await WriteMaterialAsync(materialPath, CreateMaterial("Broken", metallicFactor: 0.0f, roughnessFactor: 0.5f)
+            .WithTextureReference("base_color", "/Content/Textures/Missing.otex")).ConfigureAwait(false);
+        var service = CreateService(workspace);
+
+        var result = await service.CookMaterialAsync(
+            new MaterialCookRequest(
+                new Uri("asset:///Content/Materials/Broken.omat.json"),
+                workspace.Root,
+                "Content",
+                "Content/Materials/Broken.omat.json"),
+            this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = result.State.Should().Be(MaterialCookState.Failed);
+        _ = result.Cook!.Diagnostics.Should().Contain(diagnostic =>
+            diagnostic.Code == "material.texture_reference_invalid"
+            && diagnostic.Message.Contains("/Content/Materials/Broken.omat.json", StringComparison.Ordinal)
+            && diagnostic.Message.Contains("base_color", StringComparison.Ordinal)
+            && diagnostic.Message.Contains("texture descriptor is missing", StringComparison.Ordinal));
+    }
+
+    /// <summary>Invalid texture paths report the owning material and schema channel.</summary>
+    /// <returns>The asynchronous test operation.</returns>
+    [TestMethod]
+    public async Task CookMaterialAsync_WhenTexturePathIsInvalid_ShouldReportMaterialAndChannel()
+    {
+        using var workspace = new MaterialWorkspace();
+        var materialPath = Path.Combine(workspace.Root, "Content", "Materials", "Invalid.omat.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(materialPath)!);
+        await File.WriteAllTextAsync(materialPath, """
+            { "name": "Invalid", "textures": { "base_color": { "virtual_path": 42 } } }
+            """, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var service = CreateService(workspace);
+
+        var result = await service.CookMaterialAsync(
+            new MaterialCookRequest(
+                new Uri("asset:///Content/Materials/Invalid.omat.json"),
+                workspace.Root,
+                "Content",
+                "Content/Materials/Invalid.omat.json"),
+            this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = result.State.Should().Be(MaterialCookState.Failed);
+        _ = result.Cook!.Diagnostics.Should().Contain(diagnostic =>
+            diagnostic.Code == "material.texture_reference_invalid"
+            && diagnostic.Message.Contains("/Content/Materials/Invalid.omat.json", StringComparison.Ordinal)
+            && diagnostic.Message.Contains("base_color", StringComparison.Ordinal)
+            && diagnostic.Message.Contains("valid virtual_path", StringComparison.Ordinal));
+    }
+
     private static MaterialCookService CreateService(MaterialWorkspace workspace)
         => new(workspace.NativePipeline.Pipeline, workspace.ContextService, NullLogger<MaterialCookService>.Instance);
 

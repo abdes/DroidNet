@@ -44,11 +44,14 @@ public sealed record MaterialSource
         this.PbrMetallicRoughness = pbrMetallicRoughness;
         this.NormalTexture = normalTexture;
         this.OcclusionTexture = occlusionTexture;
+        this.NormalScale = normalTexture?.Scale ?? 1.0f;
+        this.OcclusionStrength = occlusionTexture?.Strength ?? 1.0f;
         this.AlphaMode = alphaMode;
         this.AlphaCutoff = alphaCutoff;
         this.DoubleSided = doubleSided;
         this.EmissiveColor = emissiveColor ?? Vector3.One;
         this.EmissiveIntensity = emissiveIntensity;
+        this.TextureReferences = CreateTextureReferences(pbrMetallicRoughness, normalTexture, occlusionTexture);
     }
 
     /// <summary>
@@ -70,6 +73,15 @@ public sealed record MaterialSource
     /// Gets the optional occlusion texture reference and strength.
     /// </summary>
     public OcclusionTextureRef? OcclusionTexture { get; init; }
+
+    /// <summary>Gets or sets the per-channel canonical native virtual texture paths.</summary>
+    public IReadOnlyDictionary<string, string> TextureReferences { get; init; }
+
+    /// <summary>Gets or sets the normal-map scale, retained independently of its optional binding.</summary>
+    public float NormalScale { get; init; }
+
+    /// <summary>Gets or sets the occlusion strength, retained independently of its optional binding.</summary>
+    public float OcclusionStrength { get; init; }
 
     /// <summary>
     /// Gets the alpha mode.
@@ -98,30 +110,79 @@ public sealed record MaterialSource
     /// <returns>Canonical absolute virtual paths; repeated bindings may name the same asset.</returns>
     public IEnumerable<string> EnumerateTextureVirtualPaths()
     {
-        if (this.Descriptor is { } descriptor)
+        foreach (var path in this.TextureReferences.Values)
         {
-            if (descriptor.TryGetProperty("textures", out var textures))
-            {
-                foreach (var binding in textures.EnumerateObject())
-                {
-                    yield return binding.Value.GetProperty("virtual_path").GetString()!;
-                }
-            }
+            yield return path;
+        }
+    }
 
-            yield break;
+    /// <summary>Returns a copy of this material with one texture channel assigned or cleared.</summary>
+    /// <param name="channel">A channel supported by the native material descriptor schema.</param>
+    /// <param name="virtualPath">The canonical absolute texture virtual path, or null to clear.</param>
+    /// <returns>The updated immutable material snapshot.</returns>
+    public MaterialSource WithTextureReference(string channel, string? virtualPath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(channel);
+        if (!TextureChannels.Contains(channel, StringComparer.Ordinal))
+        {
+            throw new ArgumentException($"Unsupported material texture channel '{channel}'.", nameof(channel));
         }
 
-        foreach (var path in new[]
+        var references = this.TextureReferences.ToDictionary(static pair => pair.Key, static pair => pair.Value, StringComparer.Ordinal);
+        if (string.IsNullOrWhiteSpace(virtualPath))
         {
-            this.PbrMetallicRoughness.BaseColorTexture?.Source,
-            this.PbrMetallicRoughness.MetallicRoughnessTexture?.Source,
-            this.NormalTexture?.Source,
-            this.OcclusionTexture?.Source,
-        })
+            _ = references.Remove(channel);
+            virtualPath = null;
+        }
+        else
+        {
+            references[channel] = virtualPath;
+        }
+
+        var pbr = this.PbrMetallicRoughness;
+        MaterialTextureRef? baseColor = channel == "base_color"
+            ? virtualPath is null ? null : new(virtualPath)
+            : pbr.BaseColorTexture;
+        return this with
+        {
+            TextureReferences = references,
+            PbrMetallicRoughness = new MaterialPbrMetallicRoughness(
+                pbr.BaseColorR, pbr.BaseColorG, pbr.BaseColorB, pbr.BaseColorA,
+                pbr.MetallicFactor, pbr.RoughnessFactor, baseColor, pbr.MetallicRoughnessTexture),
+            NormalTexture = channel == "normal"
+                ? virtualPath is null ? null : new(virtualPath, this.NormalScale)
+                : this.NormalTexture,
+            OcclusionTexture = channel == "ambient_occlusion"
+                ? virtualPath is null ? null : new(virtualPath, this.OcclusionStrength)
+                : this.OcclusionTexture,
+        };
+    }
+
+    /// <summary>Lists all editable texture binding names from the current native schema.</summary>
+    public static IReadOnlyList<string> TextureChannels { get; } =
+    [
+        "base_color", "normal", "metallic", "roughness", "ambient_occlusion", "emissive",
+        "specular", "sheen_color", "clearcoat", "clearcoat_normal", "transmission", "thickness",
+    ];
+
+    private static IReadOnlyDictionary<string, string> CreateTextureReferences(
+        MaterialPbrMetallicRoughness pbr,
+        NormalTextureRef? normal,
+        OcclusionTextureRef? occlusion)
+    {
+        var result = new Dictionary<string, string>(StringComparer.Ordinal);
+        Add("base_color", pbr.BaseColorTexture?.Source);
+        Add("metallic", pbr.MetallicRoughnessTexture?.Source);
+        Add("roughness", pbr.MetallicRoughnessTexture?.Source);
+        Add("normal", normal?.Source);
+        Add("ambient_occlusion", occlusion?.Source);
+        return result;
+
+        void Add(string channel, string? path)
         {
             if (path is not null)
             {
-                yield return path;
+                result[channel] = path;
             }
         }
     }

@@ -65,6 +65,43 @@ public sealed partial class MaterialDocumentService(
     }
 
     /// <inheritdoc />
+    public Task<MaterialEditResult> EditTextureAsync(
+        Guid documentId,
+        string channel,
+        string? virtualPath,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(channel);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        lock (this.sync)
+        {
+            this.FinishMaterialGesture(documentId, commit: true);
+            var document = this.GetDocument(documentId);
+            if (!MaterialSource.TextureChannels.Contains(channel, StringComparer.Ordinal))
+            {
+                return Task.FromResult(this.RejectPropertyEdit(document, "MATERIAL_TEXTURE_CHANNEL_INVALID", $"Texture channel '{channel}' is not supported."));
+            }
+
+            if (virtualPath is not null
+                && (!Oxygen.Managed.Assets.Filesystem.VirtualPath.IsCanonicalAbsolute(virtualPath)
+                    || virtualPath.IndexOf('/', 1) < 2))
+            {
+                return Task.FromResult(this.RejectPropertyEdit(document, "MATERIAL_TEXTURE_PATH_INVALID", $"Texture channel '{channel}' requires a canonical absolute virtual path."));
+            }
+
+            var updated = document.Source.WithTextureReference(channel, virtualPath);
+            if (this.ValidateEditedSource(document, updated) is { } invalid)
+            {
+                return Task.FromResult(invalid);
+            }
+
+            this.CommitMaterialSource(document, updated, $"Edit {channel} texture");
+            return Task.FromResult(new MaterialEditResult(Succeeded: true, OperationId: null));
+        }
+    }
+
+    /// <inheritdoc />
     public async Task<MaterialDocument> CreateAsync(
         Uri targetUri,
         CancellationToken cancellationToken = default)
@@ -372,15 +409,23 @@ public sealed partial class MaterialDocumentService(
             return true;
         }
 
-        if (string.Equals(fieldKey, MaterialFieldKeys.NormalTextureScale, StringComparison.Ordinal) && source.NormalTexture is { } normal)
+        if (string.Equals(fieldKey, MaterialFieldKeys.NormalTextureScale, StringComparison.Ordinal))
         {
-            updated = WithNormalTexture(source, normal with { Scale = value });
+            updated = source with
+            {
+                NormalScale = value,
+                NormalTexture = source.NormalTexture is { } normal ? normal with { Scale = value } : null,
+            };
             return true;
         }
 
-        if (string.Equals(fieldKey, MaterialFieldKeys.OcclusionTextureStrength, StringComparison.Ordinal) && source.OcclusionTexture is { } occlusion)
+        if (string.Equals(fieldKey, MaterialFieldKeys.OcclusionTextureStrength, StringComparison.Ordinal))
         {
-            updated = WithOcclusionTexture(source, occlusion with { Strength = value });
+            updated = source with
+            {
+                OcclusionStrength = value,
+                OcclusionTexture = source.OcclusionTexture is { } occlusion ? occlusion with { Strength = value } : null,
+            };
             return true;
         }
 

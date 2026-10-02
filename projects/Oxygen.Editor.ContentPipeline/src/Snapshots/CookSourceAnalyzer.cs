@@ -4,6 +4,7 @@
 
 using System.Collections.Immutable;
 using System.Security.Cryptography;
+using System.Text.Json;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.Projects;
@@ -53,6 +54,7 @@ internal sealed partial class CookSourceAnalyzer(
 
             var source = await this.PrepareAsync(input, cancellationToken).ConfigureAwait(false);
             prepared.Add(source);
+            diagnostics.AddRange(source.Diagnostics);
             if (source.Scene is { } scene)
             {
                 diagnostics.AddRange(scene.Diagnostics);
@@ -219,11 +221,136 @@ internal sealed partial class CookSourceAnalyzer(
             managed.Add(new(null, settingsPath, input.SourceRelativePath + NativeSceneImportSettings.SidecarSuffix, string.Empty, CookSnapshotInputKind.Absent));
         }
 
-        return new(input, recipes.BuildJob(input, [], settings), managed.ToImmutable(), null);
+        var textureDiagnostics = input.Kind == ContentCookAssetKind.Material
+            ? await this.ValidateMaterialTextureSourcesAsync(input, cancellationToken).ConfigureAwait(false)
+            : [];
+        return new(input, recipes.BuildJob(input, [], settings), managed.ToImmutable(), null) { Diagnostics = textureDiagnostics };
     }
+
+    private async Task<ImmutableArray<DiagnosticRecord>> ValidateMaterialTextureSourcesAsync(ContentCookInput input, CancellationToken cancellationToken)
+    {
+        var diagnostics = ImmutableArray.CreateBuilder<DiagnosticRecord>();
+        var materialBytes = await CookSavedSourceReader.ReadAsync(documents, input.SourceAbsolutePath, cancellationToken).ConfigureAwait(false);
+        JsonDocument material;
+        try
+        {
+            material = JsonDocument.Parse(materialBytes);
+        }
+        catch (JsonException exception)
+        {
+            diagnostics.Add(this.CreateTextureReferenceDiagnostic(input, "<unknown>", input.SourceAbsolutePath, "material descriptor is invalid JSON", exception.Message));
+            return diagnostics.ToImmutable();
+        }
+
+        using (material)
+        {
+            var root = material.RootElement;
+            if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("textures", out var textures))
+            {
+                return diagnostics.ToImmutable();
+            }
+
+            if (textures.ValueKind != JsonValueKind.Object)
+            {
+                diagnostics.Add(this.CreateTextureReferenceDiagnostic(input, "<unknown>", input.SourceAbsolutePath, "material texture bindings are invalid", null));
+                return diagnostics.ToImmutable();
+            }
+
+            foreach (var binding in textures.EnumerateObject())
+            {
+                var virtualPath = binding.Value.ValueKind == JsonValueKind.Object
+                    && binding.Value.TryGetProperty("virtual_path", out var pathValue)
+                    && pathValue.ValueKind == JsonValueKind.String
+                    ? pathValue.GetString()
+                    : null;
+                if (string.IsNullOrWhiteSpace(virtualPath))
+                {
+                    diagnostics.Add(this.CreateTextureReferenceDiagnostic(input, binding.Name, input.SourceAbsolutePath, "binding has no valid virtual_path", null));
+                    continue;
+                }
+
+                if (!Oxygen.Managed.Assets.Filesystem.VirtualPath.IsCanonicalAbsolute(virtualPath)
+                    || virtualPath.IndexOf('/', 1) < 2
+                    || !virtualPath.EndsWith(".otex", StringComparison.Ordinal))
+                {
+                    diagnostics.Add(this.CreateTextureReferenceDiagnostic(input, binding.Name, virtualPath, "path is not a canonical named texture", null));
+                    continue;
+                }
+
+                var textureDescriptorPath = this.ResolveTextureDescriptorPath(virtualPath);
+                if (textureDescriptorPath is null || !File.Exists(textureDescriptorPath))
+                {
+                    diagnostics.Add(this.CreateTextureReferenceDiagnostic(input, binding.Name, textureDescriptorPath ?? virtualPath, "texture descriptor is missing", null));
+                    continue;
+                }
+
+                try
+                {
+                    using var textureDescriptor = JsonDocument.Parse(await File.ReadAllBytesAsync(textureDescriptorPath, cancellationToken).ConfigureAwait(false));
+                    var descriptorRoot = textureDescriptor.RootElement;
+                    var source = descriptorRoot.ValueKind == JsonValueKind.Object
+                        && descriptorRoot.TryGetProperty("source", out var sourceValue)
+                        && sourceValue.ValueKind == JsonValueKind.String
+                        ? sourceValue.GetString()
+                        : null;
+                    if (string.IsNullOrWhiteSpace(source))
+                    {
+                        diagnostics.Add(this.CreateTextureReferenceDiagnostic(input, binding.Name, textureDescriptorPath, "texture descriptor has no source image", null));
+                        continue;
+                    }
+
+                    var imagePath = Path.IsPathRooted(source)
+                        ? Path.GetFullPath(source)
+                        : Path.GetFullPath(Path.Combine(Path.GetDirectoryName(textureDescriptorPath)!, source));
+                    if (!File.Exists(imagePath))
+                    {
+                        diagnostics.Add(this.CreateTextureReferenceDiagnostic(input, binding.Name, imagePath, "source image is missing", null));
+                    }
+                }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException or ArgumentException)
+                {
+                    diagnostics.Add(this.CreateTextureReferenceDiagnostic(input, binding.Name, textureDescriptorPath, "texture descriptor is invalid", exception.Message));
+                }
+            }
+        }
+
+        return diagnostics.ToImmutable();
+    }
+
+    private string? ResolveTextureDescriptorPath(string virtualPath)
+    {
+        var parts = virtualPath.TrimStart('/').Split('/');
+        var mount = operation.Project.AuthoringMounts.FirstOrDefault(mount => string.Equals(mount.Name, parts[0], StringComparison.OrdinalIgnoreCase));
+        if (mount is null || parts.Length < 2 || parts.Skip(1).Any(static part => part is "" or "." or ".."))
+        {
+            return null;
+        }
+
+        var relative = Path.Combine(parts.Skip(1).ToArray()) + ".json";
+        var mountRoot = Path.GetFullPath(Path.Combine(operation.Project.ProjectRoot, mount.RelativePath));
+        var descriptor = Path.GetFullPath(Path.Combine(mountRoot, relative));
+        var rootedMount = mountRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        return descriptor.StartsWith(rootedMount, StringComparison.OrdinalIgnoreCase) ? descriptor : null;
+    }
+
+    private DiagnosticRecord CreateTextureReferenceDiagnostic(ContentCookInput input, string channel, string affectedPath, string issue, string? details)
+        => new()
+        {
+            OperationId = operation.OperationId,
+            Domain = FailureDomain.AssetImport,
+            Severity = DiagnosticSeverity.Error,
+            Code = "material.texture_reference_invalid",
+            Message = $"Material '{input.AssetUri.AbsolutePath}' texture channel '{channel}' {issue}.",
+            TechnicalMessage = details,
+            AffectedPath = affectedPath,
+            AffectedVirtualPath = input.AssetUri.AbsolutePath,
+        };
 
     private ContentCookInput Rebase(ContentCookInput input)
         => input with { SourceRelativePath = Path.GetRelativePath(operation.Project.ProjectRoot, input.SourceAbsolutePath).Replace('\\', '/') };
 
-    private sealed record PreparedSource(ContentCookInput Input, ContentImportJob Job, ImmutableArray<CookSnapshotInput> ManagedFiles, SceneDescriptorGenerationResult? Scene);
+    private sealed record PreparedSource(ContentCookInput Input, ContentImportJob Job, ImmutableArray<CookSnapshotInput> ManagedFiles, SceneDescriptorGenerationResult? Scene)
+    {
+        public ImmutableArray<DiagnosticRecord> Diagnostics { get; init; } = [];
+    }
 }

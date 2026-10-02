@@ -272,6 +272,19 @@ public sealed partial class MaterialEditorViewModelTests
             return Task.FromResult(new MaterialEditResult(Succeeded: false, OperationId: null));
         }
 
+        public Task<MaterialEditResult> EditTextureAsync(
+            Guid documentId,
+            string channel,
+            string? virtualPath,
+            CancellationToken cancellationToken = default)
+        {
+            _ = documentId;
+            _ = channel;
+            _ = virtualPath;
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(new MaterialEditResult(Succeeded: false, OperationId: null));
+        }
+
         public Task<MaterialEditResult> EditPropertiesAsync(
             Guid documentId,
             PropertyEdit edit,

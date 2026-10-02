@@ -114,14 +114,14 @@ public sealed class MaterialDescriptors
             ValidateUnitFloat);
 
         Register(byId, AmbientOcclusion, unitFloat, "material.ambient_occlusion",
-            static state => state.Source.OcclusionTexture?.Strength ?? 1.0f,
+            static state => state.Source.OcclusionStrength,
             static (state, v) => state.Replace(s => WithOcclusionStrength(s, v)),
             ValidateUnitFloat);
 
         Register(byId, NormalScale,
             new EditorAnnotation { Group = "Parameters", Renderer = "numberbox", Step = 0.01, SoftMin = 0.0, SoftMax = 4.0 },
             "material.normal_scale",
-            static state => state.Source.NormalTexture?.Scale ?? 1.0f,
+            static state => state.Source.NormalScale,
             static (state, v) => state.Replace(s => WithNormalScale(s, v)),
             ValidateNonNegativeFloat);
 
@@ -213,7 +213,7 @@ public sealed class MaterialDescriptors
         var normal = source.NormalTexture is { } n
             ? (NormalTextureRef?)(n with { Scale = scale })
             : null;
-        return source with { NormalTexture = normal };
+        return source with { NormalTexture = normal, NormalScale = scale };
     }
 
     private static MaterialSource WithOcclusionStrength(MaterialSource source, float strength)
@@ -221,6 +221,6 @@ public sealed class MaterialDescriptors
         var occlusion = source.OcclusionTexture is { } o
             ? (OcclusionTextureRef?)(o with { Strength = strength })
             : null;
-        return source with { OcclusionTexture = occlusion };
+        return source with { OcclusionTexture = occlusion, OcclusionStrength = strength };
     }
 }

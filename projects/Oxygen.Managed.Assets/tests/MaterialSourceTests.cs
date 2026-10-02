@@ -133,11 +133,28 @@ public sealed class MaterialSourceTests
     }
 
     [TestMethod]
-    public void ReadOnlyTextureChangesAreRejectedInsteadOfDiscarded()
+    public void TextureEditsChangeOnlyTheSelectedChannelAndPreserveItsUvBinding()
     {
-        var source = MaterialSourceReader.Read("""{"textures":{"normal":{"virtual_path":"/Art/Normal.otex"}}}"""u8);
-        Action write = () => MaterialSourceWriter.ToJson(source with { NormalTexture = null });
-        _ = write.Should().Throw<InvalidOperationException>();
+        var source = MaterialSourceReader.Read("""
+            { "textures": {
+                "base_color": { "virtual_path": "/Art/Old.otex", "uv_set": 2,
+                  "uv_transform": { "scale": [2, 3], "offset": [0.1, 0.2] } },
+                "normal": { "virtual_path": "/Art/Normal.otex", "uv_set": 1 }
+            } }
+            """u8);
+
+        var edited = source.WithTextureReference("base_color", "/Content/Textures/New.otex");
+        var output = MaterialSourceWriter.ToJson(edited);
+
+        _ = output["textures"]!["base_color"]!["virtual_path"]!.GetValue<string>().Should().Be("/Content/Textures/New.otex");
+        _ = output["textures"]!["base_color"]!["uv_set"]!.GetValue<int>().Should().Be(2);
+        _ = output["textures"]!["base_color"]!["uv_transform"]!["scale"]![0]!.GetValue<float>().Should().Be(2f);
+        _ = output["textures"]!["normal"]!["virtual_path"]!.GetValue<string>().Should().Be("/Art/Normal.otex");
+
+        var cleared = edited.WithTextureReference("normal", null);
+        var clearedJson = MaterialSourceWriter.ToJson(cleared);
+        _ = clearedJson["textures"]!.AsObject().ContainsKey("normal").Should().BeFalse();
+        _ = clearedJson["textures"]!["base_color"]!["uv_set"]!.GetValue<int>().Should().Be(2);
     }
 
     [TestMethod]

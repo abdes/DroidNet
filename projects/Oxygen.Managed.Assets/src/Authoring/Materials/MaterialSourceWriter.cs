@@ -58,7 +58,6 @@ public static class MaterialSourceWriter
         }
 
         var pbr = material.PbrMetallicRoughness;
-        ValidateReadOnlyTextureReferences(material);
         parameters["base_color"] = new JsonArray(pbr.BaseColorR, pbr.BaseColorG, pbr.BaseColorB, pbr.BaseColorA);
         parameters["metalness"] = pbr.MetallicFactor;
         var originalParameters = material.Descriptor is { } savedDescriptor && savedDescriptor.TryGetProperty("parameters", out var savedParameters)
@@ -71,60 +70,64 @@ public static class MaterialSourceWriter
         parameters["alpha_cutoff"] = material.AlphaCutoff;
         parameters["emissive_color"] = new JsonArray(material.EmissiveColor.X, material.EmissiveColor.Y, material.EmissiveColor.Z);
         parameters["emissive_intensity"] = material.EmissiveIntensity;
-        if (material.NormalTexture is { } normal)
+        if (material.NormalTexture is not null || ShouldWriteSetting(material, "normal_scale", material.NormalScale, 1.0f))
         {
-            parameters["normal_scale"] = normal.Scale;
+            parameters["normal_scale"] = material.NormalScale;
         }
 
-        if (material.OcclusionTexture is { } occlusion)
+        if (material.OcclusionTexture is not null || ShouldWriteSetting(material, "ambient_occlusion", material.OcclusionStrength, 1.0f))
         {
-            parameters["ambient_occlusion"] = occlusion.Strength;
+            parameters["ambient_occlusion"] = material.OcclusionStrength;
         }
 
-        // Existing canonical bindings include independent channels and UV transforms.
-        // These are read-only in the scalar editor and retain their exact representation.
-        if (material.Descriptor is null)
-        {
-            var textures = new JsonObject();
-            AddTexture(textures, "base_color", pbr.BaseColorTexture?.Source);
-            AddTexture(textures, "normal", material.NormalTexture?.Source);
-            AddTexture(textures, "ambient_occlusion", material.OcclusionTexture?.Source);
-            AddTexture(textures, "metallic", pbr.MetallicRoughnessTexture?.Source);
-            AddTexture(textures, "roughness", pbr.MetallicRoughnessTexture?.Source);
-            if (textures.Count > 0)
-            {
-                descriptor["textures"] = textures;
-            }
-        }
+        ApplyTextureReferences(descriptor, material.TextureReferences);
 
         MaterialSourceReader.Validate(JsonSerializer.SerializeToElement(descriptor));
         return descriptor;
     }
 
-    private static void AddTexture(JsonObject textures, string name, string? source)
+    private static bool ShouldWriteSetting(MaterialSource material, string setting, float value, float defaultValue)
     {
-        if (source is not null)
+        if (material.Descriptor is not { } descriptor
+            || !descriptor.TryGetProperty("parameters", out var parameters)
+            || !parameters.TryGetProperty(setting, out var original))
         {
-            textures[name] = new JsonObject { ["virtual_path"] = source };
+            return value != defaultValue;
         }
+
+        return original.GetSingle() != value;
     }
 
-    private static void ValidateReadOnlyTextureReferences(MaterialSource material)
+    private static void ApplyTextureReferences(JsonObject descriptor, IReadOnlyDictionary<string, string> references)
     {
-        if (material.Descriptor is not { } descriptor)
+        var textures = descriptor["textures"] is JsonObject original
+            ? (JsonObject)original.DeepClone()
+            : new JsonObject();
+        foreach (var channel in MaterialSource.TextureChannels)
         {
-            return;
+            if (!references.TryGetValue(channel, out var virtualPath))
+            {
+                _ = textures.Remove(channel);
+                continue;
+            }
+
+            if (textures[channel] is JsonObject existing)
+            {
+                existing["virtual_path"] = virtualPath;
+            }
+            else
+            {
+                textures[channel] = new JsonObject { ["virtual_path"] = virtualPath };
+            }
         }
 
-        var textures = descriptor.TryGetProperty("textures", out var bindings) ? bindings : default;
-        string? ReadPath(string name) => textures.ValueKind == JsonValueKind.Object && textures.TryGetProperty(name, out var binding)
-            ? binding.GetProperty("virtual_path").GetString() : null;
-        if (!string.Equals(material.PbrMetallicRoughness.BaseColorTexture?.Source, ReadPath("base_color"), StringComparison.Ordinal)
-            || !string.Equals(material.PbrMetallicRoughness.MetallicRoughnessTexture?.Source, MaterialSource.PackedMetallicRoughnessPath(textures), StringComparison.Ordinal)
-            || !string.Equals(material.NormalTexture?.Source, ReadPath("normal"), StringComparison.Ordinal)
-            || !string.Equals(material.OcclusionTexture?.Source, ReadPath("ambient_occlusion"), StringComparison.Ordinal))
+        if (textures.Count == 0)
         {
-            throw new InvalidOperationException("Texture identities are read-only in the scalar material editor.");
+            _ = descriptor.Remove("textures");
+        }
+        else
+        {
+            descriptor["textures"] = textures;
         }
     }
 }

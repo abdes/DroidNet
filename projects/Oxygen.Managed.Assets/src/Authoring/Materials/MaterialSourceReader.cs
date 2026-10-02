@@ -33,6 +33,8 @@ public static class MaterialSourceReader
         var normal = Texture(textures, "normal");
         var occlusion = Texture(textures, "ambient_occlusion");
         var metallicRoughness = MaterialSource.PackedMetallicRoughnessPath(textures);
+        var normalScale = Scalar(parameters, "normal_scale", 1.0f);
+        var occlusionStrength = Scalar(parameters, "ambient_occlusion", 1.0f);
         return new MaterialSource(
             name: descriptor.TryGetProperty("name", out var name) ? name.GetString() : null,
             pbrMetallicRoughness: new MaterialPbrMetallicRoughness(
@@ -40,9 +42,9 @@ public static class MaterialSourceReader
                 Scalar(parameters, "metalness", 0.0f), MaterialSource.ResolveRoughness(parameters),
                 Texture(textures, "base_color"), metallicRoughness is null ? null : new MaterialTextureRef(metallicRoughness)),
             normalTexture: normal is { } normalRef
-                ? new NormalTextureRef(normalRef.Source, Scalar(parameters, "normal_scale", 1.0f)) : null,
+                ? new NormalTextureRef(normalRef.Source, normalScale) : null,
             occlusionTexture: occlusion is { } occlusionRef
-                ? new OcclusionTextureRef(occlusionRef.Source, Scalar(parameters, "ambient_occlusion", 1.0f)) : null,
+                ? new OcclusionTextureRef(occlusionRef.Source, occlusionStrength) : null,
             alphaMode: MaterialSource.ResolveAlphaMode(descriptor),
             alphaCutoff: Scalar(parameters, "alpha_cutoff", 0.5f),
             doubleSided: parameters.ValueKind == JsonValueKind.Object
@@ -51,6 +53,9 @@ public static class MaterialSourceReader
             emissiveIntensity: Scalar(parameters, "emissive_intensity", 0.0f))
         {
             Descriptor = descriptor.Clone(),
+            NormalScale = normalScale,
+            OcclusionStrength = occlusionStrength,
+            TextureReferences = ReadTextureReferences(textures),
         };
     }
 
@@ -140,4 +145,21 @@ public static class MaterialSourceReader
     private static MaterialTextureRef? Texture(JsonElement textures, string name)
         => textures.ValueKind == JsonValueKind.Object && textures.TryGetProperty(name, out var binding)
             ? new MaterialTextureRef(binding.GetProperty("virtual_path").GetString()!) : null;
+
+    private static IReadOnlyDictionary<string, string> ReadTextureReferences(JsonElement textures)
+    {
+        var references = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (textures.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var channel in MaterialSource.TextureChannels)
+            {
+                if (textures.TryGetProperty(channel, out var binding))
+                {
+                    references.Add(channel, binding.GetProperty("virtual_path").GetString()!);
+                }
+            }
+        }
+
+        return references;
+    }
 }

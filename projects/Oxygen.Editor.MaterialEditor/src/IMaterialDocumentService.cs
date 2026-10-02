@@ -80,6 +80,14 @@ public interface IMaterialDocumentService : IMaterialPropertyEditService
     /// <returns>The edit result.</returns>
     public Task<MaterialEditResult> EditScalarAsync(Guid documentId, MaterialFieldEdit edit, CancellationToken cancellationToken = default);
 
+    /// <summary>Assigns or clears one native material texture channel through the document history.</summary>
+    /// <param name="documentId">The material document identity.</param>
+    /// <param name="channel">The native schema channel name.</param>
+    /// <param name="virtualPath">The canonical texture virtual path, or null to clear it.</param>
+    /// <param name="cancellationToken">Cancels before authoring mutation.</param>
+    /// <returns>The validation and application result.</returns>
+    public Task<MaterialEditResult> EditTextureAsync(Guid documentId, string channel, string? virtualPath, CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Saves a material document.
     /// </summary>

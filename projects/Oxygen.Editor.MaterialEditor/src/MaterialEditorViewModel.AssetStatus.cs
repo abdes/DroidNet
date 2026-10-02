@@ -42,6 +42,61 @@ public sealed partial class MaterialEditorViewModel
         if (!this.isDisposed)
         {
             this.AssetStatus = items.FirstOrDefault(item => item.IdentityUri == this.metadata.MaterialUri || item.CookedUri == this.metadata.MaterialUri);
+            this.availableTextureChoices = items
+                .Select(CreateTextureChoice)
+                .OfType<MaterialTextureChoice>()
+                .Where(static choice => choice.IsAvailable)
+                .DistinctBy(static choice => choice.VirtualPath, StringComparer.Ordinal)
+                .OrderBy(static choice => choice.DisplayName, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            foreach (var channel in this.TextureChannels)
+            {
+                channel.Refresh(this.availableTextureChoices, channel.SelectedVirtualPath);
+            }
+        }
+    }
+
+    private static MaterialTextureChoice? CreateTextureChoice(ContentBrowserAssetItem item)
+    {
+        if (item.Kind != AssetKind.Texture
+            || item.DescriptorPath is not { } descriptorPath
+            || !item.IdentityUri.AbsolutePath.EndsWith(".otex.json", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var virtualPath = Uri.UnescapeDataString(item.IdentityUri.AbsolutePath)[..^".json".Length];
+        var valid = item.PrimaryState is not (AssetState.Broken or AssetState.Missing)
+            && IsTextureDescriptorSourceAvailable(descriptorPath);
+        return new(virtualPath, item.DisplayName, valid);
+    }
+
+    private static bool IsTextureDescriptorSourceAvailable(string descriptorPath)
+    {
+        try
+        {
+            using var descriptor = System.Text.Json.JsonDocument.Parse(File.ReadAllBytes(descriptorPath));
+            if (!descriptor.RootElement.TryGetProperty("source", out var sourceValue)
+                || sourceValue.ValueKind != System.Text.Json.JsonValueKind.String
+                || string.IsNullOrWhiteSpace(sourceValue.GetString()))
+            {
+                return false;
+            }
+
+            var source = sourceValue.GetString()!;
+            if (Path.IsPathRooted(source) || source.Replace('\\', '/').Split('/').Any(static segment => segment is ".." or "." or ""))
+            {
+                return false;
+            }
+
+            var directory = Path.GetDirectoryName(Path.GetFullPath(descriptorPath))!;
+            var sourcePath = Path.GetFullPath(Path.Combine(directory, source));
+            return sourcePath.StartsWith(directory.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+                && File.Exists(sourcePath);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or System.Text.Json.JsonException or ArgumentException)
+        {
+            return false;
         }
     }
 
