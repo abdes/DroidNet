@@ -18,6 +18,7 @@
                             x:Name="PartLabelTextBlock"
                             HorizontalAlignment="{TemplateBinding HorizontalLabelAlignment}"
                             VerticalAlignment="Center"
+                            Foreground="{TemplateBinding LabelForeground}"
                             Text="{TemplateBinding Label}"
                             TextTrimming="CharacterEllipsis"
                             TextWrapping="NoWrap" />
@@ -26,34 +27,50 @@
                             Margin="1"
                             Background="{ThemeResource ControlAltFillColorTertiaryBrush}"
                             BackgroundSizing="OuterBorderEdge"
-                            BorderBrush="Transparent"
+                            BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
                             BorderThickness="0">
-                            <Grid>
+                            <Grid ColumnSpacing="0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
                                 <TextBlock
-                                    x:Name="PartValueTextBlock"
-                                    MinHeight="26"
-                                    Padding="10,2,10,0"
-                                    HorizontalAlignment="Stretch"
+                                    x:Name="PartCompactLabelTextBlock"
+                                    Grid.Column="0"
+                                    Margin="8,0,4,0"
                                     VerticalAlignment="Center"
-                                    FontSize="14"
-                                    HorizontalTextAlignment="{Binding Path=HorizontalValueAlignment, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}"
-                                    Text="{Binding Path=DisplayText, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}" />
-                                <TextBox
-                                    x:Name="PartEditBox"
-                                    MinHeight="26"
-                                    Margin="0"
-                                    Padding="10,2,10,0"
-                                    VerticalAlignment="Center"
-                                    Background="{ThemeResource ControlAltFillColorTertiaryBrush}"
-                                    BackgroundSizing="OuterBorderEdge"
-                                    CornerRadius="0"
-                                    FontSize="14"
-                                    InputScope="Number"
-                                    IsSpellCheckEnabled="False"
-                                    IsTextPredictionEnabled="False"
-                                    TextAlignment="{Binding Path=HorizontalValueAlignment, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}"
-                                    TextWrapping="Wrap"
+                                    Foreground="{TemplateBinding LabelForeground}"
+                                    Text="{TemplateBinding Label}"
+                                    TextTrimming="CharacterEllipsis"
+                                    TextWrapping="NoWrap"
                                     Visibility="Collapsed" />
+                                <Grid Grid.Column="1">
+                                    <TextBlock
+                                        x:Name="PartValueTextBlock"
+                                        MinHeight="26"
+                                        Padding="8,2,8,0"
+                                        HorizontalAlignment="Stretch"
+                                        VerticalAlignment="Center"
+                                        FontSize="14"
+                                        HorizontalTextAlignment="{Binding Path=HorizontalValueAlignment, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}"
+                                        Text="{Binding Path=DisplayText, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}" />
+                                    <TextBox
+                                        x:Name="PartEditBox"
+                                        MinHeight="26"
+                                        Margin="0"
+                                        Padding="8,2,8,0"
+                                        VerticalAlignment="Center"
+                                        Background="{ThemeResource ControlAltFillColorTertiaryBrush}"
+                                        BackgroundSizing="OuterBorderEdge"
+                                        CornerRadius="0"
+                                        FontSize="14"
+                                        InputScope="Number"
+                                        IsSpellCheckEnabled="False"
+                                        IsTextPredictionEnabled="False"
+                                        TextAlignment="{Binding Path=HorizontalValueAlignment, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}"
+                                        TextWrapping="Wrap"
+                                        Visibility="Collapsed" />
+                                </Grid>
                             </Grid>
                         </Border>
                         <VisualStateManager.VisualStateGroups>
@@ -62,6 +79,8 @@
                                 <VisualState x:Name="Hover">
                                     <VisualState.Setters>
                                         <Setter Target="PartValueTextBlock.Foreground" Value="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                        <Setter Target="PartLabelTextBlock.FontWeight" Value="SemiBold" />
+                                        <Setter Target="PartCompactLabelTextBlock.FontWeight" Value="SemiBold" />
                                     </VisualState.Setters>
                                 </VisualState>
                                 <VisualState x:Name="Pressed" />

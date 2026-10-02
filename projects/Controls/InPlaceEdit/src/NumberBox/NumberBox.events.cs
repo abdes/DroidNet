@@ -37,6 +37,9 @@ public partial class NumberBox
     private void OnEditSessionStarted(NumberBoxEditInteractionKind interactionKind)
         => this.EditSessionStarted?.Invoke(this, new NumberBoxEditSessionEventArgs(interactionKind));
 
-    private void OnEditSessionCompleted(NumberBoxEditInteractionKind interactionKind, NumberBoxEditCompletionKind completionKind)
-        => this.EditSessionCompleted?.Invoke(this, new NumberBoxEditSessionEventArgs(interactionKind, completionKind));
+    private void OnEditSessionCompleted(
+        NumberBoxEditInteractionKind interactionKind,
+        NumberBoxEditCompletionKind completionKind,
+        string? inputText = null)
+        => this.EditSessionCompleted?.Invoke(this, new NumberBoxEditSessionEventArgs(interactionKind, completionKind, inputText));
 }

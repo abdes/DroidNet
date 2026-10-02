@@ -4,7 +4,7 @@
 
 ## Design Goals
 
-1. **Consistency with `NumberBox`**: Share UX patterns—display/edit modes, pointer drag and mouse wheel adjustments, validation, and visual states.
+1. **Consistency with `NumberBox`**: Share UX patterns—display/edit modes, label-driven pointer scrubbing, validation, and visual states. The mouse wheel remains available for scrolling the containing view.
 2. **Clean Public API**: Expose per-component writable numeric dependency properties (`XValue`, `YValue`, `ZValue`) and per-component indeterminate presentation flags (`XIsIndeterminate`, `YIsIndeterminate`, `ZIsIndeterminate`). Do **not** expose internal `NumberBox` editor instances as public API.
 3. **XAML-friendly**: Provide a concise dependency property surface suitable for XAML binding and MVVM scenarios.
 4. **Lightweight and templatable**: Keep the control simple, easy to style, and straightforward to retheme.
@@ -15,7 +15,8 @@ The control always displays per-component editors: two or three `NumberBox` inst
 
 **User interactions:**
 
-- Pointer drag or mouse wheel over a component adjusts that component's value (cursor changes during drag via `CustomGrid.InputCursor`).
+- Horizontal pointer drag on a visible component label adjusts that component's value (cursor changes during drag via `CustomGrid.InputCursor`). Dragging the value editor is not supported; clicking it enters text edit.
+- Mouse-wheel input scrolls the containing view and never changes a component value.
 - Editing clears indeterminate presentation and writes a concrete numeric value to the affected component.
 - Validation is performed per-component via a `Validate` event; invalid edits display the same invalid visual state as `NumberBox`.
 - Keyboard navigation (Tab/Shift+Tab) moves focus between component editors.
@@ -83,12 +84,14 @@ The following properties control the control-level label (for the entire `Vector
 
 #### Component Labels
 
-- **`LabelPosition ComponentLabelPosition`** (DP; default: `None`) — Position of per-component labels ("X", "Y", "Z") relative to each internal editor. By default the `VectorBox` hides per-component labels on the internal `NumberBox` instances (the control forces each `NumberBox.LabelPosition` to `None`) and exposes dedicated `TextBlock` label elements in the template (`PartLabelX`, `PartLabelY`, `PartLabelZ`).
+- **`LabelPosition ComponentLabelPosition`** (DP; default: `None`) — Position of optional per-component labels. `None` omits them. A left-positioned label is hosted inside the NumberBox's compact value field so its text fits and the input uses the remaining width.
 - **`IDictionary<string, LabelPosition> ComponentLabelPositions`** (optional, property; keys: "X", "Y", "Z") — Per-component label position overrides. If a component is not in this dictionary, `ComponentLabelPosition` is used.
+- **`IDictionary<string, string> ComponentLabels`** (optional, property; keys: "X", "Y", "Z") — Per-component text overrides, e.g. `R`, `G`, and `B` for a color vector. Defaults are empty; labels are opt-in through a non-`None` position.
+- **`IDictionary<string, Brush> ComponentLabelForegrounds`** (optional, property; keys: "X", "Y", "Z") — Optional per-component label foregrounds, such as red, green, and blue axis colors. Configure label dictionaries before template application.
 
 #### Adjustment Parameters
 
-- **`int Multiplier`** (DP; default: 1) — Scale factor for adjustment increments during keyboard/wheel/drag operations.
+- **`int Multiplier`** (DP; default: 1) — Scale factor for adjustment increments during keyboard/label-drag operations.
 - **`bool WithPadding`** (DP; default: false) — Whether to pad numeric components with zeros according to the `ComponentMask`. Forwarded to each internal `NumberBox.WithPadding`.
 
 ## Events
@@ -250,8 +253,9 @@ The control's template uses a single visual state group:
 
 - **Click on a component**: Begin editing that component (enter edit mode).
 - **Double-click on a component**: Begin editing with all text selected.
-- **Pointer drag on a component**: Adjust that component's numeric value based on horizontal drag delta. The control changes the cursor to `SizeWestEast` during drag (via `CustomGrid.InputCursor`).
-- **Mouse wheel over a component**: Increment/decrement the focused component by the NumberBox's default step.
+- **Pointer drag on a visible component label**: Adjust that component's numeric value based on horizontal drag delta. The control changes the cursor to `SizeWestEast` during drag (via `CustomGrid.InputCursor`).
+- **Click/tap on a value**: Enter text edit.
+- **Mouse wheel**: Scrolls the containing view and does not edit values.
 
 ## Parsing, Formatting, and Validation
 
@@ -388,7 +392,7 @@ Follow the `NumberBox` partial-class organization pattern:
 - **`VectorBox.cs`** — Core behavior, DP callbacks, synchronization logic, and orchestration.
 - **`VectorBox.properties.cs`** — DP registration and CLR property wrappers.
 - **`VectorBox.events.cs`** — Event payload types and event-raising helpers.
-- **`VectorBox.input.cs`** — Pointer, keyboard, and drag/wheel input handling.
+- **`VectorBox.input.cs`** — Keyboard input routing; each NumberBox label owns pointer scrubbing.
 - **`VectorBox.formatting.cs`** — MaskParser integration and per-component formatting.
 - **`VectorBox.xaml`** — Default control template and visual state groups (mirrors `NumberBox.xaml` structure but with per-component editors).
 
@@ -421,7 +425,7 @@ Implement the following types (likely in a separate file or nested in `VectorBox
 **UI tests:**
 
 - Pointer drag on each component adjusts only that component's value; cursor changes to `SizeWestEast`.
-- Mouse wheel increments a component (via internal NumberBox).
+- Mouse wheel leaves component values unchanged and scrolls the containing view.
 - Validation event callbacks can discriminate component via `ValidationEventArgs.Target` and prevent invalid commits.
 - Property change notifications fire correctly when DPs are updated.
 - `SetValues()` with multiple components stages all changes atomically.
@@ -455,7 +459,7 @@ Implement the following types (likely in a separate file or nested in `VectorBox
   - ✅ Create `VectorBox.cs` (core class definition, DP callbacks, synchronization) - ~600 lines, fully implemented.
   - ✅ Create `VectorBox.properties.cs` (DP registration and CLR property wrappers) - ~390 lines, fully implemented.
   - ✅ Create `VectorBox.events.cs` (event relay helpers) - fully implemented.
-  - ✅ Create `VectorBox.input.cs` (pointer, keyboard, drag/wheel input handlers) - fully implemented with override methods.
+  - ✅ Create `VectorBox.input.cs` for keyboard routing; NumberBox labels own pointer scrubbing.
   - ✅ Create `VectorBox.formatting.cs` (MaskParser integration and formatting logic) - fully implemented.
 
 - [x] **Implement dependency properties**
@@ -464,7 +468,7 @@ Implement the following types (likely in a separate file or nested in `VectorBox
   - ✅ `ComponentMask` (string, default: `"~.#"`).
   - ✅ `ComponentMasks` (property, optional per-component overrides).
   - ✅ `ComponentLabelPosition` (LabelPosition, default: None).
-  - ✅ `ComponentLabelPositions` (property, optional per-component label overrides).
+  - ✅ `ComponentLabelPositions`, `ComponentLabels`, and `ComponentLabelForegrounds` (optional per-component label settings).
   - ✅ `XValue`, `YValue`, `ZValue` (float proxies, writable, validation on set).
   - ✅ `XIsIndeterminate`, `YIsIndeterminate`, `ZIsIndeterminate` (bool, writable).
   - ✅ `Label`, `LabelPosition`, `HorizontalValueAlignment`, `HorizontalLabelAlignment` (control-level labeling).
@@ -503,7 +507,7 @@ Implement the following types (likely in a separate file or nested in `VectorBox
   - ✅ Override pointer event handlers (OnPointerMoved, OnPointerPressed, OnPointerReleased).
   - ✅ Input handling delegated to internal `NumberBox` editors (which handle drag detection and value adjustment).
   - ✅ `CustomGrid` root manages `InputCursor` for SizeWestEast during drag.
-  - ✅ Mouse wheel handled by internal NumberBox editors.
+  - ✅ Wheel input is not consumed by NumberBox editors, allowing inspector scrolling.
 
 - [x] **Implement keyboard input** (`VectorBox.input.cs`)
   - ✅ Override OnKeyDown to delegate to internal editors.
@@ -557,7 +561,7 @@ Implement the following types (likely in a separate file or nested in `VectorBox
 
 - [ ] **Implement UI tests**
   - Test pointer drag adjusts correct component value; cursor changes to SizeWestEast.
-  - Test mouse wheel increments by `Step`.
+  - Test wheel input leaves component values unchanged while the containing view scrolls.
   - Test keyboard navigation (Tab/Shift+Tab) between component editors.
   - Test keyboard increments (Arrow keys, Page Up/Down).
   - Test Enter commits; Escape cancels.

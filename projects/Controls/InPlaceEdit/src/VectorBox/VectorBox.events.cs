@@ -45,7 +45,7 @@ public partial class VectorBox
     {
         if (this.TryGetComponent(sender, out var component))
         {
-            this.EditSessionCompleted?.Invoke(this, new VectorBoxEditSessionEventArgs(component, e.InteractionKind, e.CompletionKind));
+            this.EditSessionCompleted?.Invoke(this, new VectorBoxEditSessionEventArgs(component, e.InteractionKind, e.CompletionKind, e.InputText));
         }
     }
 

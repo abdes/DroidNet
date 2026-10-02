@@ -6,6 +6,7 @@ using System.Numerics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Media;
 
 namespace DroidNet.Controls;
 
@@ -330,7 +331,7 @@ public partial class VectorBox
     }
 
     /// <summary>
-    ///     Gets or sets the multiplier for value adjustments during keyboard/wheel/drag operations.
+    ///     Gets or sets the multiplier for value adjustments during keyboard and label-drag operations.
     /// </summary>
     public int Multiplier
     {
@@ -358,6 +359,14 @@ public partial class VectorBox
     /// </summary>
     public IDictionary<string, LabelPosition> ComponentLabelPositions =>
         this.componentLabelPositions ??= new Dictionary<string, LabelPosition>(StringComparer.Ordinal);
+
+    /// <summary>Gets optional per-component label text overrides. Keys are "X", "Y", "Z".</summary>
+    public IDictionary<string, string> ComponentLabels =>
+        this.componentLabels ??= new Dictionary<string, string>(StringComparer.Ordinal);
+
+    /// <summary>Gets optional per-component label foreground overrides. Keys are "X", "Y", "Z".</summary>
+    public IDictionary<string, Brush> ComponentLabelForegrounds =>
+        this.componentLabelForegrounds ??= new Dictionary<string, Brush>(StringComparer.Ordinal);
 
     /// <summary>
     ///     Gets or sets the <see cref="ILoggerFactory" /> used to create loggers for this control and children.

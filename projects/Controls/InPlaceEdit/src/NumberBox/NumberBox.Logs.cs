@@ -89,18 +89,6 @@ public partial class NumberBox
         }
     }
 
-    [LoggerMessage(EventId = 3607, Level = LogLevel.Trace, Message = "[NumberBox] PointerWheel delta={Delta} (IsHorizontal={IsHorizontal})")]
-    private static partial void LogPointerWheel(ILogger logger, int delta, bool isHorizontal);
-
-    [Conditional("DEBUG")]
-    private void LogPointerWheel(int delta, bool isHorizontal)
-    {
-        if (this.logger is ILogger logger)
-        {
-            LogPointerWheel(logger, delta, isHorizontal);
-        }
-    }
-
     [LoggerMessage(EventId = 3608, Level = LogLevel.Trace, Message = "[NumberBox] Key {Key} {EventType}")]
     private static partial void LogKeyEvent(ILogger logger, VirtualKey key, string eventType);
 

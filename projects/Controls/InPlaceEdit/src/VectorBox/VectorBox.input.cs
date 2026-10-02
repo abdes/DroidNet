@@ -7,7 +7,7 @@ using Microsoft.UI.Xaml.Input;
 namespace DroidNet.Controls;
 
 /// <summary>
-///     Input handling for <see cref="VectorBox" /> - pointer, keyboard, and mouse wheel interactions.
+///     Input handling for <see cref="VectorBox" /> keyboard interactions; pointer scrubbing is owned by NumberBox labels.
 /// </summary>
 public partial class VectorBox
 {
@@ -88,7 +88,7 @@ public partial class VectorBox
     ///         <item>Enter: Commit current value</item>
     ///         <item>Escape: Revert to previous value</item>
     ///         <item>Arrow keys: Delegated to active NumberBox</item>
-    ///         <item>Mouse wheel: Delegated to active NumberBox</item>
+    ///         <item>Mouse wheel: Left unhandled for the containing scroll view</item>
     ///     </list>
     /// </remarks>
     /// <param name="e">The keyboard event arguments.</param>
@@ -100,16 +100,15 @@ public partial class VectorBox
     }
 
     /// <summary>
-    ///     Handles mouse wheel input for incremental value changes.
+    ///     Leaves mouse wheel input available to the containing scroll view.
     /// </summary>
     /// <remarks>
-    ///     This method delegates mouse wheel handling to the internal <see cref="NumberBox" /> editors
-    ///     when the focus is on one of the component editors.
+    ///     The control does not use wheel input to edit component values.
     /// </remarks>
     /// <param name="e">The pointer event arguments.</param>
     protected override void OnPointerWheelChanged(PointerRoutedEventArgs e)
     {
-        // Mouse wheel is handled by internal NumberBox editors
+        // Let the containing scroll view handle wheel input.
         base.OnPointerWheelChanged(e);
     }
 }

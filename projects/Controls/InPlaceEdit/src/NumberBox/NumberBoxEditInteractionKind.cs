@@ -15,12 +15,12 @@ public enum NumberBoxEditInteractionKind
     Text,
 
     /// <summary>
-    ///     Pointer drag on the numeric value.
+    ///     Pointer drag on a visible label.
     /// </summary>
     PointerDrag,
 
     /// <summary>
-    ///     Mouse wheel increment/decrement.
+    ///     Legacy wheel interaction identifier. NumberBox does not emit it for wheel input.
     /// </summary>
     MouseWheel,
 }

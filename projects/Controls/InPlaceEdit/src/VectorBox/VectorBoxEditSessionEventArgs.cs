@@ -15,14 +15,17 @@ public sealed class VectorBoxEditSessionEventArgs : EventArgs
     /// <param name="component">The vector component being edited.</param>
     /// <param name="interactionKind">The input interaction that owns the edit.</param>
     /// <param name="completionKind">The completion kind when the event represents an edit completion.</param>
+    /// <param name="inputText">The committed text, or <see langword="null"/> for non-text interactions.</param>
     public VectorBoxEditSessionEventArgs(
         Component component,
         NumberBoxEditInteractionKind interactionKind,
-        NumberBoxEditCompletionKind? completionKind = null)
+        NumberBoxEditCompletionKind? completionKind = null,
+        string? inputText = null)
     {
         this.Component = component;
         this.InteractionKind = interactionKind;
         this.CompletionKind = completionKind;
+        this.InputText = inputText;
     }
 
     /// <summary>
@@ -39,4 +42,7 @@ public sealed class VectorBoxEditSessionEventArgs : EventArgs
     ///     Gets the completion kind when the event represents an edit completion.
     /// </summary>
     public NumberBoxEditCompletionKind? CompletionKind { get; }
+
+    /// <summary>Gets the committed text, or <see langword="null"/> for non-text interactions.</summary>
+    public string? InputText { get; }
 }

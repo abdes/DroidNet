@@ -2,7 +2,7 @@
 
 A lightweight, stylable numeric input control for WinUI 3 (DroidNet.Controls.NumberBox).
 
-This control combines a display mode and an edit mode, supports masked formatting, mouse-drag/wheel increments, visual states for validation, and an "indeterminate" presentation useful for view-model scenarios.
+This control combines display and edit modes, supports masked formatting, horizontal scrubbing by dragging a visible label, validation states, and an "indeterminate" presentation useful for view-model scenarios. Wheel input remains available to scroll the containing view.
 
 > [!note]
 > This README documents the `NumberBox` control shipped in this repository. For full implementation details see the source files in this folder (e.g. `NumberBox.cs`, `MaskParser.cs`, `NumberBox.xaml`).
@@ -12,7 +12,11 @@ This control combines a display mode and an edit mode, supports masked formattin
 - Formatted numeric display and editable TextBox.
 - Mask-driven parsing/formatting (precision, units, sign, spacing).
 - Visual states for valid/invalid and editing modes.
-- Mouse drag and wheel support for changing value.
+- Horizontal scrubbing by dragging a visible label; value regions open text edit.
+- Clicking outside the NumberBox ends text editing: valid input commits and invalid input is canceled.
+- Optional compact labels fit to their text while the value editor fills the remaining width.
+- Wheel input remains available to scroll the containing view and never edits the value.
+- Optional label foreground for axis cues such as red X, green Y, and blue Z.
 - Indeterminate display mode (preserves numeric backing value).
 - Template parts exposed for full styling and templating.
 
@@ -53,7 +57,9 @@ numberBox.Validate += (s, e) =>
 - `NumberValue` (float) — numeric backing value.
 - `DisplayText` (string) — formatted text shown in display mode.
 - `Label` (string) — label text.
-- `LabelPosition` (enum) — None, Left, Top, Right, Bottom.
+- `LabelPosition` (enum) — None, Left, Top, Right, Bottom. Empty labels and `None` omit the label.
+- `LabelForeground` (Brush) — optional label foreground override.
+- `IsCompact` (bool) — when true with a non-empty left label, places the label inside the value field and lets the value take remaining width.
 - `Multiplier` (int) — used for step adjustments.
 - `Mask` (string) — formatting mask (see below).
 - `WithPadding` (bool) — pad integer portion to mask width.
@@ -99,6 +105,7 @@ Control template parts (names used in `NumberBox.xaml`):
 - `PartBackgroundBorder` — `Border` around the content.
 - `PartValueTextBlock` — `TextBlock` used for display mode.
 - `PartLabelTextBlock` — `TextBlock` for the label.
+- `PartCompactLabelTextBlock` — `TextBlock` for the optional in-field label.
 - `PartEditBox` — `TextBox` used in edit mode.
 
 Visual state groups & names (used by the control to animate UI):
@@ -124,7 +131,7 @@ The folder contains `NumberBox.xaml` which declares `DefaultNumberBoxStyle`. To 
 
 ## Implementation notes
 
-- Mouse and pointer dragging change the cursor while adjusting values; the control uses a private `CustomGrid` type to set the input cursor during drag operations.
+- Dragging a visible label changes the value and cursor; dragging the value region does not. The control uses a private `CustomGrid` type to set the input cursor during label scrubbing.
 - Validation is performed via the `Validate` event. The control sets internal validity state from the event.
 
 ## Building / running (repo)

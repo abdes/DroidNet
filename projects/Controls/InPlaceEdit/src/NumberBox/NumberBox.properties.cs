@@ -5,6 +5,7 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Media;
 
 namespace DroidNet.Controls;
 
@@ -41,7 +42,7 @@ public partial class NumberBox
             nameof(Label),
             typeof(string),
             typeof(NumberBox),
-            new PropertyMetadata(string.Empty));
+            new PropertyMetadata(string.Empty, OnLabelPropertyChanged));
 
     /// <summary>
     ///     Identifies the <see cref="LabelPosition" /> dependency property.
@@ -52,6 +53,20 @@ public partial class NumberBox
             typeof(LabelPosition),
             typeof(NumberBox),
             new PropertyMetadata(LabelPosition.Left, OnLabelPositionPropertyChanged));
+
+    /// <summary>Identifies the <see cref="LabelForeground"/> dependency property.</summary>
+    public static readonly DependencyProperty LabelForegroundProperty = DependencyProperty.Register(
+        nameof(LabelForeground),
+        typeof(Brush),
+        typeof(NumberBox),
+        new PropertyMetadata(null, OnLabelForegroundPropertyChanged));
+
+    /// <summary>Identifies the <see cref="IsCompact"/> dependency property.</summary>
+    public static readonly DependencyProperty IsCompactProperty = DependencyProperty.Register(
+        nameof(IsCompact),
+        typeof(bool),
+        typeof(NumberBox),
+        new PropertyMetadata(false, OnIsCompactPropertyChanged));
 
     /// <summary>
     ///     Identifies the <see cref="Multiplier" /> dependency property.
@@ -160,6 +175,20 @@ public partial class NumberBox
         set => this.SetValue(LabelPositionProperty, value);
     }
 
+    /// <summary>Gets or sets the optional foreground brush for the label.</summary>
+    public Brush? LabelForeground
+    {
+        get => (Brush?)this.GetValue(LabelForegroundProperty);
+        set => this.SetValue(LabelForegroundProperty, value);
+    }
+
+    /// <summary>Gets or sets a value indicating whether the label is compactly joined to the value editor.</summary>
+    public bool IsCompact
+    {
+        get => (bool)this.GetValue(IsCompactProperty);
+        set => this.SetValue(IsCompactProperty, value);
+    }
+
     /// <summary>
     ///     Gets or sets the multiplier used for value adjustments.
     /// </summary>
@@ -255,6 +284,30 @@ public partial class NumberBox
     }
 
     private static void OnLabelPositionPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is NumberBox numberBox)
+        {
+            numberBox.OnLabelPositionChanged();
+        }
+    }
+
+    private static void OnLabelPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is NumberBox numberBox)
+        {
+            numberBox.OnLabelPositionChanged();
+        }
+    }
+
+    private static void OnLabelForegroundPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is NumberBox numberBox)
+        {
+            numberBox.OnLabelForegroundChanged();
+        }
+    }
+
+    private static void OnIsCompactPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         if (d is NumberBox numberBox)
         {

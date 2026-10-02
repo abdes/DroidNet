@@ -9,6 +9,7 @@ using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Windows.Foundation;
 using Windows.System;
 
@@ -19,14 +20,14 @@ namespace DroidNet.Controls;
 /// </summary>
 /// <remarks>
 ///     The <see cref="NumberBox" /> control provides numeric input with optional formatting and
-///     validation (masking, clamping, label positioning, mouse drag/wheel increments, etc.).
+///     validation (masking, label positioning, and label-driven pointer scrubbing).
 ///     <para>
 ///     Important note about "indeterminate" state and ViewModel patterns:
 ///     - When <see cref="IsIndeterminate" /> is true the control displays <see cref="IndeterminateDisplayText" />
 ///       (default "-.-") instead of the formatted <see cref="NumberValue" />. This presentation flag is
 ///       separate from the numeric backing value: the control keeps a numeric <see cref="NumberValue" /> at
 ///       all times and does not clear or null it when switching to indeterminate.
-///     - User edits (typing, pointer drag, wheel) will clear <see cref="IsIndeterminate" /> and operate on the
+///     - User edits (typing and pointer drag on a visible label) clear <see cref="IsIndeterminate" /> and operate on the
 ///       existing <see cref="NumberValue" />. Likewise, externally setting <see cref="NumberValue" /> does
 ///       not implicitly toggle <see cref="IsIndeterminate" />. The two properties are independent and must be
 ///       coordinated by the host (ViewModel or code-behind) when a nullable or optional representation is
@@ -75,6 +76,7 @@ namespace DroidNet.Controls;
 [TemplatePart(Name = BackgroundBorderPartName, Type = typeof(Border))]
 [TemplatePart(Name = ValueTextBlockPartName, Type = typeof(TextBlock))]
 [TemplatePart(Name = LabelTextBlockPartName, Type = typeof(TextBlock))]
+[TemplatePart(Name = CompactLabelTextBlockPartName, Type = typeof(TextBlock))]
 [TemplatePart(Name = EditBoxPartName, Type = typeof(TextBox))]
 [TemplateVisualState(Name = NormalStateName, GroupName = CommonStatesGroupName)]
 [TemplateVisualState(Name = HoverStateName, GroupName = CommonStatesGroupName)]
@@ -88,6 +90,7 @@ public partial class NumberBox : Control
     private const string EditBoxPartName = "PartEditBox";
     private const string ValueTextBlockPartName = "PartValueTextBlock";
     private const string LabelTextBlockPartName = "PartLabelTextBlock";
+    private const string CompactLabelTextBlockPartName = "PartCompactLabelTextBlock";
     private const string RootGridPartName = "PartRootGrid";
     private const string BackgroundBorderPartName = "PartBackgroundBorder";
 
@@ -114,7 +117,11 @@ public partial class NumberBox : Control
     private TextBox? editTextBox;
     private TextBlock? valueTextBlock;
     private TextBlock? labelTextBlock;
+    private TextBlock? compactLabelTextBlock;
     private CustomGrid? rootGrid;
+    private UIElement? rootInputEventSource;
+    private PointerEventHandler? rootPointerPressedHandler;
+    private TextBlock? activeDragLabel;
     private Point? capturePoint;
     private bool isPointerOver;
     private bool valueIsValid = true;
@@ -134,8 +141,10 @@ public partial class NumberBox : Control
         this.defaultCursor = InputSystemCursor.Create(InputSystemCursorShape.Arrow);
         this.dragCursor = InputSystemCursor.Create(InputSystemCursorShape.SizeWestEast);
 
+        this.Loaded += (_, _) => this.AttachRootPointerPressedHandler();
         this.Unloaded += (_, _) =>
         {
+            this.DetachRootPointerPressedHandler();
             this.CompleteActiveEditSessionOnUnload();
             this.defaultCursor.Dispose();
             this.dragCursor.Dispose();
@@ -169,12 +178,15 @@ public partial class NumberBox : Control
         this.rootGrid = this.GetTemplateChild(RootGridPartName) as CustomGrid;
         this.backgroundBorder = this.GetTemplateChild(BackgroundBorderPartName) as Border;
         this.labelTextBlock = this.GetTemplateChild(LabelTextBlockPartName) as TextBlock;
+        this.compactLabelTextBlock = this.GetTemplateChild(CompactLabelTextBlockPartName) as TextBlock;
         this.SetupValueTextBlockPart();
+        this.SetupLabelTextBlockPart();
         this.SetupEditTextBoxPart();
 
         this.ValidateValue(this.NumberValue);
         this.UpdateDisplayText();
         this.UpdateMinimumWidth();
+        this.OnLabelForegroundChanged();
         this.UpdateLabelPosition(); // After UpdateMinimumWidth()
         this.UpdateVisualState();
     }
@@ -185,7 +197,8 @@ public partial class NumberBox : Control
         if (e.Key == VirtualKey.Escape && this.IsMouseCaptured)
         {
             this.capturePoint = null;
-            this.valueTextBlock?.ReleasePointerCaptures();
+            this.activeDragLabel?.ReleasePointerCaptures();
+            this.activeDragLabel = null;
             this.OnEditSessionCompleted(NumberBoxEditInteractionKind.PointerDrag, NumberBoxEditCompletionKind.Cancel);
             this.UpdateInputCursor();
             this.UpdateVisualState();
@@ -198,14 +211,8 @@ public partial class NumberBox : Control
 
     private void SetupValueTextBlockPart()
     {
-        var oldValueTextBlock = this.valueTextBlock;
-        if (oldValueTextBlock != null)
+        if (this.valueTextBlock is { } oldValueTextBlock)
         {
-            oldValueTextBlock.PointerPressed -= this.OnValueTextBlockPointerPressed;
-            oldValueTextBlock.PointerMoved -= this.OnValueTextBlockPointerMoved;
-            oldValueTextBlock.PointerReleased -= this.OnValueTextBlockPointerReleased;
-            oldValueTextBlock.PointerCaptureLost -= this.OnValueTextBlockPointerCaptureLost;
-            oldValueTextBlock.PointerWheelChanged -= this.OnValueTextBlockPointerWheelChanged;
             oldValueTextBlock.PointerEntered -= this.OnValueTextBlockPointerEntered;
             oldValueTextBlock.PointerExited -= this.OnValueTextBlockPointerExited;
             oldValueTextBlock.Tapped -= this.OnValueTextBlockTapped;
@@ -218,14 +225,50 @@ public partial class NumberBox : Control
             return;
         }
 
-        this.valueTextBlock.PointerPressed += this.OnValueTextBlockPointerPressed;
-        this.valueTextBlock.PointerMoved += this.OnValueTextBlockPointerMoved;
-        this.valueTextBlock.PointerReleased += this.OnValueTextBlockPointerReleased;
-        this.valueTextBlock.PointerCaptureLost += this.OnValueTextBlockPointerCaptureLost;
-        this.valueTextBlock.PointerWheelChanged += this.OnValueTextBlockPointerWheelChanged;
         this.valueTextBlock.PointerEntered += this.OnValueTextBlockPointerEntered;
         this.valueTextBlock.PointerExited += this.OnValueTextBlockPointerExited;
         this.valueTextBlock.Tapped += this.OnValueTextBlockTapped;
+    }
+
+    private void SetupLabelTextBlockPart()
+    {
+        if (this.labelTextBlock is { } oldLabelTextBlock)
+        {
+            oldLabelTextBlock.PointerPressed -= this.OnLabelPointerPressed;
+            oldLabelTextBlock.PointerMoved -= this.OnLabelPointerMoved;
+            oldLabelTextBlock.PointerReleased -= this.OnLabelPointerReleased;
+            oldLabelTextBlock.PointerCaptureLost -= this.OnLabelPointerCaptureLost;
+            oldLabelTextBlock.PointerEntered -= this.OnValueTextBlockPointerEntered;
+            oldLabelTextBlock.PointerExited -= this.OnValueTextBlockPointerExited;
+        }
+
+        if (this.compactLabelTextBlock is { } oldCompactLabelTextBlock)
+        {
+            oldCompactLabelTextBlock.PointerPressed -= this.OnLabelPointerPressed;
+            oldCompactLabelTextBlock.PointerMoved -= this.OnLabelPointerMoved;
+            oldCompactLabelTextBlock.PointerReleased -= this.OnLabelPointerReleased;
+            oldCompactLabelTextBlock.PointerCaptureLost -= this.OnLabelPointerCaptureLost;
+            oldCompactLabelTextBlock.PointerEntered -= this.OnValueTextBlockPointerEntered;
+            oldCompactLabelTextBlock.PointerExited -= this.OnValueTextBlockPointerExited;
+        }
+
+        Setup(this.labelTextBlock);
+        Setup(this.compactLabelTextBlock);
+
+        void Setup(TextBlock? label)
+        {
+            if (label is null)
+            {
+                return;
+            }
+
+            label.PointerPressed += this.OnLabelPointerPressed;
+            label.PointerMoved += this.OnLabelPointerMoved;
+            label.PointerReleased += this.OnLabelPointerReleased;
+            label.PointerCaptureLost += this.OnLabelPointerCaptureLost;
+            label.PointerEntered += this.OnValueTextBlockPointerEntered;
+            label.PointerExited += this.OnValueTextBlockPointerExited;
+        }
     }
 
     private void CompleteActiveEditSessionOnUnload()
@@ -233,7 +276,8 @@ public partial class NumberBox : Control
         if (this.IsMouseCaptured)
         {
             this.capturePoint = null;
-            this.valueTextBlock?.ReleasePointerCaptures();
+            this.activeDragLabel?.ReleasePointerCaptures();
+            this.activeDragLabel = null;
             this.OnEditSessionCompleted(NumberBoxEditInteractionKind.PointerDrag, NumberBoxEditCompletionKind.Cancel);
         }
 
@@ -241,6 +285,59 @@ public partial class NumberBox : Control
         {
             this.isEditing = false;
             this.OnEditSessionCompleted(NumberBoxEditInteractionKind.Text, NumberBoxEditCompletionKind.Cancel);
+        }
+    }
+
+    private void AttachRootPointerPressedHandler()
+    {
+        if (this.XamlRoot?.Content is not UIElement rootContent)
+        {
+            return;
+        }
+
+        if (ReferenceEquals(this.rootInputEventSource, rootContent))
+        {
+            return;
+        }
+
+        this.DetachRootPointerPressedHandler();
+        this.rootPointerPressedHandler ??= this.OnRootPointerPressed;
+        rootContent.AddHandler(UIElement.PointerPressedEvent, this.rootPointerPressedHandler, handledEventsToo: true);
+        this.rootInputEventSource = rootContent;
+    }
+
+    private void DetachRootPointerPressedHandler()
+    {
+        if (this.rootInputEventSource is null || this.rootPointerPressedHandler is null)
+        {
+            return;
+        }
+
+        this.rootInputEventSource.RemoveHandler(UIElement.PointerPressedEvent, this.rootPointerPressedHandler);
+        this.rootInputEventSource = null;
+    }
+
+    private void OnRootPointerPressed(object sender, PointerRoutedEventArgs e)
+        => this.CompleteTextEditIfPointerPressedOutside(e.OriginalSource);
+
+    private void CompleteTextEditIfPointerPressedOutside(object? originalSource)
+    {
+        if (this.isEditing && !IsDescendantOf(originalSource as DependencyObject, this))
+        {
+            this.CompletePendingTextEdit();
+        }
+
+        static bool IsDescendantOf(DependencyObject? source, DependencyObject ancestor)
+        {
+            for (var current = source; current is not null; current = VisualTreeHelper.GetParent(current))
+            {
+                if (ReferenceEquals(current, ancestor))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
     }
 
@@ -312,31 +409,34 @@ public partial class NumberBox : Control
         this.UpdateVisualState();
     }
 
-    private void OnValueTextBlockPointerPressed(object sender, PointerRoutedEventArgs e)
+    private void OnLabelPointerPressed(object sender, PointerRoutedEventArgs e)
     {
-        this.LogPointerEvent("Pressed");
-        if (this.valueTextBlock?.CapturePointer(e.Pointer) != true)
+        this.CompletePendingTextEdit();
+
+        if (sender is not TextBlock label || !label.IsHitTestVisible || !label.CapturePointer(e.Pointer))
         {
             return;
         }
 
         _ = this.Focus(FocusState.Pointer);
-        this.capturePoint = e.GetCurrentPoint(this.valueTextBlock).Position;
+        this.activeDragLabel = label;
+        this.capturePoint = e.GetCurrentPoint(label).Position;
+        this.LogPointerEvent("Pressed");
         this.OnEditSessionStarted(NumberBoxEditInteractionKind.PointerDrag);
         this.UpdateInputCursor();
         this.UpdateVisualState();
         e.Handled = true;
     }
 
-    private void OnValueTextBlockPointerMoved(object sender, PointerRoutedEventArgs e)
+    private void OnLabelPointerMoved(object sender, PointerRoutedEventArgs e)
     {
         this.LogPointerEvent("Moved");
-        if (this.capturePoint is null)
+        if (this.capturePoint is null || sender is not TextBlock label)
         {
             return;
         }
 
-        var currentPoint = e.GetCurrentPoint(this.valueTextBlock).Position;
+        var currentPoint = e.GetCurrentPoint(label).Position;
         var delta = currentPoint.X - this.capturePoint.Value.X;
 
         // Round delta up to the nearest integer
@@ -353,32 +453,6 @@ public partial class NumberBox : Control
         var newValue = this.NumberValue + increment;
 
         this.ApplyNewValueIfValid(newValue);
-        e.Handled = true;
-    }
-
-    private void OnValueTextBlockPointerWheelChanged(object sender, PointerRoutedEventArgs e)
-    {
-        var properties = e.GetCurrentPoint(this.valueTextBlock).Properties;
-        this.LogPointerWheel(properties.MouseWheelDelta, properties.IsHorizontalMouseWheel);
-        if (properties.IsHorizontalMouseWheel)
-        {
-            return;
-        }
-
-        var delta = properties.MouseWheelDelta;
-
-        // If currently indeterminate, switch presentation to determinate without resetting the underlying value
-        if (this.IsIndeterminate)
-        {
-            this.IsIndeterminate = false;
-        }
-
-        var increment = this.CalculateIncrement(Math.Sign(delta) * 10, e.KeyModifiers);
-        var newValue = this.NumberValue + increment;
-
-        this.OnEditSessionStarted(NumberBoxEditInteractionKind.MouseWheel);
-        this.ApplyNewValueIfValid(newValue);
-        this.OnEditSessionCompleted(NumberBoxEditInteractionKind.MouseWheel, NumberBoxEditCompletionKind.Commit);
         e.Handled = true;
     }
 
@@ -410,23 +484,24 @@ public partial class NumberBox : Control
         return (float)(Math.Sign(delta) * this.Multiplier * shiftMultiplier);
     }
 
-    private void OnValueTextBlockPointerReleased(object sender, PointerRoutedEventArgs e)
+    private void OnLabelPointerReleased(object sender, PointerRoutedEventArgs e)
     {
         this.LogPointerEvent("Released");
-        if (this.valueTextBlock is null || !this.IsMouseCaptured)
+        if (sender is not TextBlock label || !this.IsMouseCaptured)
         {
             return;
         }
 
         this.capturePoint = null;
-        this.valueTextBlock.ReleasePointerCapture(e.Pointer);
+        label.ReleasePointerCapture(e.Pointer);
+        this.activeDragLabel = null;
         this.OnEditSessionCompleted(NumberBoxEditInteractionKind.PointerDrag, NumberBoxEditCompletionKind.Commit);
         this.UpdateInputCursor();
         this.UpdateVisualState();
         e.Handled = true;
     }
 
-    private void OnValueTextBlockPointerCaptureLost(object sender, PointerRoutedEventArgs e)
+    private void OnLabelPointerCaptureLost(object sender, PointerRoutedEventArgs e)
     {
         this.LogPointerEvent("CaptureLost");
         if (!this.IsMouseCaptured)
@@ -435,6 +510,7 @@ public partial class NumberBox : Control
         }
 
         this.capturePoint = null;
+        this.activeDragLabel = null;
         this.OnEditSessionCompleted(NumberBoxEditInteractionKind.PointerDrag, NumberBoxEditCompletionKind.Cancel);
         this.UpdateInputCursor();
         this.UpdateVisualState();
@@ -505,7 +581,13 @@ public partial class NumberBox : Control
         {
             try
             {
-                this.NumberValue = float.Parse(text!, CultureInfo.CurrentCulture);
+                if (!NumericInputParser.TryParse(text, this.NumberValue, out var expression))
+                {
+                    this.CancelEdit();
+                    return;
+                }
+
+                this.NumberValue = expression.Apply(this.NumberValue);
                 this.IsIndeterminate = false;
                 this.LogEditCommitted(this.NumberValue);
             }
@@ -516,7 +598,7 @@ public partial class NumberBox : Control
             }
         }
 
-        this.OnEditSessionCompleted(NumberBoxEditInteractionKind.Text, NumberBoxEditCompletionKind.Commit);
+        this.OnEditSessionCompleted(NumberBoxEditInteractionKind.Text, NumberBoxEditCompletionKind.Commit, text);
         this.EndEdit();
     }
 
@@ -572,7 +654,7 @@ public partial class NumberBox : Control
     private void ValidateValue(string value)
     {
         var oldIsValid = this.valueIsValid;
-        this.valueIsValid = float.TryParse(value, NumberStyles.Float, CultureInfo.CurrentCulture, out var parsedValue);
+        this.valueIsValid = NumericInputParser.TryParse(value, this.NumberValue, out var expression);
         if (!this.valueIsValid)
         {
             this.LogValidation(oldIsValid, this.valueIsValid);
@@ -580,10 +662,10 @@ public partial class NumberBox : Control
             return;
         }
 
-        this.ValidateValue(parsedValue);
+        this.ValidateValue(expression.Apply(this.NumberValue), value);
     }
 
-    private void ValidateValue(float value)
+    private void ValidateValue(float value, string? inputText = null)
     {
         var oldIsValid = this.valueIsValid;
         if (!this.maskParser.IsValidValue(value))
@@ -593,7 +675,7 @@ public partial class NumberBox : Control
             return;
         }
 
-        var args = new ValidationEventArgs<float>(this.NumberValue, value);
+        var args = new ValidationEventArgs<float>(this.NumberValue, value, inputText);
         this.OnValidate(args);
         Debug.Assert(this.valueIsValid == args.IsValid, "should be updated by the OnValidate method");
 
@@ -659,6 +741,33 @@ public partial class NumberBox : Control
 
     private void OnLabelPositionChanged() => this.UpdateLabelPosition();
 
+    private void OnLabelForegroundChanged()
+    {
+        if (this.labelTextBlock is not null)
+        {
+            if (this.LabelForeground is { } foreground)
+            {
+                this.labelTextBlock.Foreground = foreground;
+            }
+            else
+            {
+                this.labelTextBlock.ClearValue(TextBlock.ForegroundProperty);
+            }
+        }
+
+        if (this.compactLabelTextBlock is not null)
+        {
+            if (this.LabelForeground is { } foreground)
+            {
+                this.compactLabelTextBlock.Foreground = foreground;
+            }
+            else
+            {
+                this.compactLabelTextBlock.ClearValue(TextBlock.ForegroundProperty);
+            }
+        }
+    }
+
     private void UpdateDisplayText()
     {
         if (this.IsIndeterminate)
@@ -672,7 +781,7 @@ public partial class NumberBox : Control
 
     private void UpdateLabelPosition()
     {
-        if (this.rootGrid == null || this.labelTextBlock == null || this.valueTextBlock == null || this.backgroundBorder == null)
+        if (this.rootGrid == null || this.labelTextBlock == null || this.compactLabelTextBlock == null || this.valueTextBlock == null || this.backgroundBorder == null)
         {
             return;
         }
@@ -682,8 +791,22 @@ public partial class NumberBox : Control
 
         this.valueTextBlock.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         var valueWidth = Math.Max(this.valueTextBlock.MinWidth, this.valueTextBlock.DesiredSize.Width);
+        var hasLabel = !string.IsNullOrWhiteSpace(this.Label) && this.LabelPosition != LabelPosition.None;
 
-        switch (this.LabelPosition)
+        if (this.IsCompact && hasLabel && this.LabelPosition == LabelPosition.Left)
+        {
+            this.labelTextBlock.Visibility = Visibility.Collapsed;
+            this.compactLabelTextBlock.Visibility = Visibility.Visible;
+            this.backgroundBorder.BorderThickness = new Thickness(1);
+            this.rootGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = valueWidth });
+            Grid.SetColumn(this.backgroundBorder, 0);
+            return;
+        }
+
+        this.compactLabelTextBlock.Visibility = Visibility.Collapsed;
+        this.backgroundBorder.BorderThickness = new Thickness(0);
+        var labelPosition = hasLabel ? this.LabelPosition : LabelPosition.None;
+        switch (labelPosition)
         {
             case LabelPosition.Left or LabelPosition.Right:
                 this.labelTextBlock.Visibility = Visibility.Visible;

@@ -15,10 +15,12 @@ public class ValidationEventArgs<T> : EventArgs
     /// </summary>
     /// <param name="oldValue">The old value before the change.</param>
     /// <param name="newValue">The new value after the change.</param>
-    public ValidationEventArgs(T? oldValue, T? newValue)
+    /// <param name="inputText">The raw text being validated, or <see langword="null"/> for programmatic changes.</param>
+    public ValidationEventArgs(T? oldValue, T? newValue, string? inputText = null)
     {
         this.OldValue = oldValue;
         this.NewValue = newValue;
+        this.InputText = inputText;
     }
 
     /// <summary>
@@ -30,6 +32,9 @@ public class ValidationEventArgs<T> : EventArgs
     ///     Gets the new value after the change.
     /// </summary>
     public T? NewValue { get; }
+
+    /// <summary>Gets the raw text being validated, or <see langword="null"/> for programmatic changes.</summary>
+    public string? InputText { get; }
 
     /// <summary>
     ///     Gets or sets a value indicating whether the new value is valid.

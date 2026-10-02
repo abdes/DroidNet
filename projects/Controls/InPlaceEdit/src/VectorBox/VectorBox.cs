@@ -90,6 +90,8 @@ public partial class VectorBox : Control
     private bool isSyncingValues;
     private Dictionary<string, string>? componentMasks;
     private Dictionary<string, LabelPosition>? componentLabelPositions;
+    private Dictionary<string, string>? componentLabels;
+    private Dictionary<string, Microsoft.UI.Xaml.Media.Brush>? componentLabelForegrounds;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="VectorBox" /> class.
@@ -310,9 +312,9 @@ public partial class VectorBox : Control
         // Apply indeterminate display text
         numberBox.IndeterminateDisplayText = this.IndeterminateDisplayText;
 
-        // NOTE: LabelPosition is always None for NumberBox controls in VectorBox.
-        // The component labels (X, Y, Z) are managed by the VectorBox template, not by NumberBox.
+        numberBox.Label = string.Empty;
         numberBox.LabelPosition = LabelPosition.None;
+        numberBox.IsCompact = false;
 
         // Apply other properties
         numberBox.WithPadding = this.WithPadding;
@@ -635,152 +637,98 @@ public partial class VectorBox : Control
 
     private void UpdateComponentLabelPositions()
     {
-        // Update the layout of the component grid (X/Y/Z labels and NumberBox editors) to reflect the new component label position
         if (this.componentPanel is not Grid grid)
         {
             return;
         }
 
-        var dim = this.Dimension;
-        var compCount = dim == 3 ? 3 : 2;
-
-        // Configure each component container without touching the outer grid
-        for (var i = 0; i < compCount; i++)
+        var componentCount = this.Dimension == 3 ? 3 : 2;
+        for (var componentIndex = 0; componentIndex < componentCount; componentIndex++)
         {
-            var label = GetComponentLabel(i);
-            var box = GetComponentBox(i);
-            var container = GetComponentContainer(i);
-            if (label == null || box == null || container == null)
-            {
-                continue;
-            }
+            this.UpdateComponentLabelPosition(grid, componentIndex);
+        }
+    }
 
-            container.RowDefinitions.Clear();
-            container.ColumnDefinitions.Clear();
-
-            switch (this.ComponentLabelPosition)
-            {
-                case LabelPosition.Left:
-                    LayoutComponentHorizontally(container, label, box, labelOnLeft: true);
-                    break;
-                case LabelPosition.Right:
-                    LayoutComponentHorizontally(container, label, box, labelOnLeft: false);
-                    break;
-                case LabelPosition.Top:
-                    LayoutComponentVertically(container, label, box, labelOnTop: true);
-                    break;
-                case LabelPosition.Bottom:
-                    LayoutComponentVertically(container, label, box, labelOnTop: false);
-                    break;
-                default:
-                    LayoutComponentNoLabel(container, label, box);
-                    break;
-            }
+    private void UpdateComponentLabelPosition(Grid outerGrid, int componentIndex)
+    {
+        var label = this.GetComponentLabel(componentIndex);
+        var box = this.GetComponentBox(componentIndex);
+        var container = VectorBoxComponentLayout.GetComponentContainer(outerGrid, label, box);
+        if (container is null)
+        {
+            return;
         }
 
-        TextBlock GetComponentLabel(int idx)
-            => idx switch
-            {
-                0 => this.labelX!,
-                1 => this.labelY!,
-                2 => this.labelZ!,
-                _ => throw new ArgumentOutOfRangeException(nameof(idx)),
-            };
-        NumberBox GetComponentBox(int idx)
-            => idx switch
-            {
-                0 => this.numberBoxX!,
-                1 => this.numberBoxY!,
-                2 => this.numberBoxZ!,
-                _ => throw new ArgumentOutOfRangeException(nameof(idx)),
-            };
+        container.RowDefinitions.Clear();
+        container.ColumnDefinitions.Clear();
 
-        Grid? GetComponentContainer(int idx)
-        {
-            var lbl = GetComponentLabel(idx);
-            if (lbl?.Parent is Grid g1)
-            {
-                return g1;
-            }
+        var componentName = VectorBoxComponentLayout.GetComponentName(componentIndex);
+        var labelPosition = this.componentLabelPositions?.TryGetValue(componentName, out var configuredPosition) == true
+            ? configuredPosition
+            : this.ComponentLabelPosition;
+        var foreground = this.componentLabelForegrounds?.TryGetValue(componentName, out var configuredForeground) == true
+            ? configuredForeground
+            : null;
+        var componentLabel = this.componentLabels?.TryGetValue(componentName, out var configuredLabel) == true
+            ? configuredLabel
+            : componentName;
+        label.Text = componentLabel;
+        label.Foreground = foreground;
+        box.LabelForeground = foreground;
 
-            var bx = GetComponentBox(idx);
-            if (bx?.Parent is Grid g2)
-            {
-                return g2;
-            }
-
-            // Fallback: search children of the outer panel for a Grid that contains either element
-            foreach (var child in grid.Children)
-            {
-                if (child is Grid g)
-                {
-                    if (g.Children.Contains(lbl) || g.Children.Contains(bx))
-                    {
-                        return g;
-                    }
-                }
-            }
-
-            return null;
-        }
-
-        // Local layout helpers for a single per-component container
-        void LayoutComponentNoLabel(Grid container, TextBlock label, NumberBox box)
+        if (labelPosition == LabelPosition.Left && !string.IsNullOrWhiteSpace(componentLabel))
         {
             label.Visibility = Visibility.Collapsed;
+            box.Label = componentLabel;
+            box.LabelPosition = LabelPosition.Left;
+            box.IsCompact = true;
+            container.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             container.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             Grid.SetRow(box, 0);
             Grid.SetColumn(box, 0);
+            return;
         }
 
-        void LayoutComponentHorizontally(Grid container, TextBlock label, NumberBox box, bool labelOnLeft)
+        box.Label = string.Empty;
+        box.LabelPosition = LabelPosition.None;
+        box.IsCompact = false;
+        switch (labelPosition)
         {
-            label.Visibility = Visibility.Visible;
-            container.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-
-            if (labelOnLeft)
-            {
-                container.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-                container.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-                Grid.SetColumn(label, 0);
-                Grid.SetColumn(box, 1);
-            }
-            else
-            {
-                container.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-                container.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-                Grid.SetColumn(box, 0);
-                Grid.SetColumn(label, 1);
-            }
-
-            Grid.SetRow(label, 0);
-            Grid.SetRow(box, 0);
-        }
-
-        void LayoutComponentVertically(Grid container, TextBlock label, NumberBox box, bool labelOnTop)
-        {
-            label.Visibility = Visibility.Visible;
-            container.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            container.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-
-            label.HorizontalTextAlignment = TextAlignment.Center;
-            label.HorizontalAlignment = HorizontalAlignment.Stretch;
-
-            if (labelOnTop)
-            {
-                Grid.SetRow(label, 0);
-                Grid.SetRow(box, 1);
-            }
-            else
-            {
-                Grid.SetRow(box, 0);
-                Grid.SetRow(label, 1);
-            }
-
-            Grid.SetColumn(box, 0);
-            Grid.SetColumn(label, 0);
+            case LabelPosition.Left:
+                VectorBoxComponentLayout.LayoutHorizontally(container, label, box, labelOnLeft: true);
+                break;
+            case LabelPosition.Right:
+                VectorBoxComponentLayout.LayoutHorizontally(container, label, box, labelOnLeft: false);
+                break;
+            case LabelPosition.Top:
+                VectorBoxComponentLayout.LayoutVertically(container, label, box, labelOnTop: true);
+                break;
+            case LabelPosition.Bottom:
+                VectorBoxComponentLayout.LayoutVertically(container, label, box, labelOnTop: false);
+                break;
+            default:
+                VectorBoxComponentLayout.LayoutWithoutLabel(container, label, box);
+                break;
         }
     }
+
+    private TextBlock GetComponentLabel(int componentIndex)
+        => componentIndex switch
+        {
+            0 => this.labelX!,
+            1 => this.labelY!,
+            2 => this.labelZ!,
+            _ => throw new ArgumentOutOfRangeException(nameof(componentIndex)),
+        };
+
+    private NumberBox GetComponentBox(int componentIndex)
+        => componentIndex switch
+        {
+            0 => this.numberBoxX!,
+            1 => this.numberBoxY!,
+            2 => this.numberBoxZ!,
+            _ => throw new ArgumentOutOfRangeException(nameof(componentIndex)),
+        };
 
     private void OnLabelPositionChanged() => this.UpdateLabelPosition();
 
