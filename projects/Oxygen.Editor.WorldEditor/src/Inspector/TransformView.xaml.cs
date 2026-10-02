@@ -21,6 +21,12 @@ public partial class TransformView
         this.InitializeComponent();
     }
 
+    private void PositionBox_Validate(object? sender, ValidationEventArgs<float> e)
+    {
+        e.IsValid = float.IsFinite(e.NewValue);
+        this.ViewModel?.ReportControlValidation(TransformEditFieldGroup.Position, e);
+    }
+
     private void RotationBox_Validate(object? sender, ValidationEventArgs<float> e)
     {
         var v = e.NewValue;

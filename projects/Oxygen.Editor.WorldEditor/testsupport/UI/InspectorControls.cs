@@ -162,7 +162,19 @@ internal static class InspectorControls
         throw new InvalidOperationException($"The environment vector '{field}' was not realized while scrolling its inspector.");
     }
 
-    internal static void RaiseNumberEvent(NumberBox number, string method, params object[] arguments) => _ = typeof(NumberBox).GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(number, arguments);
+    internal static void RaiseNumberEvent(NumberBox number, string method, params object[] arguments)
+    {
+        var target = typeof(NumberBox).GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var parameters = target.GetParameters();
+        var missingParameters = parameters.Skip(arguments.Length).ToArray();
+        if (arguments.Length > parameters.Length || missingParameters.Any(static parameter => !parameter.IsOptional))
+        {
+            throw new TargetParameterCountException($"Method {method} does not accept {arguments.Length} arguments.");
+        }
+
+        var invocationArguments = arguments.Concat(missingParameters.Select(static parameter => parameter.DefaultValue)).ToArray();
+        _ = target.Invoke(number, invocationArguments);
+    }
 
     internal static async Task SetEnvironmentControlValueAsync(FrameworkElement control, object value)
     {
@@ -249,6 +261,7 @@ internal static class InspectorControls
 
     internal static Task PendingNumericEdits(IPropertyEditor<SceneNode> model) => model switch
     {
+        TransformViewModel transform => transform.PendingEdits,
         PerspectiveCameraViewModel camera => camera.PendingEdits,
         DirectionalLightViewModel light => light.PendingEdits,
         EnvironmentViewModel environment => environment.PendingEdits,

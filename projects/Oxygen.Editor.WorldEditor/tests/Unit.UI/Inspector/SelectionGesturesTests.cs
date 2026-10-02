@@ -92,4 +92,80 @@ public sealed partial class SelectionGesturesTests : DroidNet.Tests.VisualUserIn
         _ = fixture.Context.History.UndoStack.Should().BeEmpty();
         _ = fixture.Context.Metadata.IsDirty.Should().BeFalse();
     });
+
+    /// <summary>Relative Transform text edits preserve each target's delta in one undoable command.</summary>
+    /// <returns>The test task.</returns>
+    [TestMethod]
+    public Task TransformRelativeTextEditAppliesPerTargetAndUndoRestoresOriginalValues() => EnqueueAsync(async () =>
+    {
+        using var fixture = new SceneAuthoringFixture();
+        var firstTransform = fixture.Node.Components.OfType<TransformComponent>().Single();
+        firstTransform.LocalPosition = new(10, 0, 0);
+        var second = new SceneNode(fixture.Scene) { Name = "Second" };
+        var secondTransform = second.Components.OfType<TransformComponent>().Single();
+        secondTransform.LocalPosition = new(20, 0, 0);
+        fixture.Scene.RootNodes.Add(second);
+
+        using var host = fixture.CreateInspectorHost("Transform");
+        _ = fixture.Messenger.Send(new SceneNodeSelectionChangedMessage([fixture.Node, second]));
+        var model = (TransformViewModel)host.PropertyEditors.Single(editor => MatchesInspector(editor, "Transform"));
+        var view = new TransformView { ViewModel = model };
+        var scroller = new ScrollViewer { Content = view };
+        await LoadTestContentAsync(scroller).ConfigureAwait(true);
+        // Text edit sessions are cancelled when their NumberBox unloads; type only after the editor is visible and stably realized.
+        var number = (NumberBox)await FindInspectorControlAsync(
+            scroller,
+            () => view.FindDescendant<Oxygen.Editor.Controls.PropertyCard>(element => string.Equals(element.PropertyName, "Position", StringComparison.Ordinal))?
+                .FindDescendant<NumberBox>(element => string.Equals(element.Name, "PartNumberBoxX", StringComparison.Ordinal)),
+            "Position.X",
+            CancellationToken.None).ConfigureAwait(true);
+
+        await EnterTextAsync(number, "+=2").ConfigureAwait(true);
+        number.CompletePendingTextEdit();
+        await PendingNumericEdits(model).ConfigureAwait(true);
+
+        _ = firstTransform.LocalPosition.X.Should().Be(12);
+        _ = secondTransform.LocalPosition.X.Should().Be(22);
+        _ = fixture.Context.History.UndoStack.Should().ContainSingle();
+        await fixture.Context.History.UndoAsync(CancellationToken.None).ConfigureAwait(true);
+        _ = firstTransform.LocalPosition.X.Should().Be(10);
+        _ = secondTransform.LocalPosition.X.Should().Be(20);
+        await fixture.Context.History.RedoAsync(CancellationToken.None).ConfigureAwait(true);
+        _ = firstTransform.LocalPosition.X.Should().Be(12);
+        _ = secondTransform.LocalPosition.X.Should().Be(22);
+    });
+
+    /// <summary>Escape cancels a relative Transform input without authoring or dirtying the scene.</summary>
+    /// <returns>The test task.</returns>
+    [TestMethod]
+    public Task TransformRelativeTextEditEscapeLeavesAllTargetsUnchanged() => EnqueueAsync(async () =>
+    {
+        using var fixture = new SceneAuthoringFixture();
+        fixture.Node.Components.OfType<TransformComponent>().Single().LocalPosition = new(10, 0, 0);
+        var second = new SceneNode(fixture.Scene) { Name = "Second" };
+        second.Components.OfType<TransformComponent>().Single().LocalPosition = new(20, 0, 0);
+        fixture.Scene.RootNodes.Add(second);
+
+        using var host = fixture.CreateInspectorHost("Transform");
+        _ = fixture.Messenger.Send(new SceneNodeSelectionChangedMessage([fixture.Node, second]));
+        var model = (TransformViewModel)host.PropertyEditors.Single(editor => MatchesInspector(editor, "Transform"));
+        var view = new TransformView { ViewModel = model };
+        var scroller = new ScrollViewer { Content = view };
+        await LoadTestContentAsync(scroller).ConfigureAwait(true);
+        var number = (NumberBox)await FindInspectorControlAsync(
+            scroller,
+            () => view.FindDescendant<Oxygen.Editor.Controls.PropertyCard>(element => string.Equals(element.PropertyName, "Position", StringComparison.Ordinal))?
+                .FindDescendant<NumberBox>(element => string.Equals(element.Name, "PartNumberBoxX", StringComparison.Ordinal)),
+            "Position.X",
+            CancellationToken.None).ConfigureAwait(true);
+
+        await EnterTextAsync(number, "+=2").ConfigureAwait(true);
+        RaiseNumberEvent(number, "CancelEdit");
+        await PendingNumericEdits(model).ConfigureAwait(true);
+
+        _ = fixture.Node.Components.OfType<TransformComponent>().Single().LocalPosition.X.Should().Be(10);
+        _ = second.Components.OfType<TransformComponent>().Single().LocalPosition.X.Should().Be(20);
+        _ = fixture.Context.History.UndoStack.Should().BeEmpty();
+        _ = fixture.Context.Metadata.IsDirty.Should().BeFalse();
+    });
 }

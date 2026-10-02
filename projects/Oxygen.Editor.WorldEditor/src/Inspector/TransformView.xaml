@@ -51,6 +51,7 @@
                         EditSessionCompleted="PositionBox_EditSessionCompleted"
                         EditSessionStarted="PositionBox_EditSessionStarted"
                         LoggerFactory="{x:Bind ViewModel.LoggerFactory, Mode=OneWay}"
+                        Validate="PositionBox_Validate"
                         XIsIndeterminate="{x:Bind ViewModel.PositionXIsIndeterminate, Mode=TwoWay}"
                         XValue="{x:Bind ViewModel.PositionX, Mode=TwoWay}"
                         YIsIndeterminate="{x:Bind ViewModel.PositionYIsIndeterminate, Mode=TwoWay}"

@@ -8,6 +8,7 @@ using DroidNet.Controls;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Dispatching;
+using Oxygen.Editor.Schemas;
 using Oxygen.Editor.Schemas.Bindings;
 using Oxygen.Editor.World.Utils;
 using Oxygen.Editor.WorldEditor.Documents.Commands;
@@ -45,6 +46,7 @@ public sealed partial class TransformViewModel(
 
     private readonly SemaphoreSlim editGate = new(initialCount: 1, maxCount: 1);
     private readonly Dictionary<string, TransformEditSession> activeSessions = [];
+    private readonly Dictionary<string, NumericInputExpression> pendingRelativeEdits = [];
     private readonly Dictionary<string, CancellationTokenSource> wheelIdleCommits = [];
     private readonly DispatcherQueue? dispatcher = DispatcherQueue.GetForCurrentThread();
 
@@ -174,14 +176,18 @@ public sealed partial class TransformViewModel(
     /// </summary>
     public PropertyDescriptor ScaleProperty { get; } = new() { Name = "Scale" };
 
+    /// <summary>Gets completion of in-flight Transform edits.</summary>
+    internal Task PendingEdits => this.WaitForPendingEditsAsync();
+
     /// <inheritdoc />
     public override void UpdateValues(ICollection<SceneNode> items)
     {
-        if (this.selectedItems is not null && (!this.SelectionMatches(items.ToArray())
+        if (this.selectedItems is not null && (!this.SelectionMatches([.. items])
             || this.selectedItems.FirstOrDefault()?.Scene != items.FirstOrDefault()?.Scene))
         {
             foreach (var field in this.activeSessions.Keys.ToArray())
             {
+                _ = this.pendingRelativeEdits.Remove(field);
                 this.supersededFields.Add(field);
                 _ = this.CompleteActiveSessionAsync(field, NumberBoxEditCompletionKind.Cancel);
             }
@@ -224,6 +230,7 @@ public sealed partial class TransformViewModel(
         }
 
         this.wheelIdleCommits.Clear();
+        this.pendingRelativeEdits.Clear();
 
         foreach (var sessionEntry in this.activeSessions.ToList())
         {
@@ -254,6 +261,7 @@ public sealed partial class TransformViewModel(
         }
 
         var property = ToPropertyName(group, args.Component);
+        _ = this.pendingRelativeEdits.Remove(property);
         _ = this.supersededFields.Remove(property);
         if (this.activeSessions.ContainsKey(property))
         {
@@ -261,6 +269,10 @@ public sealed partial class TransformViewModel(
         }
 
         var nodes = this.selectedItems.ToList();
+        var descriptor = TransformDescriptor(property);
+        var originalValues = nodes.ToDictionary(
+            static node => node.Id,
+            node => descriptor.Read(node.Components.OfType<TransformComponent>().Single()));
         var context = commandContextProvider?.Invoke();
         if (context is null || commandService is null)
         {
@@ -270,6 +282,7 @@ public sealed partial class TransformViewModel(
         this.activeSessions[property] = new TransformEditSession(
             EditSessionToken.Begin(SceneOperationKinds.EditTransform, nodes.ConvertAll(static node => node.Id), property),
             nodes,
+            originalValues,
             context,
             args.InteractionKind,
             LastEdit: null);
@@ -288,6 +301,22 @@ public sealed partial class TransformViewModel(
         }
 
         var property = ToPropertyName(group, args.Component);
+        if (args.CompletionKind == NumberBoxEditCompletionKind.Commit
+            && this.activeSessions.TryGetValue(property, out var activeSession))
+        {
+            var hasRelativeEdit = this.pendingRelativeEdits.Remove(property, out var relativeEdit);
+            if (!hasRelativeEdit && args.InputText is { } inputText)
+            {
+                var firstValue = activeSession.OriginalValues[activeSession.Nodes[0].Id];
+                hasRelativeEdit = NumericInputParser.TryParse(inputText, firstValue, out relativeEdit) && relativeEdit.IsRelative;
+            }
+
+            if (hasRelativeEdit)
+            {
+                _ = this.CompleteRelativeEditSessionAsync(property, relativeEdit, activeSession);
+                return;
+            }
+        }
 
         if (args.InteractionKind == NumberBoxEditInteractionKind.MouseWheel &&
             args.CompletionKind == NumberBoxEditCompletionKind.Commit)
@@ -322,14 +351,29 @@ public sealed partial class TransformViewModel(
             return;
         }
 
+        if (args.InputText is { } inputText)
+        {
+            if (NumericInputParser.TryParse(inputText, args.OldValue, out var expression) && expression.IsRelative)
+            {
+                this.pendingRelativeEdits[field] = expression;
+            }
+            else
+            {
+                _ = this.pendingRelativeEdits.Remove(field);
+            }
+        }
+
         var property = this.TransformPropertyId(field);
         var ticket = this.diagnostics.Begin([property], commandContextProvider?.Invoke()?.Metadata.ChangeVersion ?? 0);
         var result = args.IsValid ? SceneCommandResult.Success : new SceneCommandResult(Succeeded: false)
         {
             ValidationCode = "TRANSFORM_INVALID",
-            ValidationMessage = group == TransformEditFieldGroup.Scale
-                ? "Scale must be finite and have magnitude at least 0.001."
-                : "Rotation must be finite and between -180 and 180 degrees.",
+            ValidationMessage = group switch
+            {
+                TransformEditFieldGroup.Position => "Position must be finite.",
+                TransformEditFieldGroup.Rotation => "Rotation must be finite and between -180 and 180 degrees.",
+                _ => "Scale must be finite and have magnitude at least 0.001.",
+            },
         };
         this.diagnostics.Complete(ticket, result);
     }
@@ -396,6 +440,21 @@ public sealed partial class TransformViewModel(
             },
         };
 
+    private static PropertyDescriptor<float> TransformDescriptor(string property)
+        => property switch
+        {
+            "PositionX" => SceneDocumentCommandService.Transform.PositionXDescriptor,
+            "PositionY" => SceneDocumentCommandService.Transform.PositionYDescriptor,
+            "PositionZ" => SceneDocumentCommandService.Transform.PositionZDescriptor,
+            "RotationX" => SceneDocumentCommandService.Transform.RotationXDescriptor,
+            "RotationY" => SceneDocumentCommandService.Transform.RotationYDescriptor,
+            "RotationZ" => SceneDocumentCommandService.Transform.RotationZDescriptor,
+            "ScaleX" => SceneDocumentCommandService.Transform.ScaleXDescriptor,
+            "ScaleY" => SceneDocumentCommandService.Transform.ScaleYDescriptor,
+            "ScaleZ" => SceneDocumentCommandService.Transform.ScaleZDescriptor,
+            _ => throw new ArgumentOutOfRangeException(nameof(property)),
+        };
+
     private void UpdateBindingValue(
         PropertyBinding<float> binding,
         ICollection<SceneNode> items,
@@ -440,6 +499,7 @@ public sealed partial class TransformViewModel(
     private async Task CompleteActiveSessionAsync(string property, NumberBoxEditCompletionKind completionKind)
     {
         this.CancelPendingMouseWheelCommit(property);
+        _ = this.pendingRelativeEdits.Remove(property);
         if (!this.activeSessions.Remove(property, out var session))
         {
             return;
@@ -519,6 +579,11 @@ public sealed partial class TransformViewModel(
             return;
         }
 
+        if (this.pendingRelativeEdits.ContainsKey(property))
+        {
+            return;
+        }
+
         this.LogApplyingChange(property, ExtractValue(edit), this.selectedItems.Count);
         if (this.activeSessions.TryGetValue(property, out var existing))
         {
@@ -537,7 +602,8 @@ public sealed partial class TransformViewModel(
         TransformEdit edit,
         EditSessionToken session,
         IReadOnlyList<SceneNode> nodes,
-        SceneDocumentCommandContext? context)
+        SceneDocumentCommandContext? context,
+        IReadOnlyDictionary<Guid, PropertyEdit>? targetEdits = null)
     {
         var requestSession = session.Capture();
         var diagnostic = this.diagnostics.Begin([this.TransformPropertyId(property)], context?.Metadata.ChangeVersion ?? 0);
@@ -553,17 +619,13 @@ public sealed partial class TransformViewModel(
                 return;
             }
 
-            var result = await commandService.EditTransformAsync(
-                context,
-                nodes.Select(static node => node.Id).ToList(),
-                edit,
-                requestSession).ConfigureAwait(true);
+            var result = await SubmitTransformEditAsync(commandService, context, nodes, edit, requestSession, targetEdits).ConfigureAwait(true);
             if (!this.isDisposed && this.SelectionMatches(nodes))
             {
                 this.isApplyingEditorChanges = true;
                 try
                 {
-                    this.UpdateValues(nodes.ToList());
+                    this.UpdateValues([.. nodes]);
 
                     // A terminal request closes the gesture; it does not validate a new field value.
                     if (requestSession.IsOneShot || requestSession.State == EditSessionState.Open)
@@ -600,6 +662,17 @@ public sealed partial class TransformViewModel(
         }
     }
 
+    private static Task<SceneCommandResult> SubmitTransformEditAsync(
+        ISceneDocumentCommandService service,
+        SceneDocumentCommandContext context,
+        IReadOnlyList<SceneNode> nodes,
+        TransformEdit edit,
+        EditSessionToken session,
+        IReadOnlyDictionary<Guid, PropertyEdit>? targetEdits)
+        => targetEdits is null
+            ? service.EditTransformAsync(context, [.. nodes.Select(static node => node.Id)], edit, session)
+            : service.EditPropertiesForTargetsAsync(context, targetEdits, "Edit Transform", session);
+
     private bool SelectionMatches(IReadOnlyCollection<SceneNode> nodes)
     {
         if (this.selectedItems is null || this.selectedItems.Count != nodes.Count)
@@ -609,6 +682,34 @@ public sealed partial class TransformViewModel(
 
         var expectedIds = nodes.Select(static node => node.Id).ToHashSet();
         return this.selectedItems.All(node => expectedIds.Contains(node.Id));
+    }
+
+    private async Task CompleteRelativeEditSessionAsync(string property, NumericInputExpression expression, TransformEditSession session)
+    {
+        this.CancelPendingMouseWheelCommit(property);
+        if (!this.activeSessions.Remove(property))
+        {
+            return;
+        }
+
+        var descriptor = TransformDescriptor(property);
+        var edits = session.Nodes.ToDictionary(
+            static node => node.Id,
+            node => PropertyEdit.Single(
+                descriptor.TypedId,
+                expression.Apply(session.OriginalValues[node.Id])));
+        var empty = EmptyEdit();
+        await this.ApplyTransformEditAsync(property, empty, session.Token, session.Nodes, session.Context, edits).ConfigureAwait(true);
+        session.Token.Commit();
+        await this.ApplyTransformEditAsync(property, empty, session.Token, session.Nodes, session.Context).ConfigureAwait(true);
+    }
+
+    private async Task WaitForPendingEditsAsync()
+    {
+        while (Volatile.Read(ref this.inFlightEdits) > 0)
+        {
+            await Task.Yield();
+        }
     }
 
     private void TryDisposeEditGate()
@@ -681,6 +782,7 @@ public sealed partial class TransformViewModel(
     private sealed record TransformEditSession(
         EditSessionToken Token,
         IReadOnlyList<SceneNode> Nodes,
+        IReadOnlyDictionary<Guid, float> OriginalValues,
         SceneDocumentCommandContext Context,
         NumberBoxEditInteractionKind Interaction,
         TransformEdit? LastEdit);
